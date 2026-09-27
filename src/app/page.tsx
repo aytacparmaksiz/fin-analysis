@@ -462,6 +462,14 @@ export default function ValuationTerminal() {
           console.warn(`[PDF] ${file.name} metin ayrıştırılamadı:`, pdfErr);
         }
       }
+      if (documents.length === 0) {
+        const totalSize = files.reduce((acc, f) => acc + f.size, 0);
+        if (totalSize > 4 * 1024 * 1024) {
+          throw new Error(
+            `Yüklenen PDF belgelerinden metin katmanı çıkarılamadı ve toplam dosya boyutu (${(totalSize / (1024 * 1024)).toFixed(1)} MB) Vercel platformunun 4.5 MB sınırını aşıyor. Lütfen taranmış resim yerine dijital orijinal faaliyet raporu yükleyin veya dosya boyutunu küçültün.`
+          );
+        }
+      }
 
       setStatusMessage('Finansal zaman serisi ve rehberlik verileri Gemini AI tarafından ayıklanıyor...');
 
@@ -816,12 +824,20 @@ export default function ValuationTerminal() {
 
               {files.length > 0 && (
                 <div className="space-y-2">
-                  <span className="text-xs font-semibold text-slate-300">Yüklenecek Belgeler ({files.length} Adet):</span>
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
+                    <span>Yüklenecek Belgeler ({files.length} Adet):</span>
+                    <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-2 py-0.5 rounded">
+                      Toplam: {(files.reduce((a, b) => a + b.size, 0) / (1024 * 1024)).toFixed(1)} MB
+                    </span>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
                     {files.map((f, i) => (
                       <div key={i} className="flex items-center justify-between p-2.5 bg-slate-950 border border-slate-800 rounded-md text-xs">
-                        <span className="truncate text-slate-200 font-mono">{f.name}</span>
-                        <button type="button" onClick={() => setFiles(files.filter((_, idx) => idx !== i))} className="text-slate-500 hover:text-rose-400 cursor-pointer">
+                        <div className="flex items-center gap-2 truncate">
+                          <span className="truncate text-slate-200 font-mono">{f.name}</span>
+                          <span className="text-[10px] text-slate-500 font-mono whitespace-nowrap">({(f.size / (1024 * 1024)).toFixed(1)} MB)</span>
+                        </div>
+                        <button type="button" onClick={() => setFiles(files.filter((_, idx) => idx !== i))} className="text-slate-500 hover:text-rose-400 cursor-pointer ml-2">
                           <X className="w-4 h-4" />
                         </button>
                       </div>
