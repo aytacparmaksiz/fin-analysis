@@ -8,7 +8,7 @@ import {
   RefreshCw, Printer, PlusCircle, History, 
   ChevronRight, UploadCloud, X, CheckCircle2, Search,
   TrendingUp, BarChart3, Target, Calendar, ArrowUpRight, ArrowDownRight, Minus,
-  DollarSign, ShieldCheck, Activity, Layers, Sparkles
+  DollarSign, ShieldCheck, Activity, Layers, Sparkles, Download, Upload
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -378,6 +378,54 @@ export default function ValuationTerminal() {
     localStorage.setItem('fin_valuation_reports', JSON.stringify(updated));
   };
 
+  // JSON Yedek İndirme (Dışa Aktar)
+  const exportBackup = () => {
+    try {
+      const dataStr = JSON.stringify(savedReports, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `fin_degerleme_raporlari_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('Yedek dışa aktarılamadı.');
+    }
+  };
+
+  // JSON Yedek Yükleme (İçe Aktar)
+  const importBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target?.result as string);
+        if (Array.isArray(parsed)) {
+          const existingIds = new Set(savedReports.map(r => r.id));
+          const newEntries = parsed.filter((r: any) => r.id && r.ticker);
+          const merged = [...newEntries.filter(r => !existingIds.has(r.id)), ...savedReports];
+          
+          setSavedReports(merged);
+          localStorage.setItem('fin_valuation_reports', JSON.stringify(merged));
+          alert(`${newEntries.length} adet rapor başarıyla içeri aktarıldı!`);
+          if (merged.length > 0) {
+            setActiveReportId(merged[0].id);
+            setStep('report');
+          }
+        } else {
+          alert('Geçersiz dosya formatı. Rapor listesi JSON formatında olmalıdır.');
+        }
+      } catch (err) {
+        alert('Dosya okunurken bir hata oluştu.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       setFiles(prev => [...prev, ...Array.from(e.target.files!)]);
@@ -573,6 +621,34 @@ export default function ValuationTerminal() {
               </div>
             ))
           )}
+        </div>
+
+        {/* Sidebar Alt Butonlar: Yedek Al / İçe Aktar */}
+        <div className="p-3 border-t border-slate-800 bg-slate-950/70 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={exportBackup}
+            disabled={savedReports.length === 0}
+            className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800/80 py-2 px-2.5 rounded border border-slate-700 transition cursor-pointer"
+            title="Kayıtlı raporları JSON olarak bilgisayarınıza indirin"
+          >
+            <Download className="w-3.5 h-3.5 text-emerald-400" />
+            Yedek Al
+          </button>
+
+          <label
+            className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 py-2 px-2.5 rounded border border-slate-700 transition cursor-pointer"
+            title="İndirilen JSON yedeğini yükleyin"
+          >
+            <Upload className="w-3.5 h-3.5 text-cyan-400" />
+            İçe Aktar
+            <input
+              type="file"
+              accept="application/json"
+              onChange={importBackup}
+              className="hidden"
+            />
+          </label>
         </div>
       </aside>
 
@@ -1346,7 +1422,7 @@ export default function ValuationTerminal() {
                           {currentExtractedData.guidance_track_record.map((g: any, idx: number) => (
                             <tr key={idx} className="hover:bg-slate-800/40">
                               <td className="p-3 font-bold font-mono text-white">{g.year_or_period}</td>
-                              <td className="p-3 text-slate-200">{g.guidance_given}</td>
+                              <td className="p-3 text-slate-300">{g.guidance_given}</td>
                               <td className="p-3 font-mono font-bold text-emerald-400">{g.actual_realized}</td>
                               <td className="p-3">
                                 <span className={`px-2.5 py-1 rounded text-[10px] font-bold ${
@@ -1357,7 +1433,7 @@ export default function ValuationTerminal() {
                                   {g.status}
                                 </span>
                               </td>
-                              <td className="p-3 text-slate-300 text-xs leading-relaxed">{g.analysis}</td>
+                              <td className="p-3 text-slate-400 text-xs leading-relaxed">{g.analysis}</td>
                             </tr>
                           ))}
                         </tbody>
