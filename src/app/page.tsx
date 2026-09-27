@@ -441,19 +441,61 @@ export default function ValuationTerminal() {
     }
     setLoading(true);
     setError(null);
-    setStatusMessage('Çok yıllık PDF belgeleri taranıyor ve 5+ yıllık finansal zaman serisi ayıklanıyor...');
+    setStatusMessage('PDF belgeleri taranıyor ve metin katmanları ayıklanıyor...');
 
     try {
-      const fd = new FormData();
-      fd.append('ticker', ticker);
-      files.forEach(f => fd.append('files', f));
+      // Vercel 4.5 MB yükleme sınırını aşmamak için PDF metinlerini istemcide ayıkla
+      const { extractText, getDocumentProxy } = await import('unpdf');
+      const documents: { name: string; text: string }[] = [];
 
-      const res = await fetch('/api/extract', {
-        method: 'POST',
-        body: fd
-      });
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        setStatusMessage(`(${i + 1}/${files.length}) ${file.name} taranıyor...`);
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await getDocumentProxy(new Uint8Array(arrayBuffer));
+          const { text } = await extractText(pdf, { mergePages: true });
+          if (text && text.trim().length > 50) {
+            documents.push({ name: file.name, text: text.trim() });
+          }
+        } catch (pdfErr) {
+          console.warn(`[PDF] ${file.name} metin ayrıştırılamadı:`, pdfErr);
+        }
+      }
 
-      const result = await res.json();
+      setStatusMessage('Finansal zaman serisi ve rehberlik verileri Gemini AI tarafından ayıklanıyor...');
+
+      let res: Response;
+      if (documents.length > 0) {
+        // Vercel için ultra hafif JSON isteği (4.5 MB limitine kesinlikle takılmaz)
+        res = await fetch('/api/extract', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticker, documents })
+        });
+      } else {
+        // Fallback: Doğrudan FormData gönderimi
+        const fd = new FormData();
+        fd.append('ticker', ticker);
+        files.forEach(f => fd.append('files', f));
+
+        res = await fetch('/api/extract', {
+          method: 'POST',
+          body: fd
+        });
+      }
+
+      const responseText = await res.text();
+      let result: any;
+      try {
+        result = JSON.parse(responseText);
+      } catch {
+        if (res.status === 413 || responseText.includes('Request Entity Too Large')) {
+          throw new Error('Yüklenen belgelerin toplam boyutu sunucu sınırını (4.5 MB) aştı. Lütfen daha az veya daha küçük boyutlu PDF seçin.');
+        }
+        throw new Error(responseText || `Sunucu hatası: HTTP ${res.status}`);
+      }
+
       if (!res.ok) throw new Error(result.error || 'Veri çıkarımı başarısız oldu.');
 
       setExtractedData(result.data);
@@ -495,7 +537,14 @@ export default function ValuationTerminal() {
         })
       });
 
-      const data = await res.json();
+      const responseText = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        throw new Error(responseText || `Sunucu hatası: HTTP ${res.status}`);
+      }
+
       if (!res.ok) throw new Error(data.error || 'Değerleme tamamlanamadı.');
 
       const isAlma = data.report.includes('Analist Kararı: ALMA') || data.report.includes('ALMA');

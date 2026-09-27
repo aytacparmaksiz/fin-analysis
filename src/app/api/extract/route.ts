@@ -117,12 +117,23 @@ function mergeExtractedData(results: any[]) {
 
 export async function POST(req: Request) {
   try {
-    const formData = await req.formData();
-    const ticker = formData.get('ticker') as string;
-    const pdfFiles = formData.getAll('files') as File[];
+    const contentType = req.headers.get('content-type') || '';
+    let ticker = '';
+    let documents: { name: string; text: string }[] = [];
+    let pdfFiles: File[] = [];
 
-    if (!ticker || pdfFiles.length === 0) {
-      return NextResponse.json({ error: 'Hisse kodu ve en az bir PDF yüklenmelidir.' }, { status: 400 });
+    if (contentType.includes('application/json')) {
+      const json = await req.json();
+      ticker = json.ticker || '';
+      documents = json.documents || [];
+    } else {
+      const formData = await req.formData();
+      ticker = formData.get('ticker') as string;
+      pdfFiles = formData.getAll('files') as File[];
+    }
+
+    if (!ticker || (documents.length === 0 && pdfFiles.length === 0)) {
+      return NextResponse.json({ error: 'Hisse kodu ve en az bir PDF/doküman gereklidir.' }, { status: 400 });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
@@ -131,15 +142,6 @@ export async function POST(req: Request) {
     }
 
     const ai = new GoogleGenAI({ apiKey });
-
-    // 1. Token Sınırını (1,048,576 Token) Aşmamak İçin Akıllı Gruplama (Batching)
-    // 8 veya daha fazla PDF tek seferde gönderildiğinde 1M token sınırını aşar.
-    // Dosyaları 2'şerli güvenli paketlere ayırıp bağımsız çıkarıyor ve sonuçları birleştiriyoruz.
-    const BATCH_SIZE = pdfFiles.length > 5 ? 2 : (pdfFiles.length > 2 ? 2 : pdfFiles.length);
-    const fileBatches: File[][] = [];
-    for (let i = 0; i < pdfFiles.length; i += BATCH_SIZE) {
-      fileBatches.push(pdfFiles.slice(i, i + BATCH_SIZE));
-    }
 
     const extractionSchema: Schema = {
       type: Type.OBJECT,
@@ -242,12 +244,54 @@ KURALLAR:
 
     const batchResults: any[] = [];
 
-    // Her paketi bağımsız olarak işle
-    for (let bIndex = 0; bIndex < fileBatches.length; bIndex++) {
-      const currentBatch = fileBatches[bIndex];
-      const tempFilePaths: string[] = [];
-      const uploadedGoogleFiles: any[] = [];
-      const fileParts: any[] = [];
+    if (documents.length > 0) {
+      // 1. İstemci Tarafından Ayıklanmış Metin Dokümanları (Vercel 4.5 MB Sınırını Kesinlikle Aşmaz)
+      const DOC_BATCH_SIZE = 3;
+      for (let i = 0; i < documents.length; i += DOC_BATCH_SIZE) {
+        const batch = documents.slice(i, i + DOC_BATCH_SIZE);
+        const docTexts = batch.map((d: any) => `### RAPOR DOKÜMANI: ${d.name}\n${d.text}`).join('\n\n---\n\n');
+
+        const userPrompt = `Şirket: ${ticker.toUpperCase()}.
+Aşağıda şirkete ait yüklenen faaliyet raporları, bilançolar ve gelir tablolarının metinleri yer almaktadır (Paket ${Math.floor(i / DOC_BATCH_SIZE) + 1}/${Math.ceil(documents.length / DOC_BATCH_SIZE)}):
+
+${docTexts}
+
+GÖREVLER:
+1. Belgede yer alan tüm dönemlere ait Hasılat (revenue), FAVÖK (ebitda), Net Kâr (net_income), Marjlar (%), Nakit Akışları (OCF, CAPEX, FCF), Net Borç (net_debt) ve ROIC/WACC verilerini çıkar.
+2. Varsa geçmiş yönetim hedeflerini (guidance) ve gerçekleşmelerini çıkar.
+3. Rakamları tam veya ondalıklı sayı olarak ver.`;
+
+        try {
+          const response = await generateWithFallback(ai, {
+            contents: [userPrompt],
+            config: {
+              systemInstruction,
+              temperature: 0.0,
+              responseMimeType: 'application/json',
+              responseSchema: extractionSchema,
+            },
+          });
+
+          const parsedData = JSON.parse(response.text || '{}');
+          batchResults.push(parsedData);
+        } catch (batchError: any) {
+          console.error(`[Extract Text] Paket ${Math.floor(i / DOC_BATCH_SIZE) + 1} işlenirken hata:`, batchError);
+        }
+      }
+    } else {
+      // 2. Ham PDF Dosyaları (Doğrudan FormData Akışı)
+      const BATCH_SIZE = pdfFiles.length > 5 ? 2 : (pdfFiles.length > 2 ? 2 : pdfFiles.length);
+      const fileBatches: File[][] = [];
+      for (let i = 0; i < pdfFiles.length; i += BATCH_SIZE) {
+        fileBatches.push(pdfFiles.slice(i, i + BATCH_SIZE));
+      }
+
+      for (let bIndex = 0; bIndex < fileBatches.length; bIndex++) {
+        const currentBatch = fileBatches[bIndex];
+        const tempFilePaths: string[] = [];
+        const uploadedGoogleFiles: any[] = [];
+        const fileParts: any[] = [];
+
 
       try {
         console.log(`[Extract] Paket ${bIndex + 1}/${fileBatches.length} işleniyor (${currentBatch.length} PDF)...`);
@@ -319,8 +363,9 @@ Ekteki belgeleri incele (Paket ${bIndex + 1}/${fileBatches.length}):
         }
       }
     }
+  }
 
-    if (batchResults.length === 0) {
+  if (batchResults.length === 0) {
       return NextResponse.json({ error: 'Yüklenen PDF belgelerinden veri çıkarılamadı.' }, { status: 500 });
     }
 
