@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 📈 Kurumsal Temel Değerleme Terminali (Fintables Görünümü)
 
-## Getting Started
+Next.js 16, Google Gemini API (`@google/genai`) ve Recharts ile geliştirilmiş; çok yıllık finansal faaliyet raporlarını (2022–2026) tarayan, dinamik büyüme/marj trendlerini görselleştiren ve fon yöneticisi standartlarında yatırım tezleri üreten kurumsal değerleme terminali.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## ✨ Özellikler
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+* **Çok Yıllı Veri Ayıklama:** Birden fazla faaliyet raporu ve finansal tabloyu (PDF) yükleyerek 5+ yıllık zaman serisi (Hasılat, FAVÖK, Net Kâr, Nakit Akışları, Borçluluk, ROIC, WACC) çıkarma.
+* **Fintables Finansal Tabloları:** Gelir Tablosu, Marjlar, Nakit Akışları, Borçluluk ve Sermaye Verimliliği bölümlerinde dönemsel artış/azalış (YoY) rozetleri (`▲ +%` / `▼ -%`).
+* **Dinamik Grafik Terminali:** 
+  * Hasılat & FAVÖK Trendi (Büyüme Dinamikleri)
+  * Kârlılık Marjları Evrimi (Brüt, FAVÖK ve Net Marj)
+  * Sermaye Verimliliği (ROIC vs. WACC - Ekonomik Değer Yaratımı)
+  * Nakit Akış Kalitesi (İşletme Nakit Akışı vs. Net Kâr)
+* **Yönetim Rehberlik Karnesi:** Şirketin geçmiş yıllarda verdiği hedefleri tutturup tutturamadığının başarı analizi.
+* **Çeyreklik Skor & Karar Evrimi:** Her yeni çeyrek bilançosunda kalite skoru değişiminin ve yatırım kararının (`AL` / `ALMA` / `NÖTR`) takibi.
+* **Hedge Fund Değerleme Raporu:** DuPont analizi, ROIC vs WACC makası ve serbest nakit akışı odaklı detaylı kurumsal analiz.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🚀 Yerel Kurulum (Local Development)
 
-## Learn More
+1. **Bağımlılıkları yükleyin:**
+   ```bash
+   npm install
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+2. **Ortam değişkenlerini tanımlayın:**
+   `.env.local` dosyası oluşturun ve Gemini API anahtarınızı ekleyin:
+   ```env
+   GEMINI_API_KEY=AIzaSy...
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3. **Geliştirme sunucusunu başlatın:**
+   ```bash
+   npm run dev
+   ```
+   Tarayıcınızda [http://localhost:3000](http://localhost:3000) adresine gidin.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## 🌐 Canlıya Alma (Vercel Deployment)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+En hızlı ve sorunsuz canlıya alma yöntemi **Vercel**'dir:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Bu projeyi GitHub hesabınıza pushlayın.
+2. [Vercel](https://vercel.com) paneline gidin ve **"Add New Project"** seçeneğine tıklayın.
+3. GitHub deponuzu seçin ve içe aktarın.
+4. **Environment Variables** bölümüne:
+   * Key: `GEMINI_API_KEY`
+   * Value: `Google Gemini API Anahtarınız`
+5. **"Deploy"** butonuna basın. Projeniz 1-2 dakika içinde canlıya alınacaktır.
