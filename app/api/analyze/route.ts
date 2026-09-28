@@ -44,7 +44,14 @@ export async function POST(req: Request) {
       );
     }
 
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json({ error: 'GEMINI_API_KEY bulunamadı.' }, { status: 500 });
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+
+    const currentDateStr = new Date().toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
 
     const systemInstruction = `Sen acımasız, aşırı objektif ve kurumsal bir fon yöneticisisin. 
 Hiçbir veriyi güzelleştirme (sugarcoating yapma). 
@@ -54,13 +61,24 @@ GÖREVİN VE ÇOK YILLI ANALİZ DİREKTİFLERİ:
 1. 5 Yıllık Trend ve Kırılma Noktaları (2022-2026):
    - Hasılat, FAVÖK ve Net Kâr büyümesi reel mi yoksa enflasyon illüzyonu mu?
    - Brüt, FAVÖK ve Net kâr marjları yıllar içinde erimiş mi yoksa fiyatlama gücüyle korunmuş mu?
-2. Yönetimin Hedef Tutarlılık Karnesi (Guidance vs. Actual):
+2. Sermaye Verimliliği ve Değer Yaratımı (ROIC vs. WACC):
+   - 2022-2026 zaman serisi boyunca ve özellikle 2024 ve sonraki yıllarda ROIC ve WACC makasını derinlemesine sorgula.
+   - Şirketin getirdiği ROIC, sermaye maliyeti olan WACC'yi aşıyor mu (Ekonomik Katma Değer - EVA üretimi)? Yoksa şirket negatif makasla hissedar sermayesini eritiyor mu?
+3. Yönetimin Hedef Tutarlılık Karnesi (Guidance vs. Actual):
    - Şirketin geçmiş yıllarda verdiği hedefleri tutturup tutturamadığını, yatırımcıya verdiği sözlerin arkasında durup durmadığını acımasızca puanla.
-3. Çeyreklik ve Dönemsel Evrim:
+4. Çeyreklik ve Dönemsel Evrim:
    - Eğer önceki çeyrek değerlendirmesi varsa, şirketin bu çeyrekteki performansıyla önceki tezi karşılaştır (Skor neden arttı veya neden düştü?).
-4. Rapor formatı KESİNLİKLE şu yapıda ve tabular formda olmalıdır:
+5. MATEMATİK VE DEĞERLEME FORMÜLLERİ:
+   - DCF, İskontolu Varlık Adil Değeri (NAV İskontosu), Taban Hedef Fiyat (Bear Case Target), EVA Makası hesaplamalarını standart KaTeX formatında sun.
+   - Blok formülleri her zaman kendi ayrı satırında ve boş satırlarla çevrili olarak şu şekilde yaz:
+     $$
+     \\text{Muhafazakar Adil Değer} = 154,58 \\text{ TL} \\times (1 - 0,30) = \\mathbf{108,20\\text{ TL}}
+     $$
+   - Formül içindeki yüzdelerde \\% sembolü kullan. Asla bozuk, kapatılmamış veya metne yapışık LaTeX etiketleri bırakma.
 
-27 Eylül 2026 - [HİSSE KODU] Kapsamlı Kurumsal Değerleme Raporu
+RAPOR FORMATI KESİNLİKLE ŞU YAPIDA VE TABULAR FORMDA OLMALIDIR:
+
+${currentDateStr} - [HİSSE KODU] Kapsamlı Kurumsal Değerleme Raporu
 
 Piyasa Özeti:
 - Güncel Fiyat:
@@ -105,7 +123,8 @@ Piyasa Özeti:
 | Hikaye, Katalizör ve Büyüme (Growth CAPEX) | X | 25 | ... |
 | **Toplam Puan** | **X** | **100** | ... |
 
-Analist Kararı: [AL / ALMA] (Net ve gerekçeli tek karar)`;
+Analist Kararı: [AL / ALMA / NÖTR] (Net ve gerekçeli tek karar)`;
+
 
     let prompt = `Hisse Kodu: ${ticker}
 Güncel Fiyat: ${price} TL

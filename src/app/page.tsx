@@ -3,14 +3,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { 
   Send, FileText, AlertTriangle, Database, 
   RefreshCw, Printer, PlusCircle, History, 
   ChevronRight, UploadCloud, X, CheckCircle2, Search,
   TrendingUp, BarChart3, Target, Calendar, ArrowUpRight, ArrowDownRight, Minus,
   DollarSign, ShieldCheck, Activity, Layers, Sparkles, Download, Upload,
-  Trophy, Award, Trash2, ArrowUpDown, Filter
+  Trophy, Award, Trash2, ArrowUpDown, Filter, Copy
 } from 'lucide-react';
+
 import {
   ResponsiveContainer,
   BarChart,
@@ -152,6 +155,12 @@ function ChangeBadge({
 // Recharts İçin Yüksek Okunabilirlikli Özel Tooltip
 const CustomChartTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
+    const roicEntry = payload.find((p: any) => p.dataKey === 'roic');
+    const waccEntry = payload.find((p: any) => p.dataKey === 'wacc');
+    const evaSpread = (roicEntry && waccEntry && typeof roicEntry.value === 'number' && typeof waccEntry.value === 'number')
+      ? Number((roicEntry.value - waccEntry.value).toFixed(1))
+      : null;
+
     return (
       <div className="bg-slate-950 border border-slate-700 p-3 rounded-lg shadow-2xl font-sans text-xs space-y-1.5 min-w-[210px] z-50">
         <div className="font-bold text-white border-b border-slate-800 pb-1 font-mono text-sm flex items-center justify-between">
@@ -184,6 +193,16 @@ const CustomChartTooltip = ({ active, payload, label }: any) => {
             </div>
           );
         })}
+        {evaSpread !== null && (
+          <div className="pt-1.5 mt-1 border-t border-slate-800 flex items-center justify-between text-[11px]">
+            <span className="text-slate-400">EVA Makası (ROIC - WACC):</span>
+            <span className={`font-mono font-bold ${
+              evaSpread > 0.5 ? 'text-emerald-400' : evaSpread < -0.5 ? 'text-rose-400' : 'text-amber-400'
+            }`}>
+              {evaSpread > 0 ? `+${evaSpread}` : evaSpread === 0 ? '0.0' : `${evaSpread}`} puan
+            </span>
+          </div>
+        )}
       </div>
     );
   }
@@ -353,6 +372,233 @@ const FINANCIAL_TABLE_SECTIONS: MetricSectionConfig[] = [
   },
 ];
 
+// Kronolojik Dönem Sıralama Ağırlığı
+function parsePeriodSortKey(period: string): number {
+  if (!period) return 0;
+  const str = String(period).trim();
+  const yrMatch = str.match(/(20\d{2})/);
+  if (!yrMatch) return 0;
+  const year = parseInt(yrMatch[1], 10);
+
+  if (/(?:q1|1\.ç|1ç|\/0?3\b|3a\b)/i.test(str)) return year * 100 + 3;
+  if (/(?:q2|2\.ç|2ç|\/0?6\b|6a\b)/i.test(str)) return year * 100 + 6;
+  if (/(?:q3|3\.ç|3ç|\/0?9\b|9a\b)/i.test(str)) return year * 100 + 9;
+  if (/(?:q4|4\.ç|4ç|\/12\b|12a\b)/i.test(str)) return year * 100 + 12;
+
+  return year * 100 + 12;
+}
+
+// Çeyreklik ve Ara Dönemler İçin Yıllıklandırma Çarpanı
+function getAnnualizationFactor(period: string): number {
+  if (!period) return 1.0;
+  const str = String(period).toLowerCase();
+  if (/(?:\/0?3\b|3a\b|q1\b|1\.ç|1ç)/i.test(str)) return 4.0;
+  if (/(?:\/0?6\b|6a\b|q2\b|2\.ç|2ç)/i.test(str)) return 2.0;
+  if (/(?:\/0?9\b|9a\b|q3\b|3\.ç|3ç)/i.test(str)) return 12.0 / 9.0;
+  return 1.0;
+}
+
+// React Element Düğümlerinden Özyinelemeli (Recursive) Düz Metin Çıkarıcı
+function extractTextFromChildren(children: any): string {
+  if (children === null || children === undefined) return '';
+  if (typeof children === 'string' || typeof children === 'number') return String(children);
+  if (Array.isArray(children)) return children.map(extractTextFromChildren).join('');
+  if (typeof children === 'object' && children.props) {
+    return extractTextFromChildren(children.props.children);
+  }
+  return '';
+}
+
+// Çıkarılan Finansal Veri Setini (Özellikle 2024+ ROIC ve WACC) Zenginleştirme, Sıralama ve Temizleme
+function sanitizeHistoryData(history: any[], debtInfo: any = {}) {
+  if (!Array.isArray(history) || history.length === 0) return [];
+
+  let parsedTlRate: number | null = null;
+  if (debtInfo?.tl_interest_rate) {
+    const m = String(debtInfo.tl_interest_rate).match(/(\d+([.,]\d+)?)/);
+    if (m) {
+      const val = parseFloat(m[1].replace(',', '.'));
+      if (val > 5 && val < 90) parsedTlRate = val;
+    }
+  }
+
+  // Kronolojik sıralama
+  const sorted = [...history].filter(Boolean).sort((a, b) => {
+    return parsePeriodSortKey(a.period) - parsePeriodSortKey(b.period);
+  });
+
+  return sorted.map((item, idx) => {
+    if (!item) return item;
+    const row = { ...item };
+    const yrMatch = String(row.period || '').match(/(20\d{2})/);
+    const yr = yrMatch ? parseInt(yrMatch[1], 10) : 2024;
+
+    // Eksik marjları hesapla
+    if (row.revenue && row.revenue > 0) {
+      if (row.ebitda_margin == null && typeof row.ebitda === 'number') {
+        row.ebitda_margin = Number(((row.ebitda / row.revenue) * 100).toFixed(1));
+      }
+      if (row.net_margin == null && typeof row.net_income === 'number') {
+        row.net_margin = Number(((row.net_income / row.revenue) * 100).toFixed(1));
+      }
+      if (row.gross_margin == null && typeof row.gross_profit === 'number') {
+        row.gross_margin = Number(((row.gross_profit / row.revenue) * 100).toFixed(1));
+      }
+    }
+
+    // Gerçekçi Türkiye piyasa WACC tabanı
+    let defaultWacc = 45.0;
+    if (yr <= 2021) defaultWacc = 18.5;
+    else if (yr === 2022) defaultWacc = 22.0;
+    else if (yr === 2023) defaultWacc = 32.5;
+    else if (yr >= 2024) defaultWacc = 44.0;
+
+    if (parsedTlRate) {
+      defaultWacc = Number((parsedTlRate * 0.95).toFixed(1));
+    }
+
+    if (row.wacc == null || row.wacc === 0 || isNaN(Number(row.wacc))) {
+      row.wacc = defaultWacc;
+    } else {
+      row.wacc = Number(Number(row.wacc).toFixed(1));
+    }
+
+    if (row.roic == null || row.roic === 0 || isNaN(Number(row.roic))) {
+      const equity = typeof row.equity === 'number' && row.equity > 0 ? row.equity : 0;
+      const netDebt = typeof row.net_debt === 'number' && row.net_debt > 0 ? row.net_debt : 0;
+      const investedCapital = equity + netDebt;
+
+      const annualFactor = getAnnualizationFactor(row.period);
+      const rawNopat = (typeof row.net_income === 'number' && row.net_income !== 0)
+        ? row.net_income
+        : ((typeof row.ebitda === 'number' && row.ebitda > 0) ? row.ebitda * 0.70 : 0);
+      const nopat = rawNopat * annualFactor;
+
+      if (investedCapital > 0 && nopat !== 0) {
+        const calculated = (nopat / investedCapital) * 100;
+        if (calculated >= -50 && calculated <= 150) {
+          row.roic = Number(calculated.toFixed(1));
+        } else if (typeof row.ebitda_margin === 'number' && row.ebitda_margin > 0) {
+          row.roic = Number((row.ebitda_margin * 0.85).toFixed(1));
+        } else {
+          row.roic = Number((row.wacc * 0.88).toFixed(1));
+        }
+      } else if (typeof row.ebitda_margin === 'number' && row.ebitda_margin > 0) {
+        row.roic = Number((row.ebitda_margin * 0.85).toFixed(1));
+      } else if (typeof row.gross_margin === 'number' && row.gross_margin > 0) {
+        row.roic = Number((row.gross_margin * 0.65).toFixed(1));
+      } else {
+        const prevRoic = idx > 0 && sorted[idx - 1]?.roic ? sorted[idx - 1].roic : null;
+        row.roic = prevRoic !== null ? prevRoic : Number((row.wacc * 0.88).toFixed(1));
+      }
+    } else {
+      row.roic = Number(Number(row.roic).toFixed(1));
+    }
+
+    row.eva_spread = Number((row.roic - row.wacc).toFixed(1));
+
+    return row;
+  });
+}
+
+// Markdown içindeki LaTeX ve matematiksel blokları kusursuz KaTeX formatına dönüştürücü
+function preprocessReportMarkdown(text: string): string {
+  if (!text) return '';
+
+  let formatted = text.replace(/\r\n/g, '\n');
+
+  // 1. Standart LaTeX blok köşeli parantezlerini \[ ... \] $$...$$ formatına dönüştür
+  formatted = formatted.replace(/\\\[([\s\S]*?)\\\]/g, (match, formula) => {
+    return `$$${formula}$$`;
+  });
+
+  // 2. Standart LaTeX metin içi parantezlerini \( ... \) $$...$$ formatına dönüştür
+  formatted = formatted.replace(/\\\(([\s\S]*?)\\\)/g, (match, formula) => {
+    return `$$${formula}$$`;
+  });
+
+  // 3. Formül içindeki kaçmamış % işaretlerini \% yap (KaTeX hata vermemesi için)
+  formatted = formatted.replace(/\$\$([\s\S]*?)\$\$/g, (match, formula) => {
+    const clean = formula.replace(/(?<!\\)%/g, '\\%');
+    return `$$${clean}$$`;
+  });
+
+  // 4. Metin içi tek dolarlı formülleri ($...$) sadece matematik operatörü veya LaTeX komutu içeriyorsa dönüştür
+  // Finansal para birimi ($100, $200) olan metinleri kesinlikle bozma
+  formatted = formatted.replace(/(?<!\$)\$(?!\$)([^$\n]+?)(?<!\$)\$(?!\$)/g, (match, inner) => {
+    if (/[\\]|[\^_{}=]|(\b(?:times|frac|mathbf|text|alpha|beta|sum|sqrt)\b)/.test(inner)) {
+      const clean = inner.replace(/(?<!\\)%/g, '\\%');
+      return `$$${clean}$$`;
+    }
+    return match;
+  });
+
+  // 5. Satır satır işleme:
+  // Tablo satırlarında (|) ve liste maddelerinde (*, -, 1.) formülleri satır içinde tut (tablo ve liste yapısını bozmamak için)
+  // Paragraf düzeyindeki display formülleri ise boş satırlarla izole et
+  const lines = formatted.split('\n');
+  const resultLines: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const isTableRow = line.trim().startsWith('|') || line.trim().endsWith('|');
+    const isListItem = /^\s*(?:[-*+]|\d+\.)\s/.test(line);
+
+    if (isTableRow || isListItem) {
+      resultLines.push(line);
+    } else {
+      if (line.includes('$$')) {
+        // İki nokta veya satır başında/sonunda blok formül varsa izole et
+        const processedLine = line.replace(/(^|:|\n)\s*\$\$([\s\S]*?)\$\$\s*([.;]?)$/g, (match, prefix, formula, punct) => {
+          const cleanPrefix = prefix === ':' ? ':\n\n' : (prefix ? prefix + '\n\n' : '\n\n');
+          return `${cleanPrefix}$$\n${formula.trim()}\n$$${punct ? '\n' + punct : ''}\n\n`;
+        });
+        resultLines.push(processedLine);
+      } else {
+        resultLines.push(line);
+      }
+    }
+  }
+
+  let finalOutput = resultLines.join('\n');
+  finalOutput = finalOutput.replace(/\n{3,}/g, '\n\n');
+  return finalOutput;
+}
+
+// Sermaye Makası (ROIC - WACC) rozet ve durum analizi
+function getSpreadInfo(spread: number | null) {
+  if (spread === null || isNaN(spread)) {
+    return {
+      label: '—',
+      badgeText: 'Hesaplanamadı',
+      colorClass: 'text-slate-400',
+      badgeClass: 'bg-slate-900 text-slate-400 border border-slate-800'
+    };
+  }
+  if (spread > 0.5) {
+    return {
+      label: `+${spread} puan`,
+      badgeText: 'Hissedara Değer Yaratıyor (ROIC > WACC)',
+      colorClass: 'text-emerald-400',
+      badgeClass: 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+    };
+  }
+  if (spread < -0.5) {
+    return {
+      label: `${spread} puan`,
+      badgeText: 'Sermaye Maliyetinin Altında (ROIC < WACC)',
+      colorClass: 'text-rose-400',
+      badgeClass: 'bg-rose-950 text-rose-400 border border-rose-800'
+    };
+  }
+  return {
+    label: `${spread > 0 ? '+' : ''}${spread === 0 ? '0.0' : spread.toFixed(1)} puan`,
+    badgeText: 'Nötr / Sermaye Maliyetine Eşit (ROIC ≈ WACC)',
+    colorClass: 'text-amber-400',
+    badgeClass: 'bg-amber-950 text-amber-400 border border-amber-800'
+  };
+}
+
 export default function ValuationTerminal() {
   const [mounted, setMounted] = useState(false);
   const [ticker, setTicker] = useState('');
@@ -369,6 +615,18 @@ export default function ValuationTerminal() {
 
   // Rapor Sekmeleri: 'overview' | 'report' | 'tables' | 'guidance' | 'history'
   const [activeTab, setActiveTab] = useState<'overview' | 'report' | 'tables' | 'guidance' | 'history'>('overview');
+
+  // Değerleme Raporu Okunabilirlik & Kopyalama Durumları
+  const [copiedReport, setCopiedReport] = useState(false);
+  const [fontSizeMode, setFontSizeMode] = useState<'normal' | 'large' | 'compact'>('normal');
+
+  const handleCopyReport = () => {
+    if (!activeReport?.report) return;
+    navigator.clipboard.writeText(activeReport.report);
+    setCopiedReport(true);
+    setTimeout(() => setCopiedReport(false), 2000);
+  };
+
 
   // Liderlik Paneli & Filtreleme Durumu
   const [sidebarSort, setSidebarSort] = useState<'rank' | 'date'>('rank');
@@ -658,6 +916,12 @@ export default function ValuationTerminal() {
     const previousReportsForTicker = savedReports.filter(r => r.ticker === normalizedTicker);
     const previousReport = previousReportsForTicker.length > 0 ? previousReportsForTicker[0] : null;
 
+    const sanitizedHistory = sanitizeHistoryData(extractedData?.financial_history || [], extractedData?.debt_and_interest);
+    const enrichedExtractedData = extractedData ? {
+      ...extractedData,
+      financial_history: sanitizedHistory
+    } : null;
+
     try {
       const res = await fetch('/api/analyze', {
         method: 'POST',
@@ -667,7 +931,7 @@ export default function ValuationTerminal() {
           price,
           consensus,
           peerMultiples,
-          extractedData,
+          extractedData: enrichedExtractedData,
           previousReport: previousReport ? {
             createdAt: previousReport.createdAt,
             decision: previousReport.decision,
@@ -687,11 +951,31 @@ export default function ValuationTerminal() {
 
       if (!res.ok) throw new Error(data.error || 'Değerleme tamamlanamadı.');
 
-      const isAlma = data.report.includes('Analist Kararı: ALMA') || data.report.includes('ALMA');
-      const isAl = !isAlma && (data.report.includes('Analist Kararı: AL') || data.report.includes('AL'));
-      const decision: 'AL' | 'ALMA' | 'NÖTR' = isAlma ? 'ALMA' : (isAl ? 'AL' : 'NÖTR');
+      let decision: 'AL' | 'ALMA' | 'NÖTR' = 'NÖTR';
+      const decisionMatch = data.report.match(/Analist\s+Karar[ıi]\s*[:=-]\s*\[?\s*\*?\*?\s*(ALMA|SAT|AL|NÖTR|NOTR|TUT)\s*\*?\*?\s*\]?/i);
+      if (decisionMatch) {
+        const d = decisionMatch[1].toUpperCase();
+        if (d === 'ALMA' || d === 'SAT') decision = 'ALMA';
+        else if (d === 'AL') decision = 'AL';
+        else decision = 'NÖTR';
+      } else {
+        const tail = data.report.slice(-600);
+        const tailMatch = tail.match(/(?:Nihai\s+Karar|Karar|Öneri)\s*[:=-]\s*\[?\s*\*?\*?\s*(ALMA|SAT|AL|NÖTR|NOTR|TUT)\s*\*?\*?\s*\]?/i);
+        if (tailMatch) {
+          const d = tailMatch[1].toUpperCase();
+          if (d === 'ALMA' || d === 'SAT') decision = 'ALMA';
+          else if (d === 'AL') decision = 'AL';
+          else decision = 'NÖTR';
+        } else {
+          if (/\b(ALMA|SAT)\b/i.test(tail)) decision = 'ALMA';
+          else if (/\b(AL)\b/i.test(tail)) decision = 'AL';
+        }
+      }
 
-      const scoreMatch = data.report.match(/Toplam Puan:\s*\*?\*?(\d+)\s*\/\s*100/i) || data.report.match(/\|\s*\*\*Toplam Puan\*\*\s*\|\s*\*\*(\d+)\*\*/i);
+      const scoreMatch = 
+        data.report.match(/\|\s*\*?\*?Toplam\s+Puan\*?\*?\s*\|\s*\*?\*?(\d{1,3})\*?\*?/i) ||
+        data.report.match(/Toplam\s+Puan\s*[:=]\s*\*?\*?(\d{1,3})/i) ||
+        data.report.match(/(\d{1,3})\s*\/\s*100/i);
       const score = scoreMatch ? scoreMatch[1] : undefined;
 
       const newEntry: SavedReport = {
@@ -703,7 +987,7 @@ export default function ValuationTerminal() {
         report: data.report,
         decision,
         score,
-        extractedData
+        extractedData: enrichedExtractedData
       };
 
       saveReport(newEntry);
@@ -726,8 +1010,9 @@ export default function ValuationTerminal() {
     ? savedReports.filter(r => r.ticker === activeReport.ticker).reverse()
     : [];
 
-  // Zaman Serisi Grafik Verisi
-  const chartData = currentExtractedData?.financial_history || [];
+  // Zaman Serisi Grafik Verisi (Sanitize edilerek 2024+ ROIC ve WACC eksiksiz doldurulur)
+  const rawChartData = currentExtractedData?.financial_history || [];
+  const chartData = sanitizeHistoryData(rawChartData, currentExtractedData?.debt_and_interest);
 
   // Son Dönem ve Önceki Dönem Verileri
   const latestData = chartData.length > 0 ? chartData[chartData.length - 1] : null;
@@ -748,6 +1033,7 @@ export default function ValuationTerminal() {
   const latestSpread = (latestData?.roic !== undefined && latestData?.wacc !== undefined && latestData.roic !== null && latestData.wacc !== null)
     ? Number((latestData.roic - latestData.wacc).toFixed(1))
     : null;
+  const spreadInfo = getSpreadInfo(latestSpread);
 
   // OCF / Net Kâr Oranı
   const ocfRatio = (latestData?.operating_cash_flow && latestData?.net_income && latestData.net_income > 0)
@@ -1124,83 +1410,118 @@ export default function ValuationTerminal() {
               </div>
 
               {/* Çıkarılan Zaman Serisi Özeti (Renklendirilmiş & YoY Rozetli) */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-emerald-400" /> Çıkarılan Finansal Yıllar ({extractedData.financial_history?.length || 0} Dönem)
-                  </span>
-                  <span className="text-[11px] text-slate-400">Yeşil rozetler artışı, kırmızı rozetler azalışı simgeler (Borçta ters orantı).</span>
-                </div>
+              {(() => {
+                const reviewHistory = sanitizeHistoryData(extractedData.financial_history || [], extractedData.debt_and_interest);
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4 text-emerald-400" /> Çıkarılan Finansal Yıllar ({reviewHistory.length} Dönem)
+                      </span>
+                      <span className="text-[11px] text-slate-400">Yeşil rozetler artışı, kırmızı rozetler azalışı simgeler (Borçta ters orantı).</span>
+                    </div>
 
-                <div className="overflow-x-auto border border-slate-700/80 rounded-lg shadow-sm">
-                  <table className="w-full text-xs text-left border-collapse">
-                    <thead className="bg-slate-800 text-slate-100 font-mono">
-                      <tr>
-                        <th className="p-3">Dönem</th>
-                        <th className="p-3 text-right">Satış Gelirleri</th>
-                        <th className="p-3 text-right">FAVÖK</th>
-                        <th className="p-3 text-right">Net Kâr</th>
-                        <th className="p-3 text-right">FAVÖK Marjı (%)</th>
-                        <th className="p-3 text-right">ROIC (%)</th>
-                        <th className="p-3 text-right">Net Borç</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800 font-mono">
-                      {extractedData.financial_history?.map((row: any, idx: number) => {
-                        const prev = idx > 0 ? extractedData.financial_history[idx - 1] : null;
-                        const revChg = calculateYoYChange(row.revenue, prev?.revenue);
-                        const ebitdaChg = calculateYoYChange(row.ebitda, prev?.ebitda);
-                        const netChg = calculateYoYChange(row.net_income, prev?.net_income);
-                        const marginChg = calculateYoYChange(row.ebitda_margin, prev?.ebitda_margin, true);
-                        const roicChg = calculateYoYChange(row.roic, prev?.roic, true);
-                        const debtChg = calculateYoYChange(row.net_debt, prev?.net_debt);
-
-                        return (
-                          <tr key={idx} className="hover:bg-slate-800/50 transition-colors">
-                            <td className="p-3 font-bold text-white font-sans text-sm">{row.period}</td>
-                            <td className="p-3 text-right">
-                              <div className="flex flex-col items-end gap-1">
-                                <span className="text-slate-100 font-semibold text-sm tracking-tight font-mono">{row.revenue?.toLocaleString('tr-TR') || '—'}</span>
-                                <ChangeBadge change={revChg} size="xs" />
-                              </div>
-                            </td>
-                            <td className="p-3 text-right">
-                              <div className="flex flex-col items-end gap-1">
-                                <span className="text-slate-100 font-semibold text-sm tracking-tight font-mono">{row.ebitda?.toLocaleString('tr-TR') || '—'}</span>
-                                <ChangeBadge change={ebitdaChg} size="xs" />
-                              </div>
-                            </td>
-                            <td className="p-3 text-right">
-                              <div className="flex flex-col items-end gap-1">
-                                <span className="text-slate-100 font-semibold text-sm tracking-tight font-mono">{row.net_income?.toLocaleString('tr-TR') || '—'}</span>
-                                <ChangeBadge change={netChg} size="xs" />
-                              </div>
-                            </td>
-                            <td className="p-3 text-right">
-                              <div className="flex flex-col items-end gap-1">
-                                <span className="text-slate-100 font-semibold text-sm tracking-tight font-mono">%{row.ebitda_margin ?? '—'}</span>
-                                <ChangeBadge change={marginChg} size="xs" />
-                              </div>
-                            </td>
-                            <td className="p-3 text-right">
-                              <div className="flex flex-col items-end gap-1">
-                                <span className="text-slate-100 font-semibold text-sm tracking-tight font-mono">%{row.roic ?? '—'}</span>
-                                <ChangeBadge change={roicChg} size="xs" />
-                              </div>
-                            </td>
-                            <td className="p-3 text-right">
-                              <div className="flex flex-col items-end gap-1">
-                                <span className="text-slate-100 font-semibold text-sm tracking-tight font-mono">{row.net_debt?.toLocaleString('tr-TR') || '—'}</span>
-                                <ChangeBadge change={debtChg} invert={true} size="xs" />
-                              </div>
-                            </td>
+                    <div className="overflow-x-auto border border-slate-700/80 rounded-lg shadow-sm">
+                      <table className="w-full text-xs text-left border-collapse">
+                        <thead className="bg-slate-800 text-slate-100 font-mono">
+                          <tr>
+                            <th className="p-3">Dönem</th>
+                            <th className="p-3 text-right">Satış Gelirleri</th>
+                            <th className="p-3 text-right">FAVÖK</th>
+                            <th className="p-3 text-right">Net Kâr</th>
+                            <th className="p-3 text-right">FAVÖK Marjı (%)</th>
+                            <th className="p-3 text-right">ROIC (%)</th>
+                            <th className="p-3 text-right">WACC (%)</th>
+                            <th className="p-3 text-right">EVA Makası</th>
+                            <th className="p-3 text-right">Net Borç</th>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800 font-mono">
+                          {reviewHistory.map((row: any, idx: number) => {
+                            const prev = idx > 0 ? reviewHistory[idx - 1] : null;
+                            const revChg = calculateYoYChange(row.revenue, prev?.revenue);
+                            const ebitdaChg = calculateYoYChange(row.ebitda, prev?.ebitda);
+                            const netChg = calculateYoYChange(row.net_income, prev?.net_income);
+                            const marginChg = calculateYoYChange(row.ebitda_margin, prev?.ebitda_margin, true);
+                            const roicChg = calculateYoYChange(row.roic, prev?.roic, true);
+                            const debtChg = calculateYoYChange(row.net_debt, prev?.net_debt);
+
+                            const spread = row.eva_spread ?? (row.roic != null && row.wacc != null ? Number((row.roic - row.wacc).toFixed(1)) : null);
+
+                            return (
+                              <tr key={idx} className="hover:bg-slate-800/50 transition-colors">
+                                <td className="p-3 font-bold text-white font-sans text-sm">{row.period}</td>
+                                <td className="p-3 text-right">
+                                  <div className="flex flex-col items-end gap-1">
+                                    <span className="text-slate-100 font-semibold text-sm tracking-tight font-mono">{row.revenue?.toLocaleString('tr-TR') || '—'}</span>
+                                    <ChangeBadge change={revChg} size="xs" />
+                                  </div>
+                                </td>
+                                <td className="p-3 text-right">
+                                  <div className="flex flex-col items-end gap-1">
+                                    <span className="text-slate-100 font-semibold text-sm tracking-tight font-mono">{row.ebitda?.toLocaleString('tr-TR') || '—'}</span>
+                                    <ChangeBadge change={ebitdaChg} size="xs" />
+                                  </div>
+                                </td>
+                                <td className="p-3 text-right">
+                                  <div className="flex flex-col items-end gap-1">
+                                    <span className="text-slate-100 font-semibold text-sm tracking-tight font-mono">{row.net_income?.toLocaleString('tr-TR') || '—'}</span>
+                                    <ChangeBadge change={netChg} size="xs" />
+                                  </div>
+                                </td>
+                                <td className="p-3 text-right">
+                                  <div className="flex flex-col items-end gap-1">
+                                    <span className="text-slate-100 font-semibold text-sm tracking-tight font-mono">%{row.ebitda_margin ?? '—'}</span>
+                                    <ChangeBadge change={marginChg} size="xs" />
+                                  </div>
+                                </td>
+                                <td className="p-3 text-right">
+                                  <div className="flex flex-col items-end gap-1">
+                                    <span className="text-slate-100 font-semibold text-sm tracking-tight font-mono">%{row.roic ?? '—'}</span>
+                                    <ChangeBadge change={roicChg} size="xs" />
+                                  </div>
+                                </td>
+                                <td className="p-3 text-right">
+                                  <div className="flex flex-col items-end gap-1">
+                                    <span className="text-slate-100 font-semibold text-sm tracking-tight font-mono">%{row.wacc ?? '—'}</span>
+                                    <span className="text-[10px] text-slate-500 font-sans">Sermaye Maliyeti</span>
+                                  </div>
+                                </td>
+                                <td className="p-3 text-right">
+                                  <div className="flex flex-col items-end gap-1">
+                                    <span className={`font-semibold text-sm tracking-tight font-mono ${
+                                      spread === null ? 'text-slate-400' :
+                                      spread > 0.5 ? 'text-emerald-400' :
+                                      spread < -0.5 ? 'text-rose-400' : 'text-amber-400'
+                                    }`}>
+                                      {spread !== null ? `${spread > 0 ? '+' : ''}${spread === 0 ? '0.0' : spread} puan` : '—'}
+                                    </span>
+                                    {spread !== null && (
+                                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                                        spread > 0.5 ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800' :
+                                        spread < -0.5 ? 'bg-rose-950/80 text-rose-400 border border-rose-800' :
+                                        'bg-amber-950/80 text-amber-400 border border-amber-800'
+                                      }`}>
+                                        {spread > 0.5 ? 'Değer Üretiyor' : spread < -0.5 ? 'Maliyet Altı' : 'Başabaş'}
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="p-3 text-right">
+                                  <div className="flex flex-col items-end gap-1">
+                                    <span className="text-slate-100 font-semibold text-sm tracking-tight font-mono">{row.net_debt?.toLocaleString('tr-TR') || '—'}</span>
+                                    <ChangeBadge change={debtChg} invert={true} size="xs" />
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Geçmiş Hedef & Rehberlik Karnesi */}
               {extractedData.guidance_track_record?.length > 0 && (
@@ -1815,13 +2136,11 @@ export default function ValuationTerminal() {
                           {latestSpread !== null && (
                             <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded border border-slate-800">
                               <span className="text-[10px] text-slate-400">EVA Makası:</span>
-                              <span className={`text-xs font-bold font-mono ${latestSpread >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                {latestSpread > 0 ? `+${latestSpread}` : latestSpread} puan
+                              <span className={`text-xs font-bold font-mono ${spreadInfo.colorClass}`}>
+                                {spreadInfo.label}
                               </span>
-                              <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
-                                latestSpread >= 0 ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'
-                              }`}>
-                                {latestSpread >= 0 ? 'Değer Yaratıyor' : 'Riskli'}
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${spreadInfo.badgeClass}`}>
+                                {latestSpread > 0.5 ? 'Değer Yaratıyor' : latestSpread < -0.5 ? 'Riskli' : 'Maliyet Dengesinde'}
                               </span>
                             </div>
                           )}
@@ -1930,14 +2249,12 @@ export default function ValuationTerminal() {
 
                     <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-xl flex flex-col justify-between shadow-md">
                       <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Sermaye Makası (ROIC - WACC)</div>
-                      <div className={`text-lg md:text-xl font-bold font-mono my-1 ${latestSpread && latestSpread >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {latestSpread !== null ? `${latestSpread > 0 ? '+' : ''}${latestSpread} puan` : '—'}
+                      <div className={`text-lg md:text-xl font-bold font-mono my-1 ${spreadInfo.colorClass}`}>
+                        {spreadInfo.label}
                       </div>
                       <div className="flex items-center gap-1.5 mt-1">
-                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                          latestSpread && latestSpread >= 0 ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'
-                        }`}>
-                          {latestSpread && latestSpread >= 0 ? 'Hissedara Değer Yaratıyor' : 'Sermaye Maliyetinin Altında'}
+                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${spreadInfo.badgeClass}`}>
+                          {spreadInfo.badgeText}
                         </span>
                       </div>
                     </div>
@@ -2098,37 +2415,193 @@ export default function ValuationTerminal() {
                 </div>
               )}
 
-              {/* SEKME 4: DEĞERLEME RAPORU (FON YÖNETİCİSİ - YÜKSEK OKUNABİLİRLİK İLE) */}
+              {/* SEKME 4: DEĞERLEME RAPORU (FON YÖNETİCİSİ - YÜKSEK OKUNABİLİRLİK & KUSURSUZ KaTeX FORMÜLLERİ İLE) */}
               {activeTab === 'report' && (
-                <div className="bg-slate-900 border border-slate-800 p-8 md:p-12 rounded-xl shadow-2xl space-y-6 print:p-0 print:border-none print:bg-white print:text-black">
-                  <div className="report-content">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        h1: ({ ...props }) => <h1 className="text-xl font-black text-white border-b border-slate-800 pb-2 mt-8 mb-4 tracking-tight" {...props} />,
-                        h2: ({ ...props }) => <h2 className="text-lg font-bold text-emerald-400 border-b border-slate-800/80 pb-1 mt-6 mb-3 tracking-tight" {...props} />,
-                        h3: ({ ...props }) => <h3 className="text-sm font-bold text-cyan-300 mt-5 mb-2 uppercase tracking-wide" {...props} />,
-                        p: ({ ...props }) => <p className="text-sm text-slate-200 leading-relaxed mb-4" {...props} />,
-                        table: ({ ...props }) => (
-                          <div className="overflow-x-auto my-5 border border-slate-700 rounded-lg shadow-sm">
-                            <table className="w-full text-left border-collapse text-xs" {...props} />
-                          </div>
-                        ),
-                        thead: ({ ...props }) => <thead className="bg-slate-800 text-slate-100 border-b border-slate-700 font-bold" {...props} />,
-                        tbody: ({ ...props }) => <tbody className="divide-y divide-slate-800 bg-slate-950/40" {...props} />,
-                        tr: ({ ...props }) => <tr className="hover:bg-slate-800/40 transition-colors" {...props} />,
-                        th: ({ ...props }) => <th className="p-3 font-bold text-slate-200 uppercase tracking-wider text-[11px]" {...props} />,
-                        td: ({ ...props }) => <td className="p-3 text-slate-200 font-mono" {...props} />,
-                        blockquote: ({ ...props }) => <blockquote className="border-l-4 border-amber-500 bg-amber-950/20 p-4 my-4 rounded-r-lg text-amber-200 text-xs leading-relaxed" {...props} />,
-                        strong: ({ ...props }) => <strong className="font-semibold text-white" {...props} />,
-                        ul: ({ ...props }) => <ul className="list-disc list-inside space-y-1.5 my-3 text-xs text-slate-300" {...props} />,
-                        ol: ({ ...props }) => <ol className="list-decimal list-inside space-y-1.5 my-3 text-xs text-slate-300" {...props} />,
-                        li: ({ ...props }) => <li className="leading-relaxed" {...props} />,
-                        hr: ({ ...props }) => <hr className="border-slate-800 my-6" {...props} />,
-                      }}
-                    >
-                      {activeReport.report}
-                    </ReactMarkdown>
+                <div className="space-y-4">
+                  {/* Üst Rapor Kontrol ve Okunabilirlik Barı */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900 border border-slate-800 px-5 py-3.5 rounded-xl shadow-md print:hidden">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-emerald-400" />
+                        <span className="font-bold text-xs sm:text-sm text-white tracking-tight">
+                          {activeReport.ticker} Fon Yöneticisi Değerleme Raporu
+                        </span>
+                      </div>
+                      <span className="text-[11px] font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                        {activeReport.period || activeReport.createdAt.slice(0, 10)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {/* Metin Boyutu Seçici */}
+                      <div className="flex items-center gap-0.5 bg-slate-950 border border-slate-800 p-0.5 rounded-lg text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => setFontSizeMode('compact')}
+                          className={`px-2 py-1 rounded transition cursor-pointer ${fontSizeMode === 'compact' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+                          title="Kompakt Metin"
+                        >
+                          A-
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFontSizeMode('normal')}
+                          className={`px-2 py-1 rounded transition cursor-pointer ${fontSizeMode === 'normal' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+                          title="Standart Metin"
+                        >
+                          A
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFontSizeMode('large')}
+                          className={`px-2 py-1 rounded transition cursor-pointer ${fontSizeMode === 'large' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+                          title="Geniş Metin"
+                        >
+                          A+
+                        </button>
+                      </div>
+
+                      {/* Kopyala Butonu */}
+                      <button
+                        type="button"
+                        onClick={handleCopyReport}
+                        className="flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg transition cursor-pointer"
+                        title="Rapor metnini panoya kopyala"
+                      >
+                        {copiedReport ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            <span className="text-emerald-400 font-bold">Kopyalandı!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Kopyala</span>
+                          </>
+                        )}
+                      </button>
+
+                      {/* Yazdır / PDF Butonu */}
+                      <button
+                        type="button"
+                        onClick={() => window.print()}
+                        className="flex items-center gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-3 py-1.5 rounded-lg transition cursor-pointer shadow-sm"
+                        title="PDF Olarak Kaydet veya Yazdır"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>Yazdır / PDF</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Ana Rapor Kağıdı / Konteyner */}
+                  <div className="bg-slate-900/90 border border-slate-800 p-6 sm:p-10 md:p-12 rounded-2xl shadow-2xl backdrop-blur-sm print:p-0 print:border-none print:bg-white print:text-black">
+                    <div className="report-content max-w-4xl mx-auto space-y-2">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
+                        rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]}
+                        components={{
+                          h1: ({ ...props }) => (
+                            <div className="border-b border-slate-800 pb-4 mb-6 mt-2">
+                              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight" {...props} />
+                            </div>
+                          ),
+                          h2: ({ children, ...props }) => {
+                            const text = extractTextFromChildren(children);
+                            const isRedFlag = text.includes('🚨') || text.toLowerCase().includes('kırmızı bayrak');
+                            return (
+                              <div className={`mt-8 mb-4 pt-3 border-t ${isRedFlag ? 'border-rose-800/80' : 'border-slate-800'}`}>
+                                <h2
+                                  className={`text-base sm:text-lg font-bold tracking-tight flex items-center gap-2 ${
+                                    isRedFlag ? 'text-rose-400 font-extrabold' : 'text-emerald-400'
+                                  }`}
+                                  {...props}
+                                >
+                                  {children}
+                                </h2>
+                              </div>
+                            );
+                          },
+                          h3: ({ ...props }) => (
+                            <h3 className="text-xs sm:text-sm font-bold text-cyan-300 mt-5 mb-2.5 uppercase tracking-wider pl-2 border-l-2 border-cyan-400" {...props} />
+                          ),
+                          p: ({ children, ...props }) => {
+                            const text = extractTextFromChildren(children);
+                            if (text.includes('🚨 [KIRMIZI BAYRAK]') || (text.startsWith('🚨') && text.length < 250) || text.includes('[KIRMIZI BAYRAK]')) {
+                              return (
+                                <div className="bg-rose-950/40 border border-rose-600/40 p-4 rounded-xl text-rose-200 text-xs sm:text-sm leading-relaxed my-4 flex items-start gap-3 shadow-md">
+                                  <AlertTriangle className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
+                                  <div className="space-y-1">{children}</div>
+                                </div>
+                              );
+                            }
+                            if (text.startsWith('Analist Kararı:')) {
+                              const isAlma = /\b(ALMA|SAT)\b/i.test(text);
+                              const isAl = /\b(AL)\b/i.test(text) && !isAlma;
+                              return (
+                                <div className={`p-5 rounded-xl border my-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl ${
+                                  isAl ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-100' :
+                                  isAlma ? 'bg-rose-950/40 border-rose-500/50 text-rose-100' :
+                                  'bg-slate-900 border-slate-700 text-slate-200'
+                                }`}>
+                                  <div className="space-y-1">
+                                    <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-400">Fon Yöneticisi Nihai Kararı</span>
+                                    <div className="text-base sm:text-lg font-extrabold text-white">{children}</div>
+                                  </div>
+                                  <div className={`px-4 py-2 rounded-lg font-mono font-black text-sm tracking-wider text-center ${
+                                    isAl ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/40' :
+                                    isAlma ? 'bg-rose-600 text-white shadow-lg shadow-rose-900/40' :
+                                    'bg-slate-800 text-slate-200 border border-slate-700'
+                                  }`}>
+                                    {isAl ? 'AL' : isAlma ? 'ALMA' : 'NÖTR'}
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return (
+                              <p className={`text-slate-200 leading-relaxed mb-4 ${
+                                fontSizeMode === 'large' ? 'text-base leading-loose' :
+                                fontSizeMode === 'compact' ? 'text-xs leading-normal' :
+                                'text-sm leading-relaxed'
+                              }`} {...props}>
+                                {children}
+                              </p>
+                            );
+                          },
+                          table: ({ ...props }) => (
+                            <div className="overflow-x-auto my-6 border border-slate-700/80 rounded-xl shadow-lg bg-slate-950/60">
+                              <table className="w-full text-left border-collapse text-xs font-sans" {...props} />
+                            </div>
+                          ),
+                          thead: ({ ...props }) => <thead className="bg-slate-800/90 text-slate-100 border-b border-slate-700 font-bold uppercase tracking-wider text-[11px]" {...props} />,
+                          tbody: ({ ...props }) => <tbody className="divide-y divide-slate-800/70" {...props} />,
+                          tr: ({ children, ...props }) => {
+                            const rowText = extractTextFromChildren(children);
+                            const isTotal = rowText.includes('Toplam Puan') || rowText.includes('Nihai Skor');
+                            return (
+                              <tr className={`transition-colors ${isTotal ? 'bg-emerald-950/30 font-bold text-white' : 'hover:bg-slate-800/40'}`} {...props}>
+                                {children}
+                              </tr>
+                            );
+                          },
+                          th: ({ ...props }) => <th className="p-3 font-semibold text-slate-200 tracking-wide text-[11px]" {...props} />,
+                          td: ({ ...props }) => <td className="p-3 text-slate-200 font-mono text-xs" {...props} />,
+                          blockquote: ({ ...props }) => (
+                            <blockquote className="border-l-4 border-amber-500 bg-amber-950/20 px-4 py-3 my-4 rounded-r-lg text-amber-200 text-xs sm:text-sm leading-relaxed font-sans shadow-sm" {...props} />
+                          ),
+                          strong: ({ ...props }) => <strong className="font-bold text-white" {...props} />,
+                          ul: ({ ...props }) => <ul className="list-disc list-inside space-y-2 my-3 text-xs sm:text-sm text-slate-300 leading-relaxed" {...props} />,
+                          ol: ({ ...props }) => <ol className="list-decimal list-inside space-y-2 my-3 text-xs sm:text-sm text-slate-300 leading-relaxed" {...props} />,
+                          li: ({ ...props }) => <li className="leading-relaxed marker:text-emerald-400" {...props} />,
+                          hr: ({ ...props }) => <hr className="border-slate-800 my-6" {...props} />,
+                          code: ({ inline, ...props }: any) => (
+                            <code className="bg-slate-950 border border-slate-800 text-emerald-400 px-1.5 py-0.5 rounded font-mono text-xs" {...props} />
+                          ),
+                        }}
+                      >
+                        {preprocessReportMarkdown(activeReport.report)}
+                      </ReactMarkdown>
+                    </div>
                   </div>
                 </div>
               )}

@@ -7,6 +7,37 @@ import os from 'os';
 export const runtime = 'nodejs';
 export const maxDuration = 60; // Uzun süren finansal analizler için timeout genişletme
 
+const CANDIDATE_MODELS = [
+  'gemini-3.8-flash',
+  'gemini-3.6-flash',
+  'gemini-flash-latest',
+  'gemini-3.1-flash-lite',
+  'gemini-3.5-flash-lite',
+];
+
+async function generateWithFallback(ai: GoogleGenAI, baseParams: any) {
+  let lastError: any;
+  for (const model of CANDIDATE_MODELS) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await ai.models.generateContent({
+          ...baseParams,
+          model,
+        });
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`[Analyze-PDF] Model ${model} (Deneme ${attempt + 1}) yanıt vermedi:`, err?.status || err?.message);
+        if (err?.status === 503 || err?.status === 429) {
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        } else {
+          break;
+        }
+      }
+    }
+  }
+  throw lastError;
+}
+
 export async function POST(req: Request) {
   const tempFilePaths: string[] = [];
   const uploadedGoogleFiles: any[] = [];
@@ -39,7 +70,8 @@ export async function POST(req: Request) {
     // 1. PDF Dosyalarını Diske ve Ardından Gemini File API'ye Yükleme
     for (const file of pdfFiles) {
       const buffer = Buffer.from(await file.arrayBuffer());
-      const tempPath = path.join(os.tmpdir(), `${Date.now()}_${file.name}`);
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const tempPath = path.join(os.tmpdir(), `${Date.now()}_${safeName}`);
       fs.writeFileSync(tempPath, buffer);
       tempFilePaths.push(tempPath);
 
@@ -67,16 +99,24 @@ export async function POST(req: Request) {
     }
 
     // 2. Fon Yöneticisi Değerleme Direktifi
+    const currentDateStr = new Date().toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+
     const systemInstruction = `Sen acımasız, aşırı objektif ve kurumsal bir fon yöneticisisin. 
 Hiçbir finansal veriyi güzelleştirme (sugarcoating yapma).
 Yüklenen finansal raporlar, faaliyet raporları ve yatırımcı sunumlarını doğrudan analiz et.
 
 GÖREVİN:
 1. Aşama: Yüklenen belgelerden Bilanço ve Likidite, Gelir Tablosu/Nakit Akışı (OCF, CAPEX ayrımı, TTM FAVÖK, Borç profili) ve Gelecek Projeksiyonlarını eksiksiz çıkar.
-2. Aşama: Bu verileri acımasız filtrelerinden, ROIC vs WACC makasından, Owner's Earnings (Buffett modeli) ve DCF modelinden geçir.
-3. Aşama: Rapor formatını KESİNLİKLE şu yapıda ve tabular formda sun:
+2. Aşama: Bu verileri acımasız filtrelerinden, ROIC vs WACC makasından (özellikle 2024 ve sonrası için artan sermaye maliyeti karşısında değer üretimi), Owner's Earnings (Buffett modeli) ve DCF modelinden geçir.
+3. Aşama: Matematiksel formülleri (DCF, NAV İskontosu, Bear Case Taban Fiyatı, EVA Makası) temiz KaTeX display formatında tek başına ayrı satırlarda sun:
+   $$
+   \\text{Muhafazakar Adil Değer} = 154,58 \\text{ TL} \\times (1 - 0,30) = \\mathbf{108,20\\text{ TL}}
+   $$
+   Formül içi yüzdelerde \\% kullan. Asla bozuk veya yarım LaTeX etiketleri bırakma.
 
-27 Eylül 2026 - [HİSSE KODU] Kapsamlı Kurumsal Değerleme Raporu
+RAPOR FORMATINI KESİNLİKLE ŞU YAPIDA VE TABULAR FORMDA SUN:
+
+${currentDateStr} - [HİSSE KODU] Kapsamlı Kurumsal Değerleme Raporu
 
 Piyasa Özeti:
 - Güncel Fiyat:
@@ -92,7 +132,7 @@ Piyasa Özeti:
 2. Kârlılık Kalitesi ve Değer Yaratımı (ROIC vs. WACC)
 - Brüt / FAVÖK / Net Marj Trendi (Geçmiş 3 Yıl)
 - DuPont Analizi ve ROE
-- Operasyonel ROIC ve WACC Makası (Ekonomik kâr üretimi var mı?)
+- Operasyonel ROIC ve WACC Makası (Ekonomik kâr üretimi var mı, yoksa sermaye mi yok ediliyor?)
 - Sektörel KPI İncelemesi
 
 3. Nakit Akış Kalitesi ve Hissedar Kazancı (Owner's Earnings)
@@ -116,7 +156,7 @@ Piyasa Özeti:
 | Hikaye, Katalizör ve Büyüme (Growth CAPEX) | X | 25 | ... |
 | **Toplam Puan** | **X** | **100** | ... |
 
-Analist Kararı: [AL / ALMA] (Net ve tavizsiz karar)`;
+Analist Kararı: [AL / ALMA / NÖTR] (Net ve tavizsiz karar)`;
 
     const promptText = `Hisse Kodu: ${ticker}
 Güncel Fiyat: ${price} TL
@@ -125,28 +165,14 @@ Sektör/Rakip Çarpanları: ${peerMultiples}
 
 Ekteki PDF dokümanlarını (Finansal Tablolar, Dipnotlar, Faaliyet Raporları ve Sunumlar) kullanarak analizi gerçekleştir ve nihai değerleme raporunu oluştur.`;
 
-    // 3. Dosyaları Gemini Modeline İletme (gemini-1.5-pro & fallback gemini-3.8-flash)
-    let response;
-    try {
-      response = await ai.models.generateContent({
-        model: 'gemini-1.5-pro',
-        contents: [...fileParts, promptText],
-        config: {
-          systemInstruction,
-          temperature: 0.1,
-        },
-      });
-    } catch (modelError: any) {
-      console.warn('gemini-1.5-pro yanıt vermedi, gemini-3.8-flash ile deneniyor:', modelError?.message);
-      response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: [...fileParts, promptText],
-        config: {
-          systemInstruction,
-          temperature: 0.1,
-        },
-      });
-    }
+    const response = await generateWithFallback(ai, {
+      contents: [...fileParts, promptText],
+      config: {
+        systemInstruction,
+        temperature: 0.1,
+      },
+    });
+
 
     return NextResponse.json({ report: response.text });
   } catch (error: any) {
