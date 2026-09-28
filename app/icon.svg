@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <rect width="32" height="32" rx="7" fill="#020617" />
+  <rect x="0.5" y="0.5" width="31" height="31" rx="6.5" stroke="#1e293b" />
+  <!-- FV Monogram -->
+  <path d="M6 7H16C17.6569 7 19 8.34315 19 10C19 11.6569 17.6569 13 16 13H10.5V16H15C16.6569 16 18 17.3431 18 19C18 20.6569 16.6569 22 15 22H10.5V25H6V7Z" fill="url(#fv_grad1)" opacity="0.9" />
+  <path d="M19 13L23.5 25L28 13" stroke="url(#fv_grad2)" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="23.5" cy="8.5" r="2" fill="#10b981" />
+  <defs>
+    <linearGradient id="fv_grad1" x1="6" y1="7" x2="19" y2="25" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#34d399" />
+      <stop offset="1" stop-color="#059669" />
+    </linearGradient>
+    <linearGradient id="fv_grad2" x1="19" y1="13" x2="28" y2="25" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38bdf8" />
+      <stop offset="1" stop-color="#0284c7" />
+    </linearGradient>
+  </defs>
+</svg>

@@ -13,18 +13,19 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Kurumsal Temel Analiz & Değerleme Terminali",
-  description: "Financial Analysis Agent",
+  title: "Fair Value | Kurumsal Temel Değerleme Terminali",
+  description: "Fair Value AI Destekli Temel Değerleme, Finansal Tablolar ve Liderlik Sıralama Terminali",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
-      lang="tr"
+      lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>

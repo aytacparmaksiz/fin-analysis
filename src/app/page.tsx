@@ -8,7 +8,8 @@ import {
   RefreshCw, Printer, PlusCircle, History, 
   ChevronRight, UploadCloud, X, CheckCircle2, Search,
   TrendingUp, BarChart3, Target, Calendar, ArrowUpRight, ArrowDownRight, Minus,
-  DollarSign, ShieldCheck, Activity, Layers, Sparkles, Download, Upload
+  DollarSign, ShieldCheck, Activity, Layers, Sparkles, Download, Upload,
+  Trophy, Award, Trash2, ArrowUpDown, Filter
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -25,6 +26,19 @@ import {
   Area,
   ReferenceLine
 } from 'recharts';
+
+// Fair Value Kurumsal Vektör Logosu
+function FairValueLogo({ className = "w-8 h-8" }: { className?: string }) {
+  return (
+    <div className={`relative flex items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/20 via-slate-900 to-cyan-500/20 border border-emerald-500/30 shadow-md shadow-emerald-950/40 flex-shrink-0 p-1.5 ${className}`}>
+      <svg viewBox="0 0 32 32" fill="none" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+        <path d="M5 6H16C17.6569 6 19 7.34315 19 9C19 10.6569 17.6569 12 16 12H10V15H15C16.6569 15 18 16.3431 18 18C18 19.6569 16.6569 21 15 21H10V26H5V6Z" fill="#10B981" />
+        <path d="M18 12L22.5 25L27 12" stroke="#38BDF8" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="22.5" cy="7.5" r="2.2" fill="#10B981" />
+      </svg>
+    </div>
+  );
+}
 
 interface SavedReport {
   id: string;
@@ -200,32 +214,32 @@ const FINTABLES_SECTIONS: MetricSectionConfig[] = [
   {
     title: '1. Gelir Tablosu & Büyüme Dinamikleri',
     icon: TrendingUp,
-    color: 'text-emerald-400',
+    color: 'text-slate-400',
     rows: [
       {
         label: 'Satış Gelirleri (Hasılat)',
         sublabel: 'Net Satışlar / Toplam Gelir',
         key: 'revenue',
-        colorClass: 'text-emerald-400',
+        colorClass: 'text-slate-100',
       },
       {
         label: 'FAVÖK (EBITDA)',
         sublabel: 'Faiz, Amortisman ve Vergi Öncesi Faaliyet Kârı',
         key: 'ebitda',
-        colorClass: 'text-cyan-400',
+        colorClass: 'text-slate-100',
       },
       {
         label: 'Net Dönem Kârı',
         sublabel: 'Ana Ortaklık Payları Net Kârı',
         key: 'net_income',
-        colorClass: 'text-blue-400',
+        colorClass: 'text-slate-100',
       },
     ],
   },
   {
     title: '2. Kârlılık Marjları (%)',
     icon: BarChart3,
-    color: 'text-cyan-400',
+    color: 'text-slate-400',
     rows: [
       {
         label: 'Brüt Kâr Marjı',
@@ -233,7 +247,7 @@ const FINTABLES_SECTIONS: MetricSectionConfig[] = [
         key: 'gross_margin',
         isMargin: true,
         prefix: '%',
-        colorClass: 'text-amber-300',
+        colorClass: 'text-slate-100',
       },
       {
         label: 'FAVÖK Marjı',
@@ -241,7 +255,7 @@ const FINTABLES_SECTIONS: MetricSectionConfig[] = [
         key: 'ebitda_margin',
         isMargin: true,
         prefix: '%',
-        colorClass: 'text-cyan-300',
+        colorClass: 'text-slate-100',
       },
       {
         label: 'Net Kâr Marjı',
@@ -249,59 +263,59 @@ const FINTABLES_SECTIONS: MetricSectionConfig[] = [
         key: 'net_margin',
         isMargin: true,
         prefix: '%',
-        colorClass: 'text-purple-300',
+        colorClass: 'text-slate-100',
       },
     ],
   },
   {
     title: '3. Nakit Akışı & Yatırımlar',
     icon: DollarSign,
-    color: 'text-sky-400',
+    color: 'text-slate-400',
     rows: [
       {
         label: 'İşletme Nakit Akışı (OCF)',
         sublabel: 'Esas Faaliyetlerden Elde Edilen Gerçek Nakit',
         key: 'operating_cash_flow',
-        colorClass: 'text-sky-300',
+        colorClass: 'text-slate-100',
       },
       {
         label: 'Yatırım Harcamaları (CAPEX)',
         sublabel: 'Maddi & Gayrimaddi Duran Varlık Alımları',
         key: 'capex',
-        colorClass: 'text-amber-300',
+        colorClass: 'text-slate-100',
       },
       {
         label: 'Serbest Nakit Akışı (FCF)',
         sublabel: 'İşletme Nakit Akışı - Yatırım Harcamaları',
         key: 'free_cash_flow',
-        colorClass: 'text-emerald-400',
+        colorClass: 'text-slate-100',
       },
     ],
   },
   {
     title: '4. Bilanço & Borçluluk Seviyesi',
     icon: ShieldCheck,
-    color: 'text-rose-400',
+    color: 'text-slate-400',
     rows: [
       {
         label: 'Net Finansal Borç',
         sublabel: 'Finansal Borçlar - Nakit ve Nakit Benzerleri',
         key: 'net_debt',
         invert: true,
-        colorClass: 'text-rose-400',
+        colorClass: 'text-slate-100',
       },
       {
         label: 'Toplam Özkaynaklar',
         sublabel: 'Ana Ortaklığa Ait Özkaynak Büyüklüğü',
         key: 'equity',
-        colorClass: 'text-indigo-300',
+        colorClass: 'text-slate-100',
       },
     ],
   },
   {
     title: '5. Sermaye Verimliliği & Değer Yaratımı',
     icon: Target,
-    color: 'text-purple-400',
+    color: 'text-slate-400',
     rows: [
       {
         label: 'ROIC (Yatırılan Sermaye Getirisi)',
@@ -309,7 +323,7 @@ const FINTABLES_SECTIONS: MetricSectionConfig[] = [
         key: 'roic',
         isMargin: true,
         prefix: '%',
-        colorClass: 'text-emerald-400',
+        colorClass: 'text-slate-100',
       },
       {
         label: 'WACC (Ağırlıklı Sermaye Maliyeti)',
@@ -318,7 +332,7 @@ const FINTABLES_SECTIONS: MetricSectionConfig[] = [
         isMargin: true,
         prefix: '%',
         invert: true,
-        colorClass: 'text-rose-400',
+        colorClass: 'text-slate-100',
       },
       {
         label: 'Ekonomik Katma Değer Makası (EVA Spread)',
@@ -327,7 +341,7 @@ const FINTABLES_SECTIONS: MetricSectionConfig[] = [
         isMargin: true,
         prefix: '',
         suffix: ' puan',
-        colorClass: 'text-emerald-300',
+        colorClass: 'text-slate-100',
         customCalc: (d: any) => {
           if (d.roic !== undefined && d.wacc !== undefined && d.roic !== null && d.wacc !== null) {
             return Number((d.roic - d.wacc).toFixed(1));
@@ -349,12 +363,17 @@ export default function ValuationTerminal() {
   const [files, setFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // İşlem Aşamaları: 'input' -> 'review' -> 'report'
-  const [step, setStep] = useState<'input' | 'review' | 'report'>('input');
+  // İşlem Aşamaları: 'input' -> 'review' -> 'report' | 'leaderboard'
+  const [step, setStep] = useState<'input' | 'review' | 'report' | 'leaderboard'>('input');
   const [extractedData, setExtractedData] = useState<any>(null);
 
   // Rapor Sekmeleri: 'overview' | 'report' | 'tables' | 'guidance' | 'history'
   const [activeTab, setActiveTab] = useState<'overview' | 'report' | 'tables' | 'guidance' | 'history'>('overview');
+
+  // Liderlik Paneli & Filtreleme Durumu
+  const [sidebarSort, setSidebarSort] = useState<'rank' | 'date'>('rank');
+  const [leaderboardSearch, setLeaderboardSearch] = useState('');
+  const [leaderboardFilter, setLeaderboardFilter] = useState<'ALL' | 'AL' | 'NÖTR' | 'ALMA'>('ALL');
 
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
@@ -363,6 +382,46 @@ export default function ValuationTerminal() {
   // Arşiv
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [activeReportId, setActiveReportId] = useState<string | null>(null);
+
+  // Sıralama Algoritması: 1. Karar (AL > NÖTR > ALMA), 2. Model Puanı (Azalan: 100 -> 0)
+  const sortReportsByRank = (reports: SavedReport[]) => {
+    return [...reports].sort((a, b) => {
+      const rankDecision = (d: string) => {
+        const norm = (d || '').trim().toUpperCase();
+        if (norm === 'AL') return 1;
+        if (norm === 'NÖTR' || norm === 'NOTR') return 2;
+        if (norm === 'ALMA') return 3;
+        return 4;
+      };
+      const diffDecision = rankDecision(a.decision) - rankDecision(b.decision);
+      if (diffDecision !== 0) return diffDecision;
+
+      const scoreA = parseFloat(String(a.score || '0').replace(/[^0-9.]/g, '')) || 0;
+      const scoreB = parseFloat(String(b.score || '0').replace(/[^0-9.]/g, '')) || 0;
+      if (scoreB !== scoreA) return scoreB - scoreA;
+
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  };
+
+  const sortReportsByDate = (reports: SavedReport[]) => {
+    return [...reports].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  };
+
+  const deleteReport = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (confirm('Bu değerleme raporunu arşivden silmek istediğinize emin misiniz?')) {
+      const updated = savedReports.filter(r => r.id !== id);
+      setSavedReports(updated);
+      try {
+        localStorage.setItem('fin_valuation_reports', JSON.stringify(updated));
+      } catch (err) {}
+      if (activeReportId === id) {
+        setActiveReportId(null);
+        setStep('leaderboard');
+      }
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -627,19 +686,77 @@ export default function ValuationTerminal() {
       
       {/* Sol Sidebar: Arşiv & Skor Takibi */}
       <aside className="w-full md:w-80 border-r border-slate-800 bg-slate-900/60 flex flex-col flex-shrink-0 print:hidden">
+        {/* Logo ve Başlık */}
         <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Database className="w-5 h-5 text-emerald-400" />
-            <span className="font-bold text-sm tracking-wide text-white">DEĞERLEME ARŞİVİ</span>
+          <div className="flex items-center gap-2.5">
+            <FairValueLogo className="w-8 h-8" />
+            <div>
+              <div className="font-extrabold text-sm tracking-tight text-white flex items-center gap-1">
+                FAIR <span className="text-emerald-400">VALUE</span>
+              </div>
+              <div className="text-[10px] text-slate-400 font-mono">Terminal & Arşiv</div>
+            </div>
           </div>
           <button
             onClick={() => { setStep('input'); setActiveReportId(null); setExtractedData(null); }}
             className="flex items-center gap-1 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-1.5 px-2.5 rounded transition cursor-pointer"
+            title="Yeni Hisse Analizi Başlat"
           >
-            <PlusCircle className="w-3.5 h-3.5" /> Yeni Analiz
+            <PlusCircle className="w-3.5 h-3.5" /> Yeni
           </button>
         </div>
 
+        {/* Liderlik Paneli Butonu & Sıralama Filtresi */}
+        <div className="p-3 border-b border-slate-800/80 space-y-2 bg-slate-950/40">
+          <button
+            type="button"
+            onClick={() => setStep('leaderboard')}
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold transition border cursor-pointer ${
+              step === 'leaderboard'
+                ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-sm shadow-amber-950/30'
+                : 'bg-slate-800/70 hover:bg-slate-800 text-slate-200 border-slate-700/80'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Trophy className="w-4 h-4 text-amber-400" />
+              Hisse Sıralama Paneli
+            </span>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-700 font-bold">
+              {savedReports.length}
+            </span>
+          </button>
+
+          {/* Sıralama Ölçütü Seçici */}
+          <div className="flex items-center justify-between text-[11px] text-slate-400 px-1 pt-0.5">
+            <span className="flex items-center gap-1 text-[10px] font-medium text-slate-400">
+              <ArrowUpDown className="w-3 h-3 text-slate-500" /> Sıralama:
+            </span>
+            <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setSidebarSort('rank')}
+                className={`px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
+                  sidebarSort === 'rank' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+                title="Önce AL, sonra en yüksek puana göre sırala"
+              >
+                AL & Puan
+              </button>
+              <button
+                type="button"
+                onClick={() => setSidebarSort('date')}
+                className={`px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
+                  sidebarSort === 'date' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+                title="Tarihe göre en yeni önce"
+              >
+                Tarih
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Kayıtlı Raporlar Listesi */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {savedReports.length === 0 ? (
             <div className="text-center py-10 text-slate-500 text-xs">
@@ -647,19 +764,24 @@ export default function ValuationTerminal() {
               Henüz kayıtlı rapor yok.
             </div>
           ) : (
-            savedReports.map(item => (
+            (sidebarSort === 'rank' ? sortReportsByRank(savedReports) : sortReportsByDate(savedReports)).map((item, sIndex) => (
               <div
                 key={item.id}
                 onClick={() => { setActiveReportId(item.id); setStep('report'); }}
-                className={`p-3 rounded-lg border cursor-pointer transition flex items-center justify-between group ${
+                className={`p-2.5 rounded-lg border cursor-pointer transition flex items-center justify-between group ${
                   activeReportId === item.id && step === 'report'
                     ? 'bg-slate-800 border-emerald-500/50 shadow-md shadow-emerald-950/20'
                     : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800/60'
                 }`}
               >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm text-white">{item.ticker}</span>
+                <div className="flex-1 min-w-0 pr-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {sidebarSort === 'rank' && (
+                      <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-950 px-1 rounded border border-slate-800">
+                        #{sIndex + 1}
+                      </span>
+                    )}
+                    <span className="font-bold text-sm text-white truncate">{item.ticker}</span>
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                       item.decision === 'AL' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
                       item.decision === 'ALMA' ? 'bg-rose-950 text-rose-400 border border-rose-800' :
@@ -674,7 +796,17 @@ export default function ValuationTerminal() {
                     <span>• {item.createdAt}</span>
                   </div>
                 </div>
-                <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-colors" />
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={(e) => deleteReport(item.id, e)}
+                    title="Raporu Sil"
+                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded transition cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                  <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-colors" />
+                </div>
               </div>
             ))
           )}
@@ -713,34 +845,52 @@ export default function ValuationTerminal() {
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         <header className="border-b border-slate-800 p-4 flex items-center justify-between bg-slate-900/40 print:hidden">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-              <BarChart3 className="w-6 h-6 text-emerald-400" />
-            </div>
+            <FairValueLogo className="w-9 h-9" />
             <div>
               <h1 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
-                Fintables Tarzı Kurumsal Temel Değerleme Terminali
-                <span className="text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-800/80 px-2 py-0.5 rounded">v2.0 PRO</span>
+                <span>FAIR <span className="text-emerald-400">VALUE</span></span>
+                <span className="text-slate-500 font-normal">|</span>
+                <span className="text-slate-200 font-semibold text-sm">Kurumsal Temel Değerleme Terminali</span>
+                <span className="text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-800/80 px-2 py-0.5 rounded font-bold">PRO</span>
               </h1>
-              <p className="text-xs text-slate-400">Çok yıllık finansal göstergeler, dinamik artış/azalış yüzdeleri, rehberlik karnesi ve çeyreklik skor takibi.</p>
+              <p className="text-xs text-slate-400">Çok yıllık finansal tablolar, rehberlik karnesi ve öncelikli hisse sıralama terminali.</p>
             </div>
           </div>
 
-          {step === 'report' && activeReport && (
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setStep('leaderboard')}
+              className={`flex items-center gap-1.5 text-xs py-1.5 px-3 rounded-lg border font-semibold transition cursor-pointer ${
+                step === 'leaderboard'
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm shadow-amber-950/30'
+                  : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300 border-slate-700'
+              }`}
+            >
+              <Trophy className="w-3.5 h-3.5 text-amber-400" />
+              Sıralama Paneli
+            </button>
+
+            <button
+              onClick={() => { setStep('input'); setActiveReportId(null); }}
+              className={`flex items-center gap-1.5 text-xs py-1.5 px-3 rounded-lg border font-semibold transition cursor-pointer ${
+                step === 'input'
+                  ? 'bg-emerald-600 text-white border-emerald-500'
+                  : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300 border-slate-700'
+              }`}
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              Yeni Analiz
+            </button>
+
+            {step === 'report' && activeReport && (
               <button
                 onClick={() => window.print()}
-                className="flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 py-1.5 px-3 rounded border border-slate-700 transition cursor-pointer"
+                className="flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 py-1.5 px-3 rounded-lg border border-slate-700 transition cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5" /> PDF / Yazdır
               </button>
-              <button
-                onClick={() => setStep('input')}
-                className="text-xs text-slate-400 hover:text-white px-2 transition cursor-pointer"
-              >
-                Yeni Giriş
-              </button>
-            </div>
-          )}
+            )}
+          </div>
         </header>
 
         <div className="p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6">
@@ -919,37 +1069,37 @@ export default function ValuationTerminal() {
                             <td className="p-3 font-bold text-white font-sans text-sm">{row.period}</td>
                             <td className="p-3 text-right">
                               <div className="flex flex-col items-end gap-1">
-                                <span className="text-emerald-400 font-bold text-sm tracking-tight">{row.revenue?.toLocaleString('tr-TR') || '—'}</span>
+                                <span className="text-slate-100 font-semibold text-sm tracking-tight font-mono">{row.revenue?.toLocaleString('tr-TR') || '—'}</span>
                                 <ChangeBadge change={revChg} size="xs" />
                               </div>
                             </td>
                             <td className="p-3 text-right">
                               <div className="flex flex-col items-end gap-1">
-                                <span className="text-cyan-400 font-bold text-sm tracking-tight">{row.ebitda?.toLocaleString('tr-TR') || '—'}</span>
+                                <span className="text-slate-100 font-semibold text-sm tracking-tight font-mono">{row.ebitda?.toLocaleString('tr-TR') || '—'}</span>
                                 <ChangeBadge change={ebitdaChg} size="xs" />
                               </div>
                             </td>
                             <td className="p-3 text-right">
                               <div className="flex flex-col items-end gap-1">
-                                <span className="text-blue-400 font-bold text-sm tracking-tight">{row.net_income?.toLocaleString('tr-TR') || '—'}</span>
+                                <span className="text-slate-100 font-semibold text-sm tracking-tight font-mono">{row.net_income?.toLocaleString('tr-TR') || '—'}</span>
                                 <ChangeBadge change={netChg} size="xs" />
                               </div>
                             </td>
                             <td className="p-3 text-right">
                               <div className="flex flex-col items-end gap-1">
-                                <span className="text-slate-100 font-bold text-sm tracking-tight">%{row.ebitda_margin ?? '—'}</span>
+                                <span className="text-slate-100 font-semibold text-sm tracking-tight font-mono">%{row.ebitda_margin ?? '—'}</span>
                                 <ChangeBadge change={marginChg} size="xs" />
                               </div>
                             </td>
                             <td className="p-3 text-right">
                               <div className="flex flex-col items-end gap-1">
-                                <span className="text-amber-300 font-bold text-sm tracking-tight">%{row.roic ?? '—'}</span>
+                                <span className="text-slate-100 font-semibold text-sm tracking-tight font-mono">%{row.roic ?? '—'}</span>
                                 <ChangeBadge change={roicChg} size="xs" />
                               </div>
                             </td>
                             <td className="p-3 text-right">
                               <div className="flex flex-col items-end gap-1">
-                                <span className="text-rose-400 font-bold text-sm tracking-tight">{row.net_debt?.toLocaleString('tr-TR') || '—'}</span>
+                                <span className="text-slate-100 font-semibold text-sm tracking-tight font-mono">{row.net_debt?.toLocaleString('tr-TR') || '—'}</span>
                                 <ChangeBadge change={debtChg} invert={true} size="xs" />
                               </div>
                             </td>
@@ -973,8 +1123,8 @@ export default function ValuationTerminal() {
                         <tr>
                           <th className="p-3">Dönem</th>
                           <th className="p-3">Verilen Hedef / Rehberlik</th>
-                          <th className="p-3">Gerçekleşen</th>
-                          <th className="p-3">Durum</th>
+                          <th className="p-3 text-right">Gerçekleşen</th>
+                          <th className="p-3 text-center">Durum</th>
                           <th className="p-3">Analiz</th>
                         </tr>
                       </thead>
@@ -983,8 +1133,8 @@ export default function ValuationTerminal() {
                           <tr key={idx} className="hover:bg-slate-800/40">
                             <td className="p-3 font-bold font-mono text-white">{g.year_or_period}</td>
                             <td className="p-3 text-slate-200">{g.guidance_given}</td>
-                            <td className="p-3 font-mono font-bold text-emerald-400">{g.actual_realized}</td>
-                            <td className="p-3">
+                            <td className="p-3 text-right font-mono font-semibold text-slate-100">{g.actual_realized}</td>
+                            <td className="p-3 text-center">
                               <span className={`px-2.5 py-1 rounded text-[10px] font-bold ${
                                 g.status === 'BAŞARILI' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
                                 g.status === 'BAŞARISIZ' ? 'bg-rose-950 text-rose-400 border border-rose-800' :
@@ -1028,6 +1178,341 @@ export default function ValuationTerminal() {
                   )}
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* LİDERLİK & HİSSE SIRALAMA PANELİ */}
+          {step === 'leaderboard' && (() => {
+            const ranked = sortReportsByRank(savedReports);
+            const filtered = ranked.filter(r => {
+              const matchesSearch = !leaderboardSearch.trim() || 
+                r.ticker.toLowerCase().includes(leaderboardSearch.toLowerCase()) || 
+                (r.period && r.period.toLowerCase().includes(leaderboardSearch.toLowerCase()));
+              if (!matchesSearch) return false;
+
+              if (leaderboardFilter === 'ALL') return true;
+              const norm = (r.decision || '').trim().toUpperCase();
+              if (leaderboardFilter === 'AL') return norm === 'AL';
+              if (leaderboardFilter === 'NÖTR') return norm === 'NÖTR' || norm === 'NOTR';
+              if (leaderboardFilter === 'ALMA') return norm === 'ALMA';
+              return true;
+            });
+
+            const alTotal = savedReports.filter(r => (r.decision || '').trim().toUpperCase() === 'AL').length;
+            const notrTotal = savedReports.filter(r => {
+              const norm = (r.decision || '').trim().toUpperCase();
+              return norm.includes('NÖTR') || norm.includes('NOTR');
+            }).length;
+            const almaTotal = savedReports.filter(r => (r.decision || '').trim().toUpperCase() === 'ALMA').length;
+
+            const validScores = savedReports
+              .map(r => parseFloat(String(r.score || '').replace(/[^0-9.]/g, '')))
+              .filter(s => !isNaN(s) && s > 0);
+            const avgScore = validScores.length > 0 
+              ? Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length) 
+              : 0;
+
+            return (
+              <div className="space-y-6">
+                {/* Üst Başlık Banner */}
+                <div className="bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800 p-6 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400">
+                      <Trophy className="w-8 h-8" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                        Hisse Sıralama & Liderlik Paneli
+                        <span className="text-xs font-mono font-normal bg-slate-800 text-slate-300 border border-slate-700 px-2 py-0.5 rounded">
+                          {savedReports.length} Şirket
+                        </span>
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+                        Tüm analiz edilmiş hisseler; önce yatırım kararına göre (<span className="text-emerald-400 font-semibold">önce AL</span>, ardından NÖTR ve ALMA) ve model puanına göre azalan sırada listelenir.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setStep('input'); setActiveReportId(null); setExtractedData(null); }}
+                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2.5 px-4 rounded-lg shadow-lg shadow-emerald-950/40 transition cursor-pointer flex-shrink-0"
+                  >
+                    <PlusCircle className="w-4 h-4" /> Yeni Şirket Analizi Ekle
+                  </button>
+                </div>
+
+                {/* KPI İstatistik Kartları */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <div className="bg-slate-900/70 border border-slate-800 p-4 rounded-xl">
+                    <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Toplam Hisse</div>
+                    <div className="text-2xl font-bold font-mono text-white mt-1">{savedReports.length}</div>
+                    <div className="text-[11px] text-slate-500 mt-1">Takip edilen şirket</div>
+                  </div>
+
+                  <div className="bg-emerald-950/30 border border-emerald-900/50 p-4 rounded-xl">
+                    <div className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center justify-between">
+                      <span>AL Önerisi</span>
+                      <span className="text-[10px] font-mono bg-emerald-950 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-800 font-bold">
+                        {savedReports.length > 0 ? `%${Math.round((alTotal / savedReports.length) * 100)}` : '0%'}
+                      </span>
+                    </div>
+                    <div className="text-2xl font-bold font-mono text-emerald-300 mt-1">{alTotal}</div>
+                    <div className="text-[11px] text-emerald-500/80 mt-1">Öncelikli hisseler</div>
+                  </div>
+
+                  <div className="bg-slate-900/70 border border-slate-800 p-4 rounded-xl">
+                    <div className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                      <span>NÖTR</span>
+                      <span className="text-[10px] font-mono bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700 font-bold">
+                        {savedReports.length > 0 ? `%${Math.round((notrTotal / savedReports.length) * 100)}` : '0%'}
+                      </span>
+                    </div>
+                    <div className="text-2xl font-bold font-mono text-slate-200 mt-1">{notrTotal}</div>
+                    <div className="text-[11px] text-slate-500 mt-1">İzleme listesi</div>
+                  </div>
+
+                  <div className="bg-rose-950/30 border border-rose-900/50 p-4 rounded-xl">
+                    <div className="text-[11px] font-semibold text-rose-400 uppercase tracking-wider flex items-center justify-between">
+                      <span>ALMA (Riskli)</span>
+                      <span className="text-[10px] font-mono bg-rose-950 text-rose-400 px-1.5 py-0.5 rounded border border-rose-800 font-bold">
+                        {savedReports.length > 0 ? `%${Math.round((almaTotal / savedReports.length) * 100)}` : '0%'}
+                      </span>
+                    </div>
+                    <div className="text-2xl font-bold font-mono text-rose-300 mt-1">{almaTotal}</div>
+                    <div className="text-[11px] text-rose-500/80 mt-1">Negatif değerleme</div>
+                  </div>
+
+                  <div className="bg-slate-900/70 border border-slate-800 p-4 rounded-xl col-span-2 md:col-span-1">
+                    <div className="text-[11px] font-semibold text-amber-400 uppercase tracking-wider">Ortalama Skor</div>
+                    <div className="text-2xl font-bold font-mono text-white mt-1">
+                      {avgScore > 0 ? `${avgScore}/100` : '—'}
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-1">Portföy model ortalaması</div>
+                  </div>
+                </div>
+
+                {/* Arama & Filtre Çubuğu */}
+                <div className="bg-slate-900/60 border border-slate-800 p-3 rounded-xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={leaderboardSearch}
+                      onChange={(e) => setLeaderboardSearch(e.target.value)}
+                      placeholder="Hisse kodu veya dönem ara (örn: THYAO, 2024/12)..."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                    />
+                    {leaderboardSearch && (
+                      <button
+                        onClick={() => setLeaderboardSearch('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 overflow-x-auto">
+                    {(['ALL', 'AL', 'NÖTR', 'ALMA'] as const).map(tab => (
+                      <button
+                        key={tab}
+                        onClick={() => setLeaderboardFilter(tab)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
+                          leaderboardFilter === tab
+                            ? tab === 'AL'
+                              ? 'bg-emerald-600 text-white'
+                              : tab === 'ALMA'
+                              ? 'bg-rose-600 text-white'
+                              : tab === 'NÖTR'
+                              ? 'bg-slate-700 text-white'
+                              : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                            : 'bg-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-800'
+                        }`}
+                      >
+                        {tab === 'ALL' ? `Tümü (${savedReports.length})` : tab === 'AL' ? `🟢 AL (${alTotal})` : tab === 'NÖTR' ? `⚪ NÖTR (${notrTotal})` : `🔴 ALMA (${almaTotal})`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Liderlik Tablosu */}
+                {savedReports.length === 0 ? (
+                  <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-12 text-center space-y-4">
+                    <Trophy className="w-12 h-12 text-slate-600 mx-auto" />
+                    <h3 className="text-base font-bold text-slate-200">Henüz Kayıtlı Rapor Bulunmuyor</h3>
+                    <p className="text-xs text-slate-400 max-w-md mx-auto">
+                      Faaliyet raporları veya sunumları yükleyerek hisse analizlerinizi yapın. Analiz edilen tüm şirketler otomatik olarak bu liderlik tablosunda derecelendirilir.
+                    </p>
+                    <button
+                      onClick={() => { setStep('input'); setActiveReportId(null); }}
+                      className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2.5 px-5 rounded-lg transition cursor-pointer"
+                    >
+                      <PlusCircle className="w-4 h-4" /> İlk Analizi Başlat
+                    </button>
+                  </div>
+                ) : filtered.length === 0 ? (
+                  <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-10 text-center space-y-2">
+                    <Search className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                    <p className="text-sm font-semibold text-slate-300">Filtreye uygun hisse bulunamadı.</p>
+                    <button
+                      onClick={() => { setLeaderboardSearch(''); setLeaderboardFilter('ALL'); }}
+                      className="text-xs text-emerald-400 hover:underline cursor-pointer"
+                    >
+                      Filtreleri Temizle
+                    </button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto border border-slate-800 rounded-xl shadow-xl bg-slate-900/30">
+                    <table className="w-full text-xs text-left border-collapse">
+                      <thead className="bg-slate-900 text-slate-300 font-sans border-b border-slate-800 text-[11px] uppercase tracking-wider">
+                        <tr>
+                          <th className="p-3.5 pl-4 text-center w-16">Sıra</th>
+                          <th className="p-3.5">Hisse / Şirket</th>
+                          <th className="p-3.5 text-center">Yatırım Kararı</th>
+                          <th className="p-3.5">Terminal Skoru</th>
+                          <th className="p-3.5 text-right">Analiz Fiyatı</th>
+                          <th className="p-3.5">Analiz Tarihi</th>
+                          <th className="p-3.5 text-right pr-4">İşlem</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/80 font-sans">
+                        {filtered.map((item, idx) => {
+                          const scoreNum = parseFloat(String(item.score || '0').replace(/[^0-9.]/g, '')) || 0;
+                          const isAl = item.decision === 'AL';
+                          const isAlma = item.decision === 'ALMA';
+
+                          return (
+                            <tr
+                              key={item.id}
+                              onClick={() => { setActiveReportId(item.id); setStep('report'); }}
+                              className="hover:bg-slate-800/50 transition-colors cursor-pointer group"
+                            >
+                              <td className="p-3.5 pl-4 text-center font-mono">
+                                {idx === 0 ? (
+                                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-xs">
+                                    🥇 1
+                                  </span>
+                                ) : idx === 1 ? (
+                                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-slate-300/15 border border-slate-300/30 text-slate-200 font-bold text-xs">
+                                    🥈 2
+                                  </span>
+                                ) : idx === 2 ? (
+                                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-amber-700/15 border border-amber-700/30 text-amber-500 font-bold text-xs">
+                                    🥉 3
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 font-semibold text-xs font-mono">
+                                    #{idx + 1}
+                                  </span>
+                                )}
+                              </td>
+
+                              <td className="p-3.5">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center font-mono font-bold text-white text-xs border border-slate-700 group-hover:border-emerald-500/50 transition-colors">
+                                    {item.ticker.slice(0, 2)}
+                                  </div>
+                                  <div>
+                                    <div className="font-bold text-sm text-white group-hover:text-emerald-400 transition-colors flex items-center gap-1.5">
+                                      {item.ticker}
+                                      {item.period && (
+                                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 font-normal">
+                                          {item.period}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+
+                              <td className="p-3.5 text-center">
+                                <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-md border ${
+                                  isAl
+                                    ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800 shadow-sm shadow-emerald-950/40'
+                                    : isAlma
+                                    ? 'bg-rose-950/80 text-rose-400 border-rose-800 shadow-sm shadow-rose-950/40'
+                                    : 'bg-slate-800 text-slate-300 border-slate-700'
+                                }`}>
+                                  {item.decision}
+                                </span>
+                              </td>
+
+                              <td className="p-3.5">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono font-bold text-white text-sm">
+                                      {item.score ? `${item.score}/100` : '—'}
+                                    </span>
+                                  </div>
+                                  {scoreNum > 0 && (
+                                    <div className="w-28 bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                                      <div
+                                        className={`h-full rounded-full ${
+                                          scoreNum >= 80 ? 'bg-emerald-500' : scoreNum >= 60 ? 'bg-amber-400' : 'bg-rose-500'
+                                        }`}
+                                        style={{ width: `${Math.min(100, scoreNum)}%` }}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+
+                              <td className="p-3.5 text-right font-mono font-semibold text-slate-100 text-sm">
+                                {item.price ? `${item.price} TL` : '—'}
+                              </td>
+
+                              <td className="p-3.5 text-slate-400 text-xs font-mono">
+                                {item.createdAt}
+                              </td>
+
+                              <td className="p-3.5 text-right pr-4">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveReportId(item.id);
+                                      setStep('report');
+                                    }}
+                                    className="flex items-center gap-1 text-xs bg-slate-800 hover:bg-emerald-600 text-slate-200 hover:text-white font-semibold py-1.5 px-3 rounded-md border border-slate-700 hover:border-emerald-500 transition cursor-pointer"
+                                  >
+                                    Raporu İncele
+                                    <ChevronRight className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => deleteReport(item.id, e)}
+                                    title="Raporu Sil"
+                                    className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded transition cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Görüntülenecek Rapor Seçilmediğinde (step === 'report' ama activeReport yoksa) */}
+          {step === 'report' && !activeReport && (
+            <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-12 text-center space-y-4">
+              <History className="w-12 h-12 text-slate-600 mx-auto opacity-40" />
+              <h3 className="text-base font-bold text-slate-200">Görüntülenecek Rapor Seçilmedi</h3>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">
+                Sol arşiv listesinden bir hisseye tıklayın veya Sıralama Panelinden incelemek istediğiniz şirketi seçin.
+              </p>
+              <button
+                onClick={() => setStep('leaderboard')}
+                className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold py-2.5 px-5 rounded-lg border border-slate-700 transition cursor-pointer"
+              >
+                <Trophy className="w-4 h-4 text-amber-400" /> Sıralama Paneline Git
+              </button>
             </div>
           )}
 
@@ -1309,10 +1794,10 @@ export default function ValuationTerminal() {
 
                   {/* Üst Yönetici KPI Kartları */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col justify-between shadow-md">
-                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Son Dönem Hasılat ({latestData?.period || '—'})</div>
-                      <div className="text-lg md:text-xl font-black font-mono text-emerald-400 my-1">
-                        {formatFinancial(latestData?.revenue)} <span className="text-xs text-slate-500 font-normal">{currentExtractedData?.currency || 'TL'}</span>
+                    <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-xl flex flex-col justify-between shadow-md">
+                      <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Son Dönem Hasılat ({latestData?.period || '—'})</div>
+                      <div className="text-lg md:text-xl font-bold font-mono text-slate-100 my-1">
+                        {formatFinancial(latestData?.revenue)} <span className="text-xs text-slate-400 font-normal">{currentExtractedData?.currency || 'TL'}</span>
                       </div>
                       <div className="flex items-center gap-1.5 mt-1">
                         <ChangeBadge change={latestRevChange} size="sm" />
@@ -1320,10 +1805,10 @@ export default function ValuationTerminal() {
                       </div>
                     </div>
 
-                    <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col justify-between shadow-md">
-                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Son Dönem FAVÖK ({latestData?.period || '—'})</div>
-                      <div className="text-lg md:text-xl font-black font-mono text-cyan-400 my-1">
-                        {formatFinancial(latestData?.ebitda)} <span className="text-xs text-slate-500 font-normal">{currentExtractedData?.currency || 'TL'}</span>
+                    <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-xl flex flex-col justify-between shadow-md">
+                      <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Son Dönem FAVÖK ({latestData?.period || '—'})</div>
+                      <div className="text-lg md:text-xl font-bold font-mono text-slate-100 my-1">
+                        {formatFinancial(latestData?.ebitda)} <span className="text-xs text-slate-400 font-normal">{currentExtractedData?.currency || 'TL'}</span>
                       </div>
                       <div className="flex items-center gap-1.5 mt-1">
                         <ChangeBadge change={latestEbitdaChange} size="sm" />
@@ -1331,10 +1816,10 @@ export default function ValuationTerminal() {
                       </div>
                     </div>
 
-                    <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col justify-between shadow-md">
-                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Son Dönem Net Kâr ({latestData?.period || '—'})</div>
-                      <div className="text-lg md:text-xl font-black font-mono text-blue-400 my-1">
-                        {formatFinancial(latestData?.net_income)} <span className="text-xs text-slate-500 font-normal">{currentExtractedData?.currency || 'TL'}</span>
+                    <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-xl flex flex-col justify-between shadow-md">
+                      <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Son Dönem Net Kâr ({latestData?.period || '—'})</div>
+                      <div className="text-lg md:text-xl font-bold font-mono text-slate-100 my-1">
+                        {formatFinancial(latestData?.net_income)} <span className="text-xs text-slate-400 font-normal">{currentExtractedData?.currency || 'TL'}</span>
                       </div>
                       <div className="flex items-center gap-1.5 mt-1">
                         <ChangeBadge change={latestNetChange} size="sm" />
@@ -1342,9 +1827,9 @@ export default function ValuationTerminal() {
                       </div>
                     </div>
 
-                    <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col justify-between shadow-md">
-                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Sermaye Makası (ROIC - WACC)</div>
-                      <div className={`text-lg md:text-xl font-black font-mono my-1 ${latestSpread && latestSpread >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-xl flex flex-col justify-between shadow-md">
+                      <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Sermaye Makası (ROIC - WACC)</div>
+                      <div className={`text-lg md:text-xl font-bold font-mono my-1 ${latestSpread && latestSpread >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {latestSpread !== null ? `${latestSpread > 0 ? '+' : ''}${latestSpread} puan` : '—'}
                       </div>
                       <div className="flex items-center gap-1.5 mt-1">
@@ -1364,15 +1849,15 @@ export default function ValuationTerminal() {
                         <TrendingUp className="w-5 h-5 text-emerald-400" />
                         <div>
                           <span className="font-bold text-sm text-white">Çok Yıllı Karşılaştırmalı Finansal Göstergeler (Fintables Görünümü)</span>
-                          <p className="text-xs text-slate-400">Dönemler arası artış ve azalışlar her hücrenin altında renkli yön rozetleri ile belirtilmektedir.</p>
+                          <p className="text-xs text-slate-400">Finansal veriler yalınlaştırılmış olup, dönemler arası değişimler alt kısımdaki yön rozetleri ile gösterilir.</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Artış / İyileşme
-                          <span className="w-2.5 h-2.5 rounded-full bg-rose-500 ml-2" /> Azalış / Bozulma
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Artış
+                          <span className="w-2.5 h-2.5 rounded-full bg-rose-500 ml-2" /> Azalış
                         </div>
-                        <span className="text-xs text-emerald-400 font-mono bg-emerald-950 border border-emerald-800/80 px-2.5 py-1 rounded">
+                        <span className="text-xs text-slate-300 font-mono bg-slate-800 border border-slate-700 px-2.5 py-1 rounded">
                           Birim: {currentExtractedData?.currency || 'TL'}
                         </span>
                       </div>
@@ -1380,11 +1865,11 @@ export default function ValuationTerminal() {
 
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs text-left border-collapse">
-                        <thead className="bg-slate-800/90 text-slate-100 font-mono border-b border-slate-700">
+                        <thead className="bg-slate-800/90 text-slate-200 font-mono border-b border-slate-700">
                           <tr>
-                            <th className="p-3.5 pl-5 min-w-[240px] text-xs font-bold uppercase tracking-wider">Finansal Kalem</th>
+                            <th className="p-3.5 pl-5 min-w-[240px] text-xs font-semibold uppercase tracking-wider">Finansal Kalem</th>
                             {chartData.map((d: any, idx: number) => (
-                              <th key={idx} className="p-3.5 text-right min-w-[150px] text-xs font-bold uppercase tracking-wider">
+                              <th key={idx} className="p-3.5 text-right min-w-[150px] text-xs font-semibold uppercase tracking-wider">
                                 <div>{d.period}</div>
                                 {idx === 0 && <span className="text-[10px] text-slate-400 font-normal lowercase">(başlangıç)</span>}
                               </th>
@@ -1399,10 +1884,10 @@ export default function ValuationTerminal() {
                             return (
                               <React.Fragment key={sIdx}>
                                 {/* Kategori Başlığı Satırı */}
-                                <tr className="bg-slate-950/80 border-y border-slate-800">
-                                  <td colSpan={chartData.length + 1} className="py-2.5 px-4 font-sans font-bold text-xs uppercase tracking-wider text-slate-200">
+                                <tr className="bg-slate-900 border-y border-slate-800">
+                                  <td colSpan={chartData.length + 1} className="py-2.5 px-4 font-sans font-semibold text-xs uppercase tracking-wider text-slate-300">
                                     <div className="flex items-center gap-2">
-                                      <SectionIcon className={`w-4 h-4 ${section.color}`} />
+                                      <SectionIcon className="w-4 h-4 text-slate-400" />
                                       <span>{section.title}</span>
                                     </div>
                                   </td>
@@ -1412,7 +1897,7 @@ export default function ValuationTerminal() {
                                 {section.rows.map((row, rIdx) => (
                                   <tr key={rIdx} className="hover:bg-slate-800/40 transition-colors group">
                                     <td className="p-3 pl-5 font-sans bg-slate-900/60 group-hover:bg-slate-800/60 transition-colors">
-                                      <div className="font-bold text-white text-xs md:text-sm tracking-tight">{row.label}</div>
+                                      <div className="font-semibold text-slate-200 text-xs md:text-sm tracking-tight">{row.label}</div>
                                       <div className="text-[11px] text-slate-400 font-normal leading-tight mt-0.5">{row.sublabel}</div>
                                     </td>
 
@@ -1438,7 +1923,7 @@ export default function ValuationTerminal() {
                                       return (
                                         <td key={idx} className="p-3 text-right group-hover:bg-slate-800/30 transition-colors">
                                           <div className="flex flex-col items-end gap-1">
-                                            <span className={`font-mono text-sm font-bold tracking-tight ${row.colorClass || 'text-white'}`}>
+                                            <span className="font-mono text-sm font-semibold tracking-tight text-slate-100">
                                               {displayStr}
                                             </span>
                                             <ChangeBadge change={change} invert={row.invert} size="xs" />
@@ -1478,8 +1963,8 @@ export default function ValuationTerminal() {
                           <tr>
                             <th className="p-3">Dönem</th>
                             <th className="p-3">Açıklanan Hedef</th>
-                            <th className="p-3">Yıl Sonu Gerçekleşen</th>
-                            <th className="p-3">Karne Durumu</th>
+                            <th className="p-3 text-right">Yıl Sonu Gerçekleşen</th>
+                            <th className="p-3 text-center">Karne Durumu</th>
                             <th className="p-3">Sapma & Güvenilirlik Değerlendirmesi</th>
                           </tr>
                         </thead>
@@ -1488,7 +1973,7 @@ export default function ValuationTerminal() {
                             <tr key={idx} className="hover:bg-slate-800/40">
                               <td className="p-3 font-bold font-mono text-white">{g.year_or_period}</td>
                               <td className="p-3 text-slate-300">{g.guidance_given}</td>
-                              <td className="p-3 font-mono font-bold text-emerald-400">{g.actual_realized}</td>
+                              <td className="p-3 text-right font-mono font-semibold text-slate-100">{g.actual_realized}</td>
                               <td className="p-3">
                                 <span className={`px-2.5 py-1 rounded text-[10px] font-bold ${
                                   g.status === 'BAŞARILI' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
