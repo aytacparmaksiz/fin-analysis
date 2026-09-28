@@ -1,37 +1,14 @@
 import { GoogleGenAI } from '@google/genai';
 import { NextResponse } from 'next/server';
 import { detectSector, SectorType, SECTOR_DEFINITIONS } from '@/lib/sectors';
+import { 
+  generateWithRateLimitAndBackoff, 
+  computeContentHash 
+} from '@/lib/gemini';
+import { computeSectorValuationAndDrivers } from '@/lib/valuation';
 
-const CANDIDATE_MODELS = [
-  'gemini-3.8-flash',
-  'gemini-3.6-flash',
-  'gemini-flash-latest',
-  'gemini-3.1-flash-lite',
-  'gemini-3.5-flash-lite',
-];
-
-async function generateWithFallback(ai: GoogleGenAI, baseParams: any) {
-  let lastError: any;
-  for (const model of CANDIDATE_MODELS) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        return await ai.models.generateContent({
-          ...baseParams,
-          model,
-        });
-      } catch (err: any) {
-        lastError = err;
-        console.warn(`[Analyze] Model ${model} (Deneme ${attempt + 1}) yanıt vermedi:`, err?.status || err?.message);
-        if (err?.status === 503 || err?.status === 429) {
-          await new Promise((resolve) => setTimeout(resolve, 1500));
-        } else {
-          break;
-        }
-      }
-    }
-  }
-  throw lastError;
-}
+export const runtime = 'nodejs';
+export const maxDuration = 300;
 
 export async function POST(req: Request) {
   try {
@@ -57,6 +34,9 @@ export async function POST(req: Request) {
     const sector: SectorType = sectorOverride || extractedData.sector || detectSector(ticker);
     const sectorDef = SECTOR_DEFINITIONS[sector];
 
+    // Tek ve tutarlı kaynak: Dinamik değer sürücülerini ve adil değeri hesapla
+    const { drivers, valuation } = computeSectorValuationAndDrivers(extractedData, String(price), sector);
+
     let systemInstruction = '';
 
     if (sector === 'INSURANCE') {
@@ -80,10 +60,56 @@ DİKKAT VE SEKTÖREL KURALLAR (SİGORTACILIK & BİREYSEL EMEKLİLİK - Örn: AGE
 4. PUANLAMA TABLOSU:
    Raporun sonundaki puanlama tablosunu sigortacılık dinamiklerine göre şu başlıklarla yap:
    | Metrik | Puan | Max | Gerekçe |
+   | :--- | :--- | :--- | :--- |
    | Teknik Kârlılık & Kombine Oran (<%100) | X | 25 | ... |
    | Portföy / Yatırım Getirisi & Float Gücü | X | 25 | ... |
    | Sermaye Yeterliliği & ROE Kârlılığı | X | 25 | ... |
    | Büyüme, Pazar Payı & AUM Genişlemesi | X | 25 | ... |
+   | **Toplam Puan** | **X** | **100** | ... |
+
+Analist Kararı: [AL / ALMA / NÖTR] (Net ve gerekçeli tek karar)`;
+    } else if (sector === 'BANKING') {
+      systemInstruction = `Sen acımasız, aşırı objektif ve Türkiye bankacılık ve finans sektörüne uzmanlaşmış kurumsal bir fon yöneticisisin.
+DİKKAT VE SEKTÖREL KURALLAR (BANKACILIK SEKTÖRÜ - Örn: GARAN, AKBNK, ISCTR, YKBNK):
+1. KAVRAMSAL YASAKLAR: Bankalarda 'FAVÖK', 'Brüt Kâr Marjı', 'Net Borç' veya 'EV/EBITDA' KESİNLİKLE KULLANILAMAZ!
+2. ODAKLANILACAK DEĞER MOTORLARI:
+   - Net Faiz Geliri (NII) ve Net Faiz Marjı (NIM): Kredi getirileri vs mevduat maliyeti makası.
+   - Net Ücret & Komisyon Gelirleri: Bankacılık hizmetlerinin kâr katkısı.
+   - Aktif Kalitesi: Takipteki Alacaklar Rasyosu (NPL / TGA %), Karşılık Ayırma Oranları.
+   - Sermaye Yeterlilik Rasyosu (SYR / CAR %): BDDK yasal sınırları ve sermaye tamponu.
+   - Kredi / Mevduat Oranı (LDR %) ve Likidite Karşılama Oranı (LCR).
+   - Özkaynak Kârlılığı (ROE %) ve Sermaye Maliyeti (Ke) Makası.
+3. DEĞERLEME MODELİ:
+   - Gordon Büyüme Modeli & İskontolu Özkaynak Değeri (Hedef PD/DD = (ROE - g) / (Ke - g)).
+   - F/K ve PD/DD çarpan analizi.
+4. PUANLAMA TABLOSU:
+   | Metrik | Puan | Max | Gerekçe |
+   | :--- | :--- | :--- | :--- |
+   | Kredi Kalitesi & Risk Yönetimi (NPL) | X | 25 | ... |
+   | Net Faiz Marjı (NIM) & Fonlama Gücü | X | 25 | ... |
+   | Sermaye Yeterliliği (SYR) & ROE Verimi | X | 25 | ... |
+   | Komisyon Büyümesi & Dijital Bankacılık | X | 25 | ... |
+   | **Toplam Puan** | **X** | **100** | ... |
+
+Analist Kararı: [AL / ALMA / NÖTR] (Net ve gerekçeli tek karar)`;
+    } else if (sector === 'HOLDING') {
+      systemInstruction = `Sen acımasız, aşırı objektif ve Holding / Yatırım Şirketleri alanında uzmanlaşmış kurumsal bir fon yöneticisisin.
+DİKKAT VE SEKTÖREL KURALLAR (HOLDİNG SEKTÖRÜ - Örn: KCHOL, SAHOL, AGHOL):
+1. KAVRAMSAL YASAKLAR: Holding konsolide rakamlarında basit tekil FAVÖK çarpanı kullanılamaz. Parçaların Toplamı (SOTP) ve Net Aktif Değeri (NAD / NAV) esastır.
+2. ODAKLANILACAK DEĞER MOTORLARI:
+   - Net Aktif Değeri (NAD / NAV) ve Tarihsel NAD İskonto Oranı (% NAD İskontosu).
+   - Solo Net Nakit / Borç Durumu ve Finansal Esneklik.
+   - Halka Açık vs Halka Açık Olmayan İştirak Dağılımı ve Likidite.
+   - İştiraklerden Gelen Temettü Girişleri ve Holding Temettü Dağıtım Gücü.
+3. DEĞERLEME MODELİ:
+   - Parçaların Toplamı (Sum of the Parts - SOTP) ve Hedef NAD İskontosu Modeli.
+4. PUANLAMA TABLOSU:
+   | Metrik | Puan | Max | Gerekçe |
+   | :--- | :--- | :--- | :--- |
+   | İştirak Portföy Kalitesi & Çeşitlilik | X | 25 | ... |
+   | Solo Bilanço Gücü & Net Nakit Esnekliği | X | 25 | ... |
+   | Temettü Verimliliği & Nakit Üretimi | X | 25 | ... |
+   | NAD İskontosu & Kurumsal Katalizörler | X | 25 | ... |
    | **Toplam Puan** | **X** | **100** | ... |
 
 Analist Kararı: [AL / ALMA / NÖTR] (Net ve gerekçeli tek karar)`;
@@ -168,6 +194,21 @@ Güncel Fiyat: ${price} TL
 Konsensüs Beklentileri: ${consensus || 'Belirtilmedi'}
 Sektör/Rakip Çarpanları: ${peerMultiples || 'Belirtilmedi'}
 
+HESAPLANAN DİNAMİK DEĞERLEME VE ADİL DEĞER ÇERÇEVESİ (RAPORUNDA BU DEĞERLERİ BİREBİR KULLANACAKSIN):
+- Değerleme Modeli: ${valuation.valuation_model_name}
+- Hisse Başı Adil Değer: ${valuation.fair_value} TL
+- Güncel Piyasa Fiyatı: ${price} TL
+- İskonto Potansiyeli: %${valuation.discount_pct}
+- Ayı Senaryosu Taban Fiyatı (Bear Case Target): ${valuation.bear_price} TL
+- Boğa Senaryosu Tavan Fiyatı (Bull Case Target): ${valuation.bull_price} TL
+- 1. Değer Sürücüsü (${drivers.revenue_growth.label}): %${drivers.revenue_growth.value}
+- 2. Değer Sürücüsü (${drivers.net_income_growth.label}): %${drivers.net_income_growth.value}
+- 3. Değer Sürücüsü (${drivers.margin.label}): %${drivers.margin.value}
+- 4. Değer Sürücüsü (${drivers.target_multiple.label}): ${drivers.target_multiple.value}
+
+DİKKAT VE TUTARLILIK KURALI:
+Raporunun Değerleme ve İleriye Dönük Adil Değer (Valuation) bölümündeki formüllerde ve metinlerde KESİNLİKLE yukarıda verilen ${valuation.fair_value} TL adil değerini ve sürücü rakamlarını temel alacaksın. Rapor ile terminaldeki özet kartlar arasında herhangi bir çelişki OLMAMALIDIR!
+
 Doğrulanmış ve Raporlardan Birebir Çıkarılmış Çok Yıllı Finansal Zaman Serisi & Rehberlik Veri Seti:
 ${typeof extractedData === 'string' ? extractedData : JSON.stringify(extractedData, null, 2)}
 `;
@@ -184,15 +225,26 @@ Lütfen bu çeyrekteki yeni veriler ışığında önceki tezin nasıl evrildiğ
 
     prompt += `\nBu verileri acımasız filtrelerinden, sektöre özgü (${sectorDef.title}) dinamiklerinden ve değerleme modelinden geçirerek nihai değerleme raporunu üret.`;
 
-    const response = await generateWithFallback(ai, {
-      contents: prompt,
-      config: {
-        systemInstruction,
-        temperature: 0.1,
+    const cacheKey = `analyze_${ticker.toUpperCase()}_${extractedData?.reporting_period || 'latest'}_${price}_${sector}`;
+
+    const response = await generateWithRateLimitAndBackoff({
+      ai,
+      baseParams: {
+        contents: prompt,
+        config: {
+          systemInstruction,
+          temperature: 0.1,
+        },
       },
+      cacheKey,
     });
 
-    return NextResponse.json({ report: response.text, sector });
+    return NextResponse.json({ 
+      report: response.text, 
+      sector, 
+      valuation, 
+      drivers 
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Değerleme üretilirken hata oluştu.' }, { status: 500 });
   }

@@ -3,40 +3,13 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { 
+  generateWithRateLimitAndBackoff, 
+  computeContentHash 
+} from '@/lib/gemini';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60; // Uzun süren finansal analizler için timeout genişletme
-
-const CANDIDATE_MODELS = [
-  'gemini-3.8-flash',
-  'gemini-3.6-flash',
-  'gemini-flash-latest',
-  'gemini-3.1-flash-lite',
-  'gemini-3.5-flash-lite',
-];
-
-async function generateWithFallback(ai: GoogleGenAI, baseParams: any) {
-  let lastError: any;
-  for (const model of CANDIDATE_MODELS) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        return await ai.models.generateContent({
-          ...baseParams,
-          model,
-        });
-      } catch (err: any) {
-        lastError = err;
-        console.warn(`[Analyze-PDF] Model ${model} (Deneme ${attempt + 1}) yanıt vermedi:`, err?.status || err?.message);
-        if (err?.status === 503 || err?.status === 429) {
-          await new Promise((resolve) => setTimeout(resolve, 1500));
-        } else {
-          break;
-        }
-      }
-    }
-  }
-  throw lastError;
-}
+export const maxDuration = 300; // Uzun süren finansal analizler için timeout genişletme
 
 export async function POST(req: Request) {
   const tempFilePaths: string[] = [];
@@ -165,12 +138,19 @@ Sektör/Rakip Çarpanları: ${peerMultiples}
 
 Ekteki PDF dokümanlarını (Finansal Tablolar, Dipnotlar, Faaliyet Raporları ve Sunumlar) kullanarak analizi gerçekleştir ve nihai değerleme raporunu oluştur.`;
 
-    const response = await generateWithFallback(ai, {
-      contents: [...fileParts, promptText],
-      config: {
-        systemInstruction,
-        temperature: 0.1,
+    const pdfHash = computeContentHash(pdfFiles.map(f => `${f.name}_${f.size}`).join(';'));
+    const cacheKey = `analyze_pdf_${ticker.toUpperCase()}_${price}_${pdfHash}`;
+
+    const response = await generateWithRateLimitAndBackoff({
+      ai,
+      baseParams: {
+        contents: [...fileParts, promptText],
+        config: {
+          systemInstruction,
+          temperature: 0.1,
+        },
       },
+      cacheKey,
     });
 
 

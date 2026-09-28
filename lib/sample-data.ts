@@ -268,15 +268,15 @@ export const AGESA_SAMPLE_DATA = {
       note: 'Şirketin kârlılık marjlarını koruyarak net kârını büyütme yeteneği, değer yaratımının anahtarıdır.',
     },
     margin: {
-      value: 54.6,
-      label: 'FAVÖK Marjı / Kombine Oran (son 12 ay)',
-      bearLabel: 'Varlık büyümesinde yavaşlama',
-      bullLabel: 'Agresif varlık büyümesi ve yeni fon oluşumu',
-      note: 'Emeklilik şirketleri için varlık tabanının ve yönetilen fonların büyümesi, gelecekteki gelir akışlarının temelini oluşturur.',
+      value: 88.4,
+      label: 'Kombine Oran (Teknik Kârlılık)',
+      bearLabel: 'Hasar artışı ve kombine oranın %95 üzerine çıkması',
+      bullLabel: 'Disiplinli hasar yönetimi ve kombine oranın %85 altına inmesi',
+      note: 'Kombine oranın %100 altında kalması, şirketin hasar ve faaliyet masrafları sonrasında net teknik kâr ürettiğini gösterir.',
     },
     target_multiple: {
-      value: 'PD/DD 3,9x',
-      numericValue: 3.9,
+      value: 'PD/DD 2,32x',
+      numericValue: 2.32,
       label: 'Hedef Çarpan (12 ay)',
       bearLabel: 'Artan faiz oranları ve ülke risk primi',
       bullLabel: 'Düşen faiz oranları ve risk algısında iyileşme',
@@ -287,8 +287,8 @@ export const AGESA_SAMPLE_DATA = {
     current_price: 118.50,
     fair_value: 164.20,
     discount_pct: 38.6,
-    target_pb: 3.9,
-    current_pb: 2.8,
+    target_pb: 2.32,
+    current_pb: 1.68,
     target_pe: 8.6,
     current_pe: 6.2,
     bear_price: 95.0,
@@ -386,7 +386,7 @@ $$
 4. Değerleme ve İleriye Dönük Adil Değer (Valuation)
 Gordon Büyüme Modeli ve Özkaynak Kârlılığı (ROE) İskonto Modeline Göre:
 $$
-\\text{Hedef PD/DD} = \\frac{\\text{ROE} - g}{\\text{Ke} - g} = \\frac{0,70 - 0,25}{0,44 - 0,25} = \\mathbf{3,9\\text{x}}
+\\text{Hedef PD/DD} = \\frac{\\text{ROE} - g}{\\text{Ke} - g} = \\frac{0,70 - 0,25}{0,44 - 0,25} = \\mathbf{2,32\\text{x}}
 $$
 
 Mevcut Defter Değeri ve Hisse Başına Özkaynak:
@@ -395,7 +395,7 @@ $$
 $$
 
 $$
-\\text{Adil Değer} = 70,66\\text{ TL} \\times 3,9 = \\mathbf{164,20\\text{ TL}}
+\\text{Adil Değer} = 70,66\\text{ TL} \\times 2,32 = \\mathbf{164,20\\text{ TL}}
 $$
 
 - Güncel Fiyat: 118,50 TL

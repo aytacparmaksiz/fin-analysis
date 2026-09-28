@@ -4,40 +4,15 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { detectSector, SectorType } from '@/lib/sectors';
+import { 
+  generateWithRateLimitAndBackoff, 
+  optimizeTextForGemini, 
+  computeContentHash 
+} from '@/lib/gemini';
+import { computeSectorValuationAndDrivers } from '@/lib/valuation';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300; // Çoklu ve hacimli PDF grupları için süreyi 5 dakikaya genişletiyoruz
-
-const CANDIDATE_MODELS = [
-  'gemini-3.8-flash',
-  'gemini-3.6-flash',
-  'gemini-flash-latest',
-  'gemini-3.1-flash-lite',
-  'gemini-3.5-flash-lite',
-];
-
-async function generateWithFallback(ai: GoogleGenAI, baseParams: any) {
-  let lastError: any;
-  for (const model of CANDIDATE_MODELS) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        return await ai.models.generateContent({
-          ...baseParams,
-          model,
-        });
-      } catch (err: any) {
-        lastError = err;
-        console.warn(`[Extract] Model ${model} (Deneme ${attempt + 1}) yanıt vermedi:`, err?.status || err?.message);
-        if (err?.status === 503 || err?.status === 429) {
-          await new Promise((resolve) => setTimeout(resolve, 1500));
-        } else {
-          break;
-        }
-      }
-    }
-  }
-  throw lastError;
-}
 
 function parsePeriodSortKey(period: string): number {
   if (!period) return 0;
@@ -118,6 +93,61 @@ function enrichAndSanitizeFinancialHistory(data: any) {
       if (item.total_assets && item.equity && item.leverage_ratio == null && item.total_assets > 0) {
         item.leverage_ratio = Number((((item.total_assets - item.equity) / item.total_assets) * 100).toFixed(2));
       }
+    }
+
+    // Bilanço Kalemlerini Akıllı Türet ve Eksikleri Tamamla (İlave 4: Tablo Tirelerini Önleme)
+    // 1. Nakit ve Nakit Benzerleri
+    if (item.cash_and_equivalents == null) {
+      if (typeof item.cash === 'number') item.cash_and_equivalents = item.cash;
+      else if (typeof item.liquid_assets === 'number') item.cash_and_equivalents = item.liquid_assets;
+      else if (typeof item.net_debt === 'number' && item.net_debt < 0) {
+        item.cash_and_equivalents = Math.abs(item.net_debt);
+      }
+    }
+
+    // 2. Finansal Yatırımlar / Alacaklar Eşitlemesi
+    if (item.financial_assets_insured == null && typeof item.financial_investments === 'number') {
+      item.financial_assets_insured = item.financial_investments;
+    }
+    if (item.financial_investments == null && typeof item.financial_assets_insured === 'number') {
+      item.financial_investments = item.financial_assets_insured;
+    }
+
+    // 3. Toplam Aktifler, Cari Varlıklar ve Cari Olmayan Varlıklar Dengesi
+    if (item.total_assets != null && item.total_assets > 0) {
+      if (item.current_assets != null && item.non_current_assets == null) {
+        item.non_current_assets = Math.max(0, item.total_assets - item.current_assets);
+      } else if (item.non_current_assets != null && item.current_assets == null) {
+        item.current_assets = Math.max(0, item.total_assets - item.non_current_assets);
+      }
+    } else if (item.current_assets != null && item.non_current_assets != null) {
+      item.total_assets = item.current_assets + item.non_current_assets;
+    }
+
+    // Eğer Cari Varlıklar hala boşsa nakit + alacaklar + yatırımlardan türet
+    if (item.current_assets == null) {
+      const subTotal = (item.cash_and_equivalents || 0) + 
+                       (item.financial_assets_insured || item.financial_investments || 0) + 
+                       (item.trade_receivables || 0);
+      if (subTotal > 0) {
+        item.current_assets = subTotal;
+        if (item.total_assets != null && item.non_current_assets == null) {
+          item.non_current_assets = Math.max(0, item.total_assets - subTotal);
+        }
+      }
+    }
+
+    // Eğer Toplam Aktifler hala boşsa özkaynak ve kaldıraçtan türet
+    if (item.total_assets == null && item.equity && item.leverage_ratio && item.leverage_ratio < 100) {
+      item.total_assets = Number((item.equity / (1 - item.leverage_ratio / 100)).toFixed(0));
+      if (item.current_assets != null && item.non_current_assets == null) {
+        item.non_current_assets = Math.max(0, item.total_assets - item.current_assets);
+      }
+    }
+
+    // Özkaynak boşsa toplam aktifler ve kaldıraçtan türet
+    if (item.equity == null && item.total_assets != null && item.leverage_ratio != null && item.leverage_ratio < 100) {
+      item.equity = Number((item.total_assets * (1 - item.leverage_ratio / 100)).toFixed(0));
     }
 
     // Eksik marjları hesapla
@@ -522,7 +552,8 @@ SEKTÖREL UYARLAMA KURALLARI:
       const DOC_BATCH_SIZE = 3;
       for (let i = 0; i < documents.length; i += DOC_BATCH_SIZE) {
         const batch = documents.slice(i, i + DOC_BATCH_SIZE);
-        const docTexts = batch.map((d: any) => `### RAPOR DOKÜMANI: ${d.name}\n${d.text}`).join('\n\n---\n\n');
+        const rawDocTexts = batch.map((d: any) => `### RAPOR DOKÜMANI: ${d.name}\n${d.text}`).join('\n\n---\n\n');
+        const docTexts = optimizeTextForGemini(rawDocTexts);
 
         const userPrompt = `Şirket: ${ticker.toUpperCase()}.
 Aşağıda şirkete ait yüklenen faaliyet raporları, bilançolar ve gelir tablolarının metinleri yer almaktadır (Paket ${Math.floor(i / DOC_BATCH_SIZE) + 1}/${Math.ceil(documents.length / DOC_BATCH_SIZE)}):
@@ -531,18 +562,24 @@ ${docTexts}
 
 GÖREVLER:
 1. Belgede yer alan tüm dönemlere ait Hasılat (revenue), FAVÖK (ebitda), Net Kâr (net_income), Marjlar (%), Nakit Akışları (OCF, CAPEX, FCF), Net Borç (net_debt) ve ROIC/WACC verilerini eksiksiz çıkar veya hesapla (özellikle 2024 ve sonraki yıllar dahil).
-2. Varsa geçmiş yönetim hedeflerini (guidance) ve gerçekleşmelerini çıkar.
-3. Rakamları tam veya ondalıklı sayı olarak ver.`;
+2. BİLANÇO DETAYLARI: Cari Varlıklar (current_assets), Nakit ve Nakit Benzerleri (cash_and_equivalents), Finansal Yatırımlar (financial_assets_insured), Alacaklar (trade_receivables), Cari Olmayan Varlıklar (non_current_assets), Toplam Varlıklar (total_assets) ve Toplam Özkaynaklar (equity) kalemlerini eksiksiz çıkar.
+3. Varsa geçmiş yönetim hedeflerini (guidance) ve gerçekleşmelerini çıkar.
+4. Rakamları tam veya ondalıklı sayı olarak ver.`;
 
         try {
-          const response = await generateWithFallback(ai, {
-            contents: [userPrompt],
-            config: {
-              systemInstruction,
-              temperature: 0.0,
-              responseMimeType: 'application/json',
-              responseSchema: extractionSchema,
+          const cacheKey = `extract_${ticker.toUpperCase()}_batch_${i}_${computeContentHash(docTexts)}`;
+          const response = await generateWithRateLimitAndBackoff({
+            ai,
+            baseParams: {
+              contents: [userPrompt],
+              config: {
+                systemInstruction,
+                temperature: 0.0,
+                responseMimeType: 'application/json',
+                responseSchema: extractionSchema,
+              },
             },
+            cacheKey,
           });
 
           const parsedData = JSON.parse(response.text || '{}');
@@ -601,17 +638,25 @@ GÖREVLER:
         const userPrompt = `Şirket: ${ticker.toUpperCase()}. 
 Ekteki belgeleri incele (Paket ${bIndex + 1}/${fileBatches.length}):
 1. Belgede yer alan tüm dönemlere ait Hasılat (revenue), FAVÖK (ebitda), Net Kâr (net_income), Marjlar (%), Nakit Akışları (OCF, CAPEX, FCF), Net Borç (net_debt) ve ROIC/WACC verilerini eksiksiz çıkar veya hesapla (özellikle 2024 ve sonraki yıllar dahil).
-2. Varsa geçmiş yönetim hedeflerini (guidance) ve gerçekleşmelerini çıkar.
-3. Rakamları tam veya ondalıklı sayı olarak ver.`;
+2. BİLANÇO DETAYLARI: Cari Varlıklar (current_assets), Nakit ve Nakit Benzerleri (cash_and_equivalents), Finansal Yatırımlar (financial_assets_insured), Alacaklar (trade_receivables), Cari Olmayan Varlıklar (non_current_assets), Toplam Varlıklar (total_assets) ve Toplam Özkaynaklar (equity) kalemlerini eksiksiz çıkar.
+3. Varsa geçmiş yönetim hedeflerini (guidance) ve gerçekleşmelerini çıkar.
+4. Rakamları tam veya ondalıklı sayı olarak ver.`;
 
-        const response = await generateWithFallback(ai, {
-          contents: [...fileParts, userPrompt],
-          config: {
-            systemInstruction,
-            temperature: 0.0,
-            responseMimeType: 'application/json',
-            responseSchema: extractionSchema,
+        const pdfHash = computeContentHash(currentBatch.map(f => `${f.name}_${f.size}`).join(';'));
+        const cacheKey = `extract_${ticker.toUpperCase()}_pdf_${bIndex}_${pdfHash}`;
+
+        const response = await generateWithRateLimitAndBackoff({
+          ai,
+          baseParams: {
+            contents: [...fileParts, userPrompt],
+            config: {
+              systemInstruction,
+              temperature: 0.0,
+              responseMimeType: 'application/json',
+              responseSchema: extractionSchema,
+            },
           },
+          cacheKey,
         });
 
         const parsedData = JSON.parse(response.text || '{}');
@@ -645,6 +690,16 @@ Ekteki belgeleri incele (Paket ${bIndex + 1}/${fileBatches.length}):
 
     // Çıkarılan tüm paketleri tek bir kronolojik zaman serisinde birleştir
     const finalData = mergeExtractedData(batchResults);
+
+    // Dinamik Değer Sürücüleri ve Adil Değerleme Hesapla (Item 2 & 3)
+    const { drivers, valuation } = computeSectorValuationAndDrivers(finalData);
+    if (!finalData.fair_value_drivers || !finalData.fair_value_drivers.revenue_growth) {
+      finalData.fair_value_drivers = drivers;
+    }
+    if (!finalData.valuation || !finalData.valuation.fair_value) {
+      finalData.valuation = valuation;
+    }
+
     return NextResponse.json({ success: true, data: finalData });
 
   } catch (error: any) {

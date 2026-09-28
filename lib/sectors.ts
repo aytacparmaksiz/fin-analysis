@@ -1,4 +1,4 @@
-export type SectorType = 'INSURANCE' | 'BANKING' | 'INDUSTRIAL';
+export type SectorType = 'INSURANCE' | 'BANKING' | 'HOLDING' | 'INDUSTRIAL';
 
 export interface SectorDefinition {
   id: SectorType;
@@ -34,7 +34,7 @@ export const SECTOR_DEFINITIONS: Record<SectorType, SectorDefinition> = {
     id: 'BANKING',
     title: 'Bankacılık & Finans',
     badge: 'Banka / Finans Modu',
-    description: 'Bankalarda faiz gelirleri, net faiz marjı (NIM), komisyon gelirleri ve sermaye yeterlilik rasyosu (SYR) esastır.',
+    description: 'Bankalarda faiz gelirleri, net faiz marjı (NIM), komisyon gelirleri, kredi/mevduat kalitesi ve sermaye yeterlilik rasyosu (SYR) esastır.',
     revenueLabel: 'Net Faiz Geliri (NII)',
     revenueSublabel: 'Kredilerden Alınan Faizler - Mevduat Faiz Giderleri',
     operatingProfitLabel: 'Faaliyet Kârı (Provizyon Öncesi)',
@@ -43,6 +43,20 @@ export const SECTOR_DEFINITIONS: Record<SectorType, SectorDefinition> = {
     marginSublabel: 'Net Faiz Geliri / Ortalama Faiz Getirili Aktifler',
     valuationMultiples: 'PD/DD & F/K',
     primaryEfficiencyMetric: 'Özkaynak Kârlılığı (ROE %)',
+  },
+  HOLDING: {
+    id: 'HOLDING',
+    title: 'Holdingler & Yatırım Şirketleri',
+    badge: 'Holding / NAD Modu',
+    description: 'Holdinglerde klasik FAVÖK yerine Net Aktif Değeri (NAD / NAV), solo net nakit/borç pozisyonu ve iştirak temettü akışları esastır.',
+    revenueLabel: 'Konsolide Hasılat / Portföy Geliri',
+    revenueSublabel: 'İştirak Satışları ve Solo Temettü Girişleri',
+    operatingProfitLabel: 'Kombine Faaliyet Kârı',
+    operatingProfitSublabel: 'Grup Şirketleri Faaliyet Kârı',
+    marginLabel: 'Tarihsel NAD İskontosu (%)',
+    marginSublabel: 'Piyasa Değeri vs Portföy Net Aktif Değeri',
+    valuationMultiples: 'NAD İskontosu & Parçaların Toplamı (SOTP)',
+    primaryEfficiencyMetric: 'Hisse Başı NAD Büyümesi',
   },
   INDUSTRIAL: {
     id: 'INDUSTRIAL',
@@ -84,6 +98,21 @@ export const BIST_BANKING_TICKERS = [
   'ICBCT',
 ];
 
+export const BIST_HOLDING_TICKERS = [
+  'KCHOL',
+  'SAHOL',
+  'AGHOL',
+  'DOHOL',
+  'ALARK',
+  'TKFEN',
+  'SISE',
+  'BERA',
+  'GSDHO',
+  'GLYHO',
+  'VERUS',
+  'GOZDE',
+];
+
 export function detectSector(ticker: string, contextText = ''): SectorType {
   const normTicker = (ticker || '').toUpperCase().trim();
   if (BIST_INSURANCE_TICKERS.includes(normTicker)) {
@@ -91,6 +120,9 @@ export function detectSector(ticker: string, contextText = ''): SectorType {
   }
   if (BIST_BANKING_TICKERS.includes(normTicker)) {
     return 'BANKING';
+  }
+  if (BIST_HOLDING_TICKERS.includes(normTicker)) {
+    return 'HOLDING';
   }
 
   const text = (normTicker + ' ' + contextText).toLowerCase();
@@ -116,6 +148,15 @@ export function detectSector(ticker: string, contextText = ''): SectorType {
     text.includes('kredi mevduat')
   ) {
     return 'BANKING';
+  }
+
+  if (
+    text.includes('holding') ||
+    text.includes('yatırımlar') ||
+    text.includes('net aktif değer') ||
+    text.includes('iştirak')
+  ) {
+    return 'HOLDING';
   }
 
   return 'INDUSTRIAL';

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -11,7 +11,8 @@ import {
   ChevronRight, ChevronDown, UploadCloud, X, CheckCircle2, Search,
   TrendingUp, BarChart3, Target, Calendar, ArrowUpRight, ArrowDownRight, Minus,
   DollarSign, ShieldCheck, Activity, Layers, Sparkles, Download, Upload,
-  Trophy, Award, Trash2, ArrowUpDown, Filter, Copy, Percent, PieChart, Info
+  Trophy, Award, Trash2, ArrowUpDown, Filter, Copy, Percent, PieChart, Info,
+  PanelLeftClose, PanelLeftOpen, Pin, PinOff
 } from 'lucide-react';
 
 import {
@@ -38,6 +39,13 @@ import {
   AGESA_SAMPLE_DATA, 
   AGESA_SAMPLE_REPORT_TEXT 
 } from '@/lib/sample-data';
+
+import {
+  computeSectorValuationAndDrivers,
+  extractValuationFromReportText,
+  ValuationMetrics,
+  FairValueDrivers
+} from '@/lib/valuation';
 
 // Fair Value Kurumsal Vektör Logosu
 function FairValueLogo({ className = "w-8 h-8" }: { className?: string }) {
@@ -267,6 +275,7 @@ function DriverCard({
   bearText,
   bullText,
   description,
+  sourceExplanation,
 }: {
   title: string;
   valueText: string;
@@ -274,6 +283,7 @@ function DriverCard({
   bearText: string;
   bullText: string;
   description: string;
+  sourceExplanation?: string;
 }) {
   return (
     <div className="bg-[#111827]/90 border border-slate-800 rounded-xl p-4 sm:p-5 flex flex-col justify-between shadow-lg space-y-3.5">
@@ -304,6 +314,13 @@ function DriverCard({
           <span className="max-w-[48%] text-right text-slate-300">{bullText}</span>
         </div>
       </div>
+
+      {sourceExplanation && (
+        <div className="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-900/60 rounded px-2 py-1 flex items-center gap-1.5">
+          <Info className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+          <span className="truncate" title={sourceExplanation}>{sourceExplanation}</span>
+        </div>
+      )}
 
       <p className="text-[11px] text-slate-400 leading-relaxed pt-2 border-t border-slate-800/80">
         {description}
@@ -431,6 +448,61 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
       if (row.total_assets && row.total_assets > 0 && row.net_income && row.roa == null) {
         row.roa = Number(((row.net_income * annualFactor / row.total_assets) * 100).toFixed(2));
       }
+    }
+
+    // Bilanço Kalemlerini Akıllı Türet ve Eksikleri Tamamla (İlave 4: Tablo Tirelerini Önleme)
+    // 1. Nakit ve Nakit Benzerleri
+    if (row.cash_and_equivalents == null) {
+      if (typeof row.cash === 'number') row.cash_and_equivalents = row.cash;
+      else if (typeof row.liquid_assets === 'number') row.cash_and_equivalents = row.liquid_assets;
+      else if (typeof row.net_debt === 'number' && row.net_debt < 0) {
+        row.cash_and_equivalents = Math.abs(row.net_debt);
+      }
+    }
+
+    // 2. Finansal Yatırımlar / Alacaklar Eşitlemesi
+    if (row.financial_assets_insured == null && typeof row.financial_investments === 'number') {
+      row.financial_assets_insured = row.financial_investments;
+    }
+    if (row.financial_investments == null && typeof row.financial_assets_insured === 'number') {
+      row.financial_investments = row.financial_assets_insured;
+    }
+
+    // 3. Toplam Aktifler, Cari Varlıklar ve Cari Olmayan Varlıklar Dengesi
+    if (row.total_assets != null && row.total_assets > 0) {
+      if (row.current_assets != null && row.non_current_assets == null) {
+        row.non_current_assets = Math.max(0, row.total_assets - row.current_assets);
+      } else if (row.non_current_assets != null && row.current_assets == null) {
+        row.current_assets = Math.max(0, row.total_assets - row.non_current_assets);
+      }
+    } else if (row.current_assets != null && row.non_current_assets != null) {
+      row.total_assets = row.current_assets + row.non_current_assets;
+    }
+
+    // Eğer Cari Varlıklar hala boşsa nakit + alacaklar + yatırımlardan türet
+    if (row.current_assets == null) {
+      const subTotal = (row.cash_and_equivalents || 0) + 
+                       (row.financial_assets_insured || row.financial_investments || 0) + 
+                       (row.trade_receivables || 0);
+      if (subTotal > 0) {
+        row.current_assets = subTotal;
+        if (row.total_assets != null && row.non_current_assets == null) {
+          row.non_current_assets = Math.max(0, row.total_assets - subTotal);
+        }
+      }
+    }
+
+    // Eğer Toplam Aktifler hala boşsa özkaynak ve kaldıraçtan türet
+    if (row.total_assets == null && row.equity && row.leverage_ratio && row.leverage_ratio < 100) {
+      row.total_assets = Number((row.equity / (1 - row.leverage_ratio / 100)).toFixed(0));
+      if (row.current_assets != null && row.non_current_assets == null) {
+        row.non_current_assets = Math.max(0, row.total_assets - row.current_assets);
+      }
+    }
+
+    // Özkaynak boşsa toplam aktifler ve kaldıraçtan türet
+    if (row.equity == null && row.total_assets != null && row.leverage_ratio != null && row.leverage_ratio < 100) {
+      row.equity = Number((row.total_assets * (1 - row.leverage_ratio / 100)).toFixed(0));
     }
 
     if (row.revenue && row.revenue > 0) {
@@ -612,6 +684,10 @@ export default function ValuationTerminal() {
 
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [activeReportId, setActiveReportId] = useState<string | null>(null);
+
+  // Kenar Çubuğu Katlanabilirlik ve Sabitleme Durumu (Item 6)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarPinned, setIsSidebarPinned] = useState(true);
 
   const toggleSection = (sectionKey: string) => {
     setCollapsedSections(prev => ({
@@ -988,6 +1064,12 @@ export default function ValuationTerminal() {
         data.report.match(/(\d{1,3})\s*\/\s*100/i);
       const score = scoreMatch ? scoreMatch[1] : undefined;
 
+      const finalExtracted = {
+        ...enrichedExtractedData,
+        valuation: data.valuation || enrichedExtractedData?.valuation,
+        fair_value_drivers: data.drivers || enrichedExtractedData?.fair_value_drivers,
+      };
+
       const newEntry: SavedReport = {
         id: Date.now().toString(),
         ticker: normalizedTicker,
@@ -998,7 +1080,7 @@ export default function ValuationTerminal() {
         decision,
         score,
         sector: activeSector,
-        extractedData: enrichedExtractedData
+        extractedData: finalExtracted
       };
 
       saveReport(newEntry);
@@ -1192,35 +1274,54 @@ export default function ValuationTerminal() {
   // Bilanço Tablosu Bölümleri (Görsel 1 & Açılıp Kapanır Başlıklar - İlave 4)
   const balanceSheetSections: TableSectionConfig[] = [
     {
-      title: 'Cari Varlıklar (Dönen Varlıklar)',
+      title: currentSector === 'BANKING' ? 'Nakit, Likidite & Krediler' : 'Cari Varlıklar (Dönen Varlıklar)',
       categoryKey: 'bs_current',
       rows: [
-        { label: 'Cari Varlıklar', sublabel: 'Dönen Varlıklar Toplamı', key: 'current_assets', isHeader: false },
-        { label: 'Nakit ve Nakit Benzeri Varlıklar', sublabel: 'Kasa, Banka ve Kısa Vadeli Mevduatlar', key: 'cash_and_equivalents', isHeader: false },
+        { label: 'Nakit ve Nakit Benzeri Varlıklar', sublabel: 'Kasa, Banka ve Kısa Vadeli Mevduatlar', key: 'cash_and_equivalents', fallbackKey: 'cash', isHeader: false },
         { 
-          label: currentSector === 'INSURANCE' ? 'Finansal Varlıklar ile Riski Sigortalılara Ait Finansal Yatırımlar' : 'Ticari ve Diğer Alacaklar', 
-          sublabel: currentSector === 'INSURANCE' ? 'BES ve Hayat Katılımcılarına Ait Portföy Yatırımları' : 'Esas Faaliyet Alacakları', 
+          label: currentSector === 'INSURANCE' 
+            ? 'Finansal Varlıklar ile Riski Sigortalılara Ait Yatırımlar' 
+            : (currentSector === 'BANKING' ? 'Menkul Değerler & Finansal Varlıklar' : 'Finansal Yatırımlar'), 
+          sublabel: currentSector === 'INSURANCE' 
+            ? 'BES ve Hayat Katılımcılarına Ait Portföy Yatırımları' 
+            : 'Kısa Vadeli Menkul Kıymetler & Finansal Araçlar', 
           key: 'financial_assets_insured', 
-          fallbackKey: 'trade_receivables',
+          fallbackKey: 'financial_investments',
           isHeader: false 
         },
-        { label: 'Esas Faaliyetlerden Alacaklar', sublabel: 'Poliçe ve Ticari Alacak Bakiyesi', key: 'trade_receivables', isHeader: false },
-        { label: 'Cari Varlıklar Toplamı', sublabel: 'Toplam Kısa Vadeli Varlık Büyüklüğü', key: 'current_assets', isHeader: true, highlight: true },
+        { 
+          label: currentSector === 'BANKING' ? 'Krediler ve Alacaklar' : 'Esas Faaliyetlerden Alacaklar', 
+          sublabel: currentSector === 'BANKING' ? 'Müşterilere Verilen Krediler Bakiyesi' : 'Poliçe ve Ticari Alacak Bakiyesi', 
+          key: 'trade_receivables', 
+          isHeader: false 
+        },
+        { 
+          label: currentSector === 'BANKING' ? 'Toplam Likit Varlıklar' : 'Cari Varlıklar (Dönen Varlıklar Toplamı)', 
+          sublabel: 'Kısa Vadeli Dönen Varlık Gücü', 
+          key: 'current_assets', 
+          isHeader: true, 
+          highlight: true 
+        },
       ],
     },
     {
-      title: 'Cari Olmayan Varlıklar (Duran Varlıklar)',
+      title: currentSector === 'BANKING' ? 'Duran Varlıklar & İştirakler' : 'Cari Olmayan Varlıklar (Duran Varlıklar)',
       categoryKey: 'bs_non_current',
       rows: [
-        { label: 'Cari Olmayan Varlıklar', sublabel: 'Duran Varlıklar ve Uzun Vadeli Yatırımlar', key: 'non_current_assets', isHeader: false },
-        { label: 'Cari Olmayan Varlıklar Toplamı', sublabel: 'Toplam Uzun Vadeli Varlık Büyüklüğü', key: 'non_current_assets', isHeader: true, highlight: true },
+        { 
+          label: 'Cari Olmayan Varlıklar Toplamı', 
+          sublabel: 'Maddi, Gayrimaddi Duran Varlıklar ve Uzun Vadeli Yatırımlar', 
+          key: 'non_current_assets', 
+          isHeader: true, 
+          highlight: true 
+        },
       ],
     },
     {
       title: 'Bilanço Büyüklüğü (Toplam Aktifler & Özkaynaklar)',
       categoryKey: 'bs_totals',
       rows: [
-        { label: 'Toplam Varlıklar', sublabel: 'Bilanço Büyüklüğü (Aktif Toplamı)', key: 'total_assets', isHeader: true, highlight: true },
+        { label: 'Toplam Varlıklar (Aktifler)', sublabel: 'Bilanço Büyüklüğü (Aktif Toplamı)', key: 'total_assets', isHeader: true, highlight: true },
         { label: 'Toplam Özkaynaklar', sublabel: 'Ana Ortaklığa Ait Net Özsermaye (Defter Değeri)', key: 'equity', isHeader: true, highlight: true },
       ],
     },
@@ -1255,6 +1356,30 @@ export default function ValuationTerminal() {
       categoryKey: 'is_net_income',
       rows: [
         { label: 'Net Dönem Kârı', sublabel: 'Ana Ortaklık Net Kârı', key: 'net_income', isHeader: true, highlight: true },
+      ],
+    },
+  ] : currentSector === 'BANKING' ? [
+    {
+      title: 'Net Faiz Geliri & Aracılık Kazançları',
+      categoryKey: 'is_revenue',
+      rows: [
+        { label: 'Net Faiz Geliri (NII)', sublabel: 'Kredi Faiz Gelirleri - Mevduat Faiz Giderleri', key: 'revenue', isHeader: true },
+      ],
+    },
+    {
+      title: 'Faaliyet Kârı (Provizyon Öncesi)',
+      categoryKey: 'is_ebitda',
+      rows: [
+        { label: 'Operasyonel Faaliyet Kârı', sublabel: 'Net Faiz + Net Ücret ve Komisyon Gelirleri', key: 'ebitda', isHeader: true, highlight: true },
+      ],
+    },
+    {
+      title: 'Dönem Net Kârı & Bankacılık Rasyoları',
+      categoryKey: 'is_margins',
+      rows: [
+        { label: 'Net Dönem Kârı', sublabel: 'Ana Ortaklık Net Kârı', key: 'net_income', isHeader: true, highlight: true },
+        { label: 'Net Faiz Marjı (NIM %)', sublabel: 'Net Faiz Geliri / Faiz Getirili Aktifler', key: 'net_margin', isMargin: true, prefix: '%', isHeader: false },
+        { label: 'Özkaynak Kârlılığı (ROE %)', sublabel: 'Yıllıklandırılmış Net Kâr / Özkaynaklar', key: 'roe', isMargin: true, prefix: '%', isHeader: false },
       ],
     },
   ] : [
@@ -1403,244 +1528,311 @@ export default function ValuationTerminal() {
     ],
   };
 
-  // Adil Değer Sürücüleri Verisi (Görsel 5)
-  const drivers = currentExtractedData?.fair_value_drivers || {
-    revenue_growth: {
-      value: 45.0,
-      label: currentSector === 'INSURANCE' ? 'Gelir Büyümesi (12 ay ileri)' : 'Satış Büyümesi (12 ay ileri)',
-      bearLabel: 'Düşük enflasyon ve pazar daralması',
-      bullLabel: 'Yüksek enflasyon ve pazar payı artışı',
-      note: currentSector === 'INSURANCE'
-        ? 'Şirketin prim üretimi ve yatırım gelirlerindeki artış hızı, gelecekteki değerlemesini doğrudan etkileyecektir.'
-        : 'Reel ciro büyümesi ve fiyatlama gücü şirketin pazar payını ve gelecekteki nakit akışını belirler.',
-    },
-    net_income_growth: {
-      value: 40.0,
-      label: 'Net Kâr Büyümesi (12 ay ileri)',
-      bearLabel: 'Artan maliyetler ve düşen yatırım getirileri',
-      bullLabel: 'Operasyonel verimlilik ve güçlü yatırım performansı',
-      note: 'Şirketin kârlılık marjlarını koruyarak net kârını büyütme yeteneği, değer yaratımının anahtarıdır.',
-    },
-    margin: {
-      value: 54.6,
-      label: currentSector === 'INSURANCE' ? 'FAVÖK Marjı / Kombine Oran (son 12 ay)' : 'FAVÖK Marjı (son 12 ay)',
-      bearLabel: currentSector === 'INSURANCE' ? 'Varlık büyümesinde yavaşlama' : 'Maliyet artışları ve marj erozyonu',
-      bullLabel: currentSector === 'INSURANCE' ? 'Agresif varlık büyümesi ve yeni fon oluşumu' : 'Fiyatlama gücü ve operasyonel kaldıraç',
-      note: currentSector === 'INSURANCE'
-        ? 'Emeklilik şirketleri için varlık tabanının ve yönetilen fonların büyümesi, gelecekteki gelir akışlarının temelini oluşturur.'
-        : 'Operasyonel kârlılık marjı, şirketin maliyet şoklarını absorbe etme kabiliyetini gösterir.',
-    },
-    target_multiple: {
-      value: currentSector === 'INSURANCE' ? 'PD/DD 3,9x' : 'FD/FAVÖK 6,5x',
-      pinPercent: 55,
-      label: 'Hedef Çarpan (12 ay)',
-      bearLabel: 'Artan faiz oranları ve ülke risk primi',
-      bullLabel: 'Düşen faiz oranları ve risk algısında iyileşme',
-      note: "Makroekonomik koşullar ve Türkiye'nin risk primi, şirketin gelecekteki nakit akışlarının bugünkü değerini belirleyen iskonto oranını etkiler.",
-    },
+  // Dinamik Değer Sürücüleri ve Değerleme Hesaplaması (Item 2 & 3: Tek ve Tutarlı Kaynak)
+  const dynamicValuationResult = useMemo(() => {
+    return computeSectorValuationAndDrivers(
+      currentExtractedData,
+      activeReport?.price || price,
+      currentSector
+    );
+  }, [currentExtractedData, activeReport?.price, price, currentSector]);
+
+  // Rapor metninde önceden yazılmış adil değer varsa (Item 2: Rapor ile Kart Uyuşmazlığını Sıfırlama)
+  const reportValuation = useMemo(() => {
+    return extractValuationFromReportText(activeReport?.report || '');
+  }, [activeReport?.report]);
+
+  const drivers: FairValueDrivers = (currentExtractedData?.fair_value_drivers?.revenue_growth?.value != null)
+    ? currentExtractedData.fair_value_drivers
+    : dynamicValuationResult.drivers;
+
+  const valuationInfo: ValuationMetrics = {
+    ...dynamicValuationResult.valuation,
+    ...(currentExtractedData?.valuation || {}),
+    ...(reportValuation || {}),
+    current_price: parseFloat(activeReport?.price || price || '118.50') || 118.50,
   };
 
-  const valuationInfo = currentExtractedData?.valuation || {
-    current_price: parseFloat(activeReport?.price || price || '118.50') || 118.50,
-    fair_value: 164.20,
-    discount_pct: 38.6,
-    target_pb: 3.9,
-    current_pb: 2.8,
-    target_pe: 8.6,
-    current_pe: 6.2,
-    bear_price: 95.0,
-    bull_price: 198.0,
-    margin_of_safety: 27.8,
-  };
+  // İskonto oranını ve güvenlik marjını matematiksel olarak tutarlı güncelle
+  if (valuationInfo.fair_value && valuationInfo.current_price) {
+    valuationInfo.discount_pct = Number((((valuationInfo.fair_value - valuationInfo.current_price) / valuationInfo.current_price) * 100).toFixed(1));
+    valuationInfo.margin_of_safety = valuationInfo.discount_pct > 0 ? valuationInfo.discount_pct : 0;
+  }
 
   return (
     <div className="min-h-screen bg-[#0B0F19] text-slate-100 flex flex-col md:flex-row font-sans">
       
-      {/* Sol Kenar Çubuğu: Arşiv & Skor Takibi */}
-      <aside className="w-full md:w-80 border-r border-slate-800 bg-[#0F172A]/70 flex flex-col flex-shrink-0 print:hidden">
+      {/* Sol Kenar Çubuğu: Arşiv & Skor Takibi (Item 6: Katlanabilir ve Sabitlenebilir Kenar Çubuğu) */}
+      <aside 
+        className={`border-r border-slate-800 bg-[#0F172A]/90 flex flex-col flex-shrink-0 transition-all duration-300 print:hidden ${
+          isSidebarCollapsed ? 'w-full md:w-16' : 'w-full md:w-80'
+        }`}
+      >
         {/* Logo ve Başlık */}
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
+        <div className="p-3 sm:p-4 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-2.5 overflow-hidden">
             <FairValueLogo className="w-8 h-8" />
-            <div>
-              <div className="font-extrabold text-sm tracking-tight text-white flex items-center gap-1">
-                FAIR <span className="text-emerald-400">VALUE</span>
-              </div>
-              <div className="text-[10px] text-slate-400 font-mono">Terminal & Arşiv</div>
-            </div>
-          </div>
-          <button
-            onClick={() => { setStep('input'); setActiveReportId(null); setExtractedData(null); }}
-            className="flex items-center gap-1 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-1.5 px-2.5 rounded transition cursor-pointer"
-            title="Yeni Hisse Analizi Başlat"
-          >
-            <PlusCircle className="w-3.5 h-3.5" /> Yeni
-          </button>
-        </div>
-
-        {/* Hızlı Örnek Yükleyici (AGESA ve THYAO) */}
-        <div className="p-3 border-b border-slate-800/80 bg-slate-950/60 space-y-1.5">
-          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-            <span>Hazır Örnek Şirketler</span>
-            <Sparkles className="w-3 h-3 text-amber-400" />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={loadAgesaDemo}
-              className="px-2 py-1.5 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/70 rounded text-[11px] font-bold text-emerald-300 text-left transition flex items-center justify-between cursor-pointer"
-            >
-              <span>AGESA</span>
-              <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-emerald-900/80 text-emerald-200">Sigorta</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setTicker('THYAO');
-                setPrice('312.00');
-                setStep('input');
-              }}
-              className="px-2 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded text-[11px] font-semibold text-slate-300 text-left transition flex items-center justify-between cursor-pointer"
-            >
-              <span>THYAO</span>
-              <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-800 text-slate-400">Sanayi</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Liderlik Paneli Butonu & Sıralama Filtresi */}
-        <div className="p-3 border-b border-slate-800/80 space-y-2 bg-slate-950/40">
-          <button
-            type="button"
-            onClick={() => setStep('leaderboard')}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold transition border cursor-pointer ${
-              step === 'leaderboard'
-                ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-sm shadow-amber-950/30'
-                : 'bg-slate-800/70 hover:bg-slate-800 text-slate-200 border-slate-700/80'
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <Trophy className="w-4 h-4 text-amber-400" />
-              Hisse Sıralama Paneli
-            </span>
-            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-700 font-bold">
-              {savedReports.length}
-            </span>
-          </button>
-
-          <div className="flex items-center justify-between text-[11px] text-slate-400 px-1 pt-0.5">
-            <span className="flex items-center gap-1 text-[10px] font-medium text-slate-400">
-              <ArrowUpDown className="w-3 h-3 text-slate-500" /> Sıralama:
-            </span>
-            <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded border border-slate-800">
-              <button
-                type="button"
-                onClick={() => setSidebarSort('rank')}
-                className={`px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
-                  sidebarSort === 'rank' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                AL & Puan
-              </button>
-              <button
-                type="button"
-                onClick={() => setSidebarSort('date')}
-                className={`px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
-                  sidebarSort === 'date' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Tarih
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Kayıtlı Raporlar Listesi */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {savedReports.length === 0 ? (
-            <div className="text-center py-10 text-slate-500 text-xs">
-              <History className="w-8 h-8 mx-auto mb-2 opacity-40" />
-              Henüz kayıtlı rapor yok.
-            </div>
-          ) : (
-            (sidebarSort === 'rank' ? sortReportsByRank(savedReports) : sortReportsByDate(savedReports)).map((item, sIndex) => (
-              <div
-                key={item.id}
-                onClick={() => { setActiveReportId(item.id); setStep('report'); }}
-                className={`p-2.5 rounded-lg border cursor-pointer transition flex items-center justify-between group ${
-                  activeReportId === item.id && step === 'report'
-                    ? 'bg-slate-800 border-emerald-500/50 shadow-md shadow-emerald-950/20'
-                    : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800/60'
-                }`}
-              >
-                <div className="flex-1 min-w-0 pr-1">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {sidebarSort === 'rank' && (
-                      <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-950 px-1 rounded border border-slate-800">
-                        #{sIndex + 1}
-                      </span>
-                    )}
-                    <span className="font-bold text-sm text-white truncate">{item.ticker}</span>
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                      item.decision === 'AL' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
-                      item.decision === 'ALMA' ? 'bg-rose-950 text-rose-400 border border-rose-800' :
-                      'bg-slate-800 text-slate-400'
-                    }`}>
-                      {item.decision}
-                    </span>
-                    {item.score && <span className="text-[10px] text-slate-400 font-mono font-semibold">{item.score}/100</span>}
-                  </div>
-                  <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
-                    {item.period && <span className="text-emerald-400 font-mono font-semibold">{item.period}</span>}
-                    <span>• {item.createdAt}</span>
-                  </div>
+            {!isSidebarCollapsed && (
+              <div className="min-w-0">
+                <div className="font-extrabold text-sm tracking-tight text-white flex items-center gap-1">
+                  FAIR <span className="text-emerald-400">VALUE</span>
                 </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
+                <div className="text-[10px] text-slate-400 font-mono truncate">Terminal & Arşiv</div>
+              </div>
+            )}
+          </div>
+          
+          <div className="flex items-center gap-1">
+            {!isSidebarCollapsed && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setIsSidebarPinned(p => !p)}
+                  className={`p-1.5 rounded transition cursor-pointer ${
+                    isSidebarPinned ? 'text-emerald-400 bg-emerald-950/60' : 'text-slate-400 hover:text-white bg-slate-800/60'
+                  }`}
+                  title={isSidebarPinned ? 'Kenar Çubuğu Sabitlendi' : 'Kenar Çubuğu Sabitliğini Kaldır'}
+                >
+                  {isSidebarPinned ? <Pin className="w-3.5 h-3.5" /> : <PinOff className="w-3.5 h-3.5" />}
+                </button>
+                <button
+                  onClick={() => { setStep('input'); setActiveReportId(null); setExtractedData(null); }}
+                  className="flex items-center gap-1 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-1.5 px-2.5 rounded transition cursor-pointer"
+                  title="Yeni Hisse Analizi Başlat"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" /> Yeni
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsSidebarCollapsed(c => !c)}
+              className="p-1.5 text-slate-400 hover:text-white bg-slate-800/60 hover:bg-slate-700 rounded transition cursor-pointer"
+              title={isSidebarCollapsed ? 'Kenar Çubuğunu Genişlet' : 'Kenar Çubuğunu Daralt'}
+            >
+              {isSidebarCollapsed ? <PanelLeftOpen className="w-4 h-4 text-emerald-400" /> : <PanelLeftClose className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Daraltılmış Modda İkon Çubuğu */}
+        {isSidebarCollapsed ? (
+          <div className="flex-1 flex flex-col items-center py-4 space-y-3">
+            <button
+              onClick={() => { setStep('input'); setActiveReportId(null); setExtractedData(null); }}
+              className="p-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer shadow-md"
+              title="Yeni Analiz Başlat"
+            >
+              <PlusCircle className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setStep('leaderboard')}
+              className={`p-2.5 rounded-lg transition cursor-pointer border ${
+                step === 'leaderboard' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-slate-800/80 text-slate-300 border-slate-700'
+              }`}
+              title="Hisse Sıralama Paneli"
+            >
+              <Trophy className="w-4 h-4 text-amber-400" />
+            </button>
+            <div className="w-8 h-px bg-slate-800 my-1" />
+            <div className="flex-1 overflow-y-auto space-y-2 w-full px-2 [scrollbar-width:none]">
+              {savedReports.map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => { setActiveReportId(item.id); setStep('report'); }}
+                  className={`w-full py-2 rounded flex flex-col items-center justify-center font-bold text-[10px] transition cursor-pointer border ${
+                    activeReportId === item.id && step === 'report'
+                      ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300'
+                      : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+                  }`}
+                  title={`${item.ticker} - ${item.decision} (${item.score || 'N/A'}/100)`}
+                >
+                  <span className="truncate max-w-[40px]">{item.ticker.slice(0, 4)}</span>
+                  <span className={`text-[8px] mt-0.5 px-1 rounded ${
+                    item.decision === 'AL' ? 'text-emerald-400' :
+                    item.decision === 'ALMA' ? 'text-rose-400' : 'text-slate-400'
+                  }`}>
+                    {item.decision}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Hızlı Örnek Yükleyici (AGESA ve THYAO) */}
+            <div className="p-3 border-b border-slate-800/80 bg-slate-950/60 space-y-1.5">
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                <span>Hazır Örnek Şirketler</span>
+                <Sparkles className="w-3 h-3 text-amber-400" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={loadAgesaDemo}
+                  className="px-2 py-1.5 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/70 rounded text-[11px] font-bold text-emerald-300 text-left transition flex items-center justify-between cursor-pointer"
+                >
+                  <span>AGESA</span>
+                  <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-emerald-900/80 text-emerald-200">Sigorta</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTicker('THYAO');
+                    setPrice('312.00');
+                    setStep('input');
+                  }}
+                  className="px-2 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded text-[11px] font-semibold text-slate-300 text-left transition flex items-center justify-between cursor-pointer"
+                >
+                  <span>THYAO</span>
+                  <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-800 text-slate-400">Sanayi</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Liderlik Paneli Butonu & Sıralama Filtresi */}
+            <div className="p-3 border-b border-slate-800/80 space-y-2 bg-slate-950/40">
+              <button
+                type="button"
+                onClick={() => setStep('leaderboard')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold transition border cursor-pointer ${
+                  step === 'leaderboard'
+                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-sm shadow-amber-950/30'
+                    : 'bg-slate-800/70 hover:bg-slate-800 text-slate-200 border-slate-700/80'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <Trophy className="w-4 h-4 text-amber-400" />
+                  Hisse Sıralama Paneli
+                </span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-700 font-bold">
+                  {savedReports.length}
+                </span>
+              </button>
+
+              <div className="flex items-center justify-between text-[11px] text-slate-400 px-1 pt-0.5">
+                <span className="flex items-center gap-1 text-[10px] font-medium text-slate-400">
+                  <ArrowUpDown className="w-3 h-3 text-slate-500" /> Sıralama:
+                </span>
+                <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded border border-slate-800">
                   <button
                     type="button"
-                    onClick={(e) => deleteReport(item.id, e)}
-                    title="Raporu Sil"
-                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded transition cursor-pointer"
+                    onClick={() => setSidebarSort('rank')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
+                      sidebarSort === 'rank' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    AL & Puan
                   </button>
-                  <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-colors" />
+                  <button
+                    type="button"
+                    onClick={() => setSidebarSort('date')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
+                      sidebarSort === 'date' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Tarih
+                  </button>
                 </div>
               </div>
-            ))
-          )}
-        </div>
+            </div>
 
-        {/* Yedek Al / İçe Aktar */}
-        <div className="p-3 border-t border-slate-800 bg-slate-950/70 flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={exportBackup}
-            disabled={savedReports.length === 0}
-            className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 disabled:opacity-40 py-2 px-2.5 rounded border border-slate-700 transition cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5 text-emerald-400" />
-            Yedek Al
-          </button>
-          <label
-            className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 py-2 px-2.5 rounded border border-slate-700 transition cursor-pointer"
-          >
-            <Upload className="w-3.5 h-3.5 text-cyan-400" />
-            İçe Aktar
-            <input
-              type="file"
-              accept="application/json"
-              onChange={importBackup}
-              className="hidden"
-            />
-          </label>
-        </div>
+            {/* Kayıtlı Raporlar Listesi */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              {savedReports.length === 0 ? (
+                <div className="text-center py-10 text-slate-500 text-xs">
+                  <History className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                  Henüz kayıtlı rapor yok.
+                </div>
+              ) : (
+                (sidebarSort === 'rank' ? sortReportsByRank(savedReports) : sortReportsByDate(savedReports)).map((item, sIndex) => (
+                  <div
+                    key={item.id}
+                    onClick={() => { setActiveReportId(item.id); setStep('report'); }}
+                    className={`p-2.5 rounded-lg border cursor-pointer transition flex items-center justify-between group ${
+                      activeReportId === item.id && step === 'report'
+                        ? 'bg-slate-800 border-emerald-500/50 shadow-md shadow-emerald-950/20'
+                        : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800/60'
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0 pr-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {sidebarSort === 'rank' && (
+                          <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-950 px-1 rounded border border-slate-800">
+                            #{sIndex + 1}
+                          </span>
+                        )}
+                        <span className="font-bold text-sm text-white truncate">{item.ticker}</span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          item.decision === 'AL' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
+                          item.decision === 'ALMA' ? 'bg-rose-950 text-rose-400 border border-rose-800' :
+                          'bg-slate-800 text-slate-400'
+                        }`}>
+                          {item.decision}
+                        </span>
+                        {item.score && <span className="text-[10px] text-slate-400 font-mono font-semibold">{item.score}/100</span>}
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
+                        {item.period && <span className="text-emerald-400 font-mono font-semibold">{item.period}</span>}
+                        <span>• {item.createdAt}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => deleteReport(item.id, e)}
+                        title="Raporu Sil"
+                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded transition cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                      <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-colors" />
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Yedek Al / İçe Aktar */}
+            <div className="p-3 border-t border-slate-800 bg-slate-950/70 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={exportBackup}
+                disabled={savedReports.length === 0}
+                className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 disabled:opacity-40 py-2 px-2.5 rounded border border-slate-700 transition cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-400" />
+                Yedek Al
+              </button>
+              <label
+                className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 py-2 px-2.5 rounded border border-slate-700 transition cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5 text-cyan-400" />
+                İçe Aktar
+                <input
+                  type="file"
+                  accept="application/json"
+                  onChange={importBackup}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          </>
+        )}
       </aside>
 
       {/* Sağ Ana Bölüm */}
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         <header className="border-b border-slate-800 p-4 flex items-center justify-between bg-[#0F172A]/50 print:hidden">
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsSidebarCollapsed(p => !p)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 border border-slate-700/60 transition cursor-pointer"
+              title={isSidebarCollapsed ? "Kenar Çubuğunu Göster" : "Kenar Çubuğunu Gizle"}
+            >
+              {isSidebarCollapsed ? <PanelLeftOpen className="w-4 h-4 text-emerald-400" /> : <PanelLeftClose className="w-4 h-4" />}
+            </button>
             <FairValueLogo className="w-9 h-9" />
             <div>
               <h1 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
@@ -1689,7 +1881,7 @@ export default function ValuationTerminal() {
           </div>
         </header>
 
-        <div className="p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6">
+        <div className="p-4 sm:p-6 md:p-8 w-full max-w-[1720px] mx-auto space-y-6">
           
           {/* ADIM 1: GİRİŞ FORMU VE SEKTÖR SEÇİCİ */}
           {step === 'input' && (
@@ -1962,6 +2154,11 @@ export default function ValuationTerminal() {
                       <span className="text-xs font-mono font-bold text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-700">
                         {activeReport.price} TL
                       </span>
+                      {valuationInfo?.fair_value != null && (
+                        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 shadow-sm shadow-emerald-950/30">
+                          Adil Değer: {typeof valuationInfo.fair_value === 'number' ? valuationInfo.fair_value.toFixed(2) : valuationInfo.fair_value} TL
+                        </span>
+                      )}
                       <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
                         {activeReport.decision}
                       </span>
@@ -1995,7 +2192,7 @@ export default function ValuationTerminal() {
               </div>
 
               {/* ANA SEKME NAVİGASYONU */}
-              <div className="flex border-b border-slate-800 gap-1 overflow-x-auto print:hidden">
+              <div className="flex border-b border-slate-800 gap-1 overflow-x-auto print:hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 <button
                   onClick={() => setActiveTab('overview')}
                   className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition cursor-pointer whitespace-nowrap ${
@@ -2243,6 +2440,7 @@ export default function ValuationTerminal() {
                       bearText={drivers.revenue_growth.bearLabel}
                       bullText={drivers.revenue_growth.bullLabel}
                       description={drivers.revenue_growth.note}
+                      sourceExplanation={drivers.revenue_growth.sourceExplanation}
                     />
 
                     <DriverCard
@@ -2252,6 +2450,7 @@ export default function ValuationTerminal() {
                       bearText={drivers.net_income_growth.bearLabel}
                       bullText={drivers.net_income_growth.bullLabel}
                       description={drivers.net_income_growth.note}
+                      sourceExplanation={drivers.net_income_growth.sourceExplanation}
                     />
 
                     <DriverCard
@@ -2261,6 +2460,7 @@ export default function ValuationTerminal() {
                       bearText={drivers.margin.bearLabel}
                       bullText={drivers.margin.bullLabel}
                       description={drivers.margin.note}
+                      sourceExplanation={drivers.margin.sourceExplanation}
                     />
 
                     <DriverCard
@@ -2270,6 +2470,7 @@ export default function ValuationTerminal() {
                       bearText={drivers.target_multiple.bearLabel}
                       bullText={drivers.target_multiple.bullLabel}
                       description={drivers.target_multiple.note}
+                      sourceExplanation={drivers.target_multiple.sourceExplanation}
                     />
                   </div>
 
@@ -3094,7 +3295,7 @@ export default function ValuationTerminal() {
                   </div>
 
                   <div className="bg-[#111827]/90 border border-slate-800 p-6 sm:p-10 md:p-12 rounded-2xl shadow-2xl backdrop-blur-sm print:p-0 print:border-none print:bg-white print:text-black">
-                    <div className="report-content max-w-4xl mx-auto space-y-2">
+                    <div className="report-content max-w-5xl mx-auto space-y-2">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
                         rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]}
