@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { detectSector, SectorType } from '@/lib/sectors';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300; // Çoklu ve hacimli PDF grupları için süreyi 5 dakikaya genişletiyoruz
@@ -65,6 +66,9 @@ function getAnnualizationFactor(period: string): number {
 function enrichAndSanitizeFinancialHistory(data: any) {
   if (!data || !Array.isArray(data.financial_history)) return data;
 
+  const detectedSector: SectorType = data.sector || detectSector(data.ticker || '');
+  data.sector = detectedSector;
+
   const debtInfo = data.debt_and_interest || {};
 
   // Varsa TL borçlanma faizini tespit et
@@ -89,6 +93,32 @@ function enrichAndSanitizeFinancialHistory(data: any) {
     // Yıl tespiti
     const yrMatch = String(item.period || '').match(/(20\d{2})/);
     const yr = yrMatch ? parseInt(yrMatch[1], 10) : 2024;
+    const annualFactor = getAnnualizationFactor(item.period);
+
+    // Sigorta sektörü özel alan eşleştirmeleri
+    if (detectedSector === 'INSURANCE') {
+      if (item.written_premiums && (!item.revenue || item.revenue === 0)) {
+        item.revenue = item.written_premiums;
+      }
+      if (item.technical_profit && (!item.ebitda || item.ebitda === 0)) {
+        item.ebitda = item.technical_profit;
+      }
+      if (item.loss_ratio != null && item.expense_ratio != null && item.combined_ratio == null) {
+        item.combined_ratio = Number(((item.loss_ratio || 0) + (item.expense_ratio || 0)).toFixed(1));
+      }
+      if (item.combined_ratio != null && item.ebitda_margin == null) {
+        item.ebitda_margin = Number((100 - item.combined_ratio).toFixed(1));
+      }
+      if (item.equity && item.equity > 0 && item.net_income && item.roe == null) {
+        item.roe = Number(((item.net_income * annualFactor / item.equity) * 100).toFixed(2));
+      }
+      if (item.total_assets && item.total_assets > 0 && item.net_income && item.roa == null) {
+        item.roa = Number(((item.net_income * annualFactor / item.total_assets) * 100).toFixed(2));
+      }
+      if (item.total_assets && item.equity && item.leverage_ratio == null && item.total_assets > 0) {
+        item.leverage_ratio = Number((((item.total_assets - item.equity) / item.total_assets) * 100).toFixed(2));
+      }
+    }
 
     // Eksik marjları hesapla
     if (item.revenue && item.revenue > 0) {
@@ -123,32 +153,35 @@ function enrichAndSanitizeFinancialHistory(data: any) {
 
     // 2. ROIC boş, 0 veya geçersizse finansal tablolardan türet
     if (item.roic == null || item.roic === 0 || isNaN(Number(item.roic))) {
-      const equity = typeof item.equity === 'number' && item.equity > 0 ? item.equity : 0;
-      const netDebt = typeof item.net_debt === 'number' && item.net_debt > 0 ? item.net_debt : 0;
-      const investedCapital = equity + netDebt;
+      if (detectedSector === 'INSURANCE' && typeof item.roe === 'number') {
+        item.roic = item.roe;
+      } else {
+        const equity = typeof item.equity === 'number' && item.equity > 0 ? item.equity : 0;
+        const netDebt = typeof item.net_debt === 'number' && item.net_debt > 0 ? item.net_debt : 0;
+        const investedCapital = equity + netDebt;
 
-      const annualFactor = getAnnualizationFactor(item.period);
-      const rawNopat = (typeof item.net_income === 'number' && item.net_income !== 0)
-        ? item.net_income
-        : ((typeof item.ebitda === 'number' && item.ebitda > 0) ? item.ebitda * 0.70 : 0);
-      const nopat = rawNopat * annualFactor;
+        const rawNopat = (typeof item.net_income === 'number' && item.net_income !== 0)
+          ? item.net_income
+          : ((typeof item.ebitda === 'number' && item.ebitda > 0) ? item.ebitda * 0.70 : 0);
+        const nopat = rawNopat * annualFactor;
 
-      if (investedCapital > 0 && nopat !== 0) {
-        const calculated = (nopat / investedCapital) * 100;
-        if (calculated >= -50 && calculated <= 150) {
-          item.roic = Number(calculated.toFixed(1));
+        if (investedCapital > 0 && nopat !== 0) {
+          const calculated = (nopat / investedCapital) * 100;
+          if (calculated >= -50 && calculated <= 150) {
+            item.roic = Number(calculated.toFixed(1));
+          } else if (typeof item.ebitda_margin === 'number' && item.ebitda_margin > 0) {
+            item.roic = Number((item.ebitda_margin * 0.85).toFixed(1));
+          } else {
+            item.roic = Number((item.wacc * 0.88).toFixed(1));
+          }
         } else if (typeof item.ebitda_margin === 'number' && item.ebitda_margin > 0) {
           item.roic = Number((item.ebitda_margin * 0.85).toFixed(1));
+        } else if (typeof item.gross_margin === 'number' && item.gross_margin > 0) {
+          item.roic = Number((item.gross_margin * 0.65).toFixed(1));
         } else {
-          item.roic = Number((item.wacc * 0.88).toFixed(1));
+          const prevRoic = i > 0 && history[i - 1]?.roic ? history[i - 1].roic : null;
+          item.roic = prevRoic !== null ? prevRoic : Number((item.wacc * 0.88).toFixed(1));
         }
-      } else if (typeof item.ebitda_margin === 'number' && item.ebitda_margin > 0) {
-        item.roic = Number((item.ebitda_margin * 0.85).toFixed(1));
-      } else if (typeof item.gross_margin === 'number' && item.gross_margin > 0) {
-        item.roic = Number((item.gross_margin * 0.65).toFixed(1));
-      } else {
-        const prevRoic = i > 0 && history[i - 1]?.roic ? history[i - 1].roic : null;
-        item.roic = prevRoic !== null ? prevRoic : Number((item.wacc * 0.88).toFixed(1));
       }
     } else {
       item.roic = Number(Number(item.roic).toFixed(1));
@@ -167,6 +200,7 @@ function mergeExtractedData(results: any[]) {
 
   const merged: any = {
     ticker: '',
+    sector: '',
     currency: '',
     reporting_period: '',
     share_count: '',
@@ -183,6 +217,7 @@ function mergeExtractedData(results: any[]) {
   for (const r of results) {
     if (!r) continue;
     if (r.ticker && !merged.ticker) merged.ticker = r.ticker;
+    if (r.sector && !merged.sector) merged.sector = r.sector;
     if (r.currency && !merged.currency) merged.currency = r.currency;
     if (r.share_count && !merged.share_count) merged.share_count = r.share_count;
 
@@ -225,6 +260,10 @@ function mergeExtractedData(results: any[]) {
         }
       }
     }
+
+    if (r.pros_cons && !merged.pros_cons) merged.pros_cons = r.pros_cons;
+    if (r.fair_value_drivers && !merged.fair_value_drivers) merged.fair_value_drivers = r.fair_value_drivers;
+    if (r.valuation && !merged.valuation) merged.valuation = r.valuation;
   }
 
   merged.financial_history = Array.from(periodMap.values()).sort((a, b) => {
@@ -266,12 +305,15 @@ export async function POST(req: Request) {
 
     const ai = new GoogleGenAI({ apiKey });
 
+    const targetSector = detectSector(ticker);
+
     const extractionSchema: Schema = {
       type: Type.OBJECT,
       properties: {
         ticker: { type: Type.STRING },
-        currency: { type: Type.STRING, description: 'Raporlanan para birimi (Örn: Milyon TL, Bin TL, TL)' },
-        reporting_period: { type: Type.STRING, description: 'En güncel dönem (Örn: 2026/06 veya 2026/12)' },
+        sector: { type: Type.STRING, description: 'Şirket sektörü: INSURANCE (Sigorta/Emeklilik), BANKING (Banka) veya INDUSTRIAL (Sanayi/Genel)' },
+        currency: { type: Type.STRING, description: 'Raporlanan para birimi (Örn: Bin TRY, Milyon TL, TL)' },
+        reporting_period: { type: Type.STRING, description: 'En güncel dönem (Örn: 2026/06 veya 2026/Q2)' },
         share_count: { type: Type.STRING, description: 'Ödenmiş sermaye / hisse adedi' },
 
         financial_history: {
@@ -280,20 +322,47 @@ export async function POST(req: Request) {
           items: {
             type: Type.OBJECT,
             properties: {
-              period: { type: Type.STRING, description: 'Dönem veya Yıl (Örn: 2022, 2023, 2024, 2025, 2026)' },
-              revenue: { type: Type.NUMBER, description: 'Net Satış Gelirleri / Hasılat' },
-              ebitda: { type: Type.NUMBER, description: 'FAVÖK' },
+              period: { type: Type.STRING, description: 'Dönem veya Yıl (Örn: 2022, 2023, 2024, 2025, 2026, 2026/Q2)' },
+              revenue: { type: Type.NUMBER, description: 'Net Satış Gelirleri / Hasılat (Sigorta için Brüt Prim Üretimi)' },
+              ebitda: { type: Type.NUMBER, description: 'FAVÖK (Sigorta için Teknik Bölüm Dengesi / Kârı)' },
               net_income: { type: Type.NUMBER, description: 'Net Dönem Kârı' },
               gross_margin: { type: Type.NUMBER, description: 'Brüt Kâr Marjı (%)' },
-              ebitda_margin: { type: Type.NUMBER, description: 'FAVÖK Marjı (%)' },
+              ebitda_margin: { type: Type.NUMBER, description: 'FAVÖK Marjı (%) veya Sigortada Teknik Marj' },
               net_margin: { type: Type.NUMBER, description: 'Net Kâr Marjı (%)' },
               operating_cash_flow: { type: Type.NUMBER, description: 'İşletme Faaliyetlerinden Nakit Akışı (OCF)' },
               capex: { type: Type.NUMBER, description: 'Yatırım Harcamaları (CAPEX)' },
               free_cash_flow: { type: Type.NUMBER, description: 'Serbest Nakit Akışı (FCF)' },
-              net_debt: { type: Type.NUMBER, description: 'Net Finansal Borç' },
-              roic: { type: Type.NUMBER, description: 'Yatırılan Sermaye Getirisi (ROIC % - 2024, 2025 ve sonrası dahil her dönem için hesaplanmalıdır. Raporda doğrudan yoksa NOPAT / Yatırılan Sermaye ile hesapla)' },
-              wacc: { type: Type.NUMBER, description: 'Ağırlıklı Ortalama Sermaye Maliyeti (WACC % - 2024, 2025 ve sonrası dahil her dönem için hesaplanmalıdır. Raporda yoksa dönemin faiz koşulları ve borç faizinden hesapla)' },
+              net_debt: { type: Type.NUMBER, description: 'Net Finansal Borç (Sigortada negatif nakit fazlası olabilir)' },
+              roic: { type: Type.NUMBER, description: 'Yatırılan Sermaye Getirisi (ROIC % veya ROE %)' },
+              wacc: { type: Type.NUMBER, description: 'Ağırlıklı Ortalama Sermaye Maliyeti (WACC %)' },
               equity: { type: Type.NUMBER, description: 'Toplam Özkaynaklar' },
+
+              // Sektörel Özel Kalemler (Sigorta & Emeklilik)
+              written_premiums: { type: Type.NUMBER, description: 'Brüt Yazılan Primler (Sigorta)' },
+              earned_premiums: { type: Type.NUMBER, description: 'Net Kazanılan Primler (Sigorta)' },
+              technical_profit: { type: Type.NUMBER, description: 'Teknik Bölüm Dengesi / Kârı (Sigorta)' },
+              investment_income: { type: Type.NUMBER, description: 'Net Yatırım / Finansal Gelirler (Sigorta)' },
+              loss_ratio: { type: Type.NUMBER, description: 'Hasar/Prim Oranı (%)' },
+              expense_ratio: { type: Type.NUMBER, description: 'Masraf Oranı (%)' },
+              combined_ratio: { type: Type.NUMBER, description: 'Kombine / Bileşik Oran (%)' },
+
+              // Finansal Oranlar / Rasyolar
+              current_ratio: { type: Type.NUMBER, description: 'Cari Oran' },
+              quick_ratio: { type: Type.NUMBER, description: 'Likidite Oranı (Asit-Test)' },
+              cash_ratio: { type: Type.NUMBER, description: 'Nakit Oran' },
+              leverage_ratio: { type: Type.NUMBER, description: 'Kaldıraç Oranı (%)' },
+              asset_turnover: { type: Type.NUMBER, description: 'Aktif Devir Hızı' },
+              equity_turnover: { type: Type.NUMBER, description: 'Özkaynak Devir Hızı' },
+              roa: { type: Type.NUMBER, description: 'Aktif Karlılık (ROA %)' },
+              roe: { type: Type.NUMBER, description: 'Özkaynak Karlılığı (ROE %)' },
+
+              // Bilanço Detayları
+              current_assets: { type: Type.NUMBER, description: 'Cari Varlıklar Toplamı' },
+              cash_and_equivalents: { type: Type.NUMBER, description: 'Nakit ve Nakit Benzeri Varlıklar' },
+              financial_assets_insured: { type: Type.NUMBER, description: 'Finansal Varlıklar ile Riski Sigortalılara Ait Yatırımlar' },
+              trade_receivables: { type: Type.NUMBER, description: 'Esas Faaliyetlerden Alacaklar' },
+              non_current_assets: { type: Type.NUMBER, description: 'Cari Olmayan Varlıklar Toplamı' },
+              total_assets: { type: Type.NUMBER, description: 'Toplam Varlıklar / Aktifler' },
             },
             required: ['period', 'revenue', 'ebitda', 'net_income'],
           },
@@ -352,19 +421,99 @@ export async function POST(req: Request) {
             sensitivity_summary: { type: Type.STRING, description: 'Duyarlılık analizi özeti' },
           },
         },
+
+        pros_cons: {
+          type: Type.OBJECT,
+          description: 'Şirketin güçlü yönleri (pros) ve riskli/zayıf yönleri (cons)',
+          properties: {
+            pros: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  desc: { type: Type.STRING },
+                },
+                required: ['title', 'desc'],
+              },
+            },
+            cons: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  desc: { type: Type.STRING },
+                },
+                required: ['title', 'desc'],
+              },
+            },
+          },
+        },
+
+        fair_value_drivers: {
+          type: Type.OBJECT,
+          description: 'Adil değer sürücüleri ve ayı/boğa senaryoları',
+          properties: {
+            revenue_growth: {
+              type: Type.OBJECT,
+              properties: {
+                value: { type: Type.NUMBER },
+                label: { type: Type.STRING },
+                bearLabel: { type: Type.STRING },
+                bullLabel: { type: Type.STRING },
+                note: { type: Type.STRING },
+              },
+            },
+            net_income_growth: {
+              type: Type.OBJECT,
+              properties: {
+                value: { type: Type.NUMBER },
+                label: { type: Type.STRING },
+                bearLabel: { type: Type.STRING },
+                bullLabel: { type: Type.STRING },
+                note: { type: Type.STRING },
+              },
+            },
+            margin: {
+              type: Type.OBJECT,
+              properties: {
+                value: { type: Type.NUMBER },
+                label: { type: Type.STRING },
+                bearLabel: { type: Type.STRING },
+                bullLabel: { type: Type.STRING },
+                note: { type: Type.STRING },
+              },
+            },
+            target_multiple: {
+              type: Type.OBJECT,
+              properties: {
+                value: { type: Type.STRING },
+                label: { type: Type.STRING },
+                bearLabel: { type: Type.STRING },
+                bullLabel: { type: Type.STRING },
+                note: { type: Type.STRING },
+              },
+            },
+          },
+        },
       },
       required: ['ticker', 'reporting_period', 'financial_history'],
     };
 
     const systemInstruction = `Sen katı, rasyonel ve zaman serisi (multi-year) analizi yapabilen kıdemli bir Finansal Veri Çıkarım motorusun.
 GÖREVİN:
-Yüklenen finansal raporları tarayarak finansal kalemleri, marjları, borç profillerini ve geçmiş hedef/rehberlikleri birebir çıkarmaktır.
+Yüklenen finansal raporları tarayarak finansal kalemleri, marjları, rasyoları ve geçmiş hedef/rehberlikleri birebir çıkarmaktır.
 
-KURALLAR:
-1. Zaman serisi (financial_history) dizisinde bulunan tüm yılları (özellikle 2024, 2025, 2026 gibi güncel dönemleri) eksiksiz doldur.
-2. ROIC ve WACC ZORUNLULUĞU: Şirket raporlarında veya sunumlarında ROIC ve WACC doğrudan yazmıyorsa dahi, tablolardaki NOPAT (veya Net Kâr / Faaliyet Kârı) ve Yatırılan Sermaye (Özkaynak + Net Borç) verilerinden her dönem (özellikle 2024 ve sonrası) için ROIC oranını hesapla. WACC için ise şirketin borçlanma faiz oranı ve dönemin Türkiye piyasa gösterge faizlerini (2024-2026 için %42-%48 bandı) dikkate alarak gerçekçi bir WACC oranı belirle. Asla 0 veya boş bırakma.
-3. 'guidance_track_record' kısmında: Şirketin geçmiş yıllarda yatırımcılara sunduğu hedefleri ve gerçekleşme durumunu eksiksiz tara.
-4. KESİNLİKLE RASTGELE SAYI UYDURMA, çıkarımlarını finansal tablolardaki verilere ve standart finans matematiğine dayandır.`;
+SEKTÖREL UYARLAMA KURALLARI:
+1. Şirket AGESA, ANHYT, TURSG gibi bir SİGORTACILIK veya BİREYSEL EMEKLİLİK şirketi ise:
+   - Klasik 'Satış Gelirleri' yerine 'Brüt Yazılan Primler' veya Teknik Gelirleri 'revenue' alanına yaz.
+   - Klasik 'FAVÖK' yerine 'Teknik Bölüm Dengesi / Teknik Kâr'ı 'ebitda' alanına yaz.
+   - Hasar/Prim Oranı, Masraf Oranı ve Kombine Oranı (Hasar + Masraf) mutlaka çıkar.
+   - Özkaynak Kârlılığı (ROE) ve Aktif Kârlılığı (ROA) oranlarını doldur. Sigortacılıkta borçluluk aranmaz, özkaynak kârlılığı ve portföy büyüklüğü temel metriktir.
+   - Bilanço kalemlerini (Cari Varlıklar, Nakit, Riski Sigortalılara Ait Yatırımlar, Toplam Varlıklar, Özkaynaklar) eksiksiz çıkar.
+2. Zaman serisi (financial_history) dizisinde bulunan tüm dönemleri (özellikle 2024, 2025, 2026 gibi güncel çeyrekleri) eksiksiz doldur.
+3. KESİNLİKLE RASTGELE SAYI UYDURMA, çıkarımlarını finansal tablolardaki verilere ve standart finans matematiğine dayandır.`;
 
     const batchResults: any[] = [];
 

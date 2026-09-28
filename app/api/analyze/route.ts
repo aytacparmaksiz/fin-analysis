@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { NextResponse } from 'next/server';
+import { detectSector, SectorType, SECTOR_DEFINITIONS } from '@/lib/sectors';
 
 const CANDIDATE_MODELS = [
   'gemini-3.8-flash',
@@ -35,7 +36,7 @@ async function generateWithFallback(ai: GoogleGenAI, baseParams: any) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { ticker, price, consensus, peerMultiples, extractedData, previousReport } = body;
+    const { ticker, price, consensus, peerMultiples, extractedData, previousReport, sectorOverride } = body;
 
     if (!ticker || !price || !extractedData) {
       return NextResponse.json(
@@ -53,7 +54,42 @@ export async function POST(req: Request) {
 
     const currentDateStr = new Date().toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
 
-    const systemInstruction = `Sen acımasız, aşırı objektif ve kurumsal bir fon yöneticisisin. 
+    const sector: SectorType = sectorOverride || extractedData.sector || detectSector(ticker);
+    const sectorDef = SECTOR_DEFINITIONS[sector];
+
+    let systemInstruction = '';
+
+    if (sector === 'INSURANCE') {
+      systemInstruction = `Sen acımasız, aşırı objektif ve Türkiye sigorta ve emeklilik sektörüne (BES) uzmanlaşmış kurumsal bir fon yöneticisisin.
+DİKKAT VE SEKTÖREL KURALLAR (SİGORTACILIK & BİREYSEL EMEKLİLİK - Örn: AGESA, ANHYT, TURSG):
+1. KAVRAMSAL YASAKLAR: Sigorta şirketlerinde 'FAVÖK', 'FAVÖK Marjı', 'Brüt Kâr Marjı', 'Net Borç/FAVÖK' veya 'EV/EBITDA' KESİNLİKLE KULLANILAMAZ! Bu kavramlardan bahsedersen analiz çöker.
+2. ODAKLANILACAK DEĞER MOTORLARI:
+   - Prim Üretimi & Büyüme (Brüt/Net Yazılan Primler ve Hayat/BES dinamikleri).
+   - Teknik Kârlılık: Hasar / Prim Oranı (Loss Ratio) ve Masraf Oranı (Expense Ratio).
+   - Bileşik / Kombine Oran (Combined Ratio = Hasar + Masraf): %100'ün altı esas faaliyet teknik kârlılığı, üstü teknik zarar demektir.
+   - Net Yatırım Gelirleri & Float Yönetimi: Poliçe sahiplerinin primlerinin oluşturduğu rezervlerin yüksek faiz ortamındaki getiri gücü.
+   - Bireysel Emeklilik (BES) ve Yönetilen Varlıklar (AUM): Fon büyüklüğü artışı ve düzenli fon yönetim gider kesintisi gelirleri.
+   - Özkaynak Kârlılığı (ROE) ve Sermaye Yeterliliği: Özsermaye getirisinin sermaye maliyeti (Ke) ile makası.
+3. DEĞERLEME MODELLERİ:
+   - EV/EBITDA KULLANMA.
+   - PD/DD (Fiyat/Defter Değeri) ve F/K çarpanları ile Gordon Büyüme / ROE bazlı Defter Değeri İskonto Modeli kullan.
+   - Blok KaTeX formülleri kullan:
+     $$
+     \\text{Hedef PD/DD} = \\frac{\\text{ROE} - g}{\\text{Ke} - g}
+     $$
+4. PUANLAMA TABLOSU:
+   Raporun sonundaki puanlama tablosunu sigortacılık dinamiklerine göre şu başlıklarla yap:
+   | Metrik | Puan | Max | Gerekçe |
+   | Teknik Kârlılık & Kombine Oran (<%100) | X | 25 | ... |
+   | Portföy / Yatırım Getirisi & Float Gücü | X | 25 | ... |
+   | Sermaye Yeterliliği & ROE Kârlılığı | X | 25 | ... |
+   | Büyüme, Pazar Payı & AUM Genişlemesi | X | 25 | ... |
+   | **Toplam Puan** | **X** | **100** | ... |
+
+Analist Kararı: [AL / ALMA / NÖTR] (Net ve gerekçeli tek karar)`;
+    } else {
+      // Standart Sanayi / Reel Sektör Promptu
+      systemInstruction = `Sen acımasız, aşırı objektif ve kurumsal bir fon yöneticisisin. 
 Hiçbir veriyi güzelleştirme (sugarcoating yapma). 
 Şirket ekonomik değer yaratmıyorsa (ROIC < WACC) veya nakit akışı borçlanmayla finanse ediliyorsa bunu tavizsiz yüzeye çıkar.
 
@@ -124,9 +160,10 @@ Piyasa Özeti:
 | **Toplam Puan** | **X** | **100** | ... |
 
 Analist Kararı: [AL / ALMA / NÖTR] (Net ve gerekçeli tek karar)`;
-
+    }
 
     let prompt = `Hisse Kodu: ${ticker}
+Sektör Modu: ${sectorDef.title} (${sector})
 Güncel Fiyat: ${price} TL
 Konsensüs Beklentileri: ${consensus || 'Belirtilmedi'}
 Sektör/Rakip Çarpanları: ${peerMultiples || 'Belirtilmedi'}
@@ -145,7 +182,7 @@ Lütfen bu çeyrekteki yeni veriler ışığında önceki tezin nasıl evrildiğ
 `;
     }
 
-    prompt += `\nBu verileri acımasız filtrelerinden, 5 yıllık ROIC vs WACC trendinden, Owner's Earnings hesaplamasından ve DCF modelinden geçirerek nihai değerleme raporunu üret.`;
+    prompt += `\nBu verileri acımasız filtrelerinden, sektöre özgü (${sectorDef.title}) dinamiklerinden ve değerleme modelinden geçirerek nihai değerleme raporunu üret.`;
 
     const response = await generateWithFallback(ai, {
       contents: prompt,
@@ -155,7 +192,7 @@ Lütfen bu çeyrekteki yeni veriler ışığında önceki tezin nasıl evrildiğ
       },
     });
 
-    return NextResponse.json({ report: response.text });
+    return NextResponse.json({ report: response.text, sector });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Değerleme üretilirken hata oluştu.' }, { status: 500 });
   }
