@@ -190,7 +190,7 @@ const CustomChartTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-// Fintables Tablo Konfigürasyonu
+// Çok Yıllı Finansal Tablo Konfigürasyonu
 interface MetricRowConfig {
   label: string;
   sublabel: string;
@@ -210,7 +210,7 @@ interface MetricSectionConfig {
   rows: MetricRowConfig[];
 }
 
-const FINTABLES_SECTIONS: MetricSectionConfig[] = [
+const FINANCIAL_TABLE_SECTIONS: MetricSectionConfig[] = [
   {
     title: '1. Gelir Tablosu & Büyüme Dinamikleri',
     icon: TrendingUp,
@@ -379,6 +379,10 @@ export default function ValuationTerminal() {
   const [statusMessage, setStatusMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  // Bulut Veritabanı (Supabase) Senkronizasyon Durumu
+  const [isCloudConfigured, setIsCloudConfigured] = useState<boolean | null>(null);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
   // Arşiv
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [activeReportId, setActiveReportId] = useState<string | null>(null);
@@ -408,14 +412,27 @@ export default function ValuationTerminal() {
     return [...reports].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   };
 
-  const deleteReport = (id: string, e?: React.MouseEvent) => {
+  // Rapor Silme (Hem Yerel Hem Bulut Senkron)
+  const deleteReport = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (confirm('Bu değerleme raporunu arşivden silmek istediğinize emin misiniz?')) {
+    const reportToDelete = savedReports.find(r => r.id === id);
+    const tickerName = reportToDelete?.ticker || 'bu';
+    if (confirm(`${tickerName} hissesine ait değerleme raporunu silmek istediğinize emin misiniz?`)) {
       const updated = savedReports.filter(r => r.id !== id);
       setSavedReports(updated);
       try {
         localStorage.setItem('fin_valuation_reports', JSON.stringify(updated));
       } catch (err) {}
+
+      // Buluttan (Supabase) da sil
+      try {
+        await fetch(`/api/reports?id=${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+        });
+      } catch (err) {
+        console.warn('Buluttan silme başarısız:', err);
+      }
+
       if (activeReportId === id) {
         setActiveReportId(null);
         setStep('leaderboard');
@@ -423,18 +440,74 @@ export default function ValuationTerminal() {
     }
   };
 
+  // 1. Önce anında yerel belleği yükle (hızlı başlangıç)
+  // 2. Ardından Supabase'den güncel raporları çek ve yerel ile birleştir
   useEffect(() => {
     setMounted(true);
+    let localData: SavedReport[] = [];
     try {
       const stored = localStorage.getItem('fin_valuation_reports');
-      if (stored) setSavedReports(JSON.parse(stored));
+      if (stored) {
+        localData = JSON.parse(stored);
+        setSavedReports(localData);
+      }
     } catch (e) {}
+
+    const syncWithCloud = async () => {
+      try {
+        setIsSyncing(true);
+        const res = await fetch('/api/reports');
+        if (res.ok) {
+          const json = await res.json();
+          setIsCloudConfigured(Boolean(json.isCloudConfigured));
+          if (json.isCloudConfigured && Array.isArray(json.reports)) {
+            const combinedMap = new Map<string, SavedReport>();
+            localData.forEach(r => combinedMap.set(r.id, r));
+            json.reports.forEach((r: SavedReport) => combinedMap.set(r.id, r));
+
+            // Yerelde olup bulutta henüz olmayanları buluta aktar
+            const cloudIds = new Set(json.reports.map((r: any) => r.id));
+            const missingInCloud = localData.filter(r => !cloudIds.has(r.id));
+            for (const r of missingInCloud) {
+              fetch('/api/reports', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ report: r }),
+              }).catch(() => {});
+            }
+
+            const merged = Array.from(combinedMap.values());
+            setSavedReports(merged);
+            localStorage.setItem('fin_valuation_reports', JSON.stringify(merged));
+          }
+        }
+      } catch (err) {
+        console.warn('Cloud sync error:', err);
+      } finally {
+        setIsSyncing(false);
+      }
+    };
+
+    syncWithCloud();
   }, []);
 
-  const saveReport = (newReport: SavedReport) => {
+  const saveReport = async (newReport: SavedReport) => {
     const updated = [newReport, ...savedReports.filter(r => r.id !== newReport.id)];
     setSavedReports(updated);
-    localStorage.setItem('fin_valuation_reports', JSON.stringify(updated));
+    try {
+      localStorage.setItem('fin_valuation_reports', JSON.stringify(updated));
+    } catch (e) {}
+
+    // Supabase bulut veritabanına kaydet
+    try {
+      await fetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ report: newReport }),
+      });
+    } catch (err) {
+      console.warn('Buluta kaydetme başarısız, yerelde saklandı:', err);
+    }
   };
 
   // JSON Yedek İndirme (Dışa Aktar)
@@ -852,6 +925,15 @@ export default function ValuationTerminal() {
                 <span className="text-slate-500 font-normal">|</span>
                 <span className="text-slate-200 font-semibold text-sm">Kurumsal Temel Değerleme Terminali</span>
                 <span className="text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-800/80 px-2 py-0.5 rounded font-bold">PRO</span>
+                {isCloudConfigured ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-mono bg-emerald-950/80 text-emerald-400 border border-emerald-800/80 px-2 py-0.5 rounded" title="Supabase Bulut Veritabanı Aktif ve Senkronize">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Bulut Aktif
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-mono bg-slate-800/80 text-slate-400 border border-slate-700 px-2 py-0.5 rounded" title="Yerel Depolama Modu (Supabase anahtarları girildiğinde otomatik buluta bağlanır)">
+                    Yerel Depolama
+                  </span>
+                )}
               </h1>
               <p className="text-xs text-slate-400">Çok yıllık finansal tablolar, rehberlik karnesi ve öncelikli hisse sıralama terminali.</p>
             </div>
@@ -883,12 +965,21 @@ export default function ValuationTerminal() {
             </button>
 
             {step === 'report' && activeReport && (
-              <button
-                onClick={() => window.print()}
-                className="flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 py-1.5 px-3 rounded-lg border border-slate-700 transition cursor-pointer"
-              >
-                <Printer className="w-3.5 h-3.5" /> PDF / Yazdır
-              </button>
+              <>
+                <button
+                  onClick={() => window.print()}
+                  className="flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 py-1.5 px-3 rounded-lg border border-slate-700 transition cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" /> PDF / Yazdır
+                </button>
+                <button
+                  onClick={() => deleteReport(activeReport.id)}
+                  className="flex items-center gap-1.5 text-xs bg-rose-950/80 hover:bg-rose-900 text-rose-300 hover:text-white py-1.5 px-3 rounded-lg border border-rose-800 transition cursor-pointer"
+                  title="Bu raporu kalıcı olarak sil"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" /> Raporu Sil
+                </button>
+              </>
             )}
           </div>
         </header>
@@ -1516,7 +1607,7 @@ export default function ValuationTerminal() {
             </div>
           )}
 
-          {/* ADIM 3: FINTABLES TARZI SEKMELEŞTİRİLMİŞ ANALİZ VE GÖRSELLEŞTİRME */}
+          {/* ADIM 3: ÇOK YILLI FİNANSAL ANALİZ VE GÖRSELLEŞTİRME */}
           {step === 'report' && activeReport && (
             <div className="space-y-6">
               
@@ -1546,14 +1637,24 @@ export default function ValuationTerminal() {
                   </div>
                 </div>
 
-                {activeReport.score && (
-                  <div className="flex items-center gap-3 bg-slate-950 border border-slate-800 p-3.5 rounded-lg shadow-inner">
-                    <div className="text-right">
-                      <div className="text-[11px] text-slate-400 uppercase font-semibold">Kurumsal Kalite Skoru</div>
-                      <div className="text-2xl font-black font-mono text-emerald-400">{activeReport.score} <span className="text-xs text-slate-500 font-normal">/ 100</span></div>
+                <div className="flex items-center gap-3">
+                  {activeReport.score && (
+                    <div className="flex items-center gap-3 bg-slate-950 border border-slate-800 p-3.5 rounded-lg shadow-inner">
+                      <div className="text-right">
+                        <div className="text-[11px] text-slate-400 uppercase font-semibold">Kurumsal Kalite Skoru</div>
+                        <div className="text-2xl font-black font-mono text-emerald-400">{activeReport.score} <span className="text-xs text-slate-500 font-normal">/ 100</span></div>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                  <button
+                    onClick={() => deleteReport(activeReport.id)}
+                    className="p-3 bg-rose-950/60 hover:bg-rose-900/80 text-rose-400 hover:text-white rounded-lg border border-rose-900/80 transition cursor-pointer print:hidden flex items-center gap-1.5 text-xs font-semibold"
+                    title="Bu raporu kalıcı olarak sil"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span className="hidden sm:inline">Raporu Sil</span>
+                  </button>
+                </div>
               </div>
 
               {/* Sekme Navigasyonu (Tabs) */}
@@ -1576,7 +1677,7 @@ export default function ValuationTerminal() {
                       : 'border-transparent text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <TrendingUp className="w-4 h-4" /> 2. Fintables Finansal Tablolar
+                  <TrendingUp className="w-4 h-4" /> 2. Finansal Tablolar & Dinamikler
                 </button>
                 <button
                   onClick={() => setActiveTab('guidance')}
@@ -1788,7 +1889,7 @@ export default function ValuationTerminal() {
                 </div>
               )}
 
-              {/* SEKME 2: FİNTABLES TARZI FİNANSAL TABLOLAR (KATEGORİZE, YoY DEĞİŞİM ROZETLİ VE YÜKSEK OKUNABİLİRLİK) */}
+              {/* SEKME 2: ÇOK YILLI FİNANSAL TABLOLAR (KATEGORİZE, YoY DEĞİŞİM ROZETLİ VE YÜKSEK OKUNABİLİRLİK) */}
               {activeTab === 'tables' && (
                 <div className="space-y-6">
 
@@ -1842,13 +1943,13 @@ export default function ValuationTerminal() {
                     </div>
                   </div>
 
-                  {/* Çok Yıllı Karşılaştırmalı Fintables Tablosu */}
+                  {/* Çok Yıllı Karşılaştırmalı Finansal Tablolar */}
                   <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
                     <div className="p-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-950/60">
                       <div className="flex items-center gap-2">
                         <TrendingUp className="w-5 h-5 text-emerald-400" />
                         <div>
-                          <span className="font-bold text-sm text-white">Çok Yıllı Karşılaştırmalı Finansal Göstergeler (Fintables Görünümü)</span>
+                          <span className="font-bold text-sm text-white">Çok Yıllı Karşılaştırmalı Finansal Tablolar & Göstergeler</span>
                           <p className="text-xs text-slate-400">Finansal veriler yalınlaştırılmış olup, dönemler arası değişimler alt kısımdaki yön rozetleri ile gösterilir.</p>
                         </div>
                       </div>
@@ -1878,7 +1979,7 @@ export default function ValuationTerminal() {
                         </thead>
 
                         <tbody className="divide-y divide-slate-800/70 font-mono">
-                          {FINTABLES_SECTIONS.map((section, sIdx) => {
+                          {FINANCIAL_TABLE_SECTIONS.map((section, sIdx) => {
                             const SectionIcon = section.icon;
 
                             return (
