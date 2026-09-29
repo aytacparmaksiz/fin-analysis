@@ -257,6 +257,31 @@ describe('Item 9 & 10: Dynamic Ratios per Period (no hardcoded static duplicates
     assert.ok(result.drivers.revenue_growth.sourceExplanation.includes('2025') || result.drivers.revenue_growth.sourceExplanation.includes('Son Dönem'));
     assert.ok(result.drivers.net_income_growth.sourceExplanation.includes('2025') || result.drivers.net_income_growth.sourceExplanation.includes('Son Dönem'));
   });
+
+  it('uses Net Aktif Değeri (NAD / SOTP) valuation model for HOLDING sector without EBITDA', () => {
+    const holdingData = {
+      financial_history: [
+        {
+          period: '2025/12',
+          equity: 100000000000,
+          net_debt: -5000000000,
+          ebitda: 15000000000,
+          shares_count: 2000000000,
+          holding_discount: 30.0
+        }
+      ]
+    };
+    const result = computeSectorValuationAndDrivers(holdingData, '45.00', 'HOLDING');
+    assert.ok(result.valuation);
+    assert.ok(
+      result.valuation.valuation_model_name.includes('Net Aktif Değeri') ||
+      result.valuation.valuation_model_name.includes('NAD') ||
+      result.valuation.valuation_model_name.includes('SOTP'),
+      `Model name should be NAD/SOTP, got ${result.valuation.valuation_model_name}`
+    );
+    // Fair value should be positive and derived from NAV per share
+    assert.ok(result.valuation.fair_value > 0);
+  });
 });
 
 describe('Dikey 1: Veri Okuma, Sayı Ayrıştırma & OCR Validasyonları', () => {
@@ -280,6 +305,16 @@ describe('Dikey 1: Veri Okuma, Sayı Ayrıştırma & OCR Validasyonları', () =>
     assert.equal(parseFinancialNumber('1234,56 TL'), 1234.56);
     assert.equal(parseFinancialNumber('₺ 9.876,54'), 9876.54);
     assert.equal(parseFinancialNumber('$ 1,500.25'), 1500.25);
+  });
+
+  it('correctly parses negative numbers with currency symbols and spaces', () => {
+    assert.equal(parseFinancialNumber('(1.234) TL'), -1234);
+    assert.equal(parseFinancialNumber('TL (1.234)'), -1234);
+    assert.equal(parseFinancialNumber('( 1.234,50 ) TL'), -1234.5);
+    assert.equal(parseFinancialNumber('1.234- TL'), -1234);
+    assert.equal(parseFinancialNumber('1.234 TL -'), -1234);
+    assert.equal(parseFinancialNumber('1 234 567,89'), 1234567.89);
+    assert.equal(parseFinancialNumber('1 234 567'), 1234567);
   });
 
   it('safely handles empty, dash, null, and non-numeric placeholders', () => {
@@ -306,6 +341,30 @@ describe('Dikey 1: Veri Okuma, Sayı Ayrıştırma & OCR Validasyonları', () =>
     assert.equal(homogenizedHistory[1].is_tms29, true);
     assert.equal(homogenizedHistory[2].is_tms29, true);
     assert.ok(tms29Warnings.length > 0);
+  });
+
+  it('handles reverse-ordered history in homogenizeTms29Series and correctly sorts', () => {
+    const reversedHistory = [
+      { period: '2024/06', revenue: 2500 },
+      { period: '2024/03', revenue: 2000 },
+      { period: '2023/12', revenue: 1500 },
+      { period: '2022/12', revenue: 1000 }
+    ];
+    const { hasTms29Adjustment, tms29TransitionPeriod, tms29Warnings } = homogenizeTms29Series(reversedHistory, 'INDUSTRIAL');
+    assert.equal(hasTms29Adjustment, true);
+    assert.equal(tms29TransitionPeriod, '2023/12');
+    assert.ok(tms29Warnings.length > 0);
+  });
+
+  it('exempts Banking and Insurance sectors from TMS 29 per BDDK/SEDDK regulation', () => {
+    const bankHistory = [
+      { period: '2022/12', revenue: 1000 },
+      { period: '2023/12', revenue: 1500 },
+      { period: '2024/06', revenue: 2500 }
+    ];
+    const { hasTms29Adjustment, tms29Warnings } = homogenizeTms29Series(bankHistory, 'BANKING');
+    assert.equal(hasTms29Adjustment, false);
+    assert.equal(tms29Warnings.length, 0);
   });
 });
 
@@ -410,6 +469,47 @@ describe('Dikey 3: Sektörel Puanlama & Anomali Tespiti', () => {
     assert.ok(scoreResult.totalScore >= 70, `Bank with strong CAR and low NPL should score high, got ${scoreResult.totalScore}`);
     assert.equal(scoreResult.sector, 'BANKING');
   });
+
+  it('penalizes failing bank with low CAR and high NPL', () => {
+    const rawData = {
+      financial_history: [
+        {
+          period: '2025/12',
+          car_ratio: 7.5,
+          npl_ratio: 16.0,
+          roe: 6.0,
+          net_interest_income: 100000
+        }
+      ]
+    };
+    const scoreResult = calculateSectorScore(rawData, 'BANKING');
+    assert.ok(scoreResult.totalScore < 45, `Failing bank should score low (< 45), got ${scoreResult.totalScore}`);
+    assert.ok(scoreResult.anomalies.length > 0, 'Failing bank must have anomalies');
+  });
+
+  it('scores Holding sector based on Net Aktif Değeri, solo debt, and dividend flow', () => {
+    const rawData = {
+      financial_history: [
+        {
+          period: '2024/12',
+          equity: 5000000,
+          net_debt: -500000,
+          dividends_paid: 200000
+        },
+        {
+          period: '2025/12',
+          equity: 8000000,
+          net_debt: -1000000, // Net cash
+          dividends_paid: 400000,
+          operating_cash_flow: 600000,
+          holding_discount: 35.0
+        }
+      ]
+    };
+    const scoreResult = calculateSectorScore(rawData, 'HOLDING');
+    assert.ok(scoreResult.totalScore >= 75, `Healthy holding with net cash and strong NAV growth should score high, got ${scoreResult.totalScore}`);
+    assert.equal(scoreResult.sector, 'HOLDING');
+  });
 });
 
 describe('Dikey 4: Nihai Karar Optimizasyonu & Yanıltıcı AL Filtresi', () => {
@@ -436,6 +536,101 @@ describe('Dikey 4: Nihai Karar Optimizasyonu & Yanıltıcı AL Filtresi', () => 
 
     assert.notEqual(opt.finalDecision, 'AL', 'High leverage company must not receive AL');
     assert.ok(opt.overrideReason?.includes('Borçluluk'), `Override reason must cite leverage: ${opt.overrideReason}`);
+  });
+
+  it('overrides AL to ALMA for Industrial when EBITDA is negative with net debt', () => {
+    const rawData = {
+      financial_history: [
+        {
+          period: '2025/12',
+          net_income: -200000,
+          operating_cash_flow: 50000,
+          net_debt: 3000000,
+          ebitda: -50000
+        }
+      ]
+    };
+    const scoreResult = calculateSectorScore(rawData, 'INDUSTRIAL');
+    const opt = optimizeFinalDecision({
+      rawDecision: 'AL',
+      marketPrice: 50,
+      fairValue: 100,
+      scoreResult,
+      sector: 'INDUSTRIAL'
+    });
+
+    assert.equal(opt.finalDecision, 'ALMA');
+    assert.ok(opt.overrideReason?.includes('Operasyonel Zarar ve Borçluluk'));
+  });
+
+  it('overrides AL to ALMA for Banking when CAR < 12% or NPL > 6%', () => {
+    const rawData = {
+      financial_history: [
+        {
+          period: '2025/12',
+          car_ratio: 10.5, // Below 12%
+          npl_ratio: 3.0,
+          roe: 25.0
+        }
+      ]
+    };
+    const scoreResult = calculateSectorScore(rawData, 'BANKING');
+    const opt = optimizeFinalDecision({
+      rawDecision: 'AL',
+      marketPrice: 20,
+      fairValue: 40,
+      scoreResult,
+      sector: 'BANKING'
+    });
+
+    assert.equal(opt.finalDecision, 'ALMA');
+    assert.ok(opt.overrideReason?.includes('Sermaye Yeterlilik'));
+  });
+
+  it('overrides AL to ALMA for Insurance when combined ratio > 102%', () => {
+    const rawData = {
+      financial_history: [
+        {
+          period: '2025/12',
+          combined_ratio: 108.5,
+          roe: 25.0
+        }
+      ]
+    };
+    const scoreResult = calculateSectorScore(rawData, 'INSURANCE');
+    const opt = optimizeFinalDecision({
+      rawDecision: 'AL',
+      marketPrice: 50,
+      fairValue: 80,
+      scoreResult,
+      sector: 'INSURANCE'
+    });
+
+    assert.equal(opt.finalDecision, 'ALMA');
+    assert.ok(opt.overrideReason?.includes('Teknik Faaliyet Zararı'));
+  });
+
+  it('overrides AL to ALMA for Holding when solo net debt to equity > 0.6x', () => {
+    const rawData = {
+      financial_history: [
+        {
+          period: '2025/12',
+          net_debt: 7000000,
+          equity: 10000000 // 0.7x
+        }
+      ]
+    };
+    const scoreResult = calculateSectorScore(rawData, 'HOLDING');
+    const opt = optimizeFinalDecision({
+      rawDecision: 'AL',
+      marketPrice: 100,
+      fairValue: 200,
+      scoreResult,
+      sector: 'HOLDING'
+    });
+
+    assert.equal(opt.finalDecision, 'ALMA');
+    assert.ok(opt.overrideReason?.includes('Solo Holding'));
   });
 
   it('overrides AL to ALMA when cash flow is negative (makyajlı kâr)', () => {

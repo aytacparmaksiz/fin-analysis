@@ -73,19 +73,21 @@ function enrichAndSanitizeFinancialHistory(data: any) {
 
     // OCR & Sayısal Temizlik: Eksi bakiyeler, tireli ve parantezli sayılar, binlik/ondalık ayraçları
     const numericFields = [
-      'revenue', 'ebitda', 'net_income', 'gross_profit',
+      'revenue', 'ebitda', 'net_income', 'gross_profit', 'operating_profit',
       'operating_cash_flow', 'capex', 'free_cash_flow', 'net_debt',
       'equity', 'total_assets', 'current_assets', 'non_current_assets',
       'cash_and_equivalents', 'financial_assets_insured', 'trade_receivables',
       'written_premiums', 'earned_premiums', 'technical_profit', 'investment_income',
       'loss_ratio', 'expense_ratio', 'combined_ratio',
+      'npl_ratio', 'car_ratio', 'nim', 'net_interest_income', 'loan_to_deposit',
+      'nav', 'holding_discount', 'dividends_paid',
       'current_ratio', 'quick_ratio', 'cash_ratio', 'leverage_ratio',
       'asset_turnover', 'equity_turnover', 'roa', 'roe', 'roic', 'wacc'
     ];
     for (const f of numericFields) {
       if (item[f] !== undefined && item[f] !== null) {
         const parsed = parseFinancialNumber(item[f], { 
-          isPercentage: f.includes('ratio') || f.includes('margin') || f === 'roe' || f === 'roa' || f === 'roic' || f === 'wacc' 
+          isPercentage: f.includes('ratio') || f.includes('margin') || f === 'roe' || f === 'roa' || f === 'roic' || f === 'wacc' || f === 'nim' || f.includes('discount')
         });
         if (parsed !== null) item[f] = parsed;
       }
@@ -324,8 +326,8 @@ function enrichAndSanitizeFinancialHistory(data: any) {
     item.eva_spread = Number((item.roic - item.wacc).toFixed(1));
   }
 
-  // TMS 29 Homojenizasyonunu çalıştır
-  const { homogenizedHistory, hasTms29Adjustment, tms29Warnings } = homogenizeTms29Series(history);
+  // TMS 29 Homojenizasyonunu çalıştır (Bankacılık/Sigortacılık muafiyetini gözeterek)
+  const { homogenizedHistory, hasTms29Adjustment, tms29Warnings } = homogenizeTms29Series(history, detectedSector);
   data.financial_history = homogenizedHistory;
   if (data.is_tms29_adjusted === undefined) {
     data.is_tms29_adjusted = hasTms29Adjustment;
@@ -502,6 +504,16 @@ export async function POST(req: Request) {
               roa: { type: Type.NUMBER, description: 'Aktif Karlılık (ROA %)' },
               roe: { type: Type.NUMBER, description: 'Özkaynak Karlılığı (ROE %)' },
 
+              // Sektörel Özel Kalemler (Bankacılık & Holding)
+              npl_ratio: { type: Type.NUMBER, description: 'Takipteki Krediler Oranı (NPL / TGA %)' },
+              car_ratio: { type: Type.NUMBER, description: 'Sermaye Yeterlilik Rasyosu (SYR / CAR %)' },
+              nim: { type: Type.NUMBER, description: 'Net Faiz Marjı (NIM %)' },
+              net_interest_income: { type: Type.NUMBER, description: 'Net Faiz Geliri (NII)' },
+              loan_to_deposit: { type: Type.NUMBER, description: 'Kredi / Mevduat Oranı (LDR %)' },
+              nav: { type: Type.NUMBER, description: 'Net Aktif Değeri (NAD / NAV - Holding)' },
+              holding_discount: { type: Type.NUMBER, description: 'Tarihsel NAD İskontosu (% - Holding)' },
+              dividends_paid: { type: Type.NUMBER, description: 'Ödenen / Alınan Temettüler' },
+
               // Bilanço Detayları
               current_assets: { type: Type.NUMBER, description: 'Cari Varlıklar Toplamı' },
               cash_and_equivalents: { type: Type.NUMBER, description: 'Nakit ve Nakit Benzeri Varlıklar' },
@@ -657,17 +669,23 @@ VERİ VE SAYI OKUMA KURALLARI:
 3. KESİNLİKLE FİNANSAL HALÜSİNASYON GÖRME: Raporlarda açıkça bulunmayan hiçbir rakamı uydurma. Eğer bir veri tabloda yer almıyorsa 0 değil, null bırak.
 4. TMS 29 (ENFLASYON MUHASEBESİ): Raporlanan finansal tabloların TMS 29 Yüksek Enflasyonlu Ekonomilerde Finansal Raporlama standardına göre enflasyona göre düzeltilip düzeltilmediğini kontrol et. Her dönem için 'is_tms29' bayrağını (true/false) ve genel raporlama için 'is_tms29_adjusted' alanını işaretle.
 
-SEKTÖREL UYARLAMA KURALLARI:
+SEKTÖREL UYARLAMA VE KESİN PARAMETRE KURALLARI:
 1. Şirket AGESA, ANHYT, TURSG gibi bir SİGORTACILIK veya BİREYSEL EMEKLİLİK şirketi ise:
    - Klasik 'Satış Gelirleri' yerine 'Brüt Yazılan Primler' veya Teknik Gelirleri 'revenue' alanına yaz.
    - Klasik 'FAVÖK' yerine 'Teknik Bölüm Dengesi / Teknik Kâr'ı 'ebitda' alanına yaz.
    - Hasar/Prim Oranı, Masraf Oranı ve Kombine Oranı (Hasar + Masraf) mutlaka çıkar.
    - Özkaynak Kârlılığı (ROE) ve Aktif Kârlılığı (ROA) oranlarını doldur. Sigortacılıkta borçluluk aranmaz, özkaynak kârlılığı ve portföy büyüklüğü temel metriktir.
    - Bilanço kalemlerini (Cari Varlıklar, Nakit, Riski Sigortalılara Ait Yatırımlar, Toplam Varlıklar, Özkaynaklar) eksiksiz çıkar.
-2. Şirket BANKACILIK ise:
-   - Net Faiz Geliri (NII), Net Faiz Marjı (NIM), Aktif Kalitesi (NPL), Sermaye Yeterliliği (SYR) ve ROE çıkar.
-3. Zaman serisi (financial_history) dizisinde bulunan tüm dönemleri (özellikle 2024, 2025, 2026 gibi güncel çeyrekleri) eksiksiz doldur.
-4. Çıkarımlarını finansal tablolardaki verilere ve standart finans matematiğine dayandır.`;
+2. Şirket GARAN, AKBNK, ISCTR, YKBNK gibi BANKACILIK ise:
+   - 'revenue' alanına Net Faiz Gelirleri (NII) veya Faaliyet Gelirlerini yaz.
+   - Kesinlikle FAVÖK veya Brüt Kâr uydurma.
+   - Net Faiz Marjı ('nim'), Takipteki Krediler Oranı ('npl_ratio'), Sermaye Yeterlilik Rasyosu ('car_ratio') ve ROE oranlarını doğrudan bilanço dipnotlarından çıkar.
+3. Şirket KCHOL, SAHOL, AGHOL gibi HOLDİNG ise:
+   - Net Aktif Değeri ('nav'), Tarihsel NAD İskonto Oranı ('holding_discount'), solo net nakit/borç ve iştirak temettü akışlarını ('dividends_paid') çıkar.
+   - Holding konsolide rakamlarında operasyonel kâr yerine solo bilanço gücü ve temettü nakit akışını önceliklendir.
+4. KESİNTİSİZ HALÜSİNASYON ENGELİ: Metinde açıkça belirtilmeyen oranları (örn: bankada olmayan bir FAVÖK marjı veya borç oranı) kafandan uydurma. Veri eksikse alanı null bırak.
+5. Zaman serisi (financial_history) dizisinde bulunan tüm dönemleri (özellikle 2024, 2025, 2026 gibi güncel çeyrekleri) eksiksiz doldur.
+6. Çıkarımlarını finansal tablolardaki verilere ve standart finans matematiğine dayandır.`;
 
     const batchResults: any[] = [];
 

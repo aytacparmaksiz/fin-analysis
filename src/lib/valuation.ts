@@ -95,34 +95,30 @@ export function parseFinancialNumber(raw: any, options?: { isPercentage?: boolea
   let str = String(raw).trim();
   if (
     !str ||
-    str === '-' ||
-    str === '—' ||
-    str === '–' ||
-    str === 'N/A' ||
-    str === 'n/a' ||
-    str === 'null' ||
-    str === 'nil'
+    /^[-—–\s]+$/.test(str) ||
+    /^(?:n\/a|null|nil)$/i.test(str)
   ) {
     return null;
   }
 
-  // 1. Eksi Bakiye Tespiti:
-  // Parantez içi: (1.234) veya ( 1.234,50 ) veya (12.5%)
-  const hasParenthesis = /^\s*\((.*)\)\s*$/.test(str);
-  // Sonda tireli format: 1.234- veya 1.234,50- veya 45,2%- veya 45,2-%
-  const hasTrailingMinus = /[0-9\s%]-(?:\s*%?)?$/.test(str) || /-(?:\s*%)\s*$/.test(str);
-  // Baştaki tire veya unicode tire: -1.234, −1.234, –1.234, —1.234
-  const hasLeadingMinus = /^[−–—\s-]/.test(str);
+  // 1. Eksi Bakiye Tespiti (Muhasebe Standartları & OCR):
+  // Parantez içi: (1.234), ( 1.234,50 ), (1.234) TL, TL (1.234), (TL 1.234), (15%)
+  const hasParenthesis = /\([^(]*\d+[^(]*\)/.test(str);
+  // Sonda tireli format: 1.234-, 1.234,50-, 1.234- TL, 1.234 TL -, 45,2%-
+  const hasTrailingMinus = /\d[%]?\s*[-−–—]/i.test(str) || /[-−–—]\s*$/i.test(str);
+  // Baştaki tire veya unicode tire: -1.234, −1.234, –1.234, —1.234, ₺ -1.234, -$1.234
+  const hasLeadingMinus = /(?:^|[$₺€£¥\s]|TL|TRY|USD|EUR|GBP|CHF|JPY)\s*[-−–—]\s*\d/i.test(str) || /^[-−–—]/.test(str);
 
   const isNegative = hasParenthesis || hasTrailingMinus || hasLeadingMinus;
 
-  // Temizleme: Parantez, eksi işaretleri, para birimleri, boşluklar, %
+  // Temizleme: Parantez, tireler, para birimleri, semboller, boşluklar
   let cleaned = str
+    .replace(/\u00A0/g, ' ')
     .replace(/[()−–—]/g, '')
-    .replace(/[%₺$€]/g, '')
-    .replace(/\s*-\s*$/, '') // sondaki tire
-    .replace(/^\s*-\s*/, '') // baştaki tire
-    .replace(/\b(?:TL|TRY|USD|EUR|Bin|Milyon|Mn|TRY)\b/gi, '')
+    .replace(/[%₺$€£¥]/g, '')
+    .replace(/\b(?:TL|TRY|USD|EUR|GBP|CHF|JPY|Bin|Milyon|Mn)\b/gi, '')
+    .replace(/\s+/g, '') // Binlik ayracı olarak kullanılan boşlukları kaldır (Örn: 1 234 567)
+    .replace(/-/g, '')   // Kalan tüm eksi işaretlerini arındır
     .trim();
 
   if (!cleaned) return null;
@@ -168,6 +164,7 @@ export function parseFinancialNumber(raw: any, options?: { isPercentage?: boolea
   const parsed = parseFloat(cleaned);
   if (isNaN(parsed) || !isFinite(parsed)) return null;
 
+  if (parsed === 0) return 0;
   return isNegative ? -Math.abs(parsed) : parsed;
 }
 
@@ -183,8 +180,8 @@ export function safeDivide(
   denominator: number | null | undefined,
   fallback: number | null = null
 ): number | null {
-  if (numerator === null || numerator === undefined || isNaN(numerator)) return fallback;
-  if (denominator === null || denominator === undefined || isNaN(denominator)) return fallback;
+  if (numerator === null || numerator === undefined || isNaN(numerator) || !isFinite(numerator)) return fallback;
+  if (denominator === null || denominator === undefined || isNaN(denominator) || !isFinite(denominator)) return fallback;
   if (Math.abs(denominator) < 1e-9) return fallback;
   const result = numerator / denominator;
   return isNaN(result) || !isFinite(result) ? fallback : result;
@@ -199,15 +196,15 @@ export function safeGrowthRate(
   current: number | null | undefined,
   previous: number | null | undefined
 ): number | null {
-  if (current === null || current === undefined || isNaN(current)) return null;
-  if (previous === null || previous === undefined || isNaN(previous)) return null;
-  if (previous === 0) {
+  if (current === null || current === undefined || isNaN(current) || !isFinite(current)) return null;
+  if (previous === null || previous === undefined || isNaN(previous) || !isFinite(previous)) return null;
+  if (Math.abs(previous) < 1e-9) {
     if (current > 0) return 100.0;
     if (current < 0) return -100.0;
     return 0.0;
   }
   const growth = ((current - previous) / Math.abs(previous)) * 100;
-  return Number(growth.toFixed(1));
+  return isFinite(growth) ? Number(growth.toFixed(1)) : null;
 }
 
 /**
@@ -219,7 +216,8 @@ export function safeMargin(
   revenue: number | null | undefined
 ): number | null {
   if (numerator === null || numerator === undefined || revenue === null || revenue === undefined) return null;
-  if (revenue <= 0) return null;
+  if (isNaN(numerator) || !isFinite(numerator) || isNaN(revenue) || !isFinite(revenue)) return null;
+  if (revenue <= 1e-9) return null;
   const margin = (numerator / revenue) * 100;
   return isFinite(margin) ? Number(margin.toFixed(1)) : null;
 }
@@ -237,6 +235,9 @@ export function safeRoe(
   if (netIncome === null || netIncome === undefined || equity === null || equity === undefined) {
     return { roe: null, isInsolvent: false };
   }
+  if (isNaN(netIncome) || !isFinite(netIncome) || isNaN(equity) || !isFinite(equity)) {
+    return { roe: null, isInsolvent: false };
+  }
   // Özkaynak negatif veya sıfır ise: Borca batıklık riski (TTK 376)
   if (equity <= 0) {
     return {
@@ -247,14 +248,18 @@ export function safeRoe(
   }
   const annualizedProfit = netIncome * annualizationFactor;
   const roe = Number(((annualizedProfit / equity) * 100).toFixed(2));
-  return { roe, isInsolvent: false };
+  return { roe: isFinite(roe) ? roe : null, isInsolvent: false };
 }
 
 /**
  * Tarihsel seride TMS 29 (Enflasyon Muhasebesi) dönemlerini tespit eder,
  * nominal ve enflasyon düzeltmeli dönemler arasındaki homojenizasyon uyarısını üretir.
+ * BDDK ve SEDDK mevzuatına uygun olarak Bankacılık ve Sigortacılık sektör muafiyetlerini gözetir.
  */
-export function homogenizeTms29Series(history: any[]): {
+export function homogenizeTms29Series(
+  history: any[],
+  sector?: SectorType
+): {
   homogenizedHistory: any[];
   hasTms29Adjustment: boolean;
   tms29TransitionPeriod?: string;
@@ -264,19 +269,38 @@ export function homogenizeTms29Series(history: any[]): {
     return { homogenizedHistory: [], hasTms29Adjustment: false, tms29Warnings: [] };
   }
 
+  // 1. Doğru geçiş tespiti için seriyi eskiden yeniye kronolojik sırala
+  const parsePeriodSortKey = (p: string) => {
+    const yr = String(p || '').match(/(20\d{2})/);
+    const year = yr ? parseInt(yr[1], 10) : 2024;
+    let q = 12;
+    if (/(?:q1|1\.ç|1ç|\/0?3\b|3a\b)/i.test(p)) q = 3;
+    else if (/(?:q2|2\.ç|2ç|\/0?6\b|6a\b)/i.test(p)) q = 6;
+    else if (/(?:q3|3\.ç|3ç|\/0?9\b|9a\b)/i.test(p)) q = 9;
+    else if (/(?:q4|4\.ç|4ç|\/12\b|12a\b)/i.test(p)) q = 12;
+    return year * 100 + q;
+  };
+
+  const sorted = [...history].sort((a, b) => parsePeriodSortKey(a?.period) - parsePeriodSortKey(b?.period));
+
+  const isFinancialSector = sector === 'BANKING' || sector === 'INSURANCE';
   const warnings: string[] = [];
   let hasTms29 = false;
   let transitionPeriod: string | undefined = undefined;
 
-  const enriched = history.map((item) => {
+  const enriched = sorted.map((item) => {
     const copy = { ...item };
     const periodStr = String(copy.period || '');
     const yrMatch = periodStr.match(/(20\d{2})/);
     const yr = yrMatch ? parseInt(yrMatch[1], 10) : 2024;
 
-    // BIST'te TMS 29 zorunluluğu 2023 yıl sonu ve 2024 çeyreklerinden itibaren geçerlidir
+    // Bankacılık ve Sigorta BDDK/SEDDK kararıyla TMS 29 enflasyon muhasebesinden muaftır
     if (copy.is_tms29 === undefined) {
-      copy.is_tms29 = yr >= 2024 || (yr === 2023 && (periodStr.includes('12') || periodStr.includes('Q4')));
+      if (isFinancialSector) {
+        copy.is_tms29 = false;
+      } else {
+        copy.is_tms29 = yr >= 2024 || (yr === 2023 && (periodStr.includes('12') || periodStr.includes('Q4')));
+      }
     }
 
     if (copy.is_tms29) {
@@ -319,7 +343,19 @@ export function calculateSectorScore(
   sector: SectorType = 'INDUSTRIAL'
 ): SectorScoreResult {
   const history: any[] = Array.isArray(data?.financial_history) ? data.financial_history : [];
-  const latest = history.length > 0 ? history[history.length - 1] : null;
+  // Seriyi kronolojik sıralayarak en güncel dönemi doğru tespit et
+  const parsePeriodSortKey = (p: string) => {
+    const yr = String(p || '').match(/(20\d{2})/);
+    const year = yr ? parseInt(yr[1], 10) : 2024;
+    let q = 12;
+    if (/(?:q1|1\.ç|1ç|\/0?3\b|3a\b)/i.test(p)) q = 3;
+    else if (/(?:q2|2\.ç|2ç|\/0?6\b|6a\b)/i.test(p)) q = 6;
+    else if (/(?:q3|3\.ç|3ç|\/0?9\b|9a\b)/i.test(p)) q = 9;
+    else if (/(?:q4|4\.ç|4ç|\/12\b|12a\b)/i.test(p)) q = 12;
+    return year * 100 + q;
+  };
+  const sortedHistory = [...history].sort((a, b) => parsePeriodSortKey(a?.period) - parsePeriodSortKey(b?.period));
+  const latest = sortedHistory.length > 0 ? sortedHistory[sortedHistory.length - 1] : null;
 
   const breakdown: SectorScoreBreakdown[] = [];
   const anomalies: string[] = [];
@@ -370,8 +406,8 @@ export function calculateSectorScore(
     let s4 = 20;
     let r4 = 'Prim üretimi reel olarak büyüyor';
     let st4: 'good' | 'warning' | 'danger' = 'good';
-    if (history.length >= 2) {
-      const g = safeGrowthRate(latest?.revenue ?? latest?.written_premiums, history[history.length - 2]?.revenue ?? history[history.length - 2]?.written_premiums);
+    if (sortedHistory.length >= 2) {
+      const g = safeGrowthRate(latest?.revenue ?? latest?.written_premiums, sortedHistory[sortedHistory.length - 2]?.revenue ?? sortedHistory[sortedHistory.length - 2]?.written_premiums);
       if (g !== null) {
         if (g >= 60) { s4 = 25; r4 = `Prim büyümesi (%${g}) enflasyonun üzerinde güçlü genişleme gösteriyor.`; st4 = 'good'; }
         else if (g >= 40) { s4 = 18; r4 = `Prim büyümesi (%${g}) sektör ortalamasında.`; st4 = 'good'; }
@@ -381,22 +417,130 @@ export function calculateSectorScore(
     breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
 
   } else if (sector === 'BANKING') {
-    // Bankacılık puanlaması: Yüksek kaldıracı cezalandırma (kaldıraç bankacılığın doğasıdır!)
-    // 1. Kredi Kalitesi & Risk Yönetimi (NPL) (Max 25)
-    breakdown.push({ category: config.categories[0].name, score: 22, maxScore: 25, reason: 'Aktif kalitesi ve karşılık oranları BDDK sınırlarına uygun.', status: 'good' });
+    // Bankacılık dinamik puanlama motoru
+    // 1. Kredi Kalitesi & Risk Yönetimi (NPL / TGA) (Max 25)
+    const npl = parseFinancialNumber(latest?.npl_ratio ?? latest?.npl ?? latest?.tga_ratio);
+    let s1 = 18;
+    let r1 = 'Kredi portföyü ve karşılık oranları dengeli';
+    let st1: 'good' | 'warning' | 'danger' = 'good';
+    if (npl !== null) {
+      if (npl <= 2.0) { s1 = 25; r1 = `Aktif kalitesi mükemmel (NPL %${npl}), sektör ortalamasının belirgin altında.`; st1 = 'good'; }
+      else if (npl <= 3.5) { s1 = 20; r1 = `Kredi kalitesi ve karşılık oranları BDDK standartlarına uygun (NPL %${npl}).`; st1 = 'good'; }
+      else if (npl <= 5.0) { s1 = 12; r1 = `Takipteki alacaklar (NPL %${npl}) sınır seviyede, karşılık yükü izlenmeli.`; st1 = 'warning'; }
+      else { s1 = 4; r1 = `Kritik NPL Riski (%${npl}): Aktif kalitesinde bozulma ve yüksek kredi karşılık maliyeti!`; st1 = 'danger'; anomalies.push(`Kritik NPL Oranı: %${npl}`); }
+    }
+    breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
+
     // 2. Net Faiz Marjı (NIM) & Fonlama (Max 25)
-    breakdown.push({ category: config.categories[1].name, score: 20, maxScore: 25, reason: 'Kredi-mevduat faiz makası dengeli seyrediyor.', status: 'good' });
-    // 3. Sermaye Yeterliliği (SYR) & ROE (Max 25)
-    breakdown.push({ category: config.categories[2].name, score: 21, maxScore: 25, reason: 'Sermaye yeterlilik rasyosu (SYR) yasal %12 tabanının üzerinde.', status: 'good' });
+    const nim = parseFinancialNumber(latest?.nim ?? latest?.net_margin);
+    let s2 = 18;
+    let r2 = 'Net faiz marjı ve fonlama yapısı dengeli';
+    let st2: 'good' | 'warning' | 'danger' = 'good';
+    if (nim !== null) {
+      if (nim >= 6.0) { s2 = 25; r2 = `Güçlü Net Faiz Marjı (%${nim}), kredi-mevduat makası yüksek kârlılık sağlıyor.`; st2 = 'good'; }
+      else if (nim >= 4.0) { s2 = 19; r2 = `Net Faiz Marjı (%${nim}) sektör ortalamasında.`; st2 = 'good'; }
+      else if (nim >= 2.0) { s2 = 12; r2 = `Daralan Net Faiz Marjı (%${nim}), yüksek mevduat fonlama maliyeti baskısı.`; st2 = 'warning'; }
+      else { s2 = 4; r2 = `Kritik Marj Erozyonu: NIM (%${nim}) fonlama maliyetini karşılamakta yetersiz!`; st2 = 'danger'; anomalies.push(`Düşük NIM: %${nim}`); }
+    }
+    breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+
+    // 3. Sermaye Yeterliliği (SYR / CAR) & ROE (Max 25)
+    const car = parseFinancialNumber(latest?.car_ratio ?? latest?.syr);
+    const bankRoe = parseFinancialNumber(latest?.roe);
+    let s3 = 19;
+    let r3 = 'Sermaye yeterliliği yasal sınırların üzerinde';
+    let st3: 'good' | 'warning' | 'danger' = 'good';
+    if (car !== null) {
+      if (car >= 17.0) { s3 = 25; r3 = `Sermaye yeterlilik rasyosu (SYR: %${car}) güçlü şok emici tampon sağlıyor.`; st3 = 'good'; }
+      else if (car >= 14.0) { s3 = 20; r3 = `SYR (%${car}) BDDK hedef tabanının üzerinde, sağlıklı.`; st3 = 'good'; }
+      else if (car >= 12.0) { s3 = 11; r3 = `SYR (%${car}) yasal %12 asgari tabanına yakın, sermaye artırımı gerekebilir.`; st3 = 'warning'; }
+      else { s3 = 2; r3 = `Kritik Sermaye İhlali: SYR (%${car}) BDDK yasal tabanının (%12) altında!`; st3 = 'danger'; anomalies.push(`BDDK SYR İhlali: %${car}`); }
+    }
+    if (bankRoe !== null && bankRoe < 15.0) {
+      anomalies.push(`Yetersiz Bankacılık ROE: %${bankRoe}`);
+    }
+    breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+
     // 4. Komisyon & Dijital Bankacılık (Max 25)
-    breakdown.push({ category: config.categories[3].name, score: 20, maxScore: 25, reason: 'Net ücret ve komisyon gelirleri operasyonel giderleri karşılıyor.', status: 'good' });
+    let s4 = 20;
+    let r4 = 'Net ücret ve komisyon gelirleri operasyonel giderleri karşılıyor.';
+    let st4: 'good' | 'warning' | 'danger' = 'good';
+    if (sortedHistory.length >= 2) {
+      const prev = sortedHistory[sortedHistory.length - 2];
+      const feeGrowth = safeGrowthRate(
+        latest?.net_interest_income ?? latest?.revenue,
+        prev?.net_interest_income ?? prev?.revenue
+      );
+      if (feeGrowth !== null) {
+        if (feeGrowth >= 50.0) { s4 = 25; r4 = `Faiz dışı gelirler ve operasyonel büyüme (%${feeGrowth}) güçlü.`; st4 = 'good'; }
+        else if (feeGrowth >= 25.0) { s4 = 19; r4 = `Gelir üretimi (%${feeGrowth}) sektör ortalamasında.`; st4 = 'good'; }
+        else { s4 = 13; r4 = `Gelir artışı (%${feeGrowth}) yavaşlamış.`; st4 = 'warning'; }
+      }
+    }
+    breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
 
   } else if (sector === 'HOLDING') {
-    // Holding puanlaması: NAD İskontosu ve Solo Nakit Gücü
-    breakdown.push({ category: config.categories[0].name, score: 22, maxScore: 25, reason: 'Net Aktif Değeri (NAD) iskontosu tarihsel ortalamalara kıyasla cazip.', status: 'good' });
-    breakdown.push({ category: config.categories[1].name, score: 23, maxScore: 25, reason: 'Solo bilanço net nakit fazlası krizlere karşı koruma sağlıyor.', status: 'good' });
-    breakdown.push({ category: config.categories[2].name, score: 19, maxScore: 25, reason: 'İştiraklerden temettü akışı düzenli.', status: 'good' });
-    breakdown.push({ category: config.categories[3].name, score: 18, maxScore: 25, reason: 'Portföy çeşitlendirmesi döngüsel riskleri sınırlıyor.', status: 'good' });
+    // Holding dinamik puanlama motoru
+    // 1. Net Aktif Değeri (NAD) İskontosu (Max 25)
+    const disc = parseFinancialNumber(latest?.holding_discount ?? latest?.nav_discount);
+    let s1 = 20;
+    let r1 = 'NAD iskontosu tarihsel aralıkta';
+    let st1: 'good' | 'warning' | 'danger' = 'good';
+    if (disc !== null) {
+      if (disc >= 35.0) { s1 = 25; r1 = `Tarihsel NAD iskontosu (%${disc}) güçlü değerleme fırsatı sunuyor.`; st1 = 'good'; }
+      else if (disc >= 25.0) { s1 = 20; r1 = `NAD iskontosu (%${disc}) cazip seviyede.`; st1 = 'good'; }
+      else if (disc >= 15.0) { s1 = 13; r1 = `NAD iskontosu (%${disc}) daralmış, marjinal getiri potansiyeli.`; st1 = 'warning'; }
+      else { s1 = 6; r1 = `NAD iskontosu yetersiz veya primli (%${disc}), holding iskonto avantajı yok.`; st1 = 'danger'; anomalies.push(`Yetersiz NAD İskontosu: %${disc}`); }
+    }
+    breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
+
+    // 2. Solo Bilanço Gücü & Net Nakit Esnekliği (Max 25)
+    const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
+    const equity = parseFinancialNumber(latest?.equity) ?? 1;
+    let s2 = 20;
+    let r2 = 'Solo bilanço likiditesi yönetilebilir seviyede';
+    let st2: 'good' | 'warning' | 'danger' = 'good';
+    if (netDebt <= 0) {
+      s2 = 25; r2 = 'Solo bilançoda net nakit fazlası krizlere karşı koruma ve yeni yatırım esnekliği sağlıyor.'; st2 = 'good';
+    } else if (equity > 0 && (netDebt / equity) <= 0.25) {
+      s2 = 20; r2 = `Solo borçluluk düşük ve yönetilebilir seviyede (Net Borç/Özkaynak: ${(netDebt / equity).toFixed(2)}x).`; st2 = 'good';
+    } else if (equity > 0 && (netDebt / equity) <= 0.50) {
+      s2 = 12; r2 = `Solo borçluluk izlenmeli (Net Borç/Özkaynak: ${(netDebt / equity).toFixed(2)}x).`; st2 = 'warning';
+    } else {
+      s2 = 5; r2 = `Solo holding bilançosunda yüksek kaldıraç riski!`; st2 = 'danger'; anomalies.push('Yüksek Solo Holding Borcu');
+    }
+    breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+
+    // 3. İştirak Temettü Akışı & Nakit Üretimi (Max 25)
+    const ocf = parseFinancialNumber(latest?.operating_cash_flow);
+    const divPaid = parseFinancialNumber(latest?.dividends_paid);
+    let s3 = 19;
+    let r3 = 'İştiraklerden düzenli nakit ve temettü girişi sağlanıyor.';
+    let st3: 'good' | 'warning' | 'danger' = 'good';
+    if ((divPaid !== null && divPaid > 0) || (ocf !== null && ocf > 0)) {
+      s3 = 23; r3 = 'İştirak temettü akışı ve holding nakit üretimi güçlü.'; st3 = 'good';
+    } else if (ocf !== null && ocf < 0) {
+      s3 = 10; r3 = 'Holding solo nakit akışı negatif; iştirak temettü tahsilatı zayıf.'; st3 = 'warning';
+    }
+    breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+
+    // 4. NAD Büyümesi & Portföy Katalizörleri (Max 25)
+    let s4 = 19;
+    let r4 = 'Portföy büyümesi ve iştirak çeşitlendirmesi dengeli.';
+    let st4: 'good' | 'warning' | 'danger' = 'good';
+    if (sortedHistory.length >= 2) {
+      const prev = sortedHistory[sortedHistory.length - 2];
+      const navGrowth = safeGrowthRate(
+        latest?.equity ?? latest?.nav,
+        prev?.equity ?? prev?.nav
+      );
+      if (navGrowth !== null) {
+        if (navGrowth >= 50.0) { s4 = 25; r4 = `Konsolide net aktif değeri (%${navGrowth}) reel genişleme gösteriyor.`; st4 = 'good'; }
+        else if (navGrowth >= 25.0) { s4 = 19; r4 = `Portföy net aktif değer artışı (%${navGrowth}) sektör ortalamasında.`; st4 = 'good'; }
+        else { s4 = 12; r4 = `Portföy net aktif değer artışı (%${navGrowth}) enflasyonun gerisinde.`; st4 = 'warning'; }
+      }
+    }
+    breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
 
   } else {
     // Sanayi / Reel Sektör:
@@ -603,7 +747,7 @@ export function optimizeFinalDecision({
       safetyFlags.push('Negatif Özkaynak');
     }
 
-    // 2. Kural: Makyajlı Bilanço Koruması (Net Kâr pozitif ama İşletme Nakit Akışı negatif)
+    // 2. Kural: Sanayi Sektörü Makyajlı Bilanço Koruması (Net Kâr pozitif ama İşletme Nakit Akışı negatif)
     const netIncome = parseFinancialNumber(effectiveLatestData?.net_income);
     const ocf = parseFinancialNumber(effectiveLatestData?.operating_cash_flow);
     if (!overrideApplied && effectiveSector === 'INDUSTRIAL' && netIncome !== null && netIncome > 0 && ocf !== null && ocf < 0) {
@@ -613,17 +757,85 @@ export function optimizeFinalDecision({
       safetyFlags.push('Bilanço Makyajı: OCF negatif, net kâr pozitif.');
     }
 
-    // 3. Kural: Kritik Borçluluk Filtresi (Net Borç / FAVÖK > 4.0x)
+    // 3. Kural: Sanayi Sektörü Borçluluk & Negatif FAVÖK Filtresi
     const netDebt = parseFinancialNumber(effectiveLatestData?.net_debt);
     const ebitda = parseFinancialNumber(effectiveLatestData?.ebitda);
-    if (!overrideApplied && effectiveSector === 'INDUSTRIAL' && netDebt !== null && ebitda !== null && ebitda > 0 && (netDebt / ebitda) > 4.0) {
-      finalDecision = 'ALMA';
-      overrideApplied = true;
-      overrideReason = `Kritik Borçluluk Filtresi: Net Borç / FAVÖK çarpanı (${(netDebt / ebitda).toFixed(1)}x) emniyet sınırını (4.0x) aştığı için AL kararı ALMA olarak revize edildi.`;
-      safetyFlags.push(`Kritik Net Borç/FAVÖK: ${(netDebt / ebitda).toFixed(1)}x`);
+    if (!overrideApplied && effectiveSector === 'INDUSTRIAL' && netDebt !== null && netDebt > 0) {
+      if (ebitda !== null && ebitda <= 0) {
+        finalDecision = 'ALMA';
+        overrideApplied = true;
+        overrideReason = 'Operasyonel Zarar ve Borçluluk Riski: FAVÖK negatif olmasına rağmen şirketin net finansal borcu bulunmaktadır. AL kararı engellendi.';
+        safetyFlags.push('Negatif FAVÖK ve Net Borç');
+      } else if (ebitda !== null && ebitda > 0 && (netDebt / ebitda) > 4.0) {
+        finalDecision = 'ALMA';
+        overrideApplied = true;
+        overrideReason = `Kritik Borçluluk Filtresi: Net Borç / FAVÖK çarpanı (${(netDebt / ebitda).toFixed(1)}x) emniyet sınırını (4.0x) aştığı için AL kararı ALMA olarak revize edildi.`;
+        safetyFlags.push(`Kritik Net Borç/FAVÖK: ${(netDebt / ebitda).toFixed(1)}x`);
+      }
     }
 
-    // 4. Kural: Ağır Sermaye Erozyonu (ROIC - WACC < -5.0%)
+    // 4. Kural: Bankacılık Sektörü BDDK Risk Koruması (NPL > %6.0 veya SYR < %12.0)
+    if (!overrideApplied && effectiveSector === 'BANKING') {
+      const car = parseFinancialNumber(effectiveLatestData?.car_ratio ?? effectiveLatestData?.syr);
+      const npl = parseFinancialNumber(effectiveLatestData?.npl_ratio ?? effectiveLatestData?.npl ?? effectiveLatestData?.tga_ratio);
+      const bankRoe = parseFinancialNumber(effectiveLatestData?.roe);
+
+      if (car !== null && car < 12.0) {
+        finalDecision = 'ALMA';
+        overrideApplied = true;
+        overrideReason = `BDDK Sermaye Yeterlilik İhlali: Sermaye Yeterlilik Rasyosu (SYR: %${car}) yasal tabanın (%12.0) altındadır! AL kararı engellendi.`;
+        safetyFlags.push(`BDDK SYR İhlali: %${car}`);
+      } else if (npl !== null && npl > 6.0) {
+        finalDecision = 'ALMA';
+        overrideApplied = true;
+        overrideReason = `Toksik Kredi Riski: Takipteki Alacaklar Rasyosu (NPL: %${npl}) %6.0 emniyet eşiğini aşmıştır. Kredi batıkları nedeniyle AL engellendi.`;
+        safetyFlags.push(`Kritik NPL: %${npl}`);
+      } else if (bankRoe !== null && bankRoe < 15.0) {
+        finalDecision = 'NÖTR';
+        overrideApplied = true;
+        overrideReason = `Yetersiz Bankacılık ROE: Özkaynak kârlılığı (%${bankRoe}) enflasyon ve sermaye maliyetinin belirgin altında kaldığı için karar NÖTR'e çekildi.`;
+        safetyFlags.push(`Düşük Bankacılık ROE: %${bankRoe}`);
+      }
+    }
+
+    // 5. Kural: Sigortacılık Sektörü Teknik Zarar Filtresi (Kombine Oran > %102)
+    if (!overrideApplied && effectiveSector === 'INSURANCE') {
+      const comb = parseFinancialNumber(effectiveLatestData?.combined_ratio);
+      const insRoe = parseFinancialNumber(effectiveLatestData?.roe);
+
+      if (comb !== null && comb > 102.0) {
+        finalDecision = 'ALMA';
+        overrideApplied = true;
+        overrideReason = `Sigortacılık Teknik Faaliyet Zararı: Kombine Oran (%${comb}) %100 başabaş eşiğini aşarak teknik zarar üretmektedir. AL kararı ALMA olarak revize edildi.`;
+        safetyFlags.push(`Kombine Oran Zararı: %${comb}`);
+      } else if (insRoe !== null && insRoe < 20.0) {
+        finalDecision = 'NÖTR';
+        overrideApplied = true;
+        overrideReason = `Düşük Sigortacılık ROE: Portföy yatırım getirisi ve ROE (%${insRoe}) sermaye maliyetinin gerisindedir. Karar NÖTR yapıldı.`;
+        safetyFlags.push(`Düşük Sigorta ROE: %${insRoe}`);
+      }
+    }
+
+    // 6. Kural: Holding Sektörü Solo Borç ve İskonto Filtresi
+    if (!overrideApplied && effectiveSector === 'HOLDING') {
+      const holdingDebt = parseFinancialNumber(effectiveLatestData?.net_debt) ?? 0;
+      const holdingEq = parseFinancialNumber(effectiveLatestData?.equity) ?? 1;
+      const disc = parseFinancialNumber(effectiveLatestData?.holding_discount ?? effectiveLatestData?.nav_discount);
+
+      if (holdingEq > 0 && holdingDebt > 0 && (holdingDebt / holdingEq) > 0.6) {
+        finalDecision = 'ALMA';
+        overrideApplied = true;
+        overrideReason = `Solo Holding Kaldıraç Riski: Solo bilançodaki net borç / özkaynak oranı (${(holdingDebt / holdingEq).toFixed(2)}x) güvenli sınırın üzerindedir. AL kararı engellendi.`;
+        safetyFlags.push(`Yüksek Solo Holding Borcu: ${(holdingDebt / holdingEq).toFixed(2)}x`);
+      } else if (disc !== null && disc < 15.0) {
+        finalDecision = 'NÖTR';
+        overrideApplied = true;
+        overrideReason = `Yetersiz NAD İskontosu: Holding NAD iskontosu (%${disc}) asgari %20 holding iskonto cazibesini sağlamamaktadır.`;
+        safetyFlags.push(`Dar NAD İskontosu: %${disc}`);
+      }
+    }
+
+    // 7. Kural: Ağır Sermaye Erozyonu (ROIC - WACC < -5.0%)
     const roic = parseFinancialNumber(effectiveLatestData?.roic);
     const wacc = parseFinancialNumber(effectiveLatestData?.wacc);
     if (!overrideApplied && roic !== null && wacc !== null && (roic - wacc) < -5.0) {
@@ -633,14 +845,14 @@ export function optimizeFinalDecision({
       safetyFlags.push(`Negatif EVA Spread: ${(roic - wacc).toFixed(1)} puan`);
     }
 
-    // 5. Kural: Emniyet Marjı Yetersizse Kesinlikle AL Verilemez (Max NÖTR)
+    // 8. Kural: Emniyet Marjı Yetersizse Kesinlikle AL Verilemez (Max NÖTR)
     if (!overrideApplied && marginOfSafetyStatus === 'UNSAFE') {
       finalDecision = 'NÖTR';
       overrideApplied = true;
       overrideReason = `Muhafazakar Emniyet Marjı Filtresi: İskonto potansiyeli (%${discount}), asgari %20 güvenlik marjının altında olduğu için 'AL' kararı 'NÖTR' olarak revize edildi.`;
     }
 
-    // 6. Kural: Skor Tabanı Filtresi (Skor < 65 ise AL verilemez)
+    // 9. Kural: Skor Tabanı Filtresi (Skor < 65 ise AL verilemez)
     if (!overrideApplied && effectiveScore < 65) {
       finalDecision = 'NÖTR';
       overrideApplied = true;
@@ -945,13 +1157,19 @@ export function computeSectorValuationAndDrivers(
     // Sıfıra bölünme ve negatif payda koruması: Math.max(3.0, ke - g)
     const safeKeMinusG = Math.max(3.0, ke - g);
     if (roe > 0) {
-      const calculatedPb = (roe - g) / safeKeMinusG;
-      targetMultipleNum = Number(Math.max(1.0, Math.min(6.0, calculatedPb)).toFixed(1));
-      targetMultipleExpl = `Gordon Büyüme Modeli: (ROE: %${roe.toFixed(1)} - g: %${g}) / (Ke: %${ke.toFixed(1)} - g: %${g}) = ${targetMultipleNum}x`;
+      if (roe > g) {
+        const calculatedPb = (roe - g) / safeKeMinusG;
+        targetMultipleNum = Number(Math.max(0.6, Math.min(6.0, calculatedPb)).toFixed(1));
+        targetMultipleExpl = `Gordon Büyüme Modeli: (ROE: %${roe.toFixed(1)} - g: %${g}) / (Ke: %${ke.toFixed(1)} - g: %${g}) = ${targetMultipleNum}x`;
+      } else {
+        const modestPb = roe / Math.max(10.0, ke);
+        targetMultipleNum = Number(Math.max(0.4, Math.min(2.5, modestPb)).toFixed(1));
+        targetMultipleExpl = `Ilımlı/Düşük ROE (%${roe.toFixed(1)} <= g: %${g}): Defter Değeri Kârlılık Çarpanı (ROE / Ke = ${targetMultipleNum}x) uygulandı.`;
+      }
     } else {
       // Negatif ROE koruması: Gordon uygulanamaz, muhafazakar taban
-      targetMultipleNum = 0.8;
-      targetMultipleExpl = `Negatif/Düşük ROE (%${roe.toFixed(1)}): Muhafazakar defter değeri iskonto çarpanı (0.8x) uygulandı.`;
+      targetMultipleNum = 0.5;
+      targetMultipleExpl = `Negatif/Zarar ROE (%${roe.toFixed(1)}): Muhafazakar defter değeri iskonto çarpanı (0.5x) uygulandı.`;
     }
     targetMultipleStr = `PD/DD ${targetMultipleNum.toString().replace('.', ',')}x`;
   } else if (sector === 'HOLDING') {
@@ -1027,6 +1245,23 @@ export function computeSectorValuationAndDrivers(
       const rawFair = bookValuePerShare * targetMultipleNum;
       fairValue = Number(Math.max(0.5, rawFair).toFixed(2));
       formulaStr = `\\text{Hisse Başı Defter Değeri} = \\frac{${totalEquityFull.toLocaleString('tr-TR')}\\text{ TL}}{${shareCount.toLocaleString('tr-TR')}\\text{ Adet}} = ${bookValuePerShare.toFixed(2).replace('.', ',')}\\text{ TL}`;
+    }
+  } else if (sector === 'HOLDING') {
+    modelName = 'Net Aktif Değeri (NAD / SOTP) İskonto Modeli';
+    const totalEquity = parseFinancialNumber(latest?.equity) ?? 25000000;
+    const isBinTry = String(extractedData?.currency || '').toLowerCase().includes('bin') || Math.abs(totalEquity) < 50000000;
+    const totalEquityFull = isBinTry ? totalEquity * 1000 : totalEquity;
+
+    if (totalEquityFull <= 0) {
+      isInsolvent = true;
+      boundaryWarning = 'Holding özkaynakları negatiftir (TTK 376 Borca Batıklık).';
+      fairValue = Number((currentPrice * 0.20).toFixed(2));
+      formulaStr = `\\text{Özkaynaklar Negatif (TTK 376)} = ${totalEquityFull.toLocaleString('tr-TR')}\\text{ TL}`;
+    } else {
+      const navPerShare = totalEquityFull / shareCount;
+      const rawFair = navPerShare * targetMultipleNum;
+      fairValue = Number(Math.max(currentPrice * 0.25, rawFair).toFixed(2));
+      formulaStr = `\\text{Hisse Başı NAD} = \\frac{${totalEquityFull.toLocaleString('tr-TR')}\\text{ TL}}{${shareCount.toLocaleString('tr-TR')}\\text{ Adet}} \\times ${targetMultipleNum} = ${fairValue.toFixed(2).replace('.', ',')}\\text{ TL}`;
     }
   } else {
     modelName = 'İleriye Dönük İskontolu FAVÖK & DCF Hibrit Modeli';

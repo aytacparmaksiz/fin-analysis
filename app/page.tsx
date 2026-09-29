@@ -514,7 +514,7 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
   });
 
   // 2. TMS 29 Homojenizasyonu ve enflasyon düzeltmeli dönem takibi
-  const { homogenizedHistory } = homogenizeTms29Series(cleanedHistory);
+  const { homogenizedHistory } = homogenizeTms29Series(cleanedHistory, sector);
 
   // 3. Kronolojik sıralama (Grafikler için eskiden yeniye)
   const sorted = [...homogenizedHistory].filter(Boolean).sort((a, b) => {
@@ -1208,14 +1208,17 @@ export default function ValuationTerminal() {
         data.report.match(/Toplam\s+Puan\s*[:=]\s*\*?\*?(\d{1,3})/i) ||
         data.report.match(/(\d{1,3})\s*\/\s*100/i);
       const score = scoreMatch ? scoreMatch[1] : (data.scoreResult?.totalScore != null ? String(data.scoreResult.totalScore) : undefined);
-
       const parsedPrice = parseFinancialNumber(price);
       const targetVal = parseFinancialNumber(data.valuation?.composite_fair_value || data.valuation?.fair_value || data.valuation?.dcf_fair_value);
+      const numericScore = score ? parseInt(score, 10) : data.scoreResult?.totalScore;
 
-      const opt = data.optimization || optimizeFinalDecision({
+      const opt = optimizeFinalDecision({
         rawDecision,
+        score: numericScore,
+        valuation: data.valuation,
         marketPrice: parsedPrice,
         fairValue: targetVal,
+        latestData: enrichedExtractedData?.financial_history?.[enrichedExtractedData?.financial_history?.length - 1],
         scoreResult: data.scoreResult,
         sector: activeSector
       });
