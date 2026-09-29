@@ -9,7 +9,15 @@ import rehypeKatex from 'rehype-katex';
 
 import { 
   extractValuationFromReportText, 
-  computeSectorValuationAndDrivers 
+  computeSectorValuationAndDrivers,
+  parseFinancialNumber,
+  safeDivide,
+  safeGrowthRate,
+  safeMargin,
+  safeRoe,
+  homogenizeTms29Series,
+  calculateSectorScore,
+  optimizeFinalDecision
 } from '../lib/valuation.ts';
 import { AGESA_SAMPLE_DATA } from '../lib/sample-data.ts';
 
@@ -250,4 +258,269 @@ describe('Item 9 & 10: Dynamic Ratios per Period (no hardcoded static duplicates
     assert.ok(result.drivers.net_income_growth.sourceExplanation.includes('2025') || result.drivers.net_income_growth.sourceExplanation.includes('Son Dönem'));
   });
 });
+
+describe('Dikey 1: Veri Okuma, Sayı Ayrıştırma & OCR Validasyonları', () => {
+  it('correctly parses negative balances in parentheses: (1.234) and ( 1.234,50 )', () => {
+    assert.equal(parseFinancialNumber('(1.234)'), -1234);
+    assert.equal(parseFinancialNumber('(1.234,50)'), -1234.5);
+    assert.equal(parseFinancialNumber('( 5.678,90 )'), -5678.9);
+    assert.equal(parseFinancialNumber('(15%)'), -15);
+  });
+
+  it('correctly parses trailing minus formats: 1.234- and 1.234,50-', () => {
+    assert.equal(parseFinancialNumber('1.234-'), -1234);
+    assert.equal(parseFinancialNumber('1.234,50-'), -1234.5);
+    assert.equal(parseFinancialNumber('45,2%-'), -45.2);
+  });
+
+  it('correctly handles Turkish (dot thousands, comma decimal) and International formats', () => {
+    assert.equal(parseFinancialNumber('1.234.567,89'), 1234567.89);
+    assert.equal(parseFinancialNumber('-1.234.567,89'), -1234567.89);
+    assert.equal(parseFinancialNumber('1,234,567.89'), 1234567.89);
+    assert.equal(parseFinancialNumber('1234,56 TL'), 1234.56);
+    assert.equal(parseFinancialNumber('₺ 9.876,54'), 9876.54);
+    assert.equal(parseFinancialNumber('$ 1,500.25'), 1500.25);
+  });
+
+  it('safely handles empty, dash, null, and non-numeric placeholders', () => {
+    assert.equal(parseFinancialNumber('-'), null);
+    assert.equal(parseFinancialNumber('—'), null);
+    assert.equal(parseFinancialNumber('–'), null);
+    assert.equal(parseFinancialNumber('N/A'), null);
+    assert.equal(parseFinancialNumber(''), null);
+    assert.equal(parseFinancialNumber(null), null);
+    assert.equal(parseFinancialNumber(undefined), null);
+  });
+
+  it('homogenizes TMS 29 inflation accounting across historical series', () => {
+    const rawHistory = [
+      { period: '2022/12', revenue: 1000 },
+      { period: '2023/12', revenue: 1500 },
+      { period: '2024/03', revenue: 2000 },
+      { period: '2024/06', revenue: 2500 }
+    ];
+    const { homogenizedHistory, hasTms29Adjustment, tms29TransitionPeriod, tms29Warnings } = homogenizeTms29Series(rawHistory);
+    assert.equal(hasTms29Adjustment, true);
+    assert.equal(tms29TransitionPeriod, '2023/12');
+    assert.equal(homogenizedHistory[0].is_tms29, false);
+    assert.equal(homogenizedHistory[1].is_tms29, true);
+    assert.equal(homogenizedHistory[2].is_tms29, true);
+    assert.ok(tms29Warnings.length > 0);
+  });
+});
+
+describe('Dikey 2: Matematiksel & Finansal Model Düzeltmeleri', () => {
+  it('safeGrowthRate handles negative previous base without sign inversion (turnarounds)', () => {
+    // Zarardan kâra geçiş: Önceki net kâr -100, güncel net kâr +150
+    // Klasik formül (150 - (-100)) / (-100) = -250% verir (YANLIŞ!)
+    // Standart kurumsal finans formülü: (curr - prev) / |prev| * 100 = +250% (DOĞRU!)
+    const growth = safeGrowthRate(150, -100);
+    assert.equal(growth, 250.0, 'Turnaround from loss to profit must be positive growth');
+
+    // Zarar artışı: Önceki -100, güncel -150 => ( -150 - (-100) ) / 100 * 100 = -50%
+    const worsening = safeGrowthRate(-150, -100);
+    assert.equal(worsening, -50.0, 'Deepening loss must be negative growth');
+
+    // Sıfır tabanı
+    assert.equal(safeGrowthRate(100, 0), 100.0);
+    assert.equal(safeGrowthRate(-100, 0), -100.0);
+    assert.equal(safeGrowthRate(null, 100), null);
+  });
+
+  it('safeRoe traps double-negative bug and triggers TTK 376 insolvency guard', () => {
+    // Çift negatif tuzak: Hem net kâr negatif (-500) hem özkaynak negatif (-1000)
+    // Standart bölme -500 / -1000 = +50% (SAHTE MÜKEMMEL ROE!)
+    const trapped = safeRoe(-500, -1000);
+    assert.equal(trapped.roe, null, 'Negative equity must never return a positive ROE');
+    assert.equal(trapped.isInsolvent, true, 'Negative equity must be flagged as insolvent under TTK 376');
+    assert.ok(trapped.warning?.includes('TTK 376'));
+
+    // Normal kârlılık: Net kâr 250, Özkaynak 1000 => ROE %25
+    const normal = safeRoe(250, 1000);
+    assert.equal(normal.roe, 25.0);
+    assert.equal(normal.isInsolvent, false);
+
+    // Normal zarar pozitif özkaynak: Net kâr -150, Özkaynak 1000 => ROE -%15
+    const loss = safeRoe(-150, 1000);
+    assert.equal(loss.roe, -15.0);
+    assert.equal(loss.isInsolvent, false);
+  });
+
+  it('safeMargin and safeDivide protect against divide-by-zero and invalid bounds', () => {
+    assert.equal(safeDivide(100, 0), null);
+    assert.equal(safeMargin(50, 0), null);
+    assert.equal(safeMargin(50, -100), null);
+    assert.equal(safeMargin(25, 100), 25.0);
+  });
+});
+
+describe('Dikey 3: Sektörel Puanlama & Anomali Tespiti', () => {
+  it('detects window-dressing (makyajlı bilanço) when Net Income > 0 but OCF < 0', () => {
+    const rawData = {
+      financial_history: [
+        {
+          period: '2025/12',
+          net_income: 500000,
+          operating_cash_flow: -200000,
+          roe: 18.0,
+          roic: 14.0,
+          wacc: 35.0,
+          net_debt: 2000000,
+          ebitda: 400000,
+          current_ratio: 1.2
+        }
+      ]
+    };
+    const scoreResult = calculateSectorScore(rawData, 'INDUSTRIAL');
+    assert.ok(scoreResult.anomalies.length > 0, 'Must detect cash flow divergence anomaly');
+    const cashAnomaly = scoreResult.anomalies.find(a => a.includes('Makyajlı Bilanço') || a.includes('İşletme Nakit Akışı'));
+    assert.ok(cashAnomaly, 'Anomaly for Makyajlı Bilanço / OCF must exist');
+  });
+
+  it('scores Insurance sector with combined ratio and ROE weights', () => {
+    const rawData = {
+      financial_history: [
+        {
+          period: '2025/12',
+          combined_ratio: 86.5,
+          roe: 48.0,
+          net_income: 1200000,
+          operating_cash_flow: 1500000
+        }
+      ]
+    };
+    const scoreResult = calculateSectorScore(rawData, 'INSURANCE');
+    assert.ok(scoreResult.totalScore >= 70, `Insurance company with 86.5% combined ratio and 48% ROE should score >= 70, got ${scoreResult.totalScore}`);
+    assert.equal(scoreResult.sector, 'INSURANCE');
+  });
+
+  it('scores Banking sector with CAR, NPL and ROE', () => {
+    const rawData = {
+      financial_history: [
+        {
+          period: '2025/12',
+          car_ratio: 18.5,
+          npl_ratio: 1.8,
+          roe: 38.0,
+          net_interest_income: 5000000
+        }
+      ]
+    };
+    const scoreResult = calculateSectorScore(rawData, 'BANKING');
+    assert.ok(scoreResult.totalScore >= 70, `Bank with strong CAR and low NPL should score high, got ${scoreResult.totalScore}`);
+    assert.equal(scoreResult.sector, 'BANKING');
+  });
+});
+
+describe('Dikey 4: Nihai Karar Optimizasyonu & Yanıltıcı AL Filtresi', () => {
+  it('overrides AL to ALMA when Net Debt / EBITDA exceeds safe leverage threshold (> 4.0x)', () => {
+    const rawData = {
+      financial_history: [
+        {
+          period: '2025/12',
+          net_income: 100000,
+          operating_cash_flow: 80000,
+          net_debt: 5000000,
+          ebitda: 1000000 // Net Debt / EBITDA = 5.0x (> 4.0x)
+        }
+      ]
+    };
+    const scoreResult = calculateSectorScore(rawData, 'INDUSTRIAL');
+    const opt = optimizeFinalDecision({
+      rawDecision: 'AL',
+      marketPrice: 100,
+      fairValue: 150, // 50% discount theoretically
+      scoreResult,
+      sector: 'INDUSTRIAL'
+    });
+
+    assert.notEqual(opt.finalDecision, 'AL', 'High leverage company must not receive AL');
+    assert.ok(opt.overrideReason?.includes('Borçluluk'), `Override reason must cite leverage: ${opt.overrideReason}`);
+  });
+
+  it('overrides AL to ALMA when cash flow is negative (makyajlı kâr)', () => {
+    const rawData = {
+      financial_history: [
+        {
+          period: '2025/12',
+          net_income: 1000000,
+          operating_cash_flow: -500000, // Makyajlı kâr!
+          net_debt: 1000000,
+          ebitda: 1200000
+        }
+      ]
+    };
+    const scoreResult = calculateSectorScore(rawData, 'INDUSTRIAL');
+    const opt = optimizeFinalDecision({
+      rawDecision: 'AL',
+      marketPrice: 80,
+      fairValue: 120,
+      scoreResult,
+      sector: 'INDUSTRIAL'
+    });
+
+    assert.notEqual(opt.finalDecision, 'AL', 'Fake profit with negative OCF must not receive AL');
+    assert.ok(
+      opt.overrideReason?.toLowerCase().includes('nakit akışı') ||
+      opt.overrideReason?.includes('Makyajlı Bilanço') ||
+      opt.overrideReason?.includes('OCF'),
+      `Override reason must cite cash flow or window dressing: ${opt.overrideReason}`
+    );
+  });
+
+  it('overrides AL to NÖTR when margin of safety is insufficient (< 25%)', () => {
+    const rawData = {
+      financial_history: [
+        {
+          period: '2025/12',
+          net_income: 1000000,
+          operating_cash_flow: 1200000,
+          net_debt: 500000,
+          ebitda: 1500000
+        }
+      ]
+    };
+    const scoreResult = calculateSectorScore(rawData, 'INDUSTRIAL');
+    const opt = optimizeFinalDecision({
+      rawDecision: 'AL',
+      marketPrice: 100,
+      fairValue: 110, // Sadece %10 iskonto!
+      scoreResult,
+      sector: 'INDUSTRIAL'
+    });
+
+    assert.equal(opt.finalDecision, 'NÖTR', 'Insufficient margin of safety must downgrade AL to NÖTR');
+    assert.equal(opt.marginOfSafetyStatus, 'UNSAFE');
+  });
+
+  it('approves AL when Margin of Safety >= 25%, OCF > 0, Net Debt/EBITDA <= 4.0, and ROIC > WACC', () => {
+    const rawData = {
+      financial_history: [
+        {
+          period: '2025/12',
+          net_income: 2000000,
+          operating_cash_flow: 2500000,
+          net_debt: 1000000,
+          ebitda: 3000000,
+          roic: 45.0,
+          wacc: 35.0,
+          current_ratio: 1.6
+        }
+      ]
+    };
+    const scoreResult = calculateSectorScore(rawData, 'INDUSTRIAL');
+    const opt = optimizeFinalDecision({
+      rawDecision: 'AL',
+      marketPrice: 100,
+      fairValue: 145, // %45 iskonto
+      scoreResult,
+      sector: 'INDUSTRIAL'
+    });
+
+    assert.equal(opt.finalDecision, 'AL', 'Strong fundamentals and ample margin of safety must remain AL');
+    assert.equal(opt.marginOfSafetyStatus, 'SAFE');
+    assert.equal(opt.overrideReason, undefined);
+  });
+});
+
 

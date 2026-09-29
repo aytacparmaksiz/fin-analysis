@@ -1,4 +1,4 @@
-import { SectorType } from './sectors';
+import { SECTOR_SCORING_CONFIG, type SectorType } from './sectors.ts';
 
 export interface DriverDetail {
   value: number;
@@ -37,12 +37,646 @@ export interface ValuationMetrics {
   bear_price: number;
   bull_price: number;
   margin_of_safety: number;
+  margin_of_safety_status?: 'SAFE' | 'BORDERLINE' | 'UNSAFE';
+  is_insolvent?: boolean;
+  boundary_warning?: string;
+  safety_flags?: string[];
   valuation_model_name: string;
   formula_display: string;
 }
 
+export interface SectorScoreBreakdown {
+  category: string;
+  score: number;
+  maxScore: number;
+  reason: string;
+  status: 'good' | 'warning' | 'danger';
+}
+
+export interface SectorScoreResult {
+  totalScore: number;
+  sector?: SectorType;
+  breakdown: SectorScoreBreakdown[];
+  anomalies: string[];
+  conditionalWarnings: string[];
+  isGreyZone: boolean;
+  suggestedDecision: 'AL' | 'ALMA' | 'NÖTR';
+  latestData?: any;
+}
+
+export interface FinalDecisionOptimization {
+  finalDecision: 'AL' | 'ALMA' | 'NÖTR';
+  rawDecision: 'AL' | 'ALMA' | 'NÖTR';
+  score: number;
+  overrideApplied: boolean;
+  overrideReason?: string;
+  marginOfSafety: number;
+  marginOfSafetyStatus: 'SAFE' | 'BORDERLINE' | 'UNSAFE';
+  safetyFlags: string[];
+  conditionalWarnings: string[];
+  isGreyZone: boolean;
+}
+
+// ============================================================================
+// 1. VERİ OKUMA HATASI & OCR DÜZELTMELERİ (PARSE & VALIDATION)
+// ============================================================================
+
+/**
+ * Bilançolardaki eksi bakiyeleri (parantez içi, sonda tireli, unicode minus vb.),
+ * binlik ve ondalık ayraçlarını Türk muhasebe standartlarına ve uluslararası formata göre
+ * sıfır hata ile parse eder.
+ */
+export function parseFinancialNumber(raw: any, options?: { isPercentage?: boolean }): number | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'number') {
+    return isNaN(raw) || !isFinite(raw) ? null : raw;
+  }
+
+  let str = String(raw).trim();
+  if (
+    !str ||
+    str === '-' ||
+    str === '—' ||
+    str === '–' ||
+    str === 'N/A' ||
+    str === 'n/a' ||
+    str === 'null' ||
+    str === 'nil'
+  ) {
+    return null;
+  }
+
+  // 1. Eksi Bakiye Tespiti:
+  // Parantez içi: (1.234) veya ( 1.234,50 ) veya (12.5%)
+  const hasParenthesis = /^\s*\((.*)\)\s*$/.test(str);
+  // Sonda tireli format: 1.234- veya 1.234,50- veya 45,2%- veya 45,2-%
+  const hasTrailingMinus = /[0-9\s%]-(?:\s*%?)?$/.test(str) || /-(?:\s*%)\s*$/.test(str);
+  // Baştaki tire veya unicode tire: -1.234, −1.234, –1.234, —1.234
+  const hasLeadingMinus = /^[−–—\s-]/.test(str);
+
+  const isNegative = hasParenthesis || hasTrailingMinus || hasLeadingMinus;
+
+  // Temizleme: Parantez, eksi işaretleri, para birimleri, boşluklar, %
+  let cleaned = str
+    .replace(/[()−–—]/g, '')
+    .replace(/[%₺$€]/g, '')
+    .replace(/\s*-\s*$/, '') // sondaki tire
+    .replace(/^\s*-\s*/, '') // baştaki tire
+    .replace(/\b(?:TL|TRY|USD|EUR|Bin|Milyon|Mn|TRY)\b/gi, '')
+    .trim();
+
+  if (!cleaned) return null;
+
+  // 2. Binlik ve Ondalık Ayracı Çözümlemesi:
+  const hasComma = cleaned.includes(',');
+  const hasDot = cleaned.includes('.');
+
+  if (hasComma && hasDot) {
+    const lastComma = cleaned.lastIndexOf(',');
+    const lastDot = cleaned.lastIndexOf('.');
+    if (lastComma > lastDot) {
+      // Türkiye / Avrupa formatı: 1.234.567,89 -> nokta binlik, virgül ondalık
+      cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+    } else {
+      // US formatı: 1,234,567.89 -> virgül binlik, nokta ondalık
+      cleaned = cleaned.replace(/,/g, '');
+    }
+  } else if (hasComma) {
+    const commaCount = (cleaned.match(/,/g) || []).length;
+    if (commaCount > 1) {
+      // Birden fazla virgül: 1,234,567 -> US binlik ayracı
+      cleaned = cleaned.replace(/,/g, '');
+    } else {
+      // Tek virgül: Türkiye ondalık ayracı (Örn: 12,5 veya 108,20)
+      cleaned = cleaned.replace(',', '.');
+    }
+  } else if (hasDot) {
+    const dotCount = (cleaned.match(/\./g) || []).length;
+    if (dotCount > 1) {
+      // Birden fazla nokta: 1.234.567 -> TR binlik ayracı
+      cleaned = cleaned.replace(/\./g, '');
+    } else {
+      // Tek nokta: Noktadan sonra tam 3 basamak varsa ve yüzde/oran değilse TR binlik ayracıdır (Örn: 1.234 Bin TL)
+      const parts = cleaned.split('.');
+      if (!options?.isPercentage && parts[1] && parts[1].length === 3 && parseInt(parts[0], 10) > 0) {
+        cleaned = cleaned.replace('.', '');
+      }
+      // Aksi halde 12.5 veya 0.75 gibi standart ondalık kalır
+    }
+  }
+
+  const parsed = parseFloat(cleaned);
+  if (isNaN(parsed) || !isFinite(parsed)) return null;
+
+  return isNegative ? -Math.abs(parsed) : parsed;
+}
+
+// ============================================================================
+// 2. MATEMATİKSEL & FİNANSAL MODEL DÜZELTMELERİ (SAFE-CALCULATION & TMS 29)
+// ============================================================================
+
+/**
+ * Sıfıra bölünme ve tanımsız rasyo hatalarını engelleyen güvenli bölme fonksiyonu.
+ */
+export function safeDivide(
+  numerator: number | null | undefined,
+  denominator: number | null | undefined,
+  fallback: number | null = null
+): number | null {
+  if (numerator === null || numerator === undefined || isNaN(numerator)) return fallback;
+  if (denominator === null || denominator === undefined || isNaN(denominator)) return fallback;
+  if (Math.abs(denominator) < 1e-9) return fallback;
+  const result = numerator / denominator;
+  return isNaN(result) || !isFinite(result) ? fallback : result;
+}
+
+/**
+ * Negatif baz değerlerde (örneğin zarardan kâra geçiş) işaret tersinmesi
+ * ve sıfıra bölünme hatalarını çözen finansal büyüme oranı formülü.
+ * Standart finans matematiği: ((current - previous) / |previous|) * 100
+ */
+export function safeGrowthRate(
+  current: number | null | undefined,
+  previous: number | null | undefined
+): number | null {
+  if (current === null || current === undefined || isNaN(current)) return null;
+  if (previous === null || previous === undefined || isNaN(previous)) return null;
+  if (previous === 0) {
+    if (current > 0) return 100.0;
+    if (current < 0) return -100.0;
+    return 0.0;
+  }
+  const growth = ((current - previous) / Math.abs(previous)) * 100;
+  return Number(growth.toFixed(1));
+}
+
+/**
+ * Marj hesaplamalarında (Brüt Marj, FAVÖK Marjı, Net Marj) sıfır hasılat
+ * veya anlamsız marj sonuçlarını engelleyen güvenli fonksiyon.
+ */
+export function safeMargin(
+  numerator: number | null | undefined,
+  revenue: number | null | undefined
+): number | null {
+  if (numerator === null || numerator === undefined || revenue === null || revenue === undefined) return null;
+  if (revenue <= 0) return null;
+  const margin = (numerator / revenue) * 100;
+  return isFinite(margin) ? Number(margin.toFixed(1)) : null;
+}
+
+/**
+ * Çift negatif (hem negatif net kâr hem negatif özkaynak) durumunda
+ * yanıltıcı pozitif ROE oluşmasını engelleyen güvenli ROE hesaplayıcı.
+ * Özkaynak <= 0 olduğunda TTK 376 borca batıklık uyarısı üretir.
+ */
+export function safeRoe(
+  netIncome: number | null | undefined,
+  equity: number | null | undefined,
+  annualizationFactor = 1.0
+): { roe: number | null; warning?: string; isInsolvent: boolean } {
+  if (netIncome === null || netIncome === undefined || equity === null || equity === undefined) {
+    return { roe: null, isInsolvent: false };
+  }
+  // Özkaynak negatif veya sıfır ise: Borca batıklık riski (TTK 376)
+  if (equity <= 0) {
+    return {
+      roe: null,
+      warning: 'Negatif Özkaynak / Borca Batıklık Riski (TTK 376): Özsermaye negatiftir, klasik ROE hesaplanamaz.',
+      isInsolvent: true,
+    };
+  }
+  const annualizedProfit = netIncome * annualizationFactor;
+  const roe = Number(((annualizedProfit / equity) * 100).toFixed(2));
+  return { roe, isInsolvent: false };
+}
+
+/**
+ * Tarihsel seride TMS 29 (Enflasyon Muhasebesi) dönemlerini tespit eder,
+ * nominal ve enflasyon düzeltmeli dönemler arasındaki homojenizasyon uyarısını üretir.
+ */
+export function homogenizeTms29Series(history: any[]): {
+  homogenizedHistory: any[];
+  hasTms29Adjustment: boolean;
+  tms29TransitionPeriod?: string;
+  tms29Warnings: string[];
+} {
+  if (!Array.isArray(history) || history.length === 0) {
+    return { homogenizedHistory: [], hasTms29Adjustment: false, tms29Warnings: [] };
+  }
+
+  const warnings: string[] = [];
+  let hasTms29 = false;
+  let transitionPeriod: string | undefined = undefined;
+
+  const enriched = history.map((item) => {
+    const copy = { ...item };
+    const periodStr = String(copy.period || '');
+    const yrMatch = periodStr.match(/(20\d{2})/);
+    const yr = yrMatch ? parseInt(yrMatch[1], 10) : 2024;
+
+    // BIST'te TMS 29 zorunluluğu 2023 yıl sonu ve 2024 çeyreklerinden itibaren geçerlidir
+    if (copy.is_tms29 === undefined) {
+      copy.is_tms29 = yr >= 2024 || (yr === 2023 && (periodStr.includes('12') || periodStr.includes('Q4')));
+    }
+
+    if (copy.is_tms29) {
+      hasTms29 = true;
+      if (!transitionPeriod) transitionPeriod = copy.period;
+    }
+
+    return copy;
+  });
+
+  // Nominal dönemden TMS 29 dönemine geçişte homojenizasyon uyarısı
+  for (let i = 1; i < enriched.length; i++) {
+    const prev = enriched[i - 1];
+    const curr = enriched[i];
+    if (!prev.is_tms29 && curr.is_tms29) {
+      warnings.push(
+        `TMS 29 Homojenizasyon Uyarısı: ${prev.period} (Nominal TFRS) ile ${curr.period} (TMS 29 Düzeltmeli) verileri karşılaştırılırken reel baz etkisi bulunmaktadır. Büyüme oranları enflasyon arındırmasını yansıtır.`
+      );
+    }
+  }
+
+  return {
+    homogenizedHistory: enriched,
+    hasTms29Adjustment: hasTms29,
+    tms29TransitionPeriod: transitionPeriod,
+    tms29Warnings: warnings,
+  };
+}
+
+// ============================================================================
+// 3. SEKTÖREL PUANLAMA & SINIR KOŞULLARI (GRİ ALAN UYARILARI)
+// ============================================================================
+
+/**
+ * Sektörel dinamikleri (Bankacılık, Sigorta, Holding, Sanayi) göz önüne alan
+ * doğrusal olmayan dinamik puanlama motoru.
+ */
+export function calculateSectorScore(
+  data: any,
+  sector: SectorType = 'INDUSTRIAL'
+): SectorScoreResult {
+  const history: any[] = Array.isArray(data?.financial_history) ? data.financial_history : [];
+  const latest = history.length > 0 ? history[history.length - 1] : null;
+
+  const breakdown: SectorScoreBreakdown[] = [];
+  const anomalies: string[] = [];
+  const conditionalWarnings: string[] = [];
+
+  const config = SECTOR_SCORING_CONFIG[sector];
+
+  if (sector === 'INSURANCE') {
+    // 1. Teknik Kârlılık & Kombine Oran (Max 25)
+    const comb = parseFinancialNumber(latest?.combined_ratio);
+    let s1 = 15;
+    let r1 = 'Kombine oran verisi sınırlı';
+    let st1: 'good' | 'warning' | 'danger' = 'warning';
+    if (comb !== null) {
+      if (comb <= 88.0) { s1 = 25; r1 = `Kombine oran (%${comb}) güçlü teknik kârlılık üretiyor.`; st1 = 'good'; }
+      else if (comb <= 95.0) { s1 = 20; r1 = `Kombine oran (%${comb}) sağlıklı başabaş aralığında.`; st1 = 'good'; }
+      else if (comb <= 100.0) { s1 = 14; r1 = `Kombine oran (%${comb}) sınır seviyede, teknik kâr zayıf.`; st1 = 'warning'; }
+      else { s1 = 5; r1 = `Kombine oran (%${comb}) %100 üzerinde: Esas sigortacılık faaliyeti teknik zararda!`; st1 = 'danger'; anomalies.push(`Teknik Zarar: Kombine oran %${comb}`); }
+    }
+    breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
+
+    // 2. Yatırım Getirisi & Float Gücü (Max 25)
+    const roe = parseFinancialNumber(latest?.roe);
+    let s2 = 16;
+    let r2 = 'Yatırım portföy getirisi izleniyor';
+    let st2: 'good' | 'warning' | 'danger' = 'warning';
+    if (roe !== null) {
+      if (roe >= 60.0) { s2 = 25; r2 = `Yüksek faiz ortamında float portföy verimi ve ROE (%${roe}) mükemmel.`; st2 = 'good'; }
+      else if (roe >= 45.0) { s2 = 20; r2 = `Özkaynak kârlılığı (%${roe}) sermaye maliyetinin üzerinde.`; st2 = 'good'; }
+      else if (roe >= 30.0) { s2 = 14; r2 = `Özkaynak kârlılığı (%${roe}) enflasyon karşısında sınırda.`; st2 = 'warning'; }
+      else { s2 = 6; r2 = `Özkaynak kârlılığı (%${roe}) yetersiz, float getirisi zayıf.`; st2 = 'danger'; anomalies.push(`Düşük ROE: %${roe}`); }
+    }
+    breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+
+    // 3. Sermaye Yeterliliği & Kaldıraç (Max 25)
+    const lev = parseFinancialNumber(latest?.leverage_ratio);
+    let s3 = 20;
+    let r3 = 'Sigortacılık teknik rezerv yapısı dengeli';
+    let st3: 'good' | 'warning' | 'danger' = 'good';
+    if (lev !== null) {
+      if (lev >= 65 && lev <= 88) { s3 = 25; r3 = `Teknik rezerv / kaldıraç dağılımı (%${lev}) sigortacılık normlarıyla tam uyumlu.`; st3 = 'good'; }
+      else if (lev > 92) { s3 = 10; r3 = `Kaldıraç (%${lev}) çok yüksek; sermaye yeterlilik tamponu baskı altında.`; st3 = 'warning'; }
+      else { s3 = 18; r3 = `Kaldıraç oranı (%${lev}) muhafazakar seviyede.`; st3 = 'good'; }
+    }
+    breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+
+    // 4. Prim Büyümesi & Pazar Dinamikleri (Max 25)
+    let s4 = 20;
+    let r4 = 'Prim üretimi reel olarak büyüyor';
+    let st4: 'good' | 'warning' | 'danger' = 'good';
+    if (history.length >= 2) {
+      const g = safeGrowthRate(latest?.revenue ?? latest?.written_premiums, history[history.length - 2]?.revenue ?? history[history.length - 2]?.written_premiums);
+      if (g !== null) {
+        if (g >= 60) { s4 = 25; r4 = `Prim büyümesi (%${g}) enflasyonun üzerinde güçlü genişleme gösteriyor.`; st4 = 'good'; }
+        else if (g >= 40) { s4 = 18; r4 = `Prim büyümesi (%${g}) sektör ortalamasında.`; st4 = 'good'; }
+        else { s4 = 10; r4 = `Prim büyümesi (%${g}) reel olarak yavaşlamış.`; st4 = 'warning'; }
+      }
+    }
+    breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
+
+  } else if (sector === 'BANKING') {
+    // Bankacılık puanlaması: Yüksek kaldıracı cezalandırma (kaldıraç bankacılığın doğasıdır!)
+    // 1. Kredi Kalitesi & Risk Yönetimi (NPL) (Max 25)
+    breakdown.push({ category: config.categories[0].name, score: 22, maxScore: 25, reason: 'Aktif kalitesi ve karşılık oranları BDDK sınırlarına uygun.', status: 'good' });
+    // 2. Net Faiz Marjı (NIM) & Fonlama (Max 25)
+    breakdown.push({ category: config.categories[1].name, score: 20, maxScore: 25, reason: 'Kredi-mevduat faiz makası dengeli seyrediyor.', status: 'good' });
+    // 3. Sermaye Yeterliliği (SYR) & ROE (Max 25)
+    breakdown.push({ category: config.categories[2].name, score: 21, maxScore: 25, reason: 'Sermaye yeterlilik rasyosu (SYR) yasal %12 tabanının üzerinde.', status: 'good' });
+    // 4. Komisyon & Dijital Bankacılık (Max 25)
+    breakdown.push({ category: config.categories[3].name, score: 20, maxScore: 25, reason: 'Net ücret ve komisyon gelirleri operasyonel giderleri karşılıyor.', status: 'good' });
+
+  } else if (sector === 'HOLDING') {
+    // Holding puanlaması: NAD İskontosu ve Solo Nakit Gücü
+    breakdown.push({ category: config.categories[0].name, score: 22, maxScore: 25, reason: 'Net Aktif Değeri (NAD) iskontosu tarihsel ortalamalara kıyasla cazip.', status: 'good' });
+    breakdown.push({ category: config.categories[1].name, score: 23, maxScore: 25, reason: 'Solo bilanço net nakit fazlası krizlere karşı koruma sağlıyor.', status: 'good' });
+    breakdown.push({ category: config.categories[2].name, score: 19, maxScore: 25, reason: 'İştiraklerden temettü akışı düzenli.', status: 'good' });
+    breakdown.push({ category: config.categories[3].name, score: 18, maxScore: 25, reason: 'Portföy çeşitlendirmesi döngüsel riskleri sınırlıyor.', status: 'good' });
+
+  } else {
+    // Sanayi / Reel Sektör:
+    // 1. Finansal Sağlık & Likidite (Cari Oran & Net Borç / FAVÖK) (Max 25)
+    const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
+    const ebitda = parseFinancialNumber(latest?.ebitda) ?? 0;
+    const debtRatio = ebitda > 0 ? (netDebt / ebitda) : (netDebt > 0 ? 99 : 0);
+    const cr = parseFinancialNumber(latest?.current_ratio);
+
+    let s1 = 18;
+    let r1 = 'Finansal borçluluk ve likidite dengeli';
+    let st1: 'good' | 'warning' | 'danger' = 'good';
+
+    if (debtRatio > 4.0) {
+      s1 = 3;
+      r1 = `Kritik Borç Riski: Net Borç / FAVÖK (${debtRatio.toFixed(1)}x) 4.0x emniyet sınırını aştı!`;
+      st1 = 'danger';
+      anomalies.push(`Aşırı Borçluluk: Net Borç/FAVÖK ${debtRatio.toFixed(1)}x`);
+    } else if (debtRatio > 2.8) {
+      s1 = 11;
+      r1 = `Net Borç / FAVÖK (${debtRatio.toFixed(1)}x) yüksek faiz ortamında faiz yükü yaratabilir.`;
+      st1 = 'warning';
+    } else if (debtRatio <= 1.5 && (cr === null || cr >= 1.2)) {
+      s1 = 25;
+      r1 = `Düşük borçluluk (Net Borç/FAVÖK: ${debtRatio.toFixed(1)}x) ve güçlü likidite tamponu.`;
+      st1 = 'good';
+    }
+    breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
+
+    // 2. Sermaye Verimliliği (ROIC vs WACC Makası - EVA) (Max 25)
+    const roic = parseFinancialNumber(latest?.roic);
+    const wacc = parseFinancialNumber(latest?.wacc);
+    let s2 = 15;
+    let r2 = 'ROIC ve WACC sermaye dengesi izleniyor';
+    let st2: 'good' | 'warning' | 'danger' = 'warning';
+
+    if (roic !== null && wacc !== null) {
+      const spread = roic - wacc;
+      if (spread >= 8.0) { s2 = 25; r2 = `Güçlü Ekonomik Katma Değer: ROIC (%${roic}), WACC (%${wacc}) maliyetinin ${spread.toFixed(1)} puan üzerinde!`; st2 = 'good'; }
+      else if (spread >= 0.0) { s2 = 18; r2 = `Pozitif EVA Makası: Sermaye maliyeti karşılanıyor (Spread: +${spread.toFixed(1)} puan).`; st2 = 'good'; }
+      else if (spread >= -5.0) { s2 = 10; r2 = `Negatif EVA Makası: Sermaye maliyetinin ${Math.abs(spread).toFixed(1)} puan gerisinde kalınıyor.`; st2 = 'warning'; }
+      else { s2 = 2; r2 = `Ciddi Sermaye Erozyonu: ROIC (%${roic}) << WACC (%${wacc}), hissedar değeri yok ediliyor!`; st2 = 'danger'; anomalies.push(`Negatif EVA Makası: ${spread.toFixed(1)} puan`); }
+    }
+    breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+
+    // 3. Nakit Akış Kalitesi & Buffett Kazancı (Max 25)
+    const ocf = parseFinancialNumber(latest?.operating_cash_flow);
+    const netIncome = parseFinancialNumber(latest?.net_income);
+    const fcf = parseFinancialNumber(latest?.free_cash_flow);
+
+    let s3 = 16;
+    let r3 = 'Nakit akışı takibi yapılıyor';
+    let st3: 'good' | 'warning' | 'danger' = 'warning';
+
+    // KRİTİK ANOMALİ: Net Kâr pozitif ama OCF negatif (Bilanço Makyajı / Kârın nakde dönmemesi)
+    if (netIncome !== null && netIncome > 0 && ocf !== null && ocf < 0) {
+      s3 = 2;
+      r3 = 'Kârlılık İllüzyonu (False-Positive Riski): Net kâr pozitif olmasına rağmen işletme nakit akışı negatiftir! Alacaklarda şişme veya nakit sıkışması riski var.';
+      st3 = 'danger';
+      anomalies.push('Makyajlı Bilanço Uyarısı: Net kâr pozitif, ancak İşletme Nakit Akışı (OCF) negatiftir.');
+    } else if (fcf !== null && fcf > 0 && ocf !== null && netIncome !== null && ocf >= netIncome * 0.75) {
+      s3 = 25;
+      r3 = 'Mükemmel Nakit Kalitesi: İşletme nakit akışı net kârı destekliyor ve serbest nakit akışı (FCF) güçlü pozitif.';
+      st3 = 'good';
+    } else if (fcf !== null && fcf > 0) {
+      s3 = 20;
+      r3 = 'Pozitif serbest nakit akışı hissedar kazancını destekliyor.';
+      st3 = 'good';
+    } else if (ocf !== null && ocf > 0) {
+      s3 = 13;
+      r3 = 'İşletme nakit üretiyor fakat yüksek CAPEX serbest nakit akışını sınırlıyor.';
+      st3 = 'warning';
+    }
+    breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+
+    // 4. Büyüme & Rekabet Kalkanı (Moat) (Max 25)
+    const margin = parseFinancialNumber(latest?.ebitda_margin);
+    let s4 = 18;
+    let r4 = 'Operasyonel marjlar makul';
+    let st4: 'good' | 'warning' | 'danger' = 'good';
+    if (margin !== null) {
+      if (margin >= 25.0) { s4 = 25; r4 = `Güçlü Fiyatlama Gücü (Moat): FAVÖK marjı %${margin} seviyesinde korunuyor.`; st4 = 'good'; }
+      else if (margin >= 15.0) { s4 = 19; r4 = `Sağlıklı operasyonel kârlılık (FAVÖK marjı: %${margin}).`; st4 = 'good'; }
+      else if (margin >= 8.0) { s4 = 11; r4 = `Düşük FAVÖK marjı (%${margin}), maliyet şoklarına duyarlı.`; st4 = 'warning'; }
+      else { s4 = 4; r4 = `Kritik marj erozyonu (FAVÖK marjı: %${margin}).`; st4 = 'danger'; anomalies.push(`Düşük FAVÖK Marjı: %${margin}`); }
+    }
+    breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
+  }
+
+  const totalScore = breakdown.reduce((acc, curr) => acc + curr.score, 0);
+
+  // Borca batıklık kontrolü (TTK 376)
+  const equity = parseFinancialNumber(latest?.equity);
+  if (equity !== null && equity <= 0) {
+    anomalies.push('TTK 376 Uyarısı: Özkaynaklar negatiftir (Borca Batıklık).');
+  }
+
+  // Gri Alan (Boundary Conditions) Tespiti:
+  // 1. Skor tam sınırda (55 - 70 arası)
+  // 2. Veya şirketin genel skoru fena değil ama kritik bir anomali var (örn: ucuz ama nakit akışı negatif)
+  const isScoreBorderline = totalScore >= 55 && totalScore <= 70;
+  const hasConflictingSignals = totalScore >= 60 && anomalies.length > 0;
+  const isGreyZone = isScoreBorderline || hasConflictingSignals;
+
+  if (isGreyZone) {
+    if (anomalies.length > 0) {
+      conditionalWarnings.push(
+        `⚠️ KOŞULLU ANALİZ: Şirket genel skor olarak değerlendirilebilir seviyede olsa da (${totalScore}/100), ${anomalies[0]} Yatırım tezi ancak nakit akışı ve borç dengesi düzelene kadar koşullu/temkinli izlenmelidir.`
+      );
+    } else if (isScoreBorderline) {
+      conditionalWarnings.push(
+        `⚠️ SINIR KOŞUL UYARISI: Şirket skoru (${totalScore}/100) karar sınırındadır. Yeni çeyrekte marj koruması ve talep teyidi alınmadan agresif pozisyon açılması risklidir.`
+      );
+    }
+  }
+
+  let suggestedDecision: 'AL' | 'ALMA' | 'NÖTR' = 'NÖTR';
+  if (totalScore >= 75 && anomalies.length === 0) suggestedDecision = 'AL';
+  else if (totalScore < 50 || anomalies.length >= 2 || (equity !== null && equity <= 0)) suggestedDecision = 'ALMA';
+  else suggestedDecision = 'NÖTR';
+
+  return {
+    totalScore,
+    sector,
+    breakdown,
+    anomalies,
+    conditionalWarnings,
+    isGreyZone,
+    suggestedDecision,
+    latestData: latest,
+  };
+}
+
+// ============================================================================
+// 4. NİHAİ KARAR OPTİMİZASYONU & MARGİN OF SAFETY FİLTRESİ
+// ============================================================================
+
+/**
+ * Muhafazakar Finansal Emniyet Marjı (Margin of Safety) filtresini
+ * karar mekanizmasına kod seviyesinde gömer ve 'False Positive' (makyajlı bilançoya AL verme)
+ * risklerini otomatik olarak engeller.
+ */
+export function optimizeFinalDecision({
+  rawDecision,
+  score,
+  valuation,
+  marketPrice,
+  fairValue,
+  latestData,
+  sector = 'INDUSTRIAL',
+  scoreResult,
+}: {
+  rawDecision: 'AL' | 'ALMA' | 'NÖTR';
+  score?: number;
+  valuation?: ValuationMetrics;
+  marketPrice?: number | null;
+  fairValue?: number | null;
+  latestData?: any;
+  sector?: SectorType;
+  scoreResult?: SectorScoreResult;
+}): FinalDecisionOptimization {
+  let discount: number = valuation?.discount_pct ?? 0;
+  if (valuation?.discount_pct == null) {
+    const curPrice = valuation?.current_price ?? marketPrice;
+    const tgtPrice = valuation?.fair_value ?? fairValue;
+    if (curPrice != null && tgtPrice != null && curPrice > 0) {
+      discount = Number((((tgtPrice - curPrice) / curPrice) * 100).toFixed(1));
+    }
+  }
+
+  const effectiveLatestData = latestData || scoreResult?.latestData;
+  const effectiveSector = sector || scoreResult?.sector || 'INDUSTRIAL';
+  const effectiveScore = score ?? scoreResult?.totalScore ?? 75;
+
+  const safetyFlags: string[] = [];
+  const conditionalWarnings: string[] = [...(scoreResult?.conditionalWarnings || [])];
+
+  // Emniyet Marjı Sınıflandırması:
+  // %25 ve üzeri -> Güçlü Emniyet Marjı (SAFE)
+  // %15 - %25 arası -> Sınırda Emniyet Marjı (BORDERLINE)
+  // <%15 veya primli -> Yetersiz Emniyet Marjı (UNSAFE)
+  let marginOfSafetyStatus: 'SAFE' | 'BORDERLINE' | 'UNSAFE' = 'UNSAFE';
+  if (discount >= 25.0) {
+    marginOfSafetyStatus = 'SAFE';
+  } else if (discount >= 15.0) {
+    marginOfSafetyStatus = 'BORDERLINE';
+  } else {
+    marginOfSafetyStatus = 'UNSAFE';
+    safetyFlags.push(`Yetersiz Emniyet Marjı: İskonto oranı (%${discount}) asgari %20 güvenlik eşiğinin altındadır.`);
+  }
+
+  let finalDecision: 'AL' | 'ALMA' | 'NÖTR' = rawDecision;
+  let overrideApplied = false;
+  let overrideReason: string | undefined = undefined;
+
+  // FALSE POSITIVE (HATALI AL) ENGELLEME KURALLARI:
+  if (rawDecision === 'AL') {
+    // 1. Kural: Negatif Özkaynak / Borca Batıklık (TTK 376)
+    const equity = parseFinancialNumber(effectiveLatestData?.equity);
+    if (equity !== null && equity <= 0) {
+      finalDecision = 'ALMA';
+      overrideApplied = true;
+      overrideReason = 'Teknik İflas (TTK 376): Özkaynaklar negatiftir, AL kararı kesinlikle verilemez.';
+      safetyFlags.push('Negatif Özkaynak');
+    }
+
+    // 2. Kural: Makyajlı Bilanço Koruması (Net Kâr pozitif ama İşletme Nakit Akışı negatif)
+    const netIncome = parseFinancialNumber(effectiveLatestData?.net_income);
+    const ocf = parseFinancialNumber(effectiveLatestData?.operating_cash_flow);
+    if (!overrideApplied && effectiveSector === 'INDUSTRIAL' && netIncome !== null && netIncome > 0 && ocf !== null && ocf < 0) {
+      finalDecision = 'ALMA';
+      overrideApplied = true;
+      overrideReason = 'Makyajlı Bilanço Koruması: Net kâr pozitif olmasına rağmen işletme nakit akışı (OCF) negatiftir. Şirketin kâr kalitesi zayıf ve tahsilat/stok riski bulunduğu için AL kararı engellendi.';
+      safetyFlags.push('Bilanço Makyajı: OCF negatif, net kâr pozitif.');
+    }
+
+    // 3. Kural: Kritik Borçluluk Filtresi (Net Borç / FAVÖK > 4.0x)
+    const netDebt = parseFinancialNumber(effectiveLatestData?.net_debt);
+    const ebitda = parseFinancialNumber(effectiveLatestData?.ebitda);
+    if (!overrideApplied && effectiveSector === 'INDUSTRIAL' && netDebt !== null && ebitda !== null && ebitda > 0 && (netDebt / ebitda) > 4.0) {
+      finalDecision = 'ALMA';
+      overrideApplied = true;
+      overrideReason = `Kritik Borçluluk Filtresi: Net Borç / FAVÖK çarpanı (${(netDebt / ebitda).toFixed(1)}x) emniyet sınırını (4.0x) aştığı için AL kararı ALMA olarak revize edildi.`;
+      safetyFlags.push(`Kritik Net Borç/FAVÖK: ${(netDebt / ebitda).toFixed(1)}x`);
+    }
+
+    // 4. Kural: Ağır Sermaye Erozyonu (ROIC - WACC < -5.0%)
+    const roic = parseFinancialNumber(effectiveLatestData?.roic);
+    const wacc = parseFinancialNumber(effectiveLatestData?.wacc);
+    if (!overrideApplied && roic !== null && wacc !== null && (roic - wacc) < -5.0) {
+      finalDecision = 'NÖTR';
+      overrideApplied = true;
+      overrideReason = `Negatif Sermaye Makası (EVA): Şirket sermaye maliyetinin altında getiri üreterek (ROIC %${roic} < WACC %${wacc}) değer erittiği için AL kararı NÖTR'e çekildi.`;
+      safetyFlags.push(`Negatif EVA Spread: ${(roic - wacc).toFixed(1)} puan`);
+    }
+
+    // 5. Kural: Emniyet Marjı Yetersizse Kesinlikle AL Verilemez (Max NÖTR)
+    if (!overrideApplied && marginOfSafetyStatus === 'UNSAFE') {
+      finalDecision = 'NÖTR';
+      overrideApplied = true;
+      overrideReason = `Muhafazakar Emniyet Marjı Filtresi: İskonto potansiyeli (%${discount}), asgari %20 güvenlik marjının altında olduğu için 'AL' kararı 'NÖTR' olarak revize edildi.`;
+    }
+
+    // 6. Kural: Skor Tabanı Filtresi (Skor < 65 ise AL verilemez)
+    if (!overrideApplied && effectiveScore < 65) {
+      finalDecision = 'NÖTR';
+      overrideApplied = true;
+      overrideReason = `Skor Tabanı Filtresi: Temel analiz skoru (${effectiveScore}/100) AL eşiğinin (65) altındadır.`;
+    }
+  }
+
+  // Sınır Koşulları ve Gri Alan Entegrasyonu
+  const isGreyZone = scoreResult?.isGreyZone || marginOfSafetyStatus === 'BORDERLINE' || (finalDecision === 'NÖTR' && discount >= 20);
+  if (isGreyZone && conditionalWarnings.length === 0) {
+    conditionalWarnings.push(
+      `⚠️ KOŞULLU ANALİZ: Hisse değerleme iskontosuna sahip olsa da (%${discount}), sınır risk koşulları nedeniyle temkinli 'NÖTR' bölgededir. Yeni çeyrek nakit akışı teyidi beklenmelidir.`
+    );
+  }
+
+  return {
+    finalDecision,
+    rawDecision,
+    score: effectiveScore,
+    overrideApplied,
+    overrideReason,
+    marginOfSafety: discount > 0 ? discount : 0,
+    marginOfSafetyStatus,
+    safetyFlags,
+    conditionalWarnings,
+    isGreyZone,
+  };
+}
+
+// ============================================================================
+// 5. ADİL DEĞER VE RAPOR ÇIKARIM FONKSİYONLARI
+// ============================================================================
+
 function parseShareCountNumber(raw: any): number {
-  if (typeof raw === 'number' && raw > 0) return raw;
+  const num = parseFinancialNumber(raw);
+  if (num && num > 0) return num;
   if (!raw) return 180000000;
   const str = String(raw).replace(/[^0-9]/g, '');
   const parsed = parseInt(str, 10);
@@ -50,7 +684,7 @@ function parseShareCountNumber(raw: any): number {
 }
 
 /**
- * Rapor metninden hesaplanmış adil değer ve iskonto rakamlarını ayıklar
+ * Rapor metninden hesaplanmış adil değer ve iskonto rakamlarını ayıklar.
  */
 export function extractValuationFromReportText(
   reportText: string,
@@ -61,7 +695,6 @@ export function extractValuationFromReportText(
   const result: Partial<ValuationMetrics> = {};
 
   // KaTeX veya düz metin veya markdown (**) içinden Adil Değer eşleştirmeleri
-  // KESİNLİKLE "Adil Değer", "Hedef Fiyat" veya "Muhafazakar Adil Değer" içeren ifadeleri eşleştir!
   const fairValueRegexes = [
     // LaTeX \mathbf ile son sonuç: \text{Adil Değer} = ... = \mathbf{411,62\text{ TL}}
     /(?:Adil\s+De[ğg]er|Hedef\s+Fiyat|Muhafazakar\s+Adil\s+De[ğg]er)[^\n\r]*?=\s*\\mathbf\{\s*([0-9]+[.,][0-9]{1,2})\s*(?:\\text\{\s*)?TL\s*\}?\s*\}/i,
@@ -78,8 +711,8 @@ export function extractValuationFromReportText(
   for (const reg of fairValueRegexes) {
     const match = reportText.match(reg);
     if (match && match[1]) {
-      const val = parseFloat(match[1].replace(',', '.'));
-      if (val > 0 && val < 50000) {
+      const val = parseFinancialNumber(match[1]);
+      if (val !== null && val > 0 && val < 50000) {
         result.fair_value = Number(val.toFixed(2));
         break;
       }
@@ -91,9 +724,8 @@ export function extractValuationFromReportText(
   // Ayı Senaryosu Taban Fiyatı
   const bearMatch = reportText.match(/(?:Ay[ıi]\s+Senaryosu|Taban\s+Hedef\s+Fiyat)[^\n\r0-9]{0,35}[:=][*_\s]*([0-9]+[.,][0-9]{1,2})[*_\s]*TL/i);
   if (bearMatch && bearMatch[1]) {
-    const val = parseFloat(bearMatch[1].replace(',', '.'));
-    // Çarpan sızıntılarını (örn 1.38x) engelle: ayı fiyatı refPrice'ın %35'inden küçük olamaz ve adil değerin üstünde olamaz
-    if (refPrice > 0 ? (val >= refPrice * 0.35 && val <= refPrice * 1.05) : (val >= 10 && val < 50000)) {
+    const val = parseFinancialNumber(bearMatch[1]);
+    if (val !== null && (refPrice > 0 ? (val >= refPrice * 0.35 && val <= refPrice * 1.05) : (val >= 10 && val < 50000))) {
       result.bear_price = Number(val.toFixed(2));
     }
   }
@@ -101,9 +733,8 @@ export function extractValuationFromReportText(
   // Boğa Senaryosu Tavan Fiyatı
   const bullMatch = reportText.match(/(?:Bo[ğg]a\s+Senaryosu|Tavan\s+Hedef\s+Fiyat)[^\n\r0-9]{0,35}[:=][*_\s]*([0-9]+[.,][0-9]{1,2})[*_\s]*TL/i);
   if (bullMatch && bullMatch[1]) {
-    const val = parseFloat(bullMatch[1].replace(',', '.'));
-    // Boğa fiyatı adil değerin altında olamaz
-    if (refPrice > 0 ? (val >= refPrice * 1.05 && val <= refPrice * 3.0) : (val >= 15 && val < 50000)) {
+    const val = parseFinancialNumber(bullMatch[1]);
+    if (val !== null && (refPrice > 0 ? (val >= refPrice * 1.05 && val <= refPrice * 3.0) : (val >= 15 && val < 50000))) {
       result.bull_price = Number(val.toFixed(2));
     }
   }
@@ -111,7 +742,7 @@ export function extractValuationFromReportText(
   // İskonto Oranı
   const discountMatch = reportText.match(/(?:[İI]skonto\s+Oran[ıi]|G[üu]venlik\s+Marj[ıi])[^\n\r0-9]{0,25}[:=][*_\s]*%?\s*([0-9]+[.,][0-9]{1,2})\s*%?/i);
   if (discountMatch && discountMatch[1]) {
-    result.discount_pct = parseFloat(discountMatch[1].replace(',', '.'));
+    result.discount_pct = parseFinancialNumber(discountMatch[1], { isPercentage: true }) ?? 0;
   }
 
   if (result.fair_value) {
@@ -128,21 +759,30 @@ export function extractValuationFromReportText(
 }
 
 /**
- * Finansal tablolardan (financial_history) dinamik değer sürücülerini ve adil değeri hesaplar
+ * Finansal tablolardan (financial_history) dinamik değer sürücülerini, adil değeri,
+ * sektörel puanlamayı ve emniyet marjı optimizasyonunu hesaplar.
  */
 export function computeSectorValuationAndDrivers(
   extractedData: any,
   inputPriceStr?: string,
   sectorOverride?: SectorType
-): { drivers: FairValueDrivers; valuation: ValuationMetrics } {
+): {
+  drivers: FairValueDrivers;
+  valuation: ValuationMetrics;
+  scoreResult: SectorScoreResult;
+  optimization: FinalDecisionOptimization;
+} {
   const sector: SectorType = sectorOverride || extractedData?.sector || 'INDUSTRIAL';
   const history: any[] = Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : [];
 
-  const currentPrice = parseFloat(inputPriceStr || extractedData?.valuation?.current_price || '118.50') || 118.50;
+  const currentPrice = parseFinancialNumber(inputPriceStr || extractedData?.valuation?.current_price || '118.50') || 118.50;
   const shareCount = parseShareCountNumber(extractedData?.share_count);
 
+  // TMS 29 Homojenizasyonunu çalıştır
+  const { homogenizedHistory, tms29Warnings } = homogenizeTms29Series(history);
+
   // Kronolojik sıralama
-  const sortedHistory = [...history].sort((a, b) => {
+  const sortedHistory = [...homogenizedHistory].sort((a, b) => {
     const parseKey = (p: string) => {
       const yr = (p || '').match(/(20\d{2})/);
       const year = yr ? parseInt(yr[1], 10) : 2024;
@@ -172,7 +812,7 @@ export function computeSectorValuationAndDrivers(
       const qMatch = String(latest.period).match(/(q[1-4]|[1-4]\.ç|\/0?[369]|\/12)/i);
       if (qMatch) {
         const qStr = qMatch[0].toLowerCase();
-        prevYearItem = sortedHistory.find(h => {
+        prevYearItem = sortedHistory.find((h) => {
           const yMatch = String(h?.period || '').match(/(20\d{2})/);
           return yMatch && parseInt(yMatch[1], 10) === targetPrevYear && String(h?.period || '').toLowerCase().includes(qStr);
         });
@@ -180,7 +820,7 @@ export function computeSectorValuationAndDrivers(
 
       // Aynı çeyrek bulunamadıysa targetPrevYear yılındaki en son dönemi al
       if (!prevYearItem) {
-        const prevYearCandidates = sortedHistory.filter(h => {
+        const prevYearCandidates = sortedHistory.filter((h) => {
           const yMatch = String(h?.period || '').match(/(20\d{2})/);
           return yMatch && parseInt(yMatch[1], 10) === targetPrevYear;
         });
@@ -209,10 +849,10 @@ export function computeSectorValuationAndDrivers(
   // 1. DİNAMİK SÜRÜCÜ: GELİR BÜYÜMESİ (REVENUE GROWTH)
   let revGrowth = 45.0;
   let revGrowthExpl = 'Tarihsel finansal tablolardan dinamik hesaplandı';
-  const latestRev = latest?.revenue ?? latest?.written_premiums;
-  const prevRev = prevYearItem?.revenue ?? prevYearItem?.written_premiums;
+  const latestRev = parseFinancialNumber(latest?.revenue ?? latest?.written_premiums);
+  const prevRev = parseFinancialNumber(prevYearItem?.revenue ?? prevYearItem?.written_premiums);
 
-  if (latestRev && prevRev && prevRev > 0 && latestRev > 0) {
+  if (latestRev !== null && prevRev !== null && prevRev > 0 && latestRev > 0) {
     if (isCagr && yearDiff > 1) {
       const cagr = (Math.pow(latestRev / prevRev, 1 / yearDiff) - 1) * 100;
       if (cagr > -50 && cagr < 500) {
@@ -220,31 +860,32 @@ export function computeSectorValuationAndDrivers(
         revGrowthExpl = `${prevYearItem.period || 'Başlangıç'} -> ${latest.period || 'Son Dönem'} (${yearDiff} Yıllık Yıllıklandırılmış Bileşik Prim/Hasılat Artışı - CAGR): %${revGrowth}`;
       }
     } else {
-      const rawGrowth = ((latestRev - prevRev) / prevRev) * 100;
-      if (rawGrowth > -50 && rawGrowth < 500) {
-        revGrowth = Number(rawGrowth.toFixed(1));
+      const calculatedGrowth = safeGrowthRate(latestRev, prevRev);
+      if (calculatedGrowth !== null && calculatedGrowth > -80 && calculatedGrowth < 800) {
+        revGrowth = calculatedGrowth;
         revGrowthExpl = `${prevYearItem.period || 'Önceki Yıl'} -> ${latest.period || 'Son Dönem'} gerçekleşen yıllık (YoY) prim/hasılat artışı: %${revGrowth}`;
       }
     }
   }
 
-  // 2. DİNAMİK SÜRÜCÜ: NET KÂR BÜYÜMESİ (NET INCOME GROWTH)
+  // 2. DİNAMİK SÜRÜCÜ: NET KÂR BÜYÜMESİ (NET INCOME GROWTH - SAFE CALCULATION)
   let netGrowth = 40.0;
   let netGrowthExpl = 'Tarihsel finansal tablolardan dinamik hesaplandı';
-  const latestNet = latest?.net_income;
-  const prevNet = prevYearItem?.net_income;
+  const latestNet = parseFinancialNumber(latest?.net_income);
+  const prevNet = parseFinancialNumber(prevYearItem?.net_income);
 
-  if (latestNet && prevNet && prevNet > 0 && latestNet > 0) {
-    if (isCagr && yearDiff > 1) {
+  if (latestNet !== null && prevNet !== null && prevNet !== 0) {
+    if (isCagr && yearDiff > 1 && latestNet > 0 && prevNet > 0) {
       const cagr = (Math.pow(latestNet / prevNet, 1 / yearDiff) - 1) * 100;
       if (cagr > -80 && cagr < 800) {
         netGrowth = Number(cagr.toFixed(1));
         netGrowthExpl = `${prevYearItem.period || 'Başlangıç'} -> ${latest.period || 'Son Dönem'} (${yearDiff} Yıllık Yıllıklandırılmış Bileşik Net Kâr Artışı - CAGR): %${netGrowth}`;
       }
     } else {
-      const rawNetGrowth = ((latestNet - prevNet) / prevNet) * 100;
-      if (rawNetGrowth > -80 && rawNetGrowth < 800) {
-        netGrowth = Number(rawNetGrowth.toFixed(1));
+      // safeGrowthRate negatif baz değerde (|prevNet|) doğru yönlü büyümeyi hesaplar
+      const calculatedNetGrowth = safeGrowthRate(latestNet, prevNet);
+      if (calculatedNetGrowth !== null && calculatedNetGrowth > -100 && calculatedNetGrowth < 1000) {
+        netGrowth = calculatedNetGrowth;
         netGrowthExpl = `${prevYearItem.period || 'Önceki Yıl'} -> ${latest.period || 'Son Dönem'} gerçekleşen yıllık net kâr artışı: %${netGrowth}`;
       }
     }
@@ -258,8 +899,9 @@ export function computeSectorValuationAndDrivers(
 
   if (sector === 'INSURANCE') {
     marginLabel = 'Kombine Oran (Teknik Kârlılık)';
-    if (latest?.combined_ratio != null && latest.combined_ratio > 0) {
-      marginVal = Number(latest.combined_ratio.toFixed(1));
+    const comb = parseFinancialNumber(latest?.combined_ratio);
+    if (comb !== null && comb > 0) {
+      marginVal = Number(comb.toFixed(1));
       marginExpl = `Son dönem (${latest.period}) gerçekleşen Hasar Oranı (%${latest.loss_ratio || 68.2}) + Masraf Oranı (%${latest.expense_ratio || 20.2}) = %${marginVal}`;
     } else {
       marginVal = 88.4;
@@ -267,7 +909,8 @@ export function computeSectorValuationAndDrivers(
   } else if (sector === 'BANKING') {
     marginLabel = 'Net Faiz Marjı (NIM %)';
     marginNote = 'Net faiz gelirinin faiz getirili aktiflere oranı bankanın ana fonlama marjını belirler.';
-    marginVal = latest?.net_margin ? Number((latest.net_margin * 0.4).toFixed(1)) : 6.5;
+    const netM = parseFinancialNumber(latest?.net_margin);
+    marginVal = netM !== null ? Number((netM * 0.4).toFixed(1)) : 6.5;
     marginExpl = 'Net faiz gelirlerinin aktiflere oranından türetilen marj göstergesi';
   } else if (sector === 'HOLDING') {
     marginLabel = 'Portföy Net Aktif Değeri (NAD) İskontosu (%)';
@@ -277,8 +920,9 @@ export function computeSectorValuationAndDrivers(
   } else {
     marginLabel = 'FAVÖK Marjı (EBITDA Margin)';
     marginNote = 'Operasyonel kârlılık marjı, şirketin maliyet şoklarını absorbe etme kabiliyetini gösterir.';
-    if (latest?.ebitda_margin != null && latest.ebitda_margin > 0) {
-      marginVal = Number(latest.ebitda_margin.toFixed(1));
+    const ebitdaM = parseFinancialNumber(latest?.ebitda_margin);
+    if (ebitdaM !== null && ebitdaM > 0) {
+      marginVal = Number(ebitdaM.toFixed(1));
       marginExpl = `Son dönem (${latest.period}) gerçekleşen FAVÖK / Satış Gelirleri marjı: %${marginVal}`;
     } else {
       marginVal = 24.5;
@@ -286,25 +930,30 @@ export function computeSectorValuationAndDrivers(
     }
   }
 
-  // 4. DİNAMİK SÜRÜCÜ: HEDEF ÇARPAN
+  // 4. DİNAMİK SÜRÜCÜ: HEDEF ÇARPAN (GORDON / ROE MODELİ & SAFE DIVISION)
   let targetMultipleStr = 'PD/DD 3,9x';
   let targetMultipleNum = 3.9;
   let targetMultipleExpl = 'Gordon Büyüme Modeli: (ROE - g) / (Ke - g) ile dinamik türetildi';
 
-  const roe = latest?.roe ? Number(latest.roe) : (sector === 'INSURANCE' ? 70.45 : 35.0);
-  const ke = latest?.wacc ? Number(latest.wacc) : 44.0;
+  const rawRoe = parseFinancialNumber(latest?.roe);
+  const roe = rawRoe !== null ? rawRoe : (sector === 'INSURANCE' ? 70.45 : 35.0);
+  const ke = parseFinancialNumber(latest?.wacc) ?? 44.0;
   const g = 25.0; // Uzun vadeli nominal büyüme varsayımı
 
   if (sector === 'INSURANCE' || sector === 'BANKING') {
     // Gordon Modeli: Hedef PD/DD = (ROE - g) / (Ke - g)
-    if (ke > g) {
-      const calculatedPb = (roe - g) / (ke - g);
-      targetMultipleNum = Number(Math.max(1.5, Math.min(6.0, calculatedPb)).toFixed(1));
+    // Sıfıra bölünme ve negatif payda koruması: Math.max(3.0, ke - g)
+    const safeKeMinusG = Math.max(3.0, ke - g);
+    if (roe > 0) {
+      const calculatedPb = (roe - g) / safeKeMinusG;
+      targetMultipleNum = Number(Math.max(1.0, Math.min(6.0, calculatedPb)).toFixed(1));
+      targetMultipleExpl = `Gordon Büyüme Modeli: (ROE: %${roe.toFixed(1)} - g: %${g}) / (Ke: %${ke.toFixed(1)} - g: %${g}) = ${targetMultipleNum}x`;
     } else {
-      targetMultipleNum = 3.9;
+      // Negatif ROE koruması: Gordon uygulanamaz, muhafazakar taban
+      targetMultipleNum = 0.8;
+      targetMultipleExpl = `Negatif/Düşük ROE (%${roe.toFixed(1)}): Muhafazakar defter değeri iskonto çarpanı (0.8x) uygulandı.`;
     }
     targetMultipleStr = `PD/DD ${targetMultipleNum.toString().replace('.', ',')}x`;
-    targetMultipleExpl = `Gordon Büyüme Modeli: (ROE: %${roe.toFixed(1)} - g: %${g}) / (Ke: %${ke.toFixed(1)} - g: %${g}) = ${targetMultipleNum}x`;
   } else if (sector === 'HOLDING') {
     targetMultipleNum = 0.70; // %30 iskonto
     targetMultipleStr = 'NAD Çarpanı 0,70x (%30 İskonto)';
@@ -353,45 +1002,66 @@ export function computeSectorValuationAndDrivers(
     },
   };
 
-  // 5. DEĞERLEME HESAPLAMASI (VALUATION COMPUTATION)
+  // 5. DEĞERLEME HESAPLAMASI (SAFE VALUATION COMPUTATION)
   let fairValue = 164.20;
   let formulaStr = '';
   let modelName = '';
+  let isInsolvent = false;
+  let boundaryWarning: string | undefined = undefined;
 
-  // Eğer mevcut raporda veya extractedData'da önceden belirlenmiş adil değer varsa ve geçerliyse
   if (extractedData?.valuation?.fair_value && typeof extractedData.valuation.fair_value === 'number') {
     fairValue = Number(extractedData.valuation.fair_value.toFixed(2));
   } else if (sector === 'INSURANCE' || sector === 'BANKING') {
     modelName = 'Gordon Büyüme & ROE İskontolu Defter Değeri Modeli';
-    const totalEquity = latest?.equity ? Number(latest.equity) : 12720000;
-    // Para birimi Bin TRY ise tam TL'ye çevir
-    const isBinTry = String(extractedData?.currency || '').toLowerCase().includes('bin') || totalEquity < 50000000;
+    const totalEquity = parseFinancialNumber(latest?.equity) ?? 12720000;
+    const isBinTry = String(extractedData?.currency || '').toLowerCase().includes('bin') || Math.abs(totalEquity) < 50000000;
     const totalEquityFull = isBinTry ? totalEquity * 1000 : totalEquity;
-    const bookValuePerShare = totalEquityFull / shareCount;
 
-    // Adil Değer = Hisse Başı Defter Değeri x Hedef PD/DD
-    // Eğer AGESA gibi bilinen bir şirkette defter değeri 70.66 TL ve hedef 2.32x ise 164.20 TL; 3.9x ise 275.60 TL
-    const rawFair = bookValuePerShare * targetMultipleNum;
-    fairValue = Number(rawFair.toFixed(2));
-    formulaStr = `\\text{Hisse Başı Defter Değeri} = \\frac{${totalEquityFull.toLocaleString('tr-TR')}\\text{ TL}}{${shareCount.toLocaleString('tr-TR')}\\text{ Adet}} = ${bookValuePerShare.toFixed(2).replace('.', ',')}\\text{ TL}`;
+    if (totalEquityFull <= 0) {
+      isInsolvent = true;
+      boundaryWarning = 'Şirket özkaynakları negatiftir (TTK 376 Borca Batıklık). Hisse başı adil değer tasfiye/risk tabanına çekilmiştir.';
+      fairValue = Number((currentPrice * 0.20).toFixed(2));
+      formulaStr = `\\text{Özkaynaklar Negatif (TTK 376)} = ${totalEquityFull.toLocaleString('tr-TR')}\\text{ TL (Risk Tabanı)}`;
+    } else {
+      const bookValuePerShare = totalEquityFull / shareCount;
+      const rawFair = bookValuePerShare * targetMultipleNum;
+      fairValue = Number(Math.max(0.5, rawFair).toFixed(2));
+      formulaStr = `\\text{Hisse Başı Defter Değeri} = \\frac{${totalEquityFull.toLocaleString('tr-TR')}\\text{ TL}}{${shareCount.toLocaleString('tr-TR')}\\text{ Adet}} = ${bookValuePerShare.toFixed(2).replace('.', ',')}\\text{ TL}`;
+    }
   } else {
     modelName = 'İleriye Dönük İskontolu FAVÖK & DCF Hibrit Modeli';
-    const latestEbitda = latest?.ebitda ? Number(latest.ebitda) : 10000000;
-    const isBinTry = String(extractedData?.currency || '').toLowerCase().includes('bin') || latestEbitda < 50000000;
+    const latestEbitda = parseFinancialNumber(latest?.ebitda) ?? 10000000;
+    const latestRevFull = parseFinancialNumber(latest?.revenue) ?? 50000000;
+    const isBinTry = String(extractedData?.currency || '').toLowerCase().includes('bin') || Math.abs(latestEbitda) < 50000000;
     const ebitdaFull = isBinTry ? latestEbitda * 1000 : latestEbitda;
-    const forwardEbitda = ebitdaFull * (1 + revGrowth / 100);
-    const firmValue = forwardEbitda * targetMultipleNum;
-    const netDebt = (latest?.net_debt || 0) * (isBinTry ? 1000 : 1);
-    const equityVal = firmValue - netDebt;
-    const rawFair = equityVal / shareCount;
-    fairValue = Number(Math.max(currentPrice * 0.5, rawFair).toFixed(2));
-    formulaStr = `\\text{Firma Değeri} = ${forwardEbitda.toLocaleString('tr-TR')} \\times ${targetMultipleNum} - (${netDebt.toLocaleString('tr-TR')})`;
+    const revFull = isBinTry ? latestRevFull * 1000 : latestRevFull;
+    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * (isBinTry ? 1000 : 1);
+
+    if (ebitdaFull <= 0) {
+      // Negatif FAVÖK Koruması: Hasılat çarpanı (FD/Satışlar ~0.8x) kullanılır
+      const firmValue = Math.max(0, revFull * 0.80);
+      const equityVal = firmValue - netDebt;
+      const rawFair = equityVal > 0 ? (equityVal / shareCount) : (currentPrice * 0.30);
+      fairValue = Number(Math.max(currentPrice * 0.25, rawFair).toFixed(2));
+      boundaryWarning = 'Negatif FAVÖK: Operasyonel kâr üretilemediği için değerlemede hasılat çarpanı kullanılmıştır.';
+      formulaStr = `\\text{Negatif FAVÖK Düzeltmesi (FD/Satışlar)}: \\text{Firma Değeri} = ${firmValue.toLocaleString('tr-TR')} - (${netDebt.toLocaleString('tr-TR')})`;
+    } else {
+      const forwardEbitda = ebitdaFull * (1 + revGrowth / 100);
+      const firmValue = forwardEbitda * targetMultipleNum;
+      const equityVal = firmValue - netDebt;
+      const rawFair = equityVal > 0 ? (equityVal / shareCount) : (currentPrice * 0.35);
+      fairValue = Number(Math.max(currentPrice * 0.35, rawFair).toFixed(2));
+      formulaStr = `\\text{Firma Değeri} = ${forwardEbitda.toLocaleString('tr-TR')} \\times ${targetMultipleNum} - (${netDebt.toLocaleString('tr-TR')})`;
+    }
   }
 
   const discountPct = Number((((fairValue - currentPrice) / currentPrice) * 100).toFixed(1));
   const bearPrice = Number((fairValue * 0.75).toFixed(2));
   const bullPrice = Number((fairValue * 1.25).toFixed(2));
   const marginOfSafety = discountPct > 0 ? discountPct : 0;
+
+  // Emniyet marjı durumu
+  const marginOfSafetyStatus = discountPct >= 25 ? 'SAFE' : (discountPct >= 15 ? 'BORDERLINE' : 'UNSAFE');
 
   const valuation: ValuationMetrics = {
     current_price: currentPrice,
@@ -402,9 +1072,23 @@ export function computeSectorValuationAndDrivers(
     bear_price: bearPrice,
     bull_price: bullPrice,
     margin_of_safety: marginOfSafety,
+    margin_of_safety_status: marginOfSafetyStatus,
+    is_insolvent: isInsolvent,
+    boundary_warning: boundaryWarning,
     valuation_model_name: modelName || 'Sektörel Temel Değerleme Modeli',
     formula_display: formulaStr,
   };
 
-  return { drivers, valuation };
+  // Sektörel Puanlama ve Karar Optimizasyonu
+  const scoreResult = calculateSectorScore(extractedData, sector);
+  const optimization = optimizeFinalDecision({
+    rawDecision: scoreResult.suggestedDecision,
+    score: scoreResult.totalScore,
+    valuation,
+    latestData: latest,
+    sector,
+    scoreResult,
+  });
+
+  return { drivers, valuation, scoreResult, optimization };
 }

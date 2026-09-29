@@ -34,13 +34,27 @@ export async function POST(req: Request) {
     const sector: SectorType = sectorOverride || extractedData.sector || detectSector(ticker);
     const sectorDef = SECTOR_DEFINITIONS[sector];
 
-    // Tek ve tutarlı kaynak: Dinamik değer sürücülerini ve adil değeri hesapla
-    const { drivers, valuation } = computeSectorValuationAndDrivers(extractedData, String(price), sector);
+    // Tek ve tutarlı kaynak: Dinamik değer sürücülerini, adil değeri ve emniyet marjı optimizasyonunu hesapla
+    const { drivers, valuation, scoreResult, optimization } = computeSectorValuationAndDrivers(extractedData, String(price), sector);
 
     let systemInstruction = '';
 
+    const universalSafetyRules = `
+MUHAFAZAKAR EMNİYET MARJI (MARGIN OF SAFETY) VE FALSE-POSITIVE KORUMASI:
+1. 'AL' Kararı Vermek İçin ŞU 4 KRİTERİN TAMAMI SAĞLANMALIDIR:
+   - Asgari Güvenlik Marjı: Güncel fiyata göre Adil Değer İskontosu EN AZ %25 - %30 olmalıdır. İskonto %20'nin altındaysa KESİNLİKLE 'AL' verilemez (Maksimum 'NÖTR').
+   - Gerçek Katma Değer: ROIC > WACC (veya Bankacılık/Sigortada ROE > Ke) olmalıdır. Negatif EVA makasıyla sermaye eriten şirkete 'AL' verilemez.
+   - Nakit Akış Kalitesi: Sanayi şirketlerinde İşletme Nakit Akışı (OCF) ve Serbest Nakit Akışı (FCF) kesinlikle pozitif olmalıdır.
+   - Bilanço Makyajı Filtresi: Net Kâr pozitif olmasına rağmen OCF negatifse, veya Net Borç / FAVÖK > 4.0x ise AL kararı KESİNLİKLE YASAKTIR ('ALMA' veya 'NÖTR' verilmelidir).
+2. KOŞULLU ANALİZ / GRİ ALAN:
+   - Şirket puanı 55-70 arasındaysa veya değerleme ucuz olmasına rağmen nakit/borç profili sınır seviyedeyse, raporda '⚠️ KOŞULLU ANALİZ / GRİ ALAN UYARISI' başlığı aç ve yatırımcının hangi teyitleri beklemesi gerektiğini listele.
+3. TMS 29 ENFLASYON HOMOJENİZASYONU:
+   - Şirket verilerinde TMS 29 enflasyon muhasebesi düzeltmesi yapılmışsa, büyüme oranlarının reel büyüme mi yoksa muhasebesel enflasyon arındırması mı olduğunu açıkça belirt.
+`;
+
     if (sector === 'INSURANCE') {
       systemInstruction = `Sen acımasız, aşırı objektif ve Türkiye sigorta ve emeklilik sektörüne (BES) uzmanlaşmış kurumsal bir fon yöneticisisin.
+${universalSafetyRules}
 DİKKAT VE SEKTÖREL KURALLAR (SİGORTACILIK & BİREYSEL EMEKLİLİK - Örn: AGESA, ANHYT, TURSG):
 1. KAVRAMSAL YASAKLAR: Sigorta şirketlerinde 'FAVÖK', 'FAVÖK Marjı', 'Brüt Kâr Marjı', 'Net Borç/FAVÖK' veya 'EV/EBITDA' KESİNLİKLE KULLANILAMAZ! Bu kavramlardan bahsedersen analiz çöker.
 2. ODAKLANILACAK DEĞER MOTORLARI:
@@ -70,6 +84,7 @@ DİKKAT VE SEKTÖREL KURALLAR (SİGORTACILIK & BİREYSEL EMEKLİLİK - Örn: AGE
 Analist Kararı: [AL / ALMA / NÖTR] (Net ve gerekçeli tek karar)`;
     } else if (sector === 'BANKING') {
       systemInstruction = `Sen acımasız, aşırı objektif ve Türkiye bankacılık ve finans sektörüne uzmanlaşmış kurumsal bir fon yöneticisisin.
+${universalSafetyRules}
 DİKKAT VE SEKTÖREL KURALLAR (BANKACILIK SEKTÖRÜ - Örn: GARAN, AKBNK, ISCTR, YKBNK):
 1. KAVRAMSAL YASAKLAR: Bankalarda 'FAVÖK', 'Brüt Kâr Marjı', 'Net Borç' veya 'EV/EBITDA' KESİNLİKLE KULLANILAMAZ!
 2. ODAKLANILACAK DEĞER MOTORLARI:
@@ -94,6 +109,7 @@ DİKKAT VE SEKTÖREL KURALLAR (BANKACILIK SEKTÖRÜ - Örn: GARAN, AKBNK, ISCTR,
 Analist Kararı: [AL / ALMA / NÖTR] (Net ve gerekçeli tek karar)`;
     } else if (sector === 'HOLDING') {
       systemInstruction = `Sen acımasız, aşırı objektif ve Holding / Yatırım Şirketleri alanında uzmanlaşmış kurumsal bir fon yöneticisisin.
+${universalSafetyRules}
 DİKKAT VE SEKTÖREL KURALLAR (HOLDİNG SEKTÖRÜ - Örn: KCHOL, SAHOL, AGHOL):
 1. KAVRAMSAL YASAKLAR: Holding konsolide rakamlarında basit tekil FAVÖK çarpanı kullanılamaz. Parçaların Toplamı (SOTP) ve Net Aktif Değeri (NAD / NAV) esastır.
 2. ODAKLANILACAK DEĞER MOTORLARI:
@@ -118,6 +134,7 @@ Analist Kararı: [AL / ALMA / NÖTR] (Net ve gerekçeli tek karar)`;
       systemInstruction = `Sen acımasız, aşırı objektif ve kurumsal bir fon yöneticisisin. 
 Hiçbir veriyi güzelleştirme (sugarcoating yapma). 
 Şirket ekonomik değer yaratmıyorsa (ROIC < WACC) veya nakit akışı borçlanmayla finanse ediliyorsa bunu tavizsiz yüzeye çıkar.
+${universalSafetyRules}
 
 GÖREVİN VE ÇOK YILLI ANALİZ DİREKTİFLERİ:
 1. 5 Yıllık Trend ve Kırılma Noktaları (2022-2026):
@@ -199,12 +216,19 @@ HESAPLANAN DİNAMİK DEĞERLEME VE ADİL DEĞER ÇERÇEVESİ (RAPORUNDA BU DEĞE
 - Hisse Başı Adil Değer: ${valuation.fair_value} TL
 - Güncel Piyasa Fiyatı: ${price} TL
 - İskonto Potansiyeli: %${valuation.discount_pct}
+- Muhafazakar Emniyet Marjı Durumu: ${valuation.margin_of_safety_status || 'HESAPLANDI'}
 - Ayı Senaryosu Taban Fiyatı (Bear Case Target): ${valuation.bear_price} TL
 - Boğa Senaryosu Tavan Fiyatı (Bull Case Target): ${valuation.bull_price} TL
 - 1. Değer Sürücüsü (${drivers.revenue_growth.label}): %${drivers.revenue_growth.value}
 - 2. Değer Sürücüsü (${drivers.net_income_growth.label}): %${drivers.net_income_growth.value}
 - 3. Değer Sürücüsü (${drivers.margin.label}): %${drivers.margin.value}
 - 4. Değer Sürücüsü (${drivers.target_multiple.label}): ${drivers.target_multiple.value}
+
+ALGORİTMİK FİNANSAL SAĞLIK VE KARAR OPTİMİZASYONU:
+- Sektörel Analiz Skoru: ${scoreResult.totalScore}/100
+- Önerilen Karar: ${optimization.finalDecision}
+${optimization.overrideApplied ? `- 🛡️ Emniyet Marjı Müdahalesi: ${optimization.overrideReason}\n` : ''}
+${optimization.conditionalWarnings.length > 0 ? `- ⚠️ Sınır Koşulları ve Gri Alan: ${optimization.conditionalWarnings.join('; ')}\n` : ''}
 
 DİKKAT VE TUTARLILIK KURALI:
 1. Raporunun Değerleme bölümünde hesaplayacağın Hisse Başı Adil Değer KESİNLİKLE yukarıda verilen ${valuation.fair_value} TL olmalıdır! Kendi başına farklı bir adil değer hesaplama veya uydurma.
@@ -256,7 +280,9 @@ Lütfen bu çeyrekteki yeni veriler ışığında önceki tezin nasıl evrildiğ
       report: response.text, 
       sector, 
       valuation, 
-      drivers 
+      drivers,
+      scoreResult,
+      optimization
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Değerleme üretilirken hata oluştu.' }, { status: 500 });

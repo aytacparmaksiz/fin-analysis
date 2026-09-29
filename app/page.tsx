@@ -43,8 +43,17 @@ import {
 import {
   computeSectorValuationAndDrivers,
   extractValuationFromReportText,
+  parseFinancialNumber,
+  safeDivide,
+  safeRoe,
+  safeMargin,
+  homogenizeTms29Series,
+  optimizeFinalDecision,
+  calculateSectorScore,
   ValuationMetrics,
-  FairValueDrivers
+  FairValueDrivers,
+  FinalDecisionOptimization,
+  SectorScoreResult
 } from '@/lib/valuation';
 
 // Fair Value Kurumsal Vektör Logosu
@@ -68,9 +77,14 @@ interface SavedReport {
   period?: string;
   report: string;
   decision: 'AL' | 'ALMA' | 'NÖTR';
+  rawDecision?: 'AL' | 'ALMA' | 'NÖTR';
+  overrideReason?: string;
   score?: string;
   sector?: SectorType;
   extractedData?: any;
+  marginOfSafetyStatus?: 'SAFE' | 'BORDERLINE' | 'UNSAFE';
+  conditionalWarnings?: string[];
+  isGreyZone?: boolean;
 }
 
 // Büyüme / Azalış Değişim Tipi
@@ -463,15 +477,47 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
 
   let parsedTlRate: number | null = null;
   if (debtInfo?.tl_interest_rate) {
-    const m = String(debtInfo.tl_interest_rate).match(/(\d+([.,]\d+)?)/);
-    if (m) {
-      const val = parseFloat(m[1].replace(',', '.'));
-      if (val > 5 && val < 90) parsedTlRate = val;
+    const parsed = parseFinancialNumber(debtInfo.tl_interest_rate);
+    if (parsed !== null && parsed > 5 && parsed < 90) {
+      parsedTlRate = parsed;
+    } else {
+      const m = String(debtInfo.tl_interest_rate).match(/(\d+([.,]\d+)?)/);
+      if (m) {
+        const val = parseFloat(m[1].replace(',', '.'));
+        if (val > 5 && val < 90) parsedTlRate = val;
+      }
     }
   }
 
-  // Kronolojik sıralama (Grafikler için eskiden yeniye)
-  const sorted = [...history].filter(Boolean).sort((a, b) => {
+  // 1. Tüm sayısal alanları parseFinancialNumber ile temizle (parantezli negatif, tireli, Türkçe ayrıcı)
+  const cleanedHistory = history.map((item) => {
+    if (!item || typeof item !== 'object') return item;
+    const row = { ...item };
+    const numKeys = [
+      'revenue', 'ebitda', 'net_income', 'gross_profit', 'operating_profit',
+      'equity', 'total_assets', 'current_assets', 'non_current_assets',
+      'cash_and_equivalents', 'cash', 'liquid_assets', 'net_debt', 'short_term_debt', 'long_term_debt',
+      'financial_investments', 'financial_assets_insured', 'trade_receivables',
+      'operating_cash_flow', 'free_cash_flow', 'capex', 'dividends_paid',
+      'written_premiums', 'technical_profit', 'loss_ratio', 'expense_ratio', 'combined_ratio',
+      'npl_ratio', 'car_ratio', 'nim', 'net_interest_income', 'loan_to_deposit',
+      'nav', 'holding_discount', 'fwd_pe', 'trailing_pe', 'pb', 'ev_ebitda',
+      'roe', 'roa', 'roic', 'wacc', 'gross_margin', 'ebitda_margin', 'net_margin', 'leverage_ratio'
+    ];
+    for (const k of numKeys) {
+      if (row[k] !== undefined && row[k] !== null && typeof row[k] !== 'number') {
+        const parsed = parseFinancialNumber(row[k]);
+        if (parsed !== null) row[k] = parsed;
+      }
+    }
+    return row;
+  });
+
+  // 2. TMS 29 Homojenizasyonu ve enflasyon düzeltmeli dönem takibi
+  const { homogenizedHistory } = homogenizeTms29Series(cleanedHistory);
+
+  // 3. Kronolojik sıralama (Grafikler için eskiden yeniye)
+  const sorted = [...homogenizedHistory].filter(Boolean).sort((a, b) => {
     return parsePeriodSortKey(a.period) - parsePeriodSortKey(b.period);
   });
 
@@ -496,8 +542,14 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
       if (row.combined_ratio != null && row.ebitda_margin == null) {
         row.ebitda_margin = Number((100 - row.combined_ratio).toFixed(1));
       }
-      if (row.equity && row.equity > 0 && row.net_income && row.roe == null) {
-        row.roe = Number(((row.net_income * annualFactor / row.equity) * 100).toFixed(2));
+      if (row.equity != null && row.net_income != null && row.roe == null) {
+        const roeRes = safeRoe(row.net_income, row.equity, annualFactor);
+        if (roeRes.isInsolvent) {
+          row.roe = null;
+          row.ttk_warning = roeRes.warning;
+        } else if (roeRes.roe !== null) {
+          row.roe = roeRes.roe;
+        }
       }
       if (row.total_assets && row.total_assets > 0 && row.net_income && row.roa == null) {
         row.roa = Number(((row.net_income * annualFactor / row.total_assets) * 100).toFixed(2));
@@ -559,15 +611,30 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
       row.equity = Number((row.total_assets * (1 - row.leverage_ratio / 100)).toFixed(0));
     }
 
+    // Güvenli Marj Hesaplamaları
     if (row.revenue && row.revenue > 0) {
       if (row.ebitda_margin == null && typeof row.ebitda === 'number') {
-        row.ebitda_margin = Number(((row.ebitda / row.revenue) * 100).toFixed(1));
+        const sm = safeMargin(row.ebitda, row.revenue);
+        if (sm !== null) row.ebitda_margin = sm;
       }
       if (row.net_margin == null && typeof row.net_income === 'number') {
-        row.net_margin = Number(((row.net_income / row.revenue) * 100).toFixed(1));
+        const sm = safeMargin(row.net_income, row.revenue);
+        if (sm !== null) row.net_margin = sm;
       }
       if (row.gross_margin == null && typeof row.gross_profit === 'number') {
-        row.gross_margin = Number(((row.gross_profit / row.revenue) * 100).toFixed(1));
+        const sm = safeMargin(row.gross_profit, row.revenue);
+        if (sm !== null) row.gross_margin = sm;
+      }
+    }
+
+    // Güvenli ROE (Çift negatif tuzak engelleme ve TTK 376 kontrolü)
+    if (row.roe == null && typeof row.net_income === 'number' && typeof row.equity === 'number') {
+      const roeRes = safeRoe(row.net_income, row.equity, annualFactor);
+      if (roeRes.isInsolvent) {
+        row.roe = null;
+        row.ttk_warning = roeRes.warning;
+      } else if (roeRes.roe !== null) {
+        row.roe = roeRes.roe;
       }
     }
 
@@ -596,7 +663,7 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
         const investedCapital = equity + netDebt;
 
         const rawNopat = (typeof row.net_income === 'number' && row.net_income !== 0)
-          ? item.net_income
+          ? row.net_income
           : ((typeof row.ebitda === 'number' && row.ebitda > 0) ? row.ebitda * 0.70 : 0);
         const nopat = rawNopat * annualFactor;
 
@@ -1127,25 +1194,40 @@ export default function ValuationTerminal() {
 
       if (!res.ok) throw new Error(data.error || 'Değerleme tamamlanamadı.');
 
-      let decision: 'AL' | 'ALMA' | 'NÖTR' = 'NÖTR';
+      let rawDecision: 'AL' | 'ALMA' | 'NÖTR' = 'NÖTR';
       const decisionMatch = data.report.match(/Analist\s+Karar[ıi]\s*[:=-]\s*\[?\s*\*?\*?\s*(ALMA|SAT|AL|NÖTR|NOTR|TUT)\s*\*?\*?\s*\]?/i);
       if (decisionMatch) {
         const d = decisionMatch[1].toUpperCase();
-        if (d === 'ALMA' || d === 'SAT') decision = 'ALMA';
-        else if (d === 'AL') decision = 'AL';
-        else decision = 'NÖTR';
+        if (d === 'ALMA' || d === 'SAT') rawDecision = 'ALMA';
+        else if (d === 'AL') rawDecision = 'AL';
+        else rawDecision = 'NÖTR';
       }
 
       const scoreMatch = 
         data.report.match(/\|\s*\*?\*?Toplam\s+Puan\*?\*?\s*\|\s*\*?\*?(\d{1,3})\*?\*?/i) ||
         data.report.match(/Toplam\s+Puan\s*[:=]\s*\*?\*?(\d{1,3})/i) ||
         data.report.match(/(\d{1,3})\s*\/\s*100/i);
-      const score = scoreMatch ? scoreMatch[1] : undefined;
+      const score = scoreMatch ? scoreMatch[1] : (data.scoreResult?.totalScore != null ? String(data.scoreResult.totalScore) : undefined);
+
+      const parsedPrice = parseFinancialNumber(price);
+      const targetVal = parseFinancialNumber(data.valuation?.composite_fair_value || data.valuation?.fair_value || data.valuation?.dcf_fair_value);
+
+      const opt = data.optimization || optimizeFinalDecision({
+        rawDecision,
+        marketPrice: parsedPrice,
+        fairValue: targetVal,
+        scoreResult: data.scoreResult,
+        sector: activeSector
+      });
+
+      const finalDecision = opt?.finalDecision || rawDecision;
 
       const finalExtracted = {
         ...enrichedExtractedData,
         valuation: data.valuation || enrichedExtractedData?.valuation,
         fair_value_drivers: data.drivers || enrichedExtractedData?.fair_value_drivers,
+        score_result: data.scoreResult,
+        optimization: opt
       };
 
       const newEntry: SavedReport = {
@@ -1155,7 +1237,12 @@ export default function ValuationTerminal() {
         period: extractedData?.reporting_period,
         createdAt: new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
         report: data.report,
-        decision,
+        decision: finalDecision,
+        rawDecision: rawDecision !== finalDecision ? rawDecision : undefined,
+        overrideReason: opt?.overrideReason,
+        marginOfSafetyStatus: opt?.marginOfSafetyStatus,
+        conditionalWarnings: opt?.conditionalWarnings,
+        isGreyZone: opt?.isGreyZone,
         score,
         sector: activeSector,
         extractedData: finalExtracted
@@ -2145,7 +2232,14 @@ export default function ValuationTerminal() {
                   <tbody className="divide-y divide-slate-800">
                     {extractedData.financial_history?.map((row: any, i: number) => (
                       <tr key={i} className="hover:bg-slate-800/40">
-                        <td className="p-3 font-bold text-white">{row.period}</td>
+                        <td className="p-3 font-bold text-white flex items-center gap-1.5">
+                          <span>{row.period}</span>
+                          {row.is_tms29 && (
+                            <span className="text-[9px] font-sans font-bold px-1.5 py-0.2 rounded bg-amber-950/80 text-amber-300 border border-amber-800" title="TMS 29 Enflasyon Muhasebesi Düzeltmesi">
+                              TMS 29
+                            </span>
+                          )}
+                        </td>
                         <td className="p-3 text-right text-slate-200">{formatAmount(row.revenue, 'bin')}</td>
                         <td className="p-3 text-right text-slate-200">{formatAmount(row.ebitda, 'bin')}</td>
                         <td className="p-3 text-right text-slate-200">{formatAmount(row.net_income, 'bin')}</td>
@@ -2278,9 +2372,20 @@ export default function ValuationTerminal() {
                           Adil Değer: {typeof valuationInfo.fair_value === 'number' ? valuationInfo.fair_value.toFixed(2) : valuationInfo.fair_value} TL
                         </span>
                       )}
-                      <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded border ${
+                        activeReport.decision === 'AL'
+                          ? 'bg-emerald-950 text-emerald-400 border-emerald-800 shadow-sm shadow-emerald-950/40'
+                          : activeReport.decision === 'ALMA'
+                          ? 'bg-rose-950 text-rose-400 border-rose-800 shadow-sm shadow-rose-950/40'
+                          : 'bg-amber-950 text-amber-400 border-amber-800 shadow-sm shadow-amber-950/40'
+                      }`}>
                         {activeReport.decision}
                       </span>
+                      {activeReport.rawDecision && activeReport.rawDecision !== activeReport.decision && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-rose-950/70 text-rose-300 border border-rose-800 line-through" title="Güvenlik kalkanı öncesi model önerisi">
+                          {activeReport.rawDecision}
+                        </span>
+                      )}
                       <span className="text-xs font-mono px-2 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800">
                         {sectorMeta.badge}
                       </span>
@@ -2309,6 +2414,48 @@ export default function ValuationTerminal() {
                   </button>
                 </div>
               </div>
+
+              {/* Güvenlik Kalkanı: False-Positive / Karar Revizyon Uyarısı */}
+              {activeReport.overrideReason && (
+                <div className="bg-rose-950/30 border border-rose-800/70 rounded-xl p-4 flex items-start gap-3 shadow-lg">
+                  <div className="p-2 rounded-lg bg-rose-900/50 text-rose-300 flex-shrink-0">
+                    <ShieldCheck className="w-5 h-5 text-rose-300" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-sm font-bold text-rose-200 flex items-center gap-2">
+                      <span>Model Kararı Güvenlik Kalkanı Tarafından Revize Edildi</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-900/80 text-rose-200 border border-rose-700">
+                        İlk Karar: {activeReport.rawDecision || 'AL'} ➔ Nihai Karar: {activeReport.decision}
+                      </span>
+                    </div>
+                    <p className="text-xs text-rose-300/90 leading-relaxed">
+                      {activeReport.overrideReason}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Koşullu Analiz / Gri Alan Uyarısı */}
+              {activeReport.conditionalWarnings && activeReport.conditionalWarnings.length > 0 && (
+                <div className="bg-amber-950/25 border border-amber-800/60 rounded-xl p-4 flex items-start gap-3 shadow-md">
+                  <div className="p-2 rounded-lg bg-amber-900/50 text-amber-300 flex-shrink-0">
+                    <AlertTriangle className="w-5 h-5 text-amber-300" />
+                  </div>
+                  <div className="space-y-1.5 w-full">
+                    <div className="text-sm font-bold text-amber-200 flex items-center justify-between">
+                      <span>Koşullu Analiz & Gri Alan Uyarısı</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-900/60 text-amber-300 border border-amber-700">
+                        Sınır Koşulları Mevcut
+                      </span>
+                    </div>
+                    <ul className="text-xs text-amber-300/90 space-y-1 list-disc list-inside">
+                      {activeReport.conditionalWarnings.map((w: string, idx: number) => (
+                        <li key={idx}>{w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
 
               {/* ANA SEKME NAVİGASYONU */}
               <div className="flex border-b border-slate-800 gap-1 overflow-x-auto print:hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
@@ -2599,9 +2746,25 @@ export default function ValuationTerminal() {
                       <span className="font-bold text-sm text-white flex items-center gap-2">
                         <TrendingUp className="w-4 h-4 text-emerald-400" /> Piyasa Fiyatı & Adil Değer Potansiyeli
                       </span>
-                      <span className="text-xs font-mono bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded font-bold">
-                        Model: {currentSector === 'INSURANCE' ? 'Gordon Büyüme & ROE İskontosu' : 'DCF & Çarpan Hibrit Modeli'}
-                      </span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {activeReport?.marginOfSafetyStatus && (
+                          <span className={`text-xs font-mono px-2 py-0.5 rounded font-bold border ${
+                            activeReport.marginOfSafetyStatus === 'SAFE'
+                              ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
+                              : activeReport.marginOfSafetyStatus === 'BORDERLINE'
+                              ? 'bg-amber-950 text-amber-400 border-amber-800'
+                              : 'bg-rose-950 text-rose-400 border-rose-800'
+                          }`}>
+                            Güvenlik Marjı: {
+                              activeReport.marginOfSafetyStatus === 'SAFE' ? 'Yeterli (≥%25)' :
+                              activeReport.marginOfSafetyStatus === 'BORDERLINE' ? 'Sınırda (%15-%25)' : 'Yetersiz (<%15)'
+                            }
+                          </span>
+                        )}
+                        <span className="text-xs font-mono bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded font-bold">
+                          Model: {currentSector === 'INSURANCE' ? 'Gordon Büyüme & ROE İskontosu' : 'DCF & Çarpan Hibrit Modeli'}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -2891,7 +3054,14 @@ export default function ValuationTerminal() {
                             </th>
                             {tableData.map((d: any, idx: number) => (
                               <th key={idx} className="p-3 text-center min-w-[140px] text-xs font-bold uppercase tracking-wider">
-                                <div className="text-white text-sm font-black">{d.period}</div>
+                                <div className="text-white text-sm font-black flex items-center justify-center gap-1.5 flex-wrap">
+                                  <span>{d.period}</span>
+                                  {d.is_tms29 && (
+                                    <span className="text-[9px] font-sans font-bold px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800" title="TMS 29 Enflasyon Muhasebesi">
+                                      TMS 29
+                                    </span>
+                                  )}
+                                </div>
                                 {d.date && (
                                   <div className="text-[10px] text-slate-500 font-normal lowercase">{d.date}</div>
                                 )}

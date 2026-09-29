@@ -15,6 +15,87 @@ export interface SectorDefinition {
   primaryEfficiencyMetric: string;
 }
 
+export interface MetricScoreRule {
+  key: string;
+  name: string;
+  maxScore: number;
+  description: string;
+}
+
+export interface SectorRiskThresholds {
+  criticalDebtRatio?: number; // e.g. Net Debt / EBITDA > 4.0
+  minLiquidityRatio?: number; // Current ratio < 1.0
+  combinedRatioDanger?: number; // > 102% for Insurance
+  nplDanger?: number; // > 5.0% for Banking
+  minMarginOfSafety: number; // %20 asgari güvenlik marjı
+  idealMarginOfSafety: number; // %30 güçlü emniyet marjı
+}
+
+export interface SectorScoringDefinition {
+  sector: SectorType;
+  categories: [MetricScoreRule, MetricScoreRule, MetricScoreRule, MetricScoreRule];
+  riskThresholds: SectorRiskThresholds;
+}
+
+export const SECTOR_SCORING_CONFIG: Record<SectorType, SectorScoringDefinition> = {
+  INSURANCE: {
+    sector: 'INSURANCE',
+    categories: [
+      { key: 'technical_profitability', name: 'Teknik Kârlılık & Kombine Oran', maxScore: 25, description: 'Hasar/Prim ve Masraf Oranı toplamı (<%95 pozitif teknik kâr)' },
+      { key: 'portfolio_yield', name: 'Yatırım Getirisi & Float Gücü', maxScore: 25, description: 'Net finansal gelirler ve yüksek faiz ortamında float portföy verimi' },
+      { key: 'capital_adequacy', name: 'Sermaye Yeterliliği & ROE', maxScore: 25, description: 'Özkaynak kârlılığı ve sermaye tamponu' },
+      { key: 'premium_growth', name: 'Prim Büyümesi & Pazar Genişlemesi', maxScore: 25, description: 'Brüt yazılan prim ve BES AUM büyüme dinamikleri' },
+    ],
+    riskThresholds: {
+      combinedRatioDanger: 102.0,
+      minMarginOfSafety: 20.0,
+      idealMarginOfSafety: 30.0,
+    },
+  },
+  BANKING: {
+    sector: 'BANKING',
+    categories: [
+      { key: 'asset_quality', name: 'Kredi Kalitesi & Risk Yönetimi (NPL)', maxScore: 25, description: 'Takipteki alacaklar rasyosu ve karşılık oranları (<%3.0 güçlü)' },
+      { key: 'net_interest_margin', name: 'Net Faiz Marjı (NIM) & Fonlama', maxScore: 25, description: 'Kredi-mevduat makası ve fonlama maliyeti yönetimi' },
+      { key: 'capital_adequacy', name: 'Sermaye Yeterliliği (SYR) & ROE', maxScore: 25, description: 'BDDK yasal sermaye tamponu (SYR >%14) ve özkaynak verimi' },
+      { key: 'fee_efficiency', name: 'Komisyon & Dijital Bankacılık', maxScore: 25, description: 'Faiz dışı gelir üretimi ve operasyonel gider karşılama gücü' },
+    ],
+    riskThresholds: {
+      nplDanger: 5.0,
+      minMarginOfSafety: 20.0,
+      idealMarginOfSafety: 30.0,
+    },
+  },
+  HOLDING: {
+    sector: 'HOLDING',
+    categories: [
+      { key: 'nav_discount', name: 'Net Aktif Değeri (NAD) İskontosu', maxScore: 25, description: 'Piyasa değeri vs portföy net aktif değeri iskonto cazibesi (>%30)' },
+      { key: 'solo_liquidity', name: 'Solo Nakit Gücü & Borçsuzluk', maxScore: 25, description: 'Holding merkezinin solo net nakit fazlası ve likidite esnekliği' },
+      { key: 'dividend_yield', name: 'İştirak Temettü Akışı & Verimlilik', maxScore: 25, description: 'İştiraklerden temettü tahsilatı ve sürdürülebilir nakit üretimi' },
+      { key: 'nav_growth', name: 'Hisse Başı NAD Büyümesi & Katalizör', maxScore: 25, description: 'Konsolide portföy büyümesi ve halka arz/satış potansiyeli' },
+    ],
+    riskThresholds: {
+      minMarginOfSafety: 20.0,
+      idealMarginOfSafety: 30.0,
+    },
+  },
+  INDUSTRIAL: {
+    sector: 'INDUSTRIAL',
+    categories: [
+      { key: 'financial_health', name: 'Finansal Sağlık & Likidite', maxScore: 25, description: 'Cari oran (>1.2) ve Net Borç / FAVÖK (<2.5x) emniyet seviyeleri' },
+      { key: 'capital_efficiency', name: 'Sermaye Verimliliği (ROIC > WACC)', maxScore: 25, description: 'Yatırılan sermaye getirisinin ağırlıklı sermaye maliyetini aşması' },
+      { key: 'cash_flow_quality', name: 'Nakit Akış Kalitesi (OCF & FCF)', maxScore: 25, description: 'Kârın serbest nakde dönüşümü (Makyajsız bilanço ve Buffett Kazancı)' },
+      { key: 'growth_moat', name: 'Reel Büyüme & Rekabet Kalkanı (Moat)', maxScore: 25, description: 'Hasılat artışı, fiyatlama gücü ve FAVÖK marjı stabilitesi' },
+    ],
+    riskThresholds: {
+      criticalDebtRatio: 4.0,
+      minLiquidityRatio: 1.0,
+      minMarginOfSafety: 20.0,
+      idealMarginOfSafety: 30.0,
+    },
+  },
+};
+
 export const SECTOR_DEFINITIONS: Record<SectorType, SectorDefinition> = {
   INSURANCE: {
     id: 'INSURANCE',

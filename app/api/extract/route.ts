@@ -9,7 +9,14 @@ import {
   optimizeTextForGemini, 
   computeContentHash 
 } from '@/lib/gemini';
-import { computeSectorValuationAndDrivers } from '@/lib/valuation';
+import { 
+  computeSectorValuationAndDrivers,
+  parseFinancialNumber,
+  safeDivide,
+  safeRoe,
+  safeMargin,
+  homogenizeTms29Series
+} from '@/lib/valuation';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300; // Çoklu ve hacimli PDF grupları için süreyi 5 dakikaya genişletiyoruz
@@ -49,10 +56,9 @@ function enrichAndSanitizeFinancialHistory(data: any) {
   // Varsa TL borçlanma faizini tespit et
   let parsedTlRate: number | null = null;
   if (debtInfo.tl_interest_rate) {
-    const m = String(debtInfo.tl_interest_rate).match(/(\d+([.,]\d+)?)/);
-    if (m) {
-      const val = parseFloat(m[1].replace(',', '.'));
-      if (val > 5 && val < 90) parsedTlRate = val;
+    const rateVal = parseFinancialNumber(debtInfo.tl_interest_rate, { isPercentage: true });
+    if (rateVal !== null && rateVal > 5 && rateVal < 90) {
+      parsedTlRate = rateVal;
     }
   }
 
@@ -64,6 +70,26 @@ function enrichAndSanitizeFinancialHistory(data: any) {
   for (let i = 0; i < history.length; i++) {
     const item = history[i];
     if (!item) continue;
+
+    // OCR & Sayısal Temizlik: Eksi bakiyeler, tireli ve parantezli sayılar, binlik/ondalık ayraçları
+    const numericFields = [
+      'revenue', 'ebitda', 'net_income', 'gross_profit',
+      'operating_cash_flow', 'capex', 'free_cash_flow', 'net_debt',
+      'equity', 'total_assets', 'current_assets', 'non_current_assets',
+      'cash_and_equivalents', 'financial_assets_insured', 'trade_receivables',
+      'written_premiums', 'earned_premiums', 'technical_profit', 'investment_income',
+      'loss_ratio', 'expense_ratio', 'combined_ratio',
+      'current_ratio', 'quick_ratio', 'cash_ratio', 'leverage_ratio',
+      'asset_turnover', 'equity_turnover', 'roa', 'roe', 'roic', 'wacc'
+    ];
+    for (const f of numericFields) {
+      if (item[f] !== undefined && item[f] !== null) {
+        const parsed = parseFinancialNumber(item[f], { 
+          isPercentage: f.includes('ratio') || f.includes('margin') || f === 'roe' || f === 'roa' || f === 'roic' || f === 'wacc' 
+        });
+        if (parsed !== null) item[f] = parsed;
+      }
+    }
 
     // Yıl tespiti
     const yrMatch = String(item.period || '').match(/(20\d{2})/);
@@ -84,13 +110,15 @@ function enrichAndSanitizeFinancialHistory(data: any) {
       if (item.combined_ratio != null && item.ebitda_margin == null) {
         item.ebitda_margin = Number((100 - item.combined_ratio).toFixed(1));
       }
-      if (item.equity && item.equity > 0 && item.net_income && item.roe == null) {
-        item.roe = Number(((item.net_income * annualFactor / item.equity) * 100).toFixed(2));
+      if (item.equity != null && item.net_income != null && item.roe == null) {
+        const roeRes = safeRoe(item.net_income, item.equity, annualFactor);
+        item.roe = roeRes.roe;
+        if (roeRes.isInsolvent) item.solvency_warning = roeRes.warning;
       }
-      if (item.total_assets && item.total_assets > 0 && item.net_income && item.roa == null) {
+      if (item.total_assets && item.total_assets > 0 && item.net_income != null && item.roa == null) {
         item.roa = Number(((item.net_income * annualFactor / item.total_assets) * 100).toFixed(2));
       }
-      if (item.total_assets && item.equity && item.leverage_ratio == null && item.total_assets > 0) {
+      if (item.total_assets && item.equity != null && item.leverage_ratio == null && item.total_assets > 0) {
         item.leverage_ratio = Number((((item.total_assets - item.equity) / item.total_assets) * 100).toFixed(2));
       }
     }
@@ -150,18 +178,20 @@ function enrichAndSanitizeFinancialHistory(data: any) {
       item.equity = Number((item.total_assets * (1 - item.leverage_ratio / 100)).toFixed(0));
     }
 
-    // Tüm sektörler için ROE, ROA, Kaldıraç Oranı dinamik hesapla
-    if (item.equity && item.equity > 0 && item.net_income && item.roe == null) {
-      item.roe = Number(((item.net_income * annualFactor / item.equity) * 100).toFixed(2));
+    // Tüm sektörler için ROE, ROA, Kaldıraç Oranı dinamik hesapla (Safe ROE koruması)
+    if (item.equity != null && item.net_income != null && item.roe == null) {
+      const roeRes = safeRoe(item.net_income, item.equity, annualFactor);
+      item.roe = roeRes.roe;
+      if (roeRes.isInsolvent) item.solvency_warning = roeRes.warning;
     }
-    if (item.total_assets && item.total_assets > 0 && item.net_income && item.roa == null) {
+    if (item.total_assets && item.total_assets > 0 && item.net_income != null && item.roa == null) {
       item.roa = Number(((item.net_income * annualFactor / item.total_assets) * 100).toFixed(2));
     }
-    if (item.total_assets && item.equity && item.leverage_ratio == null && item.total_assets > 0) {
+    if (item.total_assets && item.equity != null && item.leverage_ratio == null && item.total_assets > 0) {
       item.leverage_ratio = Number((((item.total_assets - item.equity) / item.total_assets) * 100).toFixed(2));
     }
 
-    // Likidite ve Faaliyet Oranları (Item 10: Her dönem için dinamik türet)
+    // Likidite ve Faaliyet Oranları (Safe Divide ile sıfıra bölünme koruması)
     if (item.current_assets != null && item.current_assets > 0) {
       const totalLiabilities = (item.total_assets != null && item.equity != null)
         ? Math.max(1, item.total_assets - item.equity)
@@ -171,15 +201,18 @@ function enrichAndSanitizeFinancialHistory(data: any) {
         : totalLiabilities * 0.60;
 
       if (item.current_ratio == null && estCurrentLiab > 0) {
-        item.current_ratio = Number((item.current_assets / estCurrentLiab).toFixed(2));
+        const cr = safeDivide(item.current_assets, estCurrentLiab);
+        if (cr !== null) item.current_ratio = Number(cr.toFixed(2));
       }
       if (item.quick_ratio == null && estCurrentLiab > 0) {
         const quick = detectedSector === 'INSURANCE' ? item.current_assets : item.current_assets * 0.75;
-        item.quick_ratio = Number((quick / estCurrentLiab).toFixed(2));
+        const qr = safeDivide(quick, estCurrentLiab);
+        if (qr !== null) item.quick_ratio = Number(qr.toFixed(2));
       }
       if (item.cash_ratio == null && estCurrentLiab > 0) {
         const cashVal = item.cash_and_equivalents ?? item.cash ?? item.liquid_assets ?? 0;
-        item.cash_ratio = Number((cashVal / estCurrentLiab).toFixed(2));
+        const cashR = safeDivide(cashVal, estCurrentLiab);
+        if (cashR !== null) item.cash_ratio = Number(cashR.toFixed(2));
       }
     }
 
@@ -193,20 +226,20 @@ function enrichAndSanitizeFinancialHistory(data: any) {
       }
     }
 
-    // Eksik marjları hesapla
+    // Eksik marjları hesapla (Safe Margin koruması)
     if (item.revenue && item.revenue > 0) {
       if (item.ebitda_margin == null && typeof item.ebitda === 'number') {
-        item.ebitda_margin = Number(((item.ebitda / item.revenue) * 100).toFixed(1));
+        item.ebitda_margin = safeMargin(item.ebitda, item.revenue);
       }
       if (item.net_margin == null && typeof item.net_income === 'number') {
-        item.net_margin = Number(((item.net_income / item.revenue) * 100).toFixed(1));
+        item.net_margin = safeMargin(item.net_income, item.revenue);
       }
       if (item.gross_margin == null && typeof item.gross_profit === 'number') {
-        item.gross_margin = Number(((item.gross_profit / item.revenue) * 100).toFixed(1));
+        item.gross_margin = safeMargin(item.gross_profit, item.revenue);
       }
     }
 
-    // Nakit Akış Kalemlerini Tamamla (Item 9: Nakit akış tablosundaki eksik kalemleri önleme)
+    // Nakit Akış Kalemlerini Tamamla
     if (item.operating_cash_flow == null) {
       if (typeof item.ebitda === 'number' && item.ebitda > 0) {
         item.operating_cash_flow = Math.round(item.ebitda * 0.85);
@@ -235,7 +268,6 @@ function enrichAndSanitizeFinancialHistory(data: any) {
       }
     }
 
-
     // 1. Gerçekçi Türkiye piyasa WACC tabanı (TCMB ve faiz ortamı)
     let defaultWacc = 45.0; // 2024-2026 yüksek faiz ortamı varsayılanı
     if (yr <= 2021) defaultWacc = 18.5;
@@ -247,7 +279,6 @@ function enrichAndSanitizeFinancialHistory(data: any) {
       defaultWacc = Number((parsedTlRate * 0.95).toFixed(1));
     }
 
-    // WACC boş, 0 veya geçersizse tamamla
     if (item.wacc == null || item.wacc === 0 || isNaN(Number(item.wacc))) {
       item.wacc = defaultWacc;
     } else {
@@ -293,7 +324,16 @@ function enrichAndSanitizeFinancialHistory(data: any) {
     item.eva_spread = Number((item.roic - item.wacc).toFixed(1));
   }
 
-  data.financial_history = history;
+  // TMS 29 Homojenizasyonunu çalıştır
+  const { homogenizedHistory, hasTms29Adjustment, tms29Warnings } = homogenizeTms29Series(history);
+  data.financial_history = homogenizedHistory;
+  if (data.is_tms29_adjusted === undefined) {
+    data.is_tms29_adjusted = hasTms29Adjustment;
+  }
+  if (tms29Warnings.length > 0 && !data.tms29_notes) {
+    data.tms29_notes = tms29Warnings.join(' ');
+  }
+
   return data;
 }
 
@@ -418,6 +458,8 @@ export async function POST(req: Request) {
         currency: { type: Type.STRING, description: 'Raporlanan para birimi (Örn: Bin TRY, Milyon TL, TL)' },
         reporting_period: { type: Type.STRING, description: 'En güncel dönem (Örn: 2026/06 veya 2026/Q2)' },
         share_count: { type: Type.STRING, description: 'Ödenmiş sermaye / hisse adedi' },
+        is_tms29_adjusted: { type: Type.BOOLEAN, description: 'Finansal tablolarda TMS 29 enflasyon muhasebesi uygulandı mı (true/false)' },
+        tms29_notes: { type: Type.STRING, description: 'TMS 29 enflasyon muhasebesi uygulamasına dair dipnot özeti' },
 
         financial_history: {
           type: Type.ARRAY,
@@ -426,6 +468,7 @@ export async function POST(req: Request) {
             type: Type.OBJECT,
             properties: {
               period: { type: Type.STRING, description: 'Dönem veya Yıl (Örn: 2022, 2023, 2024, 2025, 2026, 2026/Q2)' },
+              is_tms29: { type: Type.BOOLEAN, description: 'Bu döneme ait veriler TMS 29 enflasyon muhasebesine göre düzeltilmiş mi?' },
               revenue: { type: Type.NUMBER, description: 'Net Satış Gelirleri / Hasılat (Sigorta için Brüt Prim Üretimi)' },
               ebitda: { type: Type.NUMBER, description: 'FAVÖK (Sigorta için Teknik Bölüm Dengesi / Kârı)' },
               net_income: { type: Type.NUMBER, description: 'Net Dönem Kârı' },
@@ -608,6 +651,12 @@ export async function POST(req: Request) {
 GÖREVİN:
 Yüklenen finansal raporları tarayarak finansal kalemleri, marjları, rasyoları ve geçmiş hedef/rehberlikleri birebir çıkarmaktır.
 
+VERİ VE SAYI OKUMA KURALLARI:
+1. EKSİ BAKİYE VE PARANTEZ FORMATLARI: Finansal tablolarda parantez içinde (örn: (1.234), (45.670), (1.250.000)) veya tire ile (örn: 1.234-, -1.234) verilen değerler NEGATİF SAYIDIR. Bunları KESİNLİKLE eksi (-) işaretli negatif sayı olarak ver (örn: -1234, -45670). Asla pozitif sayıya dönüştürme.
+2. BİNLİK VE ONDALIK AYRAÇLARI: Türkiye formatında nokta (.) binlik ayracıdır (örn: 1.250.000 = 1250000), virgül (,) ise ondalık ayracıdır (örn: 12,5% = 12.5). Ondalıkları nokta (.) ile standart JSON float formatında döndür.
+3. KESİNLİKLE FİNANSAL HALÜSİNASYON GÖRME: Raporlarda açıkça bulunmayan hiçbir rakamı uydurma. Eğer bir veri tabloda yer almıyorsa 0 değil, null bırak.
+4. TMS 29 (ENFLASYON MUHASEBESİ): Raporlanan finansal tabloların TMS 29 Yüksek Enflasyonlu Ekonomilerde Finansal Raporlama standardına göre enflasyona göre düzeltilip düzeltilmediğini kontrol et. Her dönem için 'is_tms29' bayrağını (true/false) ve genel raporlama için 'is_tms29_adjusted' alanını işaretle.
+
 SEKTÖREL UYARLAMA KURALLARI:
 1. Şirket AGESA, ANHYT, TURSG gibi bir SİGORTACILIK veya BİREYSEL EMEKLİLİK şirketi ise:
    - Klasik 'Satış Gelirleri' yerine 'Brüt Yazılan Primler' veya Teknik Gelirleri 'revenue' alanına yaz.
@@ -615,8 +664,10 @@ SEKTÖREL UYARLAMA KURALLARI:
    - Hasar/Prim Oranı, Masraf Oranı ve Kombine Oranı (Hasar + Masraf) mutlaka çıkar.
    - Özkaynak Kârlılığı (ROE) ve Aktif Kârlılığı (ROA) oranlarını doldur. Sigortacılıkta borçluluk aranmaz, özkaynak kârlılığı ve portföy büyüklüğü temel metriktir.
    - Bilanço kalemlerini (Cari Varlıklar, Nakit, Riski Sigortalılara Ait Yatırımlar, Toplam Varlıklar, Özkaynaklar) eksiksiz çıkar.
-2. Zaman serisi (financial_history) dizisinde bulunan tüm dönemleri (özellikle 2024, 2025, 2026 gibi güncel çeyrekleri) eksiksiz doldur.
-3. KESİNLİKLE RASTGELE SAYI UYDURMA, çıkarımlarını finansal tablolardaki verilere ve standart finans matematiğine dayandır.`;
+2. Şirket BANKACILIK ise:
+   - Net Faiz Geliri (NII), Net Faiz Marjı (NIM), Aktif Kalitesi (NPL), Sermaye Yeterliliği (SYR) ve ROE çıkar.
+3. Zaman serisi (financial_history) dizisinde bulunan tüm dönemleri (özellikle 2024, 2025, 2026 gibi güncel çeyrekleri) eksiksiz doldur.
+4. Çıkarımlarını finansal tablolardaki verilere ve standart finans matematiğine dayandır.`;
 
     const batchResults: any[] = [];
 
@@ -636,8 +687,10 @@ ${docTexts}
 GÖREVLER:
 1. Belgede yer alan tüm dönemlere ait Hasılat (revenue), FAVÖK (ebitda), Net Kâr (net_income), Marjlar (%), Nakit Akışları (OCF, CAPEX, FCF), Net Borç (net_debt) ve ROIC/WACC verilerini eksiksiz çıkar veya hesapla (özellikle 2024 ve sonraki yıllar dahil).
 2. BİLANÇO DETAYLARI: Cari Varlıklar (current_assets), Nakit ve Nakit Benzerleri (cash_and_equivalents), Finansal Yatırımlar (financial_assets_insured), Alacaklar (trade_receivables), Cari Olmayan Varlıklar (non_current_assets), Toplam Varlıklar (total_assets) ve Toplam Özkaynaklar (equity) kalemlerini eksiksiz çıkar.
-3. Varsa geçmiş yönetim hedeflerini (guidance) ve gerçekleşmelerini çıkar.
-4. Rakamları tam veya ondalıklı sayı olarak ver.`;
+3. EKSİ BAKİYELER: Parantez içindeki veya tireli rakamları (örn: (1.234) veya 1.234-) KESİNLİKLE negatif sayı (-1234) olarak JSON'a yaz.
+4. TMS 29: Tablolarda TMS 29 enflasyon muhasebesi varsa dönemlerin 'is_tms29' bayrağını true yap.
+5. Varsa geçmiş yönetim hedeflerini (guidance) ve gerçekleşmelerini çıkar.
+6. Rakamları tam veya ondalıklı sayı olarak ver. Tabloda olmayan rakamı uydurma, null bırak.`;
 
         try {
           const cacheKey = `extract_${ticker.toUpperCase()}_batch_${i}_${computeContentHash(docTexts)}`;
@@ -712,8 +765,10 @@ GÖREVLER:
 Ekteki belgeleri incele (Paket ${bIndex + 1}/${fileBatches.length}):
 1. Belgede yer alan tüm dönemlere ait Hasılat (revenue), FAVÖK (ebitda), Net Kâr (net_income), Marjlar (%), Nakit Akışları (OCF, CAPEX, FCF), Net Borç (net_debt) ve ROIC/WACC verilerini eksiksiz çıkar veya hesapla (özellikle 2024 ve sonraki yıllar dahil).
 2. BİLANÇO DETAYLARI: Cari Varlıklar (current_assets), Nakit ve Nakit Benzerleri (cash_and_equivalents), Finansal Yatırımlar (financial_assets_insured), Alacaklar (trade_receivables), Cari Olmayan Varlıklar (non_current_assets), Toplam Varlıklar (total_assets) ve Toplam Özkaynaklar (equity) kalemlerini eksiksiz çıkar.
-3. Varsa geçmiş yönetim hedeflerini (guidance) ve gerçekleşmelerini çıkar.
-4. Rakamları tam veya ondalıklı sayı olarak ver.`;
+3. EKSİ BAKİYELER: Parantez içindeki veya tireli rakamları (örn: (1.234) veya 1.234-) KESİNLİKLE negatif sayı (-1234) olarak JSON'a yaz.
+4. TMS 29: Tablolarda TMS 29 enflasyon muhasebesi varsa dönemlerin 'is_tms29' bayrağını true yap.
+5. Varsa geçmiş yönetim hedeflerini (guidance) ve gerçekleşmelerini çıkar.
+6. Rakamları tam veya ondalıklı sayı olarak ver. Tabloda olmayan rakamı uydurma, null bırak.`;
 
         const pdfHash = computeContentHash(currentBatch.map(f => `${f.name}_${f.size}`).join(';'));
         const cacheKey = `extract_${ticker.toUpperCase()}_pdf_${bIndex}_${pdfHash}`;
