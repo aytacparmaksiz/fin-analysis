@@ -61,16 +61,17 @@ export function extractValuationFromReportText(
   const result: Partial<ValuationMetrics> = {};
 
   // KaTeX veya düz metin veya markdown (**) içinden Adil Değer eşleştirmeleri
+  // KESİNLİKLE "Adil Değer", "Hedef Fiyat" veya "Muhafazakar Adil Değer" içeren ifadeleri eşleştir!
   const fairValueRegexes = [
-    // LaTeX formülü \mathbf ile: = \mathbf{164,20\text{ TL}} veya = \mathbf{164,20 TL}
-    /=\s*\\mathbf\{\s*([0-9]+[.,][0-9]{1,2})\s*(?:\\text\{)?\s*TL\s*\}?\s*\}/i,
-    // LaTeX formülü \mathbf olmadan: = 164,20\text{ TL} veya = 164,20 TL
-    /=\s*([0-9]+[.,][0-9]{1,2})\s*(?:\\text\{\s*)?TL/i,
-    // **Adil Değer:** 164,20 TL, **Adil Değer**: 164,20 TL veya Adil Değer: 164.20 TL
+    // LaTeX \mathbf ile son sonuç: \text{Adil Değer} = ... = \mathbf{411,62\text{ TL}}
+    /(?:Adil\s+De[ğg]er|Hedef\s+Fiyat|Muhafazakar\s+Adil\s+De[ğg]er)[^\n\r]*?=\s*\\mathbf\{\s*([0-9]+[.,][0-9]{1,2})\s*(?:\\text\{\s*)?TL\s*\}?\s*\}/i,
+    // LaTeX formülü ile: \text{Adil Değer} = 411,62 TL veya \text{Adil Değer} = \mathbf{...}
+    /\\text\{\s*(?:Adil\s+De[ğg]er|Hedef\s+Fiyat|Muhafazakar\s+Adil\s+De[ğg]er)\s*\}\s*=\s*(?:\\mathbf\{)?\s*([0-9]+[.,][0-9]{1,2})\s*(?:\\text\{\s*)?TL/i,
+    // Markdown veya düz metin: **Adil Değer:** 411,62 TL, **Adil Değer**: 411,62 TL veya Adil Değer: 411.62 TL
     /(?:Adil\s+De[ğg]er|Hedef\s+Fiyat|Muhafazakar\s+Adil\s+De[ğg]er)[^\n\r0-9]{0,35}[:=][*_\s]*([0-9]+[.,][0-9]{1,2})[*_\s]*(?:\\text\{)?\s*TL/i,
-    // - Adil Değer: 164.20 TL veya - Hedef Fiyat: 164.20 TL
+    // - Adil Değer: 411.62 TL veya - Hedef Fiyat: 411.62 TL
     /(?:Adil\s+De[ğg]er|Hedef\s+Fiyat)\s*[:=-]\s*([0-9]+[.,][0-9]{1,2})\s*TL/i,
-    // Hisse Başı Adil Değer: 633.26 TL
+    // Hisse Başı Adil Değer: 411.62 TL
     /(?:Hisse\s+Ba[şs][ıi]\s+)?Adil\s+De[ğg]er[^\n\r0-9]{0,25}[:=]\s*([0-9]+[.,][0-9]{1,2})\s*TL/i,
   ];
 
@@ -85,14 +86,14 @@ export function extractValuationFromReportText(
     }
   }
 
-  const refPrice = result.fair_value || (currentPrice && currentPrice > 0 ? currentPrice : 100);
+  const refPrice = result.fair_value || (currentPrice && currentPrice > 0 ? currentPrice : 0);
 
   // Ayı Senaryosu Taban Fiyatı
   const bearMatch = reportText.match(/(?:Ay[ıi]\s+Senaryosu|Taban\s+Hedef\s+Fiyat)[^\n\r0-9]{0,35}[:=][*_\s]*([0-9]+[.,][0-9]{1,2})[*_\s]*TL/i);
   if (bearMatch && bearMatch[1]) {
     const val = parseFloat(bearMatch[1].replace(',', '.'));
-    // Çarpan sızıntılarını (örn 1.38x veya referans fiyatın %25'inden küçük değerler) TL fiyatı olarak kabul etme!
-    if (val >= Math.min(20, refPrice * 0.25) && val < 50000) {
+    // Çarpan sızıntılarını (örn 1.38x) engelle: ayı fiyatı refPrice'ın %35'inden küçük olamaz ve adil değerin üstünde olamaz
+    if (refPrice > 0 ? (val >= refPrice * 0.35 && val <= refPrice * 1.05) : (val >= 10 && val < 50000)) {
       result.bear_price = Number(val.toFixed(2));
     }
   }
@@ -101,8 +102,8 @@ export function extractValuationFromReportText(
   const bullMatch = reportText.match(/(?:Bo[ğg]a\s+Senaryosu|Tavan\s+Hedef\s+Fiyat)[^\n\r0-9]{0,35}[:=][*_\s]*([0-9]+[.,][0-9]{1,2})[*_\s]*TL/i);
   if (bullMatch && bullMatch[1]) {
     const val = parseFloat(bullMatch[1].replace(',', '.'));
-    // Çarpan sızıntılarını (örn 2.3x veya referans fiyatın %50'sinden küçük değerler) TL fiyatı olarak kabul etme!
-    if (val >= Math.min(25, refPrice * 0.5) && val < 50000) {
+    // Boğa fiyatı adil değerin altında olamaz
+    if (refPrice > 0 ? (val >= refPrice * 1.05 && val <= refPrice * 3.0) : (val >= 15 && val < 50000)) {
       result.bull_price = Number(val.toFixed(2));
     }
   }
@@ -155,29 +156,97 @@ export function computeSectorValuationAndDrivers(
   });
 
   const latest = sortedHistory.length > 0 ? sortedHistory[sortedHistory.length - 1] : null;
-  const prevYear = sortedHistory.length > 4 
-    ? sortedHistory[sortedHistory.length - 5] 
-    : (sortedHistory.length > 1 ? sortedHistory[0] : null);
+
+  // 1 yıl önceki dönemi akıllı ara (örn 2026/Q2 -> 2025/Q2)
+  let prevYearItem: any = null;
+  let isCagr = false;
+  let yearDiff = 1;
+
+  if (latest && latest.period) {
+    const latestYrMatch = String(latest.period).match(/(20\d{2})/);
+    if (latestYrMatch) {
+      const latestYear = parseInt(latestYrMatch[1], 10);
+      const targetPrevYear = latestYear - 1;
+
+      // Önce aynı çeyreği ara (örn /Q2, /06, 2.ç)
+      const qMatch = String(latest.period).match(/(q[1-4]|[1-4]\.ç|\/0?[369]|\/12)/i);
+      if (qMatch) {
+        const qStr = qMatch[0].toLowerCase();
+        prevYearItem = sortedHistory.find(h => {
+          const yMatch = String(h?.period || '').match(/(20\d{2})/);
+          return yMatch && parseInt(yMatch[1], 10) === targetPrevYear && String(h?.period || '').toLowerCase().includes(qStr);
+        });
+      }
+
+      // Aynı çeyrek bulunamadıysa targetPrevYear yılındaki en son dönemi al
+      if (!prevYearItem) {
+        const prevYearCandidates = sortedHistory.filter(h => {
+          const yMatch = String(h?.period || '').match(/(20\d{2})/);
+          return yMatch && parseInt(yMatch[1], 10) === targetPrevYear;
+        });
+        if (prevYearCandidates.length > 0) {
+          prevYearItem = prevYearCandidates[prevYearCandidates.length - 1];
+        }
+      }
+
+      // Eğer 1 yıl öncesi hiç yoksa, en eski dönemi al ve CAGR hesapla
+      if (!prevYearItem && sortedHistory.length > 1) {
+        prevYearItem = sortedHistory[0];
+        const oldestYrMatch = String(prevYearItem?.period || '').match(/(20\d{2})/);
+        if (oldestYrMatch) {
+          const oldestYear = parseInt(oldestYrMatch[1], 10);
+          yearDiff = Math.max(1, latestYear - oldestYear);
+          if (yearDiff > 1) isCagr = true;
+        }
+      }
+    }
+  }
+
+  if (!prevYearItem && sortedHistory.length > 1) {
+    prevYearItem = sortedHistory.length > 4 ? sortedHistory[sortedHistory.length - 5] : sortedHistory[0];
+  }
 
   // 1. DİNAMİK SÜRÜCÜ: GELİR BÜYÜMESİ (REVENUE GROWTH)
   let revGrowth = 45.0;
   let revGrowthExpl = 'Tarihsel finansal tablolardan dinamik hesaplandı';
-  if (latest && prevYear && prevYear.revenue && latest.revenue && prevYear.revenue > 0) {
-    const rawGrowth = ((latest.revenue - prevYear.revenue) / prevYear.revenue) * 100;
-    if (rawGrowth > -50 && rawGrowth < 500) {
-      revGrowth = Number(rawGrowth.toFixed(1));
-      revGrowthExpl = `${prevYear.period || 'Önceki Yıl'} -> ${latest.period || 'Son Dönem'} gerçekleşen yıllık (YoY) prim/hasılat artışı: %${revGrowth}`;
+  const latestRev = latest?.revenue ?? latest?.written_premiums;
+  const prevRev = prevYearItem?.revenue ?? prevYearItem?.written_premiums;
+
+  if (latestRev && prevRev && prevRev > 0 && latestRev > 0) {
+    if (isCagr && yearDiff > 1) {
+      const cagr = (Math.pow(latestRev / prevRev, 1 / yearDiff) - 1) * 100;
+      if (cagr > -50 && cagr < 500) {
+        revGrowth = Number(cagr.toFixed(1));
+        revGrowthExpl = `${prevYearItem.period || 'Başlangıç'} -> ${latest.period || 'Son Dönem'} (${yearDiff} Yıllık Yıllıklandırılmış Bileşik Prim/Hasılat Artışı - CAGR): %${revGrowth}`;
+      }
+    } else {
+      const rawGrowth = ((latestRev - prevRev) / prevRev) * 100;
+      if (rawGrowth > -50 && rawGrowth < 500) {
+        revGrowth = Number(rawGrowth.toFixed(1));
+        revGrowthExpl = `${prevYearItem.period || 'Önceki Yıl'} -> ${latest.period || 'Son Dönem'} gerçekleşen yıllık (YoY) prim/hasılat artışı: %${revGrowth}`;
+      }
     }
   }
 
   // 2. DİNAMİK SÜRÜCÜ: NET KÂR BÜYÜMESİ (NET INCOME GROWTH)
   let netGrowth = 40.0;
   let netGrowthExpl = 'Tarihsel finansal tablolardan dinamik hesaplandı';
-  if (latest && prevYear && prevYear.net_income && latest.net_income && prevYear.net_income > 0) {
-    const rawNetGrowth = ((latest.net_income - prevYear.net_income) / prevYear.net_income) * 100;
-    if (rawNetGrowth > -80 && rawNetGrowth < 800) {
-      netGrowth = Number(rawNetGrowth.toFixed(1));
-      netGrowthExpl = `${prevYear.period || 'Önceki Yıl'} -> ${latest.period || 'Son Dönem'} gerçekleşen yıllık net kâr artışı: %${netGrowth}`;
+  const latestNet = latest?.net_income;
+  const prevNet = prevYearItem?.net_income;
+
+  if (latestNet && prevNet && prevNet > 0 && latestNet > 0) {
+    if (isCagr && yearDiff > 1) {
+      const cagr = (Math.pow(latestNet / prevNet, 1 / yearDiff) - 1) * 100;
+      if (cagr > -80 && cagr < 800) {
+        netGrowth = Number(cagr.toFixed(1));
+        netGrowthExpl = `${prevYearItem.period || 'Başlangıç'} -> ${latest.period || 'Son Dönem'} (${yearDiff} Yıllık Yıllıklandırılmış Bileşik Net Kâr Artışı - CAGR): %${netGrowth}`;
+      }
+    } else {
+      const rawNetGrowth = ((latestNet - prevNet) / prevNet) * 100;
+      if (rawNetGrowth > -80 && rawNetGrowth < 800) {
+        netGrowth = Number(rawNetGrowth.toFixed(1));
+        netGrowthExpl = `${prevYearItem.period || 'Önceki Yıl'} -> ${latest.period || 'Son Dönem'} gerçekleşen yıllık net kâr artışı: %${netGrowth}`;
+      }
     }
   }
 

@@ -637,11 +637,16 @@ function preprocessReportMarkdown(text: string): string {
   cleaned = cleaned.replace(/\\\\\[([\s\S]*?)\\\\\]/g, (_m: string, g1: string) => `\n\n$$\n${g1.trim()}\n$$\n\n`);
   cleaned = cleaned.replace(/\\\[([\s\S]*?)\\\]/g, (_m: string, g1: string) => `\n\n$$\n${g1.trim()}\n$$\n\n`);
 
-  // 2. Convert any line that is just "$" or "-> $" or "> $" into "$$" (Item 11: Text / LaTeX hatalarını önleme)
-  cleaned = cleaned.replace(/(?:^|\n)\s*(?:->\s*|>\s*)?\$\s*(?=\r?\n|$)/g, () => '\n$$');
+  // 2. Convert standalone "$" lines or lines starting with "-> $" or "> $" or "- $" (Item 11: Text / LaTeX hatalarını önleme)
+  cleaned = cleaned.replace(/(?:^|\n)\s*(?:[-*]\s*)?(?:->\s*|>\s*)?\$\s*(?=\r?\n|$)/g, () => '\n$$');
 
-  // 3. Clean inside $$ ... $$: ensure no internal blank lines break CommonMark math block
-  cleaned = cleaned.replace(/\$\$([^$]+?)\$\$/g, (_match: string, inner: string) => {
+  // 3. Convert single dollar math containing LaTeX commands (\text, \frac, etc.) or leading -> $ into $$
+  cleaned = cleaned.replace(/(?:->\s*|>\s*)?\$(?!\$)\s*([^\n$]*\\[a-zA-Z]+[^\n$]*?)\s*\$/g, (_m: string, g1: string) => {
+    return `\n\n$$\n${g1.trim()}\n$$\n\n`;
+  });
+
+  // 4. Clean inside $$ ... $$: ensure no internal blank lines break CommonMark math block
+  cleaned = cleaned.replace(/\$\$([\s\S]*?)\$\$/g, (_match: string, inner: string) => {
     const cleanedInner = inner
       .split('\n')
       .map((line: string) => line.trim())
@@ -650,12 +655,12 @@ function preprocessReportMarkdown(text: string): string {
     return `\n\n$$\n${cleanedInner}\n$$\n\n`;
   });
 
-  // 4. Inline LaTeX conversions
-  cleaned = cleaned.replace(/\\\((\s*\\text\{.*?\}\s*)\\\)/g, (_m: string, g1: string) => `$$${g1}$$`);
-  cleaned = cleaned.replace(/\\\((\s*\\frac\{.*?\}\{.*?\}\s*)\\\)/g, (_m: string, g1: string) => `$$${g1}$$`);
+  // 5. Inline LaTeX conversions: \( \text{...} \)
+  cleaned = cleaned.replace(/\\\((\s*\\text\{.*?\}\s*)\\\)/g, (_m: string, g1: string) => `\n\n$$${g1}$$\n\n`);
+  cleaned = cleaned.replace(/\\\((\s*\\frac\{.*?\}\{.*?\}\s*)\\\)/g, (_m: string, g1: string) => `\n\n$$${g1}$$\n\n`);
   cleaned = cleaned.replace(/\\\((.*?)\\\)/g, '$1');
 
-  // 5. Normalise spacing around $$ blocks
+  // 6. Normalise spacing around $$ blocks
   cleaned = cleaned.replace(/\n{3,}\$\$/g, () => '\n\n$$');
   cleaned = cleaned.replace(/\$\$\n{3,}/g, () => '$$\n\n');
 
@@ -1469,6 +1474,7 @@ export default function ValuationTerminal() {
           label: currentSector === 'BANKING' ? 'Krediler ve Alacaklar' : 'Esas Faaliyetlerden Alacaklar', 
           sublabel: currentSector === 'BANKING' ? 'Müşterilere Verilen Krediler Bakiyesi' : 'Poliçe ve Ticari Alacak Bakiyesi', 
           key: 'trade_receivables', 
+          fallbackKey: 'receivables',
           isHeader: false 
         },
         { 
@@ -1488,6 +1494,7 @@ export default function ValuationTerminal() {
           label: 'Cari Olmayan Varlıklar Toplamı', 
           sublabel: 'Maddi, Gayrimaddi Duran Varlıklar ve Uzun Vadeli Yatırımlar', 
           key: 'non_current_assets', 
+          fallbackKey: 'fixed_assets',
           isHeader: true, 
           highlight: true 
         },
@@ -1497,8 +1504,8 @@ export default function ValuationTerminal() {
       title: 'Bilanço Büyüklüğü (Toplam Aktifler & Özkaynaklar)',
       categoryKey: 'bs_totals',
       rows: [
-        { label: 'Toplam Varlıklar (Aktifler)', sublabel: 'Bilanço Büyüklüğü (Aktif Toplamı)', key: 'total_assets', isHeader: true, highlight: true },
-        { label: 'Toplam Özkaynaklar', sublabel: 'Ana Ortaklığa Ait Net Özsermaye (Defter Değeri)', key: 'equity', isHeader: true, highlight: true },
+        { label: 'Toplam Varlıklar (Aktifler)', sublabel: 'Bilanço Büyüklüğü (Aktif Toplamı)', key: 'total_assets', fallbackKey: 'assets', isHeader: true, highlight: true },
+        { label: 'Toplam Özkaynaklar', sublabel: 'Ana Ortaklığa Ait Net Özsermaye (Defter Değeri)', key: 'equity', fallbackKey: 'total_equity', isHeader: true, highlight: true },
       ],
     },
   ];
@@ -1577,7 +1584,7 @@ export default function ValuationTerminal() {
       title: 'Dönem Net Kârı & Marjlar',
       categoryKey: 'is_margins',
       rows: [
-        { label: 'Net Dönem Kârı', sublabel: 'Ana Ortaklık Net Kârı', key: 'net_income', isHeader: true, highlight: true },
+        { label: 'Net Dönem Kârı', sublabel: 'Ana Ortaklık Net Kârı', key: 'net_income', fallbackKey: 'net_profit', isHeader: true, highlight: true },
         { label: 'Brüt Kâr Marjı', sublabel: 'Brüt Kâr / Hasılat', key: 'gross_margin', isMargin: true, prefix: '%', isHeader: false },
         { label: 'FAVÖK Marjı', sublabel: 'FAVÖK / Hasılat', key: 'ebitda_margin', isMargin: true, prefix: '%', isHeader: false },
         { label: 'Net Kâr Marjı', sublabel: 'Net Kâr / Hasılat', key: 'net_margin', isMargin: true, prefix: '%', isHeader: false },
@@ -1591,21 +1598,21 @@ export default function ValuationTerminal() {
       title: 'İşletme Faaliyetleri Nakit Akışı',
       categoryKey: 'cf_operating',
       rows: [
-        { label: 'İşletme Faaliyetlerinden Nakit Akışı (OCF)', sublabel: 'Esas Faaliyetlerden Elde Edilen Gerçek Nakit', key: 'operating_cash_flow', isHeader: true },
+        { label: 'İşletme Faaliyetlerinden Nakit Akışı (OCF)', sublabel: 'Esas Faaliyetlerden Elde Edilen Gerçek Nakit', key: 'operating_cash_flow', fallbackKey: 'ocf', isHeader: true },
       ],
     },
     {
       title: 'Yatırım Harcamaları & CAPEX',
       categoryKey: 'cf_capex',
       rows: [
-        { label: 'Yatırım Harcamaları (CAPEX)', sublabel: 'Maddi & Gayrimaddi Varlık Alımları', key: 'capex', isHeader: false, invert: true },
+        { label: 'Yatırım Harcamaları (CAPEX)', sublabel: 'Maddi & Gayrimaddi Varlık Alımları', key: 'capex', fallbackKey: 'capital_expenditures', isHeader: false, invert: true },
       ],
     },
     {
       title: 'Serbest Nakit Akışı & Borçluluk',
       categoryKey: 'cf_free_cash',
       rows: [
-        { label: 'Serbest Nakit Akışı (FCF)', sublabel: 'OCF - CAPEX (Hissedara Kalan Net Nakit)', key: 'free_cash_flow', isHeader: true, highlight: true },
+        { label: 'Serbest Nakit Akışı (FCF)', sublabel: 'OCF - CAPEX (Hissedara Kalan Net Nakit)', key: 'free_cash_flow', fallbackKey: 'fcf', isHeader: true, highlight: true },
         { label: 'Net Finansal Borç / (Nakit Fazlası)', sublabel: 'Finansal Borçlar - Nakit ve Nakit Benzerleri', key: 'net_debt', isHeader: false, invert: true },
       ],
     },
@@ -1715,8 +1722,9 @@ export default function ValuationTerminal() {
 
   // Rapor metninde önceden yazılmış adil değer varsa (Item 2: Rapor ile Kart Uyuşmazlığını Sıfırlama)
   const reportValuation = useMemo(() => {
-    return extractValuationFromReportText(activeReport?.report || '');
-  }, [activeReport?.report]);
+    const numPrice = parseFloat(activeReport?.price || price || '0');
+    return extractValuationFromReportText(activeReport?.report || '', numPrice);
+  }, [activeReport?.report, activeReport?.price, price]);
 
   const drivers: FairValueDrivers = (currentExtractedData?.fair_value_drivers?.revenue_growth?.value != null)
     ? currentExtractedData.fair_value_drivers
@@ -1737,12 +1745,12 @@ export default function ValuationTerminal() {
   }
 
   // Ayı Senaryosu taban fiyatı kontrolü (Çarpan sızıntısı veya aşırı düşük fiyatları engelle)
-  if (!valuationInfo.bear_price || valuationInfo.bear_price < valuationInfo.fair_value * 0.3) {
+  if (!valuationInfo.bear_price || valuationInfo.bear_price < valuationInfo.fair_value * 0.35 || valuationInfo.bear_price > valuationInfo.fair_value * 1.05) {
     valuationInfo.bear_price = Number((valuationInfo.fair_value * 0.75).toFixed(2));
   }
 
   // Boğa Senaryosu tavan fiyatı kontrolü (Adil değerden düşük olamaz)
-  if (!valuationInfo.bull_price || valuationInfo.bull_price < valuationInfo.fair_value * 0.95) {
+  if (!valuationInfo.bull_price || valuationInfo.bull_price < valuationInfo.fair_value * 1.05) {
     valuationInfo.bull_price = Number((valuationInfo.fair_value * 1.25).toFixed(2));
   }
 
@@ -3137,7 +3145,7 @@ export default function ValuationTerminal() {
 
                                 {/* Kategori Altındaki Oran Kalemleri */}
                                 {!isCollapsed && sec.rows.map((row, rIdx) => {
-                                  const values = tableData.map((d: any) => computeRatioForPeriod(d, row.key, currentSector, row.defaultVal));
+                                  const values = tableData.map((d: any) => computeRatioForPeriod(d, row.key, currentSector));
                                   const isDetailOpen = selectedRatioDetail === row.key;
                                   const ratioDef = RATIO_DEFINITIONS[row.key];
 
@@ -3161,9 +3169,9 @@ export default function ValuationTerminal() {
                                         </td>
 
                                         {tableData.map((d: any, idx: number) => {
-                                          const rawVal = computeRatioForPeriod(d, row.key, currentSector, row.defaultVal);
+                                          const rawVal = computeRatioForPeriod(d, row.key, currentSector);
                                           const prevPeriodData = idx < tableData.length - 1 ? tableData[idx + 1] : null;
-                                          const prevVal = prevPeriodData ? computeRatioForPeriod(prevPeriodData, row.key, currentSector, row.defaultVal) : null;
+                                          const prevVal = prevPeriodData ? computeRatioForPeriod(prevPeriodData, row.key, currentSector) : null;
                                           const change = calculateYoYChange(rawVal, prevVal, true);
 
                                           let displayStr = '—';
