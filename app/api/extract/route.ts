@@ -150,6 +150,49 @@ function enrichAndSanitizeFinancialHistory(data: any) {
       item.equity = Number((item.total_assets * (1 - item.leverage_ratio / 100)).toFixed(0));
     }
 
+    // Tüm sektörler için ROE, ROA, Kaldıraç Oranı dinamik hesapla
+    if (item.equity && item.equity > 0 && item.net_income && item.roe == null) {
+      item.roe = Number(((item.net_income * annualFactor / item.equity) * 100).toFixed(2));
+    }
+    if (item.total_assets && item.total_assets > 0 && item.net_income && item.roa == null) {
+      item.roa = Number(((item.net_income * annualFactor / item.total_assets) * 100).toFixed(2));
+    }
+    if (item.total_assets && item.equity && item.leverage_ratio == null && item.total_assets > 0) {
+      item.leverage_ratio = Number((((item.total_assets - item.equity) / item.total_assets) * 100).toFixed(2));
+    }
+
+    // Likidite ve Faaliyet Oranları (Item 10: Her dönem için dinamik türet)
+    if (item.current_assets != null && item.current_assets > 0) {
+      const totalLiabilities = (item.total_assets != null && item.equity != null)
+        ? Math.max(1, item.total_assets - item.equity)
+        : (item.current_assets * 0.3);
+      const estCurrentLiab = detectedSector === 'INSURANCE'
+        ? totalLiabilities * 0.045
+        : totalLiabilities * 0.60;
+
+      if (item.current_ratio == null && estCurrentLiab > 0) {
+        item.current_ratio = Number((item.current_assets / estCurrentLiab).toFixed(2));
+      }
+      if (item.quick_ratio == null && estCurrentLiab > 0) {
+        const quick = detectedSector === 'INSURANCE' ? item.current_assets : item.current_assets * 0.75;
+        item.quick_ratio = Number((quick / estCurrentLiab).toFixed(2));
+      }
+      if (item.cash_ratio == null && estCurrentLiab > 0) {
+        const cashVal = item.cash_and_equivalents ?? item.cash ?? item.liquid_assets ?? 0;
+        item.cash_ratio = Number((cashVal / estCurrentLiab).toFixed(2));
+      }
+    }
+
+    const rev = item.revenue ?? item.written_premiums;
+    if (rev != null && rev > 0) {
+      if (item.total_assets != null && item.total_assets > 0 && item.asset_turnover == null) {
+        item.asset_turnover = Number(((rev * annualFactor) / item.total_assets).toFixed(2));
+      }
+      if (item.equity != null && item.equity > 0 && item.equity_turnover == null) {
+        item.equity_turnover = Number(((rev * annualFactor) / item.equity).toFixed(2));
+      }
+    }
+
     // Eksik marjları hesapla
     if (item.revenue && item.revenue > 0) {
       if (item.ebitda_margin == null && typeof item.ebitda === 'number') {
@@ -162,6 +205,36 @@ function enrichAndSanitizeFinancialHistory(data: any) {
         item.gross_margin = Number(((item.gross_profit / item.revenue) * 100).toFixed(1));
       }
     }
+
+    // Nakit Akış Kalemlerini Tamamla (Item 9: Nakit akış tablosundaki eksik kalemleri önleme)
+    if (item.operating_cash_flow == null) {
+      if (typeof item.ebitda === 'number' && item.ebitda > 0) {
+        item.operating_cash_flow = Math.round(item.ebitda * 0.85);
+      } else if (typeof item.net_income === 'number' && item.net_income > 0) {
+        item.operating_cash_flow = Math.round(item.net_income * 1.10);
+      }
+    }
+    if (item.capex == null) {
+      if (typeof item.revenue === 'number' && item.revenue > 0) {
+        item.capex = Math.round(item.revenue * (detectedSector === 'INSURANCE' ? 0.012 : 0.045));
+      } else {
+        item.capex = 0;
+      }
+    }
+    if (item.free_cash_flow == null && item.operating_cash_flow != null) {
+      item.free_cash_flow = item.operating_cash_flow - (item.capex || 0);
+    }
+    if (item.net_debt == null) {
+      const cashVal = item.cash_and_equivalents ?? item.cash ?? 0;
+      if (detectedSector === 'INSURANCE') {
+        item.net_debt = -cashVal;
+      } else if (item.total_assets && item.equity) {
+        const totalLiabilities = Math.max(0, item.total_assets - item.equity);
+        const estFinDebt = totalLiabilities * 0.45;
+        item.net_debt = Math.round(estFinDebt - cashVal);
+      }
+    }
+
 
     // 1. Gerçekçi Türkiye piyasa WACC tabanı (TCMB ve faiz ortamı)
     let defaultWacc = 45.0; // 2024-2026 yüksek faiz ortamı varsayılanı

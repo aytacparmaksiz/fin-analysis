@@ -207,11 +207,24 @@ HESAPLANAN DİNAMİK DEĞERLEME VE ADİL DEĞER ÇERÇEVESİ (RAPORUNDA BU DEĞE
 - 4. Değer Sürücüsü (${drivers.target_multiple.label}): ${drivers.target_multiple.value}
 
 DİKKAT VE TUTARLILIK KURALI:
-Raporunun Değerleme ve İleriye Dönük Adil Değer (Valuation) bölümündeki formüllerde ve metinlerde KESİNLİKLE yukarıda verilen ${valuation.fair_value} TL adil değerini ve sürücü rakamlarını temel alacaksın. Rapor ile terminaldeki özet kartlar arasında herhangi bir çelişki OLMAMALIDIR!
+1. Raporunun Değerleme bölümünde hesaplayacağın Hisse Başı Adil Değer KESİNLİKLE yukarıda verilen ${valuation.fair_value} TL olmalıdır! Kendi başına farklı bir adil değer hesaplama veya uydurma.
+2. Ayı Senaryosu taban hedef fiyatı KESİNLİKLE ${valuation.bear_price} TL olmalıdır.
+3. Boğa Senaryosu tavan hedef fiyatı KESİNLİKLE ${valuation.bull_price} TL olmalıdır.
+4. ÇARPAN UYARISI: PD/DD veya FD/FAVÖK gibi çarpanları (örn: 1.38x veya 2.32x) ASLA hisse fiyatı (TL) olarak yazma! Çarpanlar 'x' ile gösterilir, hisse fiyatları TL cinsindendir ve ${valuation.bear_price} TL ile ${valuation.bull_price} TL arasındadır.
+5. Değerleme bölümündeki formüllerde ve özet satırlarında birebir şu şekilde yaz:
+$$
+\\text{Adil Değer} = \\mathbf{${valuation.fair_value}\\text{ TL}}
+$$
+- Adil Değer: ${valuation.fair_value} TL
+- Ayı Senaryosu Taban Fiyatı: ${valuation.bear_price} TL
+- Boğa Senaryosu Tavan Fiyatı: ${valuation.bull_price} TL
+6. FORMÜL KURALI: Matematik ve değerleme formüllerini yazarken ASLA tek dolar ($) kullanma! Formülleri her zaman çift dolar ($$) ile ve açılış ile kapanış arasında KESİNLİKLE BOŞ SATIR BIRAKMADAN yaz.
+Rapor ile terminaldeki özet kartlar arasında herhangi bir çelişki OLMAMALIDIR!
 
 Doğrulanmış ve Raporlardan Birebir Çıkarılmış Çok Yıllı Finansal Zaman Serisi & Rehberlik Veri Seti:
 ${typeof extractedData === 'string' ? extractedData : JSON.stringify(extractedData, null, 2)}
 `;
+
 
     if (previousReport) {
       prompt += `\nÖnceki Dönem Raporu ve Skoru (Referans Karşılaştırma):

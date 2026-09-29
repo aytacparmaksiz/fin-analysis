@@ -52,17 +52,26 @@ function parseShareCountNumber(raw: any): number {
 /**
  * Rapor metninden hesaplanmış adil değer ve iskonto rakamlarını ayıklar
  */
-export function extractValuationFromReportText(reportText: string): Partial<ValuationMetrics> | null {
+export function extractValuationFromReportText(
+  reportText: string,
+  currentPrice?: number
+): Partial<ValuationMetrics> | null {
   if (!reportText) return null;
 
   const result: Partial<ValuationMetrics> = {};
 
-  // KaTeX veya düz metin içinden Adil Değer eşleştirmeleri
-  // Örn: \text{Adil Değer} = 70,66 \times 3,9 = \mathbf{164,20\text{ TL}} veya Adil Değer: 164.20 TL
+  // KaTeX veya düz metin veya markdown (**) içinden Adil Değer eşleştirmeleri
   const fairValueRegexes = [
-    /(?:Adil\s+De[ğg]er|Muhafazakar\s+Adil\s+De[ğg]er)\s*[:=]\s*(?:\\mathbf\{)?\s*([0-9]+[.,][0-9]{1,2})\s*(?:\\text\{)?\s*TL/i,
-    /(?:Hedef\s+Fiyat|Adil\s+De[ğg]er)\s*[:=]\s*[*_]*([0-9]+[.,][0-9]{1,2})\s*TL/i,
-    /=\s*\\mathbf\{\s*([0-9]+[.,][0-9]{1,2})\s*\\text\{\s*TL\s*\}\s*\}/i,
+    // LaTeX formülü \mathbf ile: = \mathbf{164,20\text{ TL}} veya = \mathbf{164,20 TL}
+    /=\s*\\mathbf\{\s*([0-9]+[.,][0-9]{1,2})\s*(?:\\text\{)?\s*TL\s*\}?\s*\}/i,
+    // LaTeX formülü \mathbf olmadan: = 164,20\text{ TL} veya = 164,20 TL
+    /=\s*([0-9]+[.,][0-9]{1,2})\s*(?:\\text\{\s*)?TL/i,
+    // **Adil Değer:** 164,20 TL, **Adil Değer**: 164,20 TL veya Adil Değer: 164.20 TL
+    /(?:Adil\s+De[ğg]er|Hedef\s+Fiyat|Muhafazakar\s+Adil\s+De[ğg]er)[^\n\r0-9]{0,35}[:=][*_\s]*([0-9]+[.,][0-9]{1,2})[*_\s]*(?:\\text\{)?\s*TL/i,
+    // - Adil Değer: 164.20 TL veya - Hedef Fiyat: 164.20 TL
+    /(?:Adil\s+De[ğg]er|Hedef\s+Fiyat)\s*[:=-]\s*([0-9]+[.,][0-9]{1,2})\s*TL/i,
+    // Hisse Başı Adil Değer: 633.26 TL
+    /(?:Hisse\s+Ba[şs][ıi]\s+)?Adil\s+De[ğg]er[^\n\r0-9]{0,25}[:=]\s*([0-9]+[.,][0-9]{1,2})\s*TL/i,
   ];
 
   for (const reg of fairValueRegexes) {
@@ -76,25 +85,41 @@ export function extractValuationFromReportText(reportText: string): Partial<Valu
     }
   }
 
+  const refPrice = result.fair_value || (currentPrice && currentPrice > 0 ? currentPrice : 100);
+
   // Ayı Senaryosu Taban Fiyatı
-  const bearMatch = reportText.match(/(?:Ay[ıi]\s+Senaryosu|Taban\s+Hedef\s+Fiyat)\s*[:=]\s*([0-9]+[.,][0-9]{1,2})\s*TL/i);
+  const bearMatch = reportText.match(/(?:Ay[ıi]\s+Senaryosu|Taban\s+Hedef\s+Fiyat)[^\n\r0-9]{0,35}[:=][*_\s]*([0-9]+[.,][0-9]{1,2})[*_\s]*TL/i);
   if (bearMatch && bearMatch[1]) {
-    result.bear_price = parseFloat(bearMatch[1].replace(',', '.'));
+    const val = parseFloat(bearMatch[1].replace(',', '.'));
+    // Çarpan sızıntılarını (örn 1.38x veya referans fiyatın %25'inden küçük değerler) TL fiyatı olarak kabul etme!
+    if (val >= Math.min(20, refPrice * 0.25) && val < 50000) {
+      result.bear_price = Number(val.toFixed(2));
+    }
   }
 
   // Boğa Senaryosu Tavan Fiyatı
-  const bullMatch = reportText.match(/(?:Bo[ğg]a\s+Senaryosu|Tavan\s+Hedef\s+Fiyat)\s*[:=]\s*([0-9]+[.,][0-9]{1,2})\s*TL/i);
+  const bullMatch = reportText.match(/(?:Bo[ğg]a\s+Senaryosu|Tavan\s+Hedef\s+Fiyat)[^\n\r0-9]{0,35}[:=][*_\s]*([0-9]+[.,][0-9]{1,2})[*_\s]*TL/i);
   if (bullMatch && bullMatch[1]) {
-    result.bull_price = parseFloat(bullMatch[1].replace(',', '.'));
+    const val = parseFloat(bullMatch[1].replace(',', '.'));
+    // Çarpan sızıntılarını (örn 2.3x veya referans fiyatın %50'sinden küçük değerler) TL fiyatı olarak kabul etme!
+    if (val >= Math.min(25, refPrice * 0.5) && val < 50000) {
+      result.bull_price = Number(val.toFixed(2));
+    }
   }
 
   // İskonto Oranı
-  const discountMatch = reportText.match(/(?:[İI]skonto\s+Oran[ıi]|G[üu]venlik\s+Marj[ıi])\s*[:=]\s*%?\s*([0-9]+[.,][0-9]{1,2})\s*%?/i);
+  const discountMatch = reportText.match(/(?:[İI]skonto\s+Oran[ıi]|G[üu]venlik\s+Marj[ıi])[^\n\r0-9]{0,25}[:=][*_\s]*%?\s*([0-9]+[.,][0-9]{1,2})\s*%?/i);
   if (discountMatch && discountMatch[1]) {
     result.discount_pct = parseFloat(discountMatch[1].replace(',', '.'));
   }
 
   if (result.fair_value) {
+    if (!result.bear_price) {
+      result.bear_price = Number((result.fair_value * 0.75).toFixed(2));
+    }
+    if (!result.bull_price) {
+      result.bull_price = Number((result.fair_value * 1.25).toFixed(2));
+    }
     return result;
   }
 

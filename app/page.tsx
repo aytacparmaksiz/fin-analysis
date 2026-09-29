@@ -267,6 +267,60 @@ function formatChartMetric(val: number | null | undefined, isPct = false): strin
   return `${val.toLocaleString('tr-TR')} TL`;
 }
 
+// Sürücü çubuğu pin yüzdesi hesaplayıcı (Item 8: Değer sürücüsü iğnesini [0, 100] aralığında mantıklı konumlandırma)
+function calculateDriverPin(
+  type: 'rev' | 'net' | 'margin' | 'multiple',
+  value: number,
+  sector?: SectorType,
+  targetNum?: number
+): number {
+  if (value === null || value === undefined || isNaN(value)) return 50;
+
+  if (type === 'rev') {
+    if (value <= -20) return 10;
+    if (value >= 150) return 92;
+    if (value <= 0) return Math.round(10 + ((value + 20) / 20) * 15);
+    if (value <= 40) return Math.round(25 + (value / 40) * 25);
+    if (value <= 80) return Math.round(50 + ((value - 40) / 40) * 25);
+    return Math.round(75 + ((value - 80) / 70) * 17);
+  }
+
+  if (type === 'net') {
+    // Net Kâr Büyümesi: örn %357.3 gibi yüksek değerler boğa bölgesinde (sağda) yer alır
+    if (value <= -30) return 10;
+    if (value >= 200) return 92;
+    if (value <= 0) return Math.round(10 + ((value + 30) / 30) * 18);
+    if (value <= 40) return Math.round(28 + (value / 40) * 22);
+    if (value <= 100) return Math.round(50 + ((value - 40) / 60) * 25);
+    return Math.round(75 + ((value - 100) / 100) * 17);
+  }
+
+  if (type === 'margin') {
+    if (sector === 'INSURANCE') {
+      // Kombine Oran: Düşük olması İYİDİR! (< %85 Boğa, %85-%95 Nötr, > %100 Ayı)
+      if (value <= 75) return 92;
+      if (value >= 115) return 10;
+      if (value <= 88) return Math.round(92 - ((value - 75) / 13) * 24);
+      if (value <= 98) return Math.round(68 - ((value - 88) / 10) * 25);
+      return Math.round(43 - ((value - 98) / 17) * 33);
+    } else {
+      // Standart FAVÖK Marjı: Yüksek olması İYİDİR!
+      if (value <= 5) return 15;
+      if (value >= 40) return 90;
+      return Math.round(15 + ((value - 5) / 35) * 75);
+    }
+  }
+
+  if (type === 'multiple') {
+    const num = targetNum || value;
+    if (num <= 1.0) return 25;
+    if (num >= 5.0) return 85;
+    return Math.round(25 + ((num - 1.0) / 4.0) * 60);
+  }
+
+  return 50;
+}
+
 // Görsel 5: Değer Sürücüleri Kartı (Driver Card)
 function DriverCard({
   title,
@@ -316,9 +370,9 @@ function DriverCard({
       </div>
 
       {sourceExplanation && (
-        <div className="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-900/60 rounded px-2 py-1 flex items-center gap-1.5">
-          <Info className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-          <span className="truncate" title={sourceExplanation}>{sourceExplanation}</span>
+        <div className="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-900/60 rounded px-2.5 py-1.5 flex items-start gap-1.5">
+          <Info className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0 mt-0.5" />
+          <span className="break-words leading-snug flex-1" title={sourceExplanation}>{sourceExplanation}</span>
         </div>
       )}
 
@@ -577,16 +631,35 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
 function preprocessReportMarkdown(text: string): string {
   if (!text) return '';
 
-  let cleaned = text.replace(/\\\\\[([\s\S]*?)\\\\\]/g, '$$$$$1$$$$');
-  cleaned = cleaned.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
-  cleaned = cleaned.replace(/\\\((\s*\\text\{.*?\}\s*)\\\)/g, '$$$1$$');
-  cleaned = cleaned.replace(/\\\((\s*\\frac\{.*?\}\{.*?\}\s*)\\\)/g, '$$$1$$');
+  let cleaned = text;
+
+  // 1. Convert \[ ... \] to $$ ... $$
+  cleaned = cleaned.replace(/\\\\\[([\s\S]*?)\\\\\]/g, (_m: string, g1: string) => `\n\n$$\n${g1.trim()}\n$$\n\n`);
+  cleaned = cleaned.replace(/\\\[([\s\S]*?)\\\]/g, (_m: string, g1: string) => `\n\n$$\n${g1.trim()}\n$$\n\n`);
+
+  // 2. Convert any line that is just "$" or "-> $" or "> $" into "$$" (Item 11: Text / LaTeX hatalarını önleme)
+  cleaned = cleaned.replace(/(?:^|\n)\s*(?:->\s*|>\s*)?\$\s*(?=\r?\n|$)/g, () => '\n$$');
+
+  // 3. Clean inside $$ ... $$: ensure no internal blank lines break CommonMark math block
+  cleaned = cleaned.replace(/\$\$([^$]+?)\$\$/g, (_match: string, inner: string) => {
+    const cleanedInner = inner
+      .split('\n')
+      .map((line: string) => line.trim())
+      .filter((line: string) => line.length > 0)
+      .join('\n');
+    return `\n\n$$\n${cleanedInner}\n$$\n\n`;
+  });
+
+  // 4. Inline LaTeX conversions
+  cleaned = cleaned.replace(/\\\((\s*\\text\{.*?\}\s*)\\\)/g, (_m: string, g1: string) => `$$${g1}$$`);
+  cleaned = cleaned.replace(/\\\((\s*\\frac\{.*?\}\{.*?\}\s*)\\\)/g, (_m: string, g1: string) => `$$${g1}$$`);
   cleaned = cleaned.replace(/\\\((.*?)\\\)/g, '$1');
 
-  cleaned = cleaned.replace(/([^\n])\n\$\$/g, '$1\n\n$$');
-  cleaned = cleaned.replace(/\$\$\n([^\n])/g, '$$\n\n$1');
+  // 5. Normalise spacing around $$ blocks
+  cleaned = cleaned.replace(/\n{3,}\$\$/g, () => '\n\n$$');
+  cleaned = cleaned.replace(/\$\$\n{3,}/g, () => '$$\n\n');
 
-  return cleaned;
+  return cleaned.trim();
 }
 
 function getSpreadInfo(spread: number | null) {
@@ -1179,6 +1252,109 @@ export default function ValuationTerminal() {
     : null;
   const spreadInfo = getSpreadInfo(latestSpread);
 
+  // Her dönem için dinamik finansal oran hesaplayıcı (Item 10: Her sene ve döneme ait verileri dinamik hesaplama)
+  const computeRatioForPeriod = (
+    d: any,
+    key: string,
+    sector?: SectorType,
+    defaultVal?: number
+  ): number | null => {
+    if (d && typeof d[key] === 'number' && !isNaN(d[key])) {
+      return d[key];
+    }
+    if (!d) return defaultVal ?? null;
+
+    // Çeyreklik yıllıklandırma katsayısı
+    const periodStr = String(d.period || '').toLowerCase();
+    let annualFactor = 1.0;
+    if (/(?:\/0?3\b|3a\b|q1\b|1\.ç|1ç)/i.test(periodStr)) annualFactor = 4.0;
+    else if (/(?:\/0?6\b|6a\b|q2\b|2\.ç|2ç)/i.test(periodStr)) annualFactor = 2.0;
+    else if (/(?:\/0?9\b|9a\b|q3\b|3\.ç|3ç)/i.test(periodStr)) annualFactor = 12.0 / 9.0;
+
+    switch (key) {
+      case 'current_ratio': {
+        if (d.current_assets && d.current_liabilities && d.current_liabilities > 0) {
+          return Number((d.current_assets / d.current_liabilities).toFixed(2));
+        }
+        if (d.total_assets && d.equity && d.current_assets) {
+          const totalLiab = Math.max(1, d.total_assets - d.equity);
+          const estCurrentLiab = sector === 'INSURANCE' ? totalLiab * 0.045 : totalLiab * 0.60;
+          return Number((d.current_assets / estCurrentLiab).toFixed(2));
+        }
+        break;
+      }
+      case 'quick_ratio': {
+        if (d.current_ratio) return d.current_ratio;
+        if (d.current_assets && d.total_assets && d.equity) {
+          const totalLiab = Math.max(1, d.total_assets - d.equity);
+          const estCurrentLiab = sector === 'INSURANCE' ? totalLiab * 0.045 : totalLiab * 0.60;
+          const quick = sector === 'INSURANCE' ? d.current_assets : d.current_assets * 0.75;
+          return Number((quick / estCurrentLiab).toFixed(2));
+        }
+        break;
+      }
+      case 'cash_ratio': {
+        const cashVal = d.cash_and_equivalents ?? d.cash ?? d.liquid_assets;
+        if (cashVal != null && d.total_assets && d.equity) {
+          const totalLiab = Math.max(1, d.total_assets - d.equity);
+          const estCurrentLiab = sector === 'INSURANCE' ? totalLiab * 0.045 : totalLiab * 0.60;
+          return Number((cashVal / estCurrentLiab).toFixed(2));
+        }
+        break;
+      }
+      case 'leverage_ratio': {
+        if (d.total_assets && d.equity && d.total_assets > 0) {
+          return Number((((d.total_assets - d.equity) / d.total_assets) * 100).toFixed(2));
+        }
+        break;
+      }
+      case 'asset_turnover': {
+        const rev = d.revenue ?? d.written_premiums;
+        if (rev && d.total_assets && d.total_assets > 0) {
+          return Number(((rev * annualFactor) / d.total_assets).toFixed(2));
+        }
+        break;
+      }
+      case 'equity_turnover': {
+        const rev = d.revenue ?? d.written_premiums;
+        if (rev && d.equity && d.equity > 0) {
+          return Number(((rev * annualFactor) / d.equity).toFixed(2));
+        }
+        break;
+      }
+      case 'roa': {
+        if (d.net_income && d.total_assets && d.total_assets > 0) {
+          return Number(((d.net_income * annualFactor / d.total_assets) * 100).toFixed(2));
+        }
+        break;
+      }
+      case 'roe': {
+        if (d.net_income && d.equity && d.equity > 0) {
+          return Number(((d.net_income * annualFactor / d.equity) * 100).toFixed(2));
+        }
+        break;
+      }
+      case 'loss_ratio': {
+        if (d.loss_ratio != null) return d.loss_ratio;
+        break;
+      }
+      case 'expense_ratio': {
+        if (d.expense_ratio != null) return d.expense_ratio;
+        break;
+      }
+      case 'combined_ratio': {
+        if (d.combined_ratio != null) return d.combined_ratio;
+        if (d.loss_ratio != null && d.expense_ratio != null) {
+          return Number((d.loss_ratio + d.expense_ratio).toFixed(1));
+        }
+        break;
+      }
+    }
+
+    return defaultVal ?? null;
+  };
+
+
   interface TableRowConfig {
     label: string;
     sublabel?: string;
@@ -1553,6 +1729,23 @@ export default function ValuationTerminal() {
     current_price: parseFloat(activeReport?.price || price || '118.50') || 118.50,
   };
 
+  // Tutarlılık (Item 6 & 7): Rapor metninde veya çıkarılan veride geçerli bir adil değer varsa kullan
+  if (reportValuation?.fair_value && reportValuation.fair_value > 10) {
+    valuationInfo.fair_value = reportValuation.fair_value;
+  } else if (!valuationInfo.fair_value || valuationInfo.fair_value <= 10) {
+    valuationInfo.fair_value = dynamicValuationResult.valuation.fair_value;
+  }
+
+  // Ayı Senaryosu taban fiyatı kontrolü (Çarpan sızıntısı veya aşırı düşük fiyatları engelle)
+  if (!valuationInfo.bear_price || valuationInfo.bear_price < valuationInfo.fair_value * 0.3) {
+    valuationInfo.bear_price = Number((valuationInfo.fair_value * 0.75).toFixed(2));
+  }
+
+  // Boğa Senaryosu tavan fiyatı kontrolü (Adil değerden düşük olamaz)
+  if (!valuationInfo.bull_price || valuationInfo.bull_price < valuationInfo.fair_value * 0.95) {
+    valuationInfo.bull_price = Number((valuationInfo.fair_value * 1.25).toFixed(2));
+  }
+
   // İskonto oranını ve güvenlik marjını matematiksel olarak tutarlı güncelle
   if (valuationInfo.fair_value && valuationInfo.current_price) {
     valuationInfo.discount_pct = Number((((valuationInfo.fair_value - valuationInfo.current_price) / valuationInfo.current_price) * 100).toFixed(1));
@@ -1584,25 +1777,16 @@ export default function ValuationTerminal() {
           
           <div className="flex items-center gap-1">
             {!isSidebarCollapsed && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setIsSidebarPinned(p => !p)}
-                  className={`p-1.5 rounded transition cursor-pointer ${
-                    isSidebarPinned ? 'text-emerald-400 bg-emerald-950/60' : 'text-slate-400 hover:text-white bg-slate-800/60'
-                  }`}
-                  title={isSidebarPinned ? 'Kenar Çubuğu Sabitlendi' : 'Kenar Çubuğu Sabitliğini Kaldır'}
-                >
-                  {isSidebarPinned ? <Pin className="w-3.5 h-3.5" /> : <PinOff className="w-3.5 h-3.5" />}
-                </button>
-                <button
-                  onClick={() => { setStep('input'); setActiveReportId(null); setExtractedData(null); }}
-                  className="flex items-center gap-1 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-1.5 px-2.5 rounded transition cursor-pointer"
-                  title="Yeni Hisse Analizi Başlat"
-                >
-                  <PlusCircle className="w-3.5 h-3.5" /> Yeni
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={() => setIsSidebarPinned(p => !p)}
+                className={`p-1.5 rounded transition cursor-pointer ${
+                  isSidebarPinned ? 'text-emerald-400 bg-emerald-950/60' : 'text-slate-400 hover:text-white bg-slate-800/60'
+                }`}
+                title={isSidebarPinned ? 'Kenar Çubuğu Sabitlendi' : 'Kenar Çubuğu Sabitliğini Kaldır'}
+              >
+                {isSidebarPinned ? <Pin className="w-3.5 h-3.5" /> : <PinOff className="w-3.5 h-3.5" />}
+              </button>
             )}
             <button
               type="button"
@@ -1617,24 +1801,7 @@ export default function ValuationTerminal() {
 
         {/* Daraltılmış Modda İkon Çubuğu */}
         {isSidebarCollapsed ? (
-          <div className="flex-1 flex flex-col items-center py-4 space-y-3">
-            <button
-              onClick={() => { setStep('input'); setActiveReportId(null); setExtractedData(null); }}
-              className="p-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer shadow-md"
-              title="Yeni Analiz Başlat"
-            >
-              <PlusCircle className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setStep('leaderboard')}
-              className={`p-2.5 rounded-lg transition cursor-pointer border ${
-                step === 'leaderboard' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-slate-800/80 text-slate-300 border-slate-700'
-              }`}
-              title="Hisse Sıralama Paneli"
-            >
-              <Trophy className="w-4 h-4 text-amber-400" />
-            </button>
-            <div className="w-8 h-px bg-slate-800 my-1" />
+          <div className="flex-1 flex flex-col items-center py-4 space-y-2">
             <div className="flex-1 overflow-y-auto space-y-2 w-full px-2 [scrollbar-width:none]">
               {savedReports.map(item => (
                 <button
@@ -1660,59 +1827,12 @@ export default function ValuationTerminal() {
           </div>
         ) : (
           <>
-            {/* Hızlı Örnek Yükleyici (AGESA ve THYAO) */}
-            <div className="p-3 border-b border-slate-800/80 bg-slate-950/60 space-y-1.5">
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                <span>Hazır Örnek Şirketler</span>
-                <Sparkles className="w-3 h-3 text-amber-400" />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={loadAgesaDemo}
-                  className="px-2 py-1.5 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/70 rounded text-[11px] font-bold text-emerald-300 text-left transition flex items-center justify-between cursor-pointer"
-                >
-                  <span>AGESA</span>
-                  <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-emerald-900/80 text-emerald-200">Sigorta</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTicker('THYAO');
-                    setPrice('312.00');
-                    setStep('input');
-                  }}
-                  className="px-2 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded text-[11px] font-semibold text-slate-300 text-left transition flex items-center justify-between cursor-pointer"
-                >
-                  <span>THYAO</span>
-                  <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-800 text-slate-400">Sanayi</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Liderlik Paneli Butonu & Sıralama Filtresi */}
-            <div className="p-3 border-b border-slate-800/80 space-y-2 bg-slate-950/40">
-              <button
-                type="button"
-                onClick={() => setStep('leaderboard')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold transition border cursor-pointer ${
-                  step === 'leaderboard'
-                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-sm shadow-amber-950/30'
-                    : 'bg-slate-800/70 hover:bg-slate-800 text-slate-200 border-slate-700/80'
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  <Trophy className="w-4 h-4 text-amber-400" />
-                  Hisse Sıralama Paneli
-                </span>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-700 font-bold">
-                  {savedReports.length}
-                </span>
-              </button>
-
-              <div className="flex items-center justify-between text-[11px] text-slate-400 px-1 pt-0.5">
-                <span className="flex items-center gap-1 text-[10px] font-medium text-slate-400">
-                  <ArrowUpDown className="w-3 h-3 text-slate-500" /> Sıralama:
+            {/* Sıralama Filtresi & Kayıtlı Analiz Sayacı (Item 1 & 2: Hazır Örnek ve Mükerrer Butonlar Kaldırıldı) */}
+            <div className="p-3 border-b border-slate-800/80 bg-slate-950/40">
+              <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-300">
+                  <History className="w-3.5 h-3.5 text-slate-400" />
+                  Kayıtlı Analizler ({savedReports.length})
                 </span>
                 <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded border border-slate-800">
                   <button
@@ -1825,20 +1945,12 @@ export default function ValuationTerminal() {
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         <header className="border-b border-slate-800 p-4 flex items-center justify-between bg-[#0F172A]/50 print:hidden">
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setIsSidebarCollapsed(p => !p)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 border border-slate-700/60 transition cursor-pointer"
-              title={isSidebarCollapsed ? "Kenar Çubuğunu Göster" : "Kenar Çubuğunu Gizle"}
-            >
-              {isSidebarCollapsed ? <PanelLeftOpen className="w-4 h-4 text-emerald-400" /> : <PanelLeftClose className="w-4 h-4" />}
-            </button>
             <FairValueLogo className="w-9 h-9" />
             <div>
               <h1 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
                 <span>FAIR <span className="text-emerald-400">VALUE</span></span>
                 <span className="text-slate-500 font-normal">|</span>
-                <span className="text-slate-200 font-semibold text-sm">Kurumsal Finansal Analiz & Değerleme Terminali</span>
+                <span className="text-slate-200 font-semibold text-sm">Finansal Analiz & Değerleme Terminali</span>
                 <span className="text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-800/80 px-2 py-0.5 rounded font-bold">PRO</span>
                 {isCloudConfigured ? (
                   <span className="inline-flex items-center gap-1 text-[10px] font-mono bg-emerald-950/80 text-emerald-400 border border-emerald-800/80 px-2 py-0.5 rounded" title="Supabase Bulut Aktif">
@@ -1850,7 +1962,6 @@ export default function ValuationTerminal() {
                   </span>
                 )}
               </h1>
-              <p className="text-xs text-slate-400">Sektöre duyarlı finansal tablolar, rasyolar, değer sürücüleri ve kurumsal karne terminali.</p>
             </div>
           </div>
 
@@ -2436,7 +2547,7 @@ export default function ValuationTerminal() {
                     <DriverCard
                       title={drivers.revenue_growth.label}
                       valueText={`%${drivers.revenue_growth.value.toFixed(1)}`}
-                      pinPercent={50}
+                      pinPercent={calculateDriverPin('rev', drivers.revenue_growth.value, currentSector)}
                       bearText={drivers.revenue_growth.bearLabel}
                       bullText={drivers.revenue_growth.bullLabel}
                       description={drivers.revenue_growth.note}
@@ -2446,7 +2557,7 @@ export default function ValuationTerminal() {
                     <DriverCard
                       title={drivers.net_income_growth.label}
                       valueText={`%${drivers.net_income_growth.value.toFixed(1)}`}
-                      pinPercent={45}
+                      pinPercent={calculateDriverPin('net', drivers.net_income_growth.value, currentSector)}
                       bearText={drivers.net_income_growth.bearLabel}
                       bullText={drivers.net_income_growth.bullLabel}
                       description={drivers.net_income_growth.note}
@@ -2456,7 +2567,7 @@ export default function ValuationTerminal() {
                     <DriverCard
                       title={drivers.margin.label}
                       valueText={`%${drivers.margin.value.toFixed(1)}`}
-                      pinPercent={60}
+                      pinPercent={calculateDriverPin('margin', drivers.margin.value, currentSector)}
                       bearText={drivers.margin.bearLabel}
                       bullText={drivers.margin.bullLabel}
                       description={drivers.margin.note}
@@ -2466,7 +2577,7 @@ export default function ValuationTerminal() {
                     <DriverCard
                       title={drivers.target_multiple.label}
                       valueText={drivers.target_multiple.value}
-                      pinPercent={55}
+                      pinPercent={calculateDriverPin('multiple', drivers.target_multiple.numericValue || 3.0, currentSector, drivers.target_multiple.numericValue)}
                       bearText={drivers.target_multiple.bearLabel}
                       bullText={drivers.target_multiple.bullLabel}
                       description={drivers.target_multiple.note}
@@ -2953,7 +3064,7 @@ export default function ValuationTerminal() {
                                 </tr>
 
                                 {!isCollapsed && sec.rows.map((row, rIdx) => {
-                                  const values = tableData.map((d: any) => d[row.key]);
+                                  const values = tableData.map((d: any) => d[row.key] ?? (row.fallbackKey ? d[row.fallbackKey] : undefined));
 
                                   return (
                                     <tr key={rIdx} className={`hover:bg-slate-800/40 transition-colors group ${
@@ -2974,9 +3085,9 @@ export default function ValuationTerminal() {
                                       </td>
 
                                       {tableData.map((d: any, idx: number) => {
-                                        const val = d[row.key];
+                                        const val = d[row.key] ?? (row.fallbackKey ? d[row.fallbackKey] : undefined);
                                         const prevPeriodData = idx < tableData.length - 1 ? tableData[idx + 1] : null;
-                                        const prevVal = prevPeriodData ? prevPeriodData[row.key] : null;
+                                        const prevVal = prevPeriodData ? (prevPeriodData[row.key] ?? (row.fallbackKey ? prevPeriodData[row.fallbackKey] : undefined)) : null;
                                         const change = calculateYoYChange(val, prevVal, false);
 
                                         return (
@@ -3026,7 +3137,7 @@ export default function ValuationTerminal() {
 
                                 {/* Kategori Altındaki Oran Kalemleri */}
                                 {!isCollapsed && sec.rows.map((row, rIdx) => {
-                                  const values = tableData.map((d: any) => d[row.key] ?? row.defaultVal);
+                                  const values = tableData.map((d: any) => computeRatioForPeriod(d, row.key, currentSector, row.defaultVal));
                                   const isDetailOpen = selectedRatioDetail === row.key;
                                   const ratioDef = RATIO_DEFINITIONS[row.key];
 
@@ -3050,9 +3161,9 @@ export default function ValuationTerminal() {
                                         </td>
 
                                         {tableData.map((d: any, idx: number) => {
-                                          const rawVal = d[row.key] ?? row.defaultVal;
+                                          const rawVal = computeRatioForPeriod(d, row.key, currentSector, row.defaultVal);
                                           const prevPeriodData = idx < tableData.length - 1 ? tableData[idx + 1] : null;
-                                          const prevVal = prevPeriodData ? (prevPeriodData[row.key] ?? row.defaultVal) : null;
+                                          const prevVal = prevPeriodData ? computeRatioForPeriod(prevPeriodData, row.key, currentSector, row.defaultVal) : null;
                                           const change = calculateYoYChange(rawVal, prevVal, true);
 
                                           let displayStr = '—';
