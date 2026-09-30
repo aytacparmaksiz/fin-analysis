@@ -696,8 +696,8 @@ SEKTÖREL UYARLAMA VE KESİN PARAMETRE KURALLARI:
     if (documents.length === 0 && pdfFiles.length > 0) {
       for (const file of pdfFiles) {
         try {
-          const buffer = Buffer.from(await file.arrayBuffer());
-          const { text } = await extractSmartFinancialText(buffer);
+          const arrayBuffer = await file.arrayBuffer();
+          const { text } = await extractSmartFinancialText(arrayBuffer);
           if (text && text.trim().length > 50) {
             documents.push({ name: file.name, text: text.trim() });
           }
@@ -749,7 +749,7 @@ GÖREVLER:
           batchResults.push(parsedData);
         } catch (batchError: any) {
           console.error(`[Extract Text] Paket ${Math.floor(i / DOC_BATCH_SIZE) + 1} işlenirken hata:`, batchError);
-          if (batchError?.status === 429 || batchError?.isRateLimit) {
+          if (batchError?.status === 429 || batchError?.statusCode === 429 || batchError?.isRateLimit) {
             throw batchError;
           }
         }
@@ -786,9 +786,11 @@ GÖREVLER:
           });
 
           let fileObj = uploadResult;
-          while (fileObj.state === 'PROCESSING') {
+          let pollAttempts = 0;
+          while (fileObj.state === 'PROCESSING' && pollAttempts < 10) {
             await new Promise((resolve) => setTimeout(resolve, 1000));
             fileObj = await ai.files.get({ name: uploadResult.name! });
+            pollAttempts++;
           }
 
           uploadedGoogleFiles.push(fileObj);

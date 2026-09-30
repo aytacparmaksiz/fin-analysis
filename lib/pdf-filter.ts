@@ -385,8 +385,11 @@ export function filterFinancialPages(pageTexts: string[], maxPages = 16): Filter
   // Kronolojik sayfa sırasına geri diz
   finalIndices.sort((a, b) => a - b);
 
-  // Metinleri birleştir
-  const combinedText = finalIndices
+  // Metinleri birleştir (boş olmayan sayfaları önceliklendir)
+  const indicesWithContent = finalIndices.filter(idx => (pageTexts[idx] || '').trim().length > 0);
+  const activeIndices = indicesWithContent.length > 0 ? indicesWithContent : finalIndices;
+
+  const combinedText = activeIndices
     .map(idx => `--- [SAYFA ${idx + 1} / ${totalPages}] ---\n${(pageTexts[idx] || '').trim()}`)
     .join('\n\n');
 
@@ -411,7 +414,20 @@ export async function extractSmartFinancialText(
   pdfInput: ArrayBuffer | Uint8Array,
   maxPages = 14
 ): Promise<{ text: string; totalPages: number; matchedPages: number; summary: string }> {
-  const uint8 = pdfInput instanceof Uint8Array ? pdfInput : new Uint8Array(pdfInput);
+  // unpdf / pdfjs Buffer kabul etmez; Node.js Buffer'ı pure Uint8Array'e dönüştürülmelidir
+  let uint8: Uint8Array;
+  if (pdfInput instanceof Uint8Array) {
+    if (typeof Buffer !== 'undefined' && (Buffer.isBuffer(pdfInput) || (pdfInput as any) instanceof Buffer)) {
+      uint8 = new Uint8Array(pdfInput.buffer, pdfInput.byteOffset, pdfInput.byteLength);
+    } else {
+      uint8 = pdfInput;
+    }
+  } else if (pdfInput instanceof ArrayBuffer) {
+    uint8 = new Uint8Array(pdfInput);
+  } else {
+    uint8 = new Uint8Array(pdfInput);
+  }
+
   const pdf = await getDocumentProxy(uint8);
   const totalPages = (pdf && typeof pdf.numPages === 'number') ? pdf.numPages : 0;
 

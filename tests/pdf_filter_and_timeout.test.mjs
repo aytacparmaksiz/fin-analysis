@@ -124,6 +124,7 @@ describe('PDF Filter & Timeout Resilience', () => {
 
       const isHtml = rawText.trim().startsWith('<!DOCTYPE') || rawText.trim().startsWith('<html') || rawText.includes('<body') || rawText.includes('</html>');
       const isTimeout = status === 504 || status === 524 || status === 408 || 
+                        /function_invocation_timeout/i.test(rawText) ||
                         /gateway\s*time-?out/i.test(rawText) || 
                         /notification:\s*gateway_timeout/i.test(rawText) ||
                         /timed?\s*out/i.test(rawText) ||
@@ -232,6 +233,14 @@ describe('PDF Filter & Timeout Resilience', () => {
         /Gemini API hız/
       );
     });
+    it('intercepts Vercel FUNCTION_INVOCATION_TIMEOUT response', async () => {
+      const vercelTimeoutBody = 'An error occurred with your deployment FUNCTION_INVOCATION_TIMEOUT fra1::4brkc-1790749921648-32bcaea113d5';
+      const mockResponse = new Response(vercelTimeoutBody, { status: 504 });
+      await assert.rejects(
+        async () => await parseApiResponse(mockResponse, 'Hata'),
+        { message: 'Sunucu yanıt süresi aşıldı (Gateway Timeout). Lütfen sadece finansal tabloları içeren sayfaları yüklemeyi deneyin.' }
+      );
+    });
   });
 
   describe('Serverless & Vercel Timeout Resilience', () => {
@@ -251,6 +260,72 @@ describe('PDF Filter & Timeout Resilience', () => {
       const elapsed = Date.now() - start;
       assert.equal(wait, 0);
       assert.ok(elapsed < 50, `scheduleRequestSlot must resolve immediately (took ${elapsed}ms)`);
+    });
+
+    it('extractSmartFinancialText safely parses Node.js Buffer without pdfjs Buffer exception', async () => {
+      const { extractSmartFinancialText } = await import('../lib/pdf-filter.ts');
+      const minimalPdfBase64 = 'JVBERi0xLjQKMSAwIG9iajw8L1R5cGUvQ2F0YWxvZy9QYWdlcyAyIDAgUj4+CmVuZG9iagoyIDAgb2JqPDwvVHlwZS9QYWdlcy9LaWRzWzMgMCBSXS9Db3VudCAxPj4KZW5kb2JqCjMgMCBvYmo8PC9UeXBlL1BhZ2UvUGFyZW50IDIgMCBSL01lZGlhQm94WzAgMCA2MTIgNzkyXS9Db250ZW50cyA0IDAgUj4+CmVuZG9iago0IDAgb2JqPDwvTGVuZ3RoIDcwPj4Kc3RyZWFtCkJUCi9GMSAxMiBUZgoxMDAgNzAwIFRkCihLSU5TT0xJREUgRklOQU5TQUwgRFVSVU0gQklMR0lMRVJJIFZBUkxJS0xBUikgVGoKRVQKZW5kc3RyZWFtCmVuZG9iagp4cmVmCjAgNQowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1NiAwMDAwMCBuIAowMDAwMDAwMTE1IDAwMDAwIG4gCjAwMDAwMDAyMTIgMDAwMDAgbiAKdHJhaWxlcjw8L1NpemUgNS9Sb290IDEgMCBSPj4Kc3RhcnR4cmVmCjMzMQolJUVPRg==';
+      const nodeBuf = Buffer.from(minimalPdfBase64, 'base64');
+      
+      const res = await extractSmartFinancialText(nodeBuf);
+      assert.equal(res.totalPages, 1);
+      assert.ok(res.text.includes('VARLIKLAR'));
+    });
+
+    it('generateWithRateLimitAndBackoff falls back to secondary model when primary is rate-limited', async () => {
+      const { generateWithRateLimitAndBackoff } = await import('../lib/gemini.ts');
+      
+      const calls = [];
+      const mockAi = {
+        models: {
+          generateContent: async ({ model }) => {
+            calls.push(model);
+            if (model === 'gemini-2.0-flash') {
+              const err = new Error('Resource has been exhausted (e.g. check quota).');
+              err.status = 429;
+              throw err;
+            }
+            return { text: JSON.stringify({ success: true, modelUsed: model }) };
+          }
+        }
+      };
+
+      const res = await generateWithRateLimitAndBackoff({
+        ai: mockAi,
+        baseParams: { contents: 'test' }
+      });
+
+      assert.ok(calls.includes('gemini-2.0-flash'), 'Should attempt primary model');
+      assert.ok(calls.includes('gemini-1.5-flash'), 'Should fall back to secondary model');
+      const parsed = JSON.parse(res.text);
+      assert.equal(parsed.modelUsed, 'gemini-1.5-flash');
+    });
+
+    it('generateWithRateLimitAndBackoff throws 429 with retryAfter: 5 when all models rate-limited', async () => {
+      const { generateWithRateLimitAndBackoff } = await import('../lib/gemini.ts');
+      
+      const mockAi = {
+        models: {
+          generateContent: async () => {
+            const err = new Error('429 RESOURCE_EXHAUSTED');
+            err.status = 429;
+            throw err;
+          }
+        }
+      };
+
+      await assert.rejects(
+        async () => await generateWithRateLimitAndBackoff({
+          ai: mockAi,
+          baseParams: { contents: 'test' }
+        }),
+        (err) => {
+          assert.equal(err.status, 429);
+          assert.equal(err.retryAfter, 5);
+          assert.equal(err.isRateLimit, true);
+          return true;
+        }
+      );
     });
 
     it('handles sampled > 40 page document arrays (first 25 + last 10) without crashing', () => {

@@ -66,6 +66,7 @@ async function parseApiResponse(res: Response, defaultError: string): Promise<an
   // 1. Gateway Timeout (504), Cloudflare (524), Request Timeout (408) veya Kurumsal Proxy HTML yanıtı
   const isHtml = rawText.trim().startsWith('<!DOCTYPE') || rawText.trim().startsWith('<html') || rawText.includes('<body') || rawText.includes('</html>');
   const isTimeout = status === 504 || status === 524 || status === 408 || 
+                    /function_invocation_timeout/i.test(rawText) ||
                     /gateway\s*time-?out/i.test(rawText) || 
                     /notification:\s*gateway_timeout/i.test(rawText) ||
                     /timed?\s*out/i.test(rawText) ||

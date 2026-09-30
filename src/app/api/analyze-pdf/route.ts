@@ -57,9 +57,11 @@ export async function POST(req: Request) {
       });
 
       let fileObj = uploadResult;
-      while (fileObj.state === 'PROCESSING') {
+      let pollAttempts = 0;
+      while (fileObj.state === 'PROCESSING' && pollAttempts < 10) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
         fileObj = await ai.files.get({ name: uploadResult.name! });
+        pollAttempts++;
       }
 
       uploadedGoogleFiles.push(fileObj);

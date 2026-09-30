@@ -229,77 +229,86 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
     : CANDIDATE_MODELS;
 
   let lastError: any = null;
+  let hasRetried = false;
 
   for (const model of modelsToTry) {
-    // Sunucu tarafında Vercel Hobby kısıtına takılmamak için en fazla 1 hızlı yeniden deneme (1.5s)
-    const MAX_RETRIES_PER_MODEL = 2; // Deneme 1 (attempt 0), Deneme 2 (attempt 1)
+    try {
+      console.log(`[GeminiClient] Model ${model} ile istek gönderiliyor...`);
+      lastRequestTimestamp = Date.now();
+      const response = await ai.models.generateContent({
+        ...baseParams,
+        model,
+      });
 
-    for (let attempt = 0; attempt < MAX_RETRIES_PER_MODEL; attempt++) {
-      try {
-        console.log(`[GeminiClient] Model ${model} ile istek gönderiliyor (Deneme ${attempt + 1}/${MAX_RETRIES_PER_MODEL})...`);
-        lastRequestTimestamp = Date.now();
-        const response = await ai.models.generateContent({
-          ...baseParams,
-          model,
-        });
-
-        // Başarılı yanıtı önbelleğe kaydet
-        if (cacheKey && response?.text) {
-          try {
-            const parsed = JSON.parse(response.text);
-            setCachedGeminiResult(cacheKey, parsed);
-          } catch {
-            setCachedGeminiResult(cacheKey, response.text);
-          }
-        }
-
-        return response;
-      } catch (err: any) {
-        lastError = err;
-        const status = err?.status || err?.statusCode || (err?.message?.includes('429') ? 429 : 0);
-        const isRateLimit = status === 429 || err?.message?.includes('RESOURCE_EXHAUSTED') || err?.message?.includes('quota');
-        const isServerBusy = status === 503 || err?.message?.includes('UNAVAILABLE');
-
-        console.warn(`[GeminiClient] Model ${model} hata verdi:`, {
-          status,
-          message: err?.message?.slice(0, 150),
-          isRateLimit,
-          isServerBusy,
-        });
-
-        if (isRateLimit || isServerBusy) {
-          if (attempt === 0) {
-            // Sunucu içinde en fazla 1 kez 1.5 sn hızlı bekleme
-            const waitMs = 1500;
-            console.warn(`[GeminiClient] API hız sınırı/meşguliyet. ${waitMs}ms sonra 1 kez hızlı denenecek...`);
-            if (params.onWaitProgress) {
-              params.onWaitProgress(1.5, 'API hız sınırı nedeniyle 1.5 sn bekleniyor...');
-            }
-            await new Promise((resolve) => setTimeout(resolve, waitMs));
-            lastRequestTimestamp = Date.now();
-            continue;
-          } else {
-            // 1 hızlı yeniden denemeden sonra hala 429 ise, Vercel timeout olmaması için derhal 429 fırlat
-            const rateLimitError: any = new Error(
-              'Gemini API hız sınırına ulaşıldı (Rate Limit 429). Lütfen 5 saniye sonra tekrar deneyin.'
-            );
-            rateLimitError.status = 429;
-            rateLimitError.statusCode = 429;
-            rateLimitError.isRateLimit = true;
-            rateLimitError.retryAfter = 5;
-            throw rateLimitError;
-          }
-        } else {
-          // Model desteklenmiyor veya 400 hatası ise hemen sonraki modele geç
-          break;
+      // Başarılı yanıtı önbelleğe kaydet
+      if (cacheKey && response?.text) {
+        try {
+          const parsed = JSON.parse(response.text);
+          setCachedGeminiResult(cacheKey, parsed);
+        } catch {
+          setCachedGeminiResult(cacheKey, response.text);
         }
       }
+
+      return response;
+    } catch (err: any) {
+      lastError = err;
+      const status = err?.status || err?.statusCode || err?.code || err?.error?.code || (err?.message?.includes('429') ? 429 : 0);
+      const isRateLimit = status === 429 || 
+        err?.isRateLimit || 
+        /too many requests|rate[- ]limit|resource_exhausted|quota/i.test(err?.message || '');
+      const isServerBusy = status === 503 || err?.code === 503 || /unavailable|server busy/i.test(err?.message || '');
+
+      console.warn(`[GeminiClient] Model ${model} hata verdi:`, {
+        status,
+        message: err?.message?.slice(0, 150),
+        isRateLimit,
+        isServerBusy,
+      });
+
+      if ((isRateLimit || isServerBusy) && !hasRetried) {
+        hasRetried = true;
+        // Sunucu içinde en fazla 1 kez 1.5 sn hızlı bekleme
+        const waitMs = 1500;
+        console.warn(`[GeminiClient] API hız sınırı/meşguliyet. ${waitMs}ms sonra 1 kez hızlı denenecek...`);
+        if (params.onWaitProgress) {
+          params.onWaitProgress(1.5, 'API hız sınırı nedeniyle 1.5 sn bekleniyor...');
+        }
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+        lastRequestTimestamp = Date.now();
+
+        try {
+          console.log(`[GeminiClient] Model ${model} ile hızlı yeniden deneme...`);
+          const retryResponse = await ai.models.generateContent({
+            ...baseParams,
+            model,
+          });
+
+          if (cacheKey && retryResponse?.text) {
+            try {
+              const parsed = JSON.parse(retryResponse.text);
+              setCachedGeminiResult(cacheKey, parsed);
+            } catch {
+              setCachedGeminiResult(cacheKey, retryResponse.text);
+            }
+          }
+
+          return retryResponse;
+        } catch (retryErr: any) {
+          lastError = retryErr;
+          console.warn(`[GeminiClient] Model ${model} hızlı yeniden denemede de hata verdi:`, retryErr?.message?.slice(0, 150));
+          // Bir sonraki modele geç
+        }
+      }
+      // Model desteklenmiyor, 400 hatası veya retry sonrası hata: döngü bir sonraki modeli dener
     }
   }
 
   // Tüm modeller denendikten sonra hala rate limit hatası varsa 429 fırlat
-  const status = lastError?.status || lastError?.statusCode || (lastError?.message?.includes('429') ? 429 : 0);
-  const isRateLimit = status === 429 || lastError?.message?.includes('RESOURCE_EXHAUSTED') || lastError?.message?.includes('quota');
+  const status = lastError?.status || lastError?.statusCode || lastError?.code || lastError?.error?.code || (lastError?.message?.includes('429') ? 429 : 0);
+  const isRateLimit = status === 429 || 
+    lastError?.isRateLimit || 
+    /too many requests|rate[- ]limit|resource_exhausted|quota/i.test(lastError?.message || '');
 
   if (isRateLimit) {
     const finalRateError: any = new Error(
