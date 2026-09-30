@@ -320,6 +320,11 @@ function mergeFinancialHistoryBatches(results: any[]): any {
       }
     }
 
+    if (r.guidance_track_record && !merged.guidance_track_record) merged.guidance_track_record = r.guidance_track_record;
+    if (r.pros_cons && !merged.pros_cons) merged.pros_cons = r.pros_cons;
+    if (r.capex_and_kpi && !merged.capex_and_kpi) merged.capex_and_kpi = r.capex_and_kpi;
+    if (r.fair_value_drivers && !merged.fair_value_drivers) merged.fair_value_drivers = r.fair_value_drivers;
+
     if (Array.isArray(r.financial_history)) {
       for (const item of r.financial_history) {
         if (!item || !item.period) continue;
@@ -558,7 +563,8 @@ ${!isInsurance && !isBanking ? `   * SANAYİ / HİZMET / DİĞER:
         batchResults.push(parsed);
       }
 
-      const mergedFin = mergeFinancialHistoryBatches(batchResults);
+      const allResults = previousData ? [previousData, ...batchResults] : batchResults;
+      const mergedFin = mergeFinancialHistoryBatches(allResults);
       mergedFin.sector = mergedFin.sector || targetSector;
       const enriched = enrichAndSanitizeFinancialHistory(mergedFin);
       const { drivers, valuation } = computeSectorValuationAndDrivers(enriched, price, targetSector);

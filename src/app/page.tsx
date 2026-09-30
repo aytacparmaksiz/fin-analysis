@@ -7,7 +7,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { 
   Send, FileText, FileSpreadsheet, Presentation, AlertTriangle, Database, 
-  RefreshCw, Printer, PlusCircle, History, 
+  RefreshCw, Printer, PlusCircle, Plus, History, 
   ChevronRight, ChevronDown, UploadCloud, X, CheckCircle2, Search,
   TrendingUp, BarChart3, Target, Calendar, ArrowUpRight, ArrowDownRight, Minus,
   DollarSign, ShieldCheck, Activity, Layers, Sparkles, Download, Upload,
@@ -900,6 +900,7 @@ export default function ValuationTerminal() {
   const financialInputRef = useRef<HTMLInputElement>(null);
   const activityInputRef = useRef<HTMLInputElement>(null);
   const presentationInputRef = useRef<HTMLInputElement>(null);
+  const appendFinancialInputRef = useRef<HTMLInputElement>(null);
   const [pipelineStep, setPipelineStep] = useState<1 | 2 | 3 | null>(null);
   const [pipelineProgress, setPipelineProgress] = useState<number>(0);
   const files = useMemo(() => [...financialFiles, ...activityFiles, ...presentationFiles], [financialFiles, activityFiles, presentationFiles]);
@@ -1233,7 +1234,86 @@ export default function ValuationTerminal() {
     setPresentationFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Aşama 1: 3 Alanlı Sıralı Pipeline Yürütümü
+  // İlave Dönem / Çeyrek Raporu Ekleme İşleyicisi
+  const handleAppendFinancialReport = async (newFiles: FileList | File[]) => {
+    const list = Array.from(newFiles).filter(f =>
+      f.name.toLowerCase().endsWith('.pdf') || f.type === 'application/pdf'
+    );
+    if (list.length === 0 || !extractedData) return;
+
+    setLoading(true);
+    setError(null);
+    setStatusMessage(`İlave ${list.length} adet finansal rapor taranıyor...`);
+
+    try {
+      let accumulated = { ...extractedData };
+      const activeSector = selectedSector === 'AUTO' ? detectSector(ticker || accumulated.ticker) : selectedSector;
+
+      for (let i = 0; i < list.length; i++) {
+        const file = list[i];
+        setStatusMessage(`İlave rapor taranıyor (${i + 1}/${list.length}): ${file.name}...`);
+
+        let fileDocText = '';
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const { text } = await extractSmartDocumentText(arrayBuffer, 'financial');
+          fileDocText = text?.trim() || '';
+        } catch (err) {
+          console.warn(`[Append PDF] ${file.name} okunamadı:`, err);
+        }
+
+        let res: Response;
+        if (fileDocText.length > 50) {
+          res = await fetchWithClientRetry(
+            () => fetch('/api/extract', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ticker: accumulated.ticker || ticker,
+                price: price || accumulated.valuation?.current_price || '0',
+                category: 'financial',
+                documents: [{ name: file.name, text: fileDocText, category: 'financial' }],
+                previousData: accumulated
+              })
+            }),
+            setStatusMessage
+          );
+        } else {
+          const fd = new FormData();
+          fd.append('ticker', accumulated.ticker || ticker);
+          fd.append('price', price || accumulated.valuation?.current_price || '0');
+          fd.append('category', 'financial');
+          fd.append('previousData', JSON.stringify(accumulated));
+          fd.append('files_financial', file);
+          res = await fetchWithClientRetry(
+            () => fetch('/api/extract', { method: 'POST', body: fd }),
+            setStatusMessage
+          );
+        }
+
+        const result = await parseApiResponse(res, `${file.name} ilave veri çıkarımı başarısız oldu.`);
+        if (result?.data) {
+          accumulated = result.data;
+        }
+      }
+
+      accumulated.sector = activeSector;
+      const sanitized = enrichAndSanitizeFinancialHistory(accumulated);
+      const { drivers, valuation } = computeSectorValuationAndDrivers(sanitized, price || sanitized.valuation?.current_price || '0', activeSector);
+      sanitized.fair_value_drivers = drivers;
+      sanitized.valuation = valuation;
+
+      setExtractedData(sanitized);
+      setStatusMessage('İlave dönem verileri başarıyla zaman serisine eklendi!');
+    } catch (err: any) {
+      setError(`İlave rapor eklenirken hata: ${err.message}`);
+    } finally {
+      setLoading(false);
+      setTimeout(() => setStatusMessage(''), 3000);
+    }
+  };
+
+  // Aşama 1: 3 Alanlı Sıralı Pipeline Yürütümü (Timeout Önleyici Dosya Bazlı Yürütüm)
   const handleExtract = async (e: React.FormEvent) => {
     e.preventDefault();
     if (financialFiles.length === 0) {
@@ -1269,36 +1349,66 @@ export default function ValuationTerminal() {
         }
       }
 
-      setPipelineProgress(33);
-      setStatusMessage(`[1. Aşama / 3]: ${financialDocs.length > 0 ? financialDocs.length : financialFiles.length} finansal tablodan resmi zaman serisi çıkarılıyor...`);
+      let currentData: any = null;
 
-      let res1: Response;
+      // Gateway Timeout (504) Koruması: Her dosyayı sunucuya tekil (sıralı) göndererek
+      // istek başına işlem süresini 2-4 saniyede tutuyoruz.
       if (financialDocs.length > 0) {
-        res1 = await fetchWithClientRetry(
-          () => fetch('/api/extract', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ticker, price, category: 'financial', documents: financialDocs })
-          }),
-          setStatusMessage
-        );
+        for (let i = 0; i < financialDocs.length; i++) {
+          const doc = financialDocs[i];
+          const pct = Math.round(15 + ((i + 1) / financialDocs.length) * 20);
+          setPipelineProgress(pct);
+          setStatusMessage(`[1. Aşama / 3]: Finansal Tablo işleniyor (${i + 1}/${financialDocs.length}): ${doc.name}...`);
+
+          const res1 = await fetchWithClientRetry(
+            () => fetch('/api/extract', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                ticker, 
+                price, 
+                category: 'financial', 
+                documents: [doc], 
+                previousData: currentData 
+              })
+            }),
+            setStatusMessage
+          );
+
+          const result1 = await parseApiResponse(res1, `${doc.name} finansal veri çıkarımı başarısız oldu.`);
+          if (result1?.data) {
+            currentData = result1.data;
+          }
+        }
       } else {
-        const fd = new FormData();
-        fd.append('ticker', ticker);
-        fd.append('price', price);
-        fd.append('category', 'financial');
-        financialFiles.forEach(f => fd.append('files_financial', f));
-        res1 = await fetchWithClientRetry(
-          () => fetch('/api/extract', { method: 'POST', body: fd }),
-          setStatusMessage
-        );
+        for (let i = 0; i < financialFiles.length; i++) {
+          const f = financialFiles[i];
+          const pct = Math.round(15 + ((i + 1) / financialFiles.length) * 20);
+          setPipelineProgress(pct);
+          setStatusMessage(`[1. Aşama / 3]: Finansal Tablo işleniyor (${i + 1}/${financialFiles.length}): ${f.name}...`);
+
+          const fd = new FormData();
+          fd.append('ticker', ticker);
+          fd.append('price', price);
+          fd.append('category', 'financial');
+          if (currentData) fd.append('previousData', JSON.stringify(currentData));
+          fd.append('files_financial', f);
+
+          const res1 = await fetchWithClientRetry(
+            () => fetch('/api/extract', { method: 'POST', body: fd }),
+            setStatusMessage
+          );
+
+          const result1 = await parseApiResponse(res1, `${f.name} finansal veri çıkarımı başarısız oldu.`);
+          if (result1?.data) {
+            currentData = result1.data;
+          }
+        }
       }
 
-      const result1 = await parseApiResponse(res1, 'Finansal veri çıkarımı başarısız oldu.');
-      if (!result1?.data) {
+      if (!currentData || !Array.isArray(currentData.financial_history) || currentData.financial_history.length === 0) {
         throw new Error('Finansal tablolardan veri seti çıkarılamadı.');
       }
-      let currentData = result1.data;
 
       // -------------------------------------------------------------
       // ADIM 2: Alan 2: Faaliyet Raporları (Opsiyonel)
@@ -3054,23 +3164,48 @@ export default function ValuationTerminal() {
                 )}
               </div>
 
-              <div className="flex gap-4 pt-2">
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setStep('input')}
-                  className="w-1/3 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg transition cursor-pointer"
+                  className="sm:w-1/4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg transition cursor-pointer"
                 >
                   Geri Dön & Belgeleri Değiştir
                 </button>
+
+                {/* İlave Dönem Raporu Ekleme Butonu */}
+                <input
+                  type="file"
+                  ref={appendFinancialInputRef}
+                  multiple
+                  accept=".pdf,application/pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      handleAppendFinancialReport(e.target.files);
+                      e.target.value = '';
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => appendFinancialInputRef.current?.click()}
+                  className="sm:w-1/3 py-3 bg-cyan-950/80 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-800/80 text-xs font-bold rounded-lg transition flex items-center justify-center gap-2 shadow cursor-pointer disabled:opacity-50"
+                  title="Farklı bir çeyrek veya yıla ait yeni finansal tablo PDF'i ekleyerek zaman serisini genişletin"
+                >
+                  <Plus className="w-4 h-4 text-cyan-400" /> + İlave Dönem / Çeyrek PDF Ekle
+                </button>
+
                 <button
                   type="button"
                   disabled={loading}
                   onClick={handleEvaluate}
-                  className="w-2/3 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white text-xs font-bold rounded-lg transition flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+                  className="sm:flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white text-xs font-bold rounded-lg transition flex items-center justify-center gap-2 shadow-lg cursor-pointer"
                 >
                   {loading ? (
                     <>
-                      <RefreshCw className="w-4 h-4 animate-spin" /> {statusMessage}
+                      <RefreshCw className="w-4 h-4 animate-spin" /> {statusMessage || 'İşleniyor...'}
                     </>
                   ) : (
                     <>
