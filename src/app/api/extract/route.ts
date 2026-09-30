@@ -280,7 +280,13 @@ KURALLAR:
 
 function mergeFinancialHistoryBatches(results: any[]): any {
   if (!results || results.length === 0) return {};
-  if (results.length === 1) return results[0];
+  if (results.length === 1) {
+    const single = results[0];
+    if (Array.isArray(single?.financial_history)) {
+      single.financial_history.sort((a: any, b: any) => parsePeriodSortKey(a?.period) - parsePeriodSortKey(b?.period));
+    }
+    return single;
+  }
 
   const merged: any = {
     ticker: '',
@@ -303,7 +309,7 @@ function mergeFinancialHistoryBatches(results: any[]): any {
     if (r.share_count && !merged.share_count) merged.share_count = r.share_count;
 
     if (r.reporting_period) {
-      if (!merged.reporting_period || String(r.reporting_period) > String(merged.reporting_period)) {
+      if (!merged.reporting_period || parsePeriodSortKey(r.reporting_period) >= parsePeriodSortKey(merged.reporting_period)) {
         merged.reporting_period = r.reporting_period;
         if (r.debt_and_interest) merged.debt_and_interest = r.debt_and_interest;
         if (r.currency) merged.currency = r.currency;
@@ -316,7 +322,13 @@ function mergeFinancialHistoryBatches(results: any[]): any {
         const key = String(item.period).trim();
         if (periodMap.has(key)) {
           const existing = periodMap.get(key);
-          periodMap.set(key, { ...existing, ...item });
+          const combined = { ...existing };
+          for (const [k, v] of Object.entries(item)) {
+            if (v !== null && v !== undefined && v !== '') {
+              combined[k] = v;
+            }
+          }
+          periodMap.set(key, combined);
         } else {
           periodMap.set(key, { ...item });
         }
@@ -347,6 +359,7 @@ export async function POST(req: Request) {
   try {
     const contentType = req.headers.get('content-type') || '';
     let ticker = '';
+    let price = '';
     let category: DocumentCategory | '' = '';
     let previousData: any = null;
     let documents: { name: string; text: string; category?: string }[] = [];
@@ -358,6 +371,7 @@ export async function POST(req: Request) {
     if (contentType.includes('application/json')) {
       const json = await req.json();
       ticker = json.ticker || '';
+      price = json.price || '';
       category = (json.category || '').toLowerCase() as DocumentCategory;
       previousData = json.previousData || null;
 
@@ -381,6 +395,7 @@ export async function POST(req: Request) {
     } else {
       const formData = await req.formData();
       ticker = (formData.get('ticker') as string) || '';
+      price = (formData.get('price') as string) || '';
       category = ((formData.get('category') as string) || '').toLowerCase() as DocumentCategory;
       
       const prevDataStr = formData.get('previousData') as string;
@@ -481,6 +496,9 @@ GÖREVLER:
       const mergedFin = mergeFinancialHistoryBatches(batchResults);
       mergedFin.sector = mergedFin.sector || targetSector;
       const enriched = enrichAndSanitizeFinancialHistory(mergedFin);
+      const { drivers, valuation } = computeSectorValuationAndDrivers(enriched, price, targetSector);
+      enriched.fair_value_drivers = drivers;
+      enriched.valuation = valuation;
       return NextResponse.json({ success: true, data: enriched });
     }
 
@@ -527,6 +545,9 @@ GÖREVLER:
       base.capex_and_kpi = { ...(base.capex_and_kpi || {}), ...(actData.capex_and_kpi || {}) };
 
       const enriched = enrichAndSanitizeFinancialHistory(base);
+      const { drivers, valuation } = computeSectorValuationAndDrivers(enriched, price, targetSector);
+      enriched.fair_value_drivers = drivers;
+      enriched.valuation = valuation;
       return NextResponse.json({ success: true, data: enriched });
     }
 
@@ -575,6 +596,9 @@ GÖREVLER:
       }
 
       const enriched = enrichAndSanitizeFinancialHistory(base);
+      const { drivers, valuation } = computeSectorValuationAndDrivers(enriched, price, targetSector);
+      enriched.fair_value_drivers = drivers;
+      enriched.valuation = valuation;
       return NextResponse.json({ success: true, data: enriched });
     }
 
@@ -669,13 +693,9 @@ GÖREVLER:
     // 4. Deterministik Matematiksel Rasyo Zenginleştirmesi & Adil Değerleme
     finalData.sector = finalData.sector || targetSector;
     const enriched = enrichAndSanitizeFinancialHistory(finalData);
-    const { drivers, valuation } = computeSectorValuationAndDrivers(enriched);
-    if (!enriched.fair_value_drivers || !enriched.fair_value_drivers.revenue_growth) {
-      enriched.fair_value_drivers = drivers;
-    }
-    if (!enriched.valuation || !enriched.valuation.fair_value) {
-      enriched.valuation = valuation;
-    }
+    const { drivers, valuation } = computeSectorValuationAndDrivers(enriched, price, targetSector);
+    enriched.fair_value_drivers = drivers;
+    enriched.valuation = valuation;
 
     return NextResponse.json({ success: true, data: enriched });
 

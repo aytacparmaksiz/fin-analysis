@@ -544,8 +544,8 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
       item.leverage_ratio = Number((((item.total_assets - item.equity) / item.total_assets) * 100).toFixed(2));
     }
 
-    // Likidite ve Faaliyet Oranları (Safe Divide ile sıfıra bölünme koruması)
-    if (item.current_assets != null && item.current_assets > 0) {
+    // Likidite ve Faaliyet Oranları (Safe Divide ile sıfıra bölünme koruması - Bankacılık hariç)
+    if (detectedSector !== 'BANKING' && item.current_assets != null && item.current_assets > 0) {
       const totalLiabilities = (item.total_assets != null && item.equity != null)
         ? Math.max(1, item.total_assets - item.equity)
         : (item.current_assets * 0.3);
@@ -1337,16 +1337,7 @@ export function computeSectorValuationAndDrivers(
 
   // Kronolojik sıralama
   const sortedHistory = [...homogenizedHistory].sort((a, b) => {
-    const parseKey = (p: string) => {
-      const yr = (p || '').match(/(20\d{2})/);
-      const year = yr ? parseInt(yr[1], 10) : 2024;
-      let q = 12;
-      if (/(?:q1|1\.ç|1ç|\/0?3\b)/i.test(p)) q = 3;
-      else if (/(?:q2|2\.ç|2ç|\/0?6\b)/i.test(p)) q = 6;
-      else if (/(?:q3|3\.ç|3ç|\/0?9\b)/i.test(p)) q = 9;
-      return year * 100 + q;
-    };
-    return parseKey(a?.period) - parseKey(b?.period);
+    return parsePeriodSortKey(a?.period) - parsePeriodSortKey(b?.period);
   });
 
   const latest = sortedHistory.length > 0 ? sortedHistory[sortedHistory.length - 1] : null;
@@ -1396,28 +1387,67 @@ export function computeSectorValuationAndDrivers(
     }
   }
 
-  if (!prevYearItem && sortedHistory.length > 1) {
-    prevYearItem = sortedHistory.length > 4 ? sortedHistory[sortedHistory.length - 5] : sortedHistory[0];
-  }
+  const presentationDrivers = extractedData?.fair_value_drivers;
+  const isPresentationTarget = (driver: any) => {
+    if (!driver || driver.value == null) return false;
+    const note = String(driver.note || '').trim().toLowerCase();
+    const expl = String(driver.sourceExplanation || '').trim().toLowerCase();
+    const label = String(driver.label || '').trim().toLowerCase();
+
+    // Default generic placeholder notes that appear in sample data or fallbacks
+    const isGenericTemplate =
+      note.includes('şirketin prim üretimi') ||
+      note.includes('şirketin kârlılık marjlarını') ||
+      note.includes('reel ciro büyümesi') ||
+      (label.endsWith('(12 ay ileri)') && !note && !expl);
+
+    if (isGenericTemplate) return false;
+
+    if (driver.sourceExplanation) return true;
+    if (Boolean(extractedData?.future_targets_summary)) return true;
+
+    const keywords = [
+      'sunum', 'hedef', 'slayt', 'guidance', 'forward', 'beklenti',
+      'öngörü', 'tahmin', 'plan', 'bütçe', 'kapasite', 'strateji', 'yönetim', 'genişleme'
+    ];
+    if (keywords.some(k => note.includes(k) || expl.includes(k) || label.includes(k))) {
+      return true;
+    }
+
+    return note.length > 0 && !note.startsWith('şirketin ');
+  };
 
   // 1. DİNAMİK SÜRÜCÜ: GELİR BÜYÜMESİ (REVENUE GROWTH)
   let revGrowth = 45.0;
   let revGrowthExpl = 'Tarihsel finansal tablolardan dinamik hesaplandı';
-  const latestRev = parseFinancialNumber(latest?.revenue ?? latest?.written_premiums);
-  const prevRev = parseFinancialNumber(prevYearItem?.revenue ?? prevYearItem?.written_premiums);
+  let hasPresentationRev = false;
 
-  if (latestRev !== null && prevRev !== null && prevRev > 0 && latestRev > 0) {
-    if (isCagr && yearDiff > 1) {
-      const cagr = (Math.pow(latestRev / prevRev, 1 / yearDiff) - 1) * 100;
-      if (cagr > -50 && cagr < 500) {
-        revGrowth = Number(cagr.toFixed(1));
-        revGrowthExpl = `${prevYearItem.period || 'Başlangıç'} -> ${latest.period || 'Son Dönem'} (${yearDiff} Yıllık Yıllıklandırılmış Bileşik Prim/Hasılat Artışı - CAGR): %${revGrowth}`;
-      }
-    } else {
-      const calculatedGrowth = safeGrowthRate(latestRev, prevRev);
-      if (calculatedGrowth !== null && calculatedGrowth > -80 && calculatedGrowth < 800) {
-        revGrowth = calculatedGrowth;
-        revGrowthExpl = `${prevYearItem.period || 'Önceki Yıl'} -> ${latest.period || 'Son Dönem'} gerçekleşen yıllık (YoY) prim/hasılat artışı: %${revGrowth}`;
+  if (isPresentationTarget(presentationDrivers?.revenue_growth)) {
+    const val = Number(presentationDrivers.revenue_growth.value);
+    if (!isNaN(val) && val > -80 && val < 800) {
+      revGrowth = Number(val.toFixed(1));
+      revGrowthExpl = presentationDrivers.revenue_growth.sourceExplanation || presentationDrivers.revenue_growth.note || `${latest?.period || 'Son Dönem'} Yatırımcı Sunumu Hedefi: %${revGrowth}`;
+      hasPresentationRev = true;
+    }
+  }
+
+  if (!hasPresentationRev) {
+    const latestRev = parseFinancialNumber(latest?.revenue ?? latest?.written_premiums);
+    const prevRev = parseFinancialNumber(prevYearItem?.revenue ?? prevYearItem?.written_premiums);
+
+    if (latestRev !== null && prevRev !== null && prevRev > 0 && latestRev > 0) {
+      if (isCagr && yearDiff > 1) {
+        const cagr = (Math.pow(latestRev / prevRev, 1 / yearDiff) - 1) * 100;
+        if (cagr > -50 && cagr < 500) {
+          revGrowth = Number(cagr.toFixed(1));
+          revGrowthExpl = `${prevYearItem.period || 'Başlangıç'} -> ${latest.period || 'Son Dönem'} (${yearDiff} Yıllık Yıllıklandırılmış Bileşik Prim/Hasılat Artışı - CAGR): %${revGrowth}`;
+        }
+      } else {
+        const calculatedGrowth = safeGrowthRate(latestRev, prevRev);
+        if (calculatedGrowth !== null && calculatedGrowth > -80 && calculatedGrowth < 800) {
+          revGrowth = calculatedGrowth;
+          revGrowthExpl = `${prevYearItem.period || 'Önceki Yıl'} -> ${latest.period || 'Son Dönem'} gerçekleşen yıllık (YoY) prim/hasılat artışı: %${revGrowth}`;
+        }
       }
     }
   }
@@ -1425,22 +1455,35 @@ export function computeSectorValuationAndDrivers(
   // 2. DİNAMİK SÜRÜCÜ: NET KÂR BÜYÜMESİ (NET INCOME GROWTH - SAFE CALCULATION)
   let netGrowth = 40.0;
   let netGrowthExpl = 'Tarihsel finansal tablolardan dinamik hesaplandı';
-  const latestNet = parseFinancialNumber(latest?.net_income);
-  const prevNet = parseFinancialNumber(prevYearItem?.net_income);
+  let hasPresentationNet = false;
 
-  if (latestNet !== null && prevNet !== null && prevNet !== 0) {
-    if (isCagr && yearDiff > 1 && latestNet > 0 && prevNet > 0) {
-      const cagr = (Math.pow(latestNet / prevNet, 1 / yearDiff) - 1) * 100;
-      if (cagr > -80 && cagr < 800) {
-        netGrowth = Number(cagr.toFixed(1));
-        netGrowthExpl = `${prevYearItem.period || 'Başlangıç'} -> ${latest.period || 'Son Dönem'} (${yearDiff} Yıllık Yıllıklandırılmış Bileşik Net Kâr Artışı - CAGR): %${netGrowth}`;
-      }
-    } else {
-      // safeGrowthRate negatif baz değerde (|prevNet|) doğru yönlü büyümeyi hesaplar
-      const calculatedNetGrowth = safeGrowthRate(latestNet, prevNet);
-      if (calculatedNetGrowth !== null && calculatedNetGrowth > -100 && calculatedNetGrowth < 1000) {
-        netGrowth = calculatedNetGrowth;
-        netGrowthExpl = `${prevYearItem.period || 'Önceki Yıl'} -> ${latest.period || 'Son Dönem'} gerçekleşen yıllık net kâr artışı: %${netGrowth}`;
+  if (isPresentationTarget(presentationDrivers?.net_income_growth)) {
+    const val = Number(presentationDrivers.net_income_growth.value);
+    if (!isNaN(val) && val > -100 && val < 1000) {
+      netGrowth = Number(val.toFixed(1));
+      netGrowthExpl = presentationDrivers.net_income_growth.sourceExplanation || presentationDrivers.net_income_growth.note || `${latest?.period || 'Son Dönem'} Yatırımcı Sunumu Hedefi: %${netGrowth}`;
+      hasPresentationNet = true;
+    }
+  }
+
+  if (!hasPresentationNet) {
+    const latestNet = parseFinancialNumber(latest?.net_income);
+    const prevNet = parseFinancialNumber(prevYearItem?.net_income);
+
+    if (latestNet !== null && prevNet !== null && prevNet !== 0) {
+      if (isCagr && yearDiff > 1 && latestNet > 0 && prevNet > 0) {
+        const cagr = (Math.pow(latestNet / prevNet, 1 / yearDiff) - 1) * 100;
+        if (cagr > -80 && cagr < 800) {
+          netGrowth = Number(cagr.toFixed(1));
+          netGrowthExpl = `${prevYearItem.period || 'Başlangıç'} -> ${latest.period || 'Son Dönem'} (${yearDiff} Yıllık Yıllıklandırılmış Bileşik Net Kâr Artışı - CAGR): %${netGrowth}`;
+        }
+      } else {
+        // safeGrowthRate negatif baz değerde (|prevNet|) doğru yönlü büyümeyi hesaplar
+        const calculatedNetGrowth = safeGrowthRate(latestNet, prevNet);
+        if (calculatedNetGrowth !== null && calculatedNetGrowth > -100 && calculatedNetGrowth < 1000) {
+          netGrowth = calculatedNetGrowth;
+          netGrowthExpl = `${prevYearItem.period || 'Önceki Yıl'} -> ${latest.period || 'Son Dönem'} gerçekleşen yıllık net kâr artışı: %${netGrowth}`;
+        }
       }
     }
   }
@@ -1450,37 +1493,51 @@ export function computeSectorValuationAndDrivers(
   let marginLabel = 'Kombine Oran (Teknik Kârlılık)';
   let marginNote = 'Kombine oranın %100 altında kalması, şirketin hasar ve faaliyet masrafları sonrasında net teknik kâr ürettiğini gösterir.';
   let marginExpl = 'Son dönem bilançosunda gerçekleşen Hasar/Prim + Masraf Oranı';
+  let hasPresentationMargin = false;
 
-  if (sector === 'INSURANCE') {
-    marginLabel = 'Kombine Oran (Teknik Kârlılık)';
-    const comb = parseFinancialNumber(latest?.combined_ratio);
-    if (comb !== null && comb > 0) {
-      marginVal = Number(comb.toFixed(1));
-      marginExpl = `Son dönem (${latest.period}) gerçekleşen Hasar Oranı (%${latest.loss_ratio || 68.2}) + Masraf Oranı (%${latest.expense_ratio || 20.2}) = %${marginVal}`;
-    } else {
-      marginVal = 88.4;
+  if (presentationDrivers?.margin?.value != null) {
+    const val = Number(presentationDrivers.margin.value);
+    if (!isNaN(val) && val > 0 && val < 200) {
+      marginVal = Number(val.toFixed(1));
+      marginExpl = presentationDrivers.margin.note || presentationDrivers.margin.sourceExplanation || 'Yatırımcı sunumu / Şirket hedef marjı';
+      if (presentationDrivers.margin.label) marginLabel = presentationDrivers.margin.label;
+      if (presentationDrivers.margin.note) marginNote = presentationDrivers.margin.note;
+      hasPresentationMargin = true;
     }
-  } else if (sector === 'BANKING') {
-    marginLabel = 'Net Faiz Marjı (NIM %)';
-    marginNote = 'Net faiz gelirinin faiz getirili aktiflere oranı bankanın ana fonlama marjını belirler.';
-    const netM = parseFinancialNumber(latest?.net_margin);
-    marginVal = netM !== null ? Number((netM * 0.4).toFixed(1)) : 6.5;
-    marginExpl = 'Net faiz gelirlerinin aktiflere oranından türetilen marj göstergesi';
-  } else if (sector === 'HOLDING') {
-    marginLabel = 'Portföy Net Aktif Değeri (NAD) İskontosu (%)';
-    marginNote = 'Holding piyasa değerinin iştirak portföyü net aktif değerine olan tarihsel iskontosu.';
-    marginVal = 32.5;
-    marginExpl = 'BIST holding sektörü tarihsel medyan NAD iskontosu tabanı';
-  } else {
-    marginLabel = 'FAVÖK Marjı (EBITDA Margin)';
-    marginNote = 'Operasyonel kârlılık marjı, şirketin maliyet şoklarını absorbe etme kabiliyetini gösterir.';
-    const ebitdaM = parseFinancialNumber(latest?.ebitda_margin);
-    if (ebitdaM !== null && ebitdaM > 0) {
-      marginVal = Number(ebitdaM.toFixed(1));
-      marginExpl = `Son dönem (${latest.period}) gerçekleşen FAVÖK / Satış Gelirleri marjı: %${marginVal}`;
+  }
+
+  if (!hasPresentationMargin) {
+    if (sector === 'INSURANCE') {
+      marginLabel = 'Kombine Oran (Teknik Kârlılık)';
+      const comb = parseFinancialNumber(latest?.combined_ratio);
+      if (comb !== null && comb > 0) {
+        marginVal = Number(comb.toFixed(1));
+        marginExpl = `Son dönem (${latest.period}) gerçekleşen Hasar Oranı (%${latest.loss_ratio || 68.2}) + Masraf Oranı (%${latest.expense_ratio || 20.2}) = %${marginVal}`;
+      } else {
+        marginVal = 88.4;
+      }
+    } else if (sector === 'BANKING') {
+      marginLabel = 'Net Faiz Marjı (NIM %)';
+      marginNote = 'Net faiz gelirinin faiz getirili aktiflere oranı bankanın ana fonlama marjını belirler.';
+      const netM = parseFinancialNumber(latest?.net_margin);
+      marginVal = netM !== null ? Number((netM * 0.4).toFixed(1)) : 6.5;
+      marginExpl = 'Net faiz gelirlerinin aktiflere oranından türetilen marj göstergesi';
+    } else if (sector === 'HOLDING') {
+      marginLabel = 'Portföy Net Aktif Değeri (NAD) İskontosu (%)';
+      marginNote = 'Holding piyasa değerinin iştirak portföyü net aktif değerine olan tarihsel iskontosu.';
+      marginVal = 32.5;
+      marginExpl = 'BIST holding sektörü tarihsel medyan NAD iskontosu tabanı';
     } else {
-      marginVal = 24.5;
-      marginExpl = 'Şirket faaliyet raporu operasyonel marj tabanı';
+      marginLabel = 'FAVÖK Marjı (EBITDA Margin)';
+      marginNote = 'Operasyonel kârlılık marjı, şirketin maliyet şoklarını absorbe etme kabiliyetini gösterir.';
+      const ebitdaM = parseFinancialNumber(latest?.ebitda_margin);
+      if (ebitdaM !== null && ebitdaM > 0) {
+        marginVal = Number(ebitdaM.toFixed(1));
+        marginExpl = `Son dönem (${latest.period}) gerçekleşen FAVÖK / Satış Gelirleri marjı: %${marginVal}`;
+      } else {
+        marginVal = 24.5;
+        marginExpl = 'Şirket faaliyet raporu operasyonel marj tabanı';
+      }
     }
   }
 
@@ -1488,76 +1545,91 @@ export function computeSectorValuationAndDrivers(
   let targetMultipleStr = 'PD/DD 3,9x';
   let targetMultipleNum = 3.9;
   let targetMultipleExpl = 'Gordon Büyüme Modeli: (ROE - g) / (Ke - g) ile dinamik türetildi';
+  let hasPresentationMultiple = false;
 
-  const rawRoe = parseFinancialNumber(latest?.roe);
-  const roe = rawRoe !== null ? rawRoe : (sector === 'INSURANCE' ? 70.45 : 35.0);
-  const ke = parseFinancialNumber(latest?.wacc) ?? 44.0;
-  const g = 25.0; // Uzun vadeli nominal büyüme varsayımı
-
-  if (sector === 'INSURANCE' || sector === 'BANKING') {
-    // Gordon Modeli: Hedef PD/DD = (ROE - g) / (Ke - g)
-    // Sıfıra bölünme ve negatif payda koruması: Math.max(3.0, ke - g)
-    const safeKeMinusG = Math.max(3.0, ke - g);
-    if (roe > 0) {
-      if (roe > g) {
-        const calculatedPb = (roe - g) / safeKeMinusG;
-        targetMultipleNum = Number(Math.max(0.6, Math.min(6.0, calculatedPb)).toFixed(1));
-        targetMultipleExpl = `Gordon Büyüme Modeli: (ROE: %${roe.toFixed(1)} - g: %${g}) / (Ke: %${ke.toFixed(1)} - g: %${g}) = ${targetMultipleNum}x`;
-      } else {
-        const modestPb = roe / Math.max(10.0, ke);
-        targetMultipleNum = Number(Math.max(0.4, Math.min(2.5, modestPb)).toFixed(1));
-        targetMultipleExpl = `Ilımlı/Düşük ROE (%${roe.toFixed(1)} <= g: %${g}): Defter Değeri Kârlılık Çarpanı (ROE / Ke = ${targetMultipleNum}x) uygulandı.`;
-      }
-    } else {
-      // Negatif ROE koruması: Gordon uygulanamaz, muhafazakar taban
-      targetMultipleNum = 0.5;
-      targetMultipleExpl = `Negatif/Zarar ROE (%${roe.toFixed(1)}): Muhafazakar defter değeri iskonto çarpanı (0.5x) uygulandı.`;
+  if (presentationDrivers?.target_multiple?.value) {
+    targetMultipleStr = String(presentationDrivers.target_multiple.value);
+    const rawVal = presentationDrivers.target_multiple.numericValue != null
+      ? Number(presentationDrivers.target_multiple.numericValue)
+      : parseFloat(String(presentationDrivers.target_multiple.value).replace(/[^0-9.,]/g, '').replace(',', '.'));
+    if (!isNaN(rawVal) && rawVal > 0.2 && rawVal < 50) {
+      targetMultipleNum = Number(rawVal.toFixed(1));
+      hasPresentationMultiple = true;
+      targetMultipleExpl = presentationDrivers.target_multiple.note || presentationDrivers.target_multiple.sourceExplanation || 'Yatırımcı sunumu / Şirket hedef çarpanı';
     }
-    targetMultipleStr = `PD/DD ${targetMultipleNum.toString().replace('.', ',')}x`;
-  } else if (sector === 'HOLDING') {
-    targetMultipleNum = 0.70; // %30 iskonto
-    targetMultipleStr = 'NAD Çarpanı 0,70x (%30 İskonto)';
-    targetMultipleExpl = 'Hedef NAD iskontosu %30 baz alınarak hesaplanan net aktif çarpanı';
-  } else {
-    targetMultipleNum = 6.5;
-    targetMultipleStr = 'FD/FAVÖK 6,5x';
-    targetMultipleExpl = 'Sektör medyanı ve sermaye maliyeti (WACC) bazlı hedef operasyonel çarpan';
+  }
+
+  if (!hasPresentationMultiple) {
+    const rawRoe = parseFinancialNumber(latest?.roe);
+    const roe = rawRoe !== null ? rawRoe : (sector === 'INSURANCE' ? 70.45 : 35.0);
+    const ke = parseFinancialNumber(latest?.wacc) ?? 44.0;
+    const g = 25.0; // Uzun vadeli nominal büyüme varsayımı
+
+    if (sector === 'INSURANCE' || sector === 'BANKING') {
+      // Gordon Modeli: Hedef PD/DD = (ROE - g) / (Ke - g)
+      // Sıfıra bölünme ve negatif payda koruması: Math.max(3.0, ke - g)
+      const safeKeMinusG = Math.max(3.0, ke - g);
+      if (roe > 0) {
+        if (roe > g) {
+          const calculatedPb = (roe - g) / safeKeMinusG;
+          targetMultipleNum = Number(Math.max(0.6, Math.min(6.0, calculatedPb)).toFixed(1));
+          targetMultipleExpl = `Gordon Büyüme Modeli: (ROE: %${roe.toFixed(1)} - g: %${g}) / (Ke: %${ke.toFixed(1)} - g: %${g}) = ${targetMultipleNum}x`;
+        } else {
+          const modestPb = roe / Math.max(10.0, ke);
+          targetMultipleNum = Number(Math.max(0.4, Math.min(2.5, modestPb)).toFixed(1));
+          targetMultipleExpl = `Ilımlı/Düşük ROE (%${roe.toFixed(1)} <= g: %${g}): Defter Değeri Kârlılık Çarpanı (ROE / Ke = ${targetMultipleNum}x) uygulandı.`;
+        }
+      } else {
+        // Negatif ROE koruması: Gordon uygulanamaz, muhafazakar taban
+        targetMultipleNum = 0.5;
+        targetMultipleExpl = `Negatif/Zarar ROE (%${roe.toFixed(1)}): Muhafazakar defter değeri iskonto çarpanı (0.5x) uygulandı.`;
+      }
+      targetMultipleStr = `PD/DD ${targetMultipleNum.toString().replace('.', ',')}x`;
+    } else if (sector === 'HOLDING') {
+      targetMultipleNum = 0.70; // %30 iskonto
+      targetMultipleStr = 'NAD Çarpanı 0,70x (%30 İskonto)';
+      targetMultipleExpl = 'Hedef NAD iskontosu %30 baz alınarak hesaplanan net aktif çarpanı';
+    } else {
+      targetMultipleNum = 6.5;
+      targetMultipleStr = 'FD/FAVÖK 6,5x';
+      targetMultipleExpl = 'Sektör medyanı ve sermaye maliyeti (WACC) bazlı hedef operasyonel çarpan';
+    }
   }
 
   const drivers: FairValueDrivers = {
     revenue_growth: {
       value: revGrowth,
-      label: sector === 'INSURANCE' ? 'Prim Büyümesi (12 ay ileri)' : 'Satış Büyümesi (12 ay ileri)',
-      bearLabel: 'Düşük enflasyon ve pazar daralması',
-      bullLabel: 'Yüksek enflasyon ve pazar payı artışı',
-      note: sector === 'INSURANCE'
+      label: presentationDrivers?.revenue_growth?.label || (sector === 'INSURANCE' ? 'Prim Büyümesi (12 ay ileri)' : 'Satış Büyümesi (12 ay ileri)'),
+      bearLabel: presentationDrivers?.revenue_growth?.bearLabel || 'Düşük enflasyon ve pazar daralması',
+      bullLabel: presentationDrivers?.revenue_growth?.bullLabel || 'Yüksek enflasyon ve pazar payı artışı',
+      note: presentationDrivers?.revenue_growth?.note || (sector === 'INSURANCE'
         ? 'Şirketin prim üretimi ve yatırım gelirlerindeki artış hızı, gelecekteki değerlemesini doğrudan etkileyecektir.'
-        : 'Reel ciro büyümesi ve fiyatlama gücü şirketin pazar payını ve gelecekteki nakit akışını belirler.',
+        : 'Reel ciro büyümesi ve fiyatlama gücü şirketin pazar payını ve gelecekteki nakit akışını belirler.'),
       sourceExplanation: revGrowthExpl,
     },
     net_income_growth: {
       value: netGrowth,
-      label: 'Net Kâr Büyümesi (12 ay ileri)',
-      bearLabel: 'Artan maliyetler ve düşen yatırım getirileri',
-      bullLabel: 'Operasyonel verimlilik ve güçlü yatırım performansı',
-      note: 'Şirketin kârlılık marjlarını koruyarak net kârını büyütme yeteneği, değer yaratımının anahtarıdır.',
+      label: presentationDrivers?.net_income_growth?.label || 'Net Kâr Büyümesi (12 ay ileri)',
+      bearLabel: presentationDrivers?.net_income_growth?.bearLabel || 'Artan maliyetler ve düşen yatırım getirileri',
+      bullLabel: presentationDrivers?.net_income_growth?.bullLabel || 'Operasyonel verimlilik ve güçlü yatırım performansı',
+      note: presentationDrivers?.net_income_growth?.note || 'Şirketin kârlılık marjlarını koruyarak net kârını büyütme yeteneği, değer yaratımının anahtarıdır.',
       sourceExplanation: netGrowthExpl,
     },
     margin: {
       value: marginVal,
       label: marginLabel,
-      bearLabel: sector === 'INSURANCE' ? 'Hasar artışı ve kombine oranın %95 üzerine çıkması' : 'Maliyet artışları ve marj erozyonu',
-      bullLabel: sector === 'INSURANCE' ? 'Disiplinli hasar yönetimi ve kombine oranın %85 altına inmesi' : 'Fiyatlama gücü ve operasyonel kaldıraç',
+      bearLabel: presentationDrivers?.margin?.bearLabel || (sector === 'INSURANCE' ? 'Hasar artışı ve kombine oranın %95 üzerine çıkması' : 'Maliyet artışları ve marj erozyonu'),
+      bullLabel: presentationDrivers?.margin?.bullLabel || (sector === 'INSURANCE' ? 'Disiplinli hasar yönetimi ve kombine oranın %85 altına inmesi' : 'Fiyatlama gücü ve operasyonel kaldıraç'),
       note: marginNote,
       sourceExplanation: marginExpl,
     },
     target_multiple: {
       value: targetMultipleStr,
       numericValue: targetMultipleNum,
-      label: 'Hedef Çarpan (12 ay)',
-      bearLabel: 'Artan faiz oranları ve ülke risk primi',
-      bullLabel: 'Düşen faiz oranları ve risk algısında iyileşme',
-      note: "Makroekonomik koşullar ve Türkiye'nin risk primi, şirketin gelecekteki nakit akışlarının bugünkü değerini belirleyen iskonto oranını etkiler.",
+      label: presentationDrivers?.target_multiple?.label || 'Hedef Çarpan (12 ay)',
+      bearLabel: presentationDrivers?.target_multiple?.bearLabel || 'Artan faiz oranları ve ülke risk primi',
+      bullLabel: presentationDrivers?.target_multiple?.bullLabel || 'Düşen faiz oranları ve risk algısında iyileşme',
+      note: presentationDrivers?.target_multiple?.note || "Makroekonomik koşullar ve Türkiye'nin risk primi, şirketin gelecekteki nakit akışlarının bugünkü değerini belirleyen iskonto oranını etkiler.",
       sourceExplanation: targetMultipleExpl,
     },
   };

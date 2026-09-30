@@ -12,7 +12,9 @@ import {
 } from '../lib/pdf-filter.ts';
 import { 
   cleanAndParseJson,
-  enrichAndSanitizeFinancialHistory
+  enrichAndSanitizeFinancialHistory,
+  computeSectorValuationAndDrivers,
+  parsePeriodSortKey
 } from '../lib/valuation.ts';
 
 describe('PDF Filter & Timeout Resilience', () => {
@@ -468,6 +470,94 @@ describe('PDF Filter & Timeout Resilience', () => {
       // they must NOT be hallucinated or invented; they must be undefined or null!
       assert.ok(item.npl_ratio == null, 'npl_ratio must be null or undefined if not reported');
       assert.ok(item.car_ratio == null, 'car_ratio must be null or undefined if not reported');
+    });
+
+    it('banking sector does not hallucinate industrial current, quick, or cash ratios', () => {
+      const bankData = {
+        ticker: 'GARAN',
+        sector: 'BANKING',
+        financial_history: [
+          {
+            period: '2025/12',
+            revenue: 150000000,
+            net_interest_income: 150000000,
+            net_income: 80000000,
+            equity: 240000000,
+            total_assets: 2000000000,
+            current_assets: 500000000, // Even if raw data mentions current assets
+            npl_ratio: 2.1,
+            car_ratio: 16.5,
+          }
+        ]
+      };
+
+      const enriched = enrichAndSanitizeFinancialHistory(bankData);
+      const item = enriched.financial_history[0];
+
+      // For banking, industrial current_ratio, quick_ratio, and cash_ratio must NOT be fabricated
+      assert.ok(item.current_ratio == null, 'Banks must not fabricate current_ratio');
+      assert.ok(item.quick_ratio == null, 'Banks must not fabricate quick_ratio');
+      assert.ok(item.cash_ratio == null, 'Banks must not fabricate cash_ratio');
+      // Bank-specific ratios must be preserved
+      assert.equal(item.npl_ratio, 2.1);
+      assert.equal(item.car_ratio, 16.5);
+    });
+
+    it('computeSectorValuationAndDrivers integrates Alan 3 investor presentation forward guidance drivers', () => {
+      const baseData = {
+        ticker: 'THYAO',
+        sector: 'INDUSTRIAL',
+        financial_history: [
+          { period: '2024/12', revenue: 500000000, ebitda: 100000000, net_income: 60000000, equity: 400000000, net_debt: 80000000 },
+          { period: '2025/12', revenue: 600000000, ebitda: 120000000, net_income: 75000000, equity: 500000000, net_debt: 70000000 }
+        ],
+        // Alan 3 Investor Presentation forward targets
+        fair_value_drivers: {
+          revenue_growth: {
+            value: 55.0,
+            label: 'Yönetim Ciro Büyüme Hedefi',
+            note: '2026 Yatırımcı Sunumu Slayt 14: Yeni filo kapasitesi ve hat açılışları'
+          },
+          net_income_growth: {
+            value: 48.0,
+            label: 'Net Kâr Genişleme Hedefi',
+            note: 'Maliyet optimizasyonu ve kargo birimi büyümesi'
+          },
+          margin: {
+            value: 26.5,
+            label: 'Hedeflenen FAVÖK Marjı',
+            note: 'Jet yakıtı hedge stratejisi ile marj korunumu'
+          },
+          target_multiple: {
+            value: 'FD/FAVÖK 7.2x',
+            numericValue: 7.2,
+            note: 'Global benzer havayolu medyan çarpanı'
+          }
+        }
+      };
+
+      const result = computeSectorValuationAndDrivers(baseData, '300.00', 'INDUSTRIAL');
+
+      // Presentation drivers must be reflected in drivers card
+      assert.equal(result.drivers.revenue_growth.value, 55.0);
+      assert.equal(result.drivers.revenue_growth.sourceExplanation, '2026 Yatırımcı Sunumu Slayt 14: Yeni filo kapasitesi ve hat açılışları');
+      assert.equal(result.drivers.net_income_growth.value, 48.0);
+      assert.equal(result.drivers.margin.value, 26.5);
+      assert.equal(result.drivers.target_multiple.numericValue, 7.2);
+      assert.ok(result.valuation.fair_value > 0);
+      assert.ok(result.drivers.revenue_growth.bearLabel.length > 0);
+      assert.ok(result.drivers.revenue_growth.bullLabel.length > 0);
+    });
+
+    it('parsePeriodSortKey correctly orders multi-format periods including 3A, 6A, Q3, 12A', () => {
+      const periods = ['2025/12', '2024/03', '2024/3A', '2024/Q2', '2024/6A', '2024/09', '2024/9A', '2024/12', '2024/12A', '2023'];
+      const sorted = [...periods].sort((a, b) => parsePeriodSortKey(a) - parsePeriodSortKey(b));
+
+      assert.equal(sorted[0], '2023');
+      assert.ok(sorted.indexOf('2024/03') < sorted.indexOf('2024/Q2'));
+      assert.ok(sorted.indexOf('2024/6A') < sorted.indexOf('2024/09'));
+      assert.ok(sorted.indexOf('2024/09') < sorted.indexOf('2024/12'));
+      assert.equal(sorted[sorted.length - 1], '2025/12');
     });
   });
 });

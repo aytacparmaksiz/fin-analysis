@@ -1238,13 +1238,14 @@ export default function ValuationTerminal() {
           () => fetch('/api/extract', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ticker, category: 'financial', documents: financialDocs })
+            body: JSON.stringify({ ticker, price, category: 'financial', documents: financialDocs })
           }),
           setStatusMessage
         );
       } else {
         const fd = new FormData();
         fd.append('ticker', ticker);
+        fd.append('price', price);
         fd.append('category', 'financial');
         financialFiles.forEach(f => fd.append('files_financial', f));
         res1 = await fetchWithClientRetry(
@@ -1262,52 +1263,53 @@ export default function ValuationTerminal() {
       // -------------------------------------------------------------
       // ADIM 2: Alan 2: Faaliyet Raporları (Opsiyonel)
       // -------------------------------------------------------------
-      setPipelineStep(2);
       if (activityFiles.length > 0) {
+        setPipelineStep(2);
         setPipelineProgress(45);
         setStatusMessage('(2/3) Faaliyet raporundan yönetim hedefleri ve riskler ayıklanıyor...');
 
-        const activityDocs: { name: string; text: string; category: string }[] = [];
-        for (let i = 0; i < activityFiles.length; i++) {
-          const file = activityFiles[i];
-          setStatusMessage(`(2/3) Faaliyet raporu: ${file.name} taranıyor (${i + 1}/${activityFiles.length})...`);
-          try {
-            const arrayBuffer = await file.arrayBuffer();
-            const { text } = await extractSmartDocumentText(arrayBuffer, 'activity');
-            if (text && text.trim().length > 50) {
-              activityDocs.push({ name: file.name, text: text.trim(), category: 'activity' });
-            }
-          } catch (err) {
-            console.warn(`[Activity PDF] ${file.name} okunamadı:`, err);
-          }
-        }
-
-        setPipelineProgress(66);
-        setStatusMessage('(2/3) Faaliyet raporundan yönetim hedefleri ve riskler ayıklanıyor...');
-
-        let res2: Response;
-        if (activityDocs.length > 0) {
-          res2 = await fetchWithClientRetry(
-            () => fetch('/api/extract', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ ticker, category: 'activity', documents: activityDocs, previousData: currentData })
-            }),
-            setStatusMessage
-          );
-        } else {
-          const fd = new FormData();
-          fd.append('ticker', ticker);
-          fd.append('category', 'activity');
-          fd.append('previousData', JSON.stringify(currentData));
-          activityFiles.forEach(f => fd.append('files_activity', f));
-          res2 = await fetchWithClientRetry(
-            () => fetch('/api/extract', { method: 'POST', body: fd }),
-            setStatusMessage
-          );
-        }
-
         try {
+          const activityDocs: { name: string; text: string; category: string }[] = [];
+          for (let i = 0; i < activityFiles.length; i++) {
+            const file = activityFiles[i];
+            setStatusMessage(`(2/3) Faaliyet raporu: ${file.name} taranıyor (${i + 1}/${activityFiles.length})...`);
+            try {
+              const arrayBuffer = await file.arrayBuffer();
+              const { text } = await extractSmartDocumentText(arrayBuffer, 'activity');
+              if (text && text.trim().length > 50) {
+                activityDocs.push({ name: file.name, text: text.trim(), category: 'activity' });
+              }
+            } catch (err) {
+              console.warn(`[Activity PDF] ${file.name} okunamadı:`, err);
+            }
+          }
+
+          setPipelineProgress(66);
+          setStatusMessage('(2/3) Faaliyet raporundan yönetim hedefleri ve riskler ayıklanıyor...');
+
+          let res2: Response;
+          if (activityDocs.length > 0) {
+            res2 = await fetchWithClientRetry(
+              () => fetch('/api/extract', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticker, price, category: 'activity', documents: activityDocs, previousData: currentData })
+              }),
+              setStatusMessage
+            );
+          } else {
+            const fd = new FormData();
+            fd.append('ticker', ticker);
+            fd.append('price', price);
+            fd.append('category', 'activity');
+            fd.append('previousData', JSON.stringify(currentData));
+            activityFiles.forEach(f => fd.append('files_activity', f));
+            res2 = await fetchWithClientRetry(
+              () => fetch('/api/extract', { method: 'POST', body: fd }),
+              setStatusMessage
+            );
+          }
+
           const result2 = await parseApiResponse(res2, 'Faaliyet raporu analizi başarısız oldu.');
           if (result2?.data) {
             currentData = result2.data;
@@ -1322,52 +1324,53 @@ export default function ValuationTerminal() {
       // -------------------------------------------------------------
       // ADIM 3: Alan 3: Yatırımcı Sunumu & Strateji Dokümanları (Opsiyonel)
       // -------------------------------------------------------------
-      setPipelineStep(3);
       if (presentationFiles.length > 0) {
+        setPipelineStep(3);
         setPipelineProgress(75);
         setStatusMessage('(3/3) Yatırımcı sunumundan ileriye dönük hedefler entegre ediliyor...');
 
-        const presentationDocs: { name: string; text: string; category: string }[] = [];
-        for (let i = 0; i < presentationFiles.length; i++) {
-          const file = presentationFiles[i];
-          setStatusMessage(`(3/3) Yatırımcı sunumu: ${file.name} taranıyor (${i + 1}/${presentationFiles.length})...`);
-          try {
-            const arrayBuffer = await file.arrayBuffer();
-            const { text } = await extractSmartDocumentText(arrayBuffer, 'presentation');
-            if (text && text.trim().length > 50) {
-              presentationDocs.push({ name: file.name, text: text.trim(), category: 'presentation' });
-            }
-          } catch (err) {
-            console.warn(`[Presentation PDF] ${file.name} okunamadı:`, err);
-          }
-        }
-
-        setPipelineProgress(90);
-        setStatusMessage('(3/3) Yatırımcı sunumundan ileriye dönük hedefler entegre ediliyor...');
-
-        let res3: Response;
-        if (presentationDocs.length > 0) {
-          res3 = await fetchWithClientRetry(
-            () => fetch('/api/extract', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ ticker, category: 'presentation', documents: presentationDocs, previousData: currentData })
-            }),
-            setStatusMessage
-          );
-        } else {
-          const fd = new FormData();
-          fd.append('ticker', ticker);
-          fd.append('category', 'presentation');
-          fd.append('previousData', JSON.stringify(currentData));
-          presentationFiles.forEach(f => fd.append('files_presentation', f));
-          res3 = await fetchWithClientRetry(
-            () => fetch('/api/extract', { method: 'POST', body: fd }),
-            setStatusMessage
-          );
-        }
-
         try {
+          const presentationDocs: { name: string; text: string; category: string }[] = [];
+          for (let i = 0; i < presentationFiles.length; i++) {
+            const file = presentationFiles[i];
+            setStatusMessage(`(3/3) Yatırımcı sunumu: ${file.name} taranıyor (${i + 1}/${presentationFiles.length})...`);
+            try {
+              const arrayBuffer = await file.arrayBuffer();
+              const { text } = await extractSmartDocumentText(arrayBuffer, 'presentation');
+              if (text && text.trim().length > 50) {
+                presentationDocs.push({ name: file.name, text: text.trim(), category: 'presentation' });
+              }
+            } catch (err) {
+              console.warn(`[Presentation PDF] ${file.name} okunamadı:`, err);
+            }
+          }
+
+          setPipelineProgress(90);
+          setStatusMessage('(3/3) Yatırımcı sunumundan ileriye dönük hedefler entegre ediliyor...');
+
+          let res3: Response;
+          if (presentationDocs.length > 0) {
+            res3 = await fetchWithClientRetry(
+              () => fetch('/api/extract', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticker, price, category: 'presentation', documents: presentationDocs, previousData: currentData })
+              }),
+              setStatusMessage
+            );
+          } else {
+            const fd = new FormData();
+            fd.append('ticker', ticker);
+            fd.append('price', price);
+            fd.append('category', 'presentation');
+            fd.append('previousData', JSON.stringify(currentData));
+            presentationFiles.forEach(f => fd.append('files_presentation', f));
+            res3 = await fetchWithClientRetry(
+              () => fetch('/api/extract', { method: 'POST', body: fd }),
+              setStatusMessage
+            );
+          }
+
           const result3 = await parseApiResponse(res3, 'Yatırımcı sunumu analizi başarısız oldu.');
           if (result3?.data) {
             currentData = result3.data;
@@ -1384,12 +1387,8 @@ export default function ValuationTerminal() {
       // Son deterministik matematiksel zenginleştirme ve adil değerleme hesaplaması
       const sanitized = enrichAndSanitizeFinancialHistory(currentData);
       const { drivers, valuation } = computeSectorValuationAndDrivers(sanitized, price, activeSector);
-      if (!sanitized.fair_value_drivers || !sanitized.fair_value_drivers.revenue_growth) {
-        sanitized.fair_value_drivers = drivers;
-      }
-      if (!sanitized.valuation || !sanitized.valuation.fair_value) {
-        sanitized.valuation = valuation;
-      }
+      sanitized.fair_value_drivers = drivers;
+      sanitized.valuation = valuation;
 
       setExtractedData(sanitized);
       setStep('review');
@@ -2077,9 +2076,39 @@ export default function ValuationTerminal() {
     return extractValuationFromReportText(activeReport?.report || '', numPrice);
   }, [activeReport?.report, activeReport?.price, price]);
 
-  const drivers: FairValueDrivers = (currentExtractedData?.fair_value_drivers?.revenue_growth?.value != null)
-    ? currentExtractedData.fair_value_drivers
-    : dynamicValuationResult.drivers;
+  const baseDrivers = dynamicValuationResult.drivers;
+  const customDrivers = currentExtractedData?.fair_value_drivers;
+  const drivers: FairValueDrivers = useMemo(() => {
+    return {
+      revenue_growth: {
+        ...baseDrivers.revenue_growth,
+        ...(customDrivers?.revenue_growth || {}),
+        value: typeof customDrivers?.revenue_growth?.value === 'number' ? customDrivers.revenue_growth.value : baseDrivers.revenue_growth.value,
+        sourceExplanation: customDrivers?.revenue_growth?.sourceExplanation || customDrivers?.revenue_growth?.note || baseDrivers.revenue_growth.sourceExplanation,
+      },
+      net_income_growth: {
+        ...baseDrivers.net_income_growth,
+        ...(customDrivers?.net_income_growth || {}),
+        value: typeof customDrivers?.net_income_growth?.value === 'number' ? customDrivers.net_income_growth.value : baseDrivers.net_income_growth.value,
+        sourceExplanation: customDrivers?.net_income_growth?.sourceExplanation || customDrivers?.net_income_growth?.note || baseDrivers.net_income_growth.sourceExplanation,
+      },
+      margin: {
+        ...baseDrivers.margin,
+        ...(customDrivers?.margin || {}),
+        value: typeof customDrivers?.margin?.value === 'number' ? customDrivers.margin.value : baseDrivers.margin.value,
+        sourceExplanation: customDrivers?.margin?.sourceExplanation || customDrivers?.margin?.note || baseDrivers.margin.sourceExplanation,
+      },
+      target_multiple: {
+        ...baseDrivers.target_multiple,
+        ...(customDrivers?.target_multiple || {}),
+        value: customDrivers?.target_multiple?.value || baseDrivers.target_multiple.value,
+        numericValue: typeof customDrivers?.target_multiple?.numericValue === 'number'
+          ? customDrivers.target_multiple.numericValue
+          : (parseFloat(String(customDrivers?.target_multiple?.value || '').replace(',', '.')) || baseDrivers.target_multiple.numericValue),
+        sourceExplanation: customDrivers?.target_multiple?.sourceExplanation || customDrivers?.target_multiple?.note || baseDrivers.target_multiple.sourceExplanation,
+      },
+    };
+  }, [baseDrivers, customDrivers]);
 
   const valuationInfo: ValuationMetrics = {
     ...dynamicValuationResult.valuation,
@@ -2431,7 +2460,17 @@ export default function ValuationTerminal() {
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                   {/* ALAN 1: Finansal Raporlar & Tablolar (KAP / Bağımsız Denetim) - ZORUNLU */}
-                  <div className={`rounded-xl border p-5 transition flex flex-col justify-between ${
+                  <div 
+                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (e.dataTransfer.files) {
+                        const pdfs = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+                        if (pdfs.length > 0) setFinancialFiles(prev => [...prev, ...pdfs]);
+                      }
+                    }}
+                    className={`rounded-xl border p-5 transition flex flex-col justify-between ${
                     financialFiles.length > 0 
                       ? 'bg-slate-950/80 border-emerald-500/50 shadow-lg shadow-emerald-950/20' 
                       : 'bg-slate-950/40 border-slate-700/80 hover:border-slate-600'
@@ -2458,7 +2497,7 @@ export default function ValuationTerminal() {
 
                       <label className="block border-2 border-dashed border-emerald-700/40 hover:border-emerald-500 rounded-lg p-3 text-center cursor-pointer transition bg-emerald-950/10 hover:bg-emerald-950/20">
                         <UploadCloud className="w-6 h-6 text-emerald-400 mx-auto mb-1" />
-                        <span className="text-xs font-bold text-white block">Mali Tablo PDF Ekle</span>
+                        <span className="text-xs font-bold text-white block">Mali Tablo PDF Ekle veya Sürükle</span>
                         <span className="text-[10px] text-slate-400">Çoklu PDF seçebilirsiniz</span>
                         <input
                           type="file"
@@ -2510,7 +2549,17 @@ export default function ValuationTerminal() {
                   </div>
 
                   {/* ALAN 2: Faaliyet Raporları - OPSİYONEL */}
-                  <div className={`rounded-xl border p-5 transition flex flex-col justify-between ${
+                  <div 
+                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (e.dataTransfer.files) {
+                        const pdfs = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+                        if (pdfs.length > 0) setActivityFiles(prev => [...prev, ...pdfs]);
+                      }
+                    }}
+                    className={`rounded-xl border p-5 transition flex flex-col justify-between ${
                     activityFiles.length > 0 
                       ? 'bg-slate-950/80 border-sky-500/50 shadow-lg shadow-sky-950/20' 
                       : 'bg-slate-950/40 border-slate-700/80 hover:border-slate-600'
@@ -2537,7 +2586,7 @@ export default function ValuationTerminal() {
 
                       <label className="block border-2 border-dashed border-sky-700/40 hover:border-sky-500 rounded-lg p-3 text-center cursor-pointer transition bg-sky-950/10 hover:bg-sky-950/20">
                         <UploadCloud className="w-6 h-6 text-sky-400 mx-auto mb-1" />
-                        <span className="text-xs font-bold text-white block">Faaliyet Raporu PDF Ekle</span>
+                        <span className="text-xs font-bold text-white block">Faaliyet Raporu PDF Ekle veya Sürükle</span>
                         <span className="text-[10px] text-slate-400">Çoklu PDF seçebilirsiniz</span>
                         <input
                           type="file"
@@ -2589,7 +2638,17 @@ export default function ValuationTerminal() {
                   </div>
 
                   {/* ALAN 3: Yatırımcı Sunumu & Strateji - OPSİYONEL */}
-                  <div className={`rounded-xl border p-5 transition flex flex-col justify-between ${
+                  <div 
+                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (e.dataTransfer.files) {
+                        const pdfs = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+                        if (pdfs.length > 0) setPresentationFiles(prev => [...prev, ...pdfs]);
+                      }
+                    }}
+                    className={`rounded-xl border p-5 transition flex flex-col justify-between ${
                     presentationFiles.length > 0 
                       ? 'bg-slate-950/80 border-amber-500/50 shadow-lg shadow-amber-950/20' 
                       : 'bg-slate-950/40 border-slate-700/80 hover:border-slate-600'
@@ -2616,7 +2675,7 @@ export default function ValuationTerminal() {
 
                       <label className="block border-2 border-dashed border-amber-700/40 hover:border-amber-500 rounded-lg p-3 text-center cursor-pointer transition bg-amber-950/10 hover:bg-amber-950/20">
                         <UploadCloud className="w-6 h-6 text-amber-400 mx-auto mb-1" />
-                        <span className="text-xs font-bold text-white block">Yatırımcı Sunumu PDF Ekle</span>
+                        <span className="text-xs font-bold text-white block">Yatırımcı Sunumu PDF Ekle veya Sürükle</span>
                         <span className="text-[10px] text-slate-400">Çoklu PDF seçebilirsiniz</span>
                         <input
                           type="file"
@@ -2696,14 +2755,18 @@ export default function ValuationTerminal() {
 
                     {/* 2. Adım */}
                     <div className={`p-3 rounded-lg border transition ${
-                      pipelineStep === 2 
-                        ? 'bg-sky-950/70 border-sky-500 text-sky-200 shadow-md shadow-sky-950/40' 
-                        : (pipelineStep && pipelineStep > 2) 
-                          ? 'bg-slate-900/90 border-sky-800/80 text-sky-400' 
-                          : 'bg-slate-900/40 border-slate-800 text-slate-500'
+                      activityFiles.length === 0
+                        ? 'bg-slate-900/30 border-slate-800/60 text-slate-500'
+                        : pipelineStep === 2 
+                          ? 'bg-sky-950/70 border-sky-500 text-sky-200 shadow-md shadow-sky-950/40' 
+                          : (pipelineProgress === 100 || (pipelineStep && pipelineStep > 2)) 
+                            ? 'bg-slate-900/90 border-sky-800/80 text-sky-400' 
+                            : 'bg-slate-900/40 border-slate-800 text-slate-500'
                     }`}>
                       <div className="flex items-center justify-center gap-2 font-bold">
-                        {pipelineStep && pipelineStep > 2 ? (
+                        {activityFiles.length === 0 ? (
+                          <Minus className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                        ) : (pipelineProgress === 100 || (pipelineStep && pipelineStep > 2)) ? (
                           <CheckCircle2 className="w-4 h-4 text-sky-400 flex-shrink-0" />
                         ) : pipelineStep === 2 ? (
                           <RefreshCw className="w-4 h-4 text-sky-400 animate-spin flex-shrink-0" />
@@ -2713,20 +2776,26 @@ export default function ValuationTerminal() {
                         <span>(2/3) Faaliyet Raporu</span>
                       </div>
                       <div className="text-[10px] text-slate-400 mt-1">
-                        {activityFiles.length > 0 ? 'Rehberlik karnesi & riskler' : 'Dosya yok (Atlanıyor)'}
+                        {activityFiles.length > 0 
+                          ? (pipelineProgress === 100 || (pipelineStep && pipelineStep > 2) ? 'Rehberlik karnesi & riskler ayıklandı' : 'Rehberlik karnesi & riskler')
+                          : 'Dosya yüklenmedi (Atlandı)'}
                       </div>
                     </div>
 
                     {/* 3. Adım */}
                     <div className={`p-3 rounded-lg border transition ${
-                      pipelineStep === 3 
-                        ? 'bg-amber-950/70 border-amber-500 text-amber-200 shadow-md shadow-amber-950/40' 
-                        : (pipelineProgress === 100)
-                          ? 'bg-slate-900/90 border-amber-800/80 text-amber-400'
-                          : 'bg-slate-900/40 border-slate-800 text-slate-500'
+                      presentationFiles.length === 0
+                        ? 'bg-slate-900/30 border-slate-800/60 text-slate-500'
+                        : pipelineStep === 3 
+                          ? 'bg-amber-950/70 border-amber-500 text-amber-200 shadow-md shadow-amber-950/40' 
+                          : (pipelineProgress === 100)
+                            ? 'bg-slate-900/90 border-amber-800/80 text-amber-400'
+                            : 'bg-slate-900/40 border-slate-800 text-slate-500'
                     }`}>
                       <div className="flex items-center justify-center gap-2 font-bold">
-                        {pipelineProgress === 100 ? (
+                        {presentationFiles.length === 0 ? (
+                          <Minus className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                        ) : pipelineProgress === 100 ? (
                           <CheckCircle2 className="w-4 h-4 text-amber-400 flex-shrink-0" />
                         ) : pipelineStep === 3 ? (
                           <RefreshCw className="w-4 h-4 text-amber-400 animate-spin flex-shrink-0" />
@@ -2736,7 +2805,9 @@ export default function ValuationTerminal() {
                         <span>(3/3) Yatırımcı Sunumu</span>
                       </div>
                       <div className="text-[10px] text-slate-400 mt-1">
-                        {presentationFiles.length > 0 ? 'İleriye dönük hedefler' : 'Dosya yok (Atlanıyor)'}
+                        {presentationFiles.length > 0 
+                          ? (pipelineProgress === 100 ? 'İleriye dönük hedefler entegre edildi' : 'İleriye dönük hedefler')
+                          : 'Dosya yüklenmedi (Atlandı)'}
                       </div>
                     </div>
                   </div>
@@ -3275,42 +3346,42 @@ export default function ValuationTerminal() {
                   {/* 4 Değer Sürücüsü Kartı (Görsel 5) */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <DriverCard
-                      title={drivers.revenue_growth.label}
-                      valueText={`%${drivers.revenue_growth.value.toFixed(1)}`}
+                      title={drivers.revenue_growth.label || 'Satış Büyümesi'}
+                      valueText={typeof drivers.revenue_growth.value === 'number' && !isNaN(drivers.revenue_growth.value) ? `%${drivers.revenue_growth.value.toFixed(1)}` : '—'}
                       pinPercent={calculateDriverPin('rev', drivers.revenue_growth.value, currentSector)}
-                      bearText={drivers.revenue_growth.bearLabel}
-                      bullText={drivers.revenue_growth.bullLabel}
-                      description={drivers.revenue_growth.note}
+                      bearText={drivers.revenue_growth.bearLabel || 'Düşük büyüme'}
+                      bullText={drivers.revenue_growth.bullLabel || 'Yüksek büyüme'}
+                      description={drivers.revenue_growth.note || ''}
                       sourceExplanation={drivers.revenue_growth.sourceExplanation}
                     />
 
                     <DriverCard
-                      title={drivers.net_income_growth.label}
-                      valueText={`%${drivers.net_income_growth.value.toFixed(1)}`}
+                      title={drivers.net_income_growth.label || 'Net Kâr Büyümesi'}
+                      valueText={typeof drivers.net_income_growth.value === 'number' && !isNaN(drivers.net_income_growth.value) ? `%${drivers.net_income_growth.value.toFixed(1)}` : '—'}
                       pinPercent={calculateDriverPin('net', drivers.net_income_growth.value, currentSector)}
-                      bearText={drivers.net_income_growth.bearLabel}
-                      bullText={drivers.net_income_growth.bullLabel}
-                      description={drivers.net_income_growth.note}
+                      bearText={drivers.net_income_growth.bearLabel || 'Düşük kârlılık'}
+                      bullText={drivers.net_income_growth.bullLabel || 'Yüksek verimlilik'}
+                      description={drivers.net_income_growth.note || ''}
                       sourceExplanation={drivers.net_income_growth.sourceExplanation}
                     />
 
                     <DriverCard
-                      title={drivers.margin.label}
-                      valueText={`%${drivers.margin.value.toFixed(1)}`}
+                      title={drivers.margin.label || 'Operasyonel Marj'}
+                      valueText={typeof drivers.margin.value === 'number' && !isNaN(drivers.margin.value) ? `%${drivers.margin.value.toFixed(1)}` : '—'}
                       pinPercent={calculateDriverPin('margin', drivers.margin.value, currentSector)}
-                      bearText={drivers.margin.bearLabel}
-                      bullText={drivers.margin.bullLabel}
-                      description={drivers.margin.note}
+                      bearText={drivers.margin.bearLabel || 'Marj daralması'}
+                      bullText={drivers.margin.bullLabel || 'Fiyatlama gücü'}
+                      description={drivers.margin.note || ''}
                       sourceExplanation={drivers.margin.sourceExplanation}
                     />
 
                     <DriverCard
-                      title={drivers.target_multiple.label}
-                      valueText={drivers.target_multiple.value}
+                      title={drivers.target_multiple.label || 'Hedef Çarpan'}
+                      valueText={drivers.target_multiple.value || '—'}
                       pinPercent={calculateDriverPin('multiple', drivers.target_multiple.numericValue || 3.0, currentSector, drivers.target_multiple.numericValue)}
-                      bearText={drivers.target_multiple.bearLabel}
-                      bullText={drivers.target_multiple.bullLabel}
-                      description={drivers.target_multiple.note}
+                      bearText={drivers.target_multiple.bearLabel || 'Düşük değerleme'}
+                      bullText={drivers.target_multiple.bullLabel || 'Yüksek çarpan'}
+                      description={drivers.target_multiple.note || ''}
                       sourceExplanation={drivers.target_multiple.sourceExplanation}
                     />
                   </div>
