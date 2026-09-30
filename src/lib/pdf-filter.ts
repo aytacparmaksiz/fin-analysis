@@ -639,16 +639,18 @@ export async function extractSmartDocumentText(
     uint8 = new Uint8Array(pdfInput);
   }
 
-  if (typeof window !== 'undefined') {
+  let pdf: any;
+  try {
+    pdf = await getDocumentProxy(uint8);
+  } catch (err) {
+    console.warn('[extractSmartDocumentText] PDF proxy yüklenemedi:', err);
     return {
       text: '',
       totalPages: 0,
       matchedPages: 0,
-      summary: 'İstemci ortamı, dosya sunucu tarafında hızlıca filtrelenecek.'
+      summary: 'PDF yükleme hatası.'
     };
   }
-
-  const pdf = await getDocumentProxy(uint8);
   const totalPages = (pdf && typeof pdf.numPages === 'number') ? pdf.numPages : 0;
 
   if (totalPages === 0) {
