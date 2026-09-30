@@ -6,7 +6,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { 
-  Send, FileText, AlertTriangle, Database, 
+  Send, FileText, FileSpreadsheet, Presentation, AlertTriangle, Database, 
   RefreshCw, Printer, PlusCircle, History, 
   ChevronRight, ChevronDown, UploadCloud, X, CheckCircle2, Search,
   TrendingUp, BarChart3, Target, Calendar, ArrowUpRight, ArrowDownRight, Minus,
@@ -42,6 +42,7 @@ import {
 
 import {
   computeSectorValuationAndDrivers,
+  enrichAndSanitizeFinancialHistory,
   extractValuationFromReportText,
   parseFinancialNumber,
   safeDivide,
@@ -56,7 +57,7 @@ import {
   SectorScoreResult,
   cleanAndParseJson
 } from '@/lib/valuation';
-import { extractSmartFinancialText } from '@/lib/pdf-filter';
+import { extractSmartFinancialText, extractSmartDocumentText, DocumentCategory } from '@/lib/pdf-filter';
 
 // Gateway Timeout, kurumsal proxy ve HTML hata sayfalarını yakalayan güvenli API yanıt ayrıştırıcısı
 async function parseApiResponse(res: Response, defaultError: string): Promise<any> {
@@ -235,6 +236,15 @@ function formatAmount(
     const finalVal = isRawInThousands ? Math.round(val * 1000) : Math.round(val);
     return `${prefix}${finalVal.toLocaleString('tr-TR')}${suffix}`;
   }
+}
+
+// Dosya Boyutu Formatlayıcı
+function formatFileSize(bytes: number): string {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
 // Yıllık / Dönemsel Değişim Hesaplama
@@ -883,7 +893,12 @@ export default function ValuationTerminal() {
   const [consensus, setConsensus] = useState('');
   const [peerMultiples, setPeerMultiples] = useState('');
   const [selectedSector, setSelectedSector] = useState<SectorType | 'AUTO'>('AUTO');
-  const [files, setFiles] = useState<File[]>([]);
+  const [financialFiles, setFinancialFiles] = useState<File[]>([]);
+  const [activityFiles, setActivityFiles] = useState<File[]>([]);
+  const [presentationFiles, setPresentationFiles] = useState<File[]>([]);
+  const [pipelineStep, setPipelineStep] = useState<1 | 2 | 3 | null>(null);
+  const [pipelineProgress, setPipelineProgress] = useState<number>(0);
+  const files = useMemo(() => [...financialFiles, ...activityFiles, ...presentationFiles], [financialFiles, activityFiles, presentationFiles]);
 
   // Aşama durumu
   const [step, setStep] = useState<'input' | 'review' | 'report' | 'leaderboard'>('input');
@@ -1165,83 +1180,226 @@ export default function ValuationTerminal() {
     e.target.value = '';
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setFiles(prev => [...prev, ...Array.from(e.target.files!)]);
-    }
+  // Dosya Kaldırma & Ekleme İşleyicileri (3 Alanlı Mimari)
+  const removeFinancialFile = (index: number) => {
+    setFinancialFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Aşama 1: PDF Metin Çıkarımı
+  const removeActivityFile = (index: number) => {
+    setActivityFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removePresentationFile = (index: number) => {
+    setPresentationFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Aşama 1: 3 Alanlı Sıralı Pipeline Yürütümü
   const handleExtract = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (files.length === 0) {
-      setError('Lütfen en az bir PDF dokümanı ekleyin (Örn: 2022-2026 raporları).');
+    if (financialFiles.length === 0) {
+      setError('Lütfen Alan 1 için en az bir Finansal Rapor & Tablo PDF dokümanı ekleyin (Zorunlu).');
       return;
     }
     setLoading(true);
     setError(null);
-    setStatusMessage('PDF belgeleri taranıyor ve finansal tablolar filtreleniyor...');
+    setPipelineStep(1);
+    setPipelineProgress(15);
+    setStatusMessage('(1/3) Finansal tablolar taranıyor ve zaman serisi oluşturuluyor...');
 
     try {
-      const documents: { name: string; text: string }[] = [];
+      // -------------------------------------------------------------
+      // ADIM 1: Alan 1: Finansal Raporlar & Tablolar (KAP / Bağımsız Denetim)
+      // -------------------------------------------------------------
+      setPipelineStep(1);
+      setPipelineProgress(20);
+      setStatusMessage('(1/3) Finansal tablolar taranıyor ve zaman serisi oluşturuluyor...');
 
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        setStatusMessage(`(${i + 1}/${files.length}) ${file.name} taranıyor...`);
+      const financialDocs: { name: string; text: string; category: string }[] = [];
+      for (let i = 0; i < financialFiles.length; i++) {
+        const file = financialFiles[i];
+        setStatusMessage(`(1/3) Finansal tablo: ${file.name} taranıyor (${i + 1}/${financialFiles.length})...`);
         try {
           const arrayBuffer = await file.arrayBuffer();
-          const { text, totalPages, matchedPages, summary } = await extractSmartFinancialText(arrayBuffer);
+          const { text } = await extractSmartDocumentText(arrayBuffer, 'financial');
           if (text && text.trim().length > 50) {
-            console.log(`[PDF Filter] ${file.name}: ${summary}`);
-            setStatusMessage(`(${i + 1}/${files.length}) ${file.name} (${totalPages} sayfadan ${matchedPages} finansal tablo sayfası filtrelendi)...`);
-            documents.push({ name: file.name, text: text.trim() });
+            financialDocs.push({ name: file.name, text: text.trim(), category: 'financial' });
           }
-        } catch (pdfErr) {
-          console.warn(`[PDF] ${file.name} metin ayrıştırılamadı:`, pdfErr);
+        } catch (err) {
+          console.warn(`[Financial PDF] ${file.name} okunamadı:`, err);
         }
       }
 
-      setStatusMessage('Finansal veriler ve rasyolar yapay zeka tarafından çıkarılıyor...');
+      setPipelineProgress(33);
+      setStatusMessage('(1/3) Finansal tablolar taranıyor ve zaman serisi oluşturuluyor...');
 
-      let res: Response;
-      if (documents.length > 0) {
-        res = await fetchWithClientRetry(
+      let res1: Response;
+      if (financialDocs.length > 0) {
+        res1 = await fetchWithClientRetry(
           () => fetch('/api/extract', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ticker, documents })
+            body: JSON.stringify({ ticker, category: 'financial', documents: financialDocs })
           }),
           setStatusMessage
         );
       } else {
         const fd = new FormData();
         fd.append('ticker', ticker);
-        files.forEach(f => fd.append('files', f));
-
-        res = await fetchWithClientRetry(
-          () => fetch('/api/extract', {
-            method: 'POST',
-            body: fd
-          }),
+        fd.append('category', 'financial');
+        financialFiles.forEach(f => fd.append('files_financial', f));
+        res1 = await fetchWithClientRetry(
+          () => fetch('/api/extract', { method: 'POST', body: fd }),
           setStatusMessage
         );
       }
 
-      const result = await parseApiResponse(res, 'Veri çıkarımı başarısız oldu.');
-      if (!result?.data) {
-        throw new Error('Sunucudan geçerli bir finansal veri seti alınamadı.');
+      const result1 = await parseApiResponse(res1, 'Finansal veri çıkarımı başarısız oldu.');
+      if (!result1?.data) {
+        throw new Error('Finansal tablolardan veri seti çıkarılamadı.');
+      }
+      let currentData = result1.data;
+
+      // -------------------------------------------------------------
+      // ADIM 2: Alan 2: Faaliyet Raporları (Opsiyonel)
+      // -------------------------------------------------------------
+      setPipelineStep(2);
+      if (activityFiles.length > 0) {
+        setPipelineProgress(45);
+        setStatusMessage('(2/3) Faaliyet raporundan yönetim hedefleri ve riskler ayıklanıyor...');
+
+        const activityDocs: { name: string; text: string; category: string }[] = [];
+        for (let i = 0; i < activityFiles.length; i++) {
+          const file = activityFiles[i];
+          setStatusMessage(`(2/3) Faaliyet raporu: ${file.name} taranıyor (${i + 1}/${activityFiles.length})...`);
+          try {
+            const arrayBuffer = await file.arrayBuffer();
+            const { text } = await extractSmartDocumentText(arrayBuffer, 'activity');
+            if (text && text.trim().length > 50) {
+              activityDocs.push({ name: file.name, text: text.trim(), category: 'activity' });
+            }
+          } catch (err) {
+            console.warn(`[Activity PDF] ${file.name} okunamadı:`, err);
+          }
+        }
+
+        setPipelineProgress(66);
+        setStatusMessage('(2/3) Faaliyet raporundan yönetim hedefleri ve riskler ayıklanıyor...');
+
+        let res2: Response;
+        if (activityDocs.length > 0) {
+          res2 = await fetchWithClientRetry(
+            () => fetch('/api/extract', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ticker, category: 'activity', documents: activityDocs, previousData: currentData })
+            }),
+            setStatusMessage
+          );
+        } else {
+          const fd = new FormData();
+          fd.append('ticker', ticker);
+          fd.append('category', 'activity');
+          fd.append('previousData', JSON.stringify(currentData));
+          activityFiles.forEach(f => fd.append('files_activity', f));
+          res2 = await fetchWithClientRetry(
+            () => fetch('/api/extract', { method: 'POST', body: fd }),
+            setStatusMessage
+          );
+        }
+
+        try {
+          const result2 = await parseApiResponse(res2, 'Faaliyet raporu analizi başarısız oldu.');
+          if (result2?.data) {
+            currentData = result2.data;
+          }
+        } catch (actErr: any) {
+          console.warn('[Activity Extraction Warning]:', actErr.message);
+        }
+      } else {
+        setPipelineProgress(66);
       }
 
-      const activeSector = selectedSector === 'AUTO' ? detectSector(ticker) : selectedSector;
-      result.data.sector = activeSector;
+      // -------------------------------------------------------------
+      // ADIM 3: Alan 3: Yatırımcı Sunumu & Strateji Dokümanları (Opsiyonel)
+      // -------------------------------------------------------------
+      setPipelineStep(3);
+      if (presentationFiles.length > 0) {
+        setPipelineProgress(75);
+        setStatusMessage('(3/3) Yatırımcı sunumundan ileriye dönük hedefler entegre ediliyor...');
 
-      setExtractedData(result.data);
+        const presentationDocs: { name: string; text: string; category: string }[] = [];
+        for (let i = 0; i < presentationFiles.length; i++) {
+          const file = presentationFiles[i];
+          setStatusMessage(`(3/3) Yatırımcı sunumu: ${file.name} taranıyor (${i + 1}/${presentationFiles.length})...`);
+          try {
+            const arrayBuffer = await file.arrayBuffer();
+            const { text } = await extractSmartDocumentText(arrayBuffer, 'presentation');
+            if (text && text.trim().length > 50) {
+              presentationDocs.push({ name: file.name, text: text.trim(), category: 'presentation' });
+            }
+          } catch (err) {
+            console.warn(`[Presentation PDF] ${file.name} okunamadı:`, err);
+          }
+        }
+
+        setPipelineProgress(90);
+        setStatusMessage('(3/3) Yatırımcı sunumundan ileriye dönük hedefler entegre ediliyor...');
+
+        let res3: Response;
+        if (presentationDocs.length > 0) {
+          res3 = await fetchWithClientRetry(
+            () => fetch('/api/extract', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ticker, category: 'presentation', documents: presentationDocs, previousData: currentData })
+            }),
+            setStatusMessage
+          );
+        } else {
+          const fd = new FormData();
+          fd.append('ticker', ticker);
+          fd.append('category', 'presentation');
+          fd.append('previousData', JSON.stringify(currentData));
+          presentationFiles.forEach(f => fd.append('files_presentation', f));
+          res3 = await fetchWithClientRetry(
+            () => fetch('/api/extract', { method: 'POST', body: fd }),
+            setStatusMessage
+          );
+        }
+
+        try {
+          const result3 = await parseApiResponse(res3, 'Yatırımcı sunumu analizi başarısız oldu.');
+          if (result3?.data) {
+            currentData = result3.data;
+          }
+        } catch (presErr: any) {
+          console.warn('[Presentation Extraction Warning]:', presErr.message);
+        }
+      }
+
+      setPipelineProgress(100);
+      const activeSector = selectedSector === 'AUTO' ? detectSector(ticker) : selectedSector;
+      currentData.sector = activeSector;
+
+      // Son deterministik matematiksel zenginleştirme ve adil değerleme hesaplaması
+      const sanitized = enrichAndSanitizeFinancialHistory(currentData);
+      const { drivers, valuation } = computeSectorValuationAndDrivers(sanitized, price, activeSector);
+      if (!sanitized.fair_value_drivers || !sanitized.fair_value_drivers.revenue_growth) {
+        sanitized.fair_value_drivers = drivers;
+      }
+      if (!sanitized.valuation || !sanitized.valuation.fair_value) {
+        sanitized.valuation = valuation;
+      }
+
+      setExtractedData(sanitized);
       setStep('review');
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
       setStatusMessage('');
+      setPipelineStep(null);
+      setPipelineProgress(0);
     }
   };
 
@@ -2260,47 +2418,358 @@ export default function ValuationTerminal() {
                 </div>
               </div>
 
-              {/* PDF Yükleme Alanı */}
-              <div className="border-2 border-dashed border-slate-700 hover:border-emerald-500/80 rounded-xl p-6 text-center bg-slate-950/40 transition">
-                <UploadCloud className="w-10 h-10 text-slate-400 mx-auto mb-2" />
-                <label className="block text-xs font-bold text-white cursor-pointer hover:underline mb-1">
-                  Çok Yıllı Faaliyet Raporları ve Finansal Tabloları Seçin (PDF)
-                  <input
-                    type="file"
-                    multiple
-                    accept=".pdf"
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                </label>
-                <p className="text-[11px] text-slate-400">
-                  Birden fazla dönemi aynı anda seçerek yükleyebilirsiniz.
-                </p>
+              {/* 3 ALANLI DOKÜMAN YÜKLEME MİMARİSİ */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-emerald-400" /> Ayrıştırılmış Doküman Yükleme Alanları
+                  </span>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    Toplam {files.length} dosya seçildi (Zorunlu Alan 1: {financialFiles.length})
+                  </span>
+                </div>
 
-                {files.length > 0 && (
-                  <div className="mt-4 flex flex-wrap gap-2 justify-center">
-                    {files.map((f, i) => (
-                      <span key={i} className="text-xs bg-slate-800 text-slate-200 border border-slate-700 px-2.5 py-1 rounded flex items-center gap-1.5">
-                        <FileText className="w-3.5 h-3.5 text-emerald-400" />
-                        {f.name}
-                      </span>
-                    ))}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                  {/* ALAN 1: Finansal Raporlar & Tablolar (KAP / Bağımsız Denetim) - ZORUNLU */}
+                  <div className={`rounded-xl border p-5 transition flex flex-col justify-between ${
+                    financialFiles.length > 0 
+                      ? 'bg-slate-950/80 border-emerald-500/50 shadow-lg shadow-emerald-950/20' 
+                      : 'bg-slate-950/40 border-slate-700/80 hover:border-slate-600'
+                  }`}>
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                            <FileSpreadsheet className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="font-bold text-xs text-white">1. Alan: Finansal Raporlar & Tablolar</div>
+                            <div className="text-[10px] text-slate-400">KAP / Bağımsız Denetim</div>
+                          </div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-950 text-emerald-300 border border-emerald-700 flex-shrink-0">
+                          Zorunlu
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-slate-300 leading-relaxed min-h-[48px]">
+                        Bilanço, Gelir Tablosu, Nakit Akış Tabloları (örn: 2022-2026 çeyreklik veya yıllık KAP mali tabloları). Sadece resmi denetlenmiş veriler taranır. Asla PR veya serbest yorum kabul edilmez.
+                      </p>
+
+                      <label className="block border-2 border-dashed border-emerald-700/40 hover:border-emerald-500 rounded-lg p-3 text-center cursor-pointer transition bg-emerald-950/10 hover:bg-emerald-950/20">
+                        <UploadCloud className="w-6 h-6 text-emerald-400 mx-auto mb-1" />
+                        <span className="text-xs font-bold text-white block">Mali Tablo PDF Ekle</span>
+                        <span className="text-[10px] text-slate-400">Çoklu PDF seçebilirsiniz</span>
+                        <input
+                          type="file"
+                          multiple
+                          accept=".pdf"
+                          onChange={e => {
+                            if (e.target.files) {
+                              setFinancialFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+                            }
+                            e.target.value = '';
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+
+                    {/* Dosya Listesi */}
+                    <div className="mt-3 pt-3 border-t border-slate-800 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400">Seçilen Belgeler:</span>
+                        <span className={`font-bold ${financialFiles.length > 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                          {financialFiles.length} dosya
+                        </span>
+                      </div>
+                      {financialFiles.length === 0 ? (
+                        <p className="text-[10px] text-slate-500 italic">Analizi başlatmak için en az 1 finansal tablo PDF&apos;i gereklidir.</p>
+                      ) : (
+                        <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
+                          {financialFiles.map((f, i) => (
+                            <div key={i} className="flex items-center justify-between gap-1 text-[11px] bg-slate-900 border border-slate-800 px-2 py-1 rounded text-slate-200">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <FileSpreadsheet className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                                <span className="truncate" title={f.name}>{f.name}</span>
+                                <span className="text-[9px] text-slate-400">({formatFileSize(f.size)})</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeFinancialFile(i)}
+                                className="text-slate-400 hover:text-red-400 p-0.5 rounded cursor-pointer"
+                                title="Kaldır"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
+
+                  {/* ALAN 2: Faaliyet Raporları - OPSİYONEL */}
+                  <div className={`rounded-xl border p-5 transition flex flex-col justify-between ${
+                    activityFiles.length > 0 
+                      ? 'bg-slate-950/80 border-sky-500/50 shadow-lg shadow-sky-950/20' 
+                      : 'bg-slate-950/40 border-slate-700/80 hover:border-slate-600'
+                  }`}>
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-400">
+                            <FileText className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="font-bold text-xs text-white">2. Alan: Faaliyet Raporları</div>
+                            <div className="text-[10px] text-slate-400">Yıllık / Dönemsel Raporlar</div>
+                          </div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-sky-950 text-sky-300 border border-sky-800 flex-shrink-0">
+                          Opsiyonel
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-slate-300 leading-relaxed min-h-[48px]">
+                        Yıllık veya Dönemsel Faaliyet Raporları. 5. Yönetim Rehberlik Karnesi (Guidance vs. Actual gerçekleşmeleri), pazar payı, riskler ve Güçlü / Zayıf Yönler (Pros & Cons) için taranır.
+                      </p>
+
+                      <label className="block border-2 border-dashed border-sky-700/40 hover:border-sky-500 rounded-lg p-3 text-center cursor-pointer transition bg-sky-950/10 hover:bg-sky-950/20">
+                        <UploadCloud className="w-6 h-6 text-sky-400 mx-auto mb-1" />
+                        <span className="text-xs font-bold text-white block">Faaliyet Raporu PDF Ekle</span>
+                        <span className="text-[10px] text-slate-400">Çoklu PDF seçebilirsiniz</span>
+                        <input
+                          type="file"
+                          multiple
+                          accept=".pdf"
+                          onChange={e => {
+                            if (e.target.files) {
+                              setActivityFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+                            }
+                            e.target.value = '';
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+
+                    {/* Dosya Listesi */}
+                    <div className="mt-3 pt-3 border-t border-slate-800 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400">Seçilen Belgeler:</span>
+                        <span className="font-bold text-sky-400">
+                          {activityFiles.length} dosya
+                        </span>
+                      </div>
+                      {activityFiles.length === 0 ? (
+                        <p className="text-[10px] text-slate-500 italic">Yüklenmezse rehberlik karnesi finansal dipnotlardan özetlenir.</p>
+                      ) : (
+                        <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
+                          {activityFiles.map((f, i) => (
+                            <div key={i} className="flex items-center justify-between gap-1 text-[11px] bg-slate-900 border border-slate-800 px-2 py-1 rounded text-slate-200">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <FileText className="w-3 h-3 text-sky-400 flex-shrink-0" />
+                                <span className="truncate" title={f.name}>{f.name}</span>
+                                <span className="text-[9px] text-slate-400">({formatFileSize(f.size)})</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeActivityFile(i)}
+                                className="text-slate-400 hover:text-red-400 p-0.5 rounded cursor-pointer"
+                                title="Kaldır"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ALAN 3: Yatırımcı Sunumu & Strateji - OPSİYONEL */}
+                  <div className={`rounded-xl border p-5 transition flex flex-col justify-between ${
+                    presentationFiles.length > 0 
+                      ? 'bg-slate-950/80 border-amber-500/50 shadow-lg shadow-amber-950/20' 
+                      : 'bg-slate-950/40 border-slate-700/80 hover:border-slate-600'
+                  }`}>
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400">
+                            <Presentation className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="font-bold text-xs text-white">3. Alan: Yatırımcı Sunumu & Strateji</div>
+                            <div className="text-[10px] text-slate-400">Gelecek Hedefleri & Vizyon</div>
+                          </div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-950 text-amber-300 border border-amber-800 flex-shrink-0">
+                          Opsiyonel
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-slate-300 leading-relaxed min-h-[48px]">
+                        Şirketin son Yatırımcı Sunumu / Gelecek Hedefleri. 2. Adil Değer & Sürücüler panelindeki ileriye dönük beklentiler, marj hedefleri ve şirket vizyonunu güncellemek için taranır.
+                      </p>
+
+                      <label className="block border-2 border-dashed border-amber-700/40 hover:border-amber-500 rounded-lg p-3 text-center cursor-pointer transition bg-amber-950/10 hover:bg-amber-950/20">
+                        <UploadCloud className="w-6 h-6 text-amber-400 mx-auto mb-1" />
+                        <span className="text-xs font-bold text-white block">Yatırımcı Sunumu PDF Ekle</span>
+                        <span className="text-[10px] text-slate-400">Çoklu PDF seçebilirsiniz</span>
+                        <input
+                          type="file"
+                          multiple
+                          accept=".pdf"
+                          onChange={e => {
+                            if (e.target.files) {
+                              setPresentationFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+                            }
+                            e.target.value = '';
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+
+                    {/* Dosya Listesi */}
+                    <div className="mt-3 pt-3 border-t border-slate-800 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400">Seçilen Belgeler:</span>
+                        <span className="font-bold text-amber-400">
+                          {presentationFiles.length} dosya
+                        </span>
+                      </div>
+                      {presentationFiles.length === 0 ? (
+                        <p className="text-[10px] text-slate-500 italic">Yüklenmezse piyasa ve tarihsel büyüme varsayılanları kullanılır.</p>
+                      ) : (
+                        <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
+                          {presentationFiles.map((f, i) => (
+                            <div key={i} className="flex items-center justify-between gap-1 text-[11px] bg-slate-900 border border-slate-800 px-2 py-1 rounded text-slate-200">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <Presentation className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                                <span className="truncate" title={f.name}>{f.name}</span>
+                                <span className="text-[9px] text-slate-400">({formatFileSize(f.size)})</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removePresentationFile(i)}
+                                className="text-slate-400 hover:text-red-400 p-0.5 rounded cursor-pointer"
+                                title="Kaldır"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
+              {/* Canlı İlerlemeli Adım Çubuğu (Sequential Stepped Progress Bar) */}
+              {loading && (
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-4 shadow-2xl animate-fade-in">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-center text-xs">
+                    {/* 1. Adım */}
+                    <div className={`p-3 rounded-lg border transition ${
+                      pipelineStep === 1 
+                        ? 'bg-emerald-950/70 border-emerald-500 text-emerald-200 shadow-md shadow-emerald-950/40' 
+                        : (pipelineStep && pipelineStep > 1) 
+                          ? 'bg-slate-900/90 border-emerald-800/80 text-emerald-400' 
+                          : 'bg-slate-900/40 border-slate-800 text-slate-500'
+                    }`}>
+                      <div className="flex items-center justify-center gap-2 font-bold">
+                        {pipelineStep && pipelineStep > 1 ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                        ) : pipelineStep === 1 ? (
+                          <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin flex-shrink-0" />
+                        ) : (
+                          <span className="w-4 h-4 rounded-full bg-slate-800 text-[10px] flex items-center justify-center text-slate-400">1</span>
+                        )}
+                        <span>(1/3) Finansal Tablolar</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-1">Zaman serisi & Bilanço taranıyor</div>
+                    </div>
+
+                    {/* 2. Adım */}
+                    <div className={`p-3 rounded-lg border transition ${
+                      pipelineStep === 2 
+                        ? 'bg-sky-950/70 border-sky-500 text-sky-200 shadow-md shadow-sky-950/40' 
+                        : (pipelineStep && pipelineStep > 2) 
+                          ? 'bg-slate-900/90 border-sky-800/80 text-sky-400' 
+                          : 'bg-slate-900/40 border-slate-800 text-slate-500'
+                    }`}>
+                      <div className="flex items-center justify-center gap-2 font-bold">
+                        {pipelineStep && pipelineStep > 2 ? (
+                          <CheckCircle2 className="w-4 h-4 text-sky-400 flex-shrink-0" />
+                        ) : pipelineStep === 2 ? (
+                          <RefreshCw className="w-4 h-4 text-sky-400 animate-spin flex-shrink-0" />
+                        ) : (
+                          <span className="w-4 h-4 rounded-full bg-slate-800 text-[10px] flex items-center justify-center text-slate-400">2</span>
+                        )}
+                        <span>(2/3) Faaliyet Raporu</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-1">
+                        {activityFiles.length > 0 ? 'Rehberlik karnesi & riskler' : 'Dosya yok (Atlanıyor)'}
+                      </div>
+                    </div>
+
+                    {/* 3. Adım */}
+                    <div className={`p-3 rounded-lg border transition ${
+                      pipelineStep === 3 
+                        ? 'bg-amber-950/70 border-amber-500 text-amber-200 shadow-md shadow-amber-950/40' 
+                        : (pipelineProgress === 100)
+                          ? 'bg-slate-900/90 border-amber-800/80 text-amber-400'
+                          : 'bg-slate-900/40 border-slate-800 text-slate-500'
+                    }`}>
+                      <div className="flex items-center justify-center gap-2 font-bold">
+                        {pipelineProgress === 100 ? (
+                          <CheckCircle2 className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                        ) : pipelineStep === 3 ? (
+                          <RefreshCw className="w-4 h-4 text-amber-400 animate-spin flex-shrink-0" />
+                        ) : (
+                          <span className="w-4 h-4 rounded-full bg-slate-800 text-[10px] flex items-center justify-center text-slate-400">3</span>
+                        )}
+                        <span>(3/3) Yatırımcı Sunumu</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-1">
+                        {presentationFiles.length > 0 ? 'İleriye dönük hedefler' : 'Dosya yok (Atlanıyor)'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* İlerleme Çubuğu */}
+                  <div className="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden border border-slate-800">
+                    <div 
+                      className="h-full bg-gradient-to-r from-emerald-500 via-sky-500 to-amber-500 transition-all duration-500 rounded-full shadow-lg"
+                      style={{ width: `${pipelineProgress}%` }}
+                    />
+                  </div>
+
+                  {/* Canlı Durum Metni */}
+                  <div className="text-center font-mono text-xs text-emerald-300 font-semibold flex items-center justify-center gap-2">
+                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    <span>{statusMessage}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Analizi Başlat Butonu */}
               <button
                 type="submit"
-                disabled={loading || files.length === 0}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white font-bold rounded-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed shadow-lg"
+                disabled={loading || financialFiles.length === 0 || !ticker.trim() || !price.trim()}
+                className="w-full py-3.5 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:from-slate-800 disabled:to-slate-800 text-white font-bold rounded-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed shadow-xl text-sm"
               >
                 {loading ? (
                   <>
-                    <RefreshCw className="w-4 h-4 animate-spin" /> {statusMessage}
+                    <RefreshCw className="w-4 h-4 animate-spin" /> Analiz Yürütülüyor ({pipelineProgress}%)...
                   </>
                 ) : (
                   <>
-                    <TrendingUp className="w-4 h-4" /> Finansal Verileri Tara ve Ayıkla (Aşama 1)
+                    <TrendingUp className="w-4 h-4" /> Analizi Başlat
                   </>
                 )}
               </button>

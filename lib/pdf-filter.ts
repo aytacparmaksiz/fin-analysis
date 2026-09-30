@@ -168,6 +168,58 @@ export const GUIDANCE_AND_OUTLOOK_KEYWORDS = [
   'management expectations'
 ];
 
+export type DocumentCategory = 'financial' | 'activity' | 'presentation';
+
+export const ACTIVITY_REPORT_KEYWORDS = [
+  'yönetim kurulu başkanı mesajı',
+  'başkanın mesajı',
+  'genel müdür mesajı',
+  'yönetim kurulu faaliyet raporu',
+  'faaliyet sonuçları',
+  'geleceğe yönelik beklentiler',
+  'geleceğe ilişkin beklentiler',
+  'beklentiler ve hedefler',
+  'yönetim hedefleri',
+  'stratejik hedefler',
+  'guidance',
+  'rehberlik',
+  'pazar payı',
+  'risk yönetimi',
+  'risklerin değerlendirilmesi',
+  'iç kontrol ve risk',
+  'fırsatlar ve tehditler',
+  'güçlü yönler',
+  'zayıf yönler',
+  'swot analizi',
+  'operasyonel gelişmeler',
+  'yatırımlar ve ar-ge',
+  'kapasite kullanım',
+  'sürdürülebilirlik hedefleri',
+  'sektörel gelişmeler'
+];
+
+export const PRESENTATION_KEYWORDS = [
+  'yatırımcı sunumu',
+  'investor presentation',
+  'gelecek hedefleri',
+  'finansal hedefler',
+  'orta vadeli hedefler',
+  'orta vadeli plan',
+  'marj hedefleri',
+  'büyüme hedefleri',
+  'guidance',
+  'beklentiler',
+  'outlook',
+  'capex planı',
+  'yatırım bütçesi',
+  'değer yaratımı',
+  'hissedar getirisi',
+  'temettü politikası',
+  'vizyon ve misyon',
+  'karlılık hedefleri',
+  'stratejik öncelikler'
+];
+
 /**
  * Türkçe karakter duyarlı ve aksanları temizleyen normalizasyon (Aramada %100 eşleşme için saf ASCII'ye indirger)
  */
@@ -190,6 +242,8 @@ export function normalizeTextForSearch(str: string): string {
 const NORMALIZED_PRIMARY = Array.from(new Set(PRIMARY_STATEMENT_KEYWORDS.map(k => normalizeTextForSearch(k))));
 const NORMALIZED_SECONDARY = Array.from(new Set(SECONDARY_FINANCIAL_KEYWORDS.map(k => normalizeTextForSearch(k))));
 const NORMALIZED_GUIDANCE = Array.from(new Set(GUIDANCE_AND_OUTLOOK_KEYWORDS.map(k => normalizeTextForSearch(k))));
+const NORMALIZED_ACTIVITY = Array.from(new Set(ACTIVITY_REPORT_KEYWORDS.map(k => normalizeTextForSearch(k))));
+const NORMALIZED_PRESENTATION = Array.from(new Set(PRESENTATION_KEYWORDS.map(k => normalizeTextForSearch(k))));
 
 export interface PageScoreResult {
   pageIndex: number;
@@ -404,17 +458,174 @@ export function filterFinancialPages(pageTexts: string[], maxPages = 16): Filter
   };
 }
 
+export function scoreActivityPage(pageText: string, pageIndex: number): PageScoreResult {
+  const norm = normalizeTextForSearch(pageText);
+  let score = 0;
+  let isPrimary = false;
+  let isGuidance = false;
+  const matchedKeywords: string[] = [];
+
+  if (!norm || norm.length < 30) {
+    return { pageIndex, pageNum: pageIndex + 1, score: 0, isPrimary: false, isGuidance: false, numberCount: 0, matchedKeywords: [] };
+  }
+
+  for (let i = 0; i < NORMALIZED_ACTIVITY.length; i++) {
+    const kw = NORMALIZED_ACTIVITY[i];
+    if (norm.includes(kw)) {
+      score += 10;
+      matchedKeywords.push(ACTIVITY_REPORT_KEYWORDS[i] || kw);
+      if (kw.includes('guidance') || kw.includes('beklenti') || kw.includes('hedef') || kw.includes('mesaj') || kw.includes('risk')) {
+        isGuidance = true;
+        isPrimary = true;
+      }
+    }
+  }
+
+  if (pageIndex < 4) {
+    score += 8;
+  }
+
+  const numberMatches = pageText.match(/(?:\(\s*-?\d[\d.,\s]*\d\s*\)|-?\b\d{1,3}(?:[.,\s]\d{3})+(?:[.,]\d+)?\b|-?\b\d+[.,]\d{1,4}%?|-?\b\d{3,}%?)/g);
+  const numberCount = numberMatches ? numberMatches.length : 0;
+  if (numberCount >= 10) score += 5;
+
+  return {
+    pageIndex,
+    pageNum: pageIndex + 1,
+    score,
+    isPrimary,
+    isGuidance,
+    numberCount,
+    matchedKeywords
+  };
+}
+
+export function scorePresentationPage(pageText: string, pageIndex: number): PageScoreResult {
+  const norm = normalizeTextForSearch(pageText);
+  let score = 0;
+  let isPrimary = false;
+  let isGuidance = false;
+  const matchedKeywords: string[] = [];
+
+  if (!norm || norm.length < 30) {
+    return { pageIndex, pageNum: pageIndex + 1, score: 0, isPrimary: false, isGuidance: false, numberCount: 0, matchedKeywords: [] };
+  }
+
+  for (let i = 0; i < NORMALIZED_PRESENTATION.length; i++) {
+    const kw = NORMALIZED_PRESENTATION[i];
+    if (norm.includes(kw)) {
+      score += 10;
+      matchedKeywords.push(PRESENTATION_KEYWORDS[i] || kw);
+      isPrimary = true;
+      isGuidance = true;
+    }
+  }
+
+  const percentMatches = pageText.match(/%?\s*\d+(?:[.,]\d+)?\s*%/g);
+  if (percentMatches && percentMatches.length >= 2) {
+    score += 6;
+  }
+
+  return {
+    pageIndex,
+    pageNum: pageIndex + 1,
+    score,
+    isPrimary,
+    isGuidance,
+    numberCount: percentMatches ? percentMatches.length : 0,
+    matchedKeywords
+  };
+}
+
+export function filterActivityPages(pageTexts: string[], maxPages = 16): FilterResult {
+  const totalPages = pageTexts.length;
+  if (totalPages === 0) {
+    return { selectedIndices: [], combinedText: '', totalPages: 0, matchedCount: 0, summary: 'Boş belge.' };
+  }
+  if (totalPages <= 14) {
+    const combined = pageTexts.map((t, idx) => `--- [SAYFA ${idx + 1} / ${totalPages}] ---\n${t.trim()}`).join('\n\n');
+    return { selectedIndices: Array.from({ length: totalPages }, (_, i) => i), combinedText: combined, totalPages, matchedCount: totalPages, summary: `Tüm ${totalPages} sayfa korundu.` };
+  }
+
+  const scored = pageTexts.map((t, idx) => scoreActivityPage(t, idx));
+  const selectedSet = new Set<number>();
+
+  for (let i = 0; i < Math.min(3, totalPages); i++) selectedSet.add(i);
+
+  const sorted = [...scored].sort((a, b) => b.score - a.score);
+  for (const s of sorted) {
+    if (s.score >= 8 || s.isGuidance) {
+      selectedSet.add(s.pageIndex);
+      if (selectedSet.size >= maxPages) break;
+    }
+  }
+
+  if (selectedSet.size < 4) {
+    for (let i = 0; i < Math.min(8, totalPages); i++) selectedSet.add(sorted[i].pageIndex);
+  }
+
+  const finalIndices = Array.from(selectedSet).slice(0, maxPages).sort((a, b) => a - b);
+  const combinedText = finalIndices.map(idx => `--- [SAYFA ${idx + 1} / ${totalPages}] ---\n${(pageTexts[idx] || '').trim()}`).join('\n\n');
+  return {
+    selectedIndices: finalIndices,
+    combinedText,
+    totalPages,
+    matchedCount: finalIndices.length,
+    summary: `${totalPages} sayfalık faaliyet raporundan yönetim ve risk sayfaları (${finalIndices.length} sayfa) filtrelendi.`
+  };
+}
+
+export function filterPresentationPages(pageTexts: string[], maxPages = 16): FilterResult {
+  const totalPages = pageTexts.length;
+  if (totalPages === 0) {
+    return { selectedIndices: [], combinedText: '', totalPages: 0, matchedCount: 0, summary: 'Boş belge.' };
+  }
+  if (totalPages <= 20) {
+    const combined = pageTexts.map((t, idx) => `--- [SAYFA ${idx + 1} / ${totalPages}] ---\n${t.trim()}`).join('\n\n');
+    return { selectedIndices: Array.from({ length: totalPages }, (_, i) => i), combinedText: combined, totalPages, matchedCount: totalPages, summary: `Tüm ${totalPages} slayt korundu.` };
+  }
+
+  const scored = pageTexts.map((t, idx) => scorePresentationPage(t, idx));
+  const selectedSet = new Set<number>();
+  for (let i = 0; i < Math.min(4, totalPages); i++) selectedSet.add(i);
+
+  const sorted = [...scored].sort((a, b) => b.score - a.score);
+  for (const s of sorted) {
+    if (s.score >= 6) {
+      selectedSet.add(s.pageIndex);
+      if (selectedSet.size >= maxPages) break;
+    }
+  }
+
+  const finalIndices = Array.from(selectedSet).slice(0, maxPages).sort((a, b) => a - b);
+  const combinedText = finalIndices.map(idx => `--- [SAYFA ${idx + 1} / ${totalPages}] ---\n${(pageTexts[idx] || '').trim()}`).join('\n\n');
+  return {
+    selectedIndices: finalIndices,
+    combinedText,
+    totalPages,
+    matchedCount: finalIndices.length,
+    summary: `${totalPages} slaytlık sunumdan en kritik ${finalIndices.length} sayfa filtrelendi.`
+  };
+}
+
+export function filterDocumentPages(pageTexts: string[], category: DocumentCategory = 'financial', maxPages = 16): FilterResult {
+  if (category === 'activity') {
+    return filterActivityPages(pageTexts, maxPages);
+  }
+  if (category === 'presentation') {
+    return filterPresentationPages(pageTexts, maxPages);
+  }
+  return filterFinancialPages(pageTexts, maxPages);
+}
+
 /**
- * Ham PDF ArrayBuffer/Uint8Array verisinden akıllı finansal metin çıkarımı yapar
- * Hacimli belgelerde (> 40 sayfa) sunucu zaman aşımını (timeout) önlemek için
- * finansal tabloların ve dipnotların yer aldığı ilk 25 sayfa ve son 10 sayfa hedeflenerek
- * yalnızca bu sayfaların metni çıkarılır.
+ * Ham PDF ArrayBuffer/Uint8Array verisinden kategoriye özel akıllı metin çıkarımı yapar.
  */
-export async function extractSmartFinancialText(
+export async function extractSmartDocumentText(
   pdfInput: ArrayBuffer | Uint8Array,
+  category: DocumentCategory = 'financial',
   maxPages = 14
 ): Promise<{ text: string; totalPages: number; matchedPages: number; summary: string }> {
-  // unpdf / pdfjs Buffer kabul etmez; Node.js Buffer'ı pure Uint8Array'e dönüştürülmelidir
   let uint8: Uint8Array;
   if (pdfInput instanceof Uint8Array) {
     if (typeof Buffer !== 'undefined' && (Buffer.isBuffer(pdfInput) || (pdfInput as any) instanceof Buffer)) {
@@ -442,17 +653,21 @@ export async function extractSmartFinancialText(
 
   let pageTexts: string[];
 
-  // 40 sayfadan uzun dokümanlarda sunucu ve istemcinin donmasını önlemek için
-  // ilk 25 ve son 10 sayfayı (bilanço, gelir tablosu ve önemli dipnotlar) hedefleriz
   if (totalPages > 40) {
     const targetPageNumbers = new Set<number>();
-    const firstPagesCount = Math.min(25, totalPages);
-    for (let i = 1; i <= firstPagesCount; i++) {
-      targetPageNumbers.add(i);
-    }
-    const lastPagesCount = Math.min(10, totalPages);
-    for (let i = totalPages - lastPagesCount + 1; i <= totalPages; i++) {
-      targetPageNumbers.add(i);
+    if (category === 'activity') {
+      const firstPages = Math.min(30, totalPages);
+      for (let i = 1; i <= firstPages; i++) targetPageNumbers.add(i);
+      const lastPages = Math.min(15, totalPages);
+      for (let i = totalPages - lastPages + 1; i <= totalPages; i++) targetPageNumbers.add(i);
+    } else if (category === 'presentation') {
+      const firstPages = Math.min(35, totalPages);
+      for (let i = 1; i <= firstPages; i++) targetPageNumbers.add(i);
+    } else {
+      const firstPagesCount = Math.min(25, totalPages);
+      for (let i = 1; i <= firstPagesCount; i++) targetPageNumbers.add(i);
+      const lastPagesCount = Math.min(10, totalPages);
+      for (let i = totalPages - lastPagesCount + 1; i <= totalPages; i++) targetPageNumbers.add(i);
     }
 
     pageTexts = new Array(totalPages).fill('');
@@ -477,7 +692,7 @@ export async function extractSmartFinancialText(
     pageTexts = Array.isArray(text) ? text : [String(text || '')];
   }
 
-  const filterRes = filterFinancialPages(pageTexts, maxPages);
+  const filterRes = filterDocumentPages(pageTexts, category, maxPages);
 
   return {
     text: filterRes.combinedText,
@@ -485,4 +700,15 @@ export async function extractSmartFinancialText(
     matchedPages: filterRes.matchedCount,
     summary: filterRes.summary
   };
+}
+
+/**
+ * Ham PDF ArrayBuffer/Uint8Array verisinden akıllı finansal metin çıkarımı yapar (Geriye dönük uyumlu).
+ */
+export async function extractSmartFinancialText(
+  pdfInput: ArrayBuffer | Uint8Array,
+  maxPages = 14,
+  category: DocumentCategory = 'financial'
+): Promise<{ text: string; totalPages: number; matchedPages: number; summary: string }> {
+  return extractSmartDocumentText(pdfInput, category, maxPages);
 }

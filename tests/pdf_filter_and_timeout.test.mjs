@@ -3,9 +3,17 @@ import assert from 'node:assert/strict';
 import { 
   normalizeTextForSearch, 
   scoreFinancialPage, 
-  filterFinancialPages 
+  filterFinancialPages,
+  scoreActivityPage,
+  scorePresentationPage,
+  filterActivityPages,
+  filterPresentationPages,
+  filterDocumentPages
 } from '../lib/pdf-filter.ts';
-import { cleanAndParseJson } from '../lib/valuation.ts';
+import { 
+  cleanAndParseJson,
+  enrichAndSanitizeFinancialHistory
+} from '../lib/valuation.ts';
 
 describe('PDF Filter & Timeout Resilience', () => {
   describe('Turkish Diacritic & Text Normalization', () => {
@@ -350,5 +358,118 @@ describe('PDF Filter & Timeout Resilience', () => {
       assert.ok(res.matchedCount <= 14);
     });
   });
+
+  describe('3-Area Separated Upload Architecture & Categorized Filtering', () => {
+    it('scoreActivityPage accurately identifies Activity Report keywords and guidance', () => {
+      const page1 = 'YÖNETİM KURULU BAŞKANI MESAJI \n 2025 yılında pazar payımızı %24 seviyesine çıkardık.';
+      const res1 = scoreActivityPage(page1, 1);
+      assert.ok(res1.score >= 10);
+      assert.ok(res1.isGuidance);
+
+      const pageRisk = 'İÇ KONTROL VE RİSK YÖNETİMİ \n Döviz kuru ve faiz riski analizi.';
+      const resRisk = scoreActivityPage(pageRisk, 25);
+      assert.ok(resRisk.score >= 10);
+      assert.ok(resRisk.matchedKeywords.length > 0);
+    });
+
+    it('filterActivityPages preserves guidance and risk management pages from 60-page filing', () => {
+      const doc = Array.from({ length: 60 }, (_, i) => `Genel kurumsal metin sayfa ${i + 1}`);
+      doc[0] = 'FAALİYET RAPORU İÇİNDEKİLER VE YÖNETİCİ ÖZETİ';
+      doc[2] = 'GENEL MÜDÜR MESAJI VE GELECEĞE YÖNELİK BEKLENTİLER \n 2026 ciro hedefi 15 milyar TL.';
+      doc[15] = 'RİSK YÖNETİMİ VE RİSKLERİN DEĞERLENDİRİLMESİ \n Kredi ve likidite risk matrisi.';
+      doc[22] = 'GÜÇLÜ YÖNLER VE FIRSATLAR SWOT ANALİZİ \n Pazar liderliği ve ihracat kanalları.';
+
+      const res = filterActivityPages(doc, 14);
+      assert.ok(res.matchedCount <= 14);
+      assert.ok(res.selectedIndices.includes(0), 'Page 1 must be selected');
+      assert.ok(res.selectedIndices.includes(2), 'General Manager message (index 2) must be selected');
+      assert.ok(res.selectedIndices.includes(15), 'Risk management (index 15) must be selected');
+      assert.ok(res.selectedIndices.includes(22), 'SWOT analysis (index 22) must be selected');
+    });
+
+    it('scorePresentationPage and filterPresentationPages preserve investor deck targets', () => {
+      const pageDeck = 'YATIRIMCI SUNUMU 2026 STRATEJİK HEDEFLER \n Ciro büyüme hedefi %45, FAVÖK marjı %28, CAPEX planı 500 Mn TL.';
+      const resScore = scorePresentationPage(pageDeck, 4);
+      assert.ok(resScore.score >= 15);
+      assert.ok(resScore.isPrimary);
+
+      const deck = Array.from({ length: 45 }, (_, i) => `Slayt ${i + 1}`);
+      deck[0] = 'YATIRIMCI SUNUMU BAŞLIK';
+      deck[5] = 'ORTA VADELİ HEDEFLER VE MARJ BEKLENTİLERİ %35 %45 %20';
+      deck[12] = 'CAPEX PLANI VE YATIRIM BÜTÇESİ %15 %25';
+
+      const resFilter = filterPresentationPages(deck, 14);
+      assert.ok(resFilter.matchedCount <= 14);
+      assert.ok(resFilter.selectedIndices.includes(0));
+      assert.ok(resFilter.selectedIndices.includes(5));
+      assert.ok(resFilter.selectedIndices.includes(12));
+    });
+
+    it('filterDocumentPages properly routes requests according to category parameter', () => {
+      const pages = Array.from({ length: 25 }, (_, i) => `Sayfa ${i + 1}`);
+      pages[3] = 'KONSOLİDE BİLANÇO VE FİNANSAL DURUM TABLOSU \n 1.000.000 TL \n 2.000.000 TL';
+      pages[8] = 'YÖNETİM KURULU BAŞKANI MESAJI VE HEDEFLER';
+      pages[12] = 'YATIRIMCI SUNUMU GELECEK HEDEFLERİ';
+
+      const finRes = filterDocumentPages(pages, 'financial', 14);
+      assert.ok(finRes.selectedIndices.includes(3), 'Financial category must capture balance sheet');
+
+      const actRes = filterDocumentPages(pages, 'activity', 14);
+      assert.ok(actRes.selectedIndices.includes(8), 'Activity category must capture board message');
+
+      const presRes = filterDocumentPages(pages, 'presentation', 14);
+      assert.ok(presRes.selectedIndices.includes(12), 'Presentation category must capture investor presentation');
+    });
+
+    it('enrichAndSanitizeFinancialHistory enforces pure deterministic math with zero hallucination', () => {
+      const rawData = {
+        ticker: 'EREGL',
+        sector: 'INDUSTRIAL',
+        financial_history: [
+          {
+            period: '2025/12',
+            revenue: 1000000,
+            gross_profit: 250000,
+            ebitda: 200000,
+            net_income: 120000,
+            equity: 800000,
+            total_assets: 1600000,
+            current_assets: 600000,
+            cash_and_equivalents: 200000,
+            operating_cash_flow: 180000,
+            capex: 50000,
+          }
+        ]
+      };
+
+      const enriched = enrichAndSanitizeFinancialHistory(rawData);
+      const item = enriched.financial_history[0];
+
+      // Pure math verifications:
+      // Gross margin: (250000 / 1000000) * 100 = 25.0%
+      assert.equal(item.gross_margin, 25.0);
+      // EBITDA margin: (200000 / 1000000) * 100 = 20.0%
+      assert.equal(item.ebitda_margin, 20.0);
+      // Net margin: (120000 / 1000000) * 100 = 12.0%
+      assert.equal(item.net_margin, 12.0);
+      // ROE: (120000 / 800000) * 100 = 15.0%
+      assert.equal(item.roe, 15.0);
+      // ROA: (120000 / 1600000) * 100 = 7.5%
+      assert.equal(item.roa, 7.5);
+      // Kaldıraç: ((1600000 - 800000) / 1600000) * 100 = 50.0%
+      assert.equal(item.leverage_ratio, 50.0);
+      // Non-current assets derived: 1600000 - 600000 = 1000000
+      assert.equal(item.non_current_assets, 1000000);
+      // FCF: 180000 - 50000 = 130000
+      assert.equal(item.free_cash_flow, 130000);
+
+      // ZERO HALLUCINATION TEST:
+      // If bank/insurance specific fields like npl_ratio or car_ratio were NOT reported,
+      // they must NOT be hallucinated or invented; they must be undefined or null!
+      assert.ok(item.npl_ratio == null, 'npl_ratio must be null or undefined if not reported');
+      assert.ok(item.car_ratio == null, 'car_ratio must be null or undefined if not reported');
+    });
+  });
 });
+
 
