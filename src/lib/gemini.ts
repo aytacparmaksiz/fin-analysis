@@ -12,16 +12,9 @@ import crypto from 'crypto';
  */
 
 export const CANDIDATE_MODELS = [
-  'gemini-2.5-flash',
   'gemini-2.0-flash',
   'gemini-1.5-flash',
-  'gemini-flash-latest',
-  'gemini-3.8-flash',
-  'gemini-3.6-flash',
 ];
-
-// İstekler arası minimum bekleme süresi (13 saniye = dakikada en fazla 4.6 istek)
-const MIN_INTERVAL_MS = 13000;
 
 // TPM (Tokens Per Minute) koruma kısıtları (dakikada maks 240k token)
 const MAX_TPM = 240000;
@@ -36,7 +29,6 @@ const tokenUsageHistory: TokenUsageEntry[] = [];
 
 // Global istek kuyruğu durumu
 let lastRequestTimestamp = 0;
-let queuePromise: Promise<number> = Promise.resolve(0);
 
 // In-memory önbellek
 const memoryCache = new Map<string, { timestamp: number; data: any }>();
@@ -191,41 +183,12 @@ function recordTokens(tokens: number) {
 }
 
 /**
- * 5 RPM ve 240k TPM hız sınırını garanti eden senkronize bekleme kuyruğu
+ * Token kullanımını kaydeder (Vercel timeout olmaması için sunucuda bekleme yapılmaz)
  */
-async function scheduleRequestSlot(estimatedTokens = 2000): Promise<number> {
-  const executeSlot = async () => {
-    let now = Date.now();
-    let totalWaitMs = 0;
-
-    // 1. RPM Kontrolü (Minimum 13 saniye aralık -> <= 4.6 RPM)
-    const elapsed = now - lastRequestTimestamp;
-    if (lastRequestTimestamp > 0 && elapsed < MIN_INTERVAL_MS) {
-      const waitMs = MIN_INTERVAL_MS - elapsed;
-      console.log(`[GeminiRateLimiter] 5 RPM koruması devrede. ${Math.ceil(waitMs / 1000)} sn bekleniyor...`);
-      await new Promise((resolve) => setTimeout(resolve, waitMs));
-      totalWaitMs += waitMs;
-    }
-
-    // 2. TPM Kontrolü (Dakikada maks 240k token)
-    now = Date.now();
-    const currentTokens = getCurrentMinuteTokens(now);
-    if (currentTokens + estimatedTokens > MAX_TPM && tokenUsageHistory.length > 0) {
-      const oldest = tokenUsageHistory[0];
-      const tpmWait = Math.max(1000, (oldest.timestamp + TPM_WINDOW_MS + 500) - now);
-      console.warn(`[GeminiRateLimiter] 240k TPM koruması devrede (Mevcut: ${currentTokens} + Tahmini: ${estimatedTokens} > ${MAX_TPM}). ${Math.ceil(tpmWait / 1000)} sn bekleniyor...`);
-      await new Promise((resolve) => setTimeout(resolve, tpmWait));
-      totalWaitMs += tpmWait;
-    }
-
-    lastRequestTimestamp = Date.now();
-    recordTokens(estimatedTokens);
-    return totalWaitMs;
-  };
-
-  const nextPromise = queuePromise.then(executeSlot, executeSlot);
-  queuePromise = nextPromise;
-  return nextPromise;
+export async function scheduleRequestSlot(estimatedTokens = 2000): Promise<number> {
+  lastRequestTimestamp = Date.now();
+  recordTokens(estimatedTokens);
+  return 0;
 }
 
 export interface GeminiCallParams {
@@ -237,7 +200,11 @@ export interface GeminiCallParams {
 }
 
 /**
- * Üstel Geri Çekilme (Exponential Backoff: 2s, 4s, 8s, 16s) & Hız Sınırlayıcı (5 RPM / 240k TPM)
+ * Hız Sınırlayıcı & Hızlı Yeniden Deneme (Free tier koruması)
+ * Vercel serverless zaman aşımını (timeout) önlemek için:
+ * - Fonksiyon içi 13 saniyelik bekleme tamamen kaldırılmıştır.
+ * - Fonksiyon içinde en fazla 1 kez hızlı yeniden deneme (1.5 sn) yapılır.
+ * - Rate limit devam ederse hemen 429 status ve retryAfter: 5 döner; bekleme istemciye devredilir.
  */
 export async function generateWithRateLimitAndBackoff(params: GeminiCallParams): Promise<any> {
   const { ai, baseParams, preferredModel, cacheKey } = params;
@@ -253,7 +220,7 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
     }
   }
 
-  // 2. Token tahmini ve Kuyruk Planlaması (5 RPM & 240k TPM garantisi)
+  // 2. Token tahmini ve kaydı (Sunucuda bekletme yapılmaz)
   const estimatedTokens = estimateTokenCount(baseParams);
   await scheduleRequestSlot(estimatedTokens);
 
@@ -264,7 +231,8 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
   let lastError: any = null;
 
   for (const model of modelsToTry) {
-    const MAX_RETRIES_PER_MODEL = 4;
+    // Sunucu tarafında Vercel Hobby kısıtına takılmamak için en fazla 1 hızlı yeniden deneme (1.5s)
+    const MAX_RETRIES_PER_MODEL = 2; // Deneme 1 (attempt 0), Deneme 2 (attempt 1)
 
     for (let attempt = 0; attempt < MAX_RETRIES_PER_MODEL; attempt++) {
       try {
@@ -300,41 +268,51 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
         });
 
         if (isRateLimit || isServerBusy) {
-          // Üstel geri çekilme (Exponential backoff): Kullanıcı talimatı: 2s, 4s, 8s, 16s + jitter
-          const baseDelay = Math.min(20000, Math.pow(2, attempt + 1) * 1000); // 2s, 4s, 8s, 16s
-          const jitter = Math.floor(Math.random() * 600);
-          const totalWait = baseDelay + jitter;
-          const waitSec = Math.ceil(totalWait / 1000);
-
-          const waitMessage = isRateLimit 
-            ? `API hız sınırı (429) nedeniyle ${waitSec} saniye bekleniyor... (Deneme ${attempt + 1}/${MAX_RETRIES_PER_MODEL})`
-            : `Sunucu meşgul (503) nedeniyle ${waitSec} saniye bekleniyor...`;
-
-          console.warn(`[GeminiClient] ${waitMessage}`);
-          if (params.onWaitProgress) {
-            params.onWaitProgress(waitSec, waitMessage);
+          if (attempt === 0) {
+            // Sunucu içinde en fazla 1 kez 1.5 sn hızlı bekleme
+            const waitMs = 1500;
+            console.warn(`[GeminiClient] API hız sınırı/meşguliyet. ${waitMs}ms sonra 1 kez hızlı denenecek...`);
+            if (params.onWaitProgress) {
+              params.onWaitProgress(1.5, 'API hız sınırı nedeniyle 1.5 sn bekleniyor...');
+            }
+            await new Promise((resolve) => setTimeout(resolve, waitMs));
+            lastRequestTimestamp = Date.now();
+            continue;
+          } else {
+            // 1 hızlı yeniden denemeden sonra hala 429 ise, Vercel timeout olmaması için derhal 429 fırlat
+            const rateLimitError: any = new Error(
+              'Gemini API hız sınırına ulaşıldı (Rate Limit 429). Lütfen 5 saniye sonra tekrar deneyin.'
+            );
+            rateLimitError.status = 429;
+            rateLimitError.statusCode = 429;
+            rateLimitError.isRateLimit = true;
+            rateLimitError.retryAfter = 5;
+            throw rateLimitError;
           }
-
-          await new Promise((resolve) => setTimeout(resolve, totalWait));
-          lastRequestTimestamp = Date.now();
-          continue;
         } else {
-          // Model desteklenmiyor veya 400 hatası ise bir sonraki modele geç
+          // Model desteklenmiyor veya 400 hatası ise hemen sonraki modele geç
           break;
         }
       }
     }
   }
 
-  // Kullanıcı dostu ve HTTP 429 durum kodunu taşıyan hata nesnesi
-  const finalError: any = new Error(
-    'Gemini API hız veya günlük kotası aşıldı (5 RPM / 240k TPM / 20 RPD). Sistem üstel geri çekilmeyi denedi. Lütfen yaklaşık 20-30 saniye sonra tekrar deneyin veya kayıtlı analizleri kullanın.'
-  );
-  finalError.status = 429;
-  finalError.isRateLimit = true;
-  finalError.retryAfter = 20;
+  // Tüm modeller denendikten sonra hala rate limit hatası varsa 429 fırlat
+  const status = lastError?.status || lastError?.statusCode || (lastError?.message?.includes('429') ? 429 : 0);
+  const isRateLimit = status === 429 || lastError?.message?.includes('RESOURCE_EXHAUSTED') || lastError?.message?.includes('quota');
 
-  throw finalError;
+  if (isRateLimit) {
+    const finalRateError: any = new Error(
+      'Gemini API hız sınırına ulaşıldı (Rate Limit 429). Lütfen 5 saniye sonra tekrar deneyin.'
+    );
+    finalRateError.status = 429;
+    finalRateError.statusCode = 429;
+    finalRateError.isRateLimit = true;
+    finalRateError.retryAfter = 5;
+    throw finalRateError;
+  }
+
+  throw lastError || new Error('Gemini API çağrısı başarısız oldu.');
 }
 
 /**

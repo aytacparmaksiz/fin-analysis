@@ -749,6 +749,9 @@ GÖREVLER:
           batchResults.push(parsedData);
         } catch (batchError: any) {
           console.error(`[Extract Text] Paket ${Math.floor(i / DOC_BATCH_SIZE) + 1} işlenirken hata:`, batchError);
+          if (batchError?.status === 429 || batchError?.isRateLimit) {
+            throw batchError;
+          }
         }
       }
     } else {
@@ -828,6 +831,9 @@ Ekteki belgeleri incele (Paket ${bIndex + 1}/${fileBatches.length}):
         batchResults.push(parsedData);
       } catch (batchError: any) {
         console.error(`[Extract] Paket ${bIndex + 1} işlenirken hata:`, batchError);
+        if (batchError?.status === 429 || batchError?.isRateLimit) {
+          throw batchError;
+        }
       } finally {
         // Geçici yerel ve Google dosyalarını her paketten sonra hemen silerek kota şişmesini önle
         for (const p of tempFilePaths) {
@@ -869,6 +875,14 @@ Ekteki belgeleri incele (Paket ${bIndex + 1}/${fileBatches.length}):
 
   } catch (error: any) {
     console.error('Extraction Error:', error);
-    return NextResponse.json({ error: error.message || 'Veri çıkarımı başarısız oldu.' }, { status: 500 });
+    const status = error?.status === 429 || error?.isRateLimit ? 429 : 500;
+    return NextResponse.json(
+      { 
+        error: error.message || 'Veri çıkarımı başarısız oldu.',
+        retryAfter: error.retryAfter || 5,
+        isRateLimit: status === 429
+      }, 
+      { status }
+    );
   }
 }

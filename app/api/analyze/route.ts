@@ -286,6 +286,15 @@ Lütfen bu çeyrekteki yeni veriler ışığında önceki tezin nasıl evrildiğ
       optimization
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Değerleme üretilirken hata oluştu.' }, { status: 500 });
+    console.error('Analyze Error:', error);
+    const status = error?.status === 429 || error?.isRateLimit ? 429 : 500;
+    return NextResponse.json(
+      { 
+        error: error.message || 'Değerleme üretilirken hata oluştu.',
+        retryAfter: error.retryAfter || 5,
+        isRateLimit: status === 429
+      }, 
+      { status }
+    );
   }
 }

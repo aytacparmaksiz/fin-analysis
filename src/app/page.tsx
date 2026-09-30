@@ -103,10 +103,54 @@ async function parseApiResponse(res: Response, defaultError: string): Promise<an
   }
 
   if (!res.ok) {
+    if (status === 429) {
+      throw new Error(parsed?.error || 'Gemini API hız kotası aşıldı (429). Lütfen birkaç saniye sonra tekrar deneyin.');
+    }
     throw new Error(parsed?.error || defaultError || `İşlem başarısız oldu (HTTP ${status}).`);
   }
 
   return parsed;
+}
+
+/**
+ * İstemci tarafı akıllı hız sınırı koruması (Client-side Rate Limit Retry):
+ * Vercel serverless fonksiyon zaman aşımını (timeout) önlemek için API 429 döndüğünde
+ * bekleme istemcide güvenle yapılır ve kullanıcıya dostça durum bilgisi gösterilir.
+ */
+async function fetchWithClientRetry(
+  requestFn: () => Promise<Response>,
+  onStatusUpdate?: (msg: string) => void,
+  maxRetries = 3
+): Promise<Response> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await requestFn();
+    if (res.status === 429) {
+      if (attempt < maxRetries) {
+        let retrySeconds = 5;
+        try {
+          const clone = res.clone();
+          const json = await clone.json();
+          if (json?.retryAfter && typeof json.retryAfter === 'number') {
+            retrySeconds = Math.max(3, Math.min(10, json.retryAfter));
+          }
+        } catch {}
+
+        for (let sec = retrySeconds; sec > 0; sec--) {
+          if (onStatusUpdate) {
+            onStatusUpdate(`API hız sınırı koruması: ${sec} sn bekleniyor...`);
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+
+        if (onStatusUpdate) {
+          onStatusUpdate('İstek yeniden gönderiliyor...');
+        }
+        continue;
+      }
+    }
+    return res;
+  }
+  return await requestFn();
 }
 
 // Fair Value Kurumsal Vektör Logosu
@@ -1160,20 +1204,26 @@ export default function ValuationTerminal() {
 
       let res: Response;
       if (documents.length > 0) {
-        res = await fetch('/api/extract', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ticker, documents })
-        });
+        res = await fetchWithClientRetry(
+          () => fetch('/api/extract', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticker, documents })
+          }),
+          setStatusMessage
+        );
       } else {
         const fd = new FormData();
         fd.append('ticker', ticker);
         files.forEach(f => fd.append('files', f));
 
-        res = await fetch('/api/extract', {
-          method: 'POST',
-          body: fd
-        });
+        res = await fetchWithClientRetry(
+          () => fetch('/api/extract', {
+            method: 'POST',
+            body: fd
+          }),
+          setStatusMessage
+        );
       }
 
       const result = await parseApiResponse(res, 'Veri çıkarımı başarısız oldu.');
@@ -1221,24 +1271,27 @@ export default function ValuationTerminal() {
     } : null;
 
     try {
-      const res = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ticker: normalizedTicker,
-          price,
-          consensus,
-          peerMultiples,
-          sectorOverride: activeSector,
-          extractedData: enrichedExtractedData,
-          previousReport: previousReport ? {
-            createdAt: previousReport.createdAt,
-            decision: previousReport.decision,
-            score: previousReport.score,
-            price: previousReport.price
-          } : undefined
-        })
-      });
+      const res = await fetchWithClientRetry(
+        () => fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ticker: normalizedTicker,
+            price,
+            consensus,
+            peerMultiples,
+            sectorOverride: activeSector,
+            extractedData: enrichedExtractedData,
+            previousReport: previousReport ? {
+              createdAt: previousReport.createdAt,
+              decision: previousReport.decision,
+              score: previousReport.score,
+              price: previousReport.price
+            } : undefined
+          })
+        }),
+        setStatusMessage
+      );
 
       const data = await parseApiResponse(res, 'Değerleme tamamlanamadı.');
 

@@ -224,5 +224,56 @@ describe('PDF Filter & Timeout Resilience', () => {
         { message: 'GEMINI_API_KEY eksik.' }
       );
     });
+
+    it('intercepts HTTP 429 rate limit response with friendly message', async () => {
+      const mockResponse = new Response(JSON.stringify({ error: 'Gemini API hız sınırına ulaşıldı (Rate Limit 429). Lütfen 5 saniye sonra tekrar deneyin.', retryAfter: 5 }), { status: 429 });
+      await assert.rejects(
+        async () => await parseApiResponse(mockResponse, 'Hata'),
+        /Gemini API hız/
+      );
+    });
+  });
+
+  describe('Serverless & Vercel Timeout Resilience', () => {
+    it('uses only real official Google Gen AI models in CANDIDATE_MODELS (no 404 models)', async () => {
+      const { CANDIDATE_MODELS } = await import('../lib/gemini.ts');
+      assert.deepEqual(CANDIDATE_MODELS, ['gemini-2.0-flash', 'gemini-1.5-flash']);
+      // Must not contain experimental or fake models
+      assert.ok(!CANDIDATE_MODELS.includes('gemini-2.5-flash'));
+      assert.ok(!CANDIDATE_MODELS.includes('gemini-3.8-flash'));
+      assert.ok(!CANDIDATE_MODELS.includes('gemini-3.6-flash'));
+    });
+
+    it('scheduleRequestSlot executes immediately (< 50ms) without in-function 13-second sleep', async () => {
+      const { scheduleRequestSlot } = await import('../lib/gemini.ts');
+      const start = Date.now();
+      const wait = await scheduleRequestSlot(2000);
+      const elapsed = Date.now() - start;
+      assert.equal(wait, 0);
+      assert.ok(elapsed < 50, `scheduleRequestSlot must resolve immediately (took ${elapsed}ms)`);
+    });
+
+    it('handles sampled > 40 page document arrays (first 25 + last 10) without crashing', () => {
+      const totalPages = 100;
+      const sampledDoc = new Array(totalPages).fill('');
+      // Populate pages in the first 25
+      sampledDoc[0] = 'FAALİYET RAPORU ÖZETİ';
+      sampledDoc[4] = 'KONSOLİDE FİNANSAL DURUM BİLGİLERİ VARLIKLAR \n ' + '1.000.000 TL '.repeat(15);
+      sampledDoc[5] = 'KONSOLİDE FİNANSAL DURUM BİLGİLERİ YÜKÜMLÜLÜKLER \n ' + '500.000 TL '.repeat(15);
+      sampledDoc[6] = 'KONSOLİDE KÂR VEYA ZARAR TABLOSU \n ' + '2.000.000 TL '.repeat(15);
+      sampledDoc[7] = 'KONSOLİDE NAKİT AKIŞ TABLOSU \n ' + '3.000.000 TL '.repeat(15);
+      // Populate pages in the last 10 (e.g. index 95)
+      sampledDoc[95] = 'FİNANSAL GÖSTERGELER VE BORÇLULUK DİPNOTLARI \n ' + '5.000.000 TL '.repeat(25);
+
+      const res = filterFinancialPages(sampledDoc, 14);
+      assert.equal(res.totalPages, 100);
+      assert.ok(res.selectedIndices.includes(4), 'Should include balance sheet assets (page 5)');
+      assert.ok(res.selectedIndices.includes(5), 'Should include balance sheet liabilities (page 6)');
+      assert.ok(res.selectedIndices.includes(6), 'Should include income statement (page 7)');
+      assert.ok(res.selectedIndices.includes(7), 'Should include cash flow statement (page 8)');
+      assert.ok(res.selectedIndices.includes(95), 'Should include note page 96');
+      assert.ok(res.matchedCount <= 14);
+    });
   });
 });
+

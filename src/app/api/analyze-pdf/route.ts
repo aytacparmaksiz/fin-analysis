@@ -158,9 +158,14 @@ Ekteki PDF dokümanlarını (Finansal Tablolar, Dipnotlar, Faaliyet Raporları v
     return NextResponse.json({ report: response.text });
   } catch (error: any) {
     console.error('PDF Analiz Hatası:', error);
+    const status = error?.status === 429 || error?.isRateLimit ? 429 : 500;
     return NextResponse.json(
-      { error: error.message || 'PDF analiz edilirken hata oluştu.' },
-      { status: 500 }
+      { 
+        error: error.message || 'PDF analiz edilirken hata oluştu.',
+        retryAfter: error.retryAfter || 5,
+        isRateLimit: status === 429
+      },
+      { status }
     );
   } finally {
     // 4. Sunucudaki geçici disk dosyalarını sil

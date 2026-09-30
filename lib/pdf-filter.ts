@@ -403,6 +403,9 @@ export function filterFinancialPages(pageTexts: string[], maxPages = 16): Filter
 
 /**
  * Ham PDF ArrayBuffer/Uint8Array verisinden akıllı finansal metin çıkarımı yapar
+ * Hacimli belgelerde (> 40 sayfa) sunucu zaman aşımını (timeout) önlemek için
+ * finansal tabloların ve dipnotların yer aldığı ilk 25 sayfa ve son 10 sayfa hedeflenerek
+ * yalnızca bu sayfaların metni çıkarılır.
  */
 export async function extractSmartFinancialText(
   pdfInput: ArrayBuffer | Uint8Array,
@@ -410,9 +413,53 @@ export async function extractSmartFinancialText(
 ): Promise<{ text: string; totalPages: number; matchedPages: number; summary: string }> {
   const uint8 = pdfInput instanceof Uint8Array ? pdfInput : new Uint8Array(pdfInput);
   const pdf = await getDocumentProxy(uint8);
+  const totalPages = (pdf && typeof pdf.numPages === 'number') ? pdf.numPages : 0;
 
-  const { totalPages, text } = await extractText(pdf, { mergePages: false });
-  const pageTexts = Array.isArray(text) ? text : [String(text || '')];
+  if (totalPages === 0) {
+    return {
+      text: '',
+      totalPages: 0,
+      matchedPages: 0,
+      summary: 'Boş belge.'
+    };
+  }
+
+  let pageTexts: string[];
+
+  // 40 sayfadan uzun dokümanlarda sunucu ve istemcinin donmasını önlemek için
+  // ilk 25 ve son 10 sayfayı (bilanço, gelir tablosu ve önemli dipnotlar) hedefleriz
+  if (totalPages > 40) {
+    const targetPageNumbers = new Set<number>();
+    const firstPagesCount = Math.min(25, totalPages);
+    for (let i = 1; i <= firstPagesCount; i++) {
+      targetPageNumbers.add(i);
+    }
+    const lastPagesCount = Math.min(10, totalPages);
+    for (let i = totalPages - lastPagesCount + 1; i <= totalPages; i++) {
+      targetPageNumbers.add(i);
+    }
+
+    pageTexts = new Array(totalPages).fill('');
+
+    await Promise.all(
+      Array.from(targetPageNumbers).map(async (pageNum) => {
+        try {
+          const page = await pdf.getPage(pageNum);
+          const content = await page.getTextContent();
+          const pageText = (content.items || [])
+            .filter((item: any) => item.str != null)
+            .map((item: any) => item.str + (item.hasEOL ? '\n' : ''))
+            .join('');
+          pageTexts[pageNum - 1] = pageText;
+        } catch (pageErr) {
+          console.warn(`[PDFFilter] Sayfa ${pageNum} metni okunamadı:`, pageErr);
+        }
+      })
+    );
+  } else {
+    const { text } = await extractText(pdf, { mergePages: false });
+    pageTexts = Array.isArray(text) ? text : [String(text || '')];
+  }
 
   const filterRes = filterFinancialPages(pageTexts, maxPages);
 
