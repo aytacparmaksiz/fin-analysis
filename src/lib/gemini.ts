@@ -12,8 +12,8 @@ import crypto from 'crypto';
  */
 
 export const CANDIDATE_MODELS = [
-  'gemini-2.0-flash',
-  'gemini-2.0-flash-lite',
+  'gemini-3.8-flash',
+  'gemini-3-flash-preview',
   'gemini-2.5-flash',
   'gemini-1.5-flash',
 ];
@@ -237,8 +237,20 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
     try {
       console.log(`[GeminiClient] Model ${model} ile istek gönderiliyor...`);
       lastRequestTimestamp = Date.now();
+
+      // Gemini 3.8 ve 3.x modellerinde varsayılan reasoning (thinking_level: MEDIUM) 20+ sn sürer.
+      // Vercel 10sn tavanı ve kurumsal proxy timeout'unu önlemek için latency-critical görevlerde LOW seviyesine alıyoruz:
+      const reqConfig = { ...(baseParams.config || {}) };
+      if (model.includes('3.8') || model.includes('3-') || model.includes('2.5')) {
+        reqConfig.thinkingConfig = {
+          thinkingLevel: 'LOW',
+          ...(reqConfig.thinkingConfig || {}),
+        };
+      }
+
       const response = await ai.models.generateContent({
         ...baseParams,
+        config: reqConfig,
         model,
       });
 
@@ -281,8 +293,16 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
 
         try {
           console.log(`[GeminiClient] Model ${model} ile hızlı yeniden deneme...`);
+          const retryConfig = { ...(baseParams.config || {}) };
+          if (model.includes('3.8') || model.includes('3-') || model.includes('2.5')) {
+            retryConfig.thinkingConfig = {
+              thinkingLevel: 'LOW',
+              ...(retryConfig.thinkingConfig || {}),
+            };
+          }
           const retryResponse = await ai.models.generateContent({
             ...baseParams,
+            config: retryConfig,
             model,
           });
 

@@ -279,7 +279,7 @@ Lütfen bu çeyrekteki yeni veriler ışığında önceki tezin nasıl evrildiğ
 
     const response = await generateWithRateLimitAndBackoff({
       ai,
-      preferredModel: 'gemini-2.0-flash',
+      preferredModel: 'gemini-3.8-flash',
       baseParams: {
         contents: prompt,
         config: {
