@@ -67,12 +67,10 @@ async function parseApiResponse(res: Response, defaultError: string): Promise<an
   // 1. Gateway Timeout (504), Cloudflare (524), Request Timeout (408) veya Kurumsal Proxy HTML yanıtı
   const isHtml = rawText.trim().startsWith('<!DOCTYPE') || rawText.trim().startsWith('<html') || rawText.includes('<body') || rawText.includes('</html>');
   const isTimeout = status === 504 || status === 524 || status === 408 || 
-                    /function_invocation_timeout/i.test(rawText) ||
-                    /gateway\s*time-?out/i.test(rawText) || 
-                    /notification:\s*gateway_timeout/i.test(rawText) ||
-                    /timed?\s*out/i.test(rawText) ||
-                    /time-?out\s+occurred/i.test(rawText);
-  const isPayloadTooLarge = status === 413 || /function_payload_too_large/i.test(rawText) || /payload\s*too\s*large/i.test(rawText);
+                    (isHtml && (/function_invocation_timeout/i.test(rawText) ||
+                                /gateway\s*time-?out/i.test(rawText) || 
+                                /notification:\s*gateway_timeout/i.test(rawText)));
+  const isPayloadTooLarge = status === 413 || (isHtml && (/function_payload_too_large/i.test(rawText) || /payload\s*too\s*large/i.test(rawText)));
 
   if (isTimeout) {
     throw new Error('Sunucu yanıt süresi aşıldı (Gateway Timeout). Lütfen sadece finansal tabloları içeren sayfaları yüklemeyi deneyin.');
@@ -1253,6 +1251,12 @@ export default function ValuationTerminal() {
         const file = list[i];
         setStatusMessage(`İlave rapor taranıyor (${i + 1}/${list.length}): ${file.name}...`);
 
+        if (i > 0) {
+          // Gemini Free Tier 5 RPM kotasını korumak için ardışık dosyalar arasına 2.5 sn ara koy
+          setStatusMessage(`API hız kotası koruması: ${file.name} hazırlanıyor...`);
+          await new Promise((r) => setTimeout(r, 2500));
+        }
+
         let fileDocText = '';
         try {
           const arrayBuffer = await file.arrayBuffer();
@@ -1261,6 +1265,20 @@ export default function ValuationTerminal() {
         } catch (err) {
           console.warn(`[Append PDF] ${file.name} okunamadı:`, err);
         }
+
+        // Sunucuya aktarılan önceki veriyi temiz ve hafif tut (gereksiz rapor metinlerini ve büyük yapıları ayıkla)
+        const sanitizedPrevData = {
+          ticker: accumulated.ticker || ticker,
+          sector: accumulated.sector || activeSector,
+          currency: accumulated.currency,
+          reporting_period: accumulated.reporting_period,
+          share_count: accumulated.share_count,
+          financial_history: accumulated.financial_history || [],
+          balance_sheet_summary: accumulated.balance_sheet_summary || [],
+          debt_and_interest: accumulated.debt_and_interest || {},
+          guidance_track_record: accumulated.guidance_track_record || [],
+          pros_cons: accumulated.pros_cons || { pros: [], cons: [] }
+        };
 
         let res: Response;
         if (fileDocText.length > 50) {
@@ -1273,7 +1291,7 @@ export default function ValuationTerminal() {
                 price: price || accumulated.valuation?.current_price || '0',
                 category: 'financial',
                 documents: [{ name: file.name, text: fileDocText, category: 'financial' }],
-                previousData: accumulated
+                previousData: sanitizedPrevData
               })
             }),
             setStatusMessage
@@ -1283,7 +1301,7 @@ export default function ValuationTerminal() {
           fd.append('ticker', accumulated.ticker || ticker);
           fd.append('price', price || accumulated.valuation?.current_price || '0');
           fd.append('category', 'financial');
-          fd.append('previousData', JSON.stringify(accumulated));
+          fd.append('previousData', JSON.stringify(sanitizedPrevData));
           fd.append('files_financial', file);
           res = await fetchWithClientRetry(
             () => fetch('/api/extract', { method: 'POST', body: fd }),
@@ -1360,6 +1378,23 @@ export default function ValuationTerminal() {
           setPipelineProgress(pct);
           setStatusMessage(`[1. Aşama / 3]: Finansal Tablo işleniyor (${i + 1}/${financialDocs.length}): ${doc.name}...`);
 
+          if (i > 0) {
+            // Gemini Free Tier 5 RPM kotasını korumak için ardışık dosyalar arasına 2 sn ara koy
+            setStatusMessage(`[1. Aşama / 3]: API hız kotası koruması: ${doc.name} hazırlanıyor...`);
+            await new Promise((r) => setTimeout(r, 2000));
+          }
+
+          const sanitizedPrevData = currentData ? {
+            ticker: currentData.ticker || ticker,
+            sector: currentData.sector,
+            currency: currentData.currency,
+            reporting_period: currentData.reporting_period,
+            share_count: currentData.share_count,
+            financial_history: currentData.financial_history || [],
+            balance_sheet_summary: currentData.balance_sheet_summary || [],
+            debt_and_interest: currentData.debt_and_interest || {},
+          } : null;
+
           const res1 = await fetchWithClientRetry(
             () => fetch('/api/extract', {
               method: 'POST',
@@ -1369,7 +1404,7 @@ export default function ValuationTerminal() {
                 price, 
                 category: 'financial', 
                 documents: [doc], 
-                previousData: currentData 
+                previousData: sanitizedPrevData 
               })
             }),
             setStatusMessage
@@ -1387,11 +1422,27 @@ export default function ValuationTerminal() {
           setPipelineProgress(pct);
           setStatusMessage(`[1. Aşama / 3]: Finansal Tablo işleniyor (${i + 1}/${financialFiles.length}): ${f.name}...`);
 
+          if (i > 0) {
+            setStatusMessage(`[1. Aşama / 3]: API hız kotası koruması: ${f.name} hazırlanıyor...`);
+            await new Promise((r) => setTimeout(r, 2000));
+          }
+
+          const sanitizedPrevData = currentData ? {
+            ticker: currentData.ticker || ticker,
+            sector: currentData.sector,
+            currency: currentData.currency,
+            reporting_period: currentData.reporting_period,
+            share_count: currentData.share_count,
+            financial_history: currentData.financial_history || [],
+            balance_sheet_summary: currentData.balance_sheet_summary || [],
+            debt_and_interest: currentData.debt_and_interest || {},
+          } : null;
+
           const fd = new FormData();
           fd.append('ticker', ticker);
           fd.append('price', price);
           fd.append('category', 'financial');
-          if (currentData) fd.append('previousData', JSON.stringify(currentData));
+          if (sanitizedPrevData) fd.append('previousData', JSON.stringify(sanitizedPrevData));
           fd.append('files_financial', f);
 
           const res1 = await fetchWithClientRetry(

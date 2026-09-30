@@ -15,7 +15,7 @@ export const CANDIDATE_MODELS = [
   'gemini-3.8-flash',
   'gemini-3-flash-preview',
   'gemini-2.5-flash',
-  'gemini-1.5-flash',
+  'gemini-2.0-flash',
 ];
 
 // TPM (Tokens Per Minute) koruma kısıtları (dakikada maks 240k token)
@@ -280,19 +280,20 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
         isServerBusy,
       });
 
-      if ((isRateLimit || isServerBusy) && !hasRetried) {
+      if (isRateLimit) {
+        console.warn(`[GeminiClient] Model ${model} hız sınırına (429) takıldı. Vercel timeout olmaması için beklemeden bir sonraki modele geçiliyor...`);
+        // Bir sonraki modele geç
+        continue;
+      }
+
+      if (isServerBusy && !hasRetried) {
         hasRetried = true;
-        // Sunucu içinde en fazla 1 kez 1.5 sn hızlı bekleme
         const waitMs = 1500;
-        console.warn(`[GeminiClient] API hız sınırı/meşguliyet. ${waitMs}ms sonra 1 kez hızlı denenecek...`);
-        if (params.onWaitProgress) {
-          params.onWaitProgress(1.5, 'API hız sınırı nedeniyle 1.5 sn bekleniyor...');
-        }
+        console.warn(`[GeminiClient] Sunucu meşgul (503). ${waitMs}ms sonra 1 kez hızlı denenecek...`);
         await new Promise((resolve) => setTimeout(resolve, waitMs));
         lastRequestTimestamp = Date.now();
 
         try {
-          console.log(`[GeminiClient] Model ${model} ile hızlı yeniden deneme...`);
           const retryConfig = { ...(baseParams.config || {}) };
           if (model.includes('3.8') || model.includes('3-') || model.includes('2.5')) {
             retryConfig.thinkingConfig = {
@@ -319,7 +320,6 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
         } catch (retryErr: any) {
           lastError = retryErr;
           console.warn(`[GeminiClient] Model ${model} hızlı yeniden denemede de hata verdi:`, retryErr?.message?.slice(0, 150));
-          // Bir sonraki modele geç
         }
       }
       // Model desteklenmiyor, 400 hatası veya retry sonrası hata: döngü bir sonraki modeli dener
