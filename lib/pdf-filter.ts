@@ -150,6 +150,24 @@ export const SECONDARY_FINANCIAL_KEYWORDS = [
   'temel rasyolar'
 ];
 
+// 3. Yönetim Rehberliği & Geleceğe Yönelik Beklentiler (+10 Puan)
+export const GUIDANCE_AND_OUTLOOK_KEYWORDS = [
+  'geleceğe yönelik beklentiler',
+  'geleceğe ilişkin beklentiler',
+  'beklentiler ve hedefler',
+  'yönetim kurulu başkanı mesajı',
+  'genel müdür mesajı',
+  'faaliyet sonuçları ve beklentiler',
+  'yönetim hedefleri',
+  'stratejik hedefler',
+  'yılı beklentileri',
+  'geleceğe dönük değerlendirmeler',
+  'forward looking statements',
+  'guidance and outlook',
+  'management guidance',
+  'management expectations'
+];
+
 /**
  * Türkçe karakter duyarlı ve aksanları temizleyen normalizasyon (Aramada %100 eşleşme için saf ASCII'ye indirger)
  */
@@ -171,12 +189,14 @@ export function normalizeTextForSearch(str: string): string {
 // Normalleştirilmiş anahtar kelime listeleri
 const NORMALIZED_PRIMARY = Array.from(new Set(PRIMARY_STATEMENT_KEYWORDS.map(k => normalizeTextForSearch(k))));
 const NORMALIZED_SECONDARY = Array.from(new Set(SECONDARY_FINANCIAL_KEYWORDS.map(k => normalizeTextForSearch(k))));
+const NORMALIZED_GUIDANCE = Array.from(new Set(GUIDANCE_AND_OUTLOOK_KEYWORDS.map(k => normalizeTextForSearch(k))));
 
 export interface PageScoreResult {
   pageIndex: number;
   pageNum: number;
   score: number;
   isPrimary: boolean;
+  isGuidance?: boolean;
   numberCount: number;
   matchedKeywords: string[];
 }
@@ -188,10 +208,11 @@ export function scoreFinancialPage(pageText: string, pageIndex: number): PageSco
   const norm = normalizeTextForSearch(pageText);
   let score = 0;
   let isPrimary = false;
+  let isGuidance = false;
   const matchedKeywords: string[] = [];
 
   if (!norm || norm.length < 30) {
-    return { pageIndex, pageNum: pageIndex + 1, score: 0, isPrimary: false, numberCount: 0, matchedKeywords: [] };
+    return { pageIndex, pageNum: pageIndex + 1, score: 0, isPrimary: false, isGuidance: false, numberCount: 0, matchedKeywords: [] };
   }
 
   // 1. Birincil Tablo Başlıkları Kontrolü (+12 puan, eğer sayfanın ilk 600 karakterindeyse +15 puan)
@@ -219,7 +240,18 @@ export function scoreFinancialPage(pageText: string, pageIndex: number): PageSco
     }
   }
 
-  // 3. Finansal Sayı & Tablo Yoğunluğu Puanlaması
+  // 3. Yönetim Rehberliği & Geleceğe Yönelik Beklentiler (+10 Puan)
+  for (let i = 0; i < NORMALIZED_GUIDANCE.length; i++) {
+    const kw = NORMALIZED_GUIDANCE[i];
+    if (norm.includes(kw)) {
+      score += 10;
+      isGuidance = true;
+      matchedKeywords.push(GUIDANCE_AND_OUTLOOK_KEYWORDS[i] || kw);
+      break;
+    }
+  }
+
+  // 4. Finansal Sayı & Tablo Yoğunluğu Puanlaması
   // Tablolarda binlik/ondalık ayraçları, parantezli negatif sayılar veya para miktarları yer alır
   const numberMatches = pageText.match(/(?:\(\s*-?\d[\d.,\s]*\d\s*\)|-?\b\d{1,3}(?:[.,\s]\d{3})+(?:[.,]\d+)?\b|-?\b\d+[.,]\d{1,4}%?|-?\b\d{3,}%?)/g);
   const numberCount = numberMatches ? numberMatches.length : 0;
@@ -232,7 +264,7 @@ export function scoreFinancialPage(pageText: string, pageIndex: number): PageSco
     score += 2;
   }
 
-  // 4. Rapor Başlangıcı (İlk 3 sayfa - Yönetici Özeti ve Temel Göstergeler)
+  // 5. Rapor Başlangıcı (İlk 3 sayfa - Yönetici Özeti ve Temel Göstergeler)
   if (pageIndex < 3) {
     if (norm.includes('ozet') || norm.includes('gosterge') || norm.includes('highlights') || norm.includes('finansal') || norm.includes('faaliyet')) {
       score += 6;
@@ -261,7 +293,7 @@ export interface FilterResult {
 /**
  * Sayfa metinleri dizisinden finansal tabloları akıllıca seçer ve filtreler
  */
-export function filterFinancialPages(pageTexts: string[], maxPages = 14): FilterResult {
+export function filterFinancialPages(pageTexts: string[], maxPages = 16): FilterResult {
   const totalPages = pageTexts.length;
 
   if (totalPages === 0) {
@@ -274,8 +306,8 @@ export function filterFinancialPages(pageTexts: string[], maxPages = 14): Filter
     };
   }
 
-  // Eğer doküman zaten kısa ise (<= 12 sayfa), filtrelemeye gerek yoktur; tüm sayfalar korunur
-  if (totalPages <= 12) {
+  // Eğer doküman zaten kısa ise (<= 14 sayfa), filtrelemeye gerek yoktur; tüm sayfalar korunur
+  if (totalPages <= 14) {
     const combined = pageTexts
       .map((t, idx) => `--- [SAYFA ${idx + 1} / ${totalPages}] ---\n${t.trim()}`)
       .join('\n\n');
@@ -324,7 +356,13 @@ export function filterFinancialPages(pageTexts: string[], maxPages = 14): Filter
     }
   }
 
-  // 3. Fallback: Eğer çok az sayfa eşleştiyse (< 4), en yüksek puanlı veya ilk 8 sayfayı al
+  // 3. Yönetim Rehberliği & Geleceğe Yönelik Beklenti Sayfaları (Yönetim Rehberlik Karnesi için en az 1-2 sayfa garanti et)
+  const guidancePages = scoredPages.filter(p => p.isGuidance);
+  for (const gPage of guidancePages.slice(0, 2)) {
+    selectedSet.add(gPage.pageIndex);
+  }
+
+  // 4. Fallback: Eğer çok az sayfa eşleştiyse (< 4), en yüksek puanlı veya ilk 8 sayfayı al
   if (selectedSet.size < 4) {
     const sortedByScore = [...scoredPages].sort((a, b) => b.score - a.score);
     for (let i = 0; i < Math.min(8, totalPages); i++) {
@@ -336,7 +374,7 @@ export function filterFinancialPages(pageTexts: string[], maxPages = 14): Filter
     }
   }
 
-  // 4. Sayfa tavanı kısıtı (maxPages): Eğer çok fazla sayfa eşleştiyse en yüksek puanlıları seç
+  // 5. Sayfa tavanı kısıtı (maxPages): Eğer çok fazla sayfa eşleştiyse en yüksek puanlıları seç
   let finalIndices = Array.from(selectedSet);
   if (finalIndices.length > maxPages) {
     finalIndices = finalIndices
