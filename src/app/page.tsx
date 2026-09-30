@@ -2952,27 +2952,36 @@ export default function ValuationTerminal() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
-                    {extractedData.financial_history?.map((row: any, i: number) => (
-                      <tr key={i} className="hover:bg-slate-800/40">
-                        <td className="p-3 font-bold text-white flex items-center gap-1.5">
-                          <span>{row.period}</span>
-                          {row.is_tms29 && (
-                            <span className="text-[9px] font-sans font-bold px-1.5 py-0.2 rounded bg-amber-950/80 text-amber-300 border border-amber-800" title="TMS 29 Enflasyon Muhasebesi Düzeltmesi">
-                              TMS 29
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3 text-right text-slate-200">{formatAmount(row.revenue, 'bin')}</td>
-                        <td className="p-3 text-right text-slate-200">{formatAmount(row.ebitda, 'bin')}</td>
-                        <td className="p-3 text-right text-slate-200">{formatAmount(row.net_income, 'bin')}</td>
-                        <td className="p-3 text-right text-slate-200">
-                          %{row.combined_ratio ?? row.ebitda_margin ?? '—'}
-                        </td>
-                        <td className="p-3 text-right font-bold text-emerald-400">
-                          %{row.roe ?? row.roic ?? '—'}
-                        </td>
-                      </tr>
-                    ))}
+                    {extractedData.financial_history?.map((row: any, i: number) => {
+                      const isIns = currentSector === 'INSURANCE';
+                      const revenueVal = isIns ? (row.written_premiums ?? row.revenue) : row.revenue;
+                      const profitVal = isIns ? (row.technical_profit ?? row.ebitda) : row.ebitda;
+                      const marginVal = isIns ? (row.combined_ratio ?? row.ebitda_margin) : row.ebitda_margin;
+                      const marginText = marginVal != null ? `%${marginVal}` : '—';
+                      const roeVal = row.roe != null 
+                        ? row.roe 
+                        : (row.net_income != null && row.equity ? Number(((row.net_income * getAnnualizationFactor(row.period) / row.equity) * 100).toFixed(1)) : null);
+                      const returnVal = isIns ? roeVal : (row.roic ?? roeVal);
+                      const returnText = returnVal != null ? `%${returnVal}` : '—';
+
+                      return (
+                        <tr key={i} className="hover:bg-slate-800/40">
+                          <td className="p-3 font-bold text-white flex items-center gap-1.5">
+                            <span>{row.period}</span>
+                            {row.is_tms29 && (
+                              <span className="text-[9px] font-sans font-bold px-1.5 py-0.2 rounded bg-amber-950/80 text-amber-300 border border-amber-800" title="TMS 29 Enflasyon Muhasebesi Düzeltmesi">
+                                TMS 29
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right text-slate-200">{formatAmount(revenueVal, 'bin')}</td>
+                          <td className="p-3 text-right text-slate-200">{formatAmount(profitVal, 'bin')}</td>
+                          <td className="p-3 text-right text-slate-200">{formatAmount(row.net_income, 'bin')}</td>
+                          <td className="p-3 text-right text-slate-200">{marginText}</td>
+                          <td className="p-3 text-right font-bold text-emerald-400">{returnText}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

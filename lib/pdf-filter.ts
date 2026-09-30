@@ -653,20 +653,20 @@ export async function extractSmartDocumentText(
 
   let pageTexts: string[];
 
-  if (totalPages > 40) {
+  if (totalPages > 50) {
     const targetPageNumbers = new Set<number>();
     if (category === 'activity') {
-      const firstPages = Math.min(30, totalPages);
+      const firstPages = Math.min(45, totalPages);
       for (let i = 1; i <= firstPages; i++) targetPageNumbers.add(i);
       const lastPages = Math.min(15, totalPages);
       for (let i = totalPages - lastPages + 1; i <= totalPages; i++) targetPageNumbers.add(i);
     } else if (category === 'presentation') {
-      const firstPages = Math.min(35, totalPages);
+      const firstPages = Math.min(50, totalPages);
       for (let i = 1; i <= firstPages; i++) targetPageNumbers.add(i);
     } else {
-      const firstPagesCount = Math.min(25, totalPages);
+      const firstPagesCount = Math.min(50, totalPages);
       for (let i = 1; i <= firstPagesCount; i++) targetPageNumbers.add(i);
-      const lastPagesCount = Math.min(10, totalPages);
+      const lastPagesCount = Math.min(15, totalPages);
       for (let i = totalPages - lastPagesCount + 1; i <= totalPages; i++) targetPageNumbers.add(i);
     }
 

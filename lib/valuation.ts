@@ -392,6 +392,22 @@ export function getAnnualizationFactor(period: string | number): number {
 }
 
 /**
+ * Dönem stringlerini (örn: '2023 Yılı', '2023/12', '2023', '2026/06') standart formata getirir
+ */
+export function normalizePeriodName(period: string | number): string {
+  if (!period) return '';
+  const str = String(period).trim();
+  const yrMatch = str.match(/(20\d{2})/);
+  if (!yrMatch) return str;
+  const year = yrMatch[1];
+  if (/(?:q1|1\.ç|1ç|\/0?3\b|3a\b)/i.test(str)) return `${year}/03`;
+  if (/(?:q2|2\.ç|2ç|\/0?6\b|6a\b)/i.test(str)) return `${year}/06`;
+  if (/(?:q3|3\.ç|3ç|\/0?9\b|9a\b)/i.test(str)) return `${year}/09`;
+  if (/(?:q4|4\.ç|4ç|\/12\b|12a\b)/i.test(str)) return `${year}`;
+  return `${year}`;
+}
+
+/**
  * Finansal zaman serisi verilerini deterministik matematik ile temizler, zenginleştirir ve doğrular.
  * Sıfır Halüsinasyon Prensibi:
  * Tüm rasyolar (Cari Oran, Likidite, Nakit Oran, Kaldıraç, Aktif Devir, ROA, ROE, Kombine Oran vb.)
@@ -456,8 +472,14 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
       if (item.written_premiums && (!item.revenue || item.revenue === 0)) {
         item.revenue = item.written_premiums;
       }
+      if (item.revenue && (!item.written_premiums || item.written_premiums === 0)) {
+        item.written_premiums = item.revenue;
+      }
       if (item.technical_profit && (!item.ebitda || item.ebitda === 0)) {
         item.ebitda = item.technical_profit;
+      }
+      if (item.ebitda && (!item.technical_profit || item.technical_profit === 0)) {
+        item.technical_profit = item.ebitda;
       }
       if (item.loss_ratio != null && item.expense_ratio != null && item.combined_ratio == null) {
         item.combined_ratio = Number(((item.loss_ratio || 0) + (item.expense_ratio || 0)).toFixed(1));
@@ -475,6 +497,24 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
       }
       if (item.total_assets && item.equity != null && item.leverage_ratio == null && item.total_assets > 0) {
         item.leverage_ratio = Number((((item.total_assets - item.equity) / item.total_assets) * 100).toFixed(2));
+      }
+    }
+
+    // Bankacılık sektörü özel alan eşleştirmeleri
+    if (detectedSector === 'BANKING') {
+      if (item.net_interest_income && (!item.revenue || item.revenue === 0)) {
+        item.revenue = item.net_interest_income;
+      }
+      if (item.revenue && (!item.net_interest_income || item.net_interest_income === 0)) {
+        item.net_interest_income = item.revenue;
+      }
+      if (item.equity != null && item.net_income != null && item.roe == null) {
+        const roeRes = safeRoe(item.net_income, item.equity, annualFactor);
+        item.roe = roeRes.roe;
+        if (roeRes.isInsolvent) item.solvency_warning = roeRes.warning;
+      }
+      if (item.total_assets && item.total_assets > 0 && item.net_income != null && item.roa == null) {
+        item.roa = Number(((item.net_income * annualFactor / item.total_assets) * 100).toFixed(2));
       }
     }
 
@@ -620,43 +660,36 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
       item.wacc = Number(Number(item.wacc).toFixed(1));
     }
 
-    // ROIC & EVA Spread
-    if (item.roic == null || item.roic === 0 || isNaN(Number(item.roic))) {
-      if (detectedSector === 'INSURANCE' && typeof item.roe === 'number') {
-        item.roic = item.roe;
-      } else {
-        const equity = typeof item.equity === 'number' && item.equity > 0 ? item.equity : 0;
-        const netDebt = typeof item.net_debt === 'number' && item.net_debt > 0 ? item.net_debt : 0;
-        const investedCapital = equity + netDebt;
+    // ROIC & EVA Spread (Sıfır Sahte Veri Prensibi: Yetersiz veride asla yapay/sabit roic türetilmez)
+    if (detectedSector === 'INSURANCE') {
+      item.roic = typeof item.roe === 'number' ? item.roe : null;
+    } else if (item.roic == null || item.roic === 0 || isNaN(Number(item.roic))) {
+      const equity = typeof item.equity === 'number' && item.equity > 0 ? item.equity : 0;
+      const netDebt = typeof item.net_debt === 'number' && item.net_debt > 0 ? item.net_debt : 0;
+      const investedCapital = equity + netDebt;
 
-        const rawNopat = (typeof item.net_income === 'number' && item.net_income !== 0)
-          ? item.net_income
-          : ((typeof item.ebitda === 'number' && item.ebitda > 0) ? item.ebitda * 0.70 : 0);
-        const nopat = rawNopat * annualFactor;
+      const rawNopat = (typeof item.net_income === 'number' && item.net_income !== 0)
+        ? item.net_income
+        : ((typeof item.ebitda === 'number' && item.ebitda > 0) ? item.ebitda * 0.70 : 0);
+      const nopat = rawNopat * annualFactor;
 
-        if (investedCapital > 0 && nopat !== 0) {
-          const calculated = (nopat / investedCapital) * 100;
-          if (calculated >= -50 && calculated <= 150) {
-            item.roic = Number(calculated.toFixed(1));
-          } else if (typeof item.ebitda_margin === 'number' && item.ebitda_margin > 0) {
-            item.roic = Number((item.ebitda_margin * 0.85).toFixed(1));
-          } else {
-            item.roic = Number((item.wacc * 0.88).toFixed(1));
-          }
-        } else if (typeof item.ebitda_margin === 'number' && item.ebitda_margin > 0) {
-          item.roic = Number((item.ebitda_margin * 0.85).toFixed(1));
-        } else if (typeof item.gross_margin === 'number' && item.gross_margin > 0) {
-          item.roic = Number((item.gross_margin * 0.65).toFixed(1));
+      if (investedCapital > 0 && nopat !== 0) {
+        const calculated = (nopat / investedCapital) * 100;
+        if (calculated >= -50 && calculated <= 150) {
+          item.roic = Number(calculated.toFixed(1));
         } else {
-          const prevRoic = i > 0 && history[i - 1]?.roic ? history[i - 1].roic : null;
-          item.roic = prevRoic !== null ? prevRoic : Number((item.wacc * 0.88).toFixed(1));
+          item.roic = null;
         }
+      } else {
+        item.roic = null;
       }
     } else {
       item.roic = Number(Number(item.roic).toFixed(1));
     }
 
-    item.eva_spread = Number((item.roic - item.wacc).toFixed(1));
+    item.eva_spread = (typeof item.roic === 'number' && typeof item.wacc === 'number')
+      ? Number((item.roic - item.wacc).toFixed(1))
+      : null;
   }
 
   // TMS 29 Homojenizasyonunu çalıştır (Bankacılık/Sigortacılık muafiyetini gözeterek)

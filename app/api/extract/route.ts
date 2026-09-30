@@ -15,7 +15,8 @@ import {
   enrichAndSanitizeFinancialHistory,
   parseFinancialNumber,
   parsePeriodSortKey,
-  getAnnualizationFactor
+  getAnnualizationFactor,
+  normalizePeriodName
 } from '@/lib/valuation';
 import { extractSmartDocumentText, DocumentCategory } from '@/lib/pdf-filter';
 
@@ -283,6 +284,9 @@ function mergeFinancialHistoryBatches(results: any[]): any {
   if (results.length === 1) {
     const single = results[0];
     if (Array.isArray(single?.financial_history)) {
+      single.financial_history.forEach((it: any) => {
+        if (it?.period) it.period = normalizePeriodName(it.period) || String(it.period).trim();
+      });
       single.financial_history.sort((a: any, b: any) => parsePeriodSortKey(a?.period) - parsePeriodSortKey(b?.period));
     }
     return single;
@@ -319,7 +323,8 @@ function mergeFinancialHistoryBatches(results: any[]): any {
     if (Array.isArray(r.financial_history)) {
       for (const item of r.financial_history) {
         if (!item || !item.period) continue;
-        const key = String(item.period).trim();
+        const key = normalizePeriodName(item.period) || String(item.period).trim();
+        item.period = key;
         if (periodMap.has(key)) {
           const existing = periodMap.get(key);
           const combined = { ...existing };
@@ -457,22 +462,82 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Alan 1 için finansal tablo PDF dokümanı bulunamadı.' }, { status: 400 });
       }
 
-      const batchResults: any[] = [];
-      const DOC_BATCH_SIZE = 5;
-      for (let i = 0; i < finDocs.length; i += DOC_BATCH_SIZE) {
-        const batch = finDocs.slice(i, i + DOC_BATCH_SIZE);
-        const rawTexts = batch.map(d => `### FİNANSAL TABLO RAPORU: ${d.name}\n${d.text}`).join('\n\n---\n\n');
-        const docTexts = optimizeTextForGemini(rawTexts);
+      // AKILLI VE GÜVENLİ BATCHING STRATEJİSİ:
+      // Belgeleri tek bir devasa metne sıkıştırmak (120k sınırında kesilme ve veri kaybı) yerine,
+      // her batch'e en fazla 2 dosya ve toplamda en fazla 70.000 karakter alıyoruz.
+      // Böylece hiçbir rapor kesilmez, model her dönemi (2022, 2023, 2024, 2025, 2026...) %100 eksiksiz okur.
+      const batches: { name: string; text: string }[][] = [];
+      let currentBatch: { name: string; text: string }[] = [];
+      let currentBatchChars = 0;
 
-        const prompt = `Şirket: ${ticker.toUpperCase()}.
+      for (const doc of finDocs) {
+        const docChars = (doc.text || '').length;
+        if (currentBatch.length >= 2 || (currentBatch.length > 0 && currentBatchChars + docChars > 70000)) {
+          batches.push(currentBatch);
+          currentBatch = [doc];
+          currentBatchChars = docChars;
+        } else {
+          currentBatch.push(doc);
+          currentBatchChars += docChars;
+        }
+      }
+      if (currentBatch.length > 0) {
+        batches.push(currentBatch);
+      }
+
+      const isInsurance = targetSector === 'INSURANCE';
+      const isBanking = targetSector === 'BANKING';
+      const isHolding = targetSector === 'HOLDING';
+
+      const batchResults: any[] = [];
+      for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
+        const rawTexts = batch.map(d => `### FİNANSAL TABLO RAPORU: ${d.name}\n${d.text}`).join('\n\n---\n\n');
+        const docTexts = optimizeTextForGemini(rawTexts, 90000);
+
+        const prompt = `Şirket: ${ticker.toUpperCase()} (Tespit Edilen Sektör: ${targetSector}).
 Aşağıda şirkete ait resmi finansal tablolar (Bilanço, Gelir Tablosu, Nakit Akış) yer almaktadır:
 
 ${docTexts}
 
 GÖREVLER:
-1. Belgede yer alan tüm dönemlere ait Hasılat (revenue), FAVÖK (ebitda), Net Kâr (net_income), Nakit Akışları (OCF, CAPEX, FCF), Net Borç ve Bilanço kalemlerini (Cari Varlıklar, Nakit, Özkaynaklar, Toplam Aktifler) resmi verilerden çıkar.
-2. Parantez içindeki negatif rakamları eksi (-) sayı olarak yaz.
-3. Tabloda olmayan rakamı uydurma, null bırak.`;
+1. Bu belgede geçen HER BİR DÖNEM (yıl veya çeyrek, örn: 2022, 2023, 2024, 2025, 2026/06) için 'financial_history' listesine ayrı bir nesne ekle.
+2. SEKTÖREL VERİ ÇIKARIMI (%100 GERÇEK VE RESMİ VERİLER):
+${isInsurance ? `   * SİGORTACILIK / EMEKLİLİK (ÖRN: AGESA, ANHYT, TURSG):
+     - Brüt Prim Üretimi (Yazılan Primler): 'written_premiums' ve 'revenue' alanlarına tam aynı tutarı yaz.
+     - Teknik Kâr / Teknik Bölüm Dengesi: 'technical_profit' ve 'ebitda' alanlarına tam aynı tutarı yaz.
+     - Net Kâr: 'net_income' alanına Gelir Tablosundaki Dönem Net Kârını yaz.
+     - Toplam Özkaynaklar: 'equity' alanına yaz.
+     - Toplam Aktifler: 'total_assets' alanına yaz.
+     - Cari Varlıklar: 'current_assets' alanına bilançodaki Cari Varlıklar toplamını yaz.
+     - Nakit ve Benzerleri: 'cash_and_equivalents' alanına yaz.
+     - Finansal Varlıklar: 'financial_assets_insured' alanına yaz.
+     - Kombine Oran (%): Varsa 'combined_ratio' alanına yaz (örn: 92.5).` : ''}
+${isBanking ? `   * BANKACILIK:
+     - Net Faiz Geliri: 'net_interest_income' ve 'revenue' alanlarına tam aynı tutarı yaz.
+     - Net Kâr: 'net_income' alanına yaz.
+     - Toplam Özkaynaklar: 'equity' alanına yaz.
+     - Toplam Aktifler: 'total_assets' alanına yaz.
+     - Takipteki Krediler Oranı: 'npl_ratio' alanına yaz.
+     - Sermaye Yeterlilik Rasyosu: 'car_ratio' alanına yaz.` : ''}
+${!isInsurance && !isBanking ? `   * SANAYİ / HİZMET / DİĞER:
+     - Hasılat / Satış Gelirleri: 'revenue' alanına yaz.
+     - FAVÖK: 'ebitda' alanına yaz.
+     - Net Kâr: 'net_income' alanına yaz.
+     - İşletme Nakit Akışı (OCF): 'operating_cash_flow' alanına yaz.
+     - Yatırım Harcamaları (CAPEX): 'capex' alanına yaz.
+     - Serbest Nakit Akışı (FCF): 'free_cash_flow' alanına yaz (veya OCF - CAPEX).
+     - Net Finansal Borç: 'net_debt' alanına yaz.
+     - Toplam Özkaynaklar: 'equity' alanına yaz.
+     - Toplam Aktifler: 'total_assets' alanına yaz.
+     - Cari Varlıklar / Dönen Varlıklar: 'current_assets' alanına yaz.
+     - Nakit ve Benzerleri: 'cash_and_equivalents' alanına yaz.` : ''}
+3. PARANTEZ VE EKSİ SAYILAR:
+   - Parantez içindeki veya sonunda eksi olan tüm rakamları (örn: (1.234) veya 1.234-) NEGATİF SAYI (-1234) olarak yaz.
+4. BİNLİK / ONDALIK:
+   - Noktalı binlikleri standart tam sayıya dönüştür (örn: 1.250.000 -> 1250000). Rapor para birimini (örn: "Bin TRY", "TL") 'currency' alanına kaydet.
+5. SIFIR HALÜSİNASYON:
+   - Belgede açıkça olmayan rakamları asla uydurma, null bırak.`;
 
         const cacheKey = `extract_fin_${ticker.toUpperCase()}_batch_${i}_${computeContentHash(docTexts)}`;
         const response = await generateWithRateLimitAndBackoff({
