@@ -82,7 +82,10 @@ DİKKAT VE SEKTÖREL KURALLAR (SİGORTACILIK & BİREYSEL EMEKLİLİK - Örn: AGE
    | Büyüme, Pazar Payı & AUM Genişlemesi | X | 25 | ... |
    | **Toplam Puan** | **X** | **100** | ... |
 
-Analist Kararı: [AL / ALMA / NÖTR] (Net ve gerekçeli tek karar)`;
+Analist Kararı: [AL / ALMA / NÖTR]
+Yatırım Tezi: [1-2 net, anlaşılır ve vurucu cümle ile nihai alım/satım gerekçesi.]
+Kilit Katalizörler: [Fiyatı adil değere taşıyacak 2-3 somut şirket katalizörü.]
+Riskler & Emniyet Marjı: [Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek majör kırmızı çizgiler.]`;
     } else if (sector === 'BANKING') {
       systemInstruction = `Sen acımasız, aşırı objektif ve Türkiye bankacılık ve finans sektörüne uzmanlaşmış kurumsal bir fon yöneticisisin.
 ${universalSafetyRules}
@@ -107,7 +110,10 @@ DİKKAT VE SEKTÖREL KURALLAR (BANKACILIK SEKTÖRÜ - Örn: GARAN, AKBNK, ISCTR,
    | Komisyon Büyümesi & Dijital Bankacılık | X | 25 | ... |
    | **Toplam Puan** | **X** | **100** | ... |
 
-Analist Kararı: [AL / ALMA / NÖTR] (Net ve gerekçeli tek karar)`;
+Analist Kararı: [AL / ALMA / NÖTR]
+Yatırım Tezi: [1-2 net, anlaşılır ve vurucu cümle ile nihai alım/satım gerekçesi.]
+Kilit Katalizörler: [Fiyatı adil değere taşıyacak 2-3 somut şirket katalizörü.]
+Riskler & Emniyet Marjı: [Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek majör kırmızı çizgiler.]`;
     } else if (sector === 'HOLDING') {
       systemInstruction = `Sen acımasız, aşırı objektif ve Holding / Yatırım Şirketleri alanında uzmanlaşmış kurumsal bir fon yöneticisisin.
 ${universalSafetyRules}
@@ -129,7 +135,10 @@ DİKKAT VE SEKTÖREL KURALLAR (HOLDİNG SEKTÖRÜ - Örn: KCHOL, SAHOL, AGHOL):
    | NAD İskontosu & Kurumsal Katalizörler | X | 25 | ... |
    | **Toplam Puan** | **X** | **100** | ... |
 
-Analist Kararı: [AL / ALMA / NÖTR] (Net ve gerekçeli tek karar)`;
+Analist Kararı: [AL / ALMA / NÖTR]
+Yatırım Tezi: [1-2 net, anlaşılır ve vurucu cümle ile nihai alım/satım gerekçesi.]
+Kilit Katalizörler: [Fiyatı adil değere taşıyacak 2-3 somut şirket katalizörü.]
+Riskler & Emniyet Marjı: [Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek majör kırmızı çizgiler.]`;
     } else {
       // Standart Sanayi / Reel Sektör Promptu
       systemInstruction = `Sen acımasız, aşırı objektif ve kurumsal bir fon yöneticisisin. 
@@ -203,7 +212,10 @@ Piyasa Özeti:
 | Hikaye, Katalizör ve Büyüme (Growth CAPEX) | X | 25 | ... |
 | **Toplam Puan** | **X** | **100** | ... |
 
-Analist Kararı: [AL / ALMA / NÖTR] (Net ve gerekçeli tek karar)`;
+Analist Kararı: [AL / ALMA / NÖTR]
+Yatırım Tezi: [1-2 net, anlaşılır ve vurucu cümle ile nihai alım/satım gerekçesi.]
+Kilit Katalizörler: [Fiyatı adil değere taşıyacak 2-3 somut şirket katalizörü.]
+Riskler & Emniyet Marjı: [Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek majör kırmızı çizgiler.]`;
     }
 
     let prompt = `Hisse Kodu: ${ticker}

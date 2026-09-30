@@ -414,4 +414,6 @@ $$
 | **Toplam Puan** | **96** | **100** | **Mükemmel Kurumsal Kalite** |
 
 Analist Kararı: AL
-Güçlü teknik kârlılık, %70+ sürdürülebilir ROE ve %38,6 güvenlik marjı ile AGESA portföyde yüksek ağırlıkla taşınmaya uygundur.`;
+Yatırım Tezi: Güçlü teknik kârlılık, %70+ sürdürülebilir ROE ve %38,6 güvenlik marjı ile AGESA portföyde yüksek kurumsal ağırlıkla taşınmaya uygundur.
+Kilit Katalizörler: BES ve otomatik katılım fon büyüklüğünde pazar liderliği, Akbank dağıtım çarpanı ve 4,92 Milyar TL net yatırım geliri üretimi.
+Riskler & Emniyet Marjı: Taban hedef fiyat (Ayı Senaryosu): 95,00 TL. Enflasyon muhasebesi kaynaklı teknik kâr oynaklığı ve finansal piyasa getirileri izlenmelidir.`;

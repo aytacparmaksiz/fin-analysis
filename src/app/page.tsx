@@ -172,6 +172,7 @@ interface SavedReport {
   id: string;
   ticker: string;
   price: string;
+  fairValue?: string;
   createdAt: string;
   period?: string;
   report: string;
@@ -896,9 +897,48 @@ export default function ValuationTerminal() {
   const [financialFiles, setFinancialFiles] = useState<File[]>([]);
   const [activityFiles, setActivityFiles] = useState<File[]>([]);
   const [presentationFiles, setPresentationFiles] = useState<File[]>([]);
+  const financialInputRef = useRef<HTMLInputElement>(null);
+  const activityInputRef = useRef<HTMLInputElement>(null);
+  const presentationInputRef = useRef<HTMLInputElement>(null);
   const [pipelineStep, setPipelineStep] = useState<1 | 2 | 3 | null>(null);
   const [pipelineProgress, setPipelineProgress] = useState<number>(0);
   const files = useMemo(() => [...financialFiles, ...activityFiles, ...presentationFiles], [financialFiles, activityFiles, presentationFiles]);
+
+  const handleAddFinancialFiles = (newFiles: FileList | File[]) => {
+    const list = Array.from(newFiles).filter(f => 
+      f.name.toLowerCase().endsWith('.pdf') || f.type === 'application/pdf'
+    );
+    if (list.length === 0) return;
+    setFinancialFiles(prev => {
+      const existingKeys = new Set(prev.map(f => `${f.name}_${f.size}`));
+      const filtered = list.filter(f => !existingKeys.has(`${f.name}_${f.size}`));
+      return [...prev, ...filtered];
+    });
+  };
+
+  const handleAddActivityFiles = (newFiles: FileList | File[]) => {
+    const list = Array.from(newFiles).filter(f => 
+      f.name.toLowerCase().endsWith('.pdf') || f.type === 'application/pdf'
+    );
+    if (list.length === 0) return;
+    setActivityFiles(prev => {
+      const existingKeys = new Set(prev.map(f => `${f.name}_${f.size}`));
+      const filtered = list.filter(f => !existingKeys.has(`${f.name}_${f.size}`));
+      return [...prev, ...filtered];
+    });
+  };
+
+  const handleAddPresentationFiles = (newFiles: FileList | File[]) => {
+    const list = Array.from(newFiles).filter(f => 
+      f.name.toLowerCase().endsWith('.pdf') || f.type === 'application/pdf'
+    );
+    if (list.length === 0) return;
+    setPresentationFiles(prev => {
+      const existingKeys = new Set(prev.map(f => `${f.name}_${f.size}`));
+      const filtered = list.filter(f => !existingKeys.has(`${f.name}_${f.size}`));
+      return [...prev, ...filtered];
+    });
+  };
 
   // Aşama durumu
   const [step, setStep] = useState<'input' | 'review' | 'report' | 'leaderboard'>('input');
@@ -2465,10 +2505,7 @@ export default function ValuationTerminal() {
                     onDrop={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      if (e.dataTransfer.files) {
-                        const pdfs = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
-                        if (pdfs.length > 0) setFinancialFiles(prev => [...prev, ...pdfs]);
-                      }
+                      if (e.dataTransfer.files) handleAddFinancialFiles(e.dataTransfer.files);
                     }}
                     className={`rounded-xl border p-5 transition flex flex-col justify-between ${
                     financialFiles.length > 0 
@@ -2495,23 +2532,38 @@ export default function ValuationTerminal() {
                         Bilanço, Gelir Tablosu, Nakit Akış Tabloları (örn: 2022-2026 çeyreklik veya yıllık KAP mali tabloları). Sadece resmi denetlenmiş veriler taranır. Asla PR veya serbest yorum kabul edilmez.
                       </p>
 
-                      <label className="block border-2 border-dashed border-emerald-700/40 hover:border-emerald-500 rounded-lg p-3 text-center cursor-pointer transition bg-emerald-950/10 hover:bg-emerald-950/20">
-                        <UploadCloud className="w-6 h-6 text-emerald-400 mx-auto mb-1" />
+                      <div 
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => financialInputRef.current?.click()}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); financialInputRef.current?.click(); } }}
+                        className="border-2 border-dashed border-emerald-700/50 hover:border-emerald-400 rounded-lg p-3.5 text-center cursor-pointer transition bg-emerald-950/20 hover:bg-emerald-950/30 group select-none"
+                      >
+                        <UploadCloud className="w-6 h-6 text-emerald-400 mx-auto mb-1 group-hover:scale-110 transition-transform" />
                         <span className="text-xs font-bold text-white block">Mali Tablo PDF Ekle veya Sürükle</span>
-                        <span className="text-[10px] text-slate-400">Çoklu PDF seçebilirsiniz</span>
+                        <span className="text-[10px] text-slate-400 block mb-2.5">Çoklu PDF seçebilirsiniz</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            financialInputRef.current?.click();
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold rounded-md shadow-sm transition cursor-pointer"
+                        >
+                          <UploadCloud className="w-3.5 h-3.5" /> PDF Dosyası Seç
+                        </button>
                         <input
+                          ref={financialInputRef}
                           type="file"
                           multiple
-                          accept=".pdf"
+                          accept=".pdf,application/pdf"
                           onChange={e => {
-                            if (e.target.files) {
-                              setFinancialFiles(prev => [...prev, ...Array.from(e.target.files!)]);
-                            }
+                            if (e.target.files) handleAddFinancialFiles(e.target.files);
                             e.target.value = '';
                           }}
-                          className="hidden"
+                          className="sr-only"
                         />
-                      </label>
+                      </div>
                     </div>
 
                     {/* Dosya Listesi */}
@@ -2554,10 +2606,7 @@ export default function ValuationTerminal() {
                     onDrop={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      if (e.dataTransfer.files) {
-                        const pdfs = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
-                        if (pdfs.length > 0) setActivityFiles(prev => [...prev, ...pdfs]);
-                      }
+                      if (e.dataTransfer.files) handleAddActivityFiles(e.dataTransfer.files);
                     }}
                     className={`rounded-xl border p-5 transition flex flex-col justify-between ${
                     activityFiles.length > 0 
@@ -2584,23 +2633,38 @@ export default function ValuationTerminal() {
                         Yıllık veya Dönemsel Faaliyet Raporları. 5. Yönetim Rehberlik Karnesi (Guidance vs. Actual gerçekleşmeleri), pazar payı, riskler ve Güçlü / Zayıf Yönler (Pros & Cons) için taranır.
                       </p>
 
-                      <label className="block border-2 border-dashed border-sky-700/40 hover:border-sky-500 rounded-lg p-3 text-center cursor-pointer transition bg-sky-950/10 hover:bg-sky-950/20">
-                        <UploadCloud className="w-6 h-6 text-sky-400 mx-auto mb-1" />
+                      <div 
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => activityInputRef.current?.click()}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activityInputRef.current?.click(); } }}
+                        className="border-2 border-dashed border-sky-700/50 hover:border-sky-400 rounded-lg p-3.5 text-center cursor-pointer transition bg-sky-950/20 hover:bg-sky-950/30 group select-none"
+                      >
+                        <UploadCloud className="w-6 h-6 text-sky-400 mx-auto mb-1 group-hover:scale-110 transition-transform" />
                         <span className="text-xs font-bold text-white block">Faaliyet Raporu PDF Ekle veya Sürükle</span>
-                        <span className="text-[10px] text-slate-400">Çoklu PDF seçebilirsiniz</span>
+                        <span className="text-[10px] text-slate-400 block mb-2.5">Çoklu PDF seçebilirsiniz</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            activityInputRef.current?.click();
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-bold rounded-md shadow-sm transition cursor-pointer"
+                        >
+                          <UploadCloud className="w-3.5 h-3.5" /> PDF Dosyası Seç
+                        </button>
                         <input
+                          ref={activityInputRef}
                           type="file"
                           multiple
-                          accept=".pdf"
+                          accept=".pdf,application/pdf"
                           onChange={e => {
-                            if (e.target.files) {
-                              setActivityFiles(prev => [...prev, ...Array.from(e.target.files!)]);
-                            }
+                            if (e.target.files) handleAddActivityFiles(e.target.files);
                             e.target.value = '';
                           }}
-                          className="hidden"
+                          className="sr-only"
                         />
-                      </label>
+                      </div>
                     </div>
 
                     {/* Dosya Listesi */}
@@ -2643,10 +2707,7 @@ export default function ValuationTerminal() {
                     onDrop={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      if (e.dataTransfer.files) {
-                        const pdfs = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
-                        if (pdfs.length > 0) setPresentationFiles(prev => [...prev, ...pdfs]);
-                      }
+                      if (e.dataTransfer.files) handleAddPresentationFiles(e.dataTransfer.files);
                     }}
                     className={`rounded-xl border p-5 transition flex flex-col justify-between ${
                     presentationFiles.length > 0 
@@ -2673,23 +2734,38 @@ export default function ValuationTerminal() {
                         Şirketin son Yatırımcı Sunumu / Gelecek Hedefleri. 2. Adil Değer & Sürücüler panelindeki ileriye dönük beklentiler, marj hedefleri ve şirket vizyonunu güncellemek için taranır.
                       </p>
 
-                      <label className="block border-2 border-dashed border-amber-700/40 hover:border-amber-500 rounded-lg p-3 text-center cursor-pointer transition bg-amber-950/10 hover:bg-amber-950/20">
-                        <UploadCloud className="w-6 h-6 text-amber-400 mx-auto mb-1" />
+                      <div 
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => presentationInputRef.current?.click()}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); presentationInputRef.current?.click(); } }}
+                        className="border-2 border-dashed border-amber-700/50 hover:border-amber-400 rounded-lg p-3.5 text-center cursor-pointer transition bg-amber-950/20 hover:bg-amber-950/30 group select-none"
+                      >
+                        <UploadCloud className="w-6 h-6 text-amber-400 mx-auto mb-1 group-hover:scale-110 transition-transform" />
                         <span className="text-xs font-bold text-white block">Yatırımcı Sunumu PDF Ekle veya Sürükle</span>
-                        <span className="text-[10px] text-slate-400">Çoklu PDF seçebilirsiniz</span>
+                        <span className="text-[10px] text-slate-400 block mb-2.5">Çoklu PDF seçebilirsiniz</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            presentationInputRef.current?.click();
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-bold rounded-md shadow-sm transition cursor-pointer"
+                        >
+                          <UploadCloud className="w-3.5 h-3.5" /> PDF Dosyası Seç
+                        </button>
                         <input
+                          ref={presentationInputRef}
                           type="file"
                           multiple
-                          accept=".pdf"
+                          accept=".pdf,application/pdf"
                           onChange={e => {
-                            if (e.target.files) {
-                              setPresentationFiles(prev => [...prev, ...Array.from(e.target.files!)]);
-                            }
+                            if (e.target.files) handleAddPresentationFiles(e.target.files);
                             e.target.value = '';
                           }}
-                          className="hidden"
+                          className="sr-only"
                         />
-                      </label>
+                      </div>
                     </div>
 
                     {/* Dosya Listesi */}
@@ -4229,35 +4305,53 @@ export default function ValuationTerminal() {
                     </div>
                   </div>
 
-                  <div className="bg-[#111827]/90 border border-slate-800 p-6 sm:p-10 md:p-12 rounded-2xl shadow-2xl backdrop-blur-sm print:p-0 print:border-none print:bg-white print:text-black">
-                    <div className="report-content max-w-5xl mx-auto space-y-2">
+                  <div className="bg-[#111827]/90 border border-slate-800 p-6 sm:p-8 md:p-10 rounded-2xl shadow-2xl backdrop-blur-sm print:p-0 print:border-none print:bg-white print:text-black w-full">
+                    <div className="report-content w-full max-w-[1700px] mx-auto space-y-6">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
                         rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]}
                         components={{
-                          h1: ({ ...props }) => (
-                            <div className="border-b border-slate-800 pb-4 mb-6 mt-2">
-                              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight" {...props} />
+                          h1: ({ children, ...props }) => (
+                            <div className="border-b border-slate-800/80 pb-5 mb-8 mt-2">
+                              <div className="flex flex-wrap items-center gap-2.5 mb-2">
+                                <span className="px-2.5 py-1 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono font-bold text-xs">
+                                  {activeReport.ticker}
+                                </span>
+                                <span className="text-xs text-slate-400 font-mono">
+                                  Kurumsal Değerleme & Karar Raporu
+                                </span>
+                              </div>
+                              <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-white tracking-tight leading-snug" {...props}>
+                                {children}
+                              </h1>
                             </div>
                           ),
                           h2: ({ children, ...props }) => {
                             const text = extractTextFromChildren(children);
                             const isRedFlag = text.includes('🚨') || text.toLowerCase().includes('kırmızı bayrak');
+                            if (isRedFlag) {
+                              return (
+                                <div className="mt-10 mb-5 p-4 sm:p-5 rounded-xl bg-gradient-to-r from-rose-950/50 via-slate-900/80 to-transparent border border-rose-800/60 shadow-lg">
+                                  <h2 className="text-base sm:text-lg font-black tracking-tight text-rose-300 flex items-center gap-2.5" {...props}>
+                                    <AlertTriangle className="w-5 h-5 text-rose-400 flex-shrink-0" />
+                                    {children}
+                                  </h2>
+                                </div>
+                              );
+                            }
                             return (
-                              <div className={`mt-8 mb-4 pt-3 border-t ${isRedFlag ? 'border-rose-800/80' : 'border-slate-800'}`}>
-                                <h2
-                                  className={`text-base sm:text-lg font-bold tracking-tight flex items-center gap-2 ${
-                                    isRedFlag ? 'text-rose-400 font-extrabold' : 'text-emerald-400'
-                                  }`}
-                                  {...props}
-                                >
+                              <div className="mt-10 mb-4 pb-2.5 border-b border-slate-800 flex items-center gap-3">
+                                <div className="w-1.5 h-5 rounded-full bg-emerald-500 flex-shrink-0" />
+                                <h2 className="text-base sm:text-lg font-bold tracking-tight text-emerald-400" {...props}>
                                   {children}
                                 </h2>
                               </div>
                             );
                           },
-                          h3: ({ ...props }) => (
-                            <h3 className="text-xs sm:text-sm font-bold text-cyan-300 mt-5 mb-2.5 uppercase tracking-wider pl-2 border-l-2 border-cyan-400" {...props} />
+                          h3: ({ children, ...props }) => (
+                            <h3 className="text-xs sm:text-sm font-bold text-cyan-300 mt-6 mb-3 uppercase tracking-wider pl-2.5 border-l-2 border-cyan-400 flex items-center gap-2" {...props}>
+                              {children}
+                            </h3>
                           ),
                           p: ({ children, ...props }) => {
                             const text = extractTextFromChildren(children);
@@ -4269,31 +4363,96 @@ export default function ValuationTerminal() {
                                 </div>
                               );
                             }
-                            if (text.startsWith('Analist Kararı:')) {
+                            if (text.startsWith('Analist Kararı:') || text.startsWith('**Analist Kararı:') || text.startsWith('### Analist Kararı:')) {
                               const isAlma = /\b(ALMA|SAT)\b/i.test(text);
                               const isAl = /\b(AL)\b/i.test(text) && !isAlma;
+                              const verdict = isAl ? 'AL' : isAlma ? 'ALMA' : 'NÖTR';
+                              const verdictTitle = isAl 
+                                ? 'Kurumsal Alım & Portföy Ağırlığı Artır' 
+                                : isAlma 
+                                ? 'Riskli / Sermaye Kaybı Riski (Yatırım Önerilmez)' 
+                                : 'Bekle-Gör / Nötr (İskonto Marjı Sınırlı)';
+
+                              const cleanBody = text.replace(/^(?:#{1,3}\s*)?\*{0,2}Analist Kararı:\s*(ALMA|SAT|AL|NÖTR)?\*{0,2}\s*/i, '').trim();
+
                               return (
-                                <div className={`p-5 rounded-xl border my-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl ${
-                                  isAl ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-100' :
-                                  isAlma ? 'bg-rose-950/40 border-rose-500/50 text-rose-100' :
-                                  'bg-slate-900 border-slate-700 text-slate-200'
+                                <div className={`my-8 rounded-2xl border p-6 md:p-8 shadow-2xl transition-all ${
+                                  isAl
+                                    ? 'bg-gradient-to-br from-emerald-950/70 via-slate-900/95 to-slate-950 border-emerald-500/50 shadow-emerald-950/40 ring-1 ring-emerald-500/20'
+                                    : isAlma
+                                    ? 'bg-gradient-to-br from-rose-950/70 via-slate-900/95 to-slate-950 border-rose-500/50 shadow-rose-950/40 ring-1 ring-rose-500/20'
+                                    : 'bg-gradient-to-br from-amber-950/60 via-slate-900/95 to-slate-950 border-amber-500/50 shadow-amber-950/40 ring-1 ring-amber-500/20'
                                 }`}>
-                                  <div className="space-y-1">
-                                    <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-400">Fon Yöneticisi Nihai Kararı</span>
-                                    <div className="text-base sm:text-lg font-extrabold text-white">{children}</div>
+                                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 pb-5 border-b border-slate-800">
+                                    <div className="flex items-center gap-4">
+                                      <div className={`px-5 py-2.5 rounded-xl font-mono font-black text-xl tracking-wider shadow-lg flex items-center justify-center min-w-[90px] ${
+                                        isAl 
+                                          ? 'bg-emerald-500 text-white shadow-emerald-950/60' 
+                                          : isAlma 
+                                          ? 'bg-rose-500 text-white shadow-rose-950/60' 
+                                          : 'bg-amber-500 text-slate-950 shadow-amber-950/60'
+                                      }`}>
+                                        {verdict}
+                                      </div>
+                                      <div>
+                                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                          Fon Yöneticisi & Baş Analist Nihai Kararı
+                                        </div>
+                                        <div className={`text-base font-extrabold ${
+                                          isAl ? 'text-emerald-300' : isAlma ? 'text-rose-300' : 'text-amber-300'
+                                        }`}>
+                                          {verdictTitle}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-2.5">
+                                      {(activeReport.fairValue || activeReport.extractedData?.valuation?.fair_value) && (
+                                        <div className="bg-slate-900/90 border border-slate-800 px-3.5 py-1.5 rounded-lg flex items-center gap-2">
+                                          <span className="text-[11px] text-slate-400">Adil Değer:</span>
+                                          <span className="font-mono text-xs font-bold text-emerald-400">
+                                            {activeReport.fairValue || activeReport.extractedData?.valuation?.fair_value} TL
+                                          </span>
+                                        </div>
+                                      )}
+                                      {activeReport.price && (
+                                        <div className="bg-slate-900/90 border border-slate-800 px-3.5 py-1.5 rounded-lg flex items-center gap-2">
+                                          <span className="text-[11px] text-slate-400">Piyasa Fiyatı:</span>
+                                          <span className="font-mono text-xs font-bold text-white">{activeReport.price} TL</span>
+                                        </div>
+                                      )}
+                                      {activeReport.score !== undefined && (
+                                        <div className="bg-slate-900/90 border border-slate-800 px-3.5 py-1.5 rounded-lg flex items-center gap-2">
+                                          <span className="text-[11px] text-slate-400">Kurumsal Skor:</span>
+                                          <span className={`font-mono text-xs font-black ${
+                                            (Number(activeReport.score) || 0) >= 70 ? 'text-emerald-400' : (Number(activeReport.score) || 0) >= 50 ? 'text-amber-400' : 'text-rose-400'
+                                          }`}>
+                                            {activeReport.score} / 100
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
-                                  <div className={`px-4 py-2 rounded-lg font-mono font-black text-sm tracking-wider text-center ${
-                                    isAl ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/40' :
-                                    isAlma ? 'bg-rose-600 text-white shadow-lg shadow-rose-900/40' :
-                                    'bg-slate-800 text-slate-200 border border-slate-700'
-                                  }`}>
-                                    {isAl ? 'AL' : isAlma ? 'ALMA' : 'NÖTR'}
+
+                                  <div className="mt-5 space-y-3">
+                                    {cleanBody ? (
+                                      <div className="text-sm md:text-base text-slate-200 leading-relaxed font-normal bg-slate-950/60 p-4 rounded-xl border border-slate-800/80">
+                                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                                          Yatırım Tezi & Gerekçe:
+                                        </span>
+                                        <p className="text-slate-200 leading-relaxed">{cleanBody}</p>
+                                      </div>
+                                    ) : (
+                                      <div className="text-sm text-slate-200 leading-relaxed font-normal">
+                                        {children}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               );
                             }
                             return (
-                              <p className={`text-slate-200 leading-relaxed mb-4 ${
+                              <p className={`text-slate-300 leading-relaxed mb-4 ${
                                 fontSizeMode === 'large' ? 'text-base leading-loose' :
                                 fontSizeMode === 'compact' ? 'text-xs leading-normal' :
                                 'text-sm leading-relaxed'
@@ -4303,30 +4462,34 @@ export default function ValuationTerminal() {
                             );
                           },
                           table: ({ ...props }) => (
-                            <div className="overflow-x-auto my-6 border border-slate-700/80 rounded-xl shadow-lg bg-slate-950/60">
+                            <div className="overflow-x-auto my-6 border border-slate-800 rounded-xl shadow-lg bg-slate-950/70">
                               <table className="w-full text-left border-collapse text-xs font-sans" {...props} />
                             </div>
                           ),
-                          thead: ({ ...props }) => <thead className="bg-slate-800/90 text-slate-100 border-b border-slate-700 font-bold uppercase tracking-wider text-[11px]" {...props} />,
-                          tbody: ({ ...props }) => <tbody className="divide-y divide-slate-800/70" {...props} />,
+                          thead: ({ ...props }) => <thead className="bg-slate-900/90 text-slate-100 border-b border-slate-800 font-bold uppercase tracking-wider text-[11px]" {...props} />,
+                          tbody: ({ ...props }) => <tbody className="divide-y divide-slate-800/60" {...props} />,
                           tr: ({ children, ...props }) => {
                             const rowText = extractTextFromChildren(children);
                             const isTotal = rowText.includes('Toplam Puan') || rowText.includes('Nihai Skor');
                             return (
-                              <tr className={`transition-colors ${isTotal ? 'bg-emerald-950/30 font-bold text-white' : 'hover:bg-slate-800/40'}`} {...props}>
+                              <tr className={`transition-colors ${isTotal ? 'bg-emerald-950/40 font-bold text-white' : 'hover:bg-slate-800/40'}`} {...props}>
                                 {children}
                               </tr>
                             );
                           },
-                          th: ({ ...props }) => <th className="p-3 font-semibold text-slate-200 tracking-wide text-[11px]" {...props} />,
-                          td: ({ ...props }) => <td className="p-3 text-slate-200 font-mono text-xs" {...props} />,
+                          th: ({ ...props }) => <th className="p-3.5 font-bold text-slate-200 tracking-wide text-[11px]" {...props} />,
+                          td: ({ ...props }) => <td className="p-3.5 text-slate-200 font-mono text-xs" {...props} />,
                           blockquote: ({ ...props }) => (
                             <blockquote className="border-l-4 border-amber-500 bg-amber-950/20 px-4 py-3 my-4 rounded-r-lg text-amber-200 text-xs sm:text-sm leading-relaxed font-sans shadow-sm" {...props} />
                           ),
-                          strong: ({ ...props }) => <strong className="font-bold text-white" {...props} />,
-                          ul: ({ ...props }) => <ul className="list-disc list-inside space-y-2 my-3 text-xs sm:text-sm text-slate-300 leading-relaxed" {...props} />,
-                          ol: ({ ...props }) => <ol className="list-decimal list-inside space-y-2 my-3 text-xs sm:text-sm text-slate-300 leading-relaxed" {...props} />,
-                          li: ({ ...props }) => <li className="leading-relaxed marker:text-emerald-400" {...props} />,
+                          strong: ({ ...props }) => <strong className="font-bold text-white tracking-tight" {...props} />,
+                          ul: ({ ...props }) => <ul className="list-disc list-outside ml-6 space-y-2.5 my-4 text-xs sm:text-sm text-slate-300 leading-relaxed" {...props} />,
+                          ol: ({ ...props }) => <ol className="list-decimal list-outside ml-6 space-y-3 my-4 text-xs sm:text-sm text-slate-300 leading-relaxed" {...props} />,
+                          li: ({ children, ...props }) => (
+                            <li className="pl-1.5 py-0.5 marker:text-emerald-400 marker:font-bold text-slate-200 leading-relaxed" {...props}>
+                              {children}
+                            </li>
+                          ),
                           hr: ({ ...props }) => <hr className="border-slate-800 my-6" {...props} />,
                           code: ({ inline, ...props }: any) => (
                             <code className="bg-slate-950 border border-slate-800 text-emerald-400 px-1.5 py-0.5 rounded font-mono text-xs" {...props} />
