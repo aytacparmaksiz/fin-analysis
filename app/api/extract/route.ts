@@ -17,9 +17,11 @@ import {
   safeMargin,
   homogenizeTms29Series
 } from '@/lib/valuation';
+import { extractSmartFinancialText } from '@/lib/pdf-filter';
 
 export const runtime = 'nodejs';
-export const maxDuration = 300; // Çoklu ve hacimli PDF grupları için süreyi 5 dakikaya genişletiyoruz
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 function parsePeriodSortKey(period: string): number {
   if (!period) return 0;
@@ -689,9 +691,25 @@ SEKTÖREL UYARLAMA VE KESİN PARAMETRE KURALLARI:
 
     const batchResults: any[] = [];
 
+    // Eğer istemciden ham dosyalar geldiyse, önce sunucu tarafında hızlıca unpdf ile akıllı sayfa filtrelemesi yap
+    if (documents.length === 0 && pdfFiles.length > 0) {
+      for (const file of pdfFiles) {
+        try {
+          const buffer = Buffer.from(await file.arrayBuffer());
+          const { text } = await extractSmartFinancialText(buffer);
+          if (text && text.trim().length > 50) {
+            documents.push({ name: file.name, text: text.trim() });
+          }
+        } catch (serverExtractErr) {
+          console.warn(`[Extract] ${file.name} sunucu unpdf metin çıkarma hatası:`, serverExtractErr);
+        }
+      }
+    }
+
     if (documents.length > 0) {
-      // 1. İstemci Tarafından Ayıklanmış Metin Dokümanları (Vercel 4.5 MB Sınırını Kesinlikle Aşmaz)
-      const DOC_BATCH_SIZE = 3;
+      // 1. İstemci veya Sunucu Tarafından Ayıklanmış Metin Dokümanları (Vercel 4.5 MB Sınırını Kesinlikle Aşmaz)
+      // 1-5 dokümanı tek bir istekte birleştirerek gereksiz ara beklemeleri (13s) ve timeout'ları önle
+      const DOC_BATCH_SIZE = 5;
       for (let i = 0; i < documents.length; i += DOC_BATCH_SIZE) {
         const batch = documents.slice(i, i + DOC_BATCH_SIZE);
         const rawDocTexts = batch.map((d: any) => `### RAPOR DOKÜMANI: ${d.name}\n${d.text}`).join('\n\n---\n\n');

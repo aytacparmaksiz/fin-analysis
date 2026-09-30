@@ -55,6 +55,47 @@ import {
   FinalDecisionOptimization,
   SectorScoreResult
 } from '@/lib/valuation';
+import { extractSmartFinancialText } from '@/lib/pdf-filter';
+
+// Gateway Timeout, kurumsal proxy ve HTML hata sayfalarını yakalayan güvenli API yanıt ayrıştırıcısı
+async function parseApiResponse(res: Response, defaultError: string): Promise<any> {
+  const status = res.status;
+  const rawText = await res.text();
+
+  // 1. Gateway Timeout (504), Bad Gateway (502), Service Unavailable (503) veya Kurumsal Proxy HTML yanıtı
+  const isHtml = rawText.trim().startsWith('<!DOCTYPE') || rawText.trim().startsWith('<html') || rawText.includes('<body') || rawText.includes('</html>');
+  const isTimeout = status === 504 || rawText.includes('GATEWAY_TIMEOUT') || rawText.includes('Gateway Timeout') || rawText.includes('timed out');
+  const isPayloadTooLarge = status === 413 || rawText.includes('FUNCTION_PAYLOAD_TOO_LARGE') || rawText.includes('Payload Too Large');
+
+  if (isTimeout) {
+    throw new Error('Sunucu yanıt süresi aşıldı (Gateway Timeout). Lütfen sadece finansal tabloları (Bilanço, Gelir Tablosu, Nakit Akış) içeren sayfaları yüklemeyi deneyin.');
+  }
+
+  if (isPayloadTooLarge) {
+    throw new Error('Yüklenen dosya boyutu sunucu sınırını aştı (Payload Too Large). Lütfen daha az sayıda veya daha küçük boyutlu PDF yükleyin.');
+  }
+
+  if (isHtml) {
+    throw new Error(`Sunucu veya ağ geçidi beklenmeyen bir HTML yanıtı döndürdü (HTTP ${status}). Lütfen internet bağlantınızı veya kurumsal proxy ayarlarınızı kontrol edip tekrar deneyin.`);
+  }
+
+  // 2. JSON Yanıtını Güvenli Ayrıştırma
+  let parsed: any;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    if (!res.ok) {
+      throw new Error(`Sunucu hatası (HTTP ${status}): ${rawText.slice(0, 150)}`);
+    }
+    throw new Error('Sunucudan geçersiz veri formatı alındı.');
+  }
+
+  if (!res.ok) {
+    throw new Error(parsed?.error || defaultError || `İşlem başarısız oldu (HTTP ${status}).`);
+  }
+
+  return parsed;
+}
 
 // Fair Value Kurumsal Vektör Logosu
 function FairValueLogo({ className = "w-8 h-8" }: { className?: string }) {
@@ -974,16 +1015,24 @@ export default function ValuationTerminal() {
         setIsSyncing(true);
         const res = await fetch('/api/reports');
         if (res.ok) {
-          const json = await res.json();
-          setIsCloudConfigured(Boolean(json.isCloudConfigured));
-          if (json.isCloudConfigured && Array.isArray(json.reports) && json.reports.length > 0) {
-            const combinedMap = new Map<string, SavedReport>();
-            localData.forEach(r => combinedMap.set(r.id, r));
-            json.reports.forEach((r: SavedReport) => combinedMap.set(r.id, r));
+          const text = await res.text();
+          let json: any = null;
+          try {
+            json = JSON.parse(text);
+          } catch {
+            console.warn('Geçersiz reports JSON yanıtı');
+          }
+          if (json) {
+            setIsCloudConfigured(Boolean(json.isCloudConfigured));
+            if (json.isCloudConfigured && Array.isArray(json.reports) && json.reports.length > 0) {
+              const combinedMap = new Map<string, SavedReport>();
+              localData.forEach(r => combinedMap.set(r.id, r));
+              json.reports.forEach((r: SavedReport) => combinedMap.set(r.id, r));
 
-            const merged = Array.from(combinedMap.values());
-            setSavedReports(merged);
-            localStorage.setItem('fin_valuation_reports', JSON.stringify(merged));
+              const merged = Array.from(combinedMap.values());
+              setSavedReports(merged);
+              localStorage.setItem('fin_valuation_reports', JSON.stringify(merged));
+            }
           }
         }
       } catch (err) {
@@ -1074,10 +1123,9 @@ export default function ValuationTerminal() {
     }
     setLoading(true);
     setError(null);
-    setStatusMessage('PDF belgeleri taranıyor ve metin katmanları ayıklanıyor...');
+    setStatusMessage('PDF belgeleri taranıyor ve finansal tablolar filtreleniyor...');
 
     try {
-      const { extractText, getDocumentProxy } = await import('unpdf');
       const documents: { name: string; text: string }[] = [];
 
       for (let i = 0; i < files.length; i++) {
@@ -1085,9 +1133,10 @@ export default function ValuationTerminal() {
         setStatusMessage(`(${i + 1}/${files.length}) ${file.name} taranıyor...`);
         try {
           const arrayBuffer = await file.arrayBuffer();
-          const pdf = await getDocumentProxy(new Uint8Array(arrayBuffer));
-          const { text } = await extractText(pdf, { mergePages: true });
+          const { text, totalPages, matchedPages, summary } = await extractSmartFinancialText(arrayBuffer);
           if (text && text.trim().length > 50) {
+            console.log(`[PDF Filter] ${file.name}: ${summary}`);
+            setStatusMessage(`(${i + 1}/${files.length}) ${file.name} (${totalPages} sayfadan ${matchedPages} finansal tablo sayfası filtrelendi)...`);
             documents.push({ name: file.name, text: text.trim() });
           }
         } catch (pdfErr) {
@@ -1115,15 +1164,7 @@ export default function ValuationTerminal() {
         });
       }
 
-      const responseText = await res.text();
-      let result: any;
-      try {
-        result = JSON.parse(responseText);
-      } catch {
-        throw new Error(responseText || `Sunucu hatası: HTTP ${res.status}`);
-      }
-
-      if (!res.ok) throw new Error(result.error || 'Veri çıkarımı başarısız oldu.');
+      const result = await parseApiResponse(res, 'Veri çıkarımı başarısız oldu.');
 
       const activeSector = selectedSector === 'AUTO' ? detectSector(ticker) : selectedSector;
       result.data.sector = activeSector;
@@ -1184,15 +1225,7 @@ export default function ValuationTerminal() {
         })
       });
 
-      const responseText = await res.text();
-      let data: any;
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        throw new Error(responseText || `Sunucu hatası: HTTP ${res.status}`);
-      }
-
-      if (!res.ok) throw new Error(data.error || 'Değerleme tamamlanamadı.');
+      const data = await parseApiResponse(res, 'Değerleme tamamlanamadı.');
 
       let rawDecision: 'AL' | 'ALMA' | 'NÖTR' = 'NÖTR';
       const decisionMatch = data.report.match(/Analist\s+Karar[ıi]\s*[:=-]\s*\[?\s*\*?\*?\s*(ALMA|SAT|AL|NÖTR|NOTR|TUT)\s*\*?\*?\s*\]?/i);
