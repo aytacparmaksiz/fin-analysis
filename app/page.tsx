@@ -53,7 +53,8 @@ import {
   ValuationMetrics,
   FairValueDrivers,
   FinalDecisionOptimization,
-  SectorScoreResult
+  SectorScoreResult,
+  cleanAndParseJson
 } from '@/lib/valuation';
 import { extractSmartFinancialText } from '@/lib/pdf-filter';
 
@@ -62,13 +63,17 @@ async function parseApiResponse(res: Response, defaultError: string): Promise<an
   const status = res.status;
   const rawText = await res.text();
 
-  // 1. Gateway Timeout (504), Bad Gateway (502), Service Unavailable (503) veya Kurumsal Proxy HTML yanıtı
+  // 1. Gateway Timeout (504), Cloudflare (524), Request Timeout (408) veya Kurumsal Proxy HTML yanıtı
   const isHtml = rawText.trim().startsWith('<!DOCTYPE') || rawText.trim().startsWith('<html') || rawText.includes('<body') || rawText.includes('</html>');
-  const isTimeout = status === 504 || rawText.includes('GATEWAY_TIMEOUT') || rawText.includes('Gateway Timeout') || rawText.includes('timed out');
-  const isPayloadTooLarge = status === 413 || rawText.includes('FUNCTION_PAYLOAD_TOO_LARGE') || rawText.includes('Payload Too Large');
+  const isTimeout = status === 504 || status === 524 || status === 408 || 
+                    /gateway\s*time-?out/i.test(rawText) || 
+                    /notification:\s*gateway_timeout/i.test(rawText) ||
+                    /timed?\s*out/i.test(rawText) ||
+                    /time-?out\s+occurred/i.test(rawText);
+  const isPayloadTooLarge = status === 413 || /function_payload_too_large/i.test(rawText) || /payload\s*too\s*large/i.test(rawText);
 
   if (isTimeout) {
-    throw new Error('Sunucu yanıt süresi aşıldı (Gateway Timeout). Lütfen sadece finansal tabloları (Bilanço, Gelir Tablosu, Nakit Akış) içeren sayfaları yüklemeyi deneyin.');
+    throw new Error('Sunucu yanıt süresi aşıldı (Gateway Timeout). Lütfen sadece finansal tabloları içeren sayfaları yüklemeyi deneyin.');
   }
 
   if (isPayloadTooLarge) {
@@ -80,10 +85,17 @@ async function parseApiResponse(res: Response, defaultError: string): Promise<an
   }
 
   // 2. JSON Yanıtını Güvenli Ayrıştırma
-  let parsed: any;
+  let parsed: any = null;
   try {
-    parsed = JSON.parse(rawText);
+    parsed = cleanAndParseJson(rawText);
   } catch {
+    if (!res.ok) {
+      throw new Error(`Sunucu hatası (HTTP ${status}): ${rawText.slice(0, 150)}`);
+    }
+    throw new Error('Sunucudan geçersiz veri formatı alındı.');
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
     if (!res.ok) {
       throw new Error(`Sunucu hatası (HTTP ${status}): ${rawText.slice(0, 150)}`);
     }
@@ -1165,6 +1177,9 @@ export default function ValuationTerminal() {
       }
 
       const result = await parseApiResponse(res, 'Veri çıkarımı başarısız oldu.');
+      if (!result?.data) {
+        throw new Error('Sunucudan geçerli bir finansal veri seti alınamadı.');
+      }
 
       const activeSector = selectedSector === 'AUTO' ? detectSector(ticker) : selectedSector;
       result.data.sector = activeSector;
@@ -1228,7 +1243,8 @@ export default function ValuationTerminal() {
       const data = await parseApiResponse(res, 'Değerleme tamamlanamadı.');
 
       let rawDecision: 'AL' | 'ALMA' | 'NÖTR' = 'NÖTR';
-      const decisionMatch = data.report.match(/Analist\s+Karar[ıi]\s*[:=-]\s*\[?\s*\*?\*?\s*(ALMA|SAT|AL|NÖTR|NOTR|TUT)\s*\*?\*?\s*\]?/i);
+      const reportText = data?.report || '';
+      const decisionMatch = reportText.match(/Analist\s+Karar[ıi]\s*[:=-]\s*\[?\s*\*?\*?\s*(ALMA|SAT|AL|NÖTR|NOTR|TUT)\s*\*?\*?\s*\]?/i);
       if (decisionMatch) {
         const d = decisionMatch[1].toUpperCase();
         if (d === 'ALMA' || d === 'SAT') rawDecision = 'ALMA';
@@ -1237,9 +1253,9 @@ export default function ValuationTerminal() {
       }
 
       const scoreMatch = 
-        data.report.match(/\|\s*\*?\*?Toplam\s+Puan\*?\*?\s*\|\s*\*?\*?(\d{1,3})\*?\*?/i) ||
-        data.report.match(/Toplam\s+Puan\s*[:=]\s*\*?\*?(\d{1,3})/i) ||
-        data.report.match(/(\d{1,3})\s*\/\s*100/i);
+        reportText.match(/\|\s*\*?\*?Toplam\s+Puan\*?\*?\s*\|\s*\*?\*?(\d{1,3})\*?\*?/i) ||
+        reportText.match(/Toplam\s+Puan\s*[:=]\s*\*?\*?(\d{1,3})/i) ||
+        reportText.match(/(\d{1,3})\s*\/\s*100/i);
       const score = scoreMatch ? scoreMatch[1] : (data.scoreResult?.totalScore != null ? String(data.scoreResult.totalScore) : undefined);
       const parsedPrice = parseFinancialNumber(price);
       const targetVal = parseFinancialNumber(data.valuation?.composite_fair_value || data.valuation?.fair_value || data.valuation?.dcf_fair_value);

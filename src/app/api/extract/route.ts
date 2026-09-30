@@ -7,7 +7,8 @@ import { detectSector, SectorType } from '@/lib/sectors';
 import { 
   generateWithRateLimitAndBackoff, 
   optimizeTextForGemini, 
-  computeContentHash 
+  computeContentHash,
+  cleanAndParseJson
 } from '@/lib/gemini';
 import { 
   computeSectorValuationAndDrivers,
@@ -744,7 +745,7 @@ GÖREVLER:
             cacheKey,
           });
 
-          const parsedData = JSON.parse(response.text || '{}');
+          const parsedData = cleanAndParseJson(response.text || '{}');
           batchResults.push(parsedData);
         } catch (batchError: any) {
           console.error(`[Extract Text] Paket ${Math.floor(i / DOC_BATCH_SIZE) + 1} işlenirken hata:`, batchError);
@@ -823,7 +824,7 @@ Ekteki belgeleri incele (Paket ${bIndex + 1}/${fileBatches.length}):
           cacheKey,
         });
 
-        const parsedData = JSON.parse(response.text || '{}');
+        const parsedData = cleanAndParseJson(response.text || '{}');
         batchResults.push(parsedData);
       } catch (batchError: any) {
         console.error(`[Extract] Paket ${bIndex + 1} işlenirken hata:`, batchError);

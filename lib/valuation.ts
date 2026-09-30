@@ -82,6 +82,37 @@ export interface FinalDecisionOptimization {
 // ============================================================================
 
 /**
+ * Gemini veya API yanıtlarındaki Markdown kod bloklarını (```json ... ```) temizler
+ * ve JSON verisini güvenle ayrıştırır. Tarayıcı ve Node.js ortamlarında %100 uyumludur.
+ */
+export function cleanAndParseJson(text: string): any {
+  if (!text) return {};
+  let cleaned = String(text).trim();
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  }
+  try {
+    return JSON.parse(cleaned);
+  } catch (err) {
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      try {
+        return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+      } catch {}
+    }
+    const firstBracket = cleaned.indexOf('[');
+    const lastBracket = cleaned.lastIndexOf(']');
+    if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+      try {
+        return JSON.parse(cleaned.slice(firstBracket, lastBracket + 1));
+      } catch {}
+    }
+    throw err;
+  }
+}
+
+/**
  * Bilançolardaki eksi bakiyeleri (parantez içi, sonda tireli, unicode minus vb.),
  * binlik ve ondalık ayraçlarını Türk muhasebe standartlarına ve uluslararası formata göre
  * sıfır hata ile parse eder.

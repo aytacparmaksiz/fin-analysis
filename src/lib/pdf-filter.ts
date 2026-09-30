@@ -8,50 +8,99 @@
 
 import { getDocumentProxy, extractText } from 'unpdf';
 
-// 1. Birincil Finansal Tablo Başlıkları (En Yüksek Öncelik: +12 Puan)
-const PRIMARY_STATEMENT_KEYWORDS = [
+// 1. Birincil Finansal Tablo Başlıkları ve Kök Kelimeler (En Yüksek Öncelik: +12/+15 Puan)
+export const PRIMARY_STATEMENT_KEYWORDS = [
+  // Bilanço / Finansal Durum
   'finansal durum tablosu',
+  'finansal durum tablolari',
+  'finansal durum bilgileri',
+  'finansal durum',
+  'finansal pozisyon',
   'bilanço',
   'bilancosu',
+  'bilanco',
   'statement of financial position',
   'balance sheet',
+  
+  // Gelir Tablosu / Kar veya Zarar
   'kapsamlı gelir tablosu',
+  'kapsamlı gelir',
   'kar veya zarar tablosu',
   'kâr veya zarar tablosu',
+  'kar veya zarar',
+  'kâr veya zarar',
+  'kar ve zarar',
+  'kâr ve zarar',
+  'kar zarar',
   'gelir tablosu',
+  'gelir tablolari',
   'statement of profit or loss',
   'statement of comprehensive income',
   'income statement',
+  'profit or loss',
+
+  // Nakit Akış
   'nakit akış tablosu',
+  'nakit akış tabloları',
   'nakit akım tablosu',
+  'nakit akım tabloları',
   'nakit akışları',
+  'nakit akış',
+  'nakit akis',
+  'nakit akım',
+  'nakit akim',
   'statement of cash flows',
   'cash flow statement',
+  'cash flows',
+
+  // Özkaynak Değişim
   'özkaynak değişim tablosu',
+  'özkaynak değişim tabloları',
   'özkaynaklar değişim tablosu',
+  'özkaynak değişim',
+  'ozkaynak degisim',
+  'özkaynaklar değişim',
+  'ozkaynaklar degisim',
   'statement of changes in equity',
+  'changes in equity',
+
+  // Teknik Bölüm (Sigorta / Emeklilik)
   'teknik bölüm dengesi',
+  'teknik bölüm',
+  'teknik bolum',
   'teknik kâr',
   'teknik kar',
   'teknik karşılıklar',
+  'teknik karsiliklar',
   'hayat dışı teknik',
   'emeklilik teknik',
-  'hayat ve emeklilik'
-];
+  'hayat ve emeklilik',
 
-// 2. İkincil Finansal Kalem ve Bilanço/Gelir Göstergeleri (+4 - +6 Puan)
-const SECONDARY_FINANCIAL_KEYWORDS = [
+  // Varlıklar & Yükümlülükler (Bilanço Kısımları)
+  'varlıklar',
+  'varliklar',
+  'yükümlülükler',
+  'yukumlulukler',
   'dönen varlıklar',
+  'donen varliklar',
   'duran varlıklar',
+  'duran varliklar',
   'toplam varlıklar',
   'toplam aktifler',
   'kısa vadeli yükümlülükler',
+  'kisa vadeli yukumlulukler',
   'uzun vadeli yükümlülükler',
-  'kısa vadeli borçlar',
-  'uzun vadeli borçlar',
-  'toplam özkaynaklar',
+  'uzun vadeli yukumlulukler',
   'toplam yükümlülükler',
+  'kaynaklar',
   'özkaynaklar',
+  'total assets',
+  'total liabilities',
+  'total equity'
+];
+
+// 2. İkincil Finansal Kalem ve Bilanço/Gelir Göstergeleri (+4 Puan)
+export const SECONDARY_FINANCIAL_KEYWORDS = [
   'satış gelirleri',
   'hasılat',
   'satışların maliyeti',
@@ -120,8 +169,8 @@ export function normalizeTextForSearch(str: string): string {
 }
 
 // Normalleştirilmiş anahtar kelime listeleri
-const NORMALIZED_PRIMARY = PRIMARY_STATEMENT_KEYWORDS.map(k => normalizeTextForSearch(k));
-const NORMALIZED_SECONDARY = SECONDARY_FINANCIAL_KEYWORDS.map(k => normalizeTextForSearch(k));
+const NORMALIZED_PRIMARY = Array.from(new Set(PRIMARY_STATEMENT_KEYWORDS.map(k => normalizeTextForSearch(k))));
+const NORMALIZED_SECONDARY = Array.from(new Set(SECONDARY_FINANCIAL_KEYWORDS.map(k => normalizeTextForSearch(k))));
 
 export interface PageScoreResult {
   pageIndex: number;
@@ -145,13 +194,16 @@ export function scoreFinancialPage(pageText: string, pageIndex: number): PageSco
     return { pageIndex, pageNum: pageIndex + 1, score: 0, isPrimary: false, numberCount: 0, matchedKeywords: [] };
   }
 
-  // 1. Birincil Tablo Başlıkları Kontrolü (+12 puan)
+  // 1. Birincil Tablo Başlıkları Kontrolü (+12 puan, eğer sayfanın ilk 600 karakterindeyse +15 puan)
+  const normHeader = norm.slice(0, 600);
   for (let i = 0; i < NORMALIZED_PRIMARY.length; i++) {
     const kw = NORMALIZED_PRIMARY[i];
     if (norm.includes(kw)) {
-      score += 12;
+      const isHeader = normHeader.includes(kw);
+      score += isHeader ? 15 : 12;
       isPrimary = true;
-      matchedKeywords.push(PRIMARY_STATEMENT_KEYWORDS[i]);
+      matchedKeywords.push(PRIMARY_STATEMENT_KEYWORDS[i] || kw);
+      break;
     }
   }
 
@@ -162,14 +214,14 @@ export function scoreFinancialPage(pageText: string, pageIndex: number): PageSco
     if (norm.includes(kw)) {
       score += 4;
       secondaryHits++;
-      matchedKeywords.push(SECONDARY_FINANCIAL_KEYWORDS[i]);
+      matchedKeywords.push(SECONDARY_FINANCIAL_KEYWORDS[i] || kw);
       if (secondaryHits >= 6) break; // puan tavanı
     }
   }
 
   // 3. Finansal Sayı & Tablo Yoğunluğu Puanlaması
-  // Tablolarda çok sayıda binlik ayracı veya parantezli negatif sayı bulunur
-  const numberMatches = pageText.match(/(?:\(\s*-?\d[\d.,]*\s*\)|-?\b\d{1,3}(?:\.\d{3})+(?:,\d+)?\b|-?\b\d+,\d{1,2}%)/g);
+  // Tablolarda binlik/ondalık ayraçları, parantezli negatif sayılar veya para miktarları yer alır
+  const numberMatches = pageText.match(/(?:\(\s*-?\d[\d.,\s]*\d\s*\)|-?\b\d{1,3}(?:[.,\s]\d{3})+(?:[.,]\d+)?\b|-?\b\d+[.,]\d{1,4}%?|-?\b\d{3,}%?)/g);
   const numberCount = numberMatches ? numberMatches.length : 0;
 
   if (numberCount >= 20) {
@@ -182,7 +234,7 @@ export function scoreFinancialPage(pageText: string, pageIndex: number): PageSco
 
   // 4. Rapor Başlangıcı (İlk 3 sayfa - Yönetici Özeti ve Temel Göstergeler)
   if (pageIndex < 3) {
-    if (norm.includes('ozet') || norm.includes('gosterge') || norm.includes('highlights') || norm.includes('finansal')) {
+    if (norm.includes('ozet') || norm.includes('gosterge') || norm.includes('highlights') || norm.includes('finansal') || norm.includes('faaliyet')) {
       score += 6;
       matchedKeywords.push('yönetici_özeti');
     }
@@ -209,7 +261,7 @@ export interface FilterResult {
 /**
  * Sayfa metinleri dizisinden finansal tabloları akıllıca seçer ve filtreler
  */
-export function filterFinancialPages(pageTexts: string[], maxPages = 22): FilterResult {
+export function filterFinancialPages(pageTexts: string[], maxPages = 14): FilterResult {
   const totalPages = pageTexts.length;
 
   if (totalPages === 0) {
@@ -238,16 +290,29 @@ export function filterFinancialPages(pageTexts: string[], maxPages = 22): Filter
 
   // Her sayfayı puanla
   const scoredPages: PageScoreResult[] = pageTexts.map((text, idx) => scoreFinancialPage(text, idx));
-
+  const effectiveScores = new Map<number, number>(scoredPages.map(p => [p.pageIndex, p.score]));
   const selectedSet = new Set<number>();
 
-  // 1. Birincil tablo başlığı içeren sayfaları ve bir sonraki sayfayı (devam tablosu: örn. Yükümlülükler) ekle
-  for (const item of scoredPages) {
-    if (item.isPrimary || item.score >= 12) {
-      selectedSet.add(item.pageIndex);
-      // Bilanço ve Gelir tablosu genellikle 2 ardışık sayfadır
-      if (item.pageIndex + 1 < totalPages) {
-        selectedSet.add(item.pageIndex + 1);
+  // 1. Doğrudan birincil tablo başlığı içeren sayfaları ve devam sayfalarını ekle (kaskad yapmadan)
+  const naturallyPrimary = scoredPages.filter(p => p.isPrimary || p.score >= 12);
+  for (const item of naturallyPrimary) {
+    selectedSet.add(item.pageIndex);
+
+    // Devam sayfası (Part 2: örn. Bilanço Varlıklar sonrası Yükümlülükler ve Özkaynaklar)
+    if (item.pageIndex + 1 < totalPages) {
+      const nextIdx = item.pageIndex + 1;
+      selectedSet.add(nextIdx);
+      const boostedScore = Math.max(effectiveScores.get(nextIdx) || 0, item.score - 1);
+      effectiveScores.set(nextIdx, boostedScore);
+
+      // Nakit akış veya özkaynak gibi 3 sayfaya uzayan yoğun tablolar
+      if (scoredPages[nextIdx].numberCount >= 8 && item.pageIndex + 2 < totalPages) {
+        const nextNextIdx = item.pageIndex + 2;
+        if (scoredPages[nextNextIdx].numberCount >= 8) {
+          selectedSet.add(nextNextIdx);
+          const boostedScore2 = Math.max(effectiveScores.get(nextNextIdx) || 0, item.score - 2);
+          effectiveScores.set(nextNextIdx, boostedScore2);
+        }
       }
     }
   }
@@ -275,7 +340,7 @@ export function filterFinancialPages(pageTexts: string[], maxPages = 22): Filter
   let finalIndices = Array.from(selectedSet);
   if (finalIndices.length > maxPages) {
     finalIndices = finalIndices
-      .sort((a, b) => (scoredPages[b]?.score || 0) - (scoredPages[a]?.score || 0))
+      .sort((a, b) => (effectiveScores.get(b) || 0) - (effectiveScores.get(a) || 0))
       .slice(0, maxPages);
   }
 
@@ -303,7 +368,7 @@ export function filterFinancialPages(pageTexts: string[], maxPages = 22): Filter
  */
 export async function extractSmartFinancialText(
   pdfInput: ArrayBuffer | Uint8Array,
-  maxPages = 22
+  maxPages = 14
 ): Promise<{ text: string; totalPages: number; matchedPages: number; summary: string }> {
   const uint8 = pdfInput instanceof Uint8Array ? pdfInput : new Uint8Array(pdfInput);
   const pdf = await getDocumentProxy(uint8);

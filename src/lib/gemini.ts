@@ -336,3 +336,34 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
 
   throw finalError;
 }
+
+/**
+ * Gemini yanıtlarındaki olası Markdown kod bloklarını (```json ... ```) temizler
+ * ve JSON verisini güvenle ayrıştırır.
+ */
+export function cleanAndParseJson(text: string): any {
+  if (!text) return {};
+  let cleaned = String(text).trim();
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  }
+  try {
+    return JSON.parse(cleaned);
+  } catch (err) {
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      try {
+        return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+      } catch {}
+    }
+    const firstBracket = cleaned.indexOf('[');
+    const lastBracket = cleaned.lastIndexOf(']');
+    if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+      try {
+        return JSON.parse(cleaned.slice(firstBracket, lastBracket + 1));
+      } catch {}
+    }
+    throw err;
+  }
+}
