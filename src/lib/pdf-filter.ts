@@ -639,6 +639,15 @@ export async function extractSmartDocumentText(
     uint8 = new Uint8Array(pdfInput);
   }
 
+  if (typeof window !== 'undefined') {
+    return {
+      text: '',
+      totalPages: 0,
+      matchedPages: 0,
+      summary: 'İstemci ortamı, dosya sunucu tarafında hızlıca filtrelenecek.'
+    };
+  }
+
   const pdf = await getDocumentProxy(uint8);
   const totalPages = (pdf && typeof pdf.numPages === 'number') ? pdf.numPages : 0;
 
@@ -651,46 +660,41 @@ export async function extractSmartDocumentText(
     };
   }
 
-  let pageTexts: string[];
+  const pageTexts: string[] = new Array(totalPages).fill('');
 
-  if (totalPages > 50) {
-    const targetPageNumbers = new Set<number>();
-    if (category === 'activity') {
-      const firstPages = Math.min(45, totalPages);
-      for (let i = 1; i <= firstPages; i++) targetPageNumbers.add(i);
-      const lastPages = Math.min(15, totalPages);
-      for (let i = totalPages - lastPages + 1; i <= totalPages; i++) targetPageNumbers.add(i);
-    } else if (category === 'presentation') {
-      const firstPages = Math.min(50, totalPages);
-      for (let i = 1; i <= firstPages; i++) targetPageNumbers.add(i);
-    } else {
-      const firstPagesCount = Math.min(50, totalPages);
-      for (let i = 1; i <= firstPagesCount; i++) targetPageNumbers.add(i);
-      const lastPagesCount = Math.min(15, totalPages);
-      for (let i = totalPages - lastPagesCount + 1; i <= totalPages; i++) targetPageNumbers.add(i);
-    }
-
-    pageTexts = new Array(totalPages).fill('');
-
-    await Promise.all(
-      Array.from(targetPageNumbers).map(async (pageNum) => {
-        try {
-          const page = await pdf.getPage(pageNum);
-          const content = await page.getTextContent();
-          const pageText = (content.items || [])
-            .filter((item: any) => item.str != null)
-            .map((item: any) => item.str + (item.hasEOL ? '\n' : ''))
-            .join('');
-          pageTexts[pageNum - 1] = pageText;
-        } catch (pageErr) {
-          console.warn(`[PDFFilter] Sayfa ${pageNum} metni okunamadı:`, pageErr);
-        }
-      })
-    );
+  // HEDEF SAYFA SEÇİMİ (KAP Finansal Raporları & Gateway Timeout Koruması):
+  // 1. Finansal Tablolar (financial): Bilanço, Gelir Tablosu, Nakit Akış ve Özkaynak Değişim
+  //    istisnasız ilk 14 sayfa içindedir (KAP Denetim Raporu sonrası). 60-100 sayfalık dipnotları
+  //    gereksiz yere parse edip sunucu süresini tüketmek yerine sadece ilk 14 sayfa taranır (300ms).
+  // 2. Faaliyet Raporları (activity): Yönetim mesajı, rehberlik ve riskler ilk 20 sayfadadır.
+  // 3. Yatırımcı Sunumu (presentation): İlk 18 slayt.
+  let targetPageNumbers: number[] = [];
+  if (category === 'activity') {
+    const limit = Math.min(20, totalPages);
+    targetPageNumbers = Array.from({ length: limit }, (_, i) => i + 1);
+  } else if (category === 'presentation') {
+    const limit = Math.min(18, totalPages);
+    targetPageNumbers = Array.from({ length: limit }, (_, i) => i + 1);
   } else {
-    const { text } = await extractText(pdf, { mergePages: false });
-    pageTexts = Array.isArray(text) ? text : [String(text || '')];
+    const limit = Math.min(14, totalPages);
+    targetPageNumbers = Array.from({ length: limit }, (_, i) => i + 1);
   }
+
+  await Promise.all(
+    targetPageNumbers.map(async (pageNum) => {
+      try {
+        const page = await pdf.getPage(pageNum);
+        const content = await page.getTextContent();
+        const pageText = (content.items || [])
+          .filter((item: any) => item.str != null)
+          .map((item: any) => item.str + (item.hasEOL ? '\n' : ''))
+          .join('');
+        pageTexts[pageNum - 1] = pageText;
+      } catch (pageErr) {
+        console.warn(`[PDFFilter] Sayfa ${pageNum} metni okunamadı:`, pageErr);
+      }
+    })
+  );
 
   const filterRes = filterDocumentPages(pageTexts, category, maxPages);
 

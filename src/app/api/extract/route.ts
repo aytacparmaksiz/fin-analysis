@@ -498,7 +498,7 @@ export async function POST(req: Request) {
       for (let i = 0; i < batches.length; i++) {
         const batch = batches[i];
         const rawTexts = batch.map(d => `### FİNANSAL TABLO RAPORU: ${d.name}\n${d.text}`).join('\n\n---\n\n');
-        const docTexts = optimizeTextForGemini(rawTexts, 90000);
+        const docTexts = optimizeTextForGemini(rawTexts, 40000);
 
         const prompt = `Şirket: ${ticker.toUpperCase()} (Tespit Edilen Sektör: ${targetSector}).
 Aşağıda şirkete ait resmi finansal tablolar (Bilanço, Gelir Tablosu, Nakit Akış) yer almaktadır:
@@ -547,6 +547,7 @@ ${!isInsurance && !isBanking ? `   * SANAYİ / HİZMET / DİĞER:
         const cacheKey = `extract_fin_${ticker.toUpperCase()}_batch_${i}_${computeContentHash(docTexts)}`;
         const response = await generateWithRateLimitAndBackoff({
           ai,
+          preferredModel: 'gemini-2.0-flash',
           baseParams: {
             contents: [prompt],
             config: {
@@ -581,7 +582,7 @@ ${!isInsurance && !isBanking ? `   * SANAYİ / HİZMET / DİĞER:
       }
 
       const rawTexts = actDocs.map(d => `### FAALİYET RAPORU: ${d.name}\n${d.text}`).join('\n\n---\n\n');
-      const docTexts = optimizeTextForGemini(rawTexts);
+      const docTexts = optimizeTextForGemini(rawTexts, 40000);
 
       const prompt = `Şirket: ${ticker.toUpperCase()}.
 Aşağıda şirkete ait faaliyet raporunun yönetim, hedefler ve risk bölümleri yer almaktadır:
@@ -596,6 +597,7 @@ GÖREVLER:
       const cacheKey = `extract_act_${ticker.toUpperCase()}_${computeContentHash(docTexts)}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
+        preferredModel: 'gemini-2.0-flash',
         baseParams: {
           contents: [prompt],
           config: {
@@ -630,7 +632,7 @@ GÖREVLER:
       }
 
       const rawTexts = presDocs.map(d => `### YATIRIMCI SUNUMU: ${d.name}\n${d.text}`).join('\n\n---\n\n');
-      const docTexts = optimizeTextForGemini(rawTexts);
+      const docTexts = optimizeTextForGemini(rawTexts, 40000);
 
       const prompt = `Şirket: ${ticker.toUpperCase()}.
 Aşağıda şirketin son Yatırımcı Sunumu ve Gelecek Stratejisi dokümanı yer almaktadır:
@@ -644,6 +646,7 @@ GÖREVLER:
       const cacheKey = `extract_pres_${ticker.toUpperCase()}_${computeContentHash(docTexts)}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
+        preferredModel: 'gemini-2.0-flash',
         baseParams: {
           contents: [prompt],
           config: {
