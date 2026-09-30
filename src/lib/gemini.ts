@@ -12,8 +12,10 @@ import crypto from 'crypto';
  */
 
 export const CANDIDATE_MODELS = [
-  'gemini-2.0-flash',
-  'gemini-1.5-flash',
+  'gemini-3.8-flash',
+  'gemini-3.5-flash',
+  'gemini-flash-lite-latest',
+  'gemini-3-flash-preview',
 ];
 
 // TPM (Tokens Per Minute) koruma kısıtları (dakikada maks 240k token)

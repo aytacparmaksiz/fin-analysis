@@ -1244,7 +1244,7 @@ export default function ValuationTerminal() {
     setError(null);
     setPipelineStep(1);
     setPipelineProgress(15);
-    setStatusMessage('(1/3) Finansal tablolar taranıyor ve zaman serisi oluşturuluyor...');
+    setStatusMessage(`[1. Aşama / 3]: ${financialFiles.length} adet Finansal Tablo taranıyor...`);
 
     try {
       // -------------------------------------------------------------
@@ -1252,12 +1252,12 @@ export default function ValuationTerminal() {
       // -------------------------------------------------------------
       setPipelineStep(1);
       setPipelineProgress(20);
-      setStatusMessage('(1/3) Finansal tablolar taranıyor ve zaman serisi oluşturuluyor...');
+      setStatusMessage(`[1. Aşama / 3]: ${financialFiles.length} adet Finansal Tablo taranıyor...`);
 
       const financialDocs: { name: string; text: string; category: string }[] = [];
       for (let i = 0; i < financialFiles.length; i++) {
         const file = financialFiles[i];
-        setStatusMessage(`(1/3) Finansal tablo: ${file.name} taranıyor (${i + 1}/${financialFiles.length})...`);
+        setStatusMessage(`[1. Aşama / 3]: Finansal Tablo taranıyor (${i + 1}/${financialFiles.length}): ${file.name}...`);
         try {
           const arrayBuffer = await file.arrayBuffer();
           const { text } = await extractSmartDocumentText(arrayBuffer, 'financial');
@@ -1270,7 +1270,7 @@ export default function ValuationTerminal() {
       }
 
       setPipelineProgress(33);
-      setStatusMessage('(1/3) Finansal tablolar taranıyor ve zaman serisi oluşturuluyor...');
+      setStatusMessage(`[1. Aşama / 3]: ${financialDocs.length > 0 ? financialDocs.length : financialFiles.length} finansal tablodan resmi zaman serisi çıkarılıyor...`);
 
       let res1: Response;
       if (financialDocs.length > 0) {
@@ -1306,13 +1306,13 @@ export default function ValuationTerminal() {
       if (activityFiles.length > 0) {
         setPipelineStep(2);
         setPipelineProgress(45);
-        setStatusMessage('(2/3) Faaliyet raporundan yönetim hedefleri ve riskler ayıklanıyor...');
+        setStatusMessage(`[2. Aşama / 3]: ${activityFiles.length} adet Faaliyet Raporu taranıyor...`);
 
         try {
           const activityDocs: { name: string; text: string; category: string }[] = [];
           for (let i = 0; i < activityFiles.length; i++) {
             const file = activityFiles[i];
-            setStatusMessage(`(2/3) Faaliyet raporu: ${file.name} taranıyor (${i + 1}/${activityFiles.length})...`);
+            setStatusMessage(`[2. Aşama / 3]: Faaliyet Raporu taranıyor (${i + 1}/${activityFiles.length}): ${file.name}...`);
             try {
               const arrayBuffer = await file.arrayBuffer();
               const { text } = await extractSmartDocumentText(arrayBuffer, 'activity');
@@ -1325,7 +1325,7 @@ export default function ValuationTerminal() {
           }
 
           setPipelineProgress(66);
-          setStatusMessage('(2/3) Faaliyet raporundan yönetim hedefleri ve riskler ayıklanıyor...');
+          setStatusMessage(`[2. Aşama / 3]: Faaliyet raporundan yönetim hedefleri ve riskler ayıklanıyor...`);
 
           let res2: Response;
           if (activityDocs.length > 0) {
@@ -1367,13 +1367,13 @@ export default function ValuationTerminal() {
       if (presentationFiles.length > 0) {
         setPipelineStep(3);
         setPipelineProgress(75);
-        setStatusMessage('(3/3) Yatırımcı sunumundan ileriye dönük hedefler entegre ediliyor...');
+        setStatusMessage(`[3. Aşama / 3]: ${presentationFiles.length} adet Yatırımcı Sunumu taranıyor...`);
 
         try {
           const presentationDocs: { name: string; text: string; category: string }[] = [];
           for (let i = 0; i < presentationFiles.length; i++) {
             const file = presentationFiles[i];
-            setStatusMessage(`(3/3) Yatırımcı sunumu: ${file.name} taranıyor (${i + 1}/${presentationFiles.length})...`);
+            setStatusMessage(`[3. Aşama / 3]: Yatırımcı Sunumu taranıyor (${i + 1}/${presentationFiles.length}): ${file.name}...`);
             try {
               const arrayBuffer = await file.arrayBuffer();
               const { text } = await extractSmartDocumentText(arrayBuffer, 'presentation');
@@ -1386,7 +1386,7 @@ export default function ValuationTerminal() {
           }
 
           setPipelineProgress(90);
-          setStatusMessage('(3/3) Yatırımcı sunumundan ileriye dönük hedefler entegre ediliyor...');
+          setStatusMessage(`[3. Aşama / 3]: Yatırımcı sunumundan ileriye dönük hedefler entegre ediliyor...`);
 
           let res3: Response;
           if (presentationDocs.length > 0) {
@@ -2816,7 +2816,7 @@ export default function ValuationTerminal() {
                           ? 'bg-slate-900/90 border-emerald-800/80 text-emerald-400' 
                           : 'bg-slate-900/40 border-slate-800 text-slate-500'
                     }`}>
-                      <div className="flex items-center justify-center gap-2 font-bold">
+                      <div className="flex items-center justify-center gap-2 font-bold text-xs">
                         {pipelineStep && pipelineStep > 1 ? (
                           <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
                         ) : pipelineStep === 1 ? (
@@ -2824,9 +2824,9 @@ export default function ValuationTerminal() {
                         ) : (
                           <span className="w-4 h-4 rounded-full bg-slate-800 text-[10px] flex items-center justify-center text-slate-400">1</span>
                         )}
-                        <span>(1/3) Finansal Tablolar</span>
+                        <span>1. Aşama: Mali Tablolar ({financialFiles.length} Belge)</span>
                       </div>
-                      <div className="text-[10px] text-slate-400 mt-1">Zaman serisi & Bilanço taranıyor</div>
+                      <div className="text-[10px] text-slate-400 mt-1">Zaman serisi & Bilanço analizi</div>
                     </div>
 
                     {/* 2. Adım */}
@@ -2839,7 +2839,7 @@ export default function ValuationTerminal() {
                             ? 'bg-slate-900/90 border-sky-800/80 text-sky-400' 
                             : 'bg-slate-900/40 border-slate-800 text-slate-500'
                     }`}>
-                      <div className="flex items-center justify-center gap-2 font-bold">
+                      <div className="flex items-center justify-center gap-2 font-bold text-xs">
                         {activityFiles.length === 0 ? (
                           <Minus className="w-4 h-4 text-slate-500 flex-shrink-0" />
                         ) : (pipelineProgress === 100 || (pipelineStep && pipelineStep > 2)) ? (
@@ -2849,7 +2849,7 @@ export default function ValuationTerminal() {
                         ) : (
                           <span className="w-4 h-4 rounded-full bg-slate-800 text-[10px] flex items-center justify-center text-slate-400">2</span>
                         )}
-                        <span>(2/3) Faaliyet Raporu</span>
+                        <span>2. Aşama: Faaliyet Raporu ({activityFiles.length > 0 ? `${activityFiles.length} Belge` : 'Opsiyonel'})</span>
                       </div>
                       <div className="text-[10px] text-slate-400 mt-1">
                         {activityFiles.length > 0 
@@ -2868,7 +2868,7 @@ export default function ValuationTerminal() {
                             ? 'bg-slate-900/90 border-amber-800/80 text-amber-400'
                             : 'bg-slate-900/40 border-slate-800 text-slate-500'
                     }`}>
-                      <div className="flex items-center justify-center gap-2 font-bold">
+                      <div className="flex items-center justify-center gap-2 font-bold text-xs">
                         {presentationFiles.length === 0 ? (
                           <Minus className="w-4 h-4 text-slate-500 flex-shrink-0" />
                         ) : pipelineProgress === 100 ? (
@@ -2878,7 +2878,7 @@ export default function ValuationTerminal() {
                         ) : (
                           <span className="w-4 h-4 rounded-full bg-slate-800 text-[10px] flex items-center justify-center text-slate-400">3</span>
                         )}
-                        <span>(3/3) Yatırımcı Sunumu</span>
+                        <span>3. Aşama: Yatırımcı Sunumu ({presentationFiles.length > 0 ? `${presentationFiles.length} Belge` : 'Opsiyonel'})</span>
                       </div>
                       <div className="text-[10px] text-slate-400 mt-1">
                         {presentationFiles.length > 0 
