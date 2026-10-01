@@ -12,9 +12,10 @@ import crypto from 'crypto';
  */
 
 export const CANDIDATE_MODELS = [
+  'gemini-3.1-flash-lite-preview',
   'gemini-3.8-flash',
+  'gemini-flash-latest',
   'gemini-3-flash-preview',
-  'gemini-2.5-flash',
 ];
 
 // TPM (Tokens Per Minute) koruma kısıtları (dakikada maks 240k token)
@@ -243,7 +244,7 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
       // Vercel 10sn tavanı ve kurumsal proxy timeout'unu önlemek için latency-critical görevlerde
       // thinkingBudget: 0 (DISABLED) ayarlanarak düşünme aşaması kapatılır ve doğrudan sub-second yanıt alınır:
       const reqConfig = { ...(baseParams.config || {}) };
-      if (model.includes('3.8') || model.includes('3-') || model.includes('2.5')) {
+      if (model.includes('3.') || model.includes('3-') || model.includes('flash')) {
         reqConfig.thinkingConfig = {
           thinkingBudget: 0,
           includeThoughts: false,
@@ -297,44 +298,11 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
         continue;
       }
 
-      if (isServerBusy && !hasRetried) {
-        hasRetried = true;
-        const waitMs = 1500;
-        console.warn(`[GeminiClient] Sunucu meşgul (503). ${waitMs}ms sonra 1 kez hızlı denenecek...`);
-        await new Promise((resolve) => setTimeout(resolve, waitMs));
-        lastRequestTimestamp = Date.now();
-
-        try {
-          const retryConfig = { ...(baseParams.config || {}) };
-          if (model.includes('3.8') || model.includes('3-') || model.includes('2.5')) {
-            retryConfig.thinkingConfig = {
-              thinkingBudget: 0,
-              includeThoughts: false,
-              ...(retryConfig.thinkingConfig || {}),
-            };
-          }
-          const retryResponse = await ai.models.generateContent({
-            ...baseParams,
-            config: retryConfig,
-            model,
-          });
-
-          if (cacheKey && retryResponse?.text) {
-            try {
-              const parsed = JSON.parse(retryResponse.text);
-              setCachedGeminiResult(cacheKey, parsed);
-            } catch {
-              setCachedGeminiResult(cacheKey, retryResponse.text);
-            }
-          }
-
-          return retryResponse;
-        } catch (retryErr: any) {
-          lastError = retryErr;
-          console.warn(`[GeminiClient] Model ${model} hızlı yeniden denemede de hata verdi:`, retryErr?.message?.slice(0, 150));
-        }
+      if (isServerBusy) {
+        console.warn(`[GeminiClient] Model ${model} aşırı yoğunluk nedeniyle meşgul (503). Vercel timeout olmaması için beklemeden derhal bir sonraki modele geçiliyor...`);
+        continue;
       }
-      // Model desteklenmiyor, 400 hatası veya retry sonrası hata: döngü bir sonraki modeli dener
+      // Model desteklenmiyor veya 400 hatası: döngü bir sonraki modeli dener
     }
   }
 
