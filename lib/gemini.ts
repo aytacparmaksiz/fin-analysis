@@ -239,12 +239,14 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
       console.log(`[GeminiClient] Model ${model} ile istek gönderiliyor...`);
       lastRequestTimestamp = Date.now();
 
-      // Gemini 3.8 ve 3.x modellerinde varsayılan reasoning (thinking_level: MEDIUM) 20+ sn sürer.
-      // Vercel 10sn tavanı ve kurumsal proxy timeout'unu önlemek için latency-critical görevlerde LOW seviyesine alıyoruz:
+      // Gemini 3.8 ve 3.x modellerinde varsayılan reasoning (thinking_level: MEDIUM) 15-25 sn sürer.
+      // Vercel 10sn tavanı ve kurumsal proxy timeout'unu önlemek için latency-critical görevlerde
+      // thinkingBudget: 0 (DISABLED) ayarlanarak düşünme aşaması kapatılır ve doğrudan sub-second yanıt alınır:
       const reqConfig = { ...(baseParams.config || {}) };
       if (model.includes('3.8') || model.includes('3-') || model.includes('2.5')) {
         reqConfig.thinkingConfig = {
-          thinkingLevel: 'LOW',
+          thinkingBudget: 0,
+          includeThoughts: false,
           ...(reqConfig.thinkingConfig || {}),
         };
       }
@@ -306,7 +308,8 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
           const retryConfig = { ...(baseParams.config || {}) };
           if (model.includes('3.8') || model.includes('3-') || model.includes('2.5')) {
             retryConfig.thinkingConfig = {
-              thinkingLevel: 'LOW',
+              thinkingBudget: 0,
+              includeThoughts: false,
               ...(retryConfig.thinkingConfig || {}),
             };
           }

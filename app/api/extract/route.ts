@@ -498,7 +498,7 @@ export async function POST(req: Request) {
       for (let i = 0; i < batches.length; i++) {
         const batch = batches[i];
         const rawTexts = batch.map(d => `### FİNANSAL TABLO RAPORU: ${d.name}\n${d.text}`).join('\n\n---\n\n');
-        const docTexts = optimizeTextForGemini(rawTexts, 40000);
+        const docTexts = optimizeTextForGemini(rawTexts, 24000);
 
         const prompt = `Şirket: ${ticker.toUpperCase()} (Tespit Edilen Sektör: ${targetSector}).
 Aşağıda şirkete ait resmi finansal tablolar (Bilanço, Gelir Tablosu, Nakit Akış) yer almaktadır:
@@ -632,7 +632,7 @@ GÖREVLER:
       }
 
       const rawTexts = presDocs.map(d => `### YATIRIMCI SUNUMU: ${d.name}\n${d.text}`).join('\n\n---\n\n');
-      const docTexts = optimizeTextForGemini(rawTexts, 40000);
+      const docTexts = optimizeTextForGemini(rawTexts, 24000);
 
       const prompt = `Şirket: ${ticker.toUpperCase()}.
 Aşağıda şirketin son Yatırımcı Sunumu ve Gelecek Stratejisi dokümanı yer almaktadır:

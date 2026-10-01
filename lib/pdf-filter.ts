@@ -678,7 +678,9 @@ export async function extractSmartDocumentText(
     const limit = Math.min(18, totalPages);
     targetPageNumbers = Array.from({ length: limit }, (_, i) => i + 1);
   } else {
-    const limit = Math.min(14, totalPages);
+    // Bağımsız denetçi raporu ilk 10-15 sayfayı kaplayabileceği için ilk 28 sayfa taranır,
+    // ardından akıllı filtreleme motoru en kritik 12 sayfayı seçer:
+    const limit = Math.min(28, totalPages);
     targetPageNumbers = Array.from({ length: limit }, (_, i) => i + 1);
   }
 
