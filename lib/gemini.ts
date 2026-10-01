@@ -12,13 +12,13 @@ import crypto from 'crypto';
  */
 
 export const CANDIDATE_MODELS = [
-  'gemini-3.1-flash-lite-preview', // 500 RPD, 15 RPM (En yüksek günlük kota & hızlı)
-  'gemini-3.6-flash',              // 860ms süper hızlı
-  'gemini-3-flash-preview',        // 1.0sn hızlı ve stabil
-  'gemini-3.7-flash',              // Kotası neredeyse boş (1/20)
+  'gemini-3.5-flash-lite',         // 500 RPD, 15 RPM, ~1.5s latency, en yüksek günlük kota & hızlı
+  'gemini-3.1-flash-lite-preview', // 500 RPD, 15 RPM, ~2.3s latency
+  'gemini-3.1-flash-lite',         // 500 RPD, resmi sürüm
+  'gemini-3.6-flash',              // 800ms ultra hızlı
+  'gemini-3-flash-preview',        // Hızlı ve stabil
   'gemini-flash-latest',           // Resmi en güncel flash alias
-  'gemini-3.5-flash',              // Yedek flash (8/20)
-  'gemini-3.8-flash',              // Kota aşımı geçtikten sonra fallback
+  'gemini-3.7-flash',              // Yedek
 ];
 
 // TPM (Tokens Per Minute) koruma kısıtları (dakikada maks 240k token)
@@ -236,24 +236,30 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
   let lastError: any = null;
   let hadRateLimit = false;
   let rateLimitError: any = null;
-  let hasRetried = false;
+  const maxAttempts = 2;
+  let attempts = 0;
 
   for (const model of modelsToTry) {
+    if (attempts >= maxAttempts) break;
+    attempts++;
+
     try {
-      console.log(`[GeminiClient] Model ${model} ile istek gönderiliyor...`);
+      console.log(`[GeminiClient] Model ${model} ile istek gönderiliyor (Deneme ${attempts}/${maxAttempts})...`);
       lastRequestTimestamp = Date.now();
 
-      // Gemini 3.8 ve 3.x modellerinde varsayılan reasoning (thinking_level: MEDIUM) 15-25 sn sürer.
-      // Vercel 10sn tavanı ve kurumsal proxy timeout'unu önlemek için latency-critical görevlerde
-      // thinkingBudget: 0 (DISABLED) ayarlanarak düşünme aşaması kapatılır ve doğrudan sub-second yanıt alınır:
       const reqConfig = { ...(baseParams.config || {}) };
-      if (model.includes('3.') || model.includes('3-') || model.includes('flash')) {
+      // Flash-Lite modelleri (gemini-3.5-flash-lite, gemini-3.1-flash-lite) thinkingBudget: 0 argümanını 400 hatasıyla reddeder.
+      // Sadece düşünme (reasoning) özelliği olan diğer 3.x Flash modellerinde thinking kapatılır:
+      if (!model.includes('lite') && (model.includes('3.') || model.includes('3-') || model.includes('flash'))) {
         reqConfig.thinkingConfig = {
           thinkingBudget: 0,
           includeThoughts: false,
           ...(reqConfig.thinkingConfig || {}),
         };
       }
+
+      // Vercel serverless fonksiyon zaman aşımını (timeout) engellemek için istek başına 8.5 saniye tavanı:
+      reqConfig.abortSignal = reqConfig.abortSignal || AbortSignal.timeout(8500);
 
       const response = await ai.models.generateContent({
         ...baseParams,
@@ -275,10 +281,11 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
     } catch (err: any) {
       lastError = err;
       const status = err?.status || err?.statusCode || err?.code || err?.error?.code || (err?.message?.includes('429') ? 429 : 0);
+      const isTimeout = err?.name === 'AbortError' || err?.name === 'TimeoutError' || /aborted|timed? ?out/i.test(err?.message || '');
       const isRateLimit = status === 429 || 
         err?.isRateLimit || 
         /too many requests|rate[- ]limit|resource_exhausted|quota/i.test(err?.message || '');
-      const isServerBusy = status === 503 || err?.code === 503 || /unavailable|server busy/i.test(err?.message || '');
+      const isServerBusy = status === 503 || err?.code === 503 || isTimeout || /unavailable|server busy/i.test(err?.message || '');
       const isModelNotFound = status === 404 || /not found|no longer available|not supported/i.test(err?.message || '');
 
       console.warn(`[GeminiClient] Model ${model} hata verdi:`, {
@@ -287,6 +294,7 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
         isRateLimit,
         isServerBusy,
         isModelNotFound,
+        isTimeout,
       });
 
       if (isRateLimit) {
@@ -302,7 +310,7 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
       }
 
       if (isServerBusy) {
-        console.warn(`[GeminiClient] Model ${model} aşırı yoğunluk nedeniyle meşgul (503). Vercel timeout olmaması için beklemeden derhal bir sonraki modele geçiliyor...`);
+        console.warn(`[GeminiClient] Model ${model} meşgul veya zaman aşımına uğradı (${isTimeout ? 'Timeout' : '503'}). Derhal bir sonraki modele geçiliyor...`);
         continue;
       }
       // Model desteklenmiyor veya 400 hatası: döngü bir sonraki modeli dener

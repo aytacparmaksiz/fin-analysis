@@ -438,13 +438,13 @@ export async function POST(req: Request) {
       for (const file of files) {
         try {
           const arrayBuffer = await file.arrayBuffer();
-          const { text, isScannedPdf } = await extractSmartDocumentText(arrayBuffer, cat);
+          const { text, isScannedPdf } = await extractSmartDocumentText(arrayBuffer.slice(0), cat);
           if (!isScannedPdf && text && text.trim().length > 50) {
             documents.push({ name: file.name, text: text.trim(), category: cat });
           } else {
             // Taranmış / Görsel PDF (sayfalar resim, metin katmanı yok): Gemini Vision multimodal OCR kullan
             // Vercel 10sn Gateway Timeout sınırını aşmamak için en fazla 5 sayfalık parçalara böl:
-            const chunks = await splitScannedPdfIntoChunks(arrayBuffer, 5, 10);
+            const chunks = await splitScannedPdfIntoChunks(arrayBuffer.slice(0), 5, 10);
             for (let cIdx = 0; cIdx < chunks.length; cIdx++) {
               const chunkBase64 = Buffer.from(chunks[cIdx]).toString('base64');
               documents.push({
@@ -580,7 +580,7 @@ ${!isInsurance && !isBanking ? `   * SANAYİ / HİZMET / DİĞER:
         const cacheKey = `extract_fin_${ticker.toUpperCase()}_batch_${i}_${computeContentHash(hashSeed || '')}`;
         const response = await generateWithRateLimitAndBackoff({
           ai,
-          preferredModel: 'gemini-3.1-flash-lite-preview',
+          preferredModel: 'gemini-3.5-flash-lite',
           baseParams: {
             contents,
             config: {
@@ -630,7 +630,7 @@ GÖREVLER:
       const cacheKey = `extract_act_${ticker.toUpperCase()}_${computeContentHash(docTexts)}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
-        preferredModel: 'gemini-3.1-flash-lite-preview',
+        preferredModel: 'gemini-3.5-flash-lite',
         baseParams: {
           contents: [prompt],
           config: {
@@ -679,7 +679,7 @@ GÖREVLER:
       const cacheKey = `extract_pres_${ticker.toUpperCase()}_${computeContentHash(docTexts)}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
-        preferredModel: 'gemini-3.1-flash-lite-preview',
+        preferredModel: 'gemini-3.5-flash-lite',
         baseParams: {
           contents: [prompt],
           config: {

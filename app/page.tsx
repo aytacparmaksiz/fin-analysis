@@ -1260,7 +1260,7 @@ export default function ValuationTerminal() {
         let fileDocText = '';
         try {
           const arrayBuffer = await file.arrayBuffer();
-          const { text, isScannedPdf } = await extractSmartDocumentText(arrayBuffer, 'financial');
+          const { text, isScannedPdf } = await extractSmartDocumentText(arrayBuffer.slice(0), 'financial');
           if (!isScannedPdf) {
             fileDocText = text?.trim() || '';
           }
@@ -1302,13 +1302,13 @@ export default function ValuationTerminal() {
           let fileChunks: Uint8Array[] = [];
           try {
             const arrayBuffer = await file.arrayBuffer();
-            fileChunks = await splitScannedPdfIntoChunks(arrayBuffer, 5, 10);
+            fileChunks = await splitScannedPdfIntoChunks(arrayBuffer.slice(0), 5, 10);
           } catch (err) {
             console.warn(`[Append Split Error] ${file.name}:`, err);
           }
 
           if (fileChunks.length === 0) {
-            fileChunks = [new Uint8Array(await file.arrayBuffer())];
+            fileChunks = [new Uint8Array((await file.arrayBuffer()).slice(0))];
           }
 
           for (let cIdx = 0; cIdx < fileChunks.length; cIdx++) {
@@ -1402,7 +1402,7 @@ export default function ValuationTerminal() {
         setStatusMessage(`[1. Aşama / 3]: Finansal Tablo taranıyor (${i + 1}/${financialFiles.length}): ${file.name}...`);
         try {
           const arrayBuffer = await file.arrayBuffer();
-          const { text, isScannedPdf } = await extractSmartDocumentText(arrayBuffer, 'financial');
+          const { text, isScannedPdf } = await extractSmartDocumentText(arrayBuffer.slice(0), 'financial');
           if (!isScannedPdf && text && text.trim().length > 50) {
             financialDocs.push({ name: file.name, text: text.trim(), category: 'financial' });
           }
@@ -1467,13 +1467,13 @@ export default function ValuationTerminal() {
           let fileChunks: Uint8Array[] = [];
           try {
             const arrayBuffer = await f.arrayBuffer();
-            fileChunks = await splitScannedPdfIntoChunks(arrayBuffer, 5, 10);
+            fileChunks = await splitScannedPdfIntoChunks(arrayBuffer.slice(0), 5, 10);
           } catch (err) {
             console.warn(`[Split Error] ${f.name}:`, err);
           }
 
           if (fileChunks.length === 0) {
-            fileChunks = [new Uint8Array(await f.arrayBuffer())];
+            fileChunks = [new Uint8Array((await f.arrayBuffer()).slice(0))];
           }
 
           for (let cIdx = 0; cIdx < fileChunks.length; cIdx++) {
@@ -1543,7 +1543,7 @@ export default function ValuationTerminal() {
             setStatusMessage(`[2. Aşama / 3]: Faaliyet Raporu taranıyor (${i + 1}/${activityFiles.length}): ${file.name}...`);
             try {
               const arrayBuffer = await file.arrayBuffer();
-              const { text } = await extractSmartDocumentText(arrayBuffer, 'activity');
+              const { text } = await extractSmartDocumentText(arrayBuffer.slice(0), 'activity');
               if (text && text.trim().length > 50) {
                 activityDocs.push({ name: file.name, text: text.trim(), category: 'activity' });
               }
@@ -1604,7 +1604,7 @@ export default function ValuationTerminal() {
             setStatusMessage(`[3. Aşama / 3]: Yatırımcı Sunumu taranıyor (${i + 1}/${presentationFiles.length}): ${file.name}...`);
             try {
               const arrayBuffer = await file.arrayBuffer();
-              const { text } = await extractSmartDocumentText(arrayBuffer, 'presentation');
+              const { text } = await extractSmartDocumentText(arrayBuffer.slice(0), 'presentation');
               if (text && text.trim().length > 50) {
                 presentationDocs.push({ name: file.name, text: text.trim(), category: 'presentation' });
               }

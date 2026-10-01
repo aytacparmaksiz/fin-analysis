@@ -638,13 +638,9 @@ export async function extractSmartDocumentText(
 ): Promise<SmartExtractionResult> {
   let uint8: Uint8Array;
   if (pdfInput instanceof Uint8Array) {
-    if (typeof Buffer !== 'undefined' && (Buffer.isBuffer(pdfInput) || (pdfInput as any) instanceof Buffer)) {
-      uint8 = new Uint8Array(pdfInput.buffer, pdfInput.byteOffset, pdfInput.byteLength);
-    } else {
-      uint8 = pdfInput;
-    }
+    uint8 = new Uint8Array(pdfInput.buffer.slice(pdfInput.byteOffset, pdfInput.byteOffset + pdfInput.byteLength));
   } else if (pdfInput instanceof ArrayBuffer) {
-    uint8 = new Uint8Array(pdfInput);
+    uint8 = new Uint8Array(pdfInput.slice(0));
   } else {
     uint8 = new Uint8Array(pdfInput);
   }
@@ -751,7 +747,9 @@ export async function splitScannedPdfIntoChunks(
   try {
     let uint8: Uint8Array;
     if (pdfInput instanceof Uint8Array) {
-      uint8 = pdfInput;
+      uint8 = new Uint8Array(pdfInput.buffer.slice(pdfInput.byteOffset, pdfInput.byteOffset + pdfInput.byteLength));
+    } else if (pdfInput instanceof ArrayBuffer) {
+      uint8 = new Uint8Array(pdfInput.slice(0));
     } else {
       uint8 = new Uint8Array(pdfInput);
     }
@@ -774,7 +772,14 @@ export async function splitScannedPdfIntoChunks(
     return chunks;
   } catch (err) {
     console.warn('[splitScannedPdfIntoChunks] Bölme hatası:', err);
-    return [pdfInput instanceof Uint8Array ? pdfInput : new Uint8Array(pdfInput)];
+    try {
+      if (pdfInput instanceof Uint8Array) {
+        return [new Uint8Array(pdfInput.buffer.slice(pdfInput.byteOffset, pdfInput.byteOffset + pdfInput.byteLength))];
+      }
+      return [new Uint8Array((pdfInput as any).slice(0))];
+    } catch {
+      return [];
+    }
   }
 }
 
