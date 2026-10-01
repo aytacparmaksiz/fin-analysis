@@ -618,6 +618,15 @@ export function filterDocumentPages(pageTexts: string[], category: DocumentCateg
   return filterFinancialPages(pageTexts, maxPages);
 }
 
+export interface SmartExtractionResult {
+  text: string;
+  totalPages: number;
+  matchedPages: number;
+  summary: string;
+  totalExtractedChars?: number;
+  isScannedPdf?: boolean;
+}
+
 /**
  * Ham PDF ArrayBuffer/Uint8Array verisinden kategoriye özel akıllı metin çıkarımı yapar.
  */
@@ -625,7 +634,7 @@ export async function extractSmartDocumentText(
   pdfInput: ArrayBuffer | Uint8Array,
   category: DocumentCategory = 'financial',
   maxPages = 14
-): Promise<{ text: string; totalPages: number; matchedPages: number; summary: string }> {
+): Promise<SmartExtractionResult> {
   let uint8: Uint8Array;
   if (pdfInput instanceof Uint8Array) {
     if (typeof Buffer !== 'undefined' && (Buffer.isBuffer(pdfInput) || (pdfInput as any) instanceof Buffer)) {
@@ -648,7 +657,9 @@ export async function extractSmartDocumentText(
       text: '',
       totalPages: 0,
       matchedPages: 0,
-      summary: 'PDF yükleme hatası.'
+      summary: 'PDF yükleme hatası.',
+      totalExtractedChars: 0,
+      isScannedPdf: false
     };
   }
   const totalPages = (pdf && typeof pdf.numPages === 'number') ? pdf.numPages : 0;
@@ -658,7 +669,9 @@ export async function extractSmartDocumentText(
       text: '',
       totalPages: 0,
       matchedPages: 0,
-      summary: 'Boş belge.'
+      summary: 'Boş belge.',
+      totalExtractedChars: 0,
+      isScannedPdf: false
     };
   }
 
@@ -684,6 +697,7 @@ export async function extractSmartDocumentText(
     targetPageNumbers = Array.from({ length: limit }, (_, i) => i + 1);
   }
 
+  let totalExtractedChars = 0;
   await Promise.all(
     targetPageNumbers.map(async (pageNum) => {
       try {
@@ -694,6 +708,7 @@ export async function extractSmartDocumentText(
           .map((item: any) => item.str + (item.hasEOL ? '\n' : ''))
           .join('');
         pageTexts[pageNum - 1] = pageText;
+        totalExtractedChars += pageText.trim().length;
       } catch (pageErr) {
         console.warn(`[PDFFilter] Sayfa ${pageNum} metni okunamadı:`, pageErr);
       }
@@ -706,7 +721,9 @@ export async function extractSmartDocumentText(
     text: filterRes.combinedText,
     totalPages: filterRes.totalPages,
     matchedPages: filterRes.matchedCount,
-    summary: filterRes.summary
+    summary: filterRes.summary,
+    totalExtractedChars,
+    isScannedPdf: totalExtractedChars < 100
   };
 }
 
@@ -717,6 +734,6 @@ export async function extractSmartFinancialText(
   pdfInput: ArrayBuffer | Uint8Array,
   maxPages = 14,
   category: DocumentCategory = 'financial'
-): Promise<{ text: string; totalPages: number; matchedPages: number; summary: string }> {
+): Promise<SmartExtractionResult> {
   return extractSmartDocumentText(pdfInput, category, maxPages);
 }

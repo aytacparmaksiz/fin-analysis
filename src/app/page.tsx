@@ -1260,8 +1260,10 @@ export default function ValuationTerminal() {
         let fileDocText = '';
         try {
           const arrayBuffer = await file.arrayBuffer();
-          const { text } = await extractSmartDocumentText(arrayBuffer, 'financial');
-          fileDocText = text?.trim() || '';
+          const { text, isScannedPdf } = await extractSmartDocumentText(arrayBuffer, 'financial');
+          if (!isScannedPdf) {
+            fileDocText = text?.trim() || '';
+          }
         } catch (err) {
           console.warn(`[Append PDF] ${file.name} okunamadı:`, err);
         }
@@ -1358,8 +1360,8 @@ export default function ValuationTerminal() {
         setStatusMessage(`[1. Aşama / 3]: Finansal Tablo taranıyor (${i + 1}/${financialFiles.length}): ${file.name}...`);
         try {
           const arrayBuffer = await file.arrayBuffer();
-          const { text } = await extractSmartDocumentText(arrayBuffer, 'financial');
-          if (text && text.trim().length > 50) {
+          const { text, isScannedPdf } = await extractSmartDocumentText(arrayBuffer, 'financial');
+          if (!isScannedPdf && text && text.trim().length > 50) {
             financialDocs.push({ name: file.name, text: text.trim(), category: 'financial' });
           }
         } catch (err) {

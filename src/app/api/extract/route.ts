@@ -438,9 +438,19 @@ export async function POST(req: Request) {
       for (const file of files) {
         try {
           const arrayBuffer = await file.arrayBuffer();
-          const { text } = await extractSmartDocumentText(arrayBuffer, cat);
-          if (text && text.trim().length > 50) {
+          const { text, isScannedPdf } = await extractSmartDocumentText(arrayBuffer, cat);
+          if (!isScannedPdf && text && text.trim().length > 50) {
             documents.push({ name: file.name, text: text.trim(), category: cat });
+          } else {
+            // Taranmış / Görsel PDF (sayfalar resim, metin katmanı yok): Gemini Vision multimodal OCR kullan
+            const base64 = Buffer.from(arrayBuffer).toString('base64');
+            documents.push({
+              name: file.name,
+              text: '',
+              category: cat,
+              isScannedImage: true,
+              base64Data: base64
+            } as any);
           }
         } catch (err) {
           console.warn(`[Extract Server Filter] ${file.name} (${cat}) metin çıkarılamadı:`, err);
@@ -503,7 +513,7 @@ export async function POST(req: Request) {
         const prompt = `Şirket: ${ticker.toUpperCase()} (Tespit Edilen Sektör: ${targetSector}).
 Aşağıda şirkete ait resmi finansal tablolar (Bilanço, Gelir Tablosu, Nakit Akış) yer almaktadır:
 
-${docTexts}
+${docTexts || 'Ekli dokümandaki görsel finansal tabloları analiz et.'}
 
 GÖREVLER:
 1. Bu belgede geçen HER BİR DÖNEM (yıl veya çeyrek, örn: 2022, 2023, 2024, 2025, 2026/06) için 'financial_history' listesine ayrı bir nesne ekle.
@@ -544,12 +554,31 @@ ${!isInsurance && !isBanking ? `   * SANAYİ / HİZMET / DİĞER:
 5. SIFIR HALÜSİNASYON:
    - Belgede açıkça olmayan rakamları asla uydurma, null bırak.`;
 
-        const cacheKey = `extract_fin_${ticker.toUpperCase()}_batch_${i}_${computeContentHash(docTexts)}`;
+        const hasScannedDoc = batch.some(d => (d as any).isScannedImage && (d as any).base64Data);
+        let contents: any[] = [];
+        if (hasScannedDoc) {
+          const scannedParts = batch
+            .filter(d => (d as any).isScannedImage && (d as any).base64Data)
+            .map(d => ({
+              inlineData: {
+                mimeType: 'application/pdf',
+                data: (d as any).base64Data
+              }
+            }));
+          contents = [...scannedParts, prompt];
+        } else {
+          contents = [prompt];
+        }
+
+        const hashSeed = hasScannedDoc 
+          ? (batch[0] as any)?.base64Data?.slice(0, 5000) 
+          : docTexts;
+        const cacheKey = `extract_fin_${ticker.toUpperCase()}_batch_${i}_${computeContentHash(hashSeed || '')}`;
         const response = await generateWithRateLimitAndBackoff({
           ai,
           preferredModel: 'gemini-3.8-flash',
           baseParams: {
-            contents: [prompt],
+            contents,
             config: {
               systemInstruction: financialSystemInstruction,
               temperature: 0.0,
