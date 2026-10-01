@@ -580,7 +580,7 @@ ${!isInsurance && !isBanking ? `   * SANAYİ / HİZMET / DİĞER:
         const cacheKey = `extract_fin_${ticker.toUpperCase()}_batch_${i}_${computeContentHash(hashSeed || '')}`;
         const response = await generateWithRateLimitAndBackoff({
           ai,
-          preferredModel: 'gemini-3.5-flash-lite',
+          preferredModel: 'gemini-3.1-flash-lite-preview',
           baseParams: {
             contents,
             config: {
@@ -630,7 +630,7 @@ GÖREVLER:
       const cacheKey = `extract_act_${ticker.toUpperCase()}_${computeContentHash(docTexts)}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
-        preferredModel: 'gemini-3.5-flash-lite',
+        preferredModel: 'gemini-3.1-flash-lite-preview',
         baseParams: {
           contents: [prompt],
           config: {
@@ -679,7 +679,7 @@ GÖREVLER:
       const cacheKey = `extract_pres_${ticker.toUpperCase()}_${computeContentHash(docTexts)}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
-        preferredModel: 'gemini-3.5-flash-lite',
+        preferredModel: 'gemini-3.1-flash-lite-preview',
         baseParams: {
           contents: [prompt],
           config: {

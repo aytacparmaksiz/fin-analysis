@@ -12,13 +12,14 @@ import crypto from 'crypto';
  */
 
 export const CANDIDATE_MODELS = [
-  'gemini-3.5-flash-lite',         // 500 RPD, 15 RPM, ~1.5s latency, en yüksek günlük kota & hızlı
-  'gemini-3.1-flash-lite-preview', // 500 RPD, 15 RPM, ~2.3s latency
-  'gemini-3.1-flash-lite',         // 500 RPD, resmi sürüm
-  'gemini-3.6-flash',              // 800ms ultra hızlı
+  'gemini-3.1-flash-lite-preview', // 500 RPD, 15 RPM, ~3.0s latency (thinkingBudget: 0 ile ultra hızlı & yüksek kota)
+  'gemini-3.1-flash-lite',         // 500 RPD, 15 RPM, ~3.0s latency (thinkingBudget: 0)
+  'gemini-3.5-flash-lite',         // 500 RPD, 15 RPM, ~1.5s latency (thinking modsuz hızlı model)
   'gemini-3-flash-preview',        // Hızlı ve stabil
   'gemini-flash-latest',           // Resmi en güncel flash alias
+  'gemini-3.6-flash',              // Yedek
   'gemini-3.7-flash',              // Yedek
+  'gemini-3.8-flash',              // Kota aşımı geçtikten sonra fallback
 ];
 
 // TPM (Tokens Per Minute) koruma kısıtları (dakikada maks 240k token)
@@ -248,9 +249,10 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
       lastRequestTimestamp = Date.now();
 
       const reqConfig = { ...(baseParams.config || {}) };
-      // Flash-Lite modelleri (gemini-3.5-flash-lite, gemini-3.1-flash-lite) thinkingBudget: 0 argümanını 400 hatasıyla reddeder.
-      // Sadece düşünme (reasoning) özelliği olan diğer 3.x Flash modellerinde thinking kapatılır:
-      if (!model.includes('lite') && (model.includes('3.') || model.includes('3-') || model.includes('flash'))) {
+      // YALNIZCA gemini-3.5-flash-lite thinkingBudget: 0 argümanını 400 hatasıyla reddeder (çünkü thinking modu yoktur).
+      // gemini-3.1-flash-lite, gemini-3.1-flash-lite-preview ve tüm diğer 3.x Flash modellerinde thinking varsayılan olarak aktiftir.
+      // 20+ saniye düşünme gecikmesini önlemek için thinkingBudget: 0 ayarlanarak doğrudan 2-3 saniyede yanıt alınır:
+      if (model !== 'gemini-3.5-flash-lite' && (model.includes('3.') || model.includes('3-') || model.includes('flash'))) {
         reqConfig.thinkingConfig = {
           thinkingBudget: 0,
           includeThoughts: false,
@@ -258,8 +260,8 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
         };
       }
 
-      // Vercel serverless fonksiyon zaman aşımını (timeout) engellemek için istek başına 22 saniye tavanı:
-      reqConfig.abortSignal = reqConfig.abortSignal || AbortSignal.timeout(22000);
+      // Vercel serverless fonksiyon zaman aşımını (timeout) engellemek için istek başına 14 saniye tavanı:
+      reqConfig.abortSignal = reqConfig.abortSignal || AbortSignal.timeout(14000);
 
       const response = await ai.models.generateContent({
         ...baseParams,
@@ -313,7 +315,7 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
   }
 
   // Eğer ana veya aday modellerden biri hız sınırına veya geçici yoğunluğa takıldıysa,
-  // istemciye derhal 429 ve retryAfter: 4 dönülür; istemci güvenle bekleyip otomatik yeniden dener:
+  // istemciye derhal 429 ve retryAfter: 5 dönülür; istemci güvenle bekleyip otomatik yeniden dener:
   const isRetryable = hadRateLimit || 
     (lastError && (
       lastError.status === 429 || 
@@ -329,7 +331,7 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
     finalRateError.status = 429;
     finalRateError.statusCode = 429;
     finalRateError.isRateLimit = true;
-    finalRateError.retryAfter = 4;
+    finalRateError.retryAfter = 5;
     throw finalRateError;
   }
 
