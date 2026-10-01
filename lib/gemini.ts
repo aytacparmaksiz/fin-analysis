@@ -258,8 +258,8 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
         };
       }
 
-      // Vercel serverless fonksiyon zaman aşımını (timeout) engellemek için istek başına 8.5 saniye tavanı:
-      reqConfig.abortSignal = reqConfig.abortSignal || AbortSignal.timeout(8500);
+      // Vercel serverless fonksiyon zaman aşımını (timeout) engellemek için istek başına 22 saniye tavanı:
+      reqConfig.abortSignal = reqConfig.abortSignal || AbortSignal.timeout(22000);
 
       const response = await ai.models.generateContent({
         ...baseParams,
@@ -297,10 +297,10 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
         isTimeout,
       });
 
-      if (isRateLimit) {
+      if (isRateLimit || isServerBusy) {
         hadRateLimit = true;
         rateLimitError = err;
-        console.warn(`[GeminiClient] Model ${model} hız sınırına (429) takıldı. Vercel timeout olmaması için beklemeden bir sonraki modele geçiliyor...`);
+        console.warn(`[GeminiClient] Model ${model} hız sınırına veya yoğunluğa takıldı. Bir sonraki modele geçiliyor...`);
         continue;
       }
 
@@ -308,26 +308,28 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
         console.warn(`[GeminiClient] Model ${model} kullanımdan kalkmış veya desteklenmiyor (404). Bir sonraki modele geçiliyor...`);
         continue;
       }
-
-      if (isServerBusy) {
-        console.warn(`[GeminiClient] Model ${model} meşgul veya zaman aşımına uğradı (${isTimeout ? 'Timeout' : '503'}). Derhal bir sonraki modele geçiliyor...`);
-        continue;
-      }
       // Model desteklenmiyor veya 400 hatası: döngü bir sonraki modeli dener
     }
   }
 
-  // Eğer ana veya aday modellerden biri hız sınırına takıldıysa (veya son hata 429 ise),
-  // diğer modeller bulunamasa (404) dahi asıl sorun kota aşımıdır.
-  // İstemciye derhal 429 ve retryAfter: 5 dönülür; istemci 5 saniye bekleyip ana modelle otomatik yeniden dener:
-  if (hadRateLimit || (lastError && (lastError.status === 429 || /too many requests|rate[- ]limit|resource_exhausted|quota/i.test(lastError.message || '')))) {
+  // Eğer ana veya aday modellerden biri hız sınırına veya geçici yoğunluğa takıldıysa,
+  // istemciye derhal 429 ve retryAfter: 4 dönülür; istemci güvenle bekleyip otomatik yeniden dener:
+  const isRetryable = hadRateLimit || 
+    (lastError && (
+      lastError.status === 429 || 
+      lastError.status === 503 ||
+      lastError.code === 503 ||
+      /too many requests|rate[- ]limit|resource_exhausted|quota|unavailable|demand|aborted/i.test(lastError.message || '')
+    ));
+
+  if (isRetryable) {
     const finalRateError: any = new Error(
-      'Gemini API hız sınırına ulaşıldı (Rate Limit 429). Lütfen 5 saniye sonra tekrar deneyin.'
+      'Gemini API servisleri geçici olarak yoğun (Rate Limit / 503). Lütfen birkaç saniye sonra tekrar deneyin.'
     );
     finalRateError.status = 429;
     finalRateError.statusCode = 429;
     finalRateError.isRateLimit = true;
-    finalRateError.retryAfter = 5;
+    finalRateError.retryAfter = 4;
     throw finalRateError;
   }
 

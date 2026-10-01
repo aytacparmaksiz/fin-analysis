@@ -124,29 +124,42 @@ async function fetchWithClientRetry(
 ): Promise<Response> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const res = await requestFn();
-    if (res.status === 429) {
-      if (attempt < maxRetries) {
-        let retrySeconds = 5;
-        try {
-          const clone = res.clone();
-          const json = await clone.json();
+    let isRetryable = res.status === 429 || res.status === 503;
+    let retrySeconds = 4;
+
+    if (!isRetryable && (res.status === 500 || res.status === 504)) {
+      try {
+        const clone = res.clone();
+        const json = await clone.json();
+        if (json?.isRateLimit || json?.retryAfter || /demand|quota|rate|busy|aborted|unavailable/i.test(json?.error || '')) {
+          isRetryable = true;
           if (json?.retryAfter && typeof json.retryAfter === 'number') {
-            retrySeconds = Math.max(3, Math.min(10, json.retryAfter));
+            retrySeconds = Math.max(3, Math.min(8, json.retryAfter));
           }
-        } catch {}
-
-        for (let sec = retrySeconds; sec > 0; sec--) {
-          if (onStatusUpdate) {
-            onStatusUpdate(`API hız sınırı koruması: ${sec} sn bekleniyor...`);
-          }
-          await new Promise((resolve) => setTimeout(resolve, 1000));
         }
+      } catch {}
+    } else if (res.status === 429) {
+      try {
+        const clone = res.clone();
+        const json = await clone.json();
+        if (json?.retryAfter && typeof json.retryAfter === 'number') {
+          retrySeconds = Math.max(3, Math.min(8, json.retryAfter));
+        }
+      } catch {}
+    }
 
+    if (isRetryable && attempt < maxRetries) {
+      for (let sec = retrySeconds; sec > 0; sec--) {
         if (onStatusUpdate) {
-          onStatusUpdate('İstek yeniden gönderiliyor...');
+          onStatusUpdate(`API hız sınırı koruması: ${sec} sn bekleniyor...`);
         }
-        continue;
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
+
+      if (onStatusUpdate) {
+        onStatusUpdate('İstek yeniden gönderiliyor...');
+      }
+      continue;
     }
     return res;
   }
