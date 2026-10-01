@@ -57,7 +57,7 @@ import {
   SectorScoreResult,
   cleanAndParseJson
 } from '@/lib/valuation';
-import { extractSmartFinancialText, extractSmartDocumentText, DocumentCategory } from '@/lib/pdf-filter';
+import { extractSmartFinancialText, extractSmartDocumentText, splitScannedPdfIntoChunks, DocumentCategory } from '@/lib/pdf-filter';
 
 // Gateway Timeout, kurumsal proxy ve HTML hata sayfalarını yakalayan güvenli API yanıt ayrıştırıcısı
 async function parseApiResponse(res: Response, defaultError: string): Promise<any> {
@@ -1299,21 +1299,63 @@ export default function ValuationTerminal() {
             setStatusMessage
           );
         } else {
-          const fd = new FormData();
-          fd.append('ticker', accumulated.ticker || ticker);
-          fd.append('price', price || accumulated.valuation?.current_price || '0');
-          fd.append('category', 'financial');
-          fd.append('previousData', JSON.stringify(sanitizedPrevData));
-          fd.append('files_financial', file);
-          res = await fetchWithClientRetry(
-            () => fetch('/api/extract', { method: 'POST', body: fd }),
-            setStatusMessage
-          );
-        }
+          let fileChunks: Uint8Array[] = [];
+          try {
+            const arrayBuffer = await file.arrayBuffer();
+            fileChunks = await splitScannedPdfIntoChunks(arrayBuffer, 5, 10);
+          } catch (err) {
+            console.warn(`[Append Split Error] ${file.name}:`, err);
+          }
 
-        const result = await parseApiResponse(res, `${file.name} ilave veri çıkarımı başarısız oldu.`);
-        if (result?.data) {
-          accumulated = result.data;
+          if (fileChunks.length === 0) {
+            fileChunks = [new Uint8Array(await file.arrayBuffer())];
+          }
+
+          for (let cIdx = 0; cIdx < fileChunks.length; cIdx++) {
+            const chunkBytes = fileChunks[cIdx];
+            const chunkBlob = new Blob([chunkBytes as unknown as BlobPart], { type: 'application/pdf' });
+            const chunkFile = new File([chunkBlob], `${file.name}_part${cIdx + 1}.pdf`, { type: 'application/pdf' });
+
+            const chunkLabel = fileChunks.length > 1 
+              ? (cIdx === 0 ? 'Bilanço (Sayfa 1-5)' : 'Gelir & Nakit Akış (Sayfa 6-10)')
+              : 'Finansal Tablo';
+
+            setStatusMessage(`İlave rapor işleniyor (${cIdx + 1}/${fileChunks.length}): ${file.name} [${chunkLabel}]...`);
+
+            if (cIdx > 0) {
+              await new Promise((r) => setTimeout(r, 1200));
+            }
+
+            const currentSanitized = {
+              ticker: accumulated.ticker || ticker,
+              sector: accumulated.sector || activeSector,
+              currency: accumulated.currency,
+              reporting_period: accumulated.reporting_period,
+              share_count: accumulated.share_count,
+              financial_history: accumulated.financial_history || [],
+              balance_sheet_summary: accumulated.balance_sheet_summary || [],
+              debt_and_interest: accumulated.debt_and_interest || {},
+              guidance_track_record: accumulated.guidance_track_record || [],
+              pros_cons: accumulated.pros_cons || { pros: [], cons: [] }
+            };
+
+            const fd = new FormData();
+            fd.append('ticker', accumulated.ticker || ticker);
+            fd.append('price', price || accumulated.valuation?.current_price || '0');
+            fd.append('category', 'financial');
+            fd.append('previousData', JSON.stringify(currentSanitized));
+            fd.append('files_financial', chunkFile);
+
+            res = await fetchWithClientRetry(
+              () => fetch('/api/extract', { method: 'POST', body: fd }),
+              setStatusMessage
+            );
+
+            const result = await parseApiResponse(res, `${file.name} (${chunkLabel}) ilave veri çıkarımı başarısız oldu.`);
+            if (result?.data) {
+              accumulated = result.data;
+            }
+          }
         }
       }
 
@@ -1420,41 +1462,64 @@ export default function ValuationTerminal() {
       } else {
         for (let i = 0; i < financialFiles.length; i++) {
           const f = financialFiles[i];
-          const pct = Math.round(15 + ((i + 1) / financialFiles.length) * 20);
-          setPipelineProgress(pct);
-          setStatusMessage(`[1. Aşama / 3]: Finansal Tablo işleniyor (${i + 1}/${financialFiles.length}): ${f.name}...`);
-
-          if (i > 0) {
-            setStatusMessage(`[1. Aşama / 3]: API hız kotası koruması: ${f.name} hazırlanıyor...`);
-            await new Promise((r) => setTimeout(r, 2000));
+          setStatusMessage(`[1. Aşama / 3]: Taranmış belge sayfaları inceleniyor: ${f.name}...`);
+          
+          let fileChunks: Uint8Array[] = [];
+          try {
+            const arrayBuffer = await f.arrayBuffer();
+            fileChunks = await splitScannedPdfIntoChunks(arrayBuffer, 5, 10);
+          } catch (err) {
+            console.warn(`[Split Error] ${f.name}:`, err);
           }
 
-          const sanitizedPrevData = currentData ? {
-            ticker: currentData.ticker || ticker,
-            sector: currentData.sector,
-            currency: currentData.currency,
-            reporting_period: currentData.reporting_period,
-            share_count: currentData.share_count,
-            financial_history: currentData.financial_history || [],
-            balance_sheet_summary: currentData.balance_sheet_summary || [],
-            debt_and_interest: currentData.debt_and_interest || {},
-          } : null;
+          if (fileChunks.length === 0) {
+            fileChunks = [new Uint8Array(await f.arrayBuffer())];
+          }
 
-          const fd = new FormData();
-          fd.append('ticker', ticker);
-          fd.append('price', price);
-          fd.append('category', 'financial');
-          if (sanitizedPrevData) fd.append('previousData', JSON.stringify(sanitizedPrevData));
-          fd.append('files_financial', f);
+          for (let cIdx = 0; cIdx < fileChunks.length; cIdx++) {
+            const chunkBytes = fileChunks[cIdx];
+            const chunkBlob = new Blob([chunkBytes as unknown as BlobPart], { type: 'application/pdf' });
+            const chunkFile = new File([chunkBlob], `${f.name}_part${cIdx + 1}.pdf`, { type: 'application/pdf' });
 
-          const res1 = await fetchWithClientRetry(
-            () => fetch('/api/extract', { method: 'POST', body: fd }),
-            setStatusMessage
-          );
+            const chunkLabel = fileChunks.length > 1 
+              ? (cIdx === 0 ? 'Bilanço (Sayfa 1-5)' : 'Gelir & Nakit Akış (Sayfa 6-10)')
+              : 'Finansal Tablo';
 
-          const result1 = await parseApiResponse(res1, `${f.name} finansal veri çıkarımı başarısız oldu.`);
-          if (result1?.data) {
-            currentData = result1.data;
+            const pct = Math.round(15 + (((i * fileChunks.length) + (cIdx + 1)) / (financialFiles.length * fileChunks.length)) * 20);
+            setPipelineProgress(pct);
+            setStatusMessage(`[1. Aşama / 3]: ${chunkLabel} taranıyor (${cIdx + 1}/${fileChunks.length}): ${f.name}...`);
+
+            if (i > 0 || cIdx > 0) {
+              await new Promise((r) => setTimeout(r, 1200));
+            }
+
+            const sanitizedPrevData = currentData ? {
+              ticker: currentData.ticker || ticker,
+              sector: currentData.sector,
+              currency: currentData.currency,
+              reporting_period: currentData.reporting_period,
+              share_count: currentData.share_count,
+              financial_history: currentData.financial_history || [],
+              balance_sheet_summary: currentData.balance_sheet_summary || [],
+              debt_and_interest: currentData.debt_and_interest || {},
+            } : null;
+
+            const fd = new FormData();
+            fd.append('ticker', ticker);
+            fd.append('price', price);
+            fd.append('category', 'financial');
+            if (sanitizedPrevData) fd.append('previousData', JSON.stringify(sanitizedPrevData));
+            fd.append('files_financial', chunkFile);
+
+            const res1 = await fetchWithClientRetry(
+              () => fetch('/api/extract', { method: 'POST', body: fd }),
+              setStatusMessage
+            );
+
+            const result1 = await parseApiResponse(res1, `${f.name} (${chunkLabel}) finansal veri çıkarımı başarısız oldu.`);
+            if (result1?.data) {
+              currentData = result1.data;
+            }
           }
         }
       }

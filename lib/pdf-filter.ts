@@ -7,6 +7,7 @@
  */
 
 import { getDocumentProxy, extractText } from 'unpdf';
+import { PDFDocument } from 'pdf-lib';
 
 // 1. Birincil Finansal Tablo Başlıkları ve Kök Kelimeler (En Yüksek Öncelik: +12/+15 Puan)
 export const PRIMARY_STATEMENT_KEYWORDS = [
@@ -737,3 +738,43 @@ export async function extractSmartFinancialText(
 ): Promise<SmartExtractionResult> {
   return extractSmartDocumentText(pdfInput, category, maxPages);
 }
+
+/**
+ * Taranmış (görsel/resim) PDF'leri Vercel Gateway Timeout (10 sn) sınırına takılmamak için
+ * en fazla `maxPagesPerChunk` (varsayılan 5) sayfalık hafif PDF parçalarına böler.
+ */
+export async function splitScannedPdfIntoChunks(
+  pdfInput: ArrayBuffer | Uint8Array,
+  maxPagesPerChunk = 5,
+  maxTotalPages = 10
+): Promise<Uint8Array[]> {
+  try {
+    let uint8: Uint8Array;
+    if (pdfInput instanceof Uint8Array) {
+      uint8 = pdfInput;
+    } else {
+      uint8 = new Uint8Array(pdfInput);
+    }
+    const srcDoc = await PDFDocument.load(uint8);
+    const total = Math.min(srcDoc.getPageCount(), maxTotalPages);
+    if (total <= maxPagesPerChunk) {
+      return [uint8];
+    }
+
+    const chunks: Uint8Array[] = [];
+    for (let start = 0; start < total; start += maxPagesPerChunk) {
+      const end = Math.min(start + maxPagesPerChunk, total);
+      const pageIndices = Array.from({ length: end - start }, (_, i) => start + i);
+      const chunkDoc = await PDFDocument.create();
+      const copied = await chunkDoc.copyPages(srcDoc, pageIndices);
+      copied.forEach(p => chunkDoc.addPage(p));
+      const bytes = await chunkDoc.save();
+      chunks.push(bytes);
+    }
+    return chunks;
+  } catch (err) {
+    console.warn('[splitScannedPdfIntoChunks] Bölme hatası:', err);
+    return [pdfInput instanceof Uint8Array ? pdfInput : new Uint8Array(pdfInput)];
+  }
+}
+

@@ -18,7 +18,7 @@ import {
   getAnnualizationFactor,
   normalizePeriodName
 } from '@/lib/valuation';
-import { extractSmartDocumentText, DocumentCategory } from '@/lib/pdf-filter';
+import { extractSmartDocumentText, splitScannedPdfIntoChunks, DocumentCategory } from '@/lib/pdf-filter';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -443,14 +443,18 @@ export async function POST(req: Request) {
             documents.push({ name: file.name, text: text.trim(), category: cat });
           } else {
             // Taranmış / Görsel PDF (sayfalar resim, metin katmanı yok): Gemini Vision multimodal OCR kullan
-            const base64 = Buffer.from(arrayBuffer).toString('base64');
-            documents.push({
-              name: file.name,
-              text: '',
-              category: cat,
-              isScannedImage: true,
-              base64Data: base64
-            } as any);
+            // Vercel 10sn Gateway Timeout sınırını aşmamak için en fazla 5 sayfalık parçalara böl:
+            const chunks = await splitScannedPdfIntoChunks(arrayBuffer, 5, 10);
+            for (let cIdx = 0; cIdx < chunks.length; cIdx++) {
+              const chunkBase64 = Buffer.from(chunks[cIdx]).toString('base64');
+              documents.push({
+                name: chunks.length > 1 ? `${file.name}_part${cIdx + 1}` : file.name,
+                text: '',
+                category: cat,
+                isScannedImage: true,
+                base64Data: chunkBase64
+              } as any);
+            }
           }
         } catch (err) {
           console.warn(`[Extract Server Filter] ${file.name} (${cat}) metin çıkarılamadı:`, err);
