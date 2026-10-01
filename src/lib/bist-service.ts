@@ -44,12 +44,12 @@ export interface BistCompanyMetadata {
 }
 
 export const KNOWN_BIST_DIRECTORY: Record<string, BistCompanyMetadata> = {
-  AGESA: { ticker: 'AGESA', name: 'Agesa Hayat ve Emeklilik A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS', shareCount: 180000000 },
-  ANHYT: { ticker: 'ANHYT', name: 'Anadolu Hayat Emeklilik A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS', shareCount: 430000000 },
-  TURSG: { ticker: 'TURSG', name: 'Türkiye Sigorta A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS', shareCount: 5000000000 },
-  ANSGR: { ticker: 'ANSGR', name: 'Anadolu Sigorta A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS', shareCount: 500000000 },
-  AKGRT: { ticker: 'AKGRT', name: 'Aksigorta A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS', shareCount: 1612000000 },
-  RAYSG: { ticker: 'RAYSG', name: 'Ray Sigorta A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS', shareCount: 163069856 },
+  AGESA: { ticker: 'AGESA', name: 'Agesa Hayat ve Emeklilik A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS_K', shareCount: 180000000 },
+  ANHYT: { ticker: 'ANHYT', name: 'Anadolu Hayat Emeklilik A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS_K', shareCount: 430000000 },
+  TURSG: { ticker: 'TURSG', name: 'Türkiye Sigorta A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS_K', shareCount: 5000000000 },
+  ANSGR: { ticker: 'ANSGR', name: 'Anadolu Sigorta A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS_K', shareCount: 500000000 },
+  AKGRT: { ticker: 'AKGRT', name: 'Aksigorta A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS_K', shareCount: 1612000000 },
+  RAYSG: { ticker: 'RAYSG', name: 'Ray Sigorta A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS_K', shareCount: 163069856 },
   
   GARAN: { ticker: 'GARAN', name: 'Garanti BBVA A.Ş.', sector: 'BANKING', financialGroup: 'UFRS', shareCount: 4200000000 },
   AKBNK: { ticker: 'AKBNK', name: 'Akbank T.A.Ş.', sector: 'BANKING', financialGroup: 'UFRS', shareCount: 5200000000 },
@@ -92,8 +92,10 @@ export function resolveBistCompanyMeta(rawTicker: string): BistCompanyMetadata {
   }
 
   const detectedSector = detectSector(cleanTicker);
-  let group: 'XI_29' | 'UFRS' = 'XI_29';
-  if (detectedSector === 'INSURANCE' || detectedSector === 'BANKING') {
+  let group: 'XI_29' | 'UFRS' | 'UFRS_K' = 'XI_29';
+  if (detectedSector === 'INSURANCE') {
+    group = 'UFRS_K';
+  } else if (detectedSector === 'BANKING') {
     group = 'UFRS';
   }
 
@@ -281,12 +283,13 @@ export async function fetchAndAnalyzeBistCompany(rawTicker: string) {
       paid_in_capital = getValByCode('2MEA') ?? getValByDesc('ödenmiş sermaye');
       equity = getValByCode('2O') ?? getValByDesc('özsermaye toplamı', 'özkaynak');
 
-      written_premiums = getValByCode('3DAAA', '3AAAA') ?? getValByDesc('brüt yazılan primler', 'yazılan prim');
+      written_premiums = getValByCode('3DAAB', '3DAAA', '3AAAA') ?? getValByDesc('brüt yazılan primler', 'yazılan prim');
       revenue = written_premiums;
       earned_premiums = getValByCode('3DAA', '3AA') ?? getValByDesc('kazanılmış primler');
       technical_profit = getValByCode('3K', '3F', '3C') ?? getValByDesc('teknik bölüm dengesi', 'genel teknik');
       investment_income = getValByCode('3L', '3DB') ?? getValByDesc('yatırım gelirleri');
-      net_income = getValByCode('2MEZ') ?? getValByDesc('dönem net karı', 'dönem net kar');
+      // UFRS_K: 2MEZ has consolidated net income; 3NJA/3Z are income statement equivalents
+      net_income = getValByCode('2MEZ', '3NJA', '3Z') ?? getValByDesc('dönem net karı', 'dönem net kar', 'ana ortaklık payları');
 
       // Sigortacılık için nakit akış türetimi
       operating_cash_flow = (net_income || 0) + ((written_premiums || 0) * 0.12);
