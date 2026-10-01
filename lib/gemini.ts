@@ -12,10 +12,13 @@ import crypto from 'crypto';
  */
 
 export const CANDIDATE_MODELS = [
-  'gemini-3.1-flash-lite-preview',
-  'gemini-3.8-flash',
-  'gemini-flash-latest',
-  'gemini-3-flash-preview',
+  'gemini-3.1-flash-lite-preview', // 500 RPD, 15 RPM (En yüksek günlük kota & hızlı)
+  'gemini-3.6-flash',              // 860ms süper hızlı
+  'gemini-3-flash-preview',        // 1.0sn hızlı ve stabil
+  'gemini-3.7-flash',              // Kotası neredeyse boş (1/20)
+  'gemini-flash-latest',           // Resmi en güncel flash alias
+  'gemini-3.5-flash',              // Yedek flash (8/20)
+  'gemini-3.8-flash',              // Kota aşımı geçtikten sonra fallback
 ];
 
 // TPM (Tokens Per Minute) koruma kısıtları (dakikada maks 240k token)
