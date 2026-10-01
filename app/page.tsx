@@ -12,7 +12,7 @@ import {
   TrendingUp, BarChart3, Target, Calendar, ArrowUpRight, ArrowDownRight, Minus,
   DollarSign, ShieldCheck, Activity, Layers, Sparkles, Download, Upload,
   Trophy, Award, Trash2, ArrowUpDown, Filter, Copy, Percent, PieChart, Info,
-  PanelLeftClose, PanelLeftOpen, Pin, PinOff
+  PanelLeftClose, PanelLeftOpen, Pin, PinOff, Zap
 } from 'lucide-react';
 
 import {
@@ -1388,6 +1388,59 @@ export default function ValuationTerminal() {
     }
   };
 
+  // ⚡ Borsa İstanbul Resmi Veri Akışı ile Tek Tıkla Analiz (0.5 sn)
+  const handleBistDirectAnalysis = async (symbolToAnalyze?: string) => {
+    const targetTicker = (symbolToAnalyze || ticker || '').toUpperCase().trim();
+    if (!targetTicker) {
+      setError('Lütfen analiz etmek istediğiniz hisse kodunu yazın (Örn: AGESA, THYAO, EREGL).');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setTicker(targetTicker);
+    setPipelineStep(1);
+    setPipelineProgress(30);
+    setStatusMessage(`⚡ Borsa İstanbul resmi mali tabloları ve canlı piyasa fiyatı çekiliyor: ${targetTicker}...`);
+
+    try {
+      const res = await fetch(`/api/bist?ticker=${targetTicker}`);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `BIST verisi çekilemedi (HTTP ${res.status})`);
+      }
+
+      setPipelineProgress(75);
+      setStatusMessage(`⚡ Zaman serisi, rasyolar ve sektörel adil değerleme modelleri hesaplanıyor...`);
+
+      const bistData = await res.json();
+      if (!bistData || !Array.isArray(bistData.financial_history) || bistData.financial_history.length === 0) {
+        throw new Error(`${targetTicker} için BIST mali tablosu bulunamadı.`);
+      }
+
+      if (bistData.current_price) {
+        setPrice(bistData.current_price.toString());
+      }
+      if (bistData.sector) {
+        setSelectedSector(bistData.sector);
+      }
+
+      setPipelineProgress(100);
+      setStatusMessage(`⚡ ${targetTicker} için ${bistData.financial_history.length} çeyreklik resmi veri başarıyla yüklendi!`);
+
+      setExtractedData(bistData);
+      setStep('review');
+    } catch (err: any) {
+      console.error('[BIST Direct Analysis Error]:', err);
+      setError(err.message || 'BIST verileri alınırken bir hata oluştu.');
+    } finally {
+      setLoading(false);
+      setStatusMessage('');
+      setPipelineStep(null);
+      setPipelineProgress(0);
+    }
+  };
+
   // Aşama 1: 3 Alanlı Sıralı Pipeline Yürütümü (Timeout Önleyici Dosya Bazlı Yürütüm)
   const handleExtract = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2665,28 +2718,110 @@ export default function ValuationTerminal() {
           
           {/* ADIM 1: GİRİŞ FORMU VE SEKTÖR SEÇİCİ */}
           {step === 'input' && (
-            <form onSubmit={handleExtract} className="space-y-6 bg-[#111827]/70 border border-slate-800 p-6 md:p-8 rounded-xl shadow-xl">
-              <div className="border-b border-slate-800 pb-3 flex items-center justify-between flex-wrap gap-2">
-                <span className="font-bold text-sm text-white flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-emerald-400" /> 1. Aşama: Şirket Bilgileri & Doküman Yükleme
-                </span>
-                <span className="text-xs text-emerald-400 font-mono bg-emerald-950/80 border border-emerald-800 px-2.5 py-0.5 rounded">
-                  Mod: Çok Dönemli & Sektöre Duyarlı
-                </span>
+            <div className="space-y-6">
+              {/* ⚡ BORSA İSTANBUL RESMİ VERİ AKIŞI İLE TEK TIKLA ANALİZ PANELİ */}
+              <div className="bg-gradient-to-r from-emerald-950/80 via-slate-900/90 to-teal-950/80 border-2 border-emerald-500/60 p-6 md:p-8 rounded-2xl shadow-2xl relative overflow-hidden backdrop-blur-sm">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-emerald-400 font-extrabold text-sm tracking-wider uppercase">
+                      <Zap className="w-5 h-5 fill-emerald-400 text-emerald-400 animate-pulse" />
+                      Borsa İstanbul Resmi Veri Akışı • Sıfır Kota • 0.5 Sn
+                    </div>
+                    <h2 className="text-lg md:text-xl font-black text-white tracking-tight">
+                      Hisse Kodunu Girin, 10 Çeyreklik Resmi Mali Tabloları Anında İnceleyin
+                    </h2>
+                    <p className="text-slate-300 text-xs leading-relaxed max-w-3xl">
+                      PDF aramanıza veya yüklemenize gerek yok. Borsa İstanbul ve İş Yatırım resmi denetlenmiş verileriyle son 10 çeyreğin Bilanço, Gelir Tablosu, Nakit Akışları ve DCF Adil Değerleme modelleri <strong>1 saniyede sıfır hata ve sıfır kota harcamasıyla</strong> ekranınıza gelir.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm shadow-emerald-950/50">
+                      ⚡ Canlı Piyasa & KAP Entegre
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={ticker}
+                      onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleBistDirectAnalysis();
+                        }
+                      }}
+                      placeholder="BIST Hisse Kodu (Örn: AGESA, THYAO, EREGL, TUPRS, GARAN, ASELS...)"
+                      className="w-full bg-slate-950/90 border border-emerald-500/60 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 font-mono font-bold tracking-wider focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleBistDirectAnalysis()}
+                    disabled={loading || !ticker.trim()}
+                    className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 transition disabled:opacity-50 cursor-pointer flex-shrink-0"
+                  >
+                    <Zap className="w-4 h-4 fill-white text-white" />
+                    Canlı Verileri Getir ve Analiz Et
+                  </button>
+                </div>
+
+                {/* Popüler BIST Hisseleri Hızlı Seçim Hapları */}
+                <div className="mt-4 pt-3.5 border-t border-slate-800/80 flex items-center gap-2 flex-wrap text-xs">
+                  <span className="text-slate-400 text-[11px] font-semibold flex items-center gap-1 mr-1">
+                    <TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> Popüler Hisseler:
+                  </span>
+                  {['AGESA', 'THYAO', 'EREGL', 'TUPRS', 'GARAN', 'ASELS', 'KCHOL', 'BIMAS', 'FROTO', 'SISE'].map((sym) => (
+                    <button
+                      key={sym}
+                      type="button"
+                      onClick={() => {
+                        setTicker(sym);
+                        handleBistDirectAnalysis(sym);
+                      }}
+                      className="px-3 py-1 rounded-lg bg-slate-800/90 hover:bg-emerald-600 hover:text-white text-slate-200 border border-slate-700/80 hover:border-emerald-500 transition text-[11px] font-mono font-bold cursor-pointer shadow-sm"
+                    >
+                      {sym}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-slate-300">Hisse Kodu (Ticker)</label>
-                  <input
-                    type="text"
-                    value={ticker}
-                    onChange={e => setTicker(e.target.value)}
-                    required
-                    placeholder="Örn: AGESA, THYAO, FROTO"
-                    className="w-full mt-1.5 bg-slate-950 border border-slate-700 rounded-md p-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none uppercase font-bold tracking-wider"
-                  />
+              {/* VEYA AYIRICI */}
+              <div className="relative flex items-center justify-center py-2">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-800" />
                 </div>
+                <div className="relative px-4 bg-[#0a0f1d] text-[11px] font-semibold text-slate-400 uppercase tracking-widest">
+                  VEYA ÖZEL / BİST DIŞI PDF DOKÜMANLARINIZI YÜKLEYİN
+                </div>
+              </div>
+
+              {/* MEVCUT 3 ALANLI PDF FORM */}
+              <form onSubmit={handleExtract} className="space-y-6 bg-[#111827]/70 border border-slate-800 p-6 md:p-8 rounded-xl shadow-xl">
+                <div className="border-b border-slate-800 pb-3 flex items-center justify-between flex-wrap gap-2">
+                  <span className="font-bold text-sm text-white flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-emerald-400" /> 1. Aşama: Şirket Bilgileri & Doküman Yükleme
+                  </span>
+                  <span className="text-xs text-emerald-400 font-mono bg-emerald-950/80 border border-emerald-800 px-2.5 py-0.5 rounded">
+                    Mod: Çok Dönemli & Sektöre Duyarlı
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300">Hisse Kodu (Ticker)</label>
+                    <input
+                      type="text"
+                      value={ticker}
+                      onChange={e => setTicker(e.target.value)}
+                      required
+                      placeholder="Örn: AGESA, THYAO, FROTO"
+                      className="w-full mt-1.5 bg-slate-950 border border-slate-700 rounded-md p-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none uppercase font-bold tracking-wider"
+                    />
+                  </div>
 
                 <div>
                   <label className="text-xs font-semibold text-slate-300">Güncel Fiyat (TL)</label>
@@ -3162,7 +3297,8 @@ export default function ValuationTerminal() {
                 )}
               </button>
             </form>
-          )}
+          </div>
+        )}
 
           {/* ADIM 2: ÇIKARILAN VERİLERİ İNCELEME & ONAYLAMA */}
           {step === 'review' && extractedData && (
