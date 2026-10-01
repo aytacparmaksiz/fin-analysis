@@ -15,7 +15,6 @@ export const CANDIDATE_MODELS = [
   'gemini-3.8-flash',
   'gemini-3-flash-preview',
   'gemini-2.5-flash',
-  'gemini-2.0-flash',
 ];
 
 // TPM (Tokens Per Minute) koruma kısıtları (dakikada maks 240k token)
@@ -231,6 +230,8 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
     : CANDIDATE_MODELS;
 
   let lastError: any = null;
+  let hadRateLimit = false;
+  let rateLimitError: any = null;
   let hasRetried = false;
 
   for (const model of modelsToTry) {
@@ -272,17 +273,25 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
         err?.isRateLimit || 
         /too many requests|rate[- ]limit|resource_exhausted|quota/i.test(err?.message || '');
       const isServerBusy = status === 503 || err?.code === 503 || /unavailable|server busy/i.test(err?.message || '');
+      const isModelNotFound = status === 404 || /not found|no longer available|not supported/i.test(err?.message || '');
 
       console.warn(`[GeminiClient] Model ${model} hata verdi:`, {
         status,
         message: err?.message?.slice(0, 150),
         isRateLimit,
         isServerBusy,
+        isModelNotFound,
       });
 
       if (isRateLimit) {
+        hadRateLimit = true;
+        rateLimitError = err;
         console.warn(`[GeminiClient] Model ${model} hız sınırına (429) takıldı. Vercel timeout olmaması için beklemeden bir sonraki modele geçiliyor...`);
-        // Bir sonraki modele geç
+        continue;
+      }
+
+      if (isModelNotFound) {
+        console.warn(`[GeminiClient] Model ${model} kullanımdan kalkmış veya desteklenmiyor (404). Bir sonraki modele geçiliyor...`);
         continue;
       }
 
@@ -326,13 +335,10 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
     }
   }
 
-  // Tüm modeller denendikten sonra hala rate limit hatası varsa 429 fırlat
-  const status = lastError?.status || lastError?.statusCode || lastError?.code || lastError?.error?.code || (lastError?.message?.includes('429') ? 429 : 0);
-  const isRateLimit = status === 429 || 
-    lastError?.isRateLimit || 
-    /too many requests|rate[- ]limit|resource_exhausted|quota/i.test(lastError?.message || '');
-
-  if (isRateLimit) {
+  // Eğer ana veya aday modellerden biri hız sınırına takıldıysa (veya son hata 429 ise),
+  // diğer modeller bulunamasa (404) dahi asıl sorun kota aşımıdır.
+  // İstemciye derhal 429 ve retryAfter: 5 dönülür; istemci 5 saniye bekleyip ana modelle otomatik yeniden dener:
+  if (hadRateLimit || (lastError && (lastError.status === 429 || /too many requests|rate[- ]limit|resource_exhausted|quota/i.test(lastError.message || '')))) {
     const finalRateError: any = new Error(
       'Gemini API hız sınırına ulaşıldı (Rate Limit 429). Lütfen 5 saniye sonra tekrar deneyin.'
     );

@@ -258,6 +258,8 @@ describe('PDF Filter & Timeout Resilience', () => {
       const { CANDIDATE_MODELS } = await import('../lib/gemini.ts');
       assert.ok(Array.isArray(CANDIDATE_MODELS) && CANDIDATE_MODELS.length >= 2);
       assert.ok(!CANDIDATE_MODELS.includes('gemini-1.5-flash')); // 404 on current API tier
+      assert.ok(!CANDIDATE_MODELS.includes('gemini-2.0-flash')); // 404 no longer available
+      assert.ok(CANDIDATE_MODELS.includes('gemini-3.8-flash'));
     });
 
     it('scheduleRequestSlot executes immediately (< 50ms) without in-function 13-second sleep', async () => {
@@ -319,6 +321,39 @@ describe('PDF Filter & Timeout Resilience', () => {
             const err = new Error('429 RESOURCE_EXHAUSTED');
             err.status = 429;
             throw err;
+          }
+        }
+      };
+
+      await assert.rejects(
+        async () => await generateWithRateLimitAndBackoff({
+          ai: mockAi,
+          baseParams: { contents: 'test' }
+        }),
+        (err) => {
+          assert.equal(err.status, 429);
+          assert.equal(err.retryAfter, 5);
+          assert.equal(err.isRateLimit, true);
+          return true;
+        }
+      );
+    });
+
+    it('generateWithRateLimitAndBackoff preserves 429 rate limit when subsequent fallback returns 404', async () => {
+      const { generateWithRateLimitAndBackoff, CANDIDATE_MODELS } = await import('../lib/gemini.ts');
+      
+      const primaryModel = CANDIDATE_MODELS[0];
+      const mockAi = {
+        models: {
+          generateContent: async ({ model }) => {
+            if (model === primaryModel) {
+              const err = new Error('Resource has been exhausted (e.g. check quota).');
+              err.status = 429;
+              throw err;
+            }
+            const err404 = new Error('This model is no longer available (404).');
+            err404.status = 404;
+            throw err404;
           }
         }
       };

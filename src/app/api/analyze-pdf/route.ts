@@ -146,6 +146,7 @@ Ekteki PDF dokümanlarını (Finansal Tablolar, Dipnotlar, Faaliyet Raporları v
 
     const response = await generateWithRateLimitAndBackoff({
       ai,
+      preferredModel: 'gemini-3.8-flash',
       baseParams: {
         contents: [...fileParts, promptText],
         config: {
