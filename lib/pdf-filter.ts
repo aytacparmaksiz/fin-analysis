@@ -175,8 +175,15 @@ export const ACTIVITY_REPORT_KEYWORDS = [
   'yönetim kurulu başkanı mesajı',
   'başkanın mesajı',
   'genel müdür mesajı',
+  'genel müdürün mesajı',
   'yönetim kurulu faaliyet raporu',
   'faaliyet sonuçları',
+  'finansal performans',
+  'finansal göstergeler',
+  'temel göstergeler',
+  'hedefler ve gerçekleşmeler',
+  'hedeflerimiz',
+  'beklentilerimiz',
   'geleceğe yönelik beklentiler',
   'geleceğe ilişkin beklentiler',
   'beklentiler ve hedefler',
@@ -185,6 +192,9 @@ export const ACTIVITY_REPORT_KEYWORDS = [
   'guidance',
   'rehberlik',
   'pazar payı',
+  'sektördeki konumu',
+  'prim üretimi',
+  'fon büyüklüğü',
   'risk yönetimi',
   'risklerin değerlendirilmesi',
   'iç kontrol ve risk',
@@ -204,6 +214,9 @@ export const PRESENTATION_KEYWORDS = [
   'investor presentation',
   'gelecek hedefleri',
   'finansal hedefler',
+  'hedeflerimiz',
+  'beklentilerimiz',
+  'hedef ve gerçekleşme',
   'orta vadeli hedefler',
   'orta vadeli plan',
   'marj hedefleri',
@@ -211,6 +224,11 @@ export const PRESENTATION_KEYWORDS = [
   'guidance',
   'beklentiler',
   'outlook',
+  'targets',
+  'guidance vs actual',
+  'pazar payı',
+  'prim üretimi',
+  'fon büyüklüğü',
   'capex planı',
   'yatırım bütçesi',
   'değer yaratımı',
@@ -674,22 +692,24 @@ export async function extractSmartDocumentText(
 
   const pageTexts: string[] = new Array(totalPages).fill('');
 
-  // HEDEF SAYFA SEÇİMİ (KAP Finansal Raporları & Gateway Timeout Koruması):
-  // 1. Finansal Tablolar (financial): Bilanço, Gelir Tablosu, Nakit Akış ve Özkaynak Değişim
-  //    istisnasız ilk 14 sayfa içindedir (KAP Denetim Raporu sonrası). 60-100 sayfalık dipnotları
-  //    gereksiz yere parse edip sunucu süresini tüketmek yerine sadece ilk 14 sayfa taranır (300ms).
-  // 2. Faaliyet Raporları (activity): Yönetim mesajı, rehberlik ve riskler ilk 20 sayfadadır.
-  // 3. Yatırımcı Sunumu (presentation): İlk 18 slayt.
+  // HEDEF SAYFA SEÇİMİ:
+  // 1. Faaliyet Raporları (activity): İlk 20 sayfa genellikle içindekiler ve yönetim kurulu özgeçmişleridir;
+  //    Finansal performans, pazar payı, riskler ve beklentiler 20-90. sayfalarda ve rapor sonundadır.
+  // 2. Yatırımcı Sunumu (presentation): Guidance ve gelecek hedefleri genellikle sunumun son slaytlarındadır (20-50. slayt).
   let targetPageNumbers: number[] = [];
   if (category === 'activity') {
-    const limit = Math.min(20, totalPages);
-    targetPageNumbers = Array.from({ length: limit }, (_, i) => i + 1);
+    const pageSet = new Set<number>();
+    const frontLimit = Math.min(90, totalPages);
+    for (let p = 1; p <= frontLimit; p++) pageSet.add(p);
+    for (let p = Math.max(1, totalPages - 20); p <= totalPages; p++) pageSet.add(p);
+    targetPageNumbers = Array.from(pageSet).sort((a, b) => a - b);
   } else if (category === 'presentation') {
-    const limit = Math.min(18, totalPages);
-    targetPageNumbers = Array.from({ length: limit }, (_, i) => i + 1);
+    const pageSet = new Set<number>();
+    const frontLimit = Math.min(50, totalPages);
+    for (let p = 1; p <= frontLimit; p++) pageSet.add(p);
+    for (let p = Math.max(1, totalPages - 12); p <= totalPages; p++) pageSet.add(p);
+    targetPageNumbers = Array.from(pageSet).sort((a, b) => a - b);
   } else {
-    // Bağımsız denetçi raporu ilk 10-15 sayfayı kaplayabileceği için ilk 28 sayfa taranır,
-    // ardından akıllı filtreleme motoru en kritik 12 sayfayı seçer:
     const limit = Math.min(28, totalPages);
     targetPageNumbers = Array.from({ length: limit }, (_, i) => i + 1);
   }

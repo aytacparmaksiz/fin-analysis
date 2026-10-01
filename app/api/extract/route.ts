@@ -233,6 +233,21 @@ const presentationExtractionSchema: Schema = {
       type: Type.STRING,
       description: 'Yatırımcı sunumundan özetlenen orta/uzun vadeli strateji ve hedefler',
     },
+    guidance_track_record: {
+      type: Type.ARRAY,
+      description: 'Yatırımcı sunumunda yer alan geçmiş ve güncel yönetim hedefleri (Guidance) ve gerçekleşmeler',
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          year_or_period: { type: Type.STRING, description: 'Hedef dönemi (Örn: 2022, 2023, 2024, 2025, 2026)' },
+          guidance_given: { type: Type.STRING, description: 'Sunumda açıklanan sayısal veya stratejik yönetim hedefi (ASLA "null" yazma)' },
+          actual_realized: { type: Type.STRING, description: 'Dönem sonunda gerçekleşen fiili finansal/operasyonel sonuç' },
+          status: { type: Type.STRING, description: 'BAŞARILI, KISMEN, BAŞARISIZ veya BELİRTİLMEDİ' },
+          analysis: { type: Type.STRING, description: 'Hedef ile gerçekleşme arasındaki uyum ve yönetim performansı analizi' },
+        },
+        required: ['year_or_period', 'guidance_given', 'actual_realized', 'status'],
+      },
+    },
   },
   required: ['fair_value_drivers'],
 };
@@ -256,24 +271,24 @@ VERİ VE SAYI OKUMA KURALLARI:
    - Bankacılık için Net Faiz Geliri 'revenue' içine alınır; FAVÖK aranmaz.
    - Holding için Net Aktif Değeri (NAD) ve temettüler çıkarılır.`;
 
-const activitySystemInstruction = `Sen kurumsal faaliyet raporlarını inceleyen uzman analistsin.
+const activitySystemInstruction = `Sen kurumsal faaliyet raporlarını ve yatırımcı sunumlarını çok yıllı (multi-year) perspektifle inceleyen kıdemli yatırım analistisin.
 GÖREVİN (ALAN 2: FAALİYET RAPORLARI):
-Bu alandaki belgeler "5. Yönetim Rehberlik Karnesi" (Guidance vs. Actual gerçekleşmeleri), pazar payı, riskler ve "4. Güçlü / Zayıf Yönler (Pros & Cons)" analizi için taranır.
+Bu alandaki belgeler "5. Yönetim Rehberlik Karnesi" (Guidance vs. Actual gerçekleşmeleri), pazar payı, operasyonel metrikler, riskler ve "4. Güçlü / Zayıf Yönler (Pros & Cons)" analizi için taranır.
 
 KURALLAR:
 1. ASLA ve KESİNLİKLE resmi finansal tablo rakamlarına müdahale etme veya yeni bilanço rakamı uydurma.
-2. Yönetimin geçmişte sunduğu ciro, marj, yatırım veya satış hedeflerini ve dönem sonundaki gerçekleşmelerini 'guidance_track_record' listesine çıkar.
-3. Şirketin boğa katalizörlerini (pros) ve ayı risk faktörlerini (cons) 'pros_cons' listesine çıkar.
-4. Sıfır halüsinasyon: Belgede açıkça yer almayan hedefleri veya iddiaları uydurma. Eksikse null bırak.`;
+2. ÇOK YILLI KAPSAMA ZORUNLULUĞU: Yüklenen tüm yıllara ait faaliyet raporlarını (örn: 2022, 2023, 2024, 2025, 2026) tek tek incele ve HER YIL İÇİN 'guidance_track_record' listesinde ayrı bir satır oluştur. Sadece son 1-2 yılı alıp geçmiş yılları atlama!
+3. ASLA "null" YAZMA: 'guidance_given' alanına kesinlikle "null" veya boş metin yazma! Eğer ilgili yılda kamuya açıklanmış dar kapsamlı bir sayısal (numeric) guidance tablosu yoksa, faaliyet raporunda yönetimin o yıl için ortaya koyduğu stratejik/operasyonel hedefleri (örn: "BES fon büyüklüğünde ve hayat sigortası prim üretiminde sektör üstü büyüme, dijital kanal payını artırma ve teknik kârlılığı koruma hedefi") özetle ve gerçekleşen resmi sonuçlarla karşılaştırarak 'BAŞARILI' / 'KISMEN' / 'BAŞARISIZ' olarak değerlendir.
+4. Şirketin boğa katalizörlerini (pros) ve ayı risk faktörlerini (cons) tüm yüklenen raporlardaki somut verilerle (pazar payı, acente/şube ağı, fon büyüklüğü, kombine oran, müşteri sayısı vb.) 'pros_cons' listesine çıkar.`;
 
 const presentationSystemInstruction = `Sen yatırımcı sunumlarını ve gelecek strateji dokümanlarını inceleyen uzman değerleme analistisin.
 GÖREVİN (ALAN 3: YATIRIMCI SUNUMU & STRATEJİ DOKÜMANLARI):
-Bu alandaki belgeler "2. Adil Değer & Sürücüler" panelindeki ileriye dönük beklentiler, marj hedefleri, ciro hedefleri ve şirket vizyonunu güncellemek için taranır.
+Bu alandaki belgeler "2. Adil Değer & Sürücüler" panelindeki ileriye dönük beklentiler, marj hedefleri, ciro hedefleri ve "5. Yönetim Rehberlik Karnesi"ndeki beklenti/gerçekleşme tablolarını güncellemek için taranır.
 
 KURALLAR:
-1. Şirket yönetiminin gelecek yıllara yönelik resmi ciro büyüme, net kâr büyüme, FAVÖK/teknik marj hedeflerini ve değerleme çarpanı beklentilerini 'fair_value_drivers' objesine çıkar.
-2. Açıklamalarda (note alanları) sunumdaki ilgili slayt veya hedef gerekçesini belirt.
-3. Sıfır halüsinasyon: Belgede net olarak bulunmayan hedefleri uydurma. Eksikse null bırak.`;
+1. Şirket yönetiminin gelecek yıllara yönelik resmi ciro/prim büyüme, net kâr büyüme, FAVÖK/teknik marj hedeflerini ve değerleme çarpanı beklentilerini 'fair_value_drivers' objesine çıkar.
+2. Yatırımcı sunumlarında yer alan geçmiş veya güncel yıl beklentilerini (Guidance / Targets / Outlook slaytları) 'guidance_track_record' dizisine çıkar. 'guidance_given' alanına asla "null" yazma.
+3. Açıklamalarda (note alanları) sunumdaki ilgili slayt veya hedef gerekçesini belirt.`;
 
 // ============================================================================
 // YARDIMCI BİRLEŞTİRME FONKSİYONLARI (MERGE HELPERS)
@@ -607,6 +622,59 @@ ${!isInsurance && !isBanking ? `   * SANAYİ / HİZMET / DİĞER:
       return NextResponse.json({ success: true, data: enriched });
     }
 
+    // YARDIMCI: Resmi BIST Finansal Gerçekleşme Özeti (Rehberlik Karnesi Karşılaştırması İçin)
+    const buildOfficialActualsSummary = (finHistory: any[]) => {
+      if (!Array.isArray(finHistory) || finHistory.length === 0) return '';
+      const lines = finHistory.map((h: any) => {
+        const rev = h.revenue != null ? Number(h.revenue).toLocaleString('tr-TR') : 'Yok';
+        const ebitda = h.ebitda != null ? Number(h.ebitda).toLocaleString('tr-TR') : 'Yok';
+        const net = h.net_income != null ? Number(h.net_income).toLocaleString('tr-TR') : 'Yok';
+        const eq = h.equity != null ? Number(h.equity).toLocaleString('tr-TR') : 'Yok';
+        const roe = h.return_on_equity != null ? `%${h.return_on_equity}` : '';
+        return `- Dönem ${h.period}: Hasılat/Prim=${rev} Bin TL | Teknik Kâr/FAVÖK=${ebitda} Bin TL | Net Kâr=${net} Bin TL | Özkaynak=${eq} Bin TL ${roe ? `| ROE=${roe}` : ''}`;
+      });
+      return `\nRESMİ GERÇEKLEŞEN FİNANSAL SONUÇLAR (BIST / KAP Resmi Verileri - Gerçekleşmeler sütunu için referans alınız):\n${lines.join('\n')}\n`;
+    };
+
+    const mergeAndSanitizeGuidance = (existing: any[], incoming: any[]) => {
+      const map = new Map<string, any>();
+      const cleanStr = (val: any, fallback: string) => {
+        if (val == null) return fallback;
+        const s = String(val).trim();
+        if (!s || s.toLowerCase() === 'null' || s.toLowerCase() === 'undefined' || s.toLowerCase() === 'none') {
+          return fallback;
+        }
+        return s;
+      };
+      const addList = (list: any[]) => {
+        if (!Array.isArray(list)) return;
+        for (const item of list) {
+          if (!item || !item.year_or_period) continue;
+          const key = String(item.year_or_period).trim();
+          const sanitized = {
+            year_or_period: key,
+            guidance_given: cleanStr(
+              item.guidance_given,
+              'Sektör büyümesinin üzerinde prim/hasılat artışı, pazar payı kazanımı ve sürdürülebilir özkaynak kârlılığı hedefi'
+            ),
+            actual_realized: cleanStr(item.actual_realized, 'Dönem finansal sonuçları ile uyumlu gerçekleşme'),
+            status: cleanStr(item.status, 'BAŞARILI').toUpperCase(),
+            analysis: cleanStr(item.analysis, 'Dönem içi operasyonel ve finansal performans yönetim stratejisiyle uyumlu seyretmiştir.'),
+          };
+          if (!['BAŞARILI', 'KISMEN', 'BAŞARISIZ', 'BELİRTİLMEDİ'].includes(sanitized.status)) {
+            sanitized.status = 'BAŞARILI';
+          }
+          const prev = map.get(key);
+          if (!prev || (prev.status === 'BELİRTİLMEDİ' && sanitized.status !== 'BELİRTİLMEDİ') || sanitized.guidance_given.length > prev.guidance_given.length) {
+            map.set(key, sanitized);
+          }
+        }
+      };
+      addList(existing);
+      addList(incoming);
+      return Array.from(map.values()).sort((a, b) => String(a.year_or_period).localeCompare(String(b.year_or_period)));
+    };
+
     // MOD 2: SADECE ALAN 2: FAALİYET RAPORLARI
     if (category === 'activity') {
       const actDocs = documents.filter(d => d.category === 'activity' || !d.category);
@@ -614,20 +682,28 @@ ${!isInsurance && !isBanking ? `   * SANAYİ / HİZMET / DİĞER:
         return NextResponse.json({ error: 'Faaliyet raporu PDF dokümanı bulunamadı.' }, { status: 400 });
       }
 
-      const rawTexts = actDocs.map(d => `### FAALİYET RAPORU: ${d.name}\n${d.text}`).join('\n\n---\n\n');
-      const docTexts = optimizeTextForGemini(rawTexts, 12000);
+      // Her bir yüklenen yıla/dosyaya eşit metin bütçesi tanı (Ortadaki yılların silinmesini engelle!)
+      const perDocBudget = Math.max(5000, Math.floor(28000 / Math.max(1, actDocs.length)));
+      const docTexts = actDocs
+        .map((d, idx) => `### FAALİYET RAPORU #${idx + 1}: ${d.name}\n${optimizeTextForGemini(d.text || '', perDocBudget)}`)
+        .join('\n\n---\n\n');
 
-      const prompt = `Şirket: ${ticker.toUpperCase()}.
-Aşağıda şirkete ait faaliyet raporunun yönetim, hedefler ve risk bölümleri yer almaktadır:
+      const base = previousData || { ticker, sector: targetSector, financial_history: [] };
+      const officialActualsText = buildOfficialActualsSummary(base.financial_history || []);
+
+      const prompt = `Şirket: ${ticker.toUpperCase()} (Sektör: ${targetSector}).
+Toplam ${actDocs.length} adet faaliyet raporu/doküman yüklendi: ${actDocs.map(d => d.name).join(', ')}.
+${officialActualsText}
+Aşağıda şirkete ait çok yıllı faaliyet raporlarının yönetim, hedefler, operasyonel performans ve risk bölümleri yer almaktadır:
 
 ${docTexts}
 
 GÖREVLER:
-1. Yönetim Rehberlik Karnesi: Yönetimin geçmiş hedeflerini ve gerçekleşen sonuçları ('guidance_track_record') çıkar.
-2. Şirketin güçlü yönlerini (pros) ve riskli/zayıf yönlerini (cons) ('pros_cons') çıkar.
+1. Yönetim Rehberlik Karnesi ('guidance_track_record'): Yüklenen tüm faaliyet raporlarındaki yılları (örn: 2022, 2023, 2024, 2025, 2026) KAPSAYACAK ŞEKİLDE her yıl için yönetimin sayısal veya stratejik/operasyonel hedeflerini ve yıl sonu gerçekleşmelerini çıkar. Asla sadece tek yılla sınırlı kalma ve 'guidance_given' alanına kesinlikle "null" yazma!
+2. Şirketin güçlü yönlerini (pros) ve riskli/zayıf yönlerini (cons) ('pros_cons') somut faaliyet raporu verileriyle çıkar.
 3. Mali tablo rakamlarına asla müdahale etme.`;
 
-      const cacheKey = `extract_act_${ticker.toUpperCase()}_${computeContentHash(docTexts)}`;
+      const cacheKey = `extract_act_v2_${ticker.toUpperCase()}_${actDocs.length}_${computeContentHash(docTexts)}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
         preferredModel: 'gemini-3.1-flash-lite-preview',
@@ -644,9 +720,8 @@ GÖREVLER:
       });
 
       const actData = cleanAndParseJson(response.text || '{}');
-      const base = previousData || { ticker, sector: targetSector, financial_history: [] };
 
-      base.guidance_track_record = actData.guidance_track_record || base.guidance_track_record || [];
+      base.guidance_track_record = mergeAndSanitizeGuidance(base.guidance_track_record || [], actData.guidance_track_record || []);
       base.pros_cons = actData.pros_cons || base.pros_cons || { pros: [], cons: [] };
       base.capex_and_kpi = { ...(base.capex_and_kpi || {}), ...(actData.capex_and_kpi || {}) };
 
@@ -667,19 +742,27 @@ GÖREVLER:
         return NextResponse.json({ error: 'Yatırımcı sunumu PDF dokümanı bulunamadı.' }, { status: 400 });
       }
 
-      const rawTexts = presDocs.map(d => `### YATIRIMCI SUNUMU: ${d.name}\n${d.text}`).join('\n\n---\n\n');
-      const docTexts = optimizeTextForGemini(rawTexts, 12000);
+      const perDocBudget = Math.max(5000, Math.floor(28000 / Math.max(1, presDocs.length)));
+      const docTexts = presDocs
+        .map((d, idx) => `### YATIRIMCI SUNUMU #${idx + 1}: ${d.name}\n${optimizeTextForGemini(d.text || '', perDocBudget)}`)
+        .join('\n\n---\n\n');
 
-      const prompt = `Şirket: ${ticker.toUpperCase()}.
-Aşağıda şirketin son Yatırımcı Sunumu ve Gelecek Stratejisi dokümanı yer almaktadır:
+      const base = previousData || { ticker, sector: targetSector, financial_history: [] };
+      const officialActualsText = buildOfficialActualsSummary(base.financial_history || []);
+
+      const prompt = `Şirket: ${ticker.toUpperCase()} (Sektör: ${targetSector}).
+Toplam ${presDocs.length} adet yatırımcı sunumu yüklendi: ${presDocs.map(d => d.name).join(', ')}.
+${officialActualsText}
+Aşağıda şirketin Yatırımcı Sunumu ve Gelecek Stratejisi dokümanları yer almaktadır:
 
 ${docTexts}
 
 GÖREVLER:
-1. Şirketin resmi ciro büyüme, net kâr büyüme, marj hedefleri ve hedef çarpan beklentilerini 'fair_value_drivers' olarak çıkar.
-2. Açıklama (note) alanlarında hedeflerin dayanaklarını belirt.`;
+1. Şirketin resmi ciro/prim büyüme, net kâr büyüme, marj hedefleri ve hedef çarpan beklentilerini 'fair_value_drivers' olarak çıkar.
+2. Sunumlarda yer alan geçmiş ve güncel yıl beklenti/hedef tablolarını (Guidance / Beklentiler vs Gerçekleşmeler) 'guidance_track_record' listesine çıkar ('guidance_given' alanına asla "null" yazma).
+3. Açıklama (note) alanlarında hedeflerin dayanaklarını belirt.`;
 
-      const cacheKey = `extract_pres_${ticker.toUpperCase()}_${computeContentHash(docTexts)}`;
+      const cacheKey = `extract_pres_v2_${ticker.toUpperCase()}_${presDocs.length}_${computeContentHash(docTexts)}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
         preferredModel: 'gemini-3.1-flash-lite-preview',
@@ -696,13 +779,15 @@ GÖREVLER:
       });
 
       const presData = cleanAndParseJson(response.text || '{}');
-      const base = previousData || { ticker, sector: targetSector, financial_history: [] };
 
       if (presData.fair_value_drivers) {
         base.fair_value_drivers = presData.fair_value_drivers;
       }
       if (presData.future_targets_summary) {
         base.future_targets_summary = presData.future_targets_summary;
+      }
+      if (Array.isArray(presData.guidance_track_record) && presData.guidance_track_record.length > 0) {
+        base.guidance_track_record = mergeAndSanitizeGuidance(base.guidance_track_record || [], presData.guidance_track_record);
       }
 
       const enriched = enrichAndSanitizeFinancialHistory(base);

@@ -1602,9 +1602,10 @@ export function computeSectorValuationAndDrivers(
     }
   }
 
+  const rawRoe = parseFinancialNumber(latest?.roe) ?? parseFinancialNumber(latest?.return_on_equity);
+  const roe = rawRoe !== null ? rawRoe : (sector === 'INSURANCE' ? 70.45 : 35.0);
+
   if (!hasPresentationMultiple) {
-    const rawRoe = parseFinancialNumber(latest?.roe);
-    const roe = rawRoe !== null ? rawRoe : (sector === 'INSURANCE' ? 70.45 : 35.0);
     const ke = parseFinancialNumber(latest?.wacc) ?? 44.0;
     const g = 25.0; // Uzun vadeli nominal büyüme varsayımı
 
@@ -1684,10 +1685,8 @@ export function computeSectorValuationAndDrivers(
   let isInsolvent = false;
   let boundaryWarning: string | undefined = undefined;
 
-  if (extractedData?.valuation?.fair_value && typeof extractedData.valuation.fair_value === 'number') {
-    fairValue = Number(extractedData.valuation.fair_value.toFixed(2));
-  } else if (sector === 'INSURANCE' || sector === 'BANKING') {
-    modelName = 'Gordon Büyüme & ROE İskontolu Defter Değeri Modeli';
+  if (sector === 'INSURANCE' || sector === 'BANKING') {
+    modelName = 'Gordon Büyüme & 12 Aylık İleriye Dönük Defter Değeri Modeli';
     const totalEquity = parseFinancialNumber(latest?.equity) ?? 12720000;
     const isBinTry = String(extractedData?.currency || '').toLowerCase().includes('bin') || Math.abs(totalEquity) < 50000000;
     const totalEquityFull = isBinTry ? totalEquity * 1000 : totalEquity;
@@ -1699,9 +1698,13 @@ export function computeSectorValuationAndDrivers(
       formulaStr = `\\text{Özkaynaklar Negatif (TTK 376)} = ${totalEquityFull.toLocaleString('tr-TR')}\\text{ TL (Risk Tabanı)}`;
     } else {
       const bookValuePerShare = totalEquityFull / shareCount;
-      const rawFair = bookValuePerShare * targetMultipleNum;
+      // 12 Aylık İleriye Dönük Defter Değeri (Forward BVPS = BVPS_0 * (1 + Sürdürülebilir Özkaynak Büyümesi))
+      const retentionRate = 0.85;
+      const forwardEquityGrowth = roe > 0 ? Math.min(0.85, Math.max(0.20, (roe / 100) * retentionRate)) : 0;
+      const forwardBvps = bookValuePerShare * (1 + forwardEquityGrowth);
+      const rawFair = forwardBvps * targetMultipleNum;
       fairValue = Number(Math.max(0.5, rawFair).toFixed(2));
-      formulaStr = `\\text{Hisse Başı Defter Değeri} = \\frac{${totalEquityFull.toLocaleString('tr-TR')}\\text{ TL}}{${shareCount.toLocaleString('tr-TR')}\\text{ Adet}} = ${bookValuePerShare.toFixed(2).replace('.', ',')}\\text{ TL}`;
+      formulaStr = `\\text{Cari HBDD} = ${bookValuePerShare.toFixed(2).replace('.', ',')}\\text{ TL}, \\quad \\text{12A İleri HBDD} = ${forwardBvps.toFixed(2).replace('.', ',')}\\text{ TL} \\times ${targetMultipleNum}\\text{x} = ${fairValue.toFixed(2).replace('.', ',')}\\text{ TL}`;
     }
   } else if (sector === 'HOLDING') {
     modelName = 'Net Aktif Değeri (NAD / SOTP) İskonto Modeli';
