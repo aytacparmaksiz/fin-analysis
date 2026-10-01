@@ -640,6 +640,8 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
       const cashVal = item.cash_and_equivalents ?? item.cash ?? 0;
       if (detectedSector === 'INSURANCE') {
         item.net_debt = -cashVal;
+      } else if (item.short_term_debt != null || item.long_term_debt != null || item.cash_and_equivalents != null) {
+        item.net_debt = (Number(item.short_term_debt || 0) + Number(item.long_term_debt || 0)) - Number(cashVal || 0);
       }
     }
 
@@ -660,31 +662,39 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
       item.wacc = Number(Number(item.wacc).toFixed(1));
     }
 
-    // ROIC & EVA Spread (Sıfır Sahte Veri Prensibi: Yetersiz veride asla yapay/sabit roic türetilmez)
-    if (detectedSector === 'INSURANCE') {
-      item.roic = typeof item.roe === 'number' ? item.roe : null;
-    } else if (item.roic == null || item.roic === 0 || isNaN(Number(item.roic))) {
+    // ROIC & EVA Spread: İlgili dönem için her zaman YILLIKLANDIRILMIŞ kârlılık oranı olarak hesaplanır
+    if (detectedSector === 'INSURANCE' || detectedSector === 'BANKING') {
+      item.roic = typeof item.roe === 'number' ? Number(item.roe.toFixed(1)) : null;
+    } else {
       const equity = typeof item.equity === 'number' && item.equity > 0 ? item.equity : 0;
       const netDebt = typeof item.net_debt === 'number' && item.net_debt > 0 ? item.net_debt : 0;
       const investedCapital = equity + netDebt;
 
-      const rawNopat = (typeof item.net_income === 'number' && item.net_income !== 0)
-        ? item.net_income
+      const opNopat = (typeof item.operating_profit === 'number' && item.operating_profit !== 0)
+        ? item.operating_profit * 0.75
         : ((typeof item.ebitda === 'number' && item.ebitda > 0) ? item.ebitda * 0.70 : 0);
-      const nopat = rawNopat * annualFactor;
 
-      if (investedCapital > 0 && nopat !== 0) {
-        const calculated = (nopat / investedCapital) * 100;
-        if (calculated >= -50 && calculated <= 150) {
+      const rawNopat = (typeof item.net_income === 'number' && item.net_income !== 0)
+        ? (opNopat > 0 && item.net_income > 0 ? Math.max(item.net_income, opNopat) : item.net_income)
+        : opNopat;
+
+      // İlgili dönem çarpanı (3A -> x4, 6A -> x2, 9A -> x1.33, 12A -> x1) ile yıllıklandırılmış NOPAT
+      const annualizedNopat = rawNopat * annualFactor;
+
+      if (investedCapital > 0 && annualizedNopat !== 0) {
+        const calculated = (annualizedNopat / investedCapital) * 100;
+        if (calculated >= -100 && calculated <= 250) {
           item.roic = Number(calculated.toFixed(1));
         } else {
           item.roic = null;
         }
+      } else if (typeof item.roe === 'number') {
+        item.roic = Number(item.roe.toFixed(1));
+      } else if (item.roic != null && !isNaN(Number(item.roic))) {
+        item.roic = Number((Number(item.roic) * (item.roic < 25 && annualFactor > 1 ? annualFactor : 1)).toFixed(1));
       } else {
         item.roic = null;
       }
-    } else {
-      item.roic = Number(Number(item.roic).toFixed(1));
     }
 
     item.eva_spread = (typeof item.roic === 'number' && typeof item.wacc === 'number')

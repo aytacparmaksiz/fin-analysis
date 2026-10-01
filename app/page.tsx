@@ -774,42 +774,48 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
       row.wacc = Number(Number(row.wacc).toFixed(1));
     }
 
-    if (row.roic == null || row.roic === 0 || isNaN(Number(row.roic))) {
-      if (sector === 'INSURANCE' && typeof row.roe === 'number') {
-        row.roic = row.roe;
-      } else {
-        const equity = typeof row.equity === 'number' && row.equity > 0 ? row.equity : 0;
-        const netDebt = typeof row.net_debt === 'number' && row.net_debt > 0 ? row.net_debt : 0;
-        const investedCapital = equity + netDebt;
-
-        const rawNopat = (typeof row.net_income === 'number' && row.net_income !== 0)
-          ? row.net_income
-          : ((typeof row.ebitda === 'number' && row.ebitda > 0) ? row.ebitda * 0.70 : 0);
-        const nopat = rawNopat * annualFactor;
-
-        if (investedCapital > 0 && nopat !== 0) {
-          const calculated = (nopat / investedCapital) * 100;
-          if (calculated >= -50 && calculated <= 150) {
-            row.roic = Number(calculated.toFixed(1));
-          } else if (typeof row.ebitda_margin === 'number' && row.ebitda_margin > 0) {
-            row.roic = Number((row.ebitda_margin * 0.85).toFixed(1));
-          } else {
-            row.roic = Number((row.wacc * 0.88).toFixed(1));
-          }
-        } else if (typeof row.ebitda_margin === 'number' && row.ebitda_margin > 0) {
-          row.roic = Number((row.ebitda_margin * 0.85).toFixed(1));
-        } else if (typeof row.gross_margin === 'number' && row.gross_margin > 0) {
-          row.roic = Number((row.gross_margin * 0.65).toFixed(1));
-        } else {
-          const prevRoic = idx > 0 && sorted[idx - 1]?.roic ? sorted[idx - 1].roic : null;
-          row.roic = prevRoic !== null ? prevRoic : Number((row.wacc * 0.88).toFixed(1));
-        }
+    // ROIC: İlgili dönem için her zaman YILLIKLANDIRILMIŞ kârlılık oranı olarak hesaplanır
+    if (sector === 'INSURANCE' || sector === 'BANKING') {
+      if (typeof row.roe === 'number') {
+        row.roic = Number(row.roe.toFixed(1));
       }
     } else {
-      row.roic = Number(Number(row.roic).toFixed(1));
+      const equity = typeof row.equity === 'number' && row.equity > 0 ? row.equity : 0;
+      const netDebt = typeof row.net_debt === 'number' && row.net_debt > 0 ? row.net_debt : 0;
+      const investedCapital = equity + netDebt;
+
+      const opNopat = (typeof row.operating_profit === 'number' && row.operating_profit !== 0)
+        ? row.operating_profit * 0.75
+        : ((typeof row.ebitda === 'number' && row.ebitda > 0) ? row.ebitda * 0.70 : 0);
+
+      const rawNopat = (typeof row.net_income === 'number' && row.net_income !== 0)
+        ? (opNopat > 0 && row.net_income > 0 ? Math.max(row.net_income, opNopat) : row.net_income)
+        : opNopat;
+
+      const annualizedNopat = rawNopat * annualFactor;
+
+      if (investedCapital > 0 && annualizedNopat !== 0) {
+        const calculated = (annualizedNopat / investedCapital) * 100;
+        if (calculated >= -100 && calculated <= 250) {
+          row.roic = Number(calculated.toFixed(1));
+        } else if (typeof row.roe === 'number') {
+          row.roic = Number(row.roe.toFixed(1));
+        } else {
+          row.roic = Number((row.wacc * 0.88).toFixed(1));
+        }
+      } else if (typeof row.roe === 'number') {
+        row.roic = Number(row.roe.toFixed(1));
+      } else if (row.roic != null && !isNaN(Number(row.roic))) {
+        row.roic = Number(Number(row.roic).toFixed(1));
+      } else {
+        const prevRoic = idx > 0 && sorted[idx - 1]?.roic ? sorted[idx - 1].roic : null;
+        row.roic = prevRoic !== null ? prevRoic : Number((row.wacc * 0.88).toFixed(1));
+      }
     }
 
-    row.eva_spread = Number((row.roic - row.wacc).toFixed(1));
+    row.eva_spread = (typeof row.roic === 'number' && typeof row.wacc === 'number')
+      ? Number((row.roic - row.wacc).toFixed(1))
+      : null;
 
     return row;
   });
@@ -1388,7 +1394,7 @@ export default function ValuationTerminal() {
     }
   };
 
-  // ⚡ Borsa İstanbul Resmi Veri Akışı ile Tek Tıkla Analiz (0.5 sn)
+  // ⚡ Borsa İstanbul Resmi Veri Akışı + Opsiyonel Faaliyet Raporu & Yatırımcı Sunumu Zenginleştirme
   const handleBistDirectAnalysis = async (symbolToAnalyze?: string) => {
     const targetTicker = (symbolToAnalyze || ticker || '').toUpperCase().trim();
     if (!targetTicker) {
@@ -1400,8 +1406,8 @@ export default function ValuationTerminal() {
     setError(null);
     setTicker(targetTicker);
     setPipelineStep(1);
-    setPipelineProgress(30);
-    setStatusMessage(`⚡ Borsa İstanbul resmi mali tabloları ve canlı piyasa fiyatı çekiliyor: ${targetTicker}...`);
+    setPipelineProgress(25);
+    setStatusMessage(`[1/3] ⚡ Borsa İstanbul resmi mali tabloları ve canlı piyasa fiyatı çekiliyor: ${targetTicker}...`);
 
     try {
       const res = await fetch(`/api/bist?ticker=${targetTicker}`);
@@ -1410,25 +1416,130 @@ export default function ValuationTerminal() {
         throw new Error(errJson.error || `BIST verisi çekilemedi (HTTP ${res.status})`);
       }
 
-      setPipelineProgress(75);
-      setStatusMessage(`⚡ Zaman serisi, rasyolar ve sektörel adil değerleme modelleri hesaplanıyor...`);
-
       const bistData = await res.json();
       if (!bistData || !Array.isArray(bistData.financial_history) || bistData.financial_history.length === 0) {
         throw new Error(`${targetTicker} için BIST mali tablosu bulunamadı.`);
       }
 
+      const livePriceStr = bistData.current_price ? bistData.current_price.toString() : (price || '100');
       if (bistData.current_price) {
-        setPrice(bistData.current_price.toString());
+        setPrice(livePriceStr);
       }
       if (bistData.sector) {
         setSelectedSector(bistData.sector);
       }
 
-      setPipelineProgress(100);
-      setStatusMessage(`⚡ ${targetTicker} için ${bistData.financial_history.length} çeyreklik resmi veri başarıyla yüklendi!`);
+      let currentData: any = {
+        ...bistData,
+        fair_value_drivers: bistData.drivers || bistData.fair_value_drivers
+      };
 
-      setExtractedData(bistData);
+      // OPSİYONEL ADIM 2: Faaliyet Raporları (Alan 2) Varsa Zenginleştir
+      if (activityFiles.length > 0) {
+        setPipelineStep(2);
+        setPipelineProgress(55);
+        setStatusMessage(`[2/3] Faaliyet Raporu taranıyor (${activityFiles.length} belge)...`);
+
+        try {
+          const activityDocs: { name: string; text: string; category: string }[] = [];
+          for (let i = 0; i < activityFiles.length; i++) {
+            const file = activityFiles[i];
+            try {
+              const arrayBuffer = await file.arrayBuffer();
+              const { text } = await extractSmartDocumentText(arrayBuffer.slice(0), 'activity');
+              if (text && text.trim().length > 50) {
+                activityDocs.push({ name: file.name, text: text.trim().slice(0, 12000), category: 'activity' });
+              }
+            } catch (err) {
+              console.warn(`[Activity PDF] ${file.name} okunamadı:`, err);
+            }
+          }
+
+          if (activityDocs.length > 0) {
+            setStatusMessage(`[2/3] Faaliyet raporundan yönetim hedefleri ve Güçlü/Zayıf yönler ayıklanıyor...`);
+            const res2 = await fetchWithClientRetry(
+              () => fetch('/api/extract', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  ticker: targetTicker,
+                  price: livePriceStr,
+                  category: 'activity',
+                  documents: activityDocs,
+                  previousData: currentData
+                })
+              }),
+              setStatusMessage
+            );
+            const result2 = await parseApiResponse(res2, 'Faaliyet raporu zenginleştirmesi tamamlanamadı.');
+            if (result2?.data) {
+              currentData = {
+                ...currentData,
+                ...result2.data,
+                financial_history: currentData.financial_history // Resmi BIST mali tablolarını koru
+              };
+            }
+          }
+        } catch (actErr: any) {
+          console.warn('[Activity Enrichment Warning]:', actErr.message);
+        }
+      }
+
+      // OPSİYONEL ADIM 3: Yatırımcı Sunumu (Alan 3) Varsa Zenginleştir
+      if (presentationFiles.length > 0) {
+        setPipelineStep(3);
+        setPipelineProgress(80);
+        setStatusMessage(`[3/3] Yatırımcı Sunumu taranıyor (${presentationFiles.length} belge)...`);
+
+        try {
+          const presentationDocs: { name: string; text: string; category: string }[] = [];
+          for (let i = 0; i < presentationFiles.length; i++) {
+            const file = presentationFiles[i];
+            try {
+              const arrayBuffer = await file.arrayBuffer();
+              const { text } = await extractSmartDocumentText(arrayBuffer.slice(0), 'presentation');
+              if (text && text.trim().length > 50) {
+                presentationDocs.push({ name: file.name, text: text.trim().slice(0, 12000), category: 'presentation' });
+              }
+            } catch (err) {
+              console.warn(`[Presentation PDF] ${file.name} okunamadı:`, err);
+            }
+          }
+
+          if (presentationDocs.length > 0) {
+            setStatusMessage(`[3/3] Yatırımcı sunumundan ileriye dönük hedefler entegre ediliyor...`);
+            const res3 = await fetchWithClientRetry(
+              () => fetch('/api/extract', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  ticker: targetTicker,
+                  price: livePriceStr,
+                  category: 'presentation',
+                  documents: presentationDocs,
+                  previousData: currentData
+                })
+              }),
+              setStatusMessage
+            );
+            const result3 = await parseApiResponse(res3, 'Yatırımcı sunumu zenginleştirmesi tamamlanamadı.');
+            if (result3?.data) {
+              currentData = {
+                ...currentData,
+                ...result3.data,
+                financial_history: currentData.financial_history // Resmi BIST mali tablolarını koru
+              };
+            }
+          }
+        } catch (presErr: any) {
+          console.warn('[Presentation Enrichment Warning]:', presErr.message);
+        }
+      }
+
+      setPipelineProgress(100);
+      setStatusMessage(`⚡ ${targetTicker} için ${currentData.financial_history.length} çeyreklik resmi veri başarıyla yüklendi!`);
+
+      setExtractedData(currentData);
       setStep('review');
     } catch (err: any) {
       console.error('[BIST Direct Analysis Error]:', err);
@@ -2023,6 +2134,28 @@ export default function ValuationTerminal() {
         }
         break;
       }
+      case 'roic': {
+        if (sector === 'INSURANCE' || sector === 'BANKING') {
+          if (d.net_income && d.equity && d.equity > 0) {
+            return Number(((d.net_income * annualFactor / d.equity) * 100).toFixed(2));
+          }
+          if (typeof d.roe === 'number') return Number(d.roe.toFixed(2));
+        }
+        const equityVal = typeof d.equity === 'number' && d.equity > 0 ? d.equity : 0;
+        const netDebtVal = typeof d.net_debt === 'number' && d.net_debt > 0 ? d.net_debt : 0;
+        const invCap = equityVal + netDebtVal;
+        const opNopat = typeof d.operating_profit === 'number' && d.operating_profit !== 0
+          ? d.operating_profit * 0.75
+          : (typeof d.ebitda === 'number' && d.ebitda > 0 ? d.ebitda * 0.70 : 0);
+        const rawProfit = typeof d.net_income === 'number' && d.net_income !== 0
+          ? (opNopat > 0 && d.net_income > 0 ? Math.max(d.net_income, opNopat) : d.net_income)
+          : opNopat;
+        if (invCap > 0 && rawProfit !== 0) {
+          return Number((((rawProfit * annualFactor) / invCap) * 100).toFixed(2));
+        }
+        if (typeof d.roic === 'number') return Number(d.roic.toFixed(2));
+        break;
+      }
       case 'loss_ratio': {
         if (d.loss_ratio != null) return d.loss_ratio;
         break;
@@ -2100,24 +2233,29 @@ export default function ValuationTerminal() {
       desc: 'Varlıkların ne kadarının yabancı kaynakla finanse edildiğini gösterir. Sigorta şirketlerinde toplanan primler teknik karşılık olarak yazıldığından yüksek kaldıraç normaldir.',
     },
     asset_turnover: {
-      formula: 'Aktif Devir Hızı = Satış Gelirleri (veya Primler) / Toplam Aktifler',
+      formula: 'Aktif Devir Hızı = Yıllıklandırılmış Satış Gelirleri / Toplam Aktifler',
       benchmark: 'Sanayi: 1,0 - 2,0 | Sigorta & Banka: 0,10 - 0,20',
       desc: 'Şirketin varlık tabanını ne kadar etkin ciroya dönüştürdüğünü ölçer.',
     },
     equity_turnover: {
-      formula: 'Özkaynak Devir Hızı = Satış Gelirleri / Toplam Özkaynaklar',
+      formula: 'Özkaynak Devir Hızı = Yıllıklandırılmış Satış Gelirleri / Toplam Özkaynaklar',
       benchmark: 'Normal: 3,0 - 6,0x',
       desc: 'Özkaynakların ne kadar ciro ürettiğini gösterir.',
     },
     roa: {
-      formula: 'Aktif Kârlılık (ROA) = Net Dönem Kârı / Toplam Aktifler (%)',
-      benchmark: 'Finans / Sigorta: %1,5 - %3,0',
-      desc: 'Tüm bilanço büyüklüğü üzerinden üretilen net getiri.',
+      formula: 'Aktif Kârlılık (ROA - Yıllıklandırılmış) = (Dönem Net Kârı × Yıllıklandırma Çarpanı) / Toplam Aktifler (%)',
+      benchmark: 'Finans / Sigorta: %1,5 - %3,0 | Sanayi: %5,0 - %15,0',
+      desc: 'İlgili dönem kârının yıllıklandırılarak tüm bilanço büyüklüğü üzerinden ürettiği net getiriyi gösterir.',
     },
     roe: {
-      formula: 'Özkaynak Kârlılığı (ROE) = Net Dönem Kârı / Toplam Özkaynaklar (%)',
-      benchmark: 'Mükemmel Değer Üretimi: ROE > Sermaye Maliyeti (%60+)',
-      desc: 'Hissedarların yatırdığı özsermayenin yıllık getiri oranıdır. AGESA %70+ ROE ile sektörünün zirvesindedir.',
+      formula: 'Özkaynak Kârlılığı (ROE - Yıllıklandırılmış) = (Dönem Net Kârı × Yıllıklandırma Çarpanı) / Toplam Özkaynaklar (%)',
+      benchmark: 'Mükemmel Değer Üretimi: ROE > Sermaye Maliyeti (%50+)',
+      desc: 'Hissedarların yatırdığı özsermayenin ilgili dönem için yıllıklandırılmış getiri oranıdır.',
+    },
+    roic: {
+      formula: 'Yatırılan Sermaye Getirisi (ROIC - Yıllıklandırılmış) = (Dönem NOPAT × Yıllıklandırma Çarpanı) / (Özkaynaklar + Net Finansal Borç) (%)',
+      benchmark: 'Değer Üretimi: ROIC > WACC (Sermaye Maliyeti)',
+      desc: 'Şirketin ana faaliyetlerine yatırılan toplam sermaye üzerinden ilgili dönem için yıllıklandırılmış olarak ürettiği kârlılık oranıdır (3A için ×4, 6A için ×2, 9A için ×1.33, 12A için ×1).',
     },
     combined_ratio: {
       formula: 'Kombine Oran = Hasar / Prim Oranı + Masraf Oranı (%)',
@@ -2329,11 +2467,12 @@ export default function ValuationTerminal() {
       ],
     },
     {
-      title: 'Karlılık Oranları',
+      title: 'Karlılık Oranları (Yıllıklandırılmış)',
       categoryKey: 'KARLILIK',
       rows: [
-        { label: 'Aktif Karlılık (ROA)', key: 'roa', isPercent: true, defaultVal: 1.60 },
-        { label: 'Özkaynak Karlılığı (ROE)', key: 'roe', isPercent: true, defaultVal: 70.45 },
+        { label: 'Aktif Karlılık (ROA - Yıllıklandırılmış)', key: 'roa', isPercent: true, defaultVal: 1.60 },
+        { label: 'Özkaynak Karlılığı (ROE - Yıllıklandırılmış)', key: 'roe', isPercent: true, defaultVal: 70.45 },
+        { label: 'Yatırılan Sermaye Getirisi (ROIC - Yıllıklandırılmış)', key: 'roic', isPercent: true, defaultVal: 45.00 },
       ],
     },
     ...(currentSector === 'INSURANCE' ? [{
@@ -2789,193 +2928,34 @@ export default function ValuationTerminal() {
                 </div>
               </div>
 
-              {/* VEYA AYIRICI */}
-              <div className="relative flex items-center justify-center py-2">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-800" />
-                </div>
-                <div className="relative px-4 bg-[#0a0f1d] text-[11px] font-semibold text-slate-400 uppercase tracking-widest">
-                  VEYA ÖZEL / BİST DIŞI PDF DOKÜMANLARINIZI YÜKLEYİN
-                </div>
-              </div>
-
-              {/* MEVCUT 3 ALANLI PDF FORM */}
-              <form onSubmit={handleExtract} className="space-y-6 bg-[#111827]/70 border border-slate-800 p-6 md:p-8 rounded-xl shadow-xl">
+              {/* OPSİYONEL ANALİZ ZENGİNLEŞTİRME PANELİ (ALAN 2: FAALİYET RAPORU & ALAN 3: YATIRIMCI SUNUMU) */}
+              <div className="space-y-5 bg-[#111827]/70 border border-slate-800 p-6 md:p-8 rounded-xl shadow-xl">
                 <div className="border-b border-slate-800 pb-3 flex items-center justify-between flex-wrap gap-2">
-                  <span className="font-bold text-sm text-white flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-emerald-400" /> 1. Aşama: Şirket Bilgileri & Doküman Yükleme
-                  </span>
-                  <span className="text-xs text-emerald-400 font-mono bg-emerald-950/80 border border-emerald-800 px-2.5 py-0.5 rounded">
-                    Mod: Çok Dönemli & Sektöre Duyarlı
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="text-xs font-semibold text-slate-300">Hisse Kodu (Ticker)</label>
-                    <input
-                      type="text"
-                      value={ticker}
-                      onChange={e => setTicker(e.target.value)}
-                      required
-                      placeholder="Örn: AGESA, THYAO, FROTO"
-                      className="w-full mt-1.5 bg-slate-950 border border-slate-700 rounded-md p-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none uppercase font-bold tracking-wider"
-                    />
+                    <span className="font-bold text-sm text-white flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-sky-400" /> Opsiyonel Analiz Zenginleştirme (Faaliyet Raporu & Yatırımcı Sunumu)
+                    </span>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Finansal tablolar BIST resmi akışından otomatik çekilir. İsterseniz Yönetim Rehberlik Karnesi, Güçlü/Zayıf Yönler ve Gelecek Hedeflerini zenginleştirmek için aşağıya PDF ekleyebilirsiniz.
+                    </p>
                   </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-300">Güncel Fiyat (TL)</label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={price}
-                    onChange={e => setPrice(e.target.value)}
-                    required
-                    placeholder="Örn: 118.50"
-                    className="w-full mt-1.5 bg-slate-950 border border-slate-700 rounded-md p-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-300">Sektör Değerleme Modu</label>
-                  <select
-                    value={selectedSector}
-                    onChange={e => setSelectedSector(e.target.value as any)}
-                    className="w-full mt-1.5 bg-slate-950 border border-slate-700 rounded-md p-2.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
-                  >
-                    <option value="AUTO">Otomatik Sektör Tespiti (Akıllı Mod)</option>
-                    <option value="INSURANCE">Sigortacılık & Emeklilik (Hayat & BES)</option>
-                    <option value="BANKING">Bankacılık & Finans</option>
-                    <option value="INDUSTRIAL">Sanayi, Hizmet & Genel Ticaret</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Sektörel Bilgilendirme Kutusu */}
-              <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-lg flex items-start gap-3 text-xs text-slate-300">
-                <Info className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <div className="font-bold text-white">Sektöre Özgü Finansal Analiz Mimarisi</div>
-                  <p className="text-slate-400 text-[11px] leading-relaxed">
-                    Sistem <strong>AGESA, ANHYT, TURSG</strong> gibi sigorta şirketlerini algıladığında klasik FAVÖK ve Net Borç yerine; 
-                    <strong> Prim Üretimi, Teknik Bölüm Dengesi, Kombine Oran, Yatırım Portföyü ve Özkaynak Kârlılığı (ROE)</strong> dinamiklerini değerlendirir.
-                  </p>
-                </div>
-              </div>
-
-              {/* 3 ALANLI DOKÜMAN YÜKLEME MİMARİSİ */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <span className="text-xs font-bold text-slate-200 flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-emerald-400" /> Ayrıştırılmış Doküman Yükleme Alanları
-                  </span>
-                  <span className="text-[11px] text-slate-400 font-mono">
-                    Toplam {files.length} dosya seçildi (Zorunlu Alan 1: {financialFiles.length})
+                  <span className="text-[11px] text-sky-400 font-mono bg-sky-950/80 border border-sky-800 px-2.5 py-0.5 rounded">
+                    Eklenen Belge: {activityFiles.length + presentationFiles.length} Dosya (Opsiyonel)
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                  {/* ALAN 1: Finansal Raporlar & Tablolar (KAP / Bağımsız Denetim) - ZORUNLU */}
-                  <div 
-                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (e.dataTransfer.files) handleAddFinancialFiles(e.dataTransfer.files);
-                    }}
-                    className={`rounded-xl border p-5 transition flex flex-col justify-between ${
-                    financialFiles.length > 0 
-                      ? 'bg-slate-950/80 border-emerald-500/50 shadow-lg shadow-emerald-950/20' 
-                      : 'bg-slate-950/40 border-slate-700/80 hover:border-slate-600'
-                  }`}>
-                    <div className="space-y-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2.5">
-                          <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-                            <FileSpreadsheet className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <div className="font-bold text-xs text-white">1. Alan: Finansal Raporlar & Tablolar</div>
-                            <div className="text-[10px] text-slate-400">KAP / Bağımsız Denetim</div>
-                          </div>
-                        </div>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-950 text-emerald-300 border border-emerald-700 flex-shrink-0">
-                          Zorunlu
-                        </span>
-                      </div>
-
-                      <p className="text-[11px] text-slate-300 leading-relaxed min-h-[48px]">
-                        Bilanço, Gelir Tablosu, Nakit Akış Tabloları (örn: 2022-2026 çeyreklik veya yıllık KAP mali tabloları). Sadece resmi denetlenmiş veriler taranır. Asla PR veya serbest yorum kabul edilmez.
-                      </p>
-
-                      <div 
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => financialInputRef.current?.click()}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); financialInputRef.current?.click(); } }}
-                        className="border-2 border-dashed border-emerald-700/50 hover:border-emerald-400 rounded-lg p-3.5 text-center cursor-pointer transition bg-emerald-950/20 hover:bg-emerald-950/30 group select-none"
-                      >
-                        <UploadCloud className="w-6 h-6 text-emerald-400 mx-auto mb-1 group-hover:scale-110 transition-transform" />
-                        <span className="text-xs font-bold text-white block">Mali Tablo PDF Ekle veya Sürükle</span>
-                        <span className="text-[10px] text-slate-400 block mb-2.5">Çoklu PDF seçebilirsiniz</span>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            financialInputRef.current?.click();
-                          }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold rounded-md shadow-sm transition cursor-pointer"
-                        >
-                          <UploadCloud className="w-3.5 h-3.5" /> PDF Dosyası Seç
-                        </button>
-                        <input
-                          ref={financialInputRef}
-                          type="file"
-                          multiple
-                          accept=".pdf,application/pdf"
-                          onChange={e => {
-                            if (e.target.files) handleAddFinancialFiles(e.target.files);
-                            e.target.value = '';
-                          }}
-                          className="sr-only"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Dosya Listesi */}
-                    <div className="mt-3 pt-3 border-t border-slate-800 space-y-1.5">
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-slate-400">Seçilen Belgeler:</span>
-                        <span className={`font-bold ${financialFiles.length > 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                          {financialFiles.length} dosya
-                        </span>
-                      </div>
-                      {financialFiles.length === 0 ? (
-                        <p className="text-[10px] text-slate-500 italic">Analizi başlatmak için en az 1 finansal tablo PDF&apos;i gereklidir.</p>
-                      ) : (
-                        <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
-                          {financialFiles.map((f, i) => (
-                            <div key={i} className="flex items-center justify-between gap-1 text-[11px] bg-slate-900 border border-slate-800 px-2 py-1 rounded text-slate-200">
-                              <div className="flex items-center gap-1.5 truncate">
-                                <FileSpreadsheet className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-                                <span className="truncate" title={f.name}>{f.name}</span>
-                                <span className="text-[9px] text-slate-400">({formatFileSize(f.size)})</span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => removeFinancialFile(i)}
-                                className="text-slate-400 hover:text-red-400 p-0.5 rounded cursor-pointer"
-                                title="Kaldır"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                {/* Sektörel Bilgilendirme Kutusu */}
+                <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-lg flex items-start gap-3 text-xs text-slate-300">
+                  <Info className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="font-bold text-white">Sektöre Özgü Finansal Analiz & Akıllı Sayfa Filtreleme</div>
+                    <p className="text-slate-400 text-[11px] leading-relaxed">
+                      Sistem <strong>AGESA, ANHYT, TURSG</strong> gibi sigorta şirketlerini algıladığında klasik FAVÖK yerine <strong>Prim Üretimi, Teknik Bölüm Dengesi, Kombine Oran ve Yıllıklandırılmış ROE/ROIC</strong> dinamiklerini değerlendirir. Eklediğiniz Faaliyet Raporu ve Yatırımcı Sunumlarının yalnızca ilgili hedef/risk sayfaları taranarak <strong>2-3 saniyede sıfır zaman aşımı hatasıyla</strong> analize dahil edilir.
+                    </p>
                   </div>
+                </div>
 
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                   {/* ALAN 2: Faaliyet Raporları - OPSİYONEL */}
                   <div 
                     onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
@@ -3178,127 +3158,130 @@ export default function ValuationTerminal() {
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Canlı İlerlemeli Adım Çubuğu (Sequential Stepped Progress Bar) */}
-              {loading && (
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-4 shadow-2xl animate-fade-in">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-center text-xs">
-                    {/* 1. Adım */}
-                    <div className={`p-3 rounded-lg border transition ${
-                      pipelineStep === 1 
-                        ? 'bg-emerald-950/70 border-emerald-500 text-emerald-200 shadow-md shadow-emerald-950/40' 
-                        : (pipelineStep && pipelineStep > 1) 
-                          ? 'bg-slate-900/90 border-emerald-800/80 text-emerald-400' 
-                          : 'bg-slate-900/40 border-slate-800 text-slate-500'
-                    }`}>
-                      <div className="flex items-center justify-center gap-2 font-bold text-xs">
-                        {pipelineStep && pipelineStep > 1 ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                        ) : pipelineStep === 1 ? (
-                          <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin flex-shrink-0" />
-                        ) : (
-                          <span className="w-4 h-4 rounded-full bg-slate-800 text-[10px] flex items-center justify-center text-slate-400">1</span>
-                        )}
-                        <span>1. Aşama: Mali Tablolar ({financialFiles.length} Belge)</span>
-                      </div>
-                      <div className="text-[10px] text-slate-400 mt-1">Zaman serisi & Bilanço analizi</div>
-                    </div>
-
-                    {/* 2. Adım */}
-                    <div className={`p-3 rounded-lg border transition ${
-                      activityFiles.length === 0
-                        ? 'bg-slate-900/30 border-slate-800/60 text-slate-500'
-                        : pipelineStep === 2 
-                          ? 'bg-sky-950/70 border-sky-500 text-sky-200 shadow-md shadow-sky-950/40' 
-                          : (pipelineProgress === 100 || (pipelineStep && pipelineStep > 2)) 
-                            ? 'bg-slate-900/90 border-sky-800/80 text-sky-400' 
+                {/* Canlı İlerlemeli Adım Çubuğu (Sequential Stepped Progress Bar) */}
+                {loading && (
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-4 shadow-2xl animate-fade-in">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-center text-xs">
+                      {/* 1. Adım */}
+                      <div className={`p-3 rounded-lg border transition ${
+                        pipelineStep === 1 
+                          ? 'bg-emerald-950/70 border-emerald-500 text-emerald-200 shadow-md shadow-emerald-950/40' 
+                          : (pipelineStep && pipelineStep > 1) 
+                            ? 'bg-slate-900/90 border-emerald-800/80 text-emerald-400' 
                             : 'bg-slate-900/40 border-slate-800 text-slate-500'
-                    }`}>
-                      <div className="flex items-center justify-center gap-2 font-bold text-xs">
-                        {activityFiles.length === 0 ? (
-                          <Minus className="w-4 h-4 text-slate-500 flex-shrink-0" />
-                        ) : (pipelineProgress === 100 || (pipelineStep && pipelineStep > 2)) ? (
-                          <CheckCircle2 className="w-4 h-4 text-sky-400 flex-shrink-0" />
-                        ) : pipelineStep === 2 ? (
-                          <RefreshCw className="w-4 h-4 text-sky-400 animate-spin flex-shrink-0" />
-                        ) : (
-                          <span className="w-4 h-4 rounded-full bg-slate-800 text-[10px] flex items-center justify-center text-slate-400">2</span>
-                        )}
-                        <span>2. Aşama: Faaliyet Raporu ({activityFiles.length > 0 ? `${activityFiles.length} Belge` : 'Opsiyonel'})</span>
+                      }`}>
+                        <div className="flex items-center justify-center gap-2 font-bold text-xs">
+                          {pipelineStep && pipelineStep > 1 ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                          ) : pipelineStep === 1 ? (
+                            <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin flex-shrink-0" />
+                          ) : (
+                            <span className="w-4 h-4 rounded-full bg-slate-800 text-[10px] flex items-center justify-center text-slate-400">1</span>
+                          )}
+                          <span>1. Aşama: BIST Resmi Mali Tabloları</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-1">10 çeyreklik konsolide bilanço & gelir analizi</div>
                       </div>
-                      <div className="text-[10px] text-slate-400 mt-1">
-                        {activityFiles.length > 0 
-                          ? (pipelineProgress === 100 || (pipelineStep && pipelineStep > 2) ? 'Rehberlik karnesi & riskler ayıklandı' : 'Rehberlik karnesi & riskler')
-                          : 'Dosya yüklenmedi (Atlandı)'}
+
+                      {/* 2. Adım */}
+                      <div className={`p-3 rounded-lg border transition ${
+                        activityFiles.length === 0
+                          ? 'bg-slate-900/30 border-slate-800/60 text-slate-500'
+                          : pipelineStep === 2 
+                            ? 'bg-sky-950/70 border-sky-500 text-sky-200 shadow-md shadow-sky-950/40' 
+                            : (pipelineProgress === 100 || (pipelineStep && pipelineStep > 2)) 
+                              ? 'bg-slate-900/90 border-sky-800/80 text-sky-400' 
+                              : 'bg-slate-900/40 border-slate-800 text-slate-500'
+                      }`}>
+                        <div className="flex items-center justify-center gap-2 font-bold text-xs">
+                          {activityFiles.length === 0 ? (
+                            <Minus className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                          ) : (pipelineProgress === 100 || (pipelineStep && pipelineStep > 2)) ? (
+                            <CheckCircle2 className="w-4 h-4 text-sky-400 flex-shrink-0" />
+                          ) : pipelineStep === 2 ? (
+                            <RefreshCw className="w-4 h-4 text-sky-400 animate-spin flex-shrink-0" />
+                          ) : (
+                            <span className="w-4 h-4 rounded-full bg-slate-800 text-[10px] flex items-center justify-center text-slate-400">2</span>
+                          )}
+                          <span>2. Aşama: Faaliyet Raporu ({activityFiles.length > 0 ? `${activityFiles.length} Belge` : 'Opsiyonel'})</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-1">
+                          {activityFiles.length > 0 
+                            ? (pipelineProgress === 100 || (pipelineStep && pipelineStep > 2) ? 'Rehberlik karnesi & riskler ayıklandı' : 'Rehberlik karnesi & riskler')
+                            : 'Dosya yüklenmedi (Atlandı)'}
+                        </div>
+                      </div>
+
+                      {/* 3. Adım */}
+                      <div className={`p-3 rounded-lg border transition ${
+                        presentationFiles.length === 0
+                          ? 'bg-slate-900/30 border-slate-800/60 text-slate-500'
+                          : pipelineStep === 3 
+                            ? 'bg-amber-950/70 border-amber-500 text-amber-200 shadow-md shadow-amber-950/40' 
+                            : (pipelineProgress === 100)
+                              ? 'bg-slate-900/90 border-amber-800/80 text-amber-400'
+                              : 'bg-slate-900/40 border-slate-800 text-slate-500'
+                      }`}>
+                        <div className="flex items-center justify-center gap-2 font-bold text-xs">
+                          {presentationFiles.length === 0 ? (
+                            <Minus className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                          ) : pipelineProgress === 100 ? (
+                            <CheckCircle2 className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                          ) : pipelineStep === 3 ? (
+                            <RefreshCw className="w-4 h-4 text-amber-400 animate-spin flex-shrink-0" />
+                          ) : (
+                            <span className="w-4 h-4 rounded-full bg-slate-800 text-[10px] flex items-center justify-center text-slate-400">3</span>
+                          )}
+                          <span>3. Aşama: Yatırımcı Sunumu ({presentationFiles.length > 0 ? `${presentationFiles.length} Belge` : 'Opsiyonel'})</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-1">
+                          {presentationFiles.length > 0 
+                            ? (pipelineProgress === 100 ? 'İleriye dönük hedefler entegre edildi' : 'İleriye dönük hedefler')
+                            : 'Dosya yüklenmedi (Atlandı)'}
+                        </div>
                       </div>
                     </div>
 
-                    {/* 3. Adım */}
-                    <div className={`p-3 rounded-lg border transition ${
-                      presentationFiles.length === 0
-                        ? 'bg-slate-900/30 border-slate-800/60 text-slate-500'
-                        : pipelineStep === 3 
-                          ? 'bg-amber-950/70 border-amber-500 text-amber-200 shadow-md shadow-amber-950/40' 
-                          : (pipelineProgress === 100)
-                            ? 'bg-slate-900/90 border-amber-800/80 text-amber-400'
-                            : 'bg-slate-900/40 border-slate-800 text-slate-500'
-                    }`}>
-                      <div className="flex items-center justify-center gap-2 font-bold text-xs">
-                        {presentationFiles.length === 0 ? (
-                          <Minus className="w-4 h-4 text-slate-500 flex-shrink-0" />
-                        ) : pipelineProgress === 100 ? (
-                          <CheckCircle2 className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                        ) : pipelineStep === 3 ? (
-                          <RefreshCw className="w-4 h-4 text-amber-400 animate-spin flex-shrink-0" />
-                        ) : (
-                          <span className="w-4 h-4 rounded-full bg-slate-800 text-[10px] flex items-center justify-center text-slate-400">3</span>
-                        )}
-                        <span>3. Aşama: Yatırımcı Sunumu ({presentationFiles.length > 0 ? `${presentationFiles.length} Belge` : 'Opsiyonel'})</span>
-                      </div>
-                      <div className="text-[10px] text-slate-400 mt-1">
-                        {presentationFiles.length > 0 
-                          ? (pipelineProgress === 100 ? 'İleriye dönük hedefler entegre edildi' : 'İleriye dönük hedefler')
-                          : 'Dosya yüklenmedi (Atlandı)'}
-                      </div>
+                    {/* İlerleme Çubuğu */}
+                    <div className="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden border border-slate-800">
+                      <div 
+                        className="h-full bg-gradient-to-r from-emerald-500 via-sky-500 to-amber-500 transition-all duration-500 rounded-full shadow-lg"
+                        style={{ width: `${pipelineProgress}%` }}
+                      />
+                    </div>
+
+                    {/* Canlı Durum Metni */}
+                    <div className="text-center font-mono text-xs text-emerald-300 font-semibold flex items-center justify-center gap-2">
+                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                      <span>{statusMessage}</span>
                     </div>
                   </div>
-
-                  {/* İlerleme Çubuğu */}
-                  <div className="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden border border-slate-800">
-                    <div 
-                      className="h-full bg-gradient-to-r from-emerald-500 via-sky-500 to-amber-500 transition-all duration-500 rounded-full shadow-lg"
-                      style={{ width: `${pipelineProgress}%` }}
-                    />
-                  </div>
-
-                  {/* Canlı Durum Metni */}
-                  <div className="text-center font-mono text-xs text-emerald-300 font-semibold flex items-center justify-center gap-2">
-                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                    <span>{statusMessage}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Analizi Başlat Butonu */}
-              <button
-                type="submit"
-                disabled={loading || financialFiles.length === 0 || !ticker.trim() || !price.trim()}
-                className="w-full py-3.5 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:from-slate-800 disabled:to-slate-800 text-white font-bold rounded-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed shadow-xl text-sm"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" /> Analiz Yürütülüyor ({pipelineProgress}%)...
-                  </>
-                ) : (
-                  <>
-                    <TrendingUp className="w-4 h-4" /> Analizi Başlat
-                  </>
                 )}
-              </button>
-            </form>
-          </div>
-        )}
+
+                {/* Analizi Başlat Butonu */}
+                <button
+                  type="button"
+                  onClick={() => handleBistDirectAnalysis()}
+                  disabled={loading || !ticker.trim()}
+                  className="w-full py-3.5 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:from-slate-800 disabled:to-slate-800 text-white font-bold rounded-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed shadow-xl text-sm"
+                >
+                  {loading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" /> Analiz Yürütülüyor ({pipelineProgress}%)...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4 fill-white text-white" />
+                      {activityFiles.length + presentationFiles.length > 0
+                        ? `BIST Resmi Verileri + ${activityFiles.length + presentationFiles.length} Ek Rapor ile Zenginleştirilmiş Analizi Başlat`
+                        : 'BIST Resmi Verileri ile Analizi Başlat'}
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* ADIM 2: ÇIKARILAN VERİLERİ İNCELEME & ONAYLAMA */}
           {step === 'review' && extractedData && (
@@ -3308,7 +3291,7 @@ export default function ValuationTerminal() {
                   <span className="font-bold text-sm text-white flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-400" /> 2. Aşama: Çıkarılan Zaman Serisi Verilerini Doğrulayın
                   </span>
-                  <p className="text-xs text-slate-400 mt-1">Veriler PDF raporlarından otomatik ayıklanmıştır.</p>
+                  <p className="text-xs text-slate-400 mt-1">Borsa İstanbul / KAP resmi denetlenmiş mali tablolarından ve varsa eklenen raporlardan derlenmiştir.</p>
                 </div>
                 <span className="text-xs font-mono px-2.5 py-1 rounded bg-slate-800 text-emerald-400 border border-slate-700 font-bold">
                   {extractedData.ticker} • {currentSector}
@@ -3325,7 +3308,7 @@ export default function ValuationTerminal() {
                       <th className="p-3 text-right">{currentSector === 'INSURANCE' ? 'Teknik Kâr' : 'FAVÖK'}</th>
                       <th className="p-3 text-right">Net Kâr</th>
                       <th className="p-3 text-right">{currentSector === 'INSURANCE' ? 'Kombine Oran' : 'FAVÖK Marjı'}</th>
-                      <th className="p-3 text-right">{currentSector === 'INSURANCE' ? 'ROE (%)' : 'ROIC (%)'}</th>
+                      <th className="p-3 text-right">{currentSector === 'INSURANCE' ? 'ROE (Yıllıklandırılmış %)' : 'ROIC (Yıllıklandırılmış %)'}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
@@ -4017,8 +4000,9 @@ export default function ValuationTerminal() {
                       {/* Kart 4: Sermaye Verimliliği / ROE & Marj */}
                       <div className="bg-[#111827]/90 border border-slate-800 p-4 rounded-xl flex flex-col justify-between shadow-md">
                         <div>
-                          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                            {currentSector === 'INSURANCE' ? 'Özkaynak Kârlılığı (ROE)' : 'Sermaye Makası (ROIC - WACC)'}
+                          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                            <span>{currentSector === 'INSURANCE' ? 'Özkaynak Kârlılığı (ROE)' : 'Sermaye Makası (ROIC - WACC)'}</span>
+                            <span className="text-[10px] font-mono text-slate-500">Yıllıklandırılmış</span>
                           </div>
                           <div className="text-xl font-black font-mono text-cyan-400 mt-1">
                             {currentSector === 'INSURANCE' 
@@ -4033,7 +4017,9 @@ export default function ValuationTerminal() {
                               : spreadInfo.badgeText}
                           </div>
                           <div className="text-[10px] text-slate-400 font-mono">
-                            {currentSector === 'INSURANCE' ? 'Teknik Kârlılık Disiplini' : `ROIC: %${latestData?.roic || '—'} vs WACC: %${latestData?.wacc || '—'}`}
+                            {currentSector === 'INSURANCE' 
+                              ? `Yıllıklandırılmış ROIC/ROE: %${latestData?.roic ?? latestData?.roe ?? '—'}` 
+                              : `Yıllıklandırılmış ROIC: %${latestData?.roic || '—'} vs WACC: %${latestData?.wacc || '—'}`}
                           </div>
                         </div>
                       </div>
@@ -4043,7 +4029,7 @@ export default function ValuationTerminal() {
                     <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-950/80 border border-slate-800 rounded-lg text-[11px] text-slate-400">
                       <Info className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
                       <span>
-                        <strong>Büyüme Metodolojisi:</strong> Dönemsel çeyrek sonuçları önceki yılın aynı çeyreğiyle (YoY) kıyaslanmakta ve yıllıklandırılmaktadır (TTM). Bu sayede ara dönemlerin 12 aylık kümülatiflerle kıyaslanmasından kaynaklanan <em>yanıltıcı zarar algısı</em> önlenmiştir.
+                        <strong>Büyüme & Kârlılık Metodolojisi:</strong> Dönemsel çeyrek sonuçları önceki yılın aynı çeyreğiyle (YoY) kıyaslanmakta; <strong>ROIC, ROE ve ROA</strong> ilgili dönem çarpanlarıyla (3A×4, 6A×2, 9A×1.33, 12A×1) yıllıklandırılmış kârlılık oranı olarak raporlanmaktadır.
                       </span>
                     </div>
                   </div>

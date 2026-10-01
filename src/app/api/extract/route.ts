@@ -611,11 +611,11 @@ ${!isInsurance && !isBanking ? `   * SANAYİ / HİZMET / DİĞER:
     if (category === 'activity') {
       const actDocs = documents.filter(d => d.category === 'activity' || !d.category);
       if (actDocs.length === 0) {
-        return NextResponse.json({ error: 'Alan 2 için faaliyet raporu PDF dokümanı bulunamadı.' }, { status: 400 });
+        return NextResponse.json({ error: 'Faaliyet raporu PDF dokümanı bulunamadı.' }, { status: 400 });
       }
 
       const rawTexts = actDocs.map(d => `### FAALİYET RAPORU: ${d.name}\n${d.text}`).join('\n\n---\n\n');
-      const docTexts = optimizeTextForGemini(rawTexts);
+      const docTexts = optimizeTextForGemini(rawTexts, 12000);
 
       const prompt = `Şirket: ${ticker.toUpperCase()}.
 Aşağıda şirkete ait faaliyet raporunun yönetim, hedefler ve risk bölümleri yer almaktadır:
@@ -651,9 +651,12 @@ GÖREVLER:
       base.capex_and_kpi = { ...(base.capex_and_kpi || {}), ...(actData.capex_and_kpi || {}) };
 
       const enriched = enrichAndSanitizeFinancialHistory(base);
-      const { drivers, valuation } = computeSectorValuationAndDrivers(enriched, price, targetSector);
+      const { drivers, valuation, scoreResult, optimization } = computeSectorValuationAndDrivers(enriched, price, targetSector);
       enriched.fair_value_drivers = drivers;
+      enriched.drivers = drivers;
       enriched.valuation = valuation;
+      enriched.scoreResult = scoreResult;
+      enriched.optimization = optimization;
       return NextResponse.json({ success: true, data: enriched });
     }
 
@@ -661,11 +664,11 @@ GÖREVLER:
     if (category === 'presentation') {
       const presDocs = documents.filter(d => d.category === 'presentation' || !d.category);
       if (presDocs.length === 0) {
-        return NextResponse.json({ error: 'Alan 3 için yatırımcı sunumu PDF dokümanı bulunamadı.' }, { status: 400 });
+        return NextResponse.json({ error: 'Yatırımcı sunumu PDF dokümanı bulunamadı.' }, { status: 400 });
       }
 
       const rawTexts = presDocs.map(d => `### YATIRIMCI SUNUMU: ${d.name}\n${d.text}`).join('\n\n---\n\n');
-      const docTexts = optimizeTextForGemini(rawTexts, 24000);
+      const docTexts = optimizeTextForGemini(rawTexts, 12000);
 
       const prompt = `Şirket: ${ticker.toUpperCase()}.
 Aşağıda şirketin son Yatırımcı Sunumu ve Gelecek Stratejisi dokümanı yer almaktadır:
@@ -703,9 +706,12 @@ GÖREVLER:
       }
 
       const enriched = enrichAndSanitizeFinancialHistory(base);
-      const { drivers, valuation } = computeSectorValuationAndDrivers(enriched, price, targetSector);
+      const { drivers, valuation, scoreResult, optimization } = computeSectorValuationAndDrivers(enriched, price, targetSector);
       enriched.fair_value_drivers = drivers;
+      enriched.drivers = drivers;
       enriched.valuation = valuation;
+      enriched.scoreResult = scoreResult;
+      enriched.optimization = optimization;
       return NextResponse.json({ success: true, data: enriched });
     }
 

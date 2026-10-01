@@ -258,6 +258,7 @@ export async function fetchAndAnalyzeBistCompany(rawTicker: string) {
     let cash_and_equivalents: number | null = null;
     let short_term_debt: number | null = null;
     let long_term_debt: number | null = null;
+    let net_debt: number | null = null;
     let operating_cash_flow: number | null = null;
     let capex: number | null = null;
     let free_cash_flow: number | null = null;
@@ -291,6 +292,8 @@ export async function fetchAndAnalyzeBistCompany(rawTicker: string) {
       // UFRS_K: 2MEZ has consolidated net income; 3NJA/3Z are income statement equivalents
       net_income = getValByCode('2MEZ', '3NJA', '3Z') ?? getValByDesc('dönem net karı', 'dönem net kar', 'ana ortaklık payları');
 
+      net_debt = cash_and_equivalents !== null ? -cash_and_equivalents : null;
+
       // Sigortacılık için nakit akış türetimi
       operating_cash_flow = (net_income || 0) + ((written_premiums || 0) * 0.12);
       free_cash_flow = operating_cash_flow;
@@ -308,13 +311,17 @@ export async function fetchAndAnalyzeBistCompany(rawTicker: string) {
       long_term_debt = getValByCode('2BA') ?? getValByDesc('uzun vadeli finansal borç');
       total_liabilities = (current_liabilities || 0) + (long_term_liabilities || 0);
 
+      if (short_term_debt !== null || long_term_debt !== null || cash_and_equivalents !== null) {
+        net_debt = (short_term_debt || 0) + (long_term_debt || 0) - (cash_and_equivalents || 0);
+      }
+
       equity = getValByCode('2N', '2O') ?? getValByDesc('özkaynaklar', 'ana ortaklığa ait özkaynaklar');
       paid_in_capital = getValByCode('2NA') ?? getValByDesc('ödenmiş sermaye');
 
       revenue = getValByCode('3C', '3A') ?? getValByDesc('satış gelirleri', 'hasılat');
       gross_profit = getValByCode('3D', '3') ?? getValByDesc('brüt kar (zarar)', 'brüt kar');
       operating_profit = getValByCode('3H') ?? getValByDesc('net faaliyet kar', 'esas faaliyet kar');
-      net_income = getValByCode('2OCF', '2MEZ') ?? getValByDesc('dönem net kar');
+      net_income = getValByCode('2OCF', '2MEZ', '2OV') ?? getValByDesc('dönem net kar');
 
       const amort = getValByCode('4B', '4CAB') ?? getValByDesc('amortisman');
       if (operating_profit !== null) {
@@ -346,6 +353,7 @@ export async function fetchAndAnalyzeBistCompany(rawTicker: string) {
       cash_and_equivalents,
       short_term_debt,
       long_term_debt,
+      net_debt,
       operating_cash_flow,
       capex,
       free_cash_flow,
