@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -3685,15 +3685,15 @@ export default function ValuationTerminal() {
                       {/* Mini Sparkline Çizgi Grafikleri (3x2) */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                         {[
-                          { title: 'Brüt Kar Marjı (Çeyreklik)', calc: (d:any) => d.revenue ? (d.gross_profit / d.revenue * 100) : null },
+                          { title: 'Brüt Kar Marjı (Çeyreklik)', calc: (d:any) => { if (currentSector === 'INSURANCE') return (d.gross_written_premiums && d.gross_written_premiums !== 0) ? ((d.gross_profit ?? d.technical_balance ?? 0) / d.gross_written_premiums * 100) : null; return (d.revenue && d.revenue !== 0 && d.gross_profit != null) ? (d.gross_profit / d.revenue * 100) : null; } },
                           { title: currentSector === 'INSURANCE' ? 'Teknik Kâr Marjı (Çeyreklik)' : 'FAVÖK Marjı (Çeyreklik)', calc: (d:any) => {
                             if (currentSector === 'INSURANCE') return (d.gross_written_premiums ? (d.technical_balance || d.net_income) / d.gross_written_premiums * 100 : null);
                             return d.revenue ? (d.ebitda / d.revenue * 100) : null;
                           }},
-                          { title: 'Net Kar Marjı (Çeyreklik)', calc: (d:any) => d.revenue ? (d.net_income / d.revenue * 100) : null },
+                          { title: 'Net Kar Marjı (Çeyreklik)', calc: (d:any) => { const denom = currentSector === 'INSURANCE' ? d.gross_written_premiums : d.revenue; return (denom && denom !== 0 && d.net_income != null) ? (d.net_income / denom * 100) : null; } },
                           { title: 'Cari Oran', calc: (d:any) => d.current_liabilities ? (d.current_assets / d.current_liabilities) : null },
-                          { title: 'Kaldıraç Oranı', calc: (d:any) => d.equity ? ((d.total_assets - d.equity) / d.equity) : null },
-                          { title: 'Özkaynak Karlılığı', calc: (d:any) => d.equity ? (d.net_income / d.equity * 100 * getAnnualizationFactor(d.period)) : null }
+                          { title: 'Kaldıraç Oranı', calc: (d:any) => (d.equity && d.equity !== 0 && d.total_assets != null) ? ((d.total_assets - d.equity) / Math.abs(d.equity)) : null },
+                          { title: 'Özkaynak Karlılığı', calc: (d:any) => (d.equity && d.equity !== 0 && d.net_income != null) ? (d.net_income / Math.abs(d.equity) * 100 * getAnnualizationFactor(d.period)) : null }
                         ].map(mini => {
                           const miniData = chartData.slice(-8).map((d:any) => ({ period: d.period, value: mini.calc(d) }));
                           return (
