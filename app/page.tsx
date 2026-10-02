@@ -621,6 +621,38 @@ function extractTextFromChildren(children: any): string {
   return '';
 }
 
+
+// Fields that are YTD cumulative in KAP reports (income statement / cash flow)
+const CUMULATIVE_FIELDS = [
+  'revenue', 'gross_profit', 'operating_income', 'ebitda', 'net_income',
+  'gross_written_premiums', 'technical_balance', 'investment_income',
+  'net_monetary_position', 'operating_cash_flow', 'free_cash_flow', 'capex'
+];
+
+function computeIncrementalQuarterlyData(rawData: any[]): any[] {
+  if (!rawData || rawData.length === 0) return rawData;
+  const sorted = [...rawData].sort((a, b) => (a.period || '').localeCompare(b.period || ''));
+  return sorted.map((item) => {
+    const period = item.period || '';
+    const quarter = period.slice(-2); // '03','06','09','12'
+    const year = period.slice(0, 4);
+    // Q1 data is already incremental (it IS the quarter)
+    if (quarter === '03' || !['06','09','12'].includes(quarter)) return { ...item };
+    // Find previous quarter in same year
+    const prevQMap: Record<string, string> = { '06': '03', '09': '06', '12': '09' };
+    const prevPeriod = `${year}/${prevQMap[quarter]}`;
+    const prevItem = sorted.find(d => d.period === prevPeriod);
+    if (!prevItem) return { ...item }; // Can't compute, use as-is
+    const result: any = { ...item };
+    for (const field of CUMULATIVE_FIELDS) {
+      if (item[field] != null && prevItem[field] != null) {
+        result[field] = item[field] - prevItem[field];
+      }
+    }
+    return result;
+  });
+}
+
 function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorType = 'INDUSTRIAL', referencePrice: number = 100) {
   if (!Array.isArray(history) || history.length === 0) return [];
 
@@ -1038,7 +1070,7 @@ export default function ValuationTerminal() {
   const [extractedData, setExtractedData] = useState<any>(null);
 
   // Ana Sekmeler
-  const [ozetPeriod, setOzetPeriod] = useState<string>('Tüm');
+  
   const [activeTab, setActiveTab] = useState<'ozet' | 'overview' | 'fairvalue' | 'tables' | 'proscons' | 'guidance' | 'report' | 'history'>('ozet');
 
   // Finansal Tablolar Alt Sekmeleri (Görsel 2)
@@ -2064,6 +2096,7 @@ export default function ValuationTerminal() {
     currentSector,
     refMarketPrice
   );
+  const quarterlyChartData = useMemo(() => computeIncrementalQuarterlyData(chartData), [chartData]);
 
   // Görsel 1 & 3: Finansal Tablolar için Günümüzden Geçmişe (Yeniden Eskiye) Sıralama
   const tableData = [...chartData].reverse();
@@ -3529,69 +3562,36 @@ export default function ValuationTerminal() {
                     </div>
                   ) : (
                     <>
-                      {(() => {
-                        let filteredChartData = chartData;
-                        if (ozetPeriod === '1Ç') filteredChartData = chartData.slice(-1);
-                        else if (ozetPeriod === '4Ç') filteredChartData = chartData.slice(-4);
-                        else if (ozetPeriod === '1Y') filteredChartData = chartData.slice(-5);
-                        else if (ozetPeriod === '3Y') filteredChartData = chartData.slice(-12);
-                        
-                        const validPrices = filteredChartData.map((d: any) => d.share_price).filter((p: any) => typeof p === 'number' && p > 0);
-                        const maxPrice = validPrices.length > 0 ? Math.max(...validPrices) : null;
-                        const minPrice = validPrices.length > 0 ? Math.min(...validPrices) : null;
-                        const firstPrice = validPrices.length > 0 ? validPrices[0] : null;
-                        const lastPrice = valuationInfo.current_price;
-                        
-                        return (
-                          <div className="bg-gray-900/80 border border-slate-800/90 rounded-2xl p-5 shadow-lg space-y-4">
-                            <div className="flex items-center justify-between flex-wrap gap-4">
-                              <div className="flex gap-6 text-sm">
-                                <div><span className="text-slate-400">Güncel Fiyat:</span> <span className="text-white font-bold">{lastPrice} TL</span></div>
-                                {maxPrice && <div><span className="text-slate-400">52H Yüksek:</span> <span className="text-white font-bold">{maxPrice.toFixed(2)} TL</span></div>}
-                                {minPrice && <div><span className="text-slate-400">52H Düşük:</span> <span className="text-white font-bold">{minPrice.toFixed(2)} TL</span></div>}
-                                {piyasaDegeriStr && <div><span className="text-slate-400">Piyasa Değeri:</span> <span className="text-white font-bold">{piyasaDegeriStr}</span></div>}
-                              </div>
-                              <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-800">
-                                {['1Ç', '4Ç', '1Y', '3Y', 'Tüm'].map(p => (
-                                  <button
-                                    key={p}
-                                    onClick={() => setOzetPeriod(p)}
-                                    className={`px-3 py-1 text-xs font-semibold rounded-md transition ${ozetPeriod === p ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'}`}
-                                  >{p}</button>
-                                ))}
-                              </div>
-                            </div>
-                            <div className="h-64 w-full">
-                              <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={filteredChartData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
-                                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
-                                  <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 11 }} />
-                                  <YAxis stroke="#64748b" tick={{ fontSize: 11 }} domain={['auto', 'auto']} />
-                                  <Tooltip content={<CustomChartTooltip />} />
-                                  <Line type="monotone" dataKey="share_price" name="Hisse Fiyatı" stroke="#10b981" strokeWidth={2.5} dot={false} />
-                                </LineChart>
-                              </ResponsiveContainer>
-                            </div>
-                          </div>
-                        );
-                      })()}
+                      
+                      
                       
                       {/* Özet Finansallar */}
+                      {(() => {
+                        const latestPeriod = quarterlyChartData[quarterlyChartData.length - 1];
+                        const latestPeriodLabel = latestPeriod?.period || '';
+                        const yoyPeriodLabel = latestPeriodLabel ? `${String(Number(latestPeriodLabel.slice(0,4)) - 1)}/${latestPeriodLabel.slice(5)}` : '';
+                        const yoyPeriod = quarterlyChartData.find((d: any) => d.period === yoyPeriodLabel);
+                        const latestBS = chartData[chartData.length - 1];
+                        const yoyBSLabel = latestBS?.period ? `${String(Number(latestBS.period.slice(0,4)) - 1)}/${latestBS.period.slice(5)}` : '';
+                        const yoyBS = chartData.find((d: any) => d.period === yoyBSLabel);
+                        return (
+
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                         <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 shadow-lg">
                           <div className="flex justify-between items-center mb-4">
                             <h3 className="text-sm font-bold text-white">Özet Gelir Tablosu (Bin TRY)</h3>
                             <div className="flex gap-2">
                               <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">TRY</span>
-                              <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">{Math.min(chartData.length, 2)} çeyrek</span>
+                              <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">{chartData.length} çeyrek</span>
                             </div>
                           </div>
                           <table className="w-full text-sm text-left">
                             <thead>
                               <tr className="text-slate-400 border-b border-slate-800">
                                 <th className="pb-2 font-medium">Kalem</th>
-                                <th className="pb-2 font-medium text-right">{chartData[chartData.length - 1]?.period}</th>
-                                <th className="pb-2 font-medium text-right">{chartData[chartData.length - 2]?.period || '-'}</th>
+                                <th className="pb-2 font-medium text-right">{latestPeriodLabel}</th>
+     <th className="pb-2 font-medium text-right">{yoyPeriodLabel}</th>
+     <th className="pb-2 font-medium text-right">YoY %</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800/50 text-slate-300">
@@ -3605,8 +3605,20 @@ export default function ValuationTerminal() {
                               ].filter(Boolean).map((rowConfig: any) => (
                                 <tr key={rowConfig.k} className="hover:bg-slate-800/30">
                                   <td className="py-2">{rowConfig.l}</td>
-                                  <td className="py-2 text-right font-mono">{chartData[chartData.length - 1]?.[rowConfig.k] != null ? (chartData[chartData.length - 1]?.[rowConfig.k] / 1000).toLocaleString('tr-TR', {maximumFractionDigits:0}) : '—'}</td>
-                                  <td className="py-2 text-right font-mono">{chartData[chartData.length - 2]?.[rowConfig.k] != null ? (chartData[chartData.length - 2]?.[rowConfig.k] / 1000).toLocaleString('tr-TR', {maximumFractionDigits:0}) : '—'}</td>
+                                  <td className="py-2 text-right font-mono">{latestPeriod?.[rowConfig.k] != null ? (latestPeriod?.[rowConfig.k] / 1000).toLocaleString('tr-TR', {maximumFractionDigits:0}) : '—'}</td>
+                                  <td className="py-2 text-right font-mono">{yoyPeriod?.[rowConfig.k] != null ? (yoyPeriod?.[rowConfig.k] / 1000).toLocaleString('tr-TR', {maximumFractionDigits:0}) : '—'}</td>
+     <td className="py-2 text-right font-mono">
+       {(() => {
+         const v1 = latestPeriod?.[rowConfig.k];
+         const v2 = yoyPeriod?.[rowConfig.k];
+         const chg = (v1 != null && v2 != null && v2 !== 0) ? ((v1 - v2) / Math.abs(v2) * 100).toFixed(1) : null;
+         return chg ? (
+           <span className={rowConfig.k === 'net_debt' ? (Number(chg) < 0 ? 'text-emerald-400' : Number(chg) > 0 ? 'text-rose-400' : 'text-slate-400') : (Number(chg) > 0 ? 'text-emerald-400' : Number(chg) < 0 ? 'text-rose-400' : 'text-slate-400')}>
+             {Number(chg) > 0 ? '+' : ''}{chg}%
+           </span>
+         ) : '—';
+       })()}
+     </td>
                                 </tr>
                               ))}
                             </tbody>
@@ -3618,15 +3630,16 @@ export default function ValuationTerminal() {
                             <h3 className="text-sm font-bold text-white">Özet Bilanço (Bin TRY)</h3>
                             <div className="flex gap-2">
                               <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">TRY</span>
-                              <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">{Math.min(chartData.length, 2)} çeyrek</span>
+                              <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">{chartData.length} çeyrek</span>
                             </div>
                           </div>
                           <table className="w-full text-sm text-left">
                             <thead>
                               <tr className="text-slate-400 border-b border-slate-800">
                                 <th className="pb-2 font-medium">Kalem</th>
-                                <th className="pb-2 font-medium text-right">{chartData[chartData.length - 1]?.period}</th>
-                                <th className="pb-2 font-medium text-right">QoQ %</th>
+                                <th className="pb-2 font-medium text-right">{latestBS?.period}</th>
+     <th className="pb-2 font-medium text-right">{yoyBSLabel}</th>
+     <th className="pb-2 font-medium text-right">YoY %</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800/50 text-slate-300">
@@ -3638,14 +3651,15 @@ export default function ValuationTerminal() {
                                 { k: 'net_debt', l: 'Net Borç' },
                                 { k: 'equity', l: 'Özkaynaklar' }
                               ].map((rowConfig: any) => {
-                                const v1 = chartData[chartData.length - 1]?.[rowConfig.k];
-                                const v2 = chartData[chartData.length - 2]?.[rowConfig.k];
+                                const v1 = latestPeriod?.[rowConfig.k];
+                                const v2 = yoyPeriod?.[rowConfig.k];
                                 const chg = (v1 != null && v2 != null && v2 !== 0) ? ((v1 - v2) / Math.abs(v2) * 100).toFixed(1) : null;
                                 return (
                                   <tr key={rowConfig.k} className="hover:bg-slate-800/30">
                                     <td className="py-2">{rowConfig.l}</td>
                                     <td className="py-2 text-right font-mono">{v1 != null ? (v1 / 1000).toLocaleString('tr-TR', {maximumFractionDigits:0}) : '—'}</td>
-                                    <td className="py-2 text-right font-mono">
+     <td className="py-2 text-right font-mono">{v2 != null ? (v2 / 1000).toLocaleString('tr-TR', {maximumFractionDigits:0}) : '—'}</td>
+     <td className="py-2 text-right font-mono">
                                       {chg ? (
                                         <span className={Number(chg) > 0 ? 'text-emerald-400' : Number(chg) < 0 ? 'text-rose-400' : 'text-slate-400'}>
                                           {Number(chg) > 0 ? '+' : ''}{chg}%
@@ -3660,6 +3674,8 @@ export default function ValuationTerminal() {
                         </div>
                       </div>
                       
+                      );
+                      })()}
                       {/* Çeyreklik Bar Grafikleri (3'lü) */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                         {[
@@ -3671,8 +3687,8 @@ export default function ValuationTerminal() {
                             <div className="text-xs font-bold text-white mb-2">{chart.title}</div>
                             <div className="h-40 w-full">
                               <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={chartData.slice(-5)} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
-                                  <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10 }} />
+                                <BarChart data={quarterlyChartData.slice(-5)} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
+                                  <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10 }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                   <Tooltip content={<CustomChartTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
                                   <Bar dataKey={chart.key} name={chart.title} fill="#3b82f6" radius={[2, 2, 0, 0]} />
                                 </BarChart>
@@ -3695,14 +3711,17 @@ export default function ValuationTerminal() {
                           { title: 'Kaldıraç Oranı', calc: (d:any) => (d.equity && d.equity !== 0 && d.total_assets != null) ? ((d.total_assets - d.equity) / Math.abs(d.equity)) : null },
                           { title: 'Özkaynak Karlılığı', calc: (d:any) => (d.equity && d.equity !== 0 && d.net_income != null) ? (d.net_income / Math.abs(d.equity) * 100 * getAnnualizationFactor(d.period)) : null }
                         ].map(mini => {
-                          const miniData = chartData.slice(-8).map((d:any) => ({ period: d.period, value: mini.calc(d) }));
+                          const miniData = quarterlyChartData.slice(-8).map((d:any) => ({ period: d.period, value: mini.calc(d) }));
+                          const sparkValues = miniData.map((d: any) => d.value).filter((v: any) => v != null && !isNaN(v));
+                          const trendColor = sparkValues.length >= 2 && sparkValues[sparkValues.length - 1] > sparkValues[0] ? '#10b981' : '#f87171';
+
                           return (
                             <div key={mini.title} className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-4 shadow-lg">
                               <div className="text-xs font-bold text-white mb-2">{mini.title}</div>
                               <div className="h-[150px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
                                   <LineChart data={miniData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
-                                    <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10 }} />
+                                    <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10 }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                     <YAxis hide />
                                     <Tooltip content={({ active, payload }) => {
                                       if (active && payload && payload.length) {
@@ -3715,7 +3734,7 @@ export default function ValuationTerminal() {
                                       }
                                       return null;
                                     }} />
-                                    <Line type="monotone" dataKey="value" stroke="#f87171" strokeWidth={2} dot={{ r: 2, fill: '#f87171' }} />
+                                    <Line type="monotone" dataKey="value" stroke={trendColor} strokeWidth={2} dot={{ r: 2, fill: trendColor }} />
                                   </LineChart>
                                 </ResponsiveContainer>
                               </div>
@@ -3762,7 +3781,7 @@ export default function ValuationTerminal() {
                             <ResponsiveContainer width="100%" height="100%">
                               <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
-                                <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                                <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                 <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFormatter} />
                                 <Tooltip content={<CustomChartTooltip />} />
                                 <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
@@ -3798,7 +3817,7 @@ export default function ValuationTerminal() {
                             <ResponsiveContainer width="100%" height="100%">
                               <ComposedChart data={chartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
-                                <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                                <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                 <YAxis yAxisId="left" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFormatter} />
                                 <YAxis yAxisId="right" orientation="right" stroke="#10b981" tick={{ fontSize: 10, fill: '#34d399' }} tickFormatter={v => `${v} TL`} />
                                 <Tooltip content={<CustomChartTooltip />} />
@@ -3833,7 +3852,7 @@ export default function ValuationTerminal() {
                             <ResponsiveContainer width="100%" height="100%">
                               <LineChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
-                                <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                                <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                 <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFormatter} />
                                 <Tooltip content={<CustomChartTooltip />} />
                                 <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
@@ -3867,7 +3886,7 @@ export default function ValuationTerminal() {
                             <ResponsiveContainer width="100%" height="100%">
                               <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
-                                <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                                <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                 <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFormatter} />
                                 <Tooltip content={<CustomChartTooltip />} />
                                 <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
@@ -5165,7 +5184,7 @@ export default function ValuationTerminal() {
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={tickerHistory.map((h) => ({ name: h.period || h.createdAt, score: Number(h.score) || 0 }))}>
                               <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} />
-                              <XAxis dataKey="name" stroke="#94a3b8" tick={{ fontSize: 11, fill: '#cbd5e1' }} />
+                              <XAxis dataKey="name" stroke="#94a3b8" tick={{ fontSize: 10, fill: '#cbd5e1' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
                               <YAxis stroke="#94a3b8" domain={[0, 100]} tick={{ fontSize: 11, fill: '#cbd5e1' }} />
                               <Tooltip contentStyle={{ backgroundColor: '#020617', borderColor: '#334155', fontSize: '12px' }} />
                               <Line type="monotone" dataKey="score" name="Kurumsal Skor" stroke="#10b981" strokeWidth={3} dot={{ r: 5, fill: '#10b981' }} />
