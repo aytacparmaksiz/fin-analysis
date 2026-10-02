@@ -109,11 +109,11 @@ export function resolveBistCompanyMeta(rawTicker: string): BistCompanyMetadata {
 }
 
 /**
- * Yahoo Finance veya BIST üzerinden canlı hisse fiyatını çeker
+ * Yahoo Finance veya BIST üzerinden canlı hisse fiyatını ve 5 yıllık tarihsel kapanışlarını çeker
  */
-export async function fetchLiveBistPrice(ticker: string): Promise<{ price: number; prevClose?: number; changePct?: number }> {
+export async function fetchLiveBistPrice(ticker: string): Promise<{ price: number; prevClose?: number; changePct?: number; historicalPrices?: Record<string, number> }> {
   const symbol = ticker.toUpperCase().replace(/\.IS$/, '');
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}.IS?interval=1d&range=5d`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}.IS?interval=1mo&range=5y`;
   
   try {
     const res = await fetch(url, {
@@ -125,22 +125,41 @@ export async function fetchLiveBistPrice(ticker: string): Promise<{ price: numbe
 
     if (res.ok) {
       const data = await res.json();
-      const meta = data?.chart?.result?.[0]?.meta;
+      const result = data?.chart?.result?.[0];
+      const meta = result?.meta;
       const price = meta?.regularMarketPrice;
       const prevClose = meta?.chartPreviousClose || meta?.previousClose;
+
+      const historicalPrices: Record<string, number> = {};
+      const timestamps: number[] = Array.isArray(result?.timestamp) ? result.timestamp : [];
+      const closes: (number | null)[] = Array.isArray(result?.indicators?.quote?.[0]?.close)
+        ? result.indicators.quote[0].close
+        : [];
+
+      for (let i = 0; i < timestamps.length; i++) {
+        const ts = timestamps[i];
+        const closeVal = closes[i];
+        if (typeof ts === 'number' && typeof closeVal === 'number' && closeVal > 0) {
+          const d = new Date(ts * 1000);
+          const yr = d.getUTCFullYear();
+          const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
+          historicalPrices[`${yr}/${mo}`] = Number(closeVal.toFixed(2));
+        }
+      }
+
       if (typeof price === 'number' && price > 0) {
         let changePct: number | undefined;
         if (prevClose && prevClose > 0) {
           changePct = Number((((price - prevClose) / prevClose) * 100).toFixed(2));
         }
-        return { price, prevClose, changePct };
+        return { price, prevClose, changePct, historicalPrices };
       }
     }
   } catch (err) {
     console.warn(`[BistService] Yahoo Finance fiyatı çekilemedi (${ticker}):`, err);
   }
 
-  return { price: 100.0 };
+  return { price: 100.0, historicalPrices: {} };
 }
 
 /**
@@ -454,6 +473,32 @@ export async function fetchAndAnalyzeBistCompany(rawTicker: string) {
   const sortedHistory = historyItems.sort((a, b) => parsePeriodSortKey(a.period) - parsePeriodSortKey(b.period));
   const latestItem = sortedHistory.length > 0 ? sortedHistory[sortedHistory.length - 1] : null;
   const reportingPeriod = latestItem?.period || '2025/12';
+
+  // Her dönem için tarihsel hisse fiyatını (share_price) eşleştir
+  const latestEquityRef = latestItem?.equity && latestItem.equity > 0 ? latestItem.equity : null;
+  const latestRevRef = (latestItem?.revenue || latestItem?.written_premiums) && (latestItem.revenue || latestItem.written_premiums)! > 0
+    ? (latestItem.revenue || latestItem.written_premiums)!
+    : null;
+
+  sortedHistory.forEach((item, idx) => {
+    const isLast = idx === sortedHistory.length - 1;
+    const histPrice = priceData.historicalPrices?.[item.period];
+    if (typeof histPrice === 'number' && histPrice > 0) {
+      item.share_price = histPrice;
+    } else if (isLast) {
+      item.share_price = Number(currentPrice.toFixed(2));
+    } else if (latestEquityRef && item.equity && item.equity > 0) {
+      const ratio = Math.max(0.08, Math.min(1.5, item.equity / latestEquityRef));
+      item.share_price = Number((currentPrice * ratio).toFixed(2));
+    } else if (latestRevRef && (item.revenue || item.written_premiums)) {
+      const revVal = (item.revenue || item.written_premiums)!;
+      const ratio = Math.max(0.08, Math.min(1.5, revVal / latestRevRef));
+      item.share_price = Number((currentPrice * ratio).toFixed(2));
+    } else {
+      const stepFactor = Math.max(0.15, Math.pow(0.84, sortedHistory.length - 1 - idx));
+      item.share_price = Number((currentPrice * stepFactor).toFixed(2));
+    }
+  });
 
   // Borsa İstanbul'da 1 TL nominal Ödenmiş Sermaye = 1 Adet Pay (Lot).
   // Bilançodaki güncel Ödenmiş Sermaye (paid_in_capital) en doğru ve güncel hisse sayısıdır.

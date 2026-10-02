@@ -454,7 +454,7 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
       'npl_ratio', 'car_ratio', 'nim', 'net_interest_income', 'loan_to_deposit',
       'nav', 'holding_discount', 'dividends_paid',
       'current_ratio', 'quick_ratio', 'cash_ratio', 'leverage_ratio',
-      'asset_turnover', 'equity_turnover', 'roa', 'roe', 'roic', 'wacc'
+      'asset_turnover', 'equity_turnover', 'roa', 'roe', 'roic', 'wacc', 'share_price'
     ];
     for (const f of numericFields) {
       if (item[f] !== undefined && item[f] !== null) {
