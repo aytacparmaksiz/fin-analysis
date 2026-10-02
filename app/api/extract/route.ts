@@ -117,7 +117,7 @@ const financialExtractionSchema: Schema = {
   required: ['ticker', 'reporting_period', 'financial_history'],
 };
 
-// Alan 2: Faaliyet Raporları Şeması - Yönetim Rehberlik Karnesi & Pros/Cons
+// Alan 2: Faaliyet Raporları Şeması - Yönetim Rehberlik Karnesi, Olumlu Gelecek Konuları & Pros/Cons
 const activityExtractionSchema: Schema = {
   type: Type.OBJECT,
   properties: {
@@ -127,14 +127,34 @@ const activityExtractionSchema: Schema = {
       items: {
         type: Type.OBJECT,
         properties: {
-          year_or_period: { type: Type.STRING, description: 'Hedef dönemi (Örn: 2023, 2024, 2025)' },
-          guidance_given: { type: Type.STRING, description: 'Yönetimin açıkladığı ciro, marj, prim veya satış adedi hedefi' },
+          year_or_period: { type: Type.STRING, description: 'Hedef dönemi (Örn: 2022, 2023, 2024, 2025, 2026)' },
+          guidance_given: { type: Type.STRING, description: 'Yönetimin açıkladığı ciro, marj, prim veya stratejik operasyonel hedefi' },
           actual_realized: { type: Type.STRING, description: 'Dönem sonunda gerçekleşen fiili sonuç' },
           status: { type: Type.STRING, description: 'BAŞARILI, KISMEN, BAŞARISIZ veya BELİRTİLMEDİ' },
           analysis: { type: Type.STRING, description: 'Sapmanın nedeni, piyasa şartları ve yönetimin vaat tutma karnesi' },
         },
         required: ['year_or_period', 'guidance_given', 'actual_realized', 'status'],
       },
+    },
+
+    positive_outlook_highlights: {
+      type: Type.ARRAY,
+      description: 'Gelecek dönem hedefleri için faaliyet raporunda olumlu bulunan konular, stratejik yatırımlar ve büyüme katalizörleri',
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING, description: 'Olumlu bulunan konunun net Türkçe başlığı' },
+          desc: { type: Type.STRING, description: 'Rapordan çıkarılan somut veri, beklenti ve neden gelecek dönem için olumlu olduğunun analizi' },
+          period_or_target: { type: Type.STRING, description: 'İlgili hedef dönemi veya sayısal beklenti (Örn: 2026 Hedefi, Orta Vadeli Plan)' },
+          category: { type: Type.STRING, description: 'BÜYÜME, MARJ İYİLEŞMESİ, YATIRIM, PAZAR PAYI veya NAKİT ÜRETİMİ' },
+        },
+        required: ['title', 'desc'],
+      },
+    },
+
+    report_executive_summary: {
+      type: Type.STRING,
+      description: 'Faaliyet raporlarının bütüncül değerlendirmesi, yönetimin gelecek dönem vizyonu ve stratejik odak noktaları',
     },
 
     pros_cons: {
@@ -176,10 +196,10 @@ const activityExtractionSchema: Schema = {
       },
     },
   },
-  required: ['guidance_track_record', 'pros_cons'],
+  required: ['guidance_track_record', 'positive_outlook_highlights', 'pros_cons'],
 };
 
-// Alan 3: Yatırımcı Sunumu Şeması - İleriye Dönük Beklentiler & Sürücüler
+// Alan 3: Yatırımcı Sunumu Şeması - İleriye Dönük Beklentiler, Olumlu Gelecek Konuları & Sürücüler
 const presentationExtractionSchema: Schema = {
   type: Type.OBJECT,
   properties: {
@@ -229,6 +249,20 @@ const presentationExtractionSchema: Schema = {
         },
       },
     },
+    positive_outlook_highlights: {
+      type: Type.ARRAY,
+      description: 'Yatırımcı sunumunda gelecek dönem hedefleri için olumlu bulunan konular, projeler ve büyüme katalizörleri',
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING, description: 'Olumlu bulunan konunun net Türkçe başlığı' },
+          desc: { type: Type.STRING, description: 'Sunumdan çıkarılan somut veri, hedef ve gelecek döneme olumlu etkisi' },
+          period_or_target: { type: Type.STRING, description: 'İlgili hedef dönemi veya sayısal beklenti' },
+          category: { type: Type.STRING, description: 'BÜYÜME, MARJ İYİLEŞMESİ, YATIRIM, PAZAR PAYI veya NAKİT ÜRETİMİ' },
+        },
+        required: ['title', 'desc'],
+      },
+    },
     future_targets_summary: {
       type: Type.STRING,
       description: 'Yatırımcı sunumundan özetlenen orta/uzun vadeli strateji ve hedefler',
@@ -249,7 +283,7 @@ const presentationExtractionSchema: Schema = {
       },
     },
   },
-  required: ['fair_value_drivers'],
+  required: ['fair_value_drivers', 'positive_outlook_highlights'],
 };
 
 // ============================================================================
@@ -273,22 +307,24 @@ VERİ VE SAYI OKUMA KURALLARI:
 
 const activitySystemInstruction = `Sen kurumsal faaliyet raporlarını ve yatırımcı sunumlarını çok yıllı (multi-year) perspektifle inceleyen kıdemli yatırım analistisin.
 GÖREVİN (ALAN 2: FAALİYET RAPORLARI):
-Bu alandaki belgeler "5. Yönetim Rehberlik Karnesi" (Guidance vs. Actual gerçekleşmeleri), pazar payı, operasyonel metrikler, riskler ve "4. Güçlü / Zayıf Yönler (Pros & Cons)" analizi için taranır.
+Bu alandaki belgeler "5. Faaliyet Raporu, Sunum & Rehberlik Analizi" panelindeki Gelecek Dönem Olumlu Konular ('positive_outlook_highlights'), Yönetim Rehberlik Karnesi ('guidance_track_record'), pazar payı, operasyonel metrikler, riskler ve "4. Güçlü / Zayıf Yönler (Pros & Cons)" analizi için taranır.
 
 KURALLAR:
 1. ASLA ve KESİNLİKLE resmi finansal tablo rakamlarına müdahale etme veya yeni bilanço rakamı uydurma.
 2. ÇOK YILLI KAPSAMA ZORUNLULUĞU: Yüklenen tüm yıllara ait faaliyet raporlarını (örn: 2022, 2023, 2024, 2025, 2026) tek tek incele ve HER YIL İÇİN 'guidance_track_record' listesinde ayrı bir satır oluştur. Sadece son 1-2 yılı alıp geçmiş yılları atlama!
-3. ASLA "null" YAZMA: 'guidance_given' alanına kesinlikle "null" veya boş metin yazma! Eğer ilgili yılda kamuya açıklanmış dar kapsamlı bir sayısal (numeric) guidance tablosu yoksa, faaliyet raporunda yönetimin o yıl için ortaya koyduğu stratejik/operasyonel hedefleri (örn: "BES fon büyüklüğünde ve hayat sigortası prim üretiminde sektör üstü büyüme, dijital kanal payını artırma ve teknik kârlılığı koruma hedefi") özetle ve gerçekleşen resmi sonuçlarla karşılaştırarak 'BAŞARILI' / 'KISMEN' / 'BAŞARISIZ' olarak değerlendir.
-4. Şirketin boğa katalizörlerini (pros) ve ayı risk faktörlerini (cons) tüm yüklenen raporlardaki somut verilerle (pazar payı, acente/şube ağı, fon büyüklüğü, kombine oran, müşteri sayısı vb.) 'pros_cons' listesine çıkar.`;
+3. ASLA "null" YAZMA: 'guidance_given' alanına kesinlikle "null" veya boş metin yazma! Eğer ilgili yılda kamuya açıklanmış dar kapsamlı bir sayısal (numeric) guidance tablosu yoksa, faaliyet raporunda yönetimin o yıl için ortaya koyduğu stratejik/operasyonel hedefleri özetle ve gerçekleşen resmi sonuçlarla karşılaştırarak 'BAŞARILI' / 'KISMEN' / 'BAŞARISIZ' olarak değerlendir.
+4. GELECEK DÖNEM HEDEFLERİ İÇİN OLUMLU BULUNAN KONULAR ('positive_outlook_highlights'): Faaliyet raporlarında şirketin gelecek dönem hedefleri, yeni yatırımları, kapasite artışları, dijitalleşme adımları, pazar payı kazanımları ve maliyet iyileştirmeleri arasında gelecek kârlılığı destekleyecek EN ÖNEMLİ 4-6 olumlu konuyu somut verilerle çıkar.
+5. DURU TÜRKÇE KURALI: 'bancassurance', 'moat', 'storytelling', 'run-rate' gibi yabancı terimler yerine anlaşılır Türkçe karşılıklarını ('banka sigortacılığı', 'rekabet üstünlüğü', 'yıllıklandırılmış tempo') kullan. Bozuk karakterler veya dolar ($) formül işaretleri kullanma.`;
 
 const presentationSystemInstruction = `Sen yatırımcı sunumlarını ve gelecek strateji dokümanlarını inceleyen uzman değerleme analistisin.
 GÖREVİN (ALAN 3: YATIRIMCI SUNUMU & STRATEJİ DOKÜMANLARI):
-Bu alandaki belgeler "2. Adil Değer & Sürücüler" panelindeki ileriye dönük beklentiler, marj hedefleri, ciro hedefleri ve "5. Yönetim Rehberlik Karnesi"ndeki beklenti/gerçekleşme tablolarını güncellemek için taranır.
+Bu alandaki belgeler "2. Adil Değer & Sürücüler" panelindeki ileriye dönük beklentiler ve "5. Faaliyet Raporu, Sunum & Rehberlik Analizi" panelindeki Gelecek Dönem Olumlu Konular ('positive_outlook_highlights') ile Yönetim Rehberlik Karnesini ('guidance_track_record') güncellemek için taranır.
 
 KURALLAR:
 1. Şirket yönetiminin gelecek yıllara yönelik resmi ciro/prim büyüme, net kâr büyüme, FAVÖK/teknik marj hedeflerini ve değerleme çarpanı beklentilerini 'fair_value_drivers' objesine çıkar.
-2. Yatırımcı sunumlarında yer alan geçmiş veya güncel yıl beklentilerini (Guidance / Targets / Outlook slaytları) 'guidance_track_record' dizisine çıkar. 'guidance_given' alanına asla "null" yazma.
-3. Açıklamalarda (note alanları) sunumdaki ilgili slayt veya hedef gerekçesini belirt.`;
+2. Yatırımcı sunumlarında gelecek dönem hedefleri için olumlu bulunan somut katalizörleri, yatırım projelerini ve marj beklentilerini 'positive_outlook_highlights' listesine (en az 4-6 madde) çıkar.
+3. Yatırımcı sunumlarında yer alan geçmiş veya güncel yıl beklentilerini (Guidance / Targets / Outlook slaytları) 'guidance_track_record' dizisine çıkar. 'guidance_given' alanına asla "null" yazma.
+4. Yabancı finansal jargon ('bancassurance', 'storytelling' vb.) yerine duru ve anlaşılır Türkçe kullan.`;
 
 // ============================================================================
 // YARDIMCI BİRLEŞTİRME FONKSİYONLARI (MERGE HELPERS)
@@ -675,6 +711,59 @@ ${!isInsurance && !isBanking ? `   * SANAYİ / HİZMET / DİĞER:
       return Array.from(map.values()).sort((a, b) => String(a.year_or_period).localeCompare(String(b.year_or_period)));
     };
 
+    const mergeAndSanitizeHighlights = (existing: any[], incoming: any[]) => {
+      const map = new Map<string, any>();
+      const addItems = (list: any[]) => {
+        if (!Array.isArray(list)) return;
+        for (const item of list) {
+          if (!item || !item.title || !item.desc) continue;
+          const title = String(item.title).trim();
+          const desc = String(item.desc).trim();
+          if (!title || !desc || title.toLowerCase() === 'null' || desc.toLowerCase() === 'null') continue;
+          const key = title.toLowerCase();
+          map.set(key, {
+            title,
+            desc,
+            period_or_target: item.period_or_target && String(item.period_or_target).toLowerCase() !== 'null'
+              ? String(item.period_or_target).trim()
+              : 'Gelecek Dönem Beklentisi',
+            category: item.category && String(item.category).toLowerCase() !== 'null'
+              ? String(item.category).trim().toUpperCase()
+              : 'STRATEJİK KATALİZÖR',
+          });
+        }
+      };
+      addItems(existing);
+      addItems(incoming);
+      return Array.from(map.values());
+    };
+
+    const sanitizeProsConsObj = (raw: any, fallback: any) => {
+      const normalizeArr = (arr: any[]) => {
+        if (!Array.isArray(arr)) return [];
+        return arr
+          .map((it: any) => {
+            if (!it) return null;
+            if (typeof it === 'string') {
+              return { title: it.slice(0, 60), desc: it };
+            }
+            const t = String(it.title || it.heading || '').trim();
+            const d = String(it.desc || it.description || it.detail || '').trim();
+            if (!t && !d) return null;
+            return { title: t || 'Analiz Notu', desc: d || t };
+          })
+          .filter(Boolean);
+      };
+      const pros = normalizeArr(raw?.pros);
+      const cons = normalizeArr(raw?.cons);
+      const fbPros = normalizeArr(fallback?.pros);
+      const fbCons = normalizeArr(fallback?.cons);
+      return {
+        pros: pros.length > 0 ? pros : fbPros,
+        cons: cons.length > 0 ? cons : fbCons,
+      };
+    };
+
     // MOD 2: SADECE ALAN 2: FAALİYET RAPORLARI
     if (category === 'activity') {
       const actDocs = documents.filter(d => d.category === 'activity' || !d.category);
@@ -700,10 +789,12 @@ ${docTexts}
 
 GÖREVLER:
 1. Yönetim Rehberlik Karnesi ('guidance_track_record'): Yüklenen tüm faaliyet raporlarındaki yılları (örn: 2022, 2023, 2024, 2025, 2026) KAPSAYACAK ŞEKİLDE her yıl için yönetimin sayısal veya stratejik/operasyonel hedeflerini ve yıl sonu gerçekleşmelerini çıkar. Asla sadece tek yılla sınırlı kalma ve 'guidance_given' alanına kesinlikle "null" yazma!
-2. Şirketin güçlü yönlerini (pros) ve riskli/zayıf yönlerini (cons) ('pros_cons') somut faaliyet raporu verileriyle çıkar.
-3. Mali tablo rakamlarına asla müdahale etme.`;
+2. Gelecek Dönem Hedefleri İçin Olumlu Bulunan Konular ('positive_outlook_highlights'): Faaliyet raporlarında şirketin gelecek dönem hedefleri, yeni yatırımları, kapasite/şube/dijital kanal büyümeleri ve marj iyileştirmeleri arasında olumlu bulunan en az 4-6 somut konuyu çıkar.
+3. Faaliyet Raporu Stratejik Özeti ('report_executive_summary'): Raporların bütüncül değerlendirmesini ve yönetimin gelecek vizyonunu özetle.
+4. Şirketin güçlü yönlerini (pros) ve riskli/zayıf yönlerini (cons) ('pros_cons') somut faaliyet raporu verileriyle çıkar.
+5. Mali tablo rakamlarına asla müdahale etme. Duru Türkçe kullan ('bancassurance' yerine 'banka sigortacılığı' yaz).`;
 
-      const cacheKey = `extract_act_v2_${ticker.toUpperCase()}_${actDocs.length}_${computeContentHash(docTexts)}`;
+      const cacheKey = `extract_act_v3_${ticker.toUpperCase()}_${actDocs.length}_${computeContentHash(docTexts)}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
         preferredModel: 'gemini-3.1-flash-lite-preview',
@@ -722,7 +813,11 @@ GÖREVLER:
       const actData = cleanAndParseJson(response.text || '{}');
 
       base.guidance_track_record = mergeAndSanitizeGuidance(base.guidance_track_record || [], actData.guidance_track_record || []);
-      base.pros_cons = actData.pros_cons || base.pros_cons || { pros: [], cons: [] };
+      base.positive_outlook_highlights = mergeAndSanitizeHighlights(base.positive_outlook_highlights || [], actData.positive_outlook_highlights || []);
+      if (actData.report_executive_summary) {
+        base.report_executive_summary = actData.report_executive_summary;
+      }
+      base.pros_cons = sanitizeProsConsObj(actData.pros_cons, base.pros_cons);
       base.capex_and_kpi = { ...(base.capex_and_kpi || {}), ...(actData.capex_and_kpi || {}) };
 
       const enriched = enrichAndSanitizeFinancialHistory(base);
@@ -759,10 +854,11 @@ ${docTexts}
 
 GÖREVLER:
 1. Şirketin resmi ciro/prim büyüme, net kâr büyüme, marj hedefleri ve hedef çarpan beklentilerini 'fair_value_drivers' olarak çıkar.
-2. Sunumlarda yer alan geçmiş ve güncel yıl beklenti/hedef tablolarını (Guidance / Beklentiler vs Gerçekleşmeler) 'guidance_track_record' listesine çıkar ('guidance_given' alanına asla "null" yazma).
-3. Açıklama (note) alanlarında hedeflerin dayanaklarını belirt.`;
+2. Gelecek Dönem Hedefleri İçin Olumlu Bulunan Konular ('positive_outlook_highlights'): Sunumlarda gelecek dönem hedefleri, stratejik yatırımlar, yeni ürünler ve kârlılık beklentileri açısından olumlu bulunan en az 4-6 somut katalizörü çıkar.
+3. Sunumlarda yer alan geçmiş ve güncel yıl beklenti/hedef tablolarını (Guidance / Beklentiler vs Gerçekleşmeler) 'guidance_track_record' listesine çıkar ('guidance_given' alanına asla "null" yazma).
+4. Açıklama (note) alanlarında hedeflerin dayanaklarını belirt ve duru Türkçe kullan.`;
 
-      const cacheKey = `extract_pres_v2_${ticker.toUpperCase()}_${presDocs.length}_${computeContentHash(docTexts)}`;
+      const cacheKey = `extract_pres_v3_${ticker.toUpperCase()}_${presDocs.length}_${computeContentHash(docTexts)}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
         preferredModel: 'gemini-3.1-flash-lite-preview',
@@ -785,6 +881,9 @@ GÖREVLER:
       }
       if (presData.future_targets_summary) {
         base.future_targets_summary = presData.future_targets_summary;
+      }
+      if (Array.isArray(presData.positive_outlook_highlights) && presData.positive_outlook_highlights.length > 0) {
+        base.positive_outlook_highlights = mergeAndSanitizeHighlights(base.positive_outlook_highlights || [], presData.positive_outlook_highlights);
       }
       if (Array.isArray(presData.guidance_track_record) && presData.guidance_track_record.length > 0) {
         base.guidance_track_record = mergeAndSanitizeGuidance(base.guidance_track_record || [], presData.guidance_track_record);
@@ -844,7 +943,7 @@ GÖREVLER:
     if (actDocs.length > 0) {
       const rawTexts = actDocs.map(d => `### FAALİYET RAPORU: ${d.name}\n${d.text}`).join('\n\n---\n\n');
       const docTexts = optimizeTextForGemini(rawTexts);
-      const cacheKey = `extract_act_all_${ticker.toUpperCase()}_${computeContentHash(docTexts)}`;
+      const cacheKey = `extract_act_all_v3_${ticker.toUpperCase()}_${computeContentHash(docTexts)}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
         baseParams: {
@@ -859,8 +958,10 @@ GÖREVLER:
         cacheKey,
       });
       const actData = cleanAndParseJson(response.text || '{}');
-      finalData.guidance_track_record = actData.guidance_track_record || [];
-      finalData.pros_cons = actData.pros_cons || { pros: [], cons: [] };
+      finalData.guidance_track_record = mergeAndSanitizeGuidance(finalData.guidance_track_record || [], actData.guidance_track_record || []);
+      finalData.positive_outlook_highlights = mergeAndSanitizeHighlights(finalData.positive_outlook_highlights || [], actData.positive_outlook_highlights || []);
+      if (actData.report_executive_summary) finalData.report_executive_summary = actData.report_executive_summary;
+      finalData.pros_cons = sanitizeProsConsObj(actData.pros_cons, finalData.pros_cons);
       finalData.capex_and_kpi = { ...(finalData.capex_and_kpi || {}), ...(actData.capex_and_kpi || {}) };
     }
 
@@ -868,7 +969,7 @@ GÖREVLER:
     if (presDocs.length > 0) {
       const rawTexts = presDocs.map(d => `### YATIRIMCI SUNUMU: ${d.name}\n${d.text}`).join('\n\n---\n\n');
       const docTexts = optimizeTextForGemini(rawTexts);
-      const cacheKey = `extract_pres_all_${ticker.toUpperCase()}_${computeContentHash(docTexts)}`;
+      const cacheKey = `extract_pres_all_v3_${ticker.toUpperCase()}_${computeContentHash(docTexts)}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
         baseParams: {
@@ -885,6 +986,15 @@ GÖREVLER:
       const presData = cleanAndParseJson(response.text || '{}');
       if (presData.fair_value_drivers) {
         finalData.fair_value_drivers = presData.fair_value_drivers;
+      }
+      if (presData.future_targets_summary) {
+        finalData.future_targets_summary = presData.future_targets_summary;
+      }
+      if (Array.isArray(presData.positive_outlook_highlights) && presData.positive_outlook_highlights.length > 0) {
+        finalData.positive_outlook_highlights = mergeAndSanitizeHighlights(finalData.positive_outlook_highlights || [], presData.positive_outlook_highlights);
+      }
+      if (Array.isArray(presData.guidance_track_record) && presData.guidance_track_record.length > 0) {
+        finalData.guidance_track_record = mergeAndSanitizeGuidance(finalData.guidance_track_record || [], presData.guidance_track_record);
       }
     }
 

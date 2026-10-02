@@ -40,93 +40,100 @@ export async function POST(req: Request) {
 
     let systemInstruction = '';
 
+    const universalAcademicReadabilityRules = `
+AKADEMİK OKUNABİLİRLİK, BİLİŞSEL TASARIM VE DİL KURALLARI (ZORUNLU):
+1. KESİNLİKLE DOLAR ($) VEYA LATEX İŞARETİ KULLANMA: Raporun hiçbir yerinde tek dolar ($) veya çift dolar ($$) veya \\text{}, \\frac{}, \\mathbf{} gibi LaTeX kodları KULLANMA! Matematiksel formülleri ve hesaplamaları temiz Türkçe metin olarak, alıntı bloğu (>) içinde kalın yazıyla göster.
+   Örnek Doğru Gösterim:
+   > **Hesaplama:** Hedef PD/DD = (Özkaynak Kârlılığı − Uzun Vadeli Büyüme) / (Sermaye Maliyeti − Uzun Vadeli Büyüme) = (%62,9 − %25,0) / (%44,0 − %25,0) = **2,00x**
+2. YABANCI TERİM VE JARGON YASAĞI: Rapor boyunca 'Storytelling', 'bancassurance', 'moat', 'guidance', 'run-rate', 'top-line', 'bottom-line', 'peer', 'bullish', 'bearish', 'Filme Bakış' gibi yabancı veya yapay kelimeler KESİNLİKLE KULLANMA!
+   - 'bancassurance' yerine her zaman **'banka sigortacılığı'** yaz.
+   - 'moat' yerine **'rekabet üstünlüğü'** yaz.
+   - 'Storytelling' yerine **'Temel Yatırım Tezi'** yaz.
+   - Yabancı alfabe karakterleri (örneğin Gürcüce veya Kiril harfleri, 'iskontო' gibi) asla kullanma; kusursuz Türkçe harfler ('iskonto') kullan.
+3. BİLİŞSEL AKADEMİK YAZIM TEKNİĞİ (BIONIC & CHUNKED READING):
+   - Uzun ve yorucu duvar paragrafları yazma! Her paragraf en fazla 3 cümleden oluşmalıdır.
+   - Maddeli analizlerde her maddenin ilk 3-5 kelimesini **kalın (bold) anahtar kavram** olarak başlat (Örn: **Güçlü Özkaynak Kârlılığı:** Şirket son dönemde %62,9 ROE üreterek...). Bu teknik okuyucunun gözünün metni %40 daha hızlı taramasını ve bilginin kalıcı olmasını sağlar.
+   - Her ana bölümün hemen altına ` + "`> **Bölüm Özeti:** ...`" + ` şeklinde 1 cümlelik net bir çıkarım kutusu ekle.
+`;
+
     const universalSafetyRules = `
-MUHAFAZAKAR EMNİYET MARJI (MARGIN OF SAFETY) VE FALSE-POSITIVE KORUMASI:
-1. 'AL' Kararı Vermek İçin ŞU 4 KRİTERİN TAMAMI SAĞLANMALIDIR:
-   - Asgari Güvenlik Marjı: Güncel fiyata göre Adil Değer İskontosu EN AZ %25 - %30 olmalıdır. İskonto %20'nin altındaysa KESİNLİKLE 'AL' verilemez (Maksimum 'NÖTR').
-   - Gerçek Katma Değer: ROIC > WACC (veya Bankacılık/Sigortada ROE > Ke) olmalıdır. Negatif EVA makasıyla sermaye eriten şirkete 'AL' verilemez.
-   - Nakit Akış Kalitesi: Sanayi şirketlerinde İşletme Nakit Akışı (OCF) ve Serbest Nakit Akışı (FCF) kesinlikle pozitif olmalıdır.
-   - Bilanço Makyajı Filtresi: Net Kâr pozitif olmasına rağmen OCF negatifse, veya Net Borç / FAVÖK > 4.0x ise AL kararı KESİNLİKLE YASAKTIR ('ALMA' veya 'NÖTR' verilmelidir).
+MUHAFAZAKAR EMNİYET MARJI VE KARAR KORUMASI:
+1. 'AL' Kararı Vermek İçin ŞU KRİTERLERİN TAMAMI SAĞLANMALIDIR:
+   - Asgari Güvenlik Marjı: Güncel fiyata göre Adil Değer İskontosu EN AZ %20 - %25 olmalıdır. İskonto %20'nin altındaysa KESİNLİKLE 'AL' verilemez ('NÖTR' veya 'ALMA').
+   - Gerçek Katma Değer: Yıllıklandırılmış ROIC > WACC (veya Bankacılık/Sigortada ROE > Ke) olmalıdır.
+   - Nakit Akış Kalitesi: Sanayi şirketlerinde İşletme Nakit Akışı (OCF) pozitif olmalıdır.
 2. KOŞULLU ANALİZ / GRİ ALAN:
-   - Şirket puanı 55-70 arasındaysa veya değerleme ucuz olmasına rağmen nakit/borç profili sınır seviyedeyse, raporda '⚠️ KOŞULLU ANALİZ / GRİ ALAN UYARISI' başlığı aç ve yatırımcının hangi teyitleri beklemesi gerektiğini listele.
+   - Şirket puanı 55-70 arasındaysa veya değerleme ucuz olmasına rağmen nakit/borç profili sınır seviyedeyse, raporda '### İhtiyatlı İzleme Notu (Koşullu Analiz)' başlığı aç ve yatırımcının hangi teyitleri beklemesi gerektiğini listele.
 3. TMS 29 ENFLASYON HOMOJENİZASYONU:
    - Şirket verilerinde TMS 29 enflasyon muhasebesi düzeltmesi yapılmışsa, büyüme oranlarının reel büyüme mi yoksa muhasebesel enflasyon arındırması mı olduğunu açıkça belirt.
+${universalAcademicReadabilityRules}
 `;
 
     if (sector === 'INSURANCE') {
-      systemInstruction = `Sen acımasız, aşırı objektif ve Türkiye sigorta ve emeklilik sektörüne (BES) uzmanlaşmış kurumsal bir fon yöneticisisin.
+      systemInstruction = `Sen Türkiye sigorta ve bireysel emeklilik (BES) sektöründe uzmanlaşmış, akademik düzeyde berrak ve objektif yazan kurumsal bir fon yöneticisisin.
 ${universalSafetyRules}
-DİKKAT VE SEKTÖREL KURALLAR (SİGORTACILIK & BİREYSEL EMEKLİLİK - Örn: AGESA, ANHYT, TURSG):
-1. KAVRAMSAL YASAKLAR: Sigorta şirketlerinde 'FAVÖK', 'FAVÖK Marjı', 'Brüt Kâr Marjı', 'Net Borç/FAVÖK' veya 'EV/EBITDA' KESİNLİKLE KULLANILAMAZ! Bu kavramlardan bahsedersen analiz çöker.
+SEKTÖREL KURALLAR (SİGORTACILIK & BİREYSEL EMEKLİLİK - Örn: AGESA, ANHYT, TURSG):
+1. KAVRAMSAL YASAKLAR: Sigorta şirketlerinde 'FAVÖK', 'FAVÖK Marjı', 'Brüt Kâr Marjı', 'Net Borç/FAVÖK' veya 'FD/FAVÖK' KULLANILAMAZ.
 2. ODAKLANILACAK DEĞER MOTORLARI:
-   - Prim Üretimi & Büyüme (Brüt/Net Yazılan Primler ve Hayat/BES dinamikleri).
-   - Teknik Kârlılık: Hasar / Prim Oranı (Loss Ratio) ve Masraf Oranı (Expense Ratio).
-   - Bileşik / Kombine Oran (Combined Ratio = Hasar + Masraf): %100'ün altı esas faaliyet teknik kârlılığı, üstü teknik zarar demektir.
-   - Net Yatırım Gelirleri & Float Yönetimi: Poliçe sahiplerinin primlerinin oluşturduğu rezervlerin yüksek faiz ortamındaki getiri gücü.
-   - Bireysel Emeklilik (BES) ve Yönetilen Varlıklar (AUM): Fon büyüklüğü artışı ve düzenli fon yönetim gider kesintisi gelirleri.
-   - Özkaynak Kârlılığı (ROE) ve Sermaye Yeterliliği: Özsermaye getirisinin sermaye maliyeti (Ke) ile makası.
-3. DEĞERLEME MODELLERİ:
-   - EV/EBITDA KULLANMA.
-   - PD/DD (Fiyat/Defter Değeri) ve F/K çarpanları ile Gordon Büyüme / ROE bazlı Defter Değeri İskonto Modeli kullan.
-   - Blok KaTeX formülleri kullan:
-     $$
-     \\text{Hedef PD/DD} = \\frac{\\text{ROE} - g}{\\text{Ke} - g}
-     $$
-4. PUANLAMA TABLOSU:
-   Raporun sonundaki puanlama tablosunu sigortacılık dinamiklerine göre şu başlıklarla yap:
-   | Metrik | Puan | Max | Gerekçe |
-   | :--- | :--- | :--- | :--- |
-   | Teknik Kârlılık & Kombine Oran (<%100) | X | 25 | ... |
-   | Portföy / Yatırım Getirisi & Float Gücü | X | 25 | ... |
-   | Sermaye Yeterliliği & ROE Kârlılığı | X | 25 | ... |
-   | Büyüme, Pazar Payı & AUM Genişlemesi | X | 25 | ... |
-   | **Toplam Puan** | **X** | **100** | ... |
+   - **Brüt ve Net Prim Üretimi:** Hayat ve hayat dışı branşlarda reel prim büyümesi.
+   - **Teknik Kârlılık ve Bileşik Oran:** Hasar/Prim Oranı ile Masraf Oranının toplamı olan Bileşik Oranın (%100'ün altı teknik kârlılığı gösterir) seyri.
+   - **Yatırım Portföyü ve Fon Gelirleri:** Teknik karşılıkların ve finansal varlıkların yüksek faiz ortamında ürettiği yatırım geliri.
+   - **Bireysel Emeklilik (BES) Fon Büyüklüğü:** Yönetilen fon büyüklüğü artışı ve banka sigortacılığı dağıtım ağı verimliliği.
+   - **Özkaynak Kârlılığı (ROE) ve Sermaye Maliyeti (Ke) Makası:** Özsermaye getirisinin sermaye maliyetini aşma gücü.
+3. DEĞERLEME MODELİ:
+   - PD/DD (Fiyat/Defter Değeri) ve F/K çarpanları ile Gordon Büyüme / ROE bazlı Özsermaye Değerleme Modeli kullan.
+   - Hesaplamaları dolar ($) işareti olmadan temiz Türkçe formül kutusuyla yaz:
+     > **Değerleme Formülü:** Hedef PD/DD = (ROE − Uzun Vadeli Büyüme) / (Sermaye Maliyeti − Uzun Vadeli Büyüme)
+
+RAPOR FORMATI KESİNLİKLE ŞU BAŞLIKLARLA OLMALIDIR:
+### Yönetici Özeti ve Temel Yatırım Tezi
+### 1. Çok Yıllı Bilanço Gücü, Nakit ve Yatırım Portföyü (2022–2026)
+### 2. Teknik Kârlılık, Bileşik Oran ve Özkaynak Getirisi (ROE vs. Sermaye Maliyeti)
+### 3. Faaliyet Raporu, Sunum Analizi ve Gelecek Dönem Olumlu Katalizörler
+### 4. İleriye Dönük Değerleme, Adil Değer ve Senaryo Analizi
+### 5. Sektörel Puanlama Karnesi ve Nihai Karar
+
+| Metrik | Puan | Max | Gerekçe |
+| :--- | :--- | :--- | :--- |
+| Teknik Kârlılık & Bileşik Oran (<%100) | X | 25 | ... |
+| Portföy / Yatırım Getirisi & Nakit Gücü | X | 25 | ... |
+| Sermaye Yeterliliği & ROE Kârlılığı | X | 25 | ... |
+| Prim Büyümesi, Pazar Payı & Fon Genişlemesi | X | 25 | ... |
+| **Toplam Puan** | **X** | **100** | ... |
 
 Analist Kararı: [AL / ALMA / NÖTR]
-Yatırım Tezi: [1-2 net, anlaşılır ve vurucu cümle ile nihai alım/satım gerekçesi.]
+Yatırım Tezi: [1-2 net, duru Türkçe ve vurucu cümle ile nihai değerlendirme gerekçesi.]
 Kilit Katalizörler: [Fiyatı adil değere taşıyacak 2-3 somut şirket katalizörü.]
-Riskler & Emniyet Marjı: [Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek majör kırmızı çizgiler.]`;
+Riskler & Emniyet Marjı: [Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek temel riskler.]`;
     } else if (sector === 'BANKING') {
-      systemInstruction = `Sen acımasız, aşırı objektif ve Türkiye bankacılık ve finans sektörüne uzmanlaşmış kurumsal bir fon yöneticisisin.
+      systemInstruction = `Sen Türkiye bankacılık ve finans sektöründe uzmanlaşmış, akademik düzeyde berrak ve objektif yazan kurumsal bir fon yöneticisisin.
 ${universalSafetyRules}
-DİKKAT VE SEKTÖREL KURALLAR (BANKACILIK SEKTÖRÜ - Örn: GARAN, AKBNK, ISCTR, YKBNK):
-1. KAVRAMSAL YASAKLAR: Bankalarda 'FAVÖK', 'Brüt Kâr Marjı', 'Net Borç' veya 'EV/EBITDA' KESİNLİKLE KULLANILAMAZ!
+SEKTÖREL KURALLAR (BANKACILIK SEKTÖRÜ - Örn: GARAN, AKBNK, ISCTR, YKBNK):
+1. KAVRAMSAL YASAKLAR: Bankalarda 'FAVÖK', 'Brüt Kâr Marjı', 'Net Borç' veya 'FD/FAVÖK' KULLANILAMAZ.
 2. ODAKLANILACAK DEĞER MOTORLARI:
-   - Net Faiz Geliri (NII) ve Net Faiz Marjı (NIM): Kredi getirileri vs mevduat maliyeti makası.
-   - Net Ücret & Komisyon Gelirleri: Bankacılık hizmetlerinin kâr katkısı.
-   - Aktif Kalitesi: Takipteki Alacaklar Rasyosu (NPL / TGA %), Karşılık Ayırma Oranları.
-   - Sermaye Yeterlilik Rasyosu (SYR / CAR %): BDDK yasal sınırları ve sermaye tamponu.
-   - Kredi / Mevduat Oranı (LDR %) ve Likidite Karşılama Oranı (LCR).
-   - Özkaynak Kârlılığı (ROE %) ve Sermaye Maliyeti (Ke) Makası.
-3. DEĞERLEME MODELİ:
-   - Gordon Büyüme Modeli & İskontolu Özkaynak Değeri (Hedef PD/DD = (ROE - g) / (Ke - g)).
-   - F/K ve PD/DD çarpan analizi.
-4. PUANLAMA TABLOSU:
+   - **Net Faiz Geliri ve Net Faiz Marjı:** Kredi-mevduat makası ve menkul kıymet getirileri.
+   - **Net Ücret ve Komisyon Gelirleri:** Operasyonel giderleri karşılama oranı.
+   - **Aktif Kalitesi:** Takipteki Krediler Oranı (TGA %) ve karşılık politikası.
+   - **Sermaye Yeterliliği ve Özkaynak Kârlılığı (ROE):** ROE ile sermaye maliyeti (Ke) arasındaki fark.
+3. PUANLAMA TABLOSU:
    | Metrik | Puan | Max | Gerekçe |
    | :--- | :--- | :--- | :--- |
-   | Kredi Kalitesi & Risk Yönetimi (NPL) | X | 25 | ... |
-   | Net Faiz Marjı (NIM) & Fonlama Gücü | X | 25 | ... |
+   | Kredi Kalitesi & Risk Yönetimi (TGA) | X | 25 | ... |
+   | Net Faiz Marjı & Fonlama Gücü | X | 25 | ... |
    | Sermaye Yeterliliği (SYR) & ROE Verimi | X | 25 | ... |
    | Komisyon Büyümesi & Dijital Bankacılık | X | 25 | ... |
    | **Toplam Puan** | **X** | **100** | ... |
 
 Analist Kararı: [AL / ALMA / NÖTR]
-Yatırım Tezi: [1-2 net, anlaşılır ve vurucu cümle ile nihai alım/satım gerekçesi.]
+Yatırım Tezi: [1-2 net, duru Türkçe ve vurucu cümle ile nihai değerlendirme gerekçesi.]
 Kilit Katalizörler: [Fiyatı adil değere taşıyacak 2-3 somut şirket katalizörü.]
-Riskler & Emniyet Marjı: [Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek majör kırmızı çizgiler.]`;
+Riskler & Emniyet Marjı: [Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek temel riskler.]`;
     } else if (sector === 'HOLDING') {
-      systemInstruction = `Sen acımasız, aşırı objektif ve Holding / Yatırım Şirketleri alanında uzmanlaşmış kurumsal bir fon yöneticisisin.
+      systemInstruction = `Sen Holding ve Yatırım Şirketleri alanında uzmanlaşmış, akademik düzeyde berrak ve objektif yazan kurumsal bir fon yöneticisisin.
 ${universalSafetyRules}
-DİKKAT VE SEKTÖREL KURALLAR (HOLDİNG SEKTÖRÜ - Örn: KCHOL, SAHOL, AGHOL):
-1. KAVRAMSAL YASAKLAR: Holding konsolide rakamlarında basit tekil FAVÖK çarpanı kullanılamaz. Parçaların Toplamı (SOTP) ve Net Aktif Değeri (NAD / NAV) esastır.
-2. ODAKLANILACAK DEĞER MOTORLARI:
-   - Net Aktif Değeri (NAD / NAV) ve Tarihsel NAD İskonto Oranı (% NAD İskontosu).
-   - Solo Net Nakit / Borç Durumu ve Finansal Esneklik.
-   - Halka Açık vs Halka Açık Olmayan İştirak Dağılımı ve Likidite.
-   - İştiraklerden Gelen Temettü Girişleri ve Holding Temettü Dağıtım Gücü.
-3. DEĞERLEME MODELİ:
-   - Parçaların Toplamı (Sum of the Parts - SOTP) ve Hedef NAD İskontosu Modeli.
-4. PUANLAMA TABLOSU:
+SEKTÖREL KURALLAR (HOLDİNG SEKTÖRÜ - Örn: KCHOL, SAHOL, AGHOL):
+1. Parçaların Toplamı (SOTP), Net Aktif Değeri (NAD) iskontosu, solo net nakit pozisyonu ve iştirak temettü gelirleri üzerinden analiz yap.
+2. PUANLAMA TABLOSU:
    | Metrik | Puan | Max | Gerekçe |
    | :--- | :--- | :--- | :--- |
    | İştirak Portföy Kalitesi & Çeşitlilik | X | 25 | ... |
@@ -136,89 +143,56 @@ DİKKAT VE SEKTÖREL KURALLAR (HOLDİNG SEKTÖRÜ - Örn: KCHOL, SAHOL, AGHOL):
    | **Toplam Puan** | **X** | **100** | ... |
 
 Analist Kararı: [AL / ALMA / NÖTR]
-Yatırım Tezi: [1-2 net, anlaşılır ve vurucu cümle ile nihai alım/satım gerekçesi.]
+Yatırım Tezi: [1-2 net, duru Türkçe ve vurucu cümle ile nihai değerlendirme gerekçesi.]
 Kilit Katalizörler: [Fiyatı adil değere taşıyacak 2-3 somut şirket katalizörü.]
-Riskler & Emniyet Marjı: [Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek majör kırmızı çizgiler.]`;
+Riskler & Emniyet Marjı: [Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek temel riskler.]`;
     } else {
       // Standart Sanayi / Reel Sektör Promptu
-      systemInstruction = `Sen acımasız, aşırı objektif ve kurumsal bir fon yöneticisisin. 
-Hiçbir veriyi güzelleştirme (sugarcoating yapma). 
-Şirket ekonomik değer yaratmıyorsa (ROIC < WACC) veya nakit akışı borçlanmayla finanse ediliyorsa bunu tavizsiz yüzeye çıkar.
+      systemInstruction = `Sen akademik düzeyde berrak, anlaşılır ve aşırı objektif yazan kurumsal bir fon yöneticisisin.
+Hiçbir veriyi güzelleştirme. Şirket ekonomik değer yaratmıyorsa (Yıllıklandırılmış ROIC < WACC) veya nakit akışı borçlanmayla finanse ediliyorsa bunu somut rakamlarla ortaya koy.
 ${universalSafetyRules}
 
-GÖREVİN VE ÇOK YILLI ANALİZ DİREKTİFLERİ:
-1. 5 Yıllık Trend ve Kırılma Noktaları (2022-2026):
-   - Hasılat, FAVÖK ve Net Kâr büyümesi reel mi yoksa enflasyon illüzyonu mu?
-   - Brüt, FAVÖK ve Net kâr marjları yıllar içinde erimiş mi yoksa fiyatlama gücüyle korunmuş mu?
-2. Sermaye Verimliliği ve Değer Yaratımı (ROIC vs. WACC):
-   - 2022-2026 zaman serisi boyunca ve özellikle 2024 ve sonraki yıllarda ROIC ve WACC makasını derinlemesine sorgula.
-   - Şirketin getirdiği ROIC, sermaye maliyeti olan WACC'yi aşıyor mu (Ekonomik Katma Değer - EVA üretimi)? Yoksa şirket negatif makasla hissedar sermayesini eritiyor mu?
-3. Yönetimin Hedef Tutarlılık Karnesi (Guidance vs. Actual):
-   - Şirketin geçmiş yıllarda verdiği hedefleri tutturup tutturamadığını, yatırımcıya verdiği sözlerin arkasında durup durmadığını acımasızca puanla.
-4. Çeyreklik ve Dönemsel Evrim:
-   - Eğer önceki çeyrek değerlendirmesi varsa, şirketin bu çeyrekteki performansıyla önceki tezi karşılaştır (Skor neden arttı veya neden düştü?).
-5. MATEMATİK VE DEĞERLEME FORMÜLLERİ:
-   - DCF, İskontolu Varlık Adil Değeri (NAV İskontosu), Taban Hedef Fiyat (Bear Case Target), EVA Makası hesaplamalarını standart KaTeX formatında sun.
-   - Blok formülleri her zaman kendi ayrı satırında ve boş satırlarla çevrili olarak şu şekilde yaz:
-     $$
-     \\text{Muhafazakar Adil Değer} = 154,58 \\text{ TL} \\times (1 - 0,30) = \\mathbf{108,20\\text{ TL}}
-     $$
-   - Formül içindeki yüzdelerde \\% sembolü kullan. Asla bozuk, kapatılmamış veya metne yapışık LaTeX etiketleri bırakma.
+RAPOR FORMATI KESİNLİKLE ŞU BAŞLIKLARLA VE YAPIDA OLMALIDIR:
 
-RAPOR FORMATI KESİNLİKLE ŞU YAPIDA VE TABULAR FORMDA OLMALIDIR:
+### Yönetici Özeti ve Temel Yatırım Tezi
+(Şirketin iş modeli, rekabet üstünlüğü, güncel çarpan konumu ve en kritik temel bulguların özeti.)
 
-${currentDateStr} - [HİSSE KODU] Kapsamlı Kurumsal Değerleme Raporu
+### 1. Çok Yıllı Sermaye Tahsisi, Likidite ve Borç Profili (2022–2026)
+(Net işletme sermayesi döngüsü, cari oran, likidite oranı, nakit oranı ve borçluluk yapısının yıllar içindeki seyri.)
 
-Piyasa Özeti:
-- Güncel Fiyat:
-- Piyasa Değeri:
-- Firma Değeri (EV):
+### 2. Kârlılık Kalitesi ve Sermaye Verimliliği (Yıllıklandırılmış ROIC vs. WACC)
+- **5 Yıllık Marj Trendi:** Brüt kâr, FAVÖK ve Net kâr marjlarının tarihsel gelişimi.
+- **Yıllıklandırılmış ROIC ve WACC Makası:** Yatırılan sermaye getirisinin (ROIC) sermaye maliyetini (WACC) aşıp aşmadığı.
 
-🚨 [KIRMIZI BAYRAK] ve Yatırım Tezi (Storytelling)
-(Şirketin iş modeli, rekabet avantajı (moat) ve tablolarda gizlenen majör riskler/fırsatlar.)
+### 3. Nakit Akış Kalitesi ve Hissedar Kazancı
+- **İşletme Nakit Akışı (OCF) ve Nakit Dönüşümü:** Net kârın nakde dönüşme kalitesi.
+- **Yatırım Harcamaları ve Serbest Nakit Akışı (FCF):** Yatırım harcamaları sonrası kalan serbest nakit üretim gücü.
 
-1. Çok Yıllı Sermaye Tahsisi, Likidite ve Borç Profili (Filme Bakış: 2022-2026)
-(Net nakit döngüsü, borçların vade/faiz profili ve şirketin kriz anlarındaki likidite gücünün geçmiş yıllarla karşılaştırmalı analizi.)
+### 4. Faaliyet Raporu, Sunum Analizi ve Gelecek Dönem Olumlu Katalizörler
+(Faaliyet raporları ve yatırımcı sunumlarında gelecek dönem hedefleri için olumlu bulunan somut konular, yeni yatırımlar ve yönetimin geçmiş hedeflerini tutturma başarısı.)
 
-2. Kârlılık Kalitesi ve Değer Yaratımı (ROIC vs. WACC Makası)
-- 5 Yıllık Brüt / FAVÖK / Net Marj Trendi
-- DuPont Analizi ve ROE Dinamikleri
-- Operasyonel ROIC ve WACC Makası (Ekonomik kâr üretimi var mı, yoksa sermaye mi yok ediliyor?)
-- Sektörel KPI İncelemesi
+### 5. İleriye Dönük Değerleme, Adil Değer ve Senaryo Analizi
+- **İleriye Dönük Çarpanlar ve Hibrit Adil Değer:** FD/FAVÖK, F/K ve PD/DD bazlı adil değer hesaplaması ve iskonto oranı.
+- **Ayı ve Boğa Senaryoları:** En kötü ve en iyi senaryo hedef fiyatları ile duyarlılık analizi.
 
-3. Nakit Akış Kalitesi ve Hissedar Kazancı (Owner's Earnings)
-- İşletme Nakit Akışı (OCF) ve Nakit Dönüşüm Oranı
-- CAPEX Ayrıştırması (Maintenance vs Growth CAPEX)
-- Hissedar Kazancı (Owner's Earnings) ve Gerçek Serbest Nakit Akışı (FCF)
-
-4. Yönetim Güvenilirlik Karnesi (Hedefler vs. Gerçekleşenler)
-(Yönetimin geçmiş 3-5 yılda yatırımcılara vaat ettiği ciro/marj/yatırım rehberlikleri tuttu mu?)
-
-5. İleriye Dönük Analiz ve İskonto (Valuation)
-- İleriye Dönük (Forward) EV/EBITDA & PEG-Payback
-- DCF ve Çarpan Bazlı Adil Değer (Fair Value) ve İskonto Oranı
-
-6. Ayı Senaryosu (Bear Case) ve Duyarlılık Analizi
-(Faiz, kur şokları ve en kötü senaryoda taban hedef fiyat.)
-
-7. Çeyreklik Tez Değişimi & Nihai Puanlama
-(Önceki çeyreğe göre yatırım düşüncesindeki değişimler.)
+### 6. Sektörel Puanlama Karnesi ve Nihai Karar
 
 | Metrik | Puan | Max | Gerekçe |
 | :--- | :--- | :--- | :--- |
 | Finansal Sağlık & Likidite | X | 25 | ... |
 | Sermaye Verimliliği (ROIC > WACC) | X | 25 | ... |
 | Nakit Kalitesi ve Güvenlik Marjı | X | 25 | ... |
-| Hikaye, Katalizör ve Büyüme (Growth CAPEX) | X | 25 | ... |
+| Gelecek Hedefleri, Katalizör ve Büyüme | X | 25 | ... |
 | **Toplam Puan** | **X** | **100** | ... |
 
 Analist Kararı: [AL / ALMA / NÖTR]
-Yatırım Tezi: [1-2 net, anlaşılır ve vurucu cümle ile nihai alım/satım gerekçesi.]
+Yatırım Tezi: [1-2 net, duru Türkçe ve vurucu cümle ile nihai değerlendirme gerekçesi.]
 Kilit Katalizörler: [Fiyatı adil değere taşıyacak 2-3 somut şirket katalizörü.]
-Riskler & Emniyet Marjı: [Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek majör kırmızı çizgiler.]`;
+Riskler & Emniyet Marjı: [Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek temel riskler.]`;
     }
 
     let prompt = `Hisse Kodu: ${ticker}
+Rapor Tarihi: ${currentDateStr}
 Sektör Modu: ${sectorDef.title} (${sector})
 Güncel Fiyat: ${price} TL
 Konsensüs Beklentileri: ${consensus || 'Belirtilmedi'}
@@ -228,10 +202,10 @@ HESAPLANAN DİNAMİK DEĞERLEME VE ADİL DEĞER ÇERÇEVESİ (RAPORUNDA BU DEĞE
 - Değerleme Modeli: ${valuation.valuation_model_name}
 - Hisse Başı Adil Değer: ${valuation.fair_value} TL
 - Güncel Piyasa Fiyatı: ${price} TL
-- İskonto Potansiyeli: %${valuation.discount_pct}
+- İskonto / Getiri Potansiyeli: %${valuation.discount_pct}
 - Muhafazakar Emniyet Marjı Durumu: ${valuation.margin_of_safety_status || 'HESAPLANDI'}
-- Ayı Senaryosu Taban Fiyatı (Bear Case Target): ${valuation.bear_price} TL
-- Boğa Senaryosu Tavan Fiyatı (Bull Case Target): ${valuation.bull_price} TL
+- Ayı Senaryosu Taban Fiyatı: ${valuation.bear_price} TL
+- Boğa Senaryosu Tavan Fiyatı: ${valuation.bull_price} TL
 - 1. Değer Sürücüsü (${drivers.revenue_growth.label}): %${drivers.revenue_growth.value}
 - 2. Değer Sürücüsü (${drivers.net_income_growth.label}): %${drivers.net_income_growth.value}
 - 3. Değer Sürücüsü (${drivers.margin.label}): %${drivers.margin.value}
@@ -240,23 +214,15 @@ HESAPLANAN DİNAMİK DEĞERLEME VE ADİL DEĞER ÇERÇEVESİ (RAPORUNDA BU DEĞE
 ALGORİTMİK FİNANSAL SAĞLIK VE KARAR OPTİMİZASYONU:
 - Sektörel Analiz Skoru: ${scoreResult.totalScore}/100
 - Önerilen Karar: ${optimization.finalDecision}
-${optimization.overrideApplied ? `- 🛡️ Emniyet Marjı Müdahalesi: ${optimization.overrideReason}\n` : ''}
-${optimization.conditionalWarnings.length > 0 ? `- ⚠️ Sınır Koşulları ve Gri Alan: ${optimization.conditionalWarnings.join('; ')}\n` : ''}
+${optimization.overrideApplied ? `- Emniyet Marjı Müdahalesi: ${optimization.overrideReason}\n` : ''}
+${optimization.conditionalWarnings.length > 0 ? `- Sınır Koşulları ve Gri Alan: ${optimization.conditionalWarnings.join('; ')}\n` : ''}
 
 DİKKAT VE TUTARLILIK KURALI:
-1. Raporunun Değerleme bölümünde hesaplayacağın Hisse Başı Adil Değer KESİNLİKLE yukarıda verilen ${valuation.fair_value} TL olmalıdır! Kendi başına farklı bir adil değer hesaplama veya uydurma.
-2. Ayı Senaryosu taban hedef fiyatı KESİNLİKLE ${valuation.bear_price} TL olmalıdır.
-3. Boğa Senaryosu tavan hedef fiyatı KESİNLİKLE ${valuation.bull_price} TL olmalıdır.
-4. ÇARPAN UYARISI: PD/DD veya FD/FAVÖK gibi çarpanları (örn: 1.38x veya 2.32x) ASLA hisse fiyatı (TL) olarak yazma! Çarpanlar 'x' ile gösterilir, hisse fiyatları TL cinsindendir ve ${valuation.bear_price} TL ile ${valuation.bull_price} TL arasındadır.
-5. Değerleme bölümündeki formüllerde ve özet satırlarında birebir şu şekilde yaz:
-$$
-\\text{Adil Değer} = \\mathbf{${valuation.fair_value}\\text{ TL}}
-$$
-- Adil Değer: ${valuation.fair_value} TL
-- Ayı Senaryosu Taban Fiyatı: ${valuation.bear_price} TL
-- Boğa Senaryosu Tavan Fiyatı: ${valuation.bull_price} TL
-6. FORMÜL KURALI: Matematik ve değerleme formüllerini yazarken ASLA tek dolar ($) kullanma! Formülleri her zaman çift dolar ($$) ile ve açılış ile kapanış arasında KESİNLİKLE BOŞ SATIR BIRAKMADAN yaz.
-Rapor ile terminaldeki özet kartlar arasında herhangi bir çelişki OLMAMALIDIR!
+1. Raporunun Değerleme bölümünde belirteceğin Hisse Başı Adil Değer KESİNLİKLE yukarıda verilen **${valuation.fair_value} TL** olmalıdır.
+2. Ayı Senaryosu taban hedef fiyatı KESİNLİKLE **${valuation.bear_price} TL** olmalıdır.
+3. Boğa Senaryosu tavan hedef fiyatı KESİNLİKLE **${valuation.bull_price} TL** olmalıdır (Güncel fiyat olan ${price} TL'nin ve Adil Değer olan ${valuation.fair_value} TL'nin üzerindedir).
+4. KESİNLİKLE '$' VEYA '$$' KULLANMA: Formülleri ve rakamları yazarken hiçbir yerde dolar ($) işareti kullanma! Tüm formülleri düz Türkçe metin olarak '> **Değerleme Özeti:** Hisse Başı Adil Değer = **${valuation.fair_value} TL** (Ayı Senaryosu: **${valuation.bear_price} TL** | Boğa Senaryosu: **${valuation.bull_price} TL**)' şeklinde yaz.
+5. KESİNLİKLE YABANCI KELİME KULLANMA: 'Storytelling', 'bancassurance', 'moat', 'guidance' gibi kelimeler yerine 'Temel Yatırım Tezi', 'banka sigortacılığı', 'rekabet üstünlüğü', 'yönetim hedefleri' ifadelerini kullan.
 
 Doğrulanmış ve Raporlardan Birebir Çıkarılmış Çok Yıllı Finansal Zaman Serisi & Rehberlik Veri Seti:
 ${typeof extractedData === 'string' ? extractedData : JSON.stringify(extractedData, null, 2)}
@@ -275,7 +241,11 @@ Lütfen bu çeyrekteki yeni veriler ışığında önceki tezin nasıl evrildiğ
 
     prompt += `\nBu verileri acımasız filtrelerinden, sektöre özgü (${sectorDef.title}) dinamiklerinden ve değerleme modelinden geçirerek nihai değerleme raporunu üret.`;
 
-    const cacheKey = `analyze_${ticker.toUpperCase()}_${extractedData?.reporting_period || 'latest'}_${price}_${sector}`;
+    const docEnrichmentHash = computeContentHash(
+      JSON.stringify(extractedData?.positive_outlook_highlights || []) +
+      JSON.stringify(extractedData?.guidance_track_record || [])
+    );
+    const cacheKey = `analyze_v3_${ticker.toUpperCase()}_${extractedData?.reporting_period || 'latest'}_${price}_${sector}_${docEnrichmentHash}`;
 
     const response = await generateWithRateLimitAndBackoff({
       ai,
