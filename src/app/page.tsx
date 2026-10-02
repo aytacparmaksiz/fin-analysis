@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -3712,8 +3712,8 @@ export default function ValuationTerminal() {
                           { title: 'Özkaynak Karlılığı', calc: (d:any) => (d.equity && d.equity !== 0 && d.net_income != null) ? (d.net_income / Math.abs(d.equity) * 100 * getAnnualizationFactor(d.period)) : null }
                         ].map(mini => {
                           const miniData = quarterlyChartData.slice(-8).map((d:any) => ({ period: d.period, value: mini.calc(d) }));
-   const sparkValues = miniData.map((d: any) => d.value).filter((v: any) => v != null && !isNaN(v));
-   const trendColor = sparkValues.length >= 2 && values[sparkValues.length - 1] > sparkValues[0] ? '#10b981' : '#f87171';
+                          const sparkValues = miniData.map((d: any) => d.value).filter((v: any) => v != null && !isNaN(v));
+                          const trendColor = sparkValues.length >= 2 && sparkValues[sparkValues.length - 1] > sparkValues[0] ? '#10b981' : '#f87171';
 
                           return (
                             <div key={mini.title} className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-4 shadow-lg">
