@@ -37,6 +37,7 @@ const financialExtractionSchema: Schema = {
     currency: { type: Type.STRING, description: 'Raporlanan para birimi (Örn: Bin TRY, Milyon TL, TL)' },
     reporting_period: { type: Type.STRING, description: 'En güncel dönem (Örn: 2026/06 veya 2026/Q2)' },
     share_count: { type: Type.STRING, description: 'Ödenmiş sermaye / hisse adedi' },
+    shares_outstanding: { type: Type.NUMBER, description: 'Total number of shares outstanding (paid-in capital / par value)' },
     is_tms29_adjusted: { type: Type.BOOLEAN, description: 'Finansal tablolarda TMS 29 enflasyon muhasebesi uygulandı mı (true/false)' },
     tms29_notes: { type: Type.STRING, description: 'TMS 29 enflasyon muhasebesi uygulamasına dair dipnot özeti' },
 
