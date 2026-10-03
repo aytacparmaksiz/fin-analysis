@@ -3574,6 +3574,16 @@ export default function ValuationTerminal() {
                         const latestBS = chartData[chartData.length - 1];
                         const yoyBSLabel = latestBS?.period ? `${String(Number(latestBS.period.slice(0,4)) - 1)}/${latestBS.period.slice(5)}` : '';
                         const yoyBS = chartData.find((d: any) => d.period === yoyBSLabel);
+                        const fv = (d: any, k: string): number | null => {
+                          if (!d) return null;
+                          if (k === 'operating_income') return d.operating_income ?? d.operating_profit ?? null;
+                          if (k === 'financial_debt') {
+                            if (d.financial_debt != null) return d.financial_debt;
+                            if (d.short_term_debt == null && d.long_term_debt == null) return null;
+                            return (d.short_term_debt || 0) + (d.long_term_debt || 0);
+                          }
+                          return d[k] ?? null;
+                        };
                         return (
 
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -3605,12 +3615,12 @@ export default function ValuationTerminal() {
                               ].filter(Boolean).map((rowConfig: any) => (
                                 <tr key={rowConfig.k} className="hover:bg-slate-800/30">
                                   <td className="py-2">{rowConfig.l}</td>
-                                  <td className="py-2 text-right font-mono">{latestPeriod?.[rowConfig.k] != null ? (latestPeriod?.[rowConfig.k] / 1000).toLocaleString('tr-TR', {maximumFractionDigits:0}) : '—'}</td>
-                                  <td className="py-2 text-right font-mono">{yoyPeriod?.[rowConfig.k] != null ? (yoyPeriod?.[rowConfig.k] / 1000).toLocaleString('tr-TR', {maximumFractionDigits:0}) : '—'}</td>
+                                  <td className="py-2 text-right font-mono">{fv(latestPeriod, rowConfig.k) != null ? (fv(latestPeriod, rowConfig.k)! / 1000).toLocaleString('tr-TR', {maximumFractionDigits:0}) : '—'}</td>
+                                  <td className="py-2 text-right font-mono">{fv(yoyPeriod, rowConfig.k) != null ? (fv(yoyPeriod, rowConfig.k)! / 1000).toLocaleString('tr-TR', {maximumFractionDigits:0}) : '—'}</td>
                                   <td className="py-2 text-right font-mono">
                                     {(() => {
-                                      const v1 = latestPeriod?.[rowConfig.k];
-                                      const v2 = yoyPeriod?.[rowConfig.k];
+                                      const v1 = fv(latestPeriod, rowConfig.k);
+                                      const v2 = fv(yoyPeriod, rowConfig.k);
                                       const chg = (v1 != null && v2 != null && v2 !== 0) ? ((v1 - v2) / Math.abs(v2) * 100).toFixed(1) : null;
                                       return chg ? (
                                         <span className={rowConfig.k === 'net_debt' ? (Number(chg) < 0 ? 'text-emerald-400' : Number(chg) > 0 ? 'text-rose-400' : 'text-slate-400') : (Number(chg) > 0 ? 'text-emerald-400' : Number(chg) < 0 ? 'text-rose-400' : 'text-slate-400')}>
@@ -3651,8 +3661,8 @@ export default function ValuationTerminal() {
                                 { k: 'net_debt', l: 'Net Borç' },
                                 { k: 'equity', l: 'Özkaynaklar' }
                               ].map((rowConfig: any) => {
-                                const v1 = latestPeriod?.[rowConfig.k];
-                                const v2 = yoyPeriod?.[rowConfig.k];
+                                const v1 = fv(latestBS, rowConfig.k);
+                                const v2 = fv(yoyBS, rowConfig.k);
                                 const chg = (v1 != null && v2 != null && v2 !== 0) ? ((v1 - v2) / Math.abs(v2) * 100).toFixed(1) : null;
                                 return (
                                   <tr key={rowConfig.k} className="hover:bg-slate-800/30">
@@ -3679,15 +3689,15 @@ export default function ValuationTerminal() {
                       {/* Çeyreklik Bar Grafikleri (3'lü) */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                         {[
-                          { title: currentSector === 'INSURANCE' ? 'Prim Üretimi (Dönem Toplamı)' : 'Satışlar (Dönem Toplamı)', key: currentSector === 'INSURANCE' ? 'gross_written_premiums' : 'revenue' },
-                          { title: currentSector === 'INSURANCE' ? 'Teknik Bölüm Dengesi (Dönem Toplamı)' : 'FAVÖK (Dönem Toplamı)', key: currentSector === 'INSURANCE' ? 'technical_balance' : 'ebitda' },
-                          { title: 'Net Kar (Dönem Toplamı)', key: 'net_income' }
+                          { title: currentSector === 'INSURANCE' ? 'Çeyreklik Prim Üretimi' : 'Çeyreklik Satışlar', key: currentSector === 'INSURANCE' ? 'gross_written_premiums' : 'revenue' },
+                          { title: currentSector === 'INSURANCE' ? 'Çeyreklik Teknik Bölüm Dengesi' : 'Çeyreklik FAVÖK', key: currentSector === 'INSURANCE' ? 'technical_balance' : 'ebitda' },
+                          { title: 'Çeyreklik Net Kar', key: 'net_income' }
                         ].map(chart => (
                           <div key={chart.key} className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-4 shadow-lg">
                             <div className="text-xs font-bold text-white mb-2">{chart.title}</div>
                             <div className="h-40 w-full">
                               <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={chartData.slice(-5)} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
+                                <BarChart data={quarterlyChartData.slice(-5)} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
                                   <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10 }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                   <Tooltip content={<CustomChartTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
                                   <Bar dataKey={chart.key} name={chart.title} fill="#3b82f6" radius={[2, 2, 0, 0]} />
@@ -3701,17 +3711,17 @@ export default function ValuationTerminal() {
                       {/* Mini Sparkline Çizgi Grafikleri (3x2) */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                         {[
-                          { title: 'Brüt Kar Marjı (Dönem Toplamı)', calc: (d:any) => { if (currentSector === 'INSURANCE') return (d.gross_written_premiums && d.gross_written_premiums !== 0) ? ((d.gross_profit ?? d.technical_balance ?? 0) / d.gross_written_premiums * 100) : null; return (d.revenue && d.revenue !== 0 && d.gross_profit != null) ? (d.gross_profit / d.revenue * 100) : null; } },
-                          { title: currentSector === 'INSURANCE' ? 'Teknik Kâr Marjı (Dönem Toplamı)' : 'FAVÖK Marjı (Dönem Toplamı)', calc: (d:any) => {
+                          { title: 'Brüt Kar Marjı (Çeyreklik)', calc: (d:any) => { if (currentSector === 'INSURANCE') return (d.gross_written_premiums && d.gross_written_premiums !== 0) ? ((d.gross_profit ?? d.technical_balance ?? 0) / d.gross_written_premiums * 100) : null; return (d.revenue && d.revenue !== 0 && d.gross_profit != null) ? (d.gross_profit / d.revenue * 100) : null; } },
+                          { title: currentSector === 'INSURANCE' ? 'Teknik Kâr Marjı (Çeyreklik)' : 'FAVÖK Marjı (Çeyreklik)', calc: (d:any) => {
                             if (currentSector === 'INSURANCE') return (d.gross_written_premiums ? (d.technical_balance || d.net_income) / d.gross_written_premiums * 100 : null);
                             return d.revenue ? (d.ebitda / d.revenue * 100) : null;
                           }},
-                          { title: 'Net Kar Marjı (Dönem Toplamı)', calc: (d:any) => { const denom = currentSector === 'INSURANCE' ? d.gross_written_premiums : d.revenue; return (denom && denom !== 0 && d.net_income != null) ? (d.net_income / denom * 100) : null; } },
+                          { title: 'Net Kar Marjı (Çeyreklik)', calc: (d:any) => { const denom = currentSector === 'INSURANCE' ? d.gross_written_premiums : d.revenue; return (denom && denom !== 0 && d.net_income != null) ? (d.net_income / denom * 100) : null; } },
                           { title: 'Cari Oran', calc: (d:any) => d.current_liabilities ? (d.current_assets / d.current_liabilities) : null },
                           { title: 'Kaldıraç Oranı', calc: (d:any) => (d.equity && d.equity !== 0 && d.total_assets != null) ? ((d.total_assets - d.equity) / Math.abs(d.equity)) : null },
                           { title: 'Özkaynak Karlılığı', calc: (d:any) => (d.equity && d.equity !== 0 && d.net_income != null) ? (d.net_income / Math.abs(d.equity) * 100 * getAnnualizationFactor(d.period)) : null }
                         ].map(mini => {
-                          const miniData = chartData.slice(-8).map((d:any) => ({ period: d.period, value: mini.calc(d) }));
+                          const miniData = quarterlyChartData.slice(-8).map((d:any) => ({ period: d.period, value: mini.calc(d) }));
                            const values = miniData.map((d: any) => d.value).filter((v: any) => v != null && !isNaN(v));
                            const trendColor = values.length >= 2 && values[values.length - 1] > values[0] ? '#10b981' : '#f87171';
                           return (
