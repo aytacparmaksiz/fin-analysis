@@ -3679,15 +3679,15 @@ export default function ValuationTerminal() {
                       {/* Çeyreklik Bar Grafikleri (3'lü) */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                         {[
-                          { title: currentSector === 'INSURANCE' ? 'Çeyreklik Prim Üretimi' : 'Çeyreklik Satışlar', key: currentSector === 'INSURANCE' ? 'gross_written_premiums' : 'revenue' },
-                          { title: currentSector === 'INSURANCE' ? 'Çeyreklik Teknik Bölüm Dengesi' : 'Çeyreklik FAVÖK', key: currentSector === 'INSURANCE' ? 'technical_balance' : 'ebitda' },
-                          { title: 'Çeyreklik Net Kar', key: 'net_income' }
+                          { title: currentSector === 'INSURANCE' ? 'Prim Üretimi (Dönem Toplamı)' : 'Satışlar (Dönem Toplamı)', key: currentSector === 'INSURANCE' ? 'gross_written_premiums' : 'revenue' },
+                          { title: currentSector === 'INSURANCE' ? 'Teknik Bölüm Dengesi (Dönem Toplamı)' : 'FAVÖK (Dönem Toplamı)', key: currentSector === 'INSURANCE' ? 'technical_balance' : 'ebitda' },
+                          { title: 'Net Kar (Dönem Toplamı)', key: 'net_income' }
                         ].map(chart => (
                           <div key={chart.key} className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-4 shadow-lg">
                             <div className="text-xs font-bold text-white mb-2">{chart.title}</div>
                             <div className="h-40 w-full">
                               <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={quarterlyChartData.slice(-5)} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
+                                <BarChart data={chartData.slice(-5)} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
                                   <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10 }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                   <Tooltip content={<CustomChartTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
                                   <Bar dataKey={chart.key} name={chart.title} fill="#3b82f6" radius={[2, 2, 0, 0]} />
@@ -3701,17 +3701,17 @@ export default function ValuationTerminal() {
                       {/* Mini Sparkline Çizgi Grafikleri (3x2) */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                         {[
-                          { title: 'Brüt Kar Marjı (Çeyreklik)', calc: (d:any) => { if (currentSector === 'INSURANCE') return (d.gross_written_premiums && d.gross_written_premiums !== 0) ? ((d.gross_profit ?? d.technical_balance ?? 0) / d.gross_written_premiums * 100) : null; return (d.revenue && d.revenue !== 0 && d.gross_profit != null) ? (d.gross_profit / d.revenue * 100) : null; } },
-                          { title: currentSector === 'INSURANCE' ? 'Teknik Kâr Marjı (Çeyreklik)' : 'FAVÖK Marjı (Çeyreklik)', calc: (d:any) => {
+                          { title: 'Brüt Kar Marjı (Dönem Toplamı)', calc: (d:any) => { if (currentSector === 'INSURANCE') return (d.gross_written_premiums && d.gross_written_premiums !== 0) ? ((d.gross_profit ?? d.technical_balance ?? 0) / d.gross_written_premiums * 100) : null; return (d.revenue && d.revenue !== 0 && d.gross_profit != null) ? (d.gross_profit / d.revenue * 100) : null; } },
+                          { title: currentSector === 'INSURANCE' ? 'Teknik Kâr Marjı (Dönem Toplamı)' : 'FAVÖK Marjı (Dönem Toplamı)', calc: (d:any) => {
                             if (currentSector === 'INSURANCE') return (d.gross_written_premiums ? (d.technical_balance || d.net_income) / d.gross_written_premiums * 100 : null);
                             return d.revenue ? (d.ebitda / d.revenue * 100) : null;
                           }},
-                          { title: 'Net Kar Marjı (Çeyreklik)', calc: (d:any) => { const denom = currentSector === 'INSURANCE' ? d.gross_written_premiums : d.revenue; return (denom && denom !== 0 && d.net_income != null) ? (d.net_income / denom * 100) : null; } },
+                          { title: 'Net Kar Marjı (Dönem Toplamı)', calc: (d:any) => { const denom = currentSector === 'INSURANCE' ? d.gross_written_premiums : d.revenue; return (denom && denom !== 0 && d.net_income != null) ? (d.net_income / denom * 100) : null; } },
                           { title: 'Cari Oran', calc: (d:any) => d.current_liabilities ? (d.current_assets / d.current_liabilities) : null },
                           { title: 'Kaldıraç Oranı', calc: (d:any) => (d.equity && d.equity !== 0 && d.total_assets != null) ? ((d.total_assets - d.equity) / Math.abs(d.equity)) : null },
                           { title: 'Özkaynak Karlılığı', calc: (d:any) => (d.equity && d.equity !== 0 && d.net_income != null) ? (d.net_income / Math.abs(d.equity) * 100 * getAnnualizationFactor(d.period)) : null }
                         ].map(mini => {
-                          const miniData = quarterlyChartData.slice(-8).map((d:any) => ({ period: d.period, value: mini.calc(d) }));
+                          const miniData = chartData.slice(-8).map((d:any) => ({ period: d.period, value: mini.calc(d) }));
                            const values = miniData.map((d: any) => d.value).filter((v: any) => v != null && !isNaN(v));
                            const trendColor = values.length >= 2 && values[values.length - 1] > values[0] ? '#10b981' : '#f87171';
                           return (
@@ -3778,7 +3778,7 @@ export default function ValuationTerminal() {
                         <div className="h-64 w-full">
                           {mounted && (
                             <ResponsiveContainer width="100%" height="100%">
-                              <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                              <ComposedChart data={quarterlyChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
                                 <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                 <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFormatter} />
@@ -3814,7 +3814,7 @@ export default function ValuationTerminal() {
                         <div className="h-64 w-full">
                           {mounted && (
                             <ResponsiveContainer width="100%" height="100%">
-                              <ComposedChart data={chartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
+                              <ComposedChart data={quarterlyChartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
                                 <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                 <YAxis yAxisId="left" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFormatter} />
@@ -3822,8 +3822,7 @@ export default function ValuationTerminal() {
                                 <Tooltip content={<CustomChartTooltip />} />
                                 <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
                                 <Bar yAxisId="left" dataKey="revenue" name={currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Satışlar'} fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                                <Bar yAxisId="right" dataKey="share_price" name="Hisse Fiyatı (TL)" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={22} />
-                                <Line yAxisId="right" type="monotone" dataKey="share_price" name="Fiyat Trendi" stroke="#34d399" strokeWidth={2} dot={{ r: 3, fill: '#ecfdf5', stroke: '#10b981', strokeWidth: 1.5 }} legendType="none" />
+                                <Line yAxisId="right" type="monotone" dataKey="share_price" name="Hisse Fiyatı (TL)" stroke="#34d399" strokeWidth={2} dot={{ r: 3, fill: '#ecfdf5', stroke: '#10b981', strokeWidth: 1.5 }} />
                               </ComposedChart>
                             </ResponsiveContainer>
                           )}
@@ -3849,7 +3848,7 @@ export default function ValuationTerminal() {
                         <div className="h-64 w-full">
                           {mounted && (
                             <ResponsiveContainer width="100%" height="100%">
-                              <LineChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                              <LineChart data={quarterlyChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
                                 <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                 <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFormatter} />
