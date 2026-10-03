@@ -636,13 +636,11 @@ function computeIncrementalQuarterlyData(rawData: any[]): any[] {
     const period = item.period || '';
     const quarter = period.slice(-2); // '03','06','09','12'
     const year = period.slice(0, 4);
-    // Q1 data is already incremental (it IS the quarter)
     if (quarter === '03' || !['06','09','12'].includes(quarter)) return { ...item };
-    // Find previous quarter in same year
     const prevQMap: Record<string, string> = { '06': '03', '09': '06', '12': '09' };
     const prevPeriod = `${year}/${prevQMap[quarter]}`;
     const prevItem = sorted.find(d => d.period === prevPeriod);
-    if (!prevItem) return { ...item }; // Can't compute, use as-is
+    if (!prevItem) return { ...item };
     const result: any = { ...item };
     for (const field of CUMULATIVE_FIELDS) {
       if (item[field] != null && prevItem[field] != null) {
@@ -2097,6 +2095,7 @@ export default function ValuationTerminal() {
     refMarketPrice
   );
   const quarterlyChartData = useMemo(() => computeIncrementalQuarterlyData(chartData), [chartData]);
+
 
   // Görsel 1 & 3: Finansal Tablolar için Günümüzden Geçmişe (Yeniden Eskiye) Sıralama
   const tableData = [...chartData].reverse();
@@ -3567,10 +3566,11 @@ export default function ValuationTerminal() {
                       
                       {/* Özet Finansallar */}
                       {(() => {
-                        const latestPeriod = quarterlyChartData[quarterlyChartData.length - 1];
+                        // YTD kümülatif (KAP ham) değerler: 2026/06 = H1 toplamı, 2025/06 = geçen yıl H1 toplamı
+                        const latestPeriod = chartData[chartData.length - 1];
                         const latestPeriodLabel = latestPeriod?.period || '';
                         const yoyPeriodLabel = latestPeriodLabel ? `${String(Number(latestPeriodLabel.slice(0,4)) - 1)}/${latestPeriodLabel.slice(5)}` : '';
-                        const yoyPeriod = quarterlyChartData.find((d: any) => d.period === yoyPeriodLabel);
+                        const yoyPeriod = chartData.find((d: any) => d.period === yoyPeriodLabel);
                         const latestBS = chartData[chartData.length - 1];
                         const yoyBSLabel = latestBS?.period ? `${String(Number(latestBS.period.slice(0,4)) - 1)}/${latestBS.period.slice(5)}` : '';
                         const yoyBS = chartData.find((d: any) => d.period === yoyBSLabel);
@@ -3590,8 +3590,8 @@ export default function ValuationTerminal() {
                               <tr className="text-slate-400 border-b border-slate-800">
                                 <th className="pb-2 font-medium">Kalem</th>
                                 <th className="pb-2 font-medium text-right">{latestPeriodLabel}</th>
-     <th className="pb-2 font-medium text-right">{yoyPeriodLabel}</th>
-     <th className="pb-2 font-medium text-right">YoY %</th>
+                                <th className="pb-2 font-medium text-right">{yoyPeriodLabel}</th>
+                                <th className="pb-2 font-medium text-right">YoY %</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800/50 text-slate-300">
@@ -3607,18 +3607,18 @@ export default function ValuationTerminal() {
                                   <td className="py-2">{rowConfig.l}</td>
                                   <td className="py-2 text-right font-mono">{latestPeriod?.[rowConfig.k] != null ? (latestPeriod?.[rowConfig.k] / 1000).toLocaleString('tr-TR', {maximumFractionDigits:0}) : '—'}</td>
                                   <td className="py-2 text-right font-mono">{yoyPeriod?.[rowConfig.k] != null ? (yoyPeriod?.[rowConfig.k] / 1000).toLocaleString('tr-TR', {maximumFractionDigits:0}) : '—'}</td>
-     <td className="py-2 text-right font-mono">
-       {(() => {
-         const v1 = latestPeriod?.[rowConfig.k];
-         const v2 = yoyPeriod?.[rowConfig.k];
-         const chg = (v1 != null && v2 != null && v2 !== 0) ? ((v1 - v2) / Math.abs(v2) * 100).toFixed(1) : null;
-         return chg ? (
-           <span className={rowConfig.k === 'net_debt' ? (Number(chg) < 0 ? 'text-emerald-400' : Number(chg) > 0 ? 'text-rose-400' : 'text-slate-400') : (Number(chg) > 0 ? 'text-emerald-400' : Number(chg) < 0 ? 'text-rose-400' : 'text-slate-400')}>
-             {Number(chg) > 0 ? '+' : ''}{chg}%
-           </span>
-         ) : '—';
-       })()}
-     </td>
+                                  <td className="py-2 text-right font-mono">
+                                    {(() => {
+                                      const v1 = latestPeriod?.[rowConfig.k];
+                                      const v2 = yoyPeriod?.[rowConfig.k];
+                                      const chg = (v1 != null && v2 != null && v2 !== 0) ? ((v1 - v2) / Math.abs(v2) * 100).toFixed(1) : null;
+                                      return chg ? (
+                                        <span className={rowConfig.k === 'net_debt' ? (Number(chg) < 0 ? 'text-emerald-400' : Number(chg) > 0 ? 'text-rose-400' : 'text-slate-400') : (Number(chg) > 0 ? 'text-emerald-400' : Number(chg) < 0 ? 'text-rose-400' : 'text-slate-400')}>
+                                          {Number(chg) > 0 ? '+' : ''}{chg}%
+                                        </span>
+                                      ) : '—';
+                                    })()}
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
@@ -3638,8 +3638,8 @@ export default function ValuationTerminal() {
                               <tr className="text-slate-400 border-b border-slate-800">
                                 <th className="pb-2 font-medium">Kalem</th>
                                 <th className="pb-2 font-medium text-right">{latestBS?.period}</th>
-     <th className="pb-2 font-medium text-right">{yoyBSLabel}</th>
-     <th className="pb-2 font-medium text-right">YoY %</th>
+                                <th className="pb-2 font-medium text-right">{yoyBSLabel}</th>
+                                <th className="pb-2 font-medium text-right">YoY %</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800/50 text-slate-300">
@@ -3658,8 +3658,8 @@ export default function ValuationTerminal() {
                                   <tr key={rowConfig.k} className="hover:bg-slate-800/30">
                                     <td className="py-2">{rowConfig.l}</td>
                                     <td className="py-2 text-right font-mono">{v1 != null ? (v1 / 1000).toLocaleString('tr-TR', {maximumFractionDigits:0}) : '—'}</td>
-     <td className="py-2 text-right font-mono">{v2 != null ? (v2 / 1000).toLocaleString('tr-TR', {maximumFractionDigits:0}) : '—'}</td>
-     <td className="py-2 text-right font-mono">
+                                    <td className="py-2 text-right font-mono">{v2 != null ? (v2 / 1000).toLocaleString('tr-TR', {maximumFractionDigits:0}) : '—'}</td>
+                                    <td className="py-2 text-right font-mono">
                                       {chg ? (
                                         <span className={Number(chg) > 0 ? 'text-emerald-400' : Number(chg) < 0 ? 'text-rose-400' : 'text-slate-400'}>
                                           {Number(chg) > 0 ? '+' : ''}{chg}%
@@ -3712,9 +3712,8 @@ export default function ValuationTerminal() {
                           { title: 'Özkaynak Karlılığı', calc: (d:any) => (d.equity && d.equity !== 0 && d.net_income != null) ? (d.net_income / Math.abs(d.equity) * 100 * getAnnualizationFactor(d.period)) : null }
                         ].map(mini => {
                           const miniData = quarterlyChartData.slice(-8).map((d:any) => ({ period: d.period, value: mini.calc(d) }));
-                          const sparkValues = miniData.map((d: any) => d.value).filter((v: any) => v != null && !isNaN(v));
-                          const trendColor = sparkValues.length >= 2 && sparkValues[sparkValues.length - 1] > sparkValues[0] ? '#10b981' : '#f87171';
-
+                           const values = miniData.map((d: any) => d.value).filter((v: any) => v != null && !isNaN(v));
+                           const trendColor = values.length >= 2 && values[values.length - 1] > values[0] ? '#10b981' : '#f87171';
                           return (
                             <div key={mini.title} className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-4 shadow-lg">
                               <div className="text-xs font-bold text-white mb-2">{mini.title}</div>
