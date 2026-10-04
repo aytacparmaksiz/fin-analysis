@@ -2227,25 +2227,26 @@ export default function ValuationTerminal() {
         break;
       }
       case 'roic': {
+        if (typeof d.roic === 'number' && !isNaN(d.roic)) return Number(d.roic.toFixed(2));
         if (sector === 'INSURANCE' || sector === 'BANKING') {
           if (d.net_income != null && d.equity && d.equity > 0) {
             return Number(((d.net_income * annualFactor / d.equity) * 100).toFixed(2));
           }
           if (typeof d.roe === 'number') return Number(d.roe.toFixed(2));
         }
+        const taxRate = sector === 'REIT' ? 0.0 : (sector === 'BANKING' || sector === 'INSURANCE') ? 0.30 : 0.25;
         const equityVal = typeof d.equity === 'number' && d.equity > 0 ? d.equity : 0;
         const netDebtVal = typeof d.net_debt === 'number' && d.net_debt > 0 ? d.net_debt : 0;
         const invCap = equityVal + netDebtVal;
         const opNopat = typeof d.operating_profit === 'number' && d.operating_profit !== 0
-          ? d.operating_profit * 0.75
-          : (typeof d.ebitda === 'number' && d.ebitda > 0 ? d.ebitda * 0.70 : 0);
+          ? d.operating_profit * (1 - taxRate)
+          : (typeof d.ebitda === 'number' && d.ebitda > 0 ? d.ebitda * (1 - taxRate) : 0);
         const rawProfit = typeof d.net_income === 'number' && d.net_income !== 0
           ? (opNopat > 0 && d.net_income > 0 ? Math.max(d.net_income, opNopat) : d.net_income)
           : opNopat;
         if (invCap > 0 && rawProfit !== 0) {
           return Number((((rawProfit * annualFactor) / invCap) * 100).toFixed(2));
         }
-        if (typeof d.roic === 'number' && !isNaN(d.roic)) return Number(d.roic.toFixed(2));
         break;
       }
       case 'loss_ratio': {
