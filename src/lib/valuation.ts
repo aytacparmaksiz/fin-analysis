@@ -571,14 +571,15 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
     }
 
     // Özkaynak ve Kaldıraç bağıntısı
-    if (item.total_assets == null && item.equity && item.leverage_ratio && item.leverage_ratio < 100) {
-      item.total_assets = Number((item.equity / (1 - item.leverage_ratio / 100)).toFixed(0));
+    const levPct = item.leverage_ratio != null ? (item.leverage_ratio > 1 ? item.leverage_ratio : item.leverage_ratio * 100) : null;
+    if (item.total_assets == null && item.equity && levPct && levPct < 100) {
+      item.total_assets = Number((item.equity / (1 - levPct / 100)).toFixed(0));
       if (item.current_assets != null && (item.non_current_assets == null || item.non_current_assets === 0)) {
         item.non_current_assets = Math.max(0, item.total_assets - item.current_assets);
       }
     }
-    if (item.equity == null && item.total_assets != null && item.leverage_ratio != null && item.leverage_ratio < 100) {
-      item.equity = Number((item.total_assets * (1 - item.leverage_ratio / 100)).toFixed(0));
+    if (item.equity == null && item.total_assets != null && levPct != null && levPct < 100) {
+      item.equity = Number((item.total_assets * (1 - levPct / 100)).toFixed(0));
     }
 
     // Tüm sektörler için ROE, ROA, Kaldıraç Oranı dinamik hesapla (Safe ROE koruması ve Aktif=Pasif sonrası kesin Kaldıraç)
@@ -594,7 +595,7 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
       const totalLiab = (typeof item.total_liabilities === 'number' && item.total_liabilities > 0 && item.total_liabilities < item.total_assets)
         ? item.total_liabilities
         : Math.max(0, item.total_assets - item.equity);
-      item.leverage_ratio = Number(((totalLiab / item.total_assets) * 100).toFixed(2));
+      item.leverage_ratio = Number((totalLiab / item.total_assets).toFixed(2));
     }
 
     // Likidite ve Faaliyet Oranları: Önce bilançodaki GERÇEK Kısa Vadeli Yükümlülükler (current_liabilities) kullanılır!
@@ -852,9 +853,10 @@ export function calculateSectorScore(
     let r3 = 'Sigortacılık teknik rezerv yapısı dengeli';
     let st3: 'good' | 'warning' | 'danger' = 'good';
     if (lev !== null) {
-      if (lev >= 65 && lev <= 88) { s3 = 25; r3 = `Teknik rezerv / kaldıraç dağılımı (%${lev}) sigortacılık normlarıyla tam uyumlu.`; st3 = 'good'; }
-      else if (lev > 92) { s3 = 10; r3 = `Kaldıraç (%${lev}) çok yüksek; sermaye yeterlilik tamponu baskı altında.`; st3 = 'warning'; }
-      else { s3 = 18; r3 = `Kaldıraç oranı (%${lev}) muhafazakar seviyede.`; st3 = 'good'; }
+      const levMul = lev > 1 ? Number((lev / 100).toFixed(2)) : lev;
+      if (levMul >= 0.65 && levMul <= 0.90) { s3 = 25; r3 = `Teknik rezerv / kaldıraç dağılımı (${levMul}x) sigortacılık normlarıyla tam uyumlu.`; st3 = 'good'; }
+      else if (levMul > 0.93) { s3 = 10; r3 = `Kaldıraç (${levMul}x) çok yüksek; sermaye yeterlilik tamponu baskı altında.`; st3 = 'warning'; }
+      else { s3 = 18; r3 = `Kaldıraç oranı (${levMul}x) muhafazakar seviyede.`; st3 = 'good'; }
     }
     breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
 

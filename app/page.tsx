@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -377,44 +377,60 @@ function SparklineBars({
   );
 }
 
-// Grafik Y-Ekseni Formatlayıcı (Görsel 4: Mn ve Mr formatı - Hem Tam TL hem Bin TL uyumlu)
-const chartYAxisFormatter = (v: number) => {
-  const abs = Math.abs(v);
-  // Tam TL veri seti (50 Milyon TL üzeri rakamlar)
-  if (abs >= 50000000) {
-    if (abs >= 1000000000) {
-      return `${(v / 1000000000).toLocaleString('tr-TR', { maximumFractionDigits: 1 })} Mr`;
-    }
-    return `${(v / 1000000).toLocaleString('tr-TR', { maximumFractionDigits: 0 })} Mn`;
-  }
-  // Bin TL veri seti
-  if (abs >= 1000000) {
-    return `${(v / 1000000).toLocaleString('tr-TR', { maximumFractionDigits: 1 })} Mr`;
-  }
-  if (abs >= 1000) {
-    return `${(v / 1000).toLocaleString('tr-TR', { maximumFractionDigits: 0 })} Mn`;
-  }
-  return `${v}`;
-};
-
-// Grafik Değeri Metin Formatlayıcı (Hem Tam TL hem Bin TL uyumlu)
-function formatChartMetric(val: number | null | undefined, isPct = false): string {
+// Finansal Büyüklük Formatlayıcı (Bin TRY, Milyon TL, Tam TL ile %100 Kusursuz Uyumlu)
+function formatFinancialScale(
+  val: number | null | undefined,
+  currency: string = 'Bin TRY',
+  isAxis = false,
+  isPct = false
+): string {
   if (val === null || val === undefined || isNaN(val)) return '—';
   if (isPct) return `%${val.toLocaleString('tr-TR', { maximumFractionDigits: 1 })}`;
-  const abs = Math.abs(val);
-  if (abs >= 50000000) {
-    if (abs >= 1000000000) {
-      return `${(val / 1000000000).toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 2 })} Mr TL`;
-    }
-    return `${(val / 1000000).toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} Mn TL`;
+
+  const norm = (currency || '').trim().toLowerCase();
+  let nominalTL = val;
+
+  if (norm.includes('bin') || norm.includes('thousand')) {
+    nominalTL = val * 1000;
+  } else if (norm.includes('milyon') || norm.includes('million')) {
+    nominalTL = val * 1_000_000;
+  } else if (norm === 'tl' || norm === 'try' || norm.includes('tam')) {
+    nominalTL = val;
+  } else {
+    // Otomatik: Türk KAP raporlarında 10 Milyar TL altındaki değerler standart Bin TRY'dir
+    nominalTL = Math.abs(val) < 10_000_000_000 ? val * 1000 : val;
   }
-  if (abs >= 1000000) {
-    return `${(val / 1000000).toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 2 })} Mr TL`;
+
+  const abs = Math.abs(nominalTL);
+
+  if (abs >= 1_000_000_000) {
+    const mr = nominalTL / 1_000_000_000;
+    return isAxis
+      ? `${mr.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} Mr`
+      : `${mr.toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 2 })} Mr TL`;
   }
-  if (abs >= 1000) {
-    return `${(val / 1000).toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} Mn TL`;
+  if (abs >= 1_000_000) {
+    const mn = nominalTL / 1_000_000;
+    return isAxis
+      ? `${mn.toLocaleString('tr-TR', { maximumFractionDigits: 0 })} Mn`
+      : `${mn.toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} Mn TL`;
   }
-  return `${val.toLocaleString('tr-TR')} TL`;
+  if (abs >= 1_000) {
+    const bin = nominalTL / 1_000;
+    return isAxis
+      ? `${bin.toLocaleString('tr-TR', { maximumFractionDigits: 0 })} Bin`
+      : `${bin.toLocaleString('tr-TR', { maximumFractionDigits: 0 })} Bin TL`;
+  }
+
+  return isAxis ? `${nominalTL.toLocaleString('tr-TR')}` : `${nominalTL.toLocaleString('tr-TR')} TL`;
+}
+
+// Grafik Y-Ekseni Formatlayıcı
+const chartYAxisFormatter = (v: number) => formatFinancialScale(v, 'Bin TRY', true, false);
+
+// Grafik Değeri Metin Formatlayıcı
+function formatChartMetric(val: number | null | undefined, isPct = false, currency = 'Bin TRY'): string {
+  return formatFinancialScale(val, currency, false, isPct);
 }
 
 // Sürücü çubuğu pin yüzdesi hesaplayıcı (Item 8: Değer sürücüsü iğnesini [0, 100] aralığında mantıklı konumlandırma)
@@ -534,7 +550,7 @@ function DriverCard({
 }
 
 // Recharts Tooltip
-const CustomChartTooltip = ({ active, payload, label }: any) => {
+const CustomChartTooltip = ({ active, payload, label, currency = 'Bin TRY' }: any) => {
   if (active && payload && payload.length) {
     // Mükerrer dataKey'leri (örn. Bar + Line share_price) tekilleştir
     const seenKeys = new Set<string>();
@@ -557,6 +573,7 @@ const CustomChartTooltip = ({ active, payload, label }: any) => {
             entry.dataKey?.includes('margin') ||
             entry.dataKey === 'roic' ||
             entry.dataKey === 'wacc' ||
+            entry.dataKey === 'eva_spread' ||
             entry.unit === '%';
           const isSharePrice = entry.dataKey === 'share_price';
 
@@ -574,8 +591,8 @@ const CustomChartTooltip = ({ active, payload, label }: any) => {
                   ? isSharePrice
                     ? `${entry.value.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL`
                     : isPct
-                      ? `%${entry.value.toLocaleString('tr-TR')}`
-                      : formatChartMetric(entry.value, false)
+                      ? `%${entry.value.toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}`
+                      : formatChartMetric(entry.value, false, currency)
                   : entry.value ?? '—'}
               </span>
             </div>
@@ -624,8 +641,8 @@ function extractTextFromChildren(children: any): string {
 
 // Fields that are YTD cumulative in KAP reports (income statement / cash flow)
 const CUMULATIVE_FIELDS = [
-  'revenue', 'gross_profit', 'operating_income', 'ebitda', 'net_income',
-  'gross_written_premiums', 'technical_balance', 'investment_income',
+  'revenue', 'gross_profit', 'operating_income', 'operating_profit', 'ebitda', 'net_income',
+  'gross_written_premiums', 'written_premiums', 'earned_premiums', 'technical_balance', 'technical_profit', 'investment_income',
   'net_monetary_position', 'operating_cash_flow', 'free_cash_flow', 'capex'
 ];
 
@@ -951,15 +968,14 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
         } else if (typeof row.roe === 'number') {
           row.roic = Number(row.roe.toFixed(1));
         } else {
-          row.roic = Number((row.wacc * 0.88).toFixed(1));
+          row.roic = null;
         }
       } else if (typeof row.roe === 'number') {
         row.roic = Number(row.roe.toFixed(1));
       } else if (row.roic != null && !isNaN(Number(row.roic))) {
         row.roic = Number(Number(row.roic).toFixed(1));
       } else {
-        const prevRoic = idx > 0 && sorted[idx - 1]?.roic ? sorted[idx - 1].roic : null;
-        row.roic = prevRoic !== null ? prevRoic : Number((row.wacc * 0.88).toFixed(1));
+        row.roic = null;
       }
     }
 
@@ -2173,6 +2189,10 @@ export default function ValuationTerminal() {
     refMarketPrice
   );
   const quarterlyChartData = useMemo(() => computeIncrementalQuarterlyData(chartData), [chartData]);
+  const chartYAxisFmt = useCallback(
+    (v: number) => formatFinancialScale(v, currentExtractedData?.currency || 'Bin TRY', true, false),
+    [currentExtractedData?.currency]
+  );
 
 
   // Görsel 1 & 3: Finansal Tablolar için Günümüzden Geçmişe (Yeniden Eskiye) Sıralama
@@ -2295,9 +2315,11 @@ export default function ValuationTerminal() {
           : d.total_assets;
         if (effAssets && d.equity != null && effAssets > 0) {
           const totalLiab = (calcLiab > 0 && calcLiab < effAssets) ? calcLiab : Math.max(0, effAssets - d.equity);
-          return Number(((totalLiab / effAssets) * 100).toFixed(2));
+          return Number((totalLiab / effAssets).toFixed(2));
         }
-        if (typeof d.leverage_ratio === 'number' && !isNaN(d.leverage_ratio)) return d.leverage_ratio;
+        if (typeof d.leverage_ratio === 'number' && !isNaN(d.leverage_ratio)) {
+          return d.leverage_ratio > 1 ? Number((d.leverage_ratio / 100).toFixed(2)) : Number(d.leverage_ratio.toFixed(2));
+        }
         break;
       }
       case 'debt_to_equity': {
@@ -2309,7 +2331,10 @@ export default function ValuationTerminal() {
           : d.total_assets;
         const totalLiab = calcLiab > 0 ? calcLiab : (effAssets && d.equity != null ? Math.max(0, effAssets - d.equity) : null);
         if (totalLiab != null && d.equity && d.equity > 0) {
-          return Number(((totalLiab / d.equity) * 100).toFixed(2));
+          return Number((totalLiab / d.equity).toFixed(2));
+        }
+        if (typeof d.debt_to_equity === 'number' && !isNaN(d.debt_to_equity)) {
+          return d.debt_to_equity > 5 ? Number((d.debt_to_equity / 100).toFixed(2)) : Number(d.debt_to_equity.toFixed(2));
         }
         break;
       }
@@ -2450,6 +2475,7 @@ export default function ValuationTerminal() {
     key: string;
     isRatio?: boolean;
     isPercent?: boolean;
+    suffix?: string;
     defaultVal: number;
   }
 
@@ -2459,87 +2485,87 @@ export default function ValuationTerminal() {
     rows: RatioRowConfig[];
   }
 
-  // Rasyo Formül ve Standart Açıklamaları (Görsel 3 & İlave 7 - İyi Kriter Kıyaslamalarıyla)
+  // Rasyo Formül ve Standart Açıklamaları (Sade, Net ve Sektör Kriterleriyle)
   const RATIO_DEFINITIONS: Record<string, { formula: string; benchmark: string; desc: string }> = {
     current_ratio: {
       formula: 'Cari Oran = Dönen Varlıklar / Kısa Vadeli Yükümlülükler',
       benchmark: 'İyi Kriter: ≥ 1,50 (Sanayi) | ≥ 1,10 (Sigorta)',
-      desc: 'Şirketin kısa vadeli yükümlülüklerini dönen varlıklarıyla karşılama oranını gösterir. Sanayi ve ticaret şirketlerinde 1,50 ve üzeri olması iyi sayılır (sigortacılıkta 1,10 ve üzeri sağlıklıdır); 1,00 altı ise net işletme sermayesi açığına ve kısa vadeli likidite riskine işaret eder.',
+      desc: 'Şirketin kısa vadeli borçlarını dönen varlıklarıyla karşılama gücünü gösterir.',
     },
     quick_ratio: {
       formula: 'Likidite Oranı (Asit-Test) = (Dönen Varlıklar - Stoklar) / Kısa Vadeli Yükümlülükler',
       benchmark: 'İyi Kriter: ≥ 1,00 (Güçlü Likidite)',
-      desc: 'Stok satışına bağımlı olmadan kısa vadeli yükümlülükleri ödeme kapasitesidir. 1,00 ve üzeri olması iyi sayılır; şirketin stoklarını hiç satamasa bile kısa vadeli borçlarını çevirebildiğini gösterir (0,80 altı nakit sıkışıklığı sinyali olabilir).',
+      desc: 'Stok satışına bağımlı olmadan kısa vadeli borçları ödeme kapasitesidir.',
     },
     cash_ratio: {
       formula: 'Nakit Oran = Nakit ve Nakit Benzerleri / Kısa Vadeli Yükümlülükler',
       benchmark: 'İyi Kriter: ≥ 0,20 (İdeal: 0,20 – 0,60)',
-      desc: 'Hiçbir alacak tahsilatı ve stok satışı olmasa dahi kasadaki hazır nakit ve nakit benzerleriyle anında karşılanabilecek kısa vadeli borç oranıdır. 0,20 (%20) ve üzeri olması iyi sayılır; nakit krizlerine karşı güçlü bir güvenlik tamponu olduğunu gösterir.',
+      desc: 'Kasadaki hazır nakit ve benzerleriyle borçların anında ödenme gücüdür.',
     },
     leverage_ratio: {
-      formula: 'Kaldıraç Oranı = Toplam Yükümlülükler / Toplam Varlıklar (%)',
-      benchmark: 'İyi Kriter: ≤ %60 (Sanayi) | %80 – %95 (Sigorta & Banka)',
-      desc: 'Toplam varlıkların yüzde kaçının yabancı kaynaklarla (borç ve yükümlülüklerle) finanse edildiğini gösterir. Sanayi şirketlerinde %60 ve altı olması iyi ve güvenli sayılır (%75 üzeri yüksek borçluluk riskidir). Sigorta ve bankacılıkta ise teknik karşılıklar ve mevduatlar yükümlülük yazıldığı için %80–%95 aralığı normal kabul edilir.',
+      formula: 'Kaldıraç Oranı = Toplam Yükümlülükler / Toplam Varlıklar (x)',
+      benchmark: 'İyi Kriter: ≤ 0,60x (Sanayi) | 0,80x – 0,95x (Sigorta & Banka)',
+      desc: 'Toplam varlıkların ne kadarlık kısmının borç ve yabancı kaynakla finanse edildiğini gösterir.',
     },
     debt_to_equity: {
-      formula: 'Borç / Özkaynak Oranı = Toplam Yükümlülükler / Toplam Özkaynaklar (%)',
-      benchmark: 'İyi Kriter: ≤ %150 (1,5x altı iyidir)',
-      desc: 'Toplam yabancı kaynakların özkaynaklara oranıdır. Sanayi şirketlerinde %100 – %150 ve altı olması özkaynak yapısının güçlü olduğunu gösterir ve iyi sayılır; %200 üzeri yüksek finansal kaldıraç riskine işaret eder.',
+      formula: 'Borç / Özkaynak = Toplam Yükümlülükler / Toplam Özkaynaklar (x)',
+      benchmark: 'İyi Kriter: ≤ 1,50x (Dengeli Borçluluk)',
+      desc: 'Toplam yabancı kaynakların özkaynaklara olan oranını ve finansal risk düzeyini gösterir.',
     },
     fin_debt_to_assets: {
-      formula: 'Finansal Borç / Aktif Oranı = (Kısa + Uzun Vadeli Finansal Borçlar) / Toplam Varlıklar (%)',
+      formula: 'Finansal Borç / Aktif = Finansal Borçlar / Toplam Varlıklar (%)',
       benchmark: 'İyi Kriter: ≤ %30 (Düşük Faiz Yükü)',
-      desc: 'Varlıkların ne kadarının faiz yükü taşıyan banka kredileri ve finansal borçlarla finanse edildiğini gösterir. %30 ve altı olması şirketin yüksek faiz ortamında finansman gideri baskısına karşı dayanıklı olduğunu gösterir ve iyi sayılır.',
+      desc: 'Varlıkların ne kadarının faiz yükü taşıyan kredilerle finanse edildiğini ölçer.',
     },
     asset_turnover: {
-      formula: 'Aktif Devir Hızı = Yıllıklandırılmış Satış Gelirleri / Toplam Aktifler',
-      benchmark: 'İyi Kriter: ≥ 1,00 (Sanayi/Ticaret) | ≥ 0,15 (Finans/Sigorta)',
-      desc: 'Şirketin toplam varlıklarının kaç katı kadar yıllıklandırılmış satış/ciro ürettiğini ölçer. Sanayi ve ticaret şirketlerinde 1,00 ve üzeri olması varlıkların verimli kullanıldığını gösterir ve iyi sayılır.',
+      formula: 'Aktif Devir Hızı = Yıllıklandırılmış Satış Gelirleri / Toplam Aktifler (x)',
+      benchmark: 'İyi Kriter: ≥ 1,00x (Sanayi) | ≥ 0,15x (Finans/Sigorta)',
+      desc: 'Toplam varlıkların yılda kaç katı kadar satış geliri ürettiğini gösterir.',
     },
     equity_turnover: {
-      formula: 'Özkaynak Devir Hızı = Yıllıklandırılmış Satış Gelirleri / Toplam Özkaynaklar',
-      benchmark: 'İyi Kriter: 2,00 – 5,00 aralığı dengeli ve iyidir',
-      desc: 'Özkaynakların yılda kaç katı kadar hasılat/prim ürettiğini gösterir. 2,00 ve üzeri olması özsermayenin aktif biçimde ciroya dönüştüğünü gösterir ve iyi sayılır; çok yüksek değerler ise düşük özkaynak (yüksek borçluluk) kaynaklı olabileceği için Kaldıraç Oranı ile birlikte değerlendirilmelidir.',
+      formula: 'Özkaynak Devir Hızı = Yıllıklandırılmış Satış Gelirleri / Toplam Özkaynaklar (x)',
+      benchmark: 'İyi Kriter: 2,00x – 5,00x',
+      desc: 'Özkaynakların ne derece verimli şekilde hasılata dönüştüğünü ölçer.',
     },
     roa: {
-      formula: 'Aktif Kârlılık (ROA - Yıllıklandırılmış) = (Dönem Net Kârı × Yıllıklandırma Çarpanı) / Toplam Aktifler (%)',
+      formula: 'Aktif Kârlılık (ROA) = (Yıllıklandırılmış Net Kâr / Toplam Aktifler) (%)',
       benchmark: 'İyi Kriter: ≥ %10 (Sanayi) | ≥ %2,5 (Finans/Sigorta)',
-      desc: 'İlgili dönem kârının yıllıklandırılarak tüm bilanço büyüklüğü üzerinden ürettiği net getiriyi gösterir. Sanayi şirketlerinde %10 ve üzeri, banka ve sigorta şirketlerinde (yüksek aktif hacmi nedeniyle) %2,5 ve üzeri olması iyi sayılır.',
+      desc: 'Tüm bilanço varlıklarının ne oranda net getiri sağladığını gösterir.',
     },
     roe: {
-      formula: 'Özkaynak Kârlılığı (ROE - Yıllıklandırılmış) = (Dönem Net Kârı × Yıllıklandırma Çarpanı) / Toplam Özkaynaklar (%)',
-      benchmark: 'İyi Kriter: ≥ %40 (Enflasyon ve Sermaye Maliyeti Üzeri)',
-      desc: 'Hissedarların yatırdığı özsermayenin ilgili dönem için yıllıklandırılmış getiri oranıdır. Enflasyon ve alternatif risksiz getirinin (sermaye maliyeti ~%35-%40) üzerinde olması, yani %40 ve üzeri olması şirketin reel değer ürettiğini gösterir ve iyi sayılır.',
+      formula: 'Özkaynak Kârlılığı (ROE) = (Yıllıklandırılmış Net Kâr / Toplam Özkaynaklar) (%)',
+      benchmark: 'İyi Kriter: ≥ %40 (Sermaye Maliyeti Üzeri)',
+      desc: 'Hissedarların yatırdığı özsermayenin yıllıklandırılmış getiri oranıdır.',
     },
     roic: {
-      formula: 'Yatırılan Sermaye Getirisi (ROIC - Yıllıklandırılmış) = (Dönem NOPAT × Yıllıklandırma Çarpanı) / (Özkaynaklar + Net Finansal Borç) (%)',
-      benchmark: 'İyi Kriter: ROIC > WACC (%38 ve üzeri güçlü)',
-      desc: 'Şirketin ana faaliyetlerine yatırılan toplam sermaye üzerinden ilgili dönem için yıllıklandırılmış olarak ürettiği kârlılık oranıdır. Sermaye maliyetinin (WACC) üzerinde olması şirketin ekonomik katma değer yarattığını gösterir ve iyi sayılır.',
+      formula: 'Yatırılan Sermaye Getirisi (ROIC) = (Yıllıklandırılmış NOPAT / Yatırılan Sermaye) (%)',
+      benchmark: 'İyi Kriter: ROIC > WACC (Pozitif Ekonomik Katma Değer)',
+      desc: 'Operasyonel faaliyetlere bağlanan net sermayenin ürettiği getiri oranıdır.',
     },
     wacc: {
-      formula: 'WACC = (We × Ke) + (Wd × Kd × (1 − Vergi Oranı)) | Ke = Rf + (Beta × ERP)',
-      benchmark: 'İyi Kriter: Düşük olması ve ROIC > WACC olması iyidir',
-      desc: 'Ağırlıklı Ortalama Sermaye Maliyetidir; şirketin özkaynak maliyeti (CAPM ile hesaplanan Ke) ile vergi kalkanı düşülmüş finansal borçlanma maliyetinin (Kd × (1 − T)) sermaye ağırlıklarına göre harmanlanmasıyla bulunur. Düşük olması ve şirketin ROIC getirisinin altında kalması iyi sayılır.',
+      formula: 'WACC = (We × Ke) + (Wd × Kd × (1 − Vergi Oranı)) (%)',
+      benchmark: 'İyi Kriter: Düşük olması ve ROIC getirisinin altında kalmasıdır',
+      desc: 'Özsermaye maliyeti ile vergi kalkanlı borç maliyetinin ağırlıklı ortalamasıdır.',
     },
     eva_spread: {
-      formula: 'Ekonomik Katma Değer Makası (EVA Spread) = Yıllıklandırılmış ROIC − WACC (%)',
-      benchmark: 'İyi Kriter: > %0,0 (İdeal: ≥ +5,0 puan pozitif makas)',
-      desc: 'Yatırılan sermaye getirisinin (ROIC) ağırlıklı ortalama sermaye maliyetini (WACC) ne kadar aştığını gösterir. Pozitif (> %0) olması ve özellikle +5 puan ve üzeri olması şirketin gerçek ekonomik değer ürettiğini gösterir ve iyi sayılır; negatif olması sermaye erimesine işaret eder.',
+      formula: 'Ekonomik Katma Değer Makası (EVA Spread) = ROIC − WACC (%)',
+      benchmark: 'İyi Kriter: > %0,0 (İdeal: ≥ +%5,0)',
+      desc: 'Sermaye getirisinin sermaye maliyetini aşarak yarattığı net ekonomik kârdır.',
     },
     combined_ratio: {
       formula: 'Bileşik Oran = Hasar / Prim Oranı + Masraf Oranı (%)',
       benchmark: 'İyi Kriter: < %100 (İdeal: ≤ %90)',
-      desc: 'Sigorta şirketinin prim üretiminden hasar ve operasyonel giderleri düştükten sonra teknik kâr edip etmediğini gösterir. %100\'ün altında olması (özellikle %90 ve altı) şirketin salt poliçe kesiminden teknik kâr elde ettiğini gösterir ve iyi sayılır.',
+      desc: 'Sigortacılık faaliyetlerinin teknik kâr üretme yeterliliğini gösterir.',
     },
     loss_ratio: {
       formula: 'Hasar Oranı = Net Gerçekleşen Hasarlar / Net Kazanılan Primler (%)',
       benchmark: 'İyi Kriter: ≤ %75 (Düşük olması iyidir)',
-      desc: 'Toplanan primlerin yüzde kaçının hasar tazminatlarına gittiğini gösterir. Düşük olması iyidir; %75 ve altı sağlıklı poliçe fiyatlamasına ve iyi risk seçimine işaret eder.',
+      desc: 'Toplanan primlerin yüzde kaçının hasar tazminatlarına harcandığını ölçer.',
     },
     expense_ratio: {
       formula: 'Masraf Oranı = Faaliyet ve Komisyon Giderleri / Net Kazanılan Primler (%)',
       benchmark: 'İyi Kriter: ≤ %20 (Düşük olması iyidir)',
-      desc: 'Acente, komisyon ve genel yönetim giderlerinin primlere oranıdır. Düşük olması iyidir; %20 ve altı operasyonel gider kontrolünün başarılı olduğunu gösterir.',
+      desc: 'Operasyonel ve komisyon giderlerinin primlere oranını gösterir.',
     },
   };
 
@@ -2729,9 +2755,9 @@ export default function ValuationTerminal() {
       title: 'Kaldıraç Oranları',
       categoryKey: 'KALDIRAC',
       rows: [
-        { label: 'Kaldıraç Oranı (Toplam Yükümlülük / Aktif)', key: 'leverage_ratio', isPercent: true, defaultVal: 60.0 },
-        { label: 'Borç / Özkaynak Oranı (Yabancı Kaynak / Özkaynak)', key: 'debt_to_equity', isPercent: true, defaultVal: 120.0 },
-        { label: 'Finansal Borç / Aktif Oranı', key: 'fin_debt_to_assets', isPercent: true, defaultVal: 15.0 },
+        { label: 'Kaldıraç Oranı (Toplam Yükümlülük / Aktif)', key: 'leverage_ratio', isRatio: true, isPercent: false, suffix: 'x', defaultVal: 0.60 },
+        { label: 'Borç / Özkaynak Oranı (Yabancı Kaynak / Özkaynak)', key: 'debt_to_equity', isRatio: true, isPercent: false, suffix: 'x', defaultVal: 1.20 },
+        { label: 'Finansal Borç / Aktif Oranı', key: 'fin_debt_to_assets', isPercent: true, suffix: '%', defaultVal: 15.0 },
       ],
     },
     {
@@ -3766,8 +3792,8 @@ export default function ValuationTerminal() {
                               ].filter(Boolean).map((rowConfig: any) => (
                                 <tr key={rowConfig.k} className="hover:bg-slate-800/30">
                                   <td className="py-2">{rowConfig.l}</td>
-                                  <td className="py-2 text-right font-mono">{fv(latestPeriod, rowConfig.k) != null ? (fv(latestPeriod, rowConfig.k)! / 1000).toLocaleString('tr-TR', {maximumFractionDigits:0}) : '—'}</td>
-                                  <td className="py-2 text-right font-mono">{fv(yoyPeriod, rowConfig.k) != null ? (fv(yoyPeriod, rowConfig.k)! / 1000).toLocaleString('tr-TR', {maximumFractionDigits:0}) : '—'}</td>
+                                  <td className="py-2 text-right font-mono">{formatAmount(fv(latestPeriod, rowConfig.k), 'bin', false, '', '', currentExtractedData?.currency || 'Bin TRY')}</td>
+                                  <td className="py-2 text-right font-mono">{formatAmount(fv(yoyPeriod, rowConfig.k), 'bin', false, '', '', currentExtractedData?.currency || 'Bin TRY')}</td>
                                   <td className="py-2 text-right font-mono">
                                     {(() => {
                                       const v1 = fv(latestPeriod, rowConfig.k);
@@ -3818,8 +3844,8 @@ export default function ValuationTerminal() {
                                 return (
                                   <tr key={rowConfig.k} className="hover:bg-slate-800/30">
                                     <td className="py-2">{rowConfig.l}</td>
-                                    <td className="py-2 text-right font-mono">{v1 != null ? (v1 / 1000).toLocaleString('tr-TR', {maximumFractionDigits:0}) : '—'}</td>
-                                    <td className="py-2 text-right font-mono">{v2 != null ? (v2 / 1000).toLocaleString('tr-TR', {maximumFractionDigits:0}) : '—'}</td>
+                                    <td className="py-2 text-right font-mono">{formatAmount(v1, 'bin', false, '', '', currentExtractedData?.currency || 'Bin TRY')}</td>
+                                    <td className="py-2 text-right font-mono">{formatAmount(v2, 'bin', false, '', '', currentExtractedData?.currency || 'Bin TRY')}</td>
                                     <td className="py-2 text-right font-mono">
                                       {chg ? (
                                         <span className={Number(chg) > 0 ? 'text-emerald-400' : Number(chg) < 0 ? 'text-rose-400' : 'text-slate-400'}>
@@ -3850,7 +3876,7 @@ export default function ValuationTerminal() {
                               <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={quarterlyChartData.slice(-5)} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
                                   <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10 }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
-                                  <Tooltip content={<CustomChartTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
+                                  <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
                                   <Bar dataKey={chart.key} name={chart.title} fill="#3b82f6" radius={[2, 2, 0, 0]} />
                                 </BarChart>
                               </ResponsiveContainer>
@@ -3889,7 +3915,7 @@ export default function ValuationTerminal() {
                                         const val = payload[0].value as number;
                                         return (
                                           <div className="bg-slate-900 border border-slate-700 p-2 text-xs text-white rounded shadow-xl">
-                                            {mini.title.includes('Marj') || mini.title.includes('Karlılığı') || mini.title.includes('Kaldıraç') ? `%${val?.toFixed(1)}` : val?.toFixed(2)}
+                                            {mini.title.includes('Marj') || mini.title.includes('Karlılığı') ? `%${val?.toFixed(1)}` : mini.title.includes('Kaldıraç') ? `${val?.toFixed(2)}x` : val?.toFixed(2)}
                                           </div>
                                         );
                                       }
@@ -3943,8 +3969,8 @@ export default function ValuationTerminal() {
                               <ComposedChart data={quarterlyChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
                                 <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
-                                <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFormatter} />
-                                <Tooltip content={<CustomChartTooltip />} />
+                                <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFmt} />
+                                <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
                                 <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
                                 <Bar dataKey="revenue" name={currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Satışlar'} fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={36} />
                                 <Line type="monotone" dataKey="ebitda" name={currentSector === 'INSURANCE' ? 'Teknik Kâr' : 'FAVÖK'} stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3.5, fill: '#f59e0b' }} />
@@ -3979,9 +4005,9 @@ export default function ValuationTerminal() {
                               <ComposedChart data={quarterlyChartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
                                 <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
-                                <YAxis yAxisId="left" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFormatter} />
+                                <YAxis yAxisId="left" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFmt} />
                                 <YAxis yAxisId="right" orientation="right" stroke="#10b981" tick={{ fontSize: 10, fill: '#34d399' }} tickFormatter={v => `${v} TL`} />
-                                <Tooltip content={<CustomChartTooltip />} />
+                                <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
                                 <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
                                 <Bar yAxisId="left" dataKey="revenue" name={currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Satışlar'} fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={28} />
                                 <Line yAxisId="right" type="monotone" dataKey="share_price" name="Hisse Fiyatı (TL)" stroke="#34d399" strokeWidth={2} dot={{ r: 3, fill: '#ecfdf5', stroke: '#10b981', strokeWidth: 1.5 }} />
@@ -4013,8 +4039,8 @@ export default function ValuationTerminal() {
                               <LineChart data={quarterlyChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
                                 <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
-                                <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFormatter} />
-                                <Tooltip content={<CustomChartTooltip />} />
+                                <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFmt} />
+                                <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
                                 <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
                                 <Line type="monotone" dataKey="net_income" name="Net Kâr" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: '#10b981' }} />
                                 <Line type="monotone" dataKey="operating_cash_flow" name="Operasyonel Nakit Akışı" stroke="#06b6d4" strokeWidth={2.5} dot={{ r: 3, fill: '#06b6d4' }} />
@@ -4047,8 +4073,8 @@ export default function ValuationTerminal() {
                               <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
                                 <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
-                                <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFormatter} />
-                                <Tooltip content={<CustomChartTooltip />} />
+                                <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFmt} />
+                                <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
                                 <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
                                 <Bar dataKey="equity" name="Özkaynak" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={36} />
                                 <Line type="monotone" dataKey="cash_and_equivalents" name="Nakit & Benzerleri" stroke="#38bdf8" strokeWidth={2.5} dot={{ r: 3.5, fill: '#38bdf8' }} />
@@ -4229,7 +4255,7 @@ export default function ValuationTerminal() {
                             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
                             <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v: string) => v ? v.slice(2) : v} />
                             <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v) => `%${v}`} />
-                            <Tooltip content={<CustomChartTooltip />} />
+                            <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
                             <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
                             <Bar dataKey="roic" name="Yıllıklandırılmış ROIC (%)" fill="#06b6d4" radius={[4, 4, 0, 0]} maxBarSize={32} />
                             <Line type="monotone" dataKey="wacc" name="Sermaye Maliyeti - WACC (%)" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3.5, fill: '#f59e0b' }} />
@@ -4784,6 +4810,8 @@ export default function ValuationTerminal() {
                                           if (rawVal !== null && rawVal !== undefined) {
                                             if (row.isPercent) {
                                               displayStr = `%${rawVal.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}`;
+                                            } else if (row.suffix) {
+                                              displayStr = `${rawVal.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${row.suffix}`;
                                             } else {
                                               displayStr = rawVal.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
                                             }
@@ -4799,20 +4827,23 @@ export default function ValuationTerminal() {
                                         })}
                                       </tr>
 
-                                      {/* Satır İçi Rasyo Açıklama & Formül Paneli (İlave 7) */}
+                                      {/* Satır İçi Rasyo Açıklama & Formül Paneli (Wrap Uyumlu & Sade) */}
                                       {isDetailOpen && ratioDef && (
                                         <tr className="bg-slate-950/90 border-y border-cyan-900/50">
                                           <td colSpan={tableData.length + 1} className="p-3 pl-8 text-xs font-sans text-slate-300">
-                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-cyan-950/30 border border-cyan-800/40 p-3 rounded-lg">
-                                              <div className="space-y-1">
-                                                <div className="font-bold text-cyan-300 font-mono flex items-center gap-1.5">
-                                                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" /> {ratioDef.formula}
-                                                </div>
-                                                <p className="text-[11px] text-slate-300 leading-relaxed">{ratioDef.desc}</p>
+                                            <div className="w-full max-w-full break-words whitespace-normal bg-cyan-950/30 border border-cyan-800/40 p-3.5 rounded-lg space-y-2">
+                                              <div className="font-bold text-cyan-300 font-mono flex items-center gap-1.5 flex-wrap">
+                                                <Sparkles className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+                                                <span>{ratioDef.formula}</span>
                                               </div>
-                                              <div className="text-right sm:border-l sm:border-slate-800 sm:pl-4 flex-shrink-0">
-                                                <span className="text-[10px] text-slate-400 uppercase font-semibold block">Sektör Kriteri</span>
-                                                <span className="font-mono text-xs font-bold text-emerald-400">{ratioDef.benchmark}</span>
+                                              <p className="text-xs text-slate-300 leading-relaxed break-words whitespace-normal">
+                                                {ratioDef.desc}
+                                              </p>
+                                              <div className="pt-1.5 border-t border-cyan-900/40 flex items-center gap-2 flex-wrap">
+                                                <span className="text-[10px] text-slate-400 uppercase font-semibold">Sektör Kriteri:</span>
+                                                <span className="font-mono text-xs font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-2 py-0.5 rounded">
+                                                  {ratioDef.benchmark}
+                                                </span>
                                               </div>
                                             </div>
                                           </td>
