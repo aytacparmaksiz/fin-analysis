@@ -45,6 +45,7 @@ import {
   enrichAndSanitizeFinancialHistory,
   extractValuationFromReportText,
   parseFinancialNumber,
+  parsePeriodSortKey,
   safeDivide,
   safeRoe,
   safeMargin,
@@ -604,21 +605,6 @@ const CustomChartTooltip = ({ active, payload, label, currency = 'Bin TRY' }: an
   return null;
 };
 
-// Dönem Sıralama Ağırlığı
-function parsePeriodSortKey(period: string): number {
-  if (!period) return 0;
-  const str = String(period).trim();
-  const yrMatch = str.match(/(20\d{2})/);
-  if (!yrMatch) return 0;
-  const year = parseInt(yrMatch[1], 10);
-
-  if (/(?:q1|1\.ç|1ç|\/0?3\b|3a\b)/i.test(str)) return year * 100 + 3;
-  if (/(?:q2|2\.ç|2ç|\/0?6\b|6a\b)/i.test(str)) return year * 100 + 6;
-  if (/(?:q3|3\.ç|3ç|\/0?9\b|9a\b)/i.test(str)) return year * 100 + 9;
-  if (/(?:q4|4\.ç|4ç|\/12\b|12a\b)/i.test(str)) return year * 100 + 12;
-
-  return year * 100 + 12;
-}
 
 function getAnnualizationFactor(period: string): number {
   if (!period) return 1.0;
@@ -646,18 +632,33 @@ const CUMULATIVE_FIELDS = [
   'net_monetary_position', 'operating_cash_flow', 'free_cash_flow', 'capex'
 ];
 
+function parseYearAndQuarter(p: string): { year: number; q: number } | null {
+  const yrMatch = String(p || '').match(/(20\d{2})/);
+  if (!yrMatch) return null;
+  const year = parseInt(yrMatch[1], 10);
+  let q = 0;
+  if (/(?:q1|1\.ç|1ç|\/0?3\b|3a\b)/i.test(p)) q = 1;
+  else if (/(?:q2|2\.ç|2ç|\/0?6\b|6a\b)/i.test(p)) q = 2;
+  else if (/(?:q3|3\.ç|3ç|\/0?9\b|9a\b)/i.test(p)) q = 3;
+  else if (/(?:q4|4\.ç|4ç|\/12\b|12a\b)/i.test(p)) q = 4;
+  else if (/^\s*20\d{2}\s*$/.test(p)) q = 4;
+  return { year, q };
+}
+
 function computeIncrementalQuarterlyData(rawData: any[]): any[] {
   if (!rawData || rawData.length === 0) return rawData;
-  const sorted = [...rawData].sort((a, b) => (a.period || '').localeCompare(b.period || ''));
+  const sorted = [...rawData].sort((a, b) => parsePeriodSortKey(a.period) - parsePeriodSortKey(b.period));
   return sorted.map((item) => {
     const period = item.period || '';
-    const quarter = period.slice(-2); // '03','06','09','12'
-    const year = period.slice(0, 4);
-    if (quarter === '03' || !['06','09','12'].includes(quarter)) return { ...item };
-    const prevQMap: Record<string, string> = { '06': '03', '09': '06', '12': '09' };
-    const prevPeriod = `${year}/${prevQMap[quarter]}`;
-    const prevItem = sorted.find(d => d.period === prevPeriod);
+    const info = parseYearAndQuarter(period);
+    if (!info || info.q <= 1) return { ...item };
+
+    const prevItem = sorted.find(d => {
+      const dInfo = parseYearAndQuarter(d.period);
+      return dInfo && dInfo.year === info.year && dInfo.q === info.q - 1;
+    });
     if (!prevItem) return { ...item };
+
     const result: any = { ...item };
     for (const field of CUMULATIVE_FIELDS) {
       if (item[field] != null && prevItem[field] != null) {
@@ -670,6 +671,16 @@ function computeIncrementalQuarterlyData(rawData: any[]): any[] {
 
 function computeTtmChartData(quarterlyData: any[], _rawData?: any[]): any[] {
   if (!quarterlyData || quarterlyData.length === 0) return quarterlyData;
+
+  // Yalnızca yıllık serilerde (alt çeyreklik verisi olmayan) TTM zaten ilgili yılın tamamıdır
+  const hasSubYearQuarters = quarterlyData.some(d => {
+    const info = parseYearAndQuarter(d.period);
+    return info && info.q >= 1 && info.q <= 3;
+  });
+  if (!hasSubYearQuarters) {
+    return quarterlyData;
+  }
+
   return quarterlyData.map((item, idx) => {
     const result: any = { ...item };
     const sliceStart = Math.max(0, idx - 3);
@@ -697,13 +708,18 @@ function computeTtmChartData(quarterlyData: any[], _rawData?: any[]): any[] {
 }
 
 function exportTableToCsv(filename: string, headers: string[], rows: (string | number | null | undefined)[][]): void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
   try {
+    const safeFilename = (filename || 'Rapor').replace(/[/\\?%*:|"<>]/g, '_').trim();
     const csvContent = '\uFEFF' + [
-      headers.join(';'),
-      ...rows.map(r => r.map(cell => {
+      (headers || []).map(h => {
+        const str = String(h ?? '').replace(/"/g, '""');
+        return str.includes(';') || str.includes('\n') || str.includes('\r') || str.includes('"') ? `"${str}"` : str;
+      }).join(';'),
+      ...(rows || []).map(r => (r || []).map(cell => {
         if (cell === null || cell === undefined) return '';
         const str = String(cell).replace(/"/g, '""');
-        return str.includes(';') || str.includes('\n') ? `"${str}"` : str;
+        return str.includes(';') || str.includes('\n') || str.includes('\r') || str.includes('"') ? `"${str}"` : str;
       }).join(';'))
     ].join('\r\n');
 
@@ -711,12 +727,13 @@ function exportTableToCsv(filename: string, headers: string[], rows: (string | n
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `${filename}.csv`);
+    link.setAttribute('download', `${safeFilename}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   } catch (e) {
+    console.error('CSV dışa aktarım hatası:', e);
     alert('CSV dışa aktarımında hata oluştu.');
   }
 }
@@ -923,11 +940,9 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
     // Güvenli ROE (Çift negatif tuzak engelleme ve TTK 376 kontrolü)
     if (typeof row.net_income === 'number' && typeof row.equity === 'number') {
       const roeRes = safeRoe(row.net_income, row.equity, annualFactor);
+      row.roe = roeRes.roe;
       if (roeRes.isInsolvent) {
-        row.roe = null;
         row.ttk_warning = roeRes.warning;
-      } else if (roeRes.roe !== null) {
-        row.roe = roeRes.roe;
       }
     }
 
@@ -4164,9 +4179,12 @@ export default function ValuationTerminal() {
                                     <Tooltip content={({ active, payload }) => {
                                       if (active && payload && payload.length) {
                                         const val = payload[0].value as number;
+                                        const valText = (typeof val === 'number' && !isNaN(val))
+                                          ? (mini.title.includes('Marj') || mini.title.includes('Karlılığı') ? `%${val.toFixed(1)}` : mini.title.includes('Kaldıraç') ? `${val.toFixed(2)}x` : val.toFixed(2))
+                                          : '—';
                                         return (
                                           <div className="bg-slate-900 border border-slate-700 p-2 text-xs text-white rounded shadow-xl">
-                                            {mini.title.includes('Marj') || mini.title.includes('Karlılığı') ? `%${val?.toFixed(1)}` : mini.title.includes('Kaldıraç') ? `${val?.toFixed(2)}x` : val?.toFixed(2)}
+                                            {valText}
                                           </div>
                                         );
                                       }
@@ -4661,14 +4679,14 @@ export default function ValuationTerminal() {
                           </div>
                           <div className="text-xl font-black font-mono text-cyan-400 mt-1">
                             {currentSector === 'INSURANCE' 
-                              ? `%${latestData?.roe ?? 70.45}` 
+                              ? (latestData?.roe != null ? `%${latestData.roe}` : '—') 
                               : spreadInfo.label}
                           </div>
                         </div>
                         <div className="pt-2 border-t border-slate-800/80 mt-2 space-y-1">
                           <div className="text-[10px] font-semibold text-slate-300">
                             {currentSector === 'INSURANCE'
-                              ? `Kombine Oran: %${latestData?.combined_ratio ?? 88.4}`
+                              ? (latestData?.combined_ratio != null ? `Kombine Oran: %${latestData.combined_ratio}` : 'Kombine Oran: —')
                               : spreadInfo.badgeText}
                           </div>
                           <div className="text-[10px] text-slate-400 font-mono">

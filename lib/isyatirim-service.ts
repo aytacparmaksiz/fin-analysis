@@ -3,6 +3,8 @@
  * Kaynak: https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/Temel-Degerler-Ve-Oranlar.aspx
  */
 
+import { parseFinancialNumber } from './valuation.ts';
+
 export interface IsYatirimStockMultiples {
   ticker: string;
   name: string;
@@ -29,12 +31,9 @@ const CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 saat önbellek
  */
 function parseTrFloat(valStr: string | null | undefined): number | null {
   if (!valStr) return null;
-  const clean = valStr.trim();
-  if (clean === '-' || clean === '—' || clean === 'A/D' || clean === 'N/A' || clean === '') return null;
-  // '402.960,0' -> nokta binlik, virgül ondalık
-  const normalized = clean.replace(/\./g, '').replace(',', '.');
-  const num = parseFloat(normalized);
-  return isNaN(num) ? null : num;
+  const clean = String(valStr).trim();
+  if (clean === '-' || clean === '—' || clean === '–' || clean === 'A/D' || clean === 'N/A' || clean === 'n/a' || clean === 'null' || clean === '') return null;
+  return parseFinancialNumber(clean);
 }
 
 /**

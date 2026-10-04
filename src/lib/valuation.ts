@@ -585,7 +585,7 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
     // Tüm sektörler için ROE, ROA, Kaldıraç Oranı dinamik hesapla (Safe ROE koruması ve Aktif=Pasif sonrası kesin Kaldıraç)
     if (item.equity != null && item.net_income != null) {
       const roeRes = safeRoe(item.net_income, item.equity, annualFactor);
-      if (roeRes.roe !== null) item.roe = roeRes.roe;
+      item.roe = roeRes.roe;
       if (roeRes.isInsolvent) item.solvency_warning = roeRes.warning;
     }
     if (item.total_assets && item.total_assets > 0 && item.net_income != null) {
@@ -595,7 +595,7 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
       const totalLiab = (typeof item.total_liabilities === 'number' && item.total_liabilities > 0 && item.total_liabilities < item.total_assets)
         ? item.total_liabilities
         : Math.max(0, item.total_assets - item.equity);
-      item.leverage_ratio = Number((totalLiab / item.total_assets).toFixed(2));
+      item.leverage_ratio = Number(((totalLiab / item.total_assets) * 100).toFixed(2));
     }
 
     // Likidite ve Faaliyet Oranları: Önce bilançodaki GERÇEK Kısa Vadeli Yükümlülükler (current_liabilities) kullanılır!
@@ -673,7 +673,7 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
     let rf = 30.0; // Risksiz faiz oranı (10Y TR Gösterge Tahvil %)
     let erp = 7.5; // Türkiye Hisse Senedi Risk Primi (ERP %)
     let preTaxKd = 46.0; // Kurumsal Ticari Kredi Faizi (%)
-    const taxRate = (detectedSector === 'BANKING' || detectedSector === 'INSURANCE') ? 0.30 : 0.25;
+    const taxRate = (detectedSector === 'BANKING' || detectedSector === 'INSURANCE') ? 0.30 : (detectedSector === 'REIT' ? 0.0 : 0.25);
 
     if (yr <= 2021) { rf = 17.5; erp = 6.5; preTaxKd = 21.0; }
     else if (yr === 2022) { rf = 19.0; erp = 7.0; preTaxKd = 25.0; }
@@ -704,6 +704,8 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
     const unleveredBeta = detectedSector === 'INSURANCE' ? 0.95
       : detectedSector === 'BANKING' ? 1.15
       : detectedSector === 'HOLDING' ? 0.92
+      : detectedSector === 'REIT' ? 0.85
+      : detectedSector === 'TECH' ? 1.25
       : 0.90;
     const debtToEquityRatio = eqVal > 0 ? Math.min(2.5, effectiveDebt / eqVal) : 0;
     const leveredBeta = (detectedSector === 'INSURANCE' || detectedSector === 'BANKING')
@@ -742,7 +744,7 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
       const opIncomeVal = item.operating_profit ?? item.operating_income ?? null;
       const opNopat = (typeof opIncomeVal === 'number' && opIncomeVal !== 0)
         ? opIncomeVal * (1 - taxRate)
-        : ((typeof item.ebitda === 'number' && item.ebitda > 0) ? item.ebitda * 0.70 : 0);
+        : ((typeof item.ebitda === 'number' && item.ebitda > 0) ? item.ebitda * (1 - taxRate) : 0);
 
       const rawNopat = (opNopat !== 0)
         ? opNopat
@@ -769,7 +771,7 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
       }
     }
 
-    item.eva_spread = (typeof item.roic === 'number' && typeof item.wacc === 'number')
+    item.eva_spread = (typeof item.roic === 'number' && typeof item.wacc === 'number' && !isNaN(item.roic) && !isNaN(item.wacc))
       ? Number((item.roic - item.wacc).toFixed(1))
       : null;
   }
@@ -1136,7 +1138,7 @@ export function calculateSectorScore(
       s1 = 11;
       r1 = `Net Borç / FAVÖK (${debtRatio.toFixed(1)}x) yüksek faiz ortamında faiz yükü yaratabilir.`;
       st1 = 'warning';
-    } else if (debtRatio <= 1.5 && (cr === null || cr >= 1.2)) {
+    } else if (latest !== null && debtRatio <= 1.5 && (cr === null || cr >= 1.2)) {
       s1 = 25;
       r1 = `Düşük borçluluk (Net Borç/FAVÖK: ${debtRatio.toFixed(1)}x) ve güçlü likidite tamponu.`;
       st1 = 'good';
@@ -1408,7 +1410,46 @@ export function optimizeFinalDecision({
       }
     }
 
-    // 7. Kural: Ağır Sermaye Erozyonu (ROIC - WACC < -5.0%)
+    // 7. Kural: GYO (REIT) Sektörü LTV ve Primli NAD Koruması
+    if (!overrideApplied && effectiveSector === 'REIT') {
+      const netDebt = parseFinancialNumber(effectiveLatestData?.net_debt) ?? 0;
+      const totalAssets = parseFinancialNumber(effectiveLatestData?.total_assets) ?? 1;
+      const ltv = totalAssets > 0 ? (Math.max(0, netDebt) / totalAssets) : 0;
+      const pb = parseFinancialNumber(effectiveLatestData?.pb ?? effectiveLatestData?.p_nav);
+
+      if (ltv > 0.60) {
+        finalDecision = 'ALMA';
+        overrideApplied = true;
+        overrideReason = `Kritik GYO Borçluluğu (LTV): Borç/Aktif oranı (%${(ltv * 100).toFixed(1)}) %60 emniyet eşiğini aşmıştır. Portföy borçluluğu nedeniyle AL kararı engellendi.`;
+        safetyFlags.push(`Kritik GYO LTV: %${(ltv * 100).toFixed(1)}`);
+      } else if (pb !== null && pb > 1.15) {
+        finalDecision = 'NÖTR';
+        overrideApplied = true;
+        overrideReason = `Primli GYO Değerlemesi: PD/NAD (${pb.toFixed(2)}x) portföy net aktif değeri üzerinde primli işlem görmektedir; GYO iskonto marjı bulunmamaktadır.`;
+        safetyFlags.push(`Primli GYO P/NAV: ${pb.toFixed(2)}x`);
+      }
+    }
+
+    // 8. Kural: Teknoloji & Yazılım (TECH) Sektörü Brüt Marj ve Borç Filtresi
+    if (!overrideApplied && effectiveSector === 'TECH') {
+      const gm = parseFinancialNumber(effectiveLatestData?.gross_margin);
+      const netDebt = parseFinancialNumber(effectiveLatestData?.net_debt) ?? 0;
+      const ebitda = parseFinancialNumber(effectiveLatestData?.ebitda) ?? 0;
+
+      if (gm !== null && gm < 20.0) {
+        finalDecision = 'ALMA';
+        overrideApplied = true;
+        overrideReason = `Kritik Düşük Brüt Kâr Marjı: Brüt marj (%${gm.toFixed(1)}) teknoloji ve yazılım sektörü normlarının (%50+) çok altındadır. Katma değer yetersizliği nedeniyle AL engellendi.`;
+        safetyFlags.push(`Düşük Teknoloji Brüt Marjı: %${gm.toFixed(1)}`);
+      } else if (ebitda > 0 && (netDebt / ebitda) > 3.0) {
+        finalDecision = 'ALMA';
+        overrideApplied = true;
+        overrideReason = `Teknoloji Şirketinde Yüksek Borçluluk: Net Borç / FAVÖK çarpanı (${(netDebt / ebitda).toFixed(1)}x) hafif varlık (asset-light) teknoloji şirketleri için emniyet sınırını (3.0x) aştı.`;
+        safetyFlags.push(`Yüksek Teknoloji Net Borç/FAVÖK: ${(netDebt / ebitda).toFixed(1)}x`);
+      }
+    }
+
+    // 9. Kural: Ağır Sermaye Erozyonu (ROIC - WACC < -5.0%)
     const roic = parseFinancialNumber(effectiveLatestData?.roic);
     const wacc = parseFinancialNumber(effectiveLatestData?.wacc);
     if (!overrideApplied && roic !== null && wacc !== null && (roic - wacc) < -5.0) {
@@ -1418,14 +1459,14 @@ export function optimizeFinalDecision({
       safetyFlags.push(`Negatif EVA Spread: ${(roic - wacc).toFixed(1)} puan`);
     }
 
-    // 8. Kural: Emniyet Marjı Yetersizse Kesinlikle AL Verilemez (Max NÖTR)
+    // 10. Kural: Emniyet Marjı Yetersizse Kesinlikle AL Verilemez (Max NÖTR)
     if (!overrideApplied && marginOfSafetyStatus === 'UNSAFE') {
       finalDecision = 'NÖTR';
       overrideApplied = true;
       overrideReason = `Muhafazakar Emniyet Marjı Filtresi: İskonto potansiyeli (%${discount}), asgari %20 güvenlik marjının altında olduğu için 'AL' kararı 'NÖTR' olarak revize edildi.`;
     }
 
-    // 9. Kural: Skor Tabanı Filtresi (Skor < 65 ise AL verilemez)
+    // 11. Kural: Skor Tabanı Filtresi (Skor < 65 ise AL verilemez)
     if (!overrideApplied && effectiveScore < 65) {
       finalDecision = 'NÖTR';
       overrideApplied = true;
@@ -1560,7 +1601,8 @@ export function computeSectorValuationAndDrivers(
   const sector: SectorType = sectorOverride || extractedData?.sector || 'INDUSTRIAL';
   const history: any[] = Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : [];
 
-  const currentPrice = parseFinancialNumber(inputPriceStr || extractedData?.valuation?.current_price || '118.50') || 118.50;
+  const rawPrice = parseFinancialNumber(inputPriceStr || extractedData?.valuation?.current_price || '118.50');
+  const currentPrice = (rawPrice !== null && rawPrice > 0) ? rawPrice : 118.50;
   const shareCount = parseShareCountNumber(extractedData?.share_count);
 
   // TMS 29 Homojenizasyonunu çalıştır
@@ -1900,7 +1942,8 @@ export function computeSectorValuationAndDrivers(
   // Borsa İstanbul'da 1 TL nominal Ödenmiş Sermaye = 1 Adet Pay (Lot).
   const rawPaidCap = parseFinancialNumber(latest?.paid_in_capital);
   const paidCapShares = rawPaidCap !== null && rawPaidCap > 0 ? Math.abs(rawPaidCap) * unitScale : null;
-  const effectiveShareCount = (paidCapShares && paidCapShares >= 1000000) ? paidCapShares : shareCount;
+  const rawEffectiveShareCount = (paidCapShares && paidCapShares >= 1000000) ? paidCapShares : shareCount;
+  const effectiveShareCount = (rawEffectiveShareCount && rawEffectiveShareCount > 0) ? rawEffectiveShareCount : 180000000;
 
   const periodAnnualFactor = getAnnualizationFactor(latest?.period);
 
@@ -2065,7 +2108,8 @@ export function computeSectorValuationAndDrivers(
     }
   }
 
-  const discountPct = Number((((fairValue - currentPrice) / currentPrice) * 100).toFixed(1));
+  const safeCurrentPrice = (currentPrice && currentPrice > 0) ? currentPrice : 1.0;
+  const discountPct = Number((((fairValue - safeCurrentPrice) / safeCurrentPrice) * 100).toFixed(1));
   // Ayı Senaryosu (Taban): Stres senaryosunda adil değerin ve cari fiyatın alt bandı
   const bearPrice = isInsolvent
     ? Number((fairValue * 0.65).toFixed(2))
@@ -2079,12 +2123,15 @@ export function computeSectorValuationAndDrivers(
   // Emniyet marjı durumu
   const marginOfSafetyStatus = discountPct >= 25 ? 'SAFE' : (discountPct >= 15 ? 'BORDERLINE' : 'UNSAFE');
 
+  const impliedBvps = (fairValue > 0 && targetMultipleNum > 0) ? (fairValue / targetMultipleNum) : null;
+  const currentPb = (sector === 'INSURANCE' || sector === 'BANKING') && impliedBvps ? Number((currentPrice / impliedBvps).toFixed(1)) : undefined;
+
   const valuation: ValuationMetrics = {
     current_price: currentPrice,
     fair_value: fairValue,
     discount_pct: discountPct,
     target_pb: sector === 'INSURANCE' || sector === 'BANKING' ? targetMultipleNum : undefined,
-    current_pb: sector === 'INSURANCE' || sector === 'BANKING' ? Number((currentPrice / (fairValue / targetMultipleNum)).toFixed(1)) : undefined,
+    current_pb: currentPb,
     bear_price: bearPrice,
     bull_price: bullPrice,
     margin_of_safety: marginOfSafety,

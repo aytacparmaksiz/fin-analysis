@@ -305,23 +305,30 @@ export const BIST_TECH_TICKERS = [
 
 export function detectSector(ticker: string, contextText = ''): SectorType {
   const normTicker = (ticker || '').toUpperCase().trim();
-  if (BIST_INSURANCE_TICKERS.includes(normTicker)) {
+  const cleanTicker = normTicker.replace(/\.IS$/i, '').trim();
+
+  if (BIST_INSURANCE_TICKERS.includes(cleanTicker)) {
     return 'INSURANCE';
   }
-  if (BIST_BANKING_TICKERS.includes(normTicker)) {
+  if (BIST_BANKING_TICKERS.includes(cleanTicker)) {
     return 'BANKING';
   }
-  if (BIST_HOLDING_TICKERS.includes(normTicker)) {
+  if (BIST_HOLDING_TICKERS.includes(cleanTicker)) {
     return 'HOLDING';
   }
-  if (BIST_REIT_TICKERS.includes(normTicker)) {
+  if (BIST_REIT_TICKERS.includes(cleanTicker) || cleanTicker.endsWith('GYO')) {
     return 'REIT';
   }
-  if (BIST_TECH_TICKERS.includes(normTicker)) {
+  if (BIST_TECH_TICKERS.includes(cleanTicker)) {
     return 'TECH';
   }
 
-  const text = (normTicker + ' ' + contextText).toLowerCase();
+  // Türkçe I/İ normalizasyonu ve küçük harfe dönüştürme
+  const text = (cleanTicker + ' ' + contextText)
+    .replace(/İ/g, 'i')
+    .replace(/I/g, 'ı')
+    .toLocaleLowerCase('tr-TR');
+
   if (
     text.includes('sigorta') ||
     text.includes('emeklilik') ||
