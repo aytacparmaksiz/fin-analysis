@@ -1000,6 +1000,121 @@ export function calculateSectorScore(
     }
     breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
 
+  } else if (sector === 'REIT') {
+    // GYO (Gayrimenkul Yatırım Ortaklığı) Puanlama Motoru
+    // 1. Net Aktif Değeri (NAD) İskontosu (Max 25)
+    const pb = parseFinancialNumber(latest?.pb ?? latest?.p_nav);
+    let s1 = 18;
+    let r1 = 'NAD iskontosu BIST ortalamalarında';
+    let st1: 'good' | 'warning' | 'danger' = 'good';
+    if (pb !== null) {
+      if (pb <= 0.65) { s1 = 25; r1 = `Yüksek İskonto Fırsatı: PD/NAD (${pb.toFixed(2)}x) ile %35 üzeri iskontolu işlem görüyor.`; st1 = 'good'; }
+      else if (pb <= 0.85) { s1 = 20; r1 = `Makul İskonto: PD/NAD (${pb.toFixed(2)}x) sağlıklı değerleme aralığında.`; st1 = 'good'; }
+      else if (pb <= 1.05) { s1 = 14; r1 = `NAD seviyesine yakın işlem görüyor (${pb.toFixed(2)}x), iskonto marjı sınırlı.`; st1 = 'warning'; }
+      else { s1 = 7; r1 = `Piyasa Değeri NAD üzerinde primli (${pb.toFixed(2)}x); GYO iskonto avantajı yok.`; st1 = 'danger'; anomalies.push(`Primli GYO: PD/NAD ${pb.toFixed(2)}x`); }
+    }
+    breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
+
+    // 2. Borçluluk & LTV Oranı (Max 25)
+    const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
+    const assets = parseFinancialNumber(latest?.total_assets) ?? 1;
+    const ltv = assets > 0 ? (Math.max(0, netDebt) / assets) : 0;
+    let s2 = 20;
+    let r2 = 'Borç / Aktif (LTV) oranı makul seviyede';
+    let st2: 'good' | 'warning' | 'danger' = 'good';
+    if (ltv <= 0.20) { s2 = 25; r2 = `Çok Düşük Kaldıraç: Finansal Borç / Portföy oranı (%${(ltv * 100).toFixed(1)}) çok güvenli.`; st2 = 'good'; }
+    else if (ltv <= 0.40) { s2 = 19; r2 = `Sağlıklı LTV: Portföy borçluluğu (%${(ltv * 100).toFixed(1)}) SPK tavanlarının oldukça altında.`; st2 = 'good'; }
+    else if (ltv <= 0.55) { s2 = 12; r2 = `Yüksek LTV (%${(ltv * 100).toFixed(1)}): Faiz giderleri portföy getirisini baskılayabilir.`; st2 = 'warning'; }
+    else { s2 = 4; r2 = `Kritik Borçluluk: LTV (%${(ltv * 100).toFixed(1)}) gayrimenkul döngüsü için yüksek riskli!`; st2 = 'danger'; anomalies.push(`Aşırı GYO Borçluluğu (LTV: %${(ltv * 100).toFixed(1)})`); }
+    breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+
+    // 3. Kira Akışı & FFO Verimi (Max 25)
+    const ocf = parseFinancialNumber(latest?.operating_cash_flow);
+    let s3 = 18;
+    let r3 = 'Kira ve proje nakit akışı portföy giderlerini karşılıyor.';
+    let st3: 'good' | 'warning' | 'danger' = 'good';
+    if (ocf !== null && ocf > 0) {
+      s3 = 24; r3 = 'Operasyonel nakit üretimi (FFO) pozitif; düzenli kira ve teslimat tahsilatı güçlü.'; st3 = 'good';
+    } else if (ocf !== null && ocf < 0) {
+      s3 = 9; r3 = 'İşletme nakit akışı negatif; proje geliştirme veya tahsilat gecikmeleri nakit yakıyor.'; st3 = 'warning';
+    }
+    breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+
+    // 4. Portföy Büyümesi & Ekspertiz Değeri (Max 25)
+    let s4 = 20;
+    let r4 = 'Portföy ekspertiz değerleri ve özkaynak büyümesi stabil.';
+    let st4: 'good' | 'warning' | 'danger' = 'good';
+    if (sortedHistory.length >= 2) {
+      const prev = sortedHistory[sortedHistory.length - 2];
+      const eqGrowth = safeGrowthRate(latest?.equity, prev?.equity);
+      if (eqGrowth !== null) {
+        if (eqGrowth >= 40.0) { s4 = 25; r4 = `Gayrimenkul portföyü ve özkaynaklar (%${eqGrowth}) enflasyonun üzerinde reel büyüyor.`; st4 = 'good'; }
+        else if (eqGrowth >= 20.0) { s4 = 18; r4 = `Portföy genişlemesi (%${eqGrowth}) sektör ortalamasında.`; st4 = 'good'; }
+        else { s4 = 10; r4 = `Portföy büyümesi (%${eqGrowth}) zayıf kalmış.`; st4 = 'warning'; }
+      }
+    }
+    breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
+
+  } else if (sector === 'TECH') {
+    // Teknoloji, Yazılım & Bilişim Puanlama Motoru
+    // 1. Rule of 40 (Büyüme + FCF Marjı) (Max 25)
+    let revG = 40.0;
+    if (sortedHistory.length >= 2) {
+      const calcG = safeGrowthRate(latest?.revenue, sortedHistory[sortedHistory.length - 2]?.revenue);
+      if (calcG !== null) revG = calcG;
+    }
+    const fcfM = parseFinancialNumber(latest?.fcf_margin ?? latest?.ebitda_margin) ?? 15.0;
+    const ruleOf40 = revG + fcfM;
+    let s1 = 18;
+    let r1 = 'Büyüme ve operasyonel nakit dengeli';
+    let st1: 'good' | 'warning' | 'danger' = 'good';
+    if (ruleOf40 >= 50.0) { s1 = 25; r1 = `Seçkin Teknoloji Şirketi: Rule of 40 (%${ruleOf40.toFixed(1)}) dünya standartlarının oldukça üzerinde!`; st1 = 'good'; }
+    else if (ruleOf40 >= 40.0) { s1 = 22; r1 = `Rule of 40 Başarılı: Büyüme + Nakit marjı (%${ruleOf40.toFixed(1)}) sağlıklı genişleme üretiyor.`; st1 = 'good'; }
+    else if (ruleOf40 >= 20.0) { s1 = 14; r1 = `Rule of 40 (%${ruleOf40.toFixed(1)}) sektör ortalamasının altında, marj veya büyüme ivmesi gerek.`; st1 = 'warning'; }
+    else { s1 = 6; r1 = `Rule of 40 Zayıf: Büyüme ve kârlılık bileşimi (%${ruleOf40.toFixed(1)}) teknoloji normlarının gerisinde.`; st1 = 'danger'; anomalies.push(`Zayıf Rule of 40: %${ruleOf40.toFixed(1)}`); }
+    breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
+
+    // 2. Yüksek Brüt Kâr Marjı (Max 25)
+    const gm = parseFinancialNumber(latest?.gross_margin);
+    let s2 = 18;
+    let r2 = 'Yazılım ve hizmet brüt marjı dengeli';
+    let st2: 'good' | 'warning' | 'danger' = 'good';
+    if (gm !== null) {
+      if (gm >= 55.0) { s2 = 25; r2 = `Yüksek Fiyatlama Gücü: Brüt kâr marjı (%${gm.toFixed(1)}) yazılım ve yüksek katma değerli iş modelini kanıtlıyor.`; st2 = 'good'; }
+      else if (gm >= 40.0) { s2 = 19; r2 = `Brüt kâr marjı (%${gm.toFixed(1)}) teknoloji sektörü ortalamalarında.`; st2 = 'good'; }
+      else if (gm >= 25.0) { s2 = 12; r2 = `Düşük Katma Değer: Brüt kâr marjı (%${gm.toFixed(1)}) donanım/distribütör ağırlıklı yapıya işaret ediyor.`; st2 = 'warning'; }
+      else { s2 = 5; r2 = `Kritik Düşük Brüt Marj (%${gm.toFixed(1)}); operasyonel kaldıraç potansiyeli zayıf.`; st2 = 'danger'; }
+    }
+    breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+
+    // 3. Net Nakit Pozisyonu & Likidite (Max 25)
+    const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
+    const cr = parseFinancialNumber(latest?.current_ratio);
+    let s3 = 20;
+    let r3 = 'Nakit ve borç dengesi koruma altında';
+    let st3: 'good' | 'warning' | 'danger' = 'good';
+    if (netDebt <= 0 && (cr === null || cr >= 1.5)) {
+      s3 = 25; r3 = 'Net Nakit Fazlası: Şirketin faiz taşıyan borcu yok, kasasındaki nakit Ar-Ge ve satın almalar için tam esneklik sunuyor.'; st3 = 'good';
+    } else if (netDebt <= 0) {
+      s3 = 22; r3 = 'Net Nakit Pozisyonunda, borç riski bulunmuyor.'; st3 = 'good';
+    } else {
+      s3 = 10; r3 = `Teknoloji şirketinde borçluluk mevcut (Net Borç: ${netDebt.toLocaleString('tr-TR')} TL); faiz ortamı izlenmeli.`; st3 = 'warning';
+    }
+    breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+
+    // 4. Sermaye Verimliliği (ROIC & ROE) (Max 25)
+    const roe = parseFinancialNumber(latest?.roe);
+    let s4 = 18;
+    let r4 = 'Yatırılan sermaye verimliliği izleniyor';
+    let st4: 'good' | 'warning' | 'danger' = 'good';
+    if (roe !== null) {
+      if (roe >= 45.0) { s4 = 25; r4 = `Hafif Varlık Üstünlüğü: Özkaynak getirisi (%${roe.toFixed(1)}) çok yüksek sermaye verimliliğine işaret ediyor.`; st4 = 'good'; }
+      else if (roe >= 30.0) { s4 = 20; r4 = `Özkaynak kârlılığı (%${roe.toFixed(1)}) sermaye maliyetinin üzerinde.`; st4 = 'good'; }
+      else if (roe >= 15.0) { s4 = 12; r4 = `Özkaynak kârlılığı (%${roe.toFixed(1)}) teknoloji sektörü için ılımlı.`; st4 = 'warning'; }
+      else { s4 = 5; r4 = `Düşük Sermaye Verimliliği (%${roe.toFixed(1)}).`; st4 = 'danger'; anomalies.push(`Düşük Teknoloji ROE: %${roe.toFixed(1)}`); }
+    }
+    breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
+
   } else {
     // Sanayi / Reel Sektör:
     // 1. Finansal Sağlık & Likidite (Cari Oran & Net Borç / FAVÖK) (Max 25)
@@ -1643,6 +1758,17 @@ export function computeSectorValuationAndDrivers(
       marginNote = 'Holding piyasa değerinin iştirak portföyü net aktif değerine olan tarihsel iskontosu.';
       marginVal = 32.5;
       marginExpl = 'BIST holding sektörü tarihsel medyan NAD iskontosu tabanı';
+    } else if (sector === 'REIT') {
+      marginLabel = 'Portföy Net Aktif Değeri (NAD) İskontosu (%)';
+      marginNote = 'GYO piyasa değerinin bağımsız ekspertiz onaylı gayrimenkul portföy net aktif değerine olan tarihsel iskontosu.';
+      marginVal = 30.0;
+      marginExpl = 'BIST GYO sektörü tarihsel ortalama NAD iskontosu tabanı (%30)';
+    } else if (sector === 'TECH') {
+      marginLabel = 'Brüt Kâr Marjı (Gross Margin %)';
+      marginNote = 'Yazılım ve teknoloji şirketlerinin fiyatlama gücünü ve ölçek ekonomisi verimliliğini gösterir.';
+      const gm = parseFinancialNumber(latest?.gross_margin);
+      marginVal = gm !== null && gm > 0 ? Number(gm.toFixed(1)) : 52.0;
+      marginExpl = `Son dönem (${latest?.period || 'Son'}) gerçekleşen Brüt Kâr Marjı: %${marginVal}`;
     } else {
       marginLabel = 'FAVÖK Marjı (EBITDA Margin)';
       marginNote = 'Operasyonel kârlılık marjı, şirketin maliyet şoklarını absorbe etme kabiliyetini gösterir.';
@@ -1706,6 +1832,14 @@ export function computeSectorValuationAndDrivers(
       targetMultipleNum = 0.70; // %30 iskonto
       targetMultipleStr = 'NAD Çarpanı 0,70x (%30 İskonto)';
       targetMultipleExpl = 'Hedef NAD iskontosu %30 baz alınarak hesaplanan net aktif çarpanı';
+    } else if (sector === 'REIT') {
+      targetMultipleNum = 0.75; // %25 NAD İskontosu
+      targetMultipleStr = 'P/NAV 0,75x (%25 İskonto)';
+      targetMultipleExpl = 'Hedef Net Aktif Değeri (P/NAV) çarpanı (%25 iskonto bazlı)';
+    } else if (sector === 'TECH') {
+      targetMultipleNum = 4.2;
+      targetMultipleStr = 'FD/Satışlar 4,2x (Rule of 40 Bazlı)';
+      targetMultipleExpl = 'Yüksek büyüme ve yazılım operasyonel nakit dönüşümüne göre FD/Satışlar çarpanı';
     } else {
       targetMultipleNum = 6.5;
       targetMultipleStr = 'FD/FAVÖK 6,5x';
@@ -1807,6 +1941,68 @@ export function computeSectorValuationAndDrivers(
       const rawFair = forwardNavPerShare * Math.max(0.85, targetMultipleNum);
       fairValue = Number(Math.max(currentPrice * 0.55, rawFair).toFixed(2));
       formulaStr = `12A İleri NAD/Pay = ${forwardNavPerShare.toFixed(2).replace('.', ',')} TL × ${Math.max(0.85, targetMultipleNum)} = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+    }
+  } else if (sector === 'REIT') {
+    modelName = '12 Aylık İleriye Dönük Net Aktif Değeri (NAD) & Portföy Ekspertiz İskonto Modeli';
+    const totalEquity = parseFinancialNumber(latest?.equity) ?? 20000000;
+    const totalEquityFull = totalEquity * unitScale;
+
+    if (totalEquityFull <= 0) {
+      isInsolvent = true;
+      boundaryWarning = 'GYO özkaynakları negatiftir (TTK 376 Borca Batıklık).';
+      fairValue = Number((currentPrice * 0.20).toFixed(2));
+      formulaStr = `Özkaynaklar Negatif (TTK 376) = ${totalEquityFull.toLocaleString('tr-TR')} TL`;
+    } else {
+      const navPerShare = totalEquityFull / effectiveShareCount;
+      const forwardNavGrowth = 0.35; // %35 portföy ekspertiz genişlemesi
+      const forwardNavPerShare = navPerShare * (1 + forwardNavGrowth);
+      const rawFair = forwardNavPerShare * Math.max(0.65, Math.min(0.90, targetMultipleNum));
+      fairValue = Number(Math.max(currentPrice * 0.50, rawFair).toFixed(2));
+      formulaStr = `Cari NAD/Pay = ${navPerShare.toFixed(2).replace('.', ',')} TL | 12A İleri NAD/Pay = ${forwardNavPerShare.toFixed(2).replace('.', ',')} TL × ${targetMultipleNum}x = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+    }
+  } else if (sector === 'TECH') {
+    modelName = '12 Aylık İleriye Dönük Rule of 40, FD/Satışlar & Nakit Akış Hibrit Modeli';
+    const latestRev = parseFinancialNumber(latest?.revenue) ?? 0;
+    const latestNet = parseFinancialNumber(latest?.net_income) ?? 0;
+    const latestEq = parseFinancialNumber(latest?.equity) ?? 0;
+
+    const revFull = latestRev * unitScale * periodAnnualFactor;
+    const netFull = latestNet * unitScale * periodAnnualFactor;
+    const totalEquityFull = latestEq * unitScale;
+    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+
+    if (totalEquityFull < 0 && revFull <= 0) {
+      isInsolvent = true;
+      boundaryWarning = 'Şirket özkaynakları ve hasılat üretimi negatiftir.';
+      fairValue = Number((currentPrice * 0.30).toFixed(2));
+      formulaStr = 'Negatif Özkaynak ve Hasılat (Risk Tabanı)';
+    } else {
+      const clampedRevGrowth = Math.min(0.85, Math.max(0.25, revGrowth / 100));
+      const forwardRev = revFull > 0 ? revFull * (1 + clampedRevGrowth) : 0;
+      const evSalesMult = Math.max(2.5, Math.min(6.5, targetMultipleNum));
+      const firmValue = forwardRev * evSalesMult;
+      const equityValue = firmValue - netDebt;
+      const salesPerShare = equityValue > 0 ? (equityValue / effectiveShareCount) : 0;
+
+      const forwardNet = netFull > 0 ? netFull * (1 + Math.min(0.85, Math.max(0.25, netGrowth / 100))) : 0;
+      const targetPe = Math.max(12.0, Math.min(25.0, evSalesMult * 3.5));
+      const pePerShare = forwardNet > 0 ? ((forwardNet * targetPe) / effectiveShareCount) : 0;
+
+      const bvps = totalEquityFull > 0 ? (totalEquityFull / effectiveShareCount) : 0;
+      const forwardBvps = bvps * (1 + Math.min(0.60, Math.max(0.20, (roe / 100) * 0.85)));
+      const pbPerShare = forwardBvps * Math.max(2.0, Math.min(6.0, roe / 15));
+
+      const weights = { sales: 0.50, pe: 0.35, pb: 0.15 };
+      let combinedPerShare = 0;
+      let totalW = 0;
+
+      if (salesPerShare > 0) { combinedPerShare += salesPerShare * weights.sales; totalW += weights.sales; }
+      if (pePerShare > 0) { combinedPerShare += pePerShare * weights.pe; totalW += weights.pe; }
+      if (pbPerShare > 0) { combinedPerShare += pbPerShare * weights.pb; totalW += weights.pb; }
+
+      const rawFair = totalW > 0 ? (combinedPerShare / totalW) : currentPrice;
+      fairValue = Number(Math.max(currentPrice * 0.40, rawFair).toFixed(2));
+      formulaStr = `12A İleri FD/Satışlar: ${salesPerShare.toFixed(2).replace('.', ',')} TL (%50) + F/K: ${pePerShare.toFixed(2).replace('.', ',')} TL (%35) + PD/DD: ${pbPerShare.toFixed(2).replace('.', ',')} TL (%15) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
     }
   } else {
     modelName = 'İleriye Dönük İskontolu FAVÖK, F/K & Özkaynak Hibrit Modeli';

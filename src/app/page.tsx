@@ -668,6 +668,59 @@ function computeIncrementalQuarterlyData(rawData: any[]): any[] {
   });
 }
 
+function computeTtmChartData(quarterlyData: any[], _rawData?: any[]): any[] {
+  if (!quarterlyData || quarterlyData.length === 0) return quarterlyData;
+  return quarterlyData.map((item, idx) => {
+    const result: any = { ...item };
+    const sliceStart = Math.max(0, idx - 3);
+    const window = quarterlyData.slice(sliceStart, idx + 1);
+
+    for (const field of CUMULATIVE_FIELDS) {
+      if (item[field] != null) {
+        let sum = 0;
+        let valid = 0;
+        for (const w of window) {
+          if (w[field] != null && !isNaN(w[field])) {
+            sum += w[field];
+            valid++;
+          }
+        }
+        if (valid === 4) {
+          result[field] = sum;
+        } else if (valid > 0) {
+          result[field] = Math.round((sum / valid) * 4);
+        }
+      }
+    }
+    return result;
+  });
+}
+
+function exportTableToCsv(filename: string, headers: string[], rows: (string | number | null | undefined)[][]): void {
+  try {
+    const csvContent = '\uFEFF' + [
+      headers.join(';'),
+      ...rows.map(r => r.map(cell => {
+        if (cell === null || cell === undefined) return '';
+        const str = String(cell).replace(/"/g, '""');
+        return str.includes(';') || str.includes('\n') ? `"${str}"` : str;
+      }).join(';'))
+    ].join('\r\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${filename}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('CSV dışa aktarımında hata oluştu.');
+  }
+}
+
 function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorType = 'INDUSTRIAL', referencePrice: number = 100) {
   if (!Array.isArray(history) || history.length === 0) return [];
 
@@ -884,7 +937,7 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
     let rf = 30.0;
     let erp = 7.5;
     let preTaxKd = 46.0;
-    const taxRate = (sector === 'BANKING' || sector === 'INSURANCE') ? 0.30 : 0.25;
+    const taxRate = (sector === 'BANKING' || sector === 'INSURANCE') ? 0.30 : (sector === 'REIT' ? 0.0 : 0.25);
 
     if (yr <= 2021) { rf = 17.5; erp = 6.5; preTaxKd = 21.0; }
     else if (yr === 2022) { rf = 19.0; erp = 7.0; preTaxKd = 25.0; }
@@ -913,6 +966,8 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
     const unleveredBeta = sector === 'INSURANCE' ? 0.95
       : sector === 'BANKING' ? 1.15
       : sector === 'HOLDING' ? 0.92
+      : sector === 'REIT' ? 0.85
+      : sector === 'TECH' ? 1.25
       : 0.90;
     const debtToEquityRatio = eqVal > 0 ? Math.min(2.5, effectiveDebt / eqVal) : 0;
     const leveredBeta = (sector === 'INSURANCE' || sector === 'BANKING')
@@ -1112,6 +1167,8 @@ export default function ValuationTerminal() {
   const [consensus, setConsensus] = useState('');
   const [peerMultiples, setPeerMultiples] = useState('');
   const [selectedSector, setSelectedSector] = useState<SectorType | 'AUTO'>('AUTO');
+  const [chartMode, setChartMode] = useState<'quarterly' | 'ttm'>('quarterly');
+  const [isHeatmapActive, setIsHeatmapActive] = useState<boolean>(true);
   const [financialFiles, setFinancialFiles] = useState<File[]>([]);
   const [activityFiles, setActivityFiles] = useState<File[]>([]);
   const [presentationFiles, setPresentationFiles] = useState<File[]>([]);
@@ -2189,10 +2246,73 @@ export default function ValuationTerminal() {
     refMarketPrice
   );
   const quarterlyChartData = useMemo(() => computeIncrementalQuarterlyData(chartData), [chartData]);
+  const ttmChartData = useMemo(() => computeTtmChartData(quarterlyChartData, chartData), [quarterlyChartData, chartData]);
+  const activeFlowChartData = chartMode === 'ttm' ? ttmChartData : quarterlyChartData;
+
   const chartYAxisFmt = useCallback(
     (v: number) => formatFinancialScale(v, currentExtractedData?.currency || 'Bin TRY', true, false),
     [currentExtractedData?.currency]
   );
+
+  const getRatioHeatmapClass = (key: string, val: number | null, sec: SectorType): string => {
+    if (!isHeatmapActive || val === null || isNaN(val)) return '';
+    switch (key) {
+      case 'current_ratio': {
+        const minGood = (sec === 'INSURANCE' || sec === 'REIT') ? 1.10 : 1.50;
+        if (val >= minGood) return 'bg-emerald-950/40 text-emerald-300 font-semibold';
+        if (val >= 1.0) return 'bg-amber-950/30 text-amber-300';
+        return 'bg-rose-950/40 text-rose-300';
+      }
+      case 'quick_ratio': {
+        const minGood = (sec === 'INSURANCE' || sec === 'REIT') ? 0.90 : 1.00;
+        if (val >= minGood) return 'bg-emerald-950/40 text-emerald-300 font-semibold';
+        if (val >= 0.75) return 'bg-amber-950/30 text-amber-300';
+        return 'bg-rose-950/40 text-rose-300';
+      }
+      case 'cash_ratio': {
+        if (val >= 0.30) return 'bg-emerald-950/40 text-emerald-300 font-semibold';
+        if (val >= 0.15) return 'bg-amber-950/30 text-amber-300';
+        return 'bg-rose-950/40 text-rose-300';
+      }
+      case 'leverage_ratio': {
+        const maxGood = sec === 'INSURANCE' ? 0.90 : (sec === 'TECH' ? 0.40 : 0.70);
+        const maxWarn = sec === 'INSURANCE' ? 0.93 : (sec === 'TECH' ? 0.55 : 0.85);
+        if (val <= maxGood) return 'bg-emerald-950/40 text-emerald-300 font-semibold';
+        if (val <= maxWarn) return 'bg-amber-950/30 text-amber-300';
+        return 'bg-rose-950/40 text-rose-300';
+      }
+      case 'debt_to_equity': {
+        const maxGood = sec === 'INSURANCE' ? 8.0 : (sec === 'TECH' ? 0.60 : 1.50);
+        const maxWarn = sec === 'INSURANCE' ? 12.0 : (sec === 'TECH' ? 1.0 : 2.50);
+        if (val <= maxGood) return 'bg-emerald-950/40 text-emerald-300 font-semibold';
+        if (val <= maxWarn) return 'bg-amber-950/30 text-amber-300';
+        return 'bg-rose-950/40 text-rose-300';
+      }
+      case 'roa': {
+        if (val >= 8.0) return 'bg-emerald-950/40 text-emerald-300 font-semibold';
+        if (val >= 4.0) return 'bg-amber-950/30 text-amber-300';
+        return 'bg-rose-950/40 text-rose-300';
+      }
+      case 'roe': {
+        const minGood = (sec === 'INSURANCE' || sec === 'TECH') ? 45.0 : 35.0;
+        if (val >= minGood) return 'bg-emerald-950/40 text-emerald-300 font-semibold';
+        if (val >= 20.0) return 'bg-amber-950/30 text-amber-300';
+        return 'bg-rose-950/40 text-rose-300';
+      }
+      case 'roic': {
+        if (val >= 28.0) return 'bg-emerald-950/40 text-emerald-300 font-semibold';
+        if (val >= 16.0) return 'bg-amber-950/30 text-amber-300';
+        return 'bg-rose-950/40 text-rose-300';
+      }
+      case 'eva_spread': {
+        if (val > 0) return 'bg-emerald-950/40 text-emerald-300 font-semibold';
+        if (val >= -5.0) return 'bg-amber-950/30 text-amber-300';
+        return 'bg-rose-950/40 text-rose-300';
+      }
+      default:
+        return '';
+    }
+  };
 
 
   // Görsel 1 & 3: Finansal Tablolar için Günümüzden Geçmişe (Yeniden Eskiye) Sıralama
@@ -2943,12 +3063,18 @@ export default function ValuationTerminal() {
   }
 
 
+  const marketMultiples = currentExtractedData?.market_multiples || activeReport?.extractedData?.market_multiples;
+
   const piyasaDegeri = (valuationInfo.current_price ?? 0) * (currentExtractedData?.shares_outstanding ?? currentExtractedData?.share_count ?? 0);
   let piyasaDegeriStr = '';
   if (piyasaDegeri >= 1_000_000_000) {
     piyasaDegeriStr = (piyasaDegeri / 1e9).toFixed(1) + ' Bn TL';
   } else if (piyasaDegeri >= 1_000_000) {
     piyasaDegeriStr = (piyasaDegeri / 1e6).toFixed(0) + ' Mn TL';
+  } else if (marketMultiples?.market_cap_mn_tl) {
+    piyasaDegeriStr = marketMultiples.market_cap_mn_tl >= 1000
+      ? (marketMultiples.market_cap_mn_tl / 1000).toFixed(1) + ' Bn TL'
+      : marketMultiples.market_cap_mn_tl.toFixed(0) + ' Mn TL';
   } else if (currentExtractedData?.marketCap) {
       const mc = currentExtractedData.marketCap;
       if (mc >= 1_000_000_000) {
@@ -3594,6 +3720,31 @@ export default function ValuationTerminal() {
                         </span>
                       )}
 
+                      {marketMultiples && (
+                        <>
+                          {marketMultiples.pe != null && (
+                            <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-md bg-emerald-950/40 text-emerald-300 border border-emerald-800/60" title="Fiyat / Kazanç Oranı (İş Yatırım)">
+                              F/K: {marketMultiples.pe.toFixed(1)}
+                            </span>
+                          )}
+                          {marketMultiples.pb != null && (
+                            <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-md bg-cyan-950/40 text-cyan-300 border border-cyan-800/60" title="Piyasa Değeri / Defter Değeri (İş Yatırım)">
+                              PD/DD: {marketMultiples.pb.toFixed(2)}
+                            </span>
+                          )}
+                          {marketMultiples.ev_ebitda != null && (
+                            <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-md bg-amber-950/40 text-amber-300 border border-amber-800/60" title="Firma Değeri / FAVÖK (İş Yatırım)">
+                              FD/FAVÖK: {marketMultiples.ev_ebitda.toFixed(1)}
+                            </span>
+                          )}
+                          {marketMultiples.free_float_pct != null && (
+                            <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-md bg-slate-900 text-slate-300 border border-slate-800" title="Fiili Dolaşım Oranı (İş Yatırım)">
+                              Halka Açıklık: %{marketMultiples.free_float_pct.toFixed(0)}
+                            </span>
+                          )}
+                        </>
+                      )}
+
                       <span className={`text-xs font-bold px-2.5 py-0.5 rounded-md border ${
                         activeReport.decision === 'AL'
                           ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
@@ -3762,12 +3913,94 @@ export default function ValuationTerminal() {
                           return d[k] ?? null;
                         };
                         return (
+                          <>
+                            {/* İş Yatırım Canlı Piyasa Çarpanları Şeridi */}
+                            {marketMultiples && (
+                        <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-4 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
+                              <Sparkles className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold text-white">İş Yatırım Resmi Canlı Piyasa Çarpanları</span>
+                                <span className="text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded">
+                                  {marketMultiples.last_period || 'Son Bilanço'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-400 mt-0.5">
+                                Borsa İstanbul resmi piyasa verileri ve güncel değerleme rasyoları
+                              </p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                            <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                              <div className="text-[10px] uppercase font-bold text-slate-500">F/K</div>
+                              <div className="text-sm font-black font-mono text-emerald-400">
+                                {marketMultiples.pe != null ? marketMultiples.pe.toFixed(2) : 'A/D'}
+                              </div>
+                            </div>
+                            <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                              <div className="text-[10px] uppercase font-bold text-slate-500">PD/DD</div>
+                              <div className="text-sm font-black font-mono text-cyan-400">
+                                {marketMultiples.pb != null ? marketMultiples.pb.toFixed(2) : 'A/D'}
+                              </div>
+                            </div>
+                            <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                              <div className="text-[10px] uppercase font-bold text-slate-500">FD/FAVÖK</div>
+                              <div className="text-sm font-black font-mono text-amber-400">
+                                {marketMultiples.ev_ebitda != null ? marketMultiples.ev_ebitda.toFixed(2) : '—'}
+                              </div>
+                            </div>
+                            <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                              <div className="text-[10px] uppercase font-bold text-slate-500">FD/Satışlar</div>
+                              <div className="text-sm font-black font-mono text-indigo-400">
+                                {marketMultiples.ev_sales != null ? marketMultiples.ev_sales.toFixed(2) : '—'}
+                              </div>
+                            </div>
+                            <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                              <div className="text-[10px] uppercase font-bold text-slate-500">Halka Açıklık</div>
+                              <div className="text-sm font-black font-mono text-slate-200">
+                                %{marketMultiples.free_float_pct != null ? marketMultiples.free_float_pct.toFixed(1) : '—'}
+                              </div>
+                            </div>
+                            <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                              <div className="text-[10px] uppercase font-bold text-slate-500">Piyasa Değeri</div>
+                              <div className="text-sm font-black font-mono text-purple-400">
+                                {marketMultiples.market_cap_mn_tl != null
+                                  ? (marketMultiples.market_cap_mn_tl >= 1000
+                                      ? `${(marketMultiples.market_cap_mn_tl / 1000).toFixed(1)} Mr TL`
+                                      : `${marketMultiples.market_cap_mn_tl.toFixed(0)} Mn TL`)
+                                  : '—'}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                         <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 shadow-lg">
                           <div className="flex justify-between items-center mb-4">
                             <h3 className="text-sm font-bold text-white">Özet Gelir Tablosu (Bin TRY)</h3>
-                            <div className="flex gap-2">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const rows = [
+                                    currentSector === 'INSURANCE' ? ['Prim Üretimi', formatAmount(fv(latestPeriod, 'gross_written_premiums'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyPeriod, 'gross_written_premiums'), 'bin', false, '', '', 'Bin TRY')] : ['Satışlar', formatAmount(fv(latestPeriod, 'revenue'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyPeriod, 'revenue'), 'bin', false, '', '', 'Bin TRY')],
+                                    currentSector === 'INSURANCE' ? null : ['Brüt Kar', formatAmount(fv(latestPeriod, 'gross_profit'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyPeriod, 'gross_profit'), 'bin', false, '', '', 'Bin TRY')],
+                                    currentSector === 'INSURANCE' ? null : ['Esas Faaliyet Karı', formatAmount(fv(latestPeriod, 'operating_income'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyPeriod, 'operating_income'), 'bin', false, '', '', 'Bin TRY')],
+                                    currentSector === 'INSURANCE' ? ['Teknik Bölüm Dengesi', formatAmount(fv(latestPeriod, 'technical_balance'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyPeriod, 'technical_balance'), 'bin', false, '', '', 'Bin TRY')] : ['FAVÖK', formatAmount(fv(latestPeriod, 'ebitda'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyPeriod, 'ebitda'), 'bin', false, '', '', 'Bin TRY')],
+                                    currentSector === 'INSURANCE' ? ['Yatırım Gelirleri', formatAmount(fv(latestPeriod, 'investment_income'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyPeriod, 'investment_income'), 'bin', false, '', '', 'Bin TRY')] : null,
+                                    ['Net Dönem Karı', formatAmount(fv(latestPeriod, 'net_income'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyPeriod, 'net_income'), 'bin', false, '', '', 'Bin TRY')]
+                                  ].filter(Boolean) as (string | number)[][];
+                                  exportTableToCsv(`${activeReport?.ticker || 'Sirket'}_Ozet_Gelir_Tablosu`, ['Kalem', latestPeriodLabel, yoyPeriodLabel], rows);
+                                }}
+                                className="text-[10px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-0.5 rounded border border-slate-700 transition flex items-center gap-1 cursor-pointer"
+                                title="Excel / CSV Olarak İndir"
+                              >
+                                <Download className="w-3 h-3 text-emerald-400" /> CSV
+                              </button>
                               <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">TRY</span>
                               <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">{chartData.length} çeyrek</span>
                             </div>
@@ -3815,7 +4048,25 @@ export default function ValuationTerminal() {
                         <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 shadow-lg">
                           <div className="flex justify-between items-center mb-4">
                             <h3 className="text-sm font-bold text-white">Özet Bilanço (Bin TRY)</h3>
-                            <div className="flex gap-2">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const rows = [
+                                    ['Dönen Varlıklar', formatAmount(fv(latestBS, 'current_assets'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyBS, 'current_assets'), 'bin', false, '', '', 'Bin TRY')],
+                                    ['Duran Varlıklar', formatAmount(fv(latestBS, 'non_current_assets'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyBS, 'non_current_assets'), 'bin', false, '', '', 'Bin TRY')],
+                                    ['Toplam Varlıklar', formatAmount(fv(latestBS, 'total_assets'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyBS, 'total_assets'), 'bin', false, '', '', 'Bin TRY')],
+                                    ['Finansal Borçlar', formatAmount(fv(latestBS, 'financial_debt'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyBS, 'financial_debt'), 'bin', false, '', '', 'Bin TRY')],
+                                    ['Net Borç', formatAmount(fv(latestBS, 'net_debt'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyBS, 'net_debt'), 'bin', false, '', '', 'Bin TRY')],
+                                    ['Özkaynaklar', formatAmount(fv(latestBS, 'equity'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyBS, 'equity'), 'bin', false, '', '', 'Bin TRY')]
+                                  ];
+                                  exportTableToCsv(`${activeReport?.ticker || 'Sirket'}_Ozet_Bilanco`, ['Kalem', latestBS?.period || '', yoyBSLabel || ''], rows);
+                                }}
+                                className="text-[10px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-0.5 rounded border border-slate-700 transition flex items-center gap-1 cursor-pointer"
+                                title="Excel / CSV Olarak İndir"
+                              >
+                                <Download className="w-3 h-3 text-emerald-400" /> CSV
+                              </button>
                               <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">TRY</span>
                               <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">{chartData.length} çeyrek</span>
                             </div>
@@ -3860,7 +4111,7 @@ export default function ValuationTerminal() {
                           </table>
                         </div>
                       </div>
-                      
+                      </>
                       );
                       })()}
                       {/* Çeyreklik Bar Grafikleri (3'lü) */}
@@ -3943,113 +4194,161 @@ export default function ValuationTerminal() {
                       Grafik verisi bulunamadı.
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-
-                      {/* Grafik 1: Büyüme Trendi: Satışlar ve Karlılık */}
-                      <div className="bg-[#0F1523] border border-slate-800/90 p-5 rounded-2xl space-y-4 shadow-lg">
-                        <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400">
-                              <BarChart3 className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <span className="text-xs font-bold text-white">
-                                {currentSector === 'INSURANCE' ? 'Prim Üretimi ve Kârlılık' : 'Satışlar ve Kârlılık'}
-                              </span>
-                              <p className="text-[11px] text-slate-500">
-                                {currentSector === 'INSURANCE' ? 'Primler, Teknik Kâr ve Net Kâr' : 'Satışlar, FAVÖK ve Net Kâr'}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="h-64 w-full">
-                          {mounted && (
-                            <ResponsiveContainer width="100%" height="100%">
-                              <ComposedChart data={quarterlyChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
-                                <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
-                                <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFmt} />
-                                <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
-                                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                                <Bar dataKey="revenue" name={currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Satışlar'} fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={36} />
-                                <Line type="monotone" dataKey="ebitda" name={currentSector === 'INSURANCE' ? 'Teknik Kâr' : 'FAVÖK'} stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3.5, fill: '#f59e0b' }} />
-                                <Line type="monotone" dataKey="net_income" name="Net Kâr" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3.5, fill: '#10b981' }} />
-                              </ComposedChart>
-                            </ResponsiveContainer>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Grafik 2: Prim Üretimi / Satışlar ve Hisse Fiyatı (Fiyat Çubuğu + Trend Çizgisi) */}
-                      <div className="bg-[#0F1523] border border-slate-800/90 p-5 rounded-2xl space-y-4 shadow-lg">
-                        <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                              <TrendingUp className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <span className="text-xs font-bold text-white">
-                                {currentSector === 'INSURANCE' ? 'Prim Üretimi ve Hisse Fiyatı' : 'Satışlar ve Hisse Fiyatı'}
-                              </span>
-                              <p className="text-[11px] text-slate-500">
-                                Dönemsel gelir hacmi (sol eksen) ve hisse fiyatı (sağ eksen - TL)
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="h-64 w-full">
-                          {mounted && (
-                            <ResponsiveContainer width="100%" height="100%">
-                              <ComposedChart data={quarterlyChartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
-                                <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
-                                <YAxis yAxisId="left" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFmt} />
-                                <YAxis yAxisId="right" orientation="right" stroke="#10b981" tick={{ fontSize: 10, fill: '#34d399' }} tickFormatter={v => `${v} TL`} />
-                                <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
-                                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                                <Bar yAxisId="left" dataKey="revenue" name={currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Satışlar'} fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                                <Line yAxisId="right" type="monotone" dataKey="share_price" name="Hisse Fiyatı (TL)" stroke="#34d399" strokeWidth={2} dot={{ r: 3, fill: '#ecfdf5', stroke: '#10b981', strokeWidth: 1.5 }} />
-                              </ComposedChart>
-                            </ResponsiveContainer>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Grafik 3: Nakit Akışı Kalitesi */}
-                      <div className="bg-[#0F1523] border border-slate-800/90 p-5 rounded-2xl space-y-4 shadow-lg">
-                        <div className="flex items-center gap-2.5 border-b border-slate-800/80 pb-3">
-                          <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                    <>
+                      {/* Çeyreklik vs TTM Geçiş Kontrolü */}
+                      <div className="flex items-center justify-between flex-wrap gap-3 bg-[#0F1523] border border-slate-800/90 p-3.5 rounded-2xl shadow-lg">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400">
                             <Activity className="w-4 h-4" />
                           </div>
                           <div>
-                            <span className="text-xs font-bold text-white">
-                              Nakit Akışı Kalitesi
-                            </span>
-                            <p className="text-[11px] text-slate-500">
-                              Net kâr, operasyonel nakit (OCF) ve serbest nakit akışı (FCF)
+                            <div className="text-xs font-bold text-white flex items-center gap-2">
+                              <span>Grafik Dönem Modu:</span>
+                              <span className="text-blue-400 font-mono">
+                                {chartMode === 'quarterly' ? 'Çeyreklik (Son 3 Ay)' : 'Yıllıklandırılmış (Son 12 Ay - TTM)'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400">
+                              {chartMode === 'quarterly'
+                                ? 'Her çeyreğin salt kendi operasyonel hasılatı ve kâr performansı görüntülenir.'
+                                : 'Son 4 çeyreğin hareketli toplamı (TTM) ile mevsimsellikten arındırılmış yıllık trend izlenir.'}
                             </p>
                           </div>
                         </div>
 
-                        <div className="h-64 w-full">
-                          {mounted && (
-                            <ResponsiveContainer width="100%" height="100%">
-                              <LineChart data={quarterlyChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
-                                <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
-                                <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFmt} />
-                                <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
-                                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                                <Line type="monotone" dataKey="net_income" name="Net Kâr" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: '#10b981' }} />
-                                <Line type="monotone" dataKey="operating_cash_flow" name="Operasyonel Nakit Akışı" stroke="#06b6d4" strokeWidth={2.5} dot={{ r: 3, fill: '#06b6d4' }} />
-                                <Line type="monotone" dataKey="free_cash_flow" name="Serbest Nakit Akışı" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 3, fill: '#3b82f6' }} />
-                              </LineChart>
-                            </ResponsiveContainer>
-                          )}
+                        <div className="inline-flex items-center p-1 bg-[#090D16] border border-slate-800 rounded-xl text-xs font-semibold">
+                          <button
+                            type="button"
+                            onClick={() => setChartMode('quarterly')}
+                            className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                              chartMode === 'quarterly'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            Çeyreklik (Son 3 Ay)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setChartMode('ttm')}
+                            className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                              chartMode === 'ttm'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            Yıllıklandırılmış (TTM)
+                          </button>
                         </div>
                       </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+                        {/* Grafik 1: Büyüme Trendi: Satışlar ve Karlılık */}
+                        <div className="bg-[#0F1523] border border-slate-800/90 p-5 rounded-2xl space-y-4 shadow-lg">
+                          <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400">
+                                <BarChart3 className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <span className="text-xs font-bold text-white">
+                                  {currentSector === 'INSURANCE' ? 'Prim Üretimi ve Kârlılık' : 'Satışlar ve Kârlılık'}
+                                </span>
+                                <p className="text-[11px] text-slate-500">
+                                  {currentSector === 'INSURANCE' ? 'Primler, Teknik Kâr ve Net Kâr' : 'Satışlar, FAVÖK ve Net Kâr'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="h-64 w-full">
+                            {mounted && (
+                              <ResponsiveContainer width="100%" height="100%">
+                                <ComposedChart data={activeFlowChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
+                                  <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
+                                  <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFmt} />
+                                  <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
+                                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                                  <Bar dataKey="revenue" name={currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Satışlar'} fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                                  <Line type="monotone" dataKey="ebitda" name={currentSector === 'INSURANCE' ? 'Teknik Kâr' : 'FAVÖK'} stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3.5, fill: '#f59e0b' }} />
+                                  <Line type="monotone" dataKey="net_income" name="Net Kâr" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3.5, fill: '#10b981' }} />
+                                </ComposedChart>
+                              </ResponsiveContainer>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Grafik 2: Prim Üretimi / Satışlar ve Hisse Fiyatı (Fiyat Çubuğu + Trend Çizgisi) */}
+                        <div className="bg-[#0F1523] border border-slate-800/90 p-5 rounded-2xl space-y-4 shadow-lg">
+                          <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                                <TrendingUp className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <span className="text-xs font-bold text-white">
+                                  {currentSector === 'INSURANCE' ? 'Prim Üretimi ve Hisse Fiyatı' : 'Satışlar ve Hisse Fiyatı'}
+                                </span>
+                                <p className="text-[11px] text-slate-500">
+                                  Dönemsel gelir hacmi (sol eksen) ve hisse fiyatı (sağ eksen - TL)
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="h-64 w-full">
+                            {mounted && (
+                              <ResponsiveContainer width="100%" height="100%">
+                                <ComposedChart data={activeFlowChartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
+                                  <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
+                                  <YAxis yAxisId="left" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFmt} />
+                                  <YAxis yAxisId="right" orientation="right" stroke="#10b981" tick={{ fontSize: 10, fill: '#34d399' }} tickFormatter={v => `${v} TL`} />
+                                  <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
+                                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                                  <Bar yAxisId="left" dataKey="revenue" name={currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Satışlar'} fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                                  <Line yAxisId="right" type="monotone" dataKey="share_price" name="Hisse Fiyatı (TL)" stroke="#34d399" strokeWidth={2} dot={{ r: 3, fill: '#ecfdf5', stroke: '#10b981', strokeWidth: 1.5 }} />
+                                </ComposedChart>
+                              </ResponsiveContainer>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Grafik 3: Nakit Akışı Kalitesi */}
+                        <div className="bg-[#0F1523] border border-slate-800/90 p-5 rounded-2xl space-y-4 shadow-lg">
+                          <div className="flex items-center gap-2.5 border-b border-slate-800/80 pb-3">
+                            <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                              <Activity className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <span className="text-xs font-bold text-white">
+                                Nakit Akışı Kalitesi
+                              </span>
+                              <p className="text-[11px] text-slate-500">
+                                Net kâr, operasyonel nakit (OCF) ve serbest nakit akışı (FCF)
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="h-64 w-full">
+                            {mounted && (
+                              <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={activeFlowChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
+                                  <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
+                                  <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFmt} />
+                                  <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
+                                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                                  <Line type="monotone" dataKey="net_income" name="Net Kâr" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: '#10b981' }} />
+                                  <Line type="monotone" dataKey="operating_cash_flow" name="Operasyonel Nakit Akışı" stroke="#06b6d4" strokeWidth={2.5} dot={{ r: 3, fill: '#06b6d4' }} />
+                                  <Line type="monotone" dataKey="free_cash_flow" name="Serbest Nakit Akışı" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 3, fill: '#3b82f6' }} />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            )}
+                          </div>
+                        </div>
 
                       {/* Grafik 4: Bilanço Gücü: Özsermaye ve Nakit Pozisyonu */}
                       <div className="bg-[#0F1523] border border-slate-800/90 p-5 rounded-2xl space-y-4 shadow-lg">
@@ -4085,6 +4384,7 @@ export default function ValuationTerminal() {
                       </div>
 
                     </div>
+                    </>
                   )}
                 </div>
               )}
@@ -4465,6 +4765,34 @@ export default function ValuationTerminal() {
 
                       <button
                         type="button"
+                        onClick={() => {
+                          const headers = ['Kalem', ...tableData.map((d: any) => d.period)];
+                          let rows: (string | number)[][] = [];
+                          if (tableSubTab === 'oranlar') {
+                            const sections = ratioSections;
+                            sections.forEach(sec => {
+                              sec.rows.forEach(r => {
+                                rows.push([r.label, ...tableData.map((d: any) => computeRatioForPeriod(d, r.key, currentSector) ?? '')]);
+                              });
+                            });
+                          } else {
+                            const activeSections = tableSubTab === 'bilanco' ? balanceSheetSections : tableSubTab === 'gelir' ? incomeStatementSections : cashFlowSections;
+                            activeSections.forEach(sec => {
+                              sec.rows.forEach(r => {
+                                rows.push([r.label, ...tableData.map((d: any) => (d[r.key] ?? d[r.fallbackKey || '']) ?? '')]);
+                              });
+                            });
+                          }
+                          exportTableToCsv(`${activeReport?.ticker || 'Sirket'}_${tableSubTab.toUpperCase()}`, headers, rows);
+                        }}
+                        className="text-[11px] text-slate-300 hover:text-white bg-slate-800/80 px-2.5 py-1 rounded border border-slate-700 transition cursor-pointer flex items-center gap-1"
+                        title="Tüm Tabloyu Excel / CSV Olarak İndir"
+                      >
+                        <FileSpreadsheet className="w-3 h-3 text-emerald-400" /> Excel / CSV İndir
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => collapseAllSections(currentSubTabSections)}
                         className="text-[11px] text-slate-300 hover:text-white bg-slate-800/80 px-2.5 py-1 rounded border border-slate-700 transition cursor-pointer flex items-center gap-1"
                       >
@@ -4499,6 +4827,20 @@ export default function ValuationTerminal() {
                             {pill.label}
                           </button>
                         ))}
+
+                        <button
+                          type="button"
+                          onClick={() => setIsHeatmapActive(!isHeatmapActive)}
+                          className={`ml-2 px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                            isHeatmapActive
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 shadow-sm'
+                              : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
+                          }`}
+                          title="Sektör kriterlerine göre yeşil / sarı / kırmızı renklendirme"
+                        >
+                          <Activity className="w-3 h-3 text-emerald-400" />
+                          <span>Isı Haritası (Heatmap): {isHeatmapActive ? 'Açık' : 'Kapalı'}</span>
+                        </button>
                       </div>
 
                       <div className="text-[11px] text-slate-500 font-mono hidden md:block">
@@ -4817,9 +5159,11 @@ export default function ValuationTerminal() {
                                             }
                                           }
 
+                                          const heatmapClass = getRatioHeatmapClass(row.key, rawVal, currentSector);
+
                                           return (
-                                            <td key={idx} className="p-3 text-center group-hover:bg-slate-800/30 transition-colors">
-                                              <span className="font-mono text-xs sm:text-sm font-semibold tracking-tight text-white">
+                                            <td key={idx} className={`p-3 text-center transition-colors ${heatmapClass ? heatmapClass : 'group-hover:bg-slate-800/30'}`}>
+                                              <span className={`font-mono text-xs sm:text-sm font-semibold tracking-tight ${heatmapClass ? '' : 'text-white'}`}>
                                                 {displayStr}
                                               </span>
                                             </td>

@@ -1,4 +1,4 @@
-export type SectorType = 'INSURANCE' | 'BANKING' | 'HOLDING' | 'INDUSTRIAL';
+export type SectorType = 'INSURANCE' | 'BANKING' | 'HOLDING' | 'INDUSTRIAL' | 'REIT' | 'TECH';
 
 export interface SectorDefinition {
   id: SectorType;
@@ -79,6 +79,36 @@ export const SECTOR_SCORING_CONFIG: Record<SectorType, SectorScoringDefinition> 
       idealMarginOfSafety: 30.0,
     },
   },
+  REIT: {
+    sector: 'REIT',
+    categories: [
+      { key: 'nav_discount', name: 'Net Aktif Değeri (NAD) İskontosu', maxScore: 25, description: 'Portföy NAD / Piyasa Değeri iskontosu (%25-%40 üzeri cazip)' },
+      { key: 'debt_ltv', name: 'Finansal Borç / Portföy (LTV Oranı)', maxScore: 25, description: 'Finansal Borç / Aktif oranı (<%40 sağlıklı sermaye tamponu)' },
+      { key: 'rental_ffo_yield', name: 'Kira Akışı & FFO Verimi', maxScore: 25, description: 'Düzenli kira gelirleri ve operasyonel nakit üretimi (FFO)' },
+      { key: 'revaluation_growth', name: 'Portföy Büyümesi & Ekspertiz Değeri', maxScore: 25, description: 'Yıl sonu gayrimenkul ekspertiz ve proje portföyü reel büyümesi' },
+    ],
+    riskThresholds: {
+      criticalDebtRatio: 3.5,
+      minLiquidityRatio: 0.9,
+      minMarginOfSafety: 20.0,
+      idealMarginOfSafety: 30.0,
+    },
+  },
+  TECH: {
+    sector: 'TECH',
+    categories: [
+      { key: 'rule_of_40', name: 'Rule of 40 (Büyüme + FCF Marjı)', maxScore: 25, description: 'Hasılat artışı + Serbest Nakit Akışı marjı toplamı (>= %40 dünya standardı)' },
+      { key: 'gross_margin_software', name: 'Yüksek Brüt Kâr Marjı', maxScore: 25, description: 'Yazılım ve lisanslama kârlılığı (>= %50 güçlü fiyatlama kalkanı)' },
+      { key: 'net_cash_cushion', name: 'Net Nakit Pozisyonu & Borçsuzluk', maxScore: 25, description: 'Teknoloji şirketlerinde negatif net borç (güçlü net nakit fazlası)' },
+      { key: 'capital_efficiency_roic', name: 'Sermaye Verimliliği (ROIC & ROE)', maxScore: 25, description: 'Hafif varlık yapısı (Asset-light) ve yüksek yatırılan sermaye getirisi' },
+    ],
+    riskThresholds: {
+      criticalDebtRatio: 2.0,
+      minLiquidityRatio: 1.5,
+      minMarginOfSafety: 20.0,
+      idealMarginOfSafety: 30.0,
+    },
+  },
   INDUSTRIAL: {
     sector: 'INDUSTRIAL',
     categories: [
@@ -139,6 +169,34 @@ export const SECTOR_DEFINITIONS: Record<SectorType, SectorDefinition> = {
     valuationMultiples: 'NAD İskontosu & Parçaların Toplamı (SOTP)',
     primaryEfficiencyMetric: 'Hisse Başı NAD Büyümesi',
   },
+  REIT: {
+    id: 'REIT',
+    title: 'Gayrimenkul Yatırım Ortaklığı (GYO)',
+    badge: 'GYO / NAD Modu (Vergisiz %0 KV)',
+    description: 'GYO’lar 5520 sayılı KVK md. 5/1-d uyarınca Kurumlar Vergisinden MUAFTIR (%0 KV). Net Aktif Değeri (NAD / NAV), LTV borçluluk ve kira/FFO akışı esastır.',
+    revenueLabel: 'Kira & Proje Gelirleri (Hasılat)',
+    revenueSublabel: 'Düzenli Kira Gelirleri ve Bağımsız Bölüm Satışları',
+    operatingProfitLabel: 'Esas Faaliyet Kârı (Ekspertiz Öncesi/Dahil)',
+    operatingProfitSublabel: 'Portföy Operasyonel Kârı ve Ekspertiz Kazançları',
+    marginLabel: 'Portföy NAD İskontosu (%)',
+    marginSublabel: 'Piyasa Değeri vs Gayrimenkul Net Aktif Değeri',
+    valuationMultiples: 'P/NAV (Piyasa/NAD), PD/DD & F/K',
+    primaryEfficiencyMetric: 'Portföy Büyüklüğü & NAD Büyümesi',
+  },
+  TECH: {
+    id: 'TECH',
+    title: 'Teknoloji, Bilişim & Yazılım',
+    badge: 'Teknoloji / SaaS & Rule of 40 Modu',
+    description: 'Teknoloji şirketlerinde hafif varlık yapısı (Asset-light), Rule of 40 metriği, yüksek brüt kâr marjı ve net nakit pozisyonu esastır.',
+    revenueLabel: 'Yazılım & Teknoloji Gelirleri',
+    revenueSublabel: 'Lisans, SaaS, Ar-Ge ve Teknoloji Satışları',
+    operatingProfitLabel: 'FAVÖK (EBITDA)',
+    operatingProfitSublabel: 'Operasyonel Nakit Üretimi',
+    marginLabel: 'Brüt Kâr & FCF Marjı (%)',
+    marginSublabel: 'Fiyatlama Gücü ve Nakit Dönüşüm Oranı',
+    valuationMultiples: 'FD/Satışlar (EV/Sales), FD/FAVÖK & PEG',
+    primaryEfficiencyMetric: 'Rule of 40 (Büyüme + FCF Marjı %)',
+  },
   INDUSTRIAL: {
     id: 'INDUSTRIAL',
     title: 'Sanayi, Hizmet & Genel Ticaret',
@@ -161,7 +219,7 @@ export const BIST_INSURANCE_TICKERS = [
   'TURSG',
   'ANSGR',
   'AKGRT',
-  'RAYYS',
+  'RAYSG',
 ];
 
 export const BIST_BANKING_TICKERS = [
@@ -194,6 +252,57 @@ export const BIST_HOLDING_TICKERS = [
   'GOZDE',
 ];
 
+export const BIST_REIT_TICKERS = [
+  'EKGYO',
+  'TRGYO',
+  'ISGYO',
+  'SNGYO',
+  'OZKGY',
+  'KLGYO',
+  'VKGYO',
+  'KZBGY',
+  'PSGYO',
+  'YKGYO',
+  'ALGYO',
+  'HLGYO',
+  'PEKGY',
+  'RYGYO',
+  'AKFGY',
+  'DGGYO',
+  'MRGYO',
+  'KGYO',
+  'MSGYO',
+  'ZRGYO',
+  'BASGZ',
+];
+
+export const BIST_TECH_TICKERS = [
+  'LOGO',
+  'MIATK',
+  'VBTYZ',
+  'ARDYZ',
+  'KFEIN',
+  'FONET',
+  'SMART',
+  'LINK',
+  'SDTTR',
+  'KONTSE',
+  'REEDR',
+  'MOBTL',
+  'HTTBT',
+  'PKART',
+  'PAPIL',
+  'INDES',
+  'DGATE',
+  'DESPC',
+  'ALCTL',
+  'NETAS',
+  'EDATA',
+  'OBAMS',
+  'EFORC',
+  'BINHO',
+];
+
 export function detectSector(ticker: string, contextText = ''): SectorType {
   const normTicker = (ticker || '').toUpperCase().trim();
   if (BIST_INSURANCE_TICKERS.includes(normTicker)) {
@@ -204,6 +313,12 @@ export function detectSector(ticker: string, contextText = ''): SectorType {
   }
   if (BIST_HOLDING_TICKERS.includes(normTicker)) {
     return 'HOLDING';
+  }
+  if (BIST_REIT_TICKERS.includes(normTicker)) {
+    return 'REIT';
+  }
+  if (BIST_TECH_TICKERS.includes(normTicker)) {
+    return 'TECH';
   }
 
   const text = (normTicker + ' ' + contextText).toLowerCase();
@@ -234,10 +349,30 @@ export function detectSector(ticker: string, contextText = ''): SectorType {
   if (
     text.includes('holding') ||
     text.includes('yatırımlar') ||
-    text.includes('net aktif değer') ||
     text.includes('iştirak')
   ) {
     return 'HOLDING';
+  }
+
+  if (
+    text.includes('gyo') ||
+    text.includes('gayrimenkul yatırım') ||
+    text.includes('reit') ||
+    text.includes('kira geliri') ||
+    text.includes('gayrimenkul portföy')
+  ) {
+    return 'REIT';
+  }
+
+  if (
+    text.includes('yazılım') ||
+    text.includes('teknoloji') ||
+    text.includes('bilişim') ||
+    text.includes('software') ||
+    text.includes('saas') ||
+    text.includes('ar-ge')
+  ) {
+    return 'TECH';
   }
 
   return 'INDUSTRIAL';

@@ -5,6 +5,7 @@ import {
   parseFinancialNumber,
   parsePeriodSortKey
 } from './valuation.ts';
+import { getIsYatirimMultiplesForTicker } from './isyatirim-service.ts';
 
 export interface FinancialHistoryItem {
   period: string;
@@ -80,6 +81,23 @@ export const KNOWN_BIST_DIRECTORY: Record<string, BistCompanyMetadata> = {
   ENKAI: { ticker: 'ENKAI', name: 'Enka İnşaat ve Sanayi A.Ş.', sector: 'INDUSTRIAL', financialGroup: 'XI_29', shareCount: 6000000000 },
   TOASO: { ticker: 'TOASO', name: 'Tofaş Türk Otomobil Fabrikası A.Ş.', sector: 'INDUSTRIAL', financialGroup: 'XI_29', shareCount: 500000000 },
   ARCLK: { ticker: 'ARCLK', name: 'Arçelik A.Ş.', sector: 'INDUSTRIAL', financialGroup: 'XI_29', shareCount: 675728205 },
+
+  // GYO (Gayrimenkul Yatırım Ortaklıkları - KVK md. 5/1-d %0 KV)
+  EKGYO: { ticker: 'EKGYO', name: 'Emlak Konut GYO A.Ş.', sector: 'REIT', financialGroup: 'XI_29', shareCount: 3800000000 },
+  TRGYO: { ticker: 'TRGYO', name: 'Torunlar GYO A.Ş.', sector: 'REIT', financialGroup: 'XI_29', shareCount: 1000000000 },
+  ISGYO: { ticker: 'ISGYO', name: 'İş GYO A.Ş.', sector: 'REIT', financialGroup: 'XI_29', shareCount: 2025000000 },
+  OZKGY: { ticker: 'OZKGY', name: 'Özak GYO A.Ş.', sector: 'REIT', financialGroup: 'XI_29', shareCount: 1456000000 },
+  SNGYO: { ticker: 'SNGYO', name: 'Sinpaş GYO A.Ş.', sector: 'REIT', financialGroup: 'XI_29', shareCount: 1500000000 },
+  VKGYO: { ticker: 'VKGYO', name: 'Vakıf GYO A.Ş.', sector: 'REIT', financialGroup: 'XI_29', shareCount: 1965000000 },
+  ALGYO: { ticker: 'ALGYO', name: 'Alarko GYO A.Ş.', sector: 'REIT', financialGroup: 'XI_29', shareCount: 144000000 },
+
+  // TEKNOLOJİ, YAZILIM & BİLİŞİM (Asset-light, Rule of 40)
+  LOGO:  { ticker: 'LOGO',  name: 'Logo Yazılım Sanayi ve Ticaret A.Ş.', sector: 'TECH', financialGroup: 'XI_29', shareCount: 100000000 },
+  MIATK: { ticker: 'MIATK', name: 'Mia Teknoloji A.Ş.', sector: 'TECH', financialGroup: 'XI_29', shareCount: 1900000000 },
+  VBTYZ: { ticker: 'VBTYZ', name: 'VBT Yazılım A.Ş.', sector: 'TECH', financialGroup: 'XI_29', shareCount: 117000000 },
+  ARDYZ: { ticker: 'ARDYZ', name: 'ARD Grup Bilişim Teknolojileri A.Ş.', sector: 'TECH', financialGroup: 'XI_29', shareCount: 680000000 },
+  FONET: { ticker: 'FONET', name: 'Fonet Bilgi Teknolojileri A.Ş.', sector: 'TECH', financialGroup: 'XI_29', shareCount: 160000000 },
+  SDTTR: { ticker: 'SDTTR', name: 'SDT Uzay ve Savunma Teknolojileri A.Ş.', sector: 'TECH', financialGroup: 'XI_29', shareCount: 58000000 },
 };
 
 /**
@@ -511,7 +529,7 @@ export async function fetchAndAnalyzeBistCompany(rawTicker: string) {
     ...yearsToFetch.map(yr => fetchIsYatirimMaliTablo(ticker, meta.financialGroup, yr))
   ]);
 
-  const currentPrice = priceData.price;
+  let currentPrice = priceData.price;
 
   // 3. Dönemlere Göre Matris Oluştur
   const periodMap = new Map<string, Record<string, number>>();
@@ -870,12 +888,22 @@ export async function fetchAndAnalyzeBistCompany(rawTicker: string) {
     }
   });
 
+  // 4.5. İş Yatırım Resmi Canlı Piyasa Çarpanlarını (F/K, PD/DD, FD/FAVÖK, Piyasa Değeri) Getir
+  const isMultiples = await getIsYatirimMultiplesForTicker(ticker);
+
+  if ((!currentPrice || currentPrice === 100.0) && isMultiples?.lastPrice && isMultiples.lastPrice > 0) {
+    currentPrice = isMultiples.lastPrice;
+  }
+
   // Borsa İstanbul'da 1 TL nominal Ödenmiş Sermaye = 1 Adet Pay (Lot).
   // Bilançodaki güncel Ödenmiş Sermaye (paid_in_capital) en doğru ve güncel hisse sayısıdır.
   const latestPaidCapital = latestItem?.paid_in_capital ? Math.abs(latestItem.paid_in_capital) : null;
+  const isYatirimShares = (isMultiples?.paidInCapitalMnTl && isMultiples.paidInCapitalMnTl > 0)
+    ? isMultiples.paidInCapitalMnTl * 1000000
+    : null;
   const effectiveShareCount = (latestPaidCapital && latestPaidCapital >= 1000000)
     ? latestPaidCapital
-    : (meta.shareCount || 500000000);
+    : (isYatirimShares || meta.shareCount || 500000000);
 
   // 5. Ham Veri Paketini Oluştur
   const rawDataPayload = {
@@ -918,6 +946,18 @@ export async function fetchAndAnalyzeBistCompany(rawTicker: string) {
     drivers: valuationEngineResult.drivers,
     scoreResult: valuationEngineResult.scoreResult,
     optimization: valuationEngineResult.optimization,
+    market_multiples: isMultiples ? {
+      pe: isMultiples.pe,
+      pb: isMultiples.pb,
+      ev_ebitda: isMultiples.evEbitda,
+      ev_sales: isMultiples.evSales,
+      market_cap_mn_tl: isMultiples.marketCapMnTl,
+      market_cap_mn_usd: isMultiples.marketCapMnUsd,
+      free_float_pct: isMultiples.freeFloatPct,
+      paid_in_capital_mn_tl: isMultiples.paidInCapitalMnTl,
+      last_period: isMultiples.lastPeriod,
+      source: 'İş Yatırım Resmi Çarpanları'
+    } : null,
     generatedAt: new Date().toISOString()
   };
 }
