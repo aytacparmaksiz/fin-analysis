@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -673,13 +673,13 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
     if (!item || typeof item !== 'object') return item;
     const row = { ...item };
     const numKeys = [
-      'revenue', 'ebitda', 'net_income', 'gross_profit', 'operating_profit',
+      'revenue', 'ebitda', 'net_income', 'gross_profit', 'operating_profit', 'operating_income',
       'equity', 'paid_in_capital', 'total_assets', 'current_assets', 'non_current_assets',
       'current_liabilities', 'long_term_liabilities', 'total_liabilities', 'inventories',
-      'cash_and_equivalents', 'cash', 'liquid_assets', 'net_debt', 'short_term_debt', 'long_term_debt',
+      'cash_and_equivalents', 'cash', 'liquid_assets', 'net_debt', 'short_term_debt', 'long_term_debt', 'financial_debt',
       'financial_investments', 'financial_assets_insured', 'trade_receivables',
       'operating_cash_flow', 'free_cash_flow', 'capex', 'dividends_paid',
-      'written_premiums', 'earned_premiums', 'technical_profit', 'investment_income',
+      'written_premiums', 'gross_written_premiums', 'earned_premiums', 'technical_profit', 'technical_balance', 'investment_income',
       'loss_ratio', 'expense_ratio', 'combined_ratio',
       'npl_ratio', 'car_ratio', 'nim', 'net_interest_income', 'loan_to_deposit',
       'nav', 'holding_discount', 'fwd_pe', 'trailing_pe', 'pb', 'ev_ebitda',
@@ -720,29 +720,23 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
 
     // Sigorta sektörü eşleştirmeleri
     if (sector === 'INSURANCE') {
-      if (row.written_premiums && (!row.revenue || row.revenue === 0)) {
-        row.revenue = row.written_premiums;
+      const resolvedPrem = row.gross_written_premiums ?? row.written_premiums ?? row.revenue ?? row.earned_premiums ?? null;
+      if (resolvedPrem != null && resolvedPrem !== 0) {
+        if (!row.revenue || row.revenue === 0) row.revenue = resolvedPrem;
+        if (!row.written_premiums || row.written_premiums === 0) row.written_premiums = resolvedPrem;
+        if (!row.gross_written_premiums || row.gross_written_premiums === 0) row.gross_written_premiums = resolvedPrem;
       }
-      if (row.technical_profit && (!row.ebitda || row.ebitda === 0)) {
-        row.ebitda = row.technical_profit;
+      const resolvedTech = row.technical_balance ?? row.technical_profit ?? row.ebitda ?? row.operating_profit ?? row.operating_income ?? null;
+      if (resolvedTech != null && resolvedTech !== 0) {
+        if (!row.ebitda || row.ebitda === 0) row.ebitda = resolvedTech;
+        if (!row.technical_profit || row.technical_profit === 0) row.technical_profit = resolvedTech;
+        if (!row.technical_balance || row.technical_balance === 0) row.technical_balance = resolvedTech;
       }
       if (row.loss_ratio != null && row.expense_ratio != null && row.combined_ratio == null) {
         row.combined_ratio = Number(((row.loss_ratio || 0) + (row.expense_ratio || 0)).toFixed(1));
       }
       if (row.combined_ratio != null && row.ebitda_margin == null) {
         row.ebitda_margin = Number((100 - row.combined_ratio).toFixed(1));
-      }
-      if (row.equity != null && row.net_income != null && row.roe == null) {
-        const roeRes = safeRoe(row.net_income, row.equity, annualFactor);
-        if (roeRes.isInsolvent) {
-          row.roe = null;
-          row.ttk_warning = roeRes.warning;
-        } else if (roeRes.roe !== null) {
-          row.roe = roeRes.roe;
-        }
-      }
-      if (row.total_assets && row.total_assets > 0 && row.net_income && row.roa == null) {
-        row.roa = Number(((row.net_income * annualFactor / row.total_assets) * 100).toFixed(2));
       }
     }
 
@@ -756,17 +750,44 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
       }
     }
 
-    // 2. Finansal Yatırımlar / Alacaklar Eşitlemesi
+    // 2. Finansal Yatırımlar / Alacaklar / Borçlar Eşitlemesi
     if (row.financial_assets_insured == null && typeof row.financial_investments === 'number') {
       row.financial_assets_insured = row.financial_investments;
     }
     if (row.financial_investments == null && typeof row.financial_assets_insured === 'number') {
       row.financial_investments = row.financial_assets_insured;
     }
+    if (row.operating_income == null && typeof row.operating_profit === 'number') {
+      row.operating_income = row.operating_profit;
+    }
+    if (row.operating_profit == null && typeof row.operating_income === 'number') {
+      row.operating_profit = row.operating_income;
+    }
+    if (row.financial_debt == null && (row.short_term_debt != null || row.long_term_debt != null)) {
+      row.financial_debt = (row.short_term_debt || 0) + (row.long_term_debt || 0);
+    }
 
-    // 3. Toplam Aktifler, Cari Varlıklar ve Cari Olmayan Varlıklar Dengesi
+    // 3. Yükümlülükler ve Aktif = Pasif Muhasebe Özdeşliği Kontrolü
+    const calcTotalLiab = (typeof row.total_liabilities === 'number' && row.total_liabilities > 0)
+      ? row.total_liabilities
+      : ((row.current_liabilities || 0) + (row.long_term_liabilities || 0));
+    if (calcTotalLiab > 0 && (row.total_liabilities == null || row.total_liabilities <= 0)) {
+      row.total_liabilities = calcTotalLiab;
+    }
+    if (calcTotalLiab > 0 && typeof row.equity === 'number' && row.equity > 0) {
+      const impliedAssets = calcTotalLiab + row.equity;
+      if (
+        row.total_assets == null ||
+        row.total_assets <= 0 ||
+        (row.current_assets != null && row.total_assets <= row.current_assets && impliedAssets > row.current_assets)
+      ) {
+        row.total_assets = impliedAssets;
+      }
+    }
+
+    // 4. Toplam Aktifler, Cari Varlıklar ve Cari Olmayan Varlıklar Dengesi
     if (row.total_assets != null && row.total_assets > 0) {
-      if (row.current_assets != null && row.non_current_assets == null) {
+      if (row.current_assets != null && (row.non_current_assets == null || row.non_current_assets === 0) && row.total_assets > row.current_assets) {
         row.non_current_assets = Math.max(0, row.total_assets - row.current_assets);
       } else if (row.non_current_assets != null && row.current_assets == null) {
         row.current_assets = Math.max(0, row.total_assets - row.non_current_assets);
@@ -782,7 +803,7 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
                        (row.trade_receivables || 0);
       if (subTotal > 0) {
         row.current_assets = subTotal;
-        if (row.total_assets != null && row.non_current_assets == null) {
+        if (row.total_assets != null && (row.non_current_assets == null || row.non_current_assets === 0) && row.total_assets > subTotal) {
           row.non_current_assets = Math.max(0, row.total_assets - subTotal);
         }
       }
@@ -791,7 +812,7 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
     // Eğer Toplam Aktifler hala boşsa özkaynak ve kaldıraçtan türet
     if (row.total_assets == null && row.equity && row.leverage_ratio && row.leverage_ratio < 100) {
       row.total_assets = Number((row.equity / (1 - row.leverage_ratio / 100)).toFixed(0));
-      if (row.current_assets != null && row.non_current_assets == null) {
+      if (row.current_assets != null && (row.non_current_assets == null || row.non_current_assets === 0)) {
         row.non_current_assets = Math.max(0, row.total_assets - row.current_assets);
       }
     }
@@ -799,6 +820,18 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
     // Özkaynak boşsa toplam aktifler ve kaldıraçtan türet
     if (row.equity == null && row.total_assets != null && row.leverage_ratio != null && row.leverage_ratio < 100) {
       row.equity = Number((row.total_assets * (1 - row.leverage_ratio / 100)).toFixed(0));
+    }
+
+    // Kesin Kaldıraç Oranı (Toplam Yükümlülükler / Toplam Varlıklar %)
+    if (row.total_assets && row.total_assets > 0 && row.equity != null) {
+      const totalLiab = (typeof row.total_liabilities === 'number' && row.total_liabilities > 0 && row.total_liabilities < row.total_assets)
+        ? row.total_liabilities
+        : Math.max(0, row.total_assets - row.equity);
+      row.leverage_ratio = Number(((totalLiab / row.total_assets) * 100).toFixed(2));
+    }
+
+    if (row.total_assets && row.total_assets > 0 && row.net_income != null) {
+      row.roa = Number(((row.net_income * annualFactor / row.total_assets) * 100).toFixed(2));
     }
 
     // Güvenli Marj Hesaplamaları
@@ -818,7 +851,7 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
     }
 
     // Güvenli ROE (Çift negatif tuzak engelleme ve TTK 376 kontrolü)
-    if (row.roe == null && typeof row.net_income === 'number' && typeof row.equity === 'number') {
+    if (typeof row.net_income === 'number' && typeof row.equity === 'number') {
       const roeRes = safeRoe(row.net_income, row.equity, annualFactor);
       if (roeRes.isInsolvent) {
         row.roe = null;
@@ -828,18 +861,64 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
       }
     }
 
-    let defaultWacc = 45.0;
-    if (yr <= 2021) defaultWacc = 18.5;
-    else if (yr === 2022) defaultWacc = 22.0;
-    else if (yr === 2023) defaultWacc = 32.5;
-    else if (yr >= 2024) defaultWacc = 44.0;
+    // =========================================================================
+    // DİNAMİK WACC (AĞIRLIKLI ORTALAMA SERMAYE MALİYETİ - CAPM + KD VERGİ KALKANI)
+    // =========================================================================
+    let rf = 30.0;
+    let erp = 7.5;
+    let preTaxKd = 46.0;
+    const taxRate = (sector === 'BANKING' || sector === 'INSURANCE') ? 0.30 : 0.25;
+
+    if (yr <= 2021) { rf = 17.5; erp = 6.5; preTaxKd = 21.0; }
+    else if (yr === 2022) { rf = 19.0; erp = 7.0; preTaxKd = 25.0; }
+    else if (yr === 2023) { rf = 26.5; erp = 7.0; preTaxKd = 36.0; }
+    else if (yr === 2024) { rf = 31.0; erp = 7.5; preTaxKd = 50.0; }
+    else if (yr === 2025) { rf = 29.5; erp = 7.5; preTaxKd = 45.0; }
+    else { rf = 28.0; erp = 7.5; preTaxKd = 42.0; }
 
     if (parsedTlRate) {
-      defaultWacc = Number((parsedTlRate * 0.95).toFixed(1));
+      preTaxKd = parsedTlRate;
     }
 
-    if (row.wacc == null || row.wacc === 0 || isNaN(Number(row.wacc))) {
-      row.wacc = defaultWacc;
+    const eqVal = (typeof row.equity === 'number' && row.equity > 0) ? row.equity : 0;
+    const grossFinDebt = row.financial_debt != null
+      ? Math.max(0, row.financial_debt)
+      : Math.max(0, (row.short_term_debt || 0) + (row.long_term_debt || 0));
+    const netFinDebt = (typeof row.net_debt === 'number' && row.net_debt > 0) ? row.net_debt : 0;
+    const effectiveDebt = grossFinDebt > 0 ? grossFinDebt : netFinDebt;
+
+    const totalCapital = eqVal + effectiveDebt;
+    const debtWeight = (sector === 'INSURANCE' || sector === 'BANKING' || totalCapital <= 0)
+      ? 0.0
+      : Math.min(0.75, Math.max(0.0, effectiveDebt / totalCapital));
+    const equityWeight = Number((1.0 - debtWeight).toFixed(4));
+
+    const unleveredBeta = sector === 'INSURANCE' ? 0.95
+      : sector === 'BANKING' ? 1.15
+      : sector === 'HOLDING' ? 0.92
+      : 0.90;
+    const debtToEquityRatio = eqVal > 0 ? Math.min(2.5, effectiveDebt / eqVal) : 0;
+    const leveredBeta = (sector === 'INSURANCE' || sector === 'BANKING')
+      ? unleveredBeta
+      : Number((unleveredBeta * (1 + (1 - taxRate) * debtToEquityRatio)).toFixed(2));
+
+    const costOfEquity = Number((rf + leveredBeta * erp).toFixed(2));
+    const afterTaxCostOfDebt = Number((preTaxKd * (1 - taxRate)).toFixed(2));
+
+    const computedWacc = (sector === 'INSURANCE' || sector === 'BANKING')
+      ? Number(costOfEquity.toFixed(1))
+      : Number(((equityWeight * costOfEquity) + (debtWeight * afterTaxCostOfDebt)).toFixed(1));
+
+    row.cost_of_equity = costOfEquity;
+    row.after_tax_cost_of_debt = afterTaxCostOfDebt;
+    row.equity_weight = Number((equityWeight * 100).toFixed(1));
+    row.debt_weight = Number((debtWeight * 100).toFixed(1));
+    row.beta = leveredBeta;
+    row.risk_free_rate = rf;
+    row.erp = erp;
+
+    if (row.wacc == null || row.wacc === 0 || isNaN(Number(row.wacc)) || row.wacc === 44.0 || row.wacc === 45.0) {
+      row.wacc = computedWacc;
     } else {
       row.wacc = Number(Number(row.wacc).toFixed(1));
     }
@@ -854,13 +933,14 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
       const netDebt = typeof row.net_debt === 'number' && row.net_debt > 0 ? row.net_debt : 0;
       const investedCapital = equity + netDebt;
 
-      const opNopat = (typeof row.operating_profit === 'number' && row.operating_profit !== 0)
-        ? row.operating_profit * 0.75
+      const opIncomeVal = row.operating_profit ?? row.operating_income ?? null;
+      const opNopat = (typeof opIncomeVal === 'number' && opIncomeVal !== 0)
+        ? opIncomeVal * (1 - taxRate)
         : ((typeof row.ebitda === 'number' && row.ebitda > 0) ? row.ebitda * 0.70 : 0);
 
-      const rawNopat = (typeof row.net_income === 'number' && row.net_income !== 0)
-        ? (opNopat > 0 && row.net_income > 0 ? Math.max(row.net_income, opNopat) : row.net_income)
-        : opNopat;
+      const rawNopat = (opNopat !== 0)
+        ? opNopat
+        : (typeof row.net_income === 'number' ? row.net_income : 0);
 
       const annualizedNopat = rawNopat * annualFactor;
 
@@ -1494,13 +1574,11 @@ export default function ValuationTerminal() {
     setStatusMessage(`[1/3] ⚡ Borsa İstanbul resmi mali tabloları ve canlı piyasa fiyatı çekiliyor: ${targetTicker}...`);
 
     try {
-      const res = await fetch(`/api/bist?ticker=${targetTicker}`);
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || `BIST verisi çekilemedi (HTTP ${res.status})`);
-      }
-
-      const bistData = await res.json();
+      const res = await fetchWithClientRetry(
+        () => fetch(`/api/bist?ticker=${targetTicker}`),
+        setStatusMessage
+      );
+      const bistData = await parseApiResponse(res, `${targetTicker} için BIST verisi çekilemedi.`);
       if (!bistData || !Array.isArray(bistData.financial_history) || bistData.financial_history.length === 0) {
         throw new Error(`${targetTicker} için BIST mali tablosu bulunamadı.`);
       }
@@ -2209,10 +2287,45 @@ export default function ValuationTerminal() {
         break;
       }
       case 'leverage_ratio': {
-        if (d.total_assets && d.equity != null && d.total_assets > 0) {
-          return Number((((d.total_assets - d.equity) / d.total_assets) * 100).toFixed(2));
+        const calcLiab = (typeof d.total_liabilities === 'number' && d.total_liabilities > 0)
+          ? d.total_liabilities
+          : ((d.current_liabilities || 0) + (d.long_term_liabilities || 0));
+        const effAssets = (calcLiab > 0 && d.equity && d.equity > 0 && (!d.total_assets || d.total_assets <= (d.current_assets || 0)))
+          ? (calcLiab + d.equity)
+          : d.total_assets;
+        if (effAssets && d.equity != null && effAssets > 0) {
+          const totalLiab = (calcLiab > 0 && calcLiab < effAssets) ? calcLiab : Math.max(0, effAssets - d.equity);
+          return Number(((totalLiab / effAssets) * 100).toFixed(2));
         }
         if (typeof d.leverage_ratio === 'number' && !isNaN(d.leverage_ratio)) return d.leverage_ratio;
+        break;
+      }
+      case 'debt_to_equity': {
+        const calcLiab = (typeof d.total_liabilities === 'number' && d.total_liabilities > 0)
+          ? d.total_liabilities
+          : ((d.current_liabilities || 0) + (d.long_term_liabilities || 0));
+        const effAssets = (calcLiab > 0 && d.equity && d.equity > 0 && (!d.total_assets || d.total_assets <= (d.current_assets || 0)))
+          ? (calcLiab + d.equity)
+          : d.total_assets;
+        const totalLiab = calcLiab > 0 ? calcLiab : (effAssets && d.equity != null ? Math.max(0, effAssets - d.equity) : null);
+        if (totalLiab != null && d.equity && d.equity > 0) {
+          return Number(((totalLiab / d.equity) * 100).toFixed(2));
+        }
+        break;
+      }
+      case 'fin_debt_to_assets': {
+        const finDebt = d.financial_debt != null
+          ? d.financial_debt
+          : ((d.short_term_debt != null || d.long_term_debt != null) ? (d.short_term_debt || 0) + (d.long_term_debt || 0) : null);
+        const calcLiab = (typeof d.total_liabilities === 'number' && d.total_liabilities > 0)
+          ? d.total_liabilities
+          : ((d.current_liabilities || 0) + (d.long_term_liabilities || 0));
+        const effAssets = (calcLiab > 0 && d.equity && d.equity > 0 && (!d.total_assets || d.total_assets <= (d.current_assets || 0)))
+          ? (calcLiab + d.equity)
+          : d.total_assets;
+        if (finDebt != null && effAssets && effAssets > 0) {
+          return Number(((finDebt / effAssets) * 100).toFixed(2));
+        }
         break;
       }
       case 'asset_turnover': {
@@ -2295,6 +2408,18 @@ export default function ValuationTerminal() {
         }
         break;
       }
+      case 'wacc': {
+        if (typeof d.wacc === 'number' && !isNaN(d.wacc)) return Number(d.wacc.toFixed(1));
+        break;
+      }
+      case 'eva_spread': {
+        if (typeof d.eva_spread === 'number' && !isNaN(d.eva_spread)) return Number(d.eva_spread.toFixed(1));
+        const rVal = computeRatioForPeriod(d, 'roic', sector);
+        if (rVal != null && typeof d.wacc === 'number' && !isNaN(d.wacc)) {
+          return Number((rVal - d.wacc).toFixed(1));
+        }
+        break;
+      }
     }
 
     return null;
@@ -2334,67 +2459,87 @@ export default function ValuationTerminal() {
     rows: RatioRowConfig[];
   }
 
-  // Rasyo Formül ve Standart Açıklamaları (Görsel 3 & İlave 7)
+  // Rasyo Formül ve Standart Açıklamaları (Görsel 3 & İlave 7 - İyi Kriter Kıyaslamalarıyla)
   const RATIO_DEFINITIONS: Record<string, { formula: string; benchmark: string; desc: string }> = {
     current_ratio: {
       formula: 'Cari Oran = Dönen Varlıklar / Kısa Vadeli Yükümlülükler',
-      benchmark: 'Normal: 1,50 - 2,50 | Sigortacılıkta: 1,10 - 1,60 (Teknik Karşılık Dengesi)',
-      desc: 'Şirketin kısa vadeli yükümlülüklerini dönen varlıklarıyla karşılama oranını gösterir.',
+      benchmark: 'İyi Kriter: ≥ 1,50 (Sanayi) | ≥ 1,10 (Sigorta)',
+      desc: 'Şirketin kısa vadeli yükümlülüklerini dönen varlıklarıyla karşılama oranını gösterir. Sanayi ve ticaret şirketlerinde 1,50 ve üzeri olması iyi sayılır (sigortacılıkta 1,10 ve üzeri sağlıklıdır); 1,00 altı ise net işletme sermayesi açığına ve kısa vadeli likidite riskine işaret eder.',
     },
     quick_ratio: {
       formula: 'Likidite Oranı (Asit-Test) = (Dönen Varlıklar - Stoklar) / Kısa Vadeli Yükümlülükler',
-      benchmark: 'Normal: 1,00+ | Sigortacılıkta: Cari Orana Eşit (Stok Bulunmaz)',
-      desc: 'Stok satışına bağımlı olmadan kısa vadeli yükümlülükleri ödeme kapasitesidir.',
+      benchmark: 'İyi Kriter: ≥ 1,00 (Güçlü Likidite)',
+      desc: 'Stok satışına bağımlı olmadan kısa vadeli yükümlülükleri ödeme kapasitesidir. 1,00 ve üzeri olması iyi sayılır; şirketin stoklarını hiç satamasa bile kısa vadeli borçlarını çevirebildiğini gösterir (0,80 altı nakit sıkışıklığı sinyali olabilir).',
     },
     cash_ratio: {
       formula: 'Nakit Oran = Nakit ve Nakit Benzerleri / Kısa Vadeli Yükümlülükler',
-      benchmark: 'Normal: 0,20 - 0,50 | Sigortacılıkta: 0,30 - 0,80',
-      desc: 'Hiçbir alacak tahsilatı olmasa dahi kasadaki hazır değerlerle anında karşılanabilecek kısa vadeli borç oranı.',
+      benchmark: 'İyi Kriter: ≥ 0,20 (İdeal: 0,20 – 0,60)',
+      desc: 'Hiçbir alacak tahsilatı ve stok satışı olmasa dahi kasadaki hazır nakit ve nakit benzerleriyle anında karşılanabilecek kısa vadeli borç oranıdır. 0,20 (%20) ve üzeri olması iyi sayılır; nakit krizlerine karşı güçlü bir güvenlik tamponu olduğunu gösterir.',
     },
     leverage_ratio: {
       formula: 'Kaldıraç Oranı = Toplam Yükümlülükler / Toplam Varlıklar (%)',
-      benchmark: 'Sanayi: %50 - %70 | Sigorta & Emeklilik: %85 - %96 (Teknik Karşılıklar ve BES Fonları)',
-      desc: 'Varlıkların ne kadarının yabancı kaynak ve teknik karşılıklarla finanse edildiğini gösterir.',
+      benchmark: 'İyi Kriter: ≤ %60 (Sanayi) | %80 – %95 (Sigorta & Banka)',
+      desc: 'Toplam varlıkların yüzde kaçının yabancı kaynaklarla (borç ve yükümlülüklerle) finanse edildiğini gösterir. Sanayi şirketlerinde %60 ve altı olması iyi ve güvenli sayılır (%75 üzeri yüksek borçluluk riskidir). Sigorta ve bankacılıkta ise teknik karşılıklar ve mevduatlar yükümlülük yazıldığı için %80–%95 aralığı normal kabul edilir.',
+    },
+    debt_to_equity: {
+      formula: 'Borç / Özkaynak Oranı = Toplam Yükümlülükler / Toplam Özkaynaklar (%)',
+      benchmark: 'İyi Kriter: ≤ %150 (1,5x altı iyidir)',
+      desc: 'Toplam yabancı kaynakların özkaynaklara oranıdır. Sanayi şirketlerinde %100 – %150 ve altı olması özkaynak yapısının güçlü olduğunu gösterir ve iyi sayılır; %200 üzeri yüksek finansal kaldıraç riskine işaret eder.',
+    },
+    fin_debt_to_assets: {
+      formula: 'Finansal Borç / Aktif Oranı = (Kısa + Uzun Vadeli Finansal Borçlar) / Toplam Varlıklar (%)',
+      benchmark: 'İyi Kriter: ≤ %30 (Düşük Faiz Yükü)',
+      desc: 'Varlıkların ne kadarının faiz yükü taşıyan banka kredileri ve finansal borçlarla finanse edildiğini gösterir. %30 ve altı olması şirketin yüksek faiz ortamında finansman gideri baskısına karşı dayanıklı olduğunu gösterir ve iyi sayılır.',
     },
     asset_turnover: {
       formula: 'Aktif Devir Hızı = Yıllıklandırılmış Satış Gelirleri / Toplam Aktifler',
-      benchmark: 'Sanayi: 0,8 - 2,0 | Sigorta & Banka: 0,10 - 0,35',
-      desc: 'Şirketin varlık tabanını ne kadar etkin ciroya dönüştürdüğünü ölçer.',
+      benchmark: 'İyi Kriter: ≥ 1,00 (Sanayi/Ticaret) | ≥ 0,15 (Finans/Sigorta)',
+      desc: 'Şirketin toplam varlıklarının kaç katı kadar yıllıklandırılmış satış/ciro ürettiğini ölçer. Sanayi ve ticaret şirketlerinde 1,00 ve üzeri olması varlıkların verimli kullanıldığını gösterir ve iyi sayılır.',
     },
     equity_turnover: {
       formula: 'Özkaynak Devir Hızı = Yıllıklandırılmış Satış Gelirleri / Toplam Özkaynaklar',
-      benchmark: 'Normal: 2,0 - 6,0x',
-      desc: 'Özkaynakların ne kadar yıllıklandırılmış hasılat/prim ürettiğini gösterir.',
+      benchmark: 'İyi Kriter: 2,00 – 5,00 aralığı dengeli ve iyidir',
+      desc: 'Özkaynakların yılda kaç katı kadar hasılat/prim ürettiğini gösterir. 2,00 ve üzeri olması özsermayenin aktif biçimde ciroya dönüştüğünü gösterir ve iyi sayılır; çok yüksek değerler ise düşük özkaynak (yüksek borçluluk) kaynaklı olabileceği için Kaldıraç Oranı ile birlikte değerlendirilmelidir.',
     },
     roa: {
       formula: 'Aktif Kârlılık (ROA - Yıllıklandırılmış) = (Dönem Net Kârı × Yıllıklandırma Çarpanı) / Toplam Aktifler (%)',
-      benchmark: 'Finans / Sigorta: %1,5 - %4,0 | Sanayi: %5,0 - %15,0',
-      desc: 'İlgili dönem kârının yıllıklandırılarak tüm bilanço büyüklüğü üzerinden ürettiği net getiriyi gösterir.',
+      benchmark: 'İyi Kriter: ≥ %10 (Sanayi) | ≥ %2,5 (Finans/Sigorta)',
+      desc: 'İlgili dönem kârının yıllıklandırılarak tüm bilanço büyüklüğü üzerinden ürettiği net getiriyi gösterir. Sanayi şirketlerinde %10 ve üzeri, banka ve sigorta şirketlerinde (yüksek aktif hacmi nedeniyle) %2,5 ve üzeri olması iyi sayılır.',
     },
     roe: {
       formula: 'Özkaynak Kârlılığı (ROE - Yıllıklandırılmış) = (Dönem Net Kârı × Yıllıklandırma Çarpanı) / Toplam Özkaynaklar (%)',
-      benchmark: 'Güçlü Değer Üretimi: ROE > Sermaye Maliyeti (%45+)',
-      desc: 'Hissedarların yatırdığı özsermayenin ilgili dönem için yıllıklandırılmış getiri oranıdır.',
+      benchmark: 'İyi Kriter: ≥ %40 (Enflasyon ve Sermaye Maliyeti Üzeri)',
+      desc: 'Hissedarların yatırdığı özsermayenin ilgili dönem için yıllıklandırılmış getiri oranıdır. Enflasyon ve alternatif risksiz getirinin (sermaye maliyeti ~%35-%40) üzerinde olması, yani %40 ve üzeri olması şirketin reel değer ürettiğini gösterir ve iyi sayılır.',
     },
     roic: {
       formula: 'Yatırılan Sermaye Getirisi (ROIC - Yıllıklandırılmış) = (Dönem NOPAT × Yıllıklandırma Çarpanı) / (Özkaynaklar + Net Finansal Borç) (%)',
-      benchmark: 'Değer Üretimi: ROIC > WACC (Sermaye Maliyeti)',
-      desc: 'Şirketin ana faaliyetlerine yatırılan toplam sermaye üzerinden ilgili dönem için yıllıklandırılmış olarak ürettiği kârlılık oranıdır (3A için ×4, 6A için ×2, 9A için ×1.33, 12A için ×1).',
+      benchmark: 'İyi Kriter: ROIC > WACC (%38 ve üzeri güçlü)',
+      desc: 'Şirketin ana faaliyetlerine yatırılan toplam sermaye üzerinden ilgili dönem için yıllıklandırılmış olarak ürettiği kârlılık oranıdır. Sermaye maliyetinin (WACC) üzerinde olması şirketin ekonomik katma değer yarattığını gösterir ve iyi sayılır.',
+    },
+    wacc: {
+      formula: 'WACC = (We × Ke) + (Wd × Kd × (1 − Vergi Oranı)) | Ke = Rf + (Beta × ERP)',
+      benchmark: 'İyi Kriter: Düşük olması ve ROIC > WACC olması iyidir',
+      desc: 'Ağırlıklı Ortalama Sermaye Maliyetidir; şirketin özkaynak maliyeti (CAPM ile hesaplanan Ke) ile vergi kalkanı düşülmüş finansal borçlanma maliyetinin (Kd × (1 − T)) sermaye ağırlıklarına göre harmanlanmasıyla bulunur. Düşük olması ve şirketin ROIC getirisinin altında kalması iyi sayılır.',
+    },
+    eva_spread: {
+      formula: 'Ekonomik Katma Değer Makası (EVA Spread) = Yıllıklandırılmış ROIC − WACC (%)',
+      benchmark: 'İyi Kriter: > %0,0 (İdeal: ≥ +5,0 puan pozitif makas)',
+      desc: 'Yatırılan sermaye getirisinin (ROIC) ağırlıklı ortalama sermaye maliyetini (WACC) ne kadar aştığını gösterir. Pozitif (> %0) olması ve özellikle +5 puan ve üzeri olması şirketin gerçek ekonomik değer ürettiğini gösterir ve iyi sayılır; negatif olması sermaye erimesine işaret eder.',
     },
     combined_ratio: {
       formula: 'Bileşik Oran = Hasar / Prim Oranı + Masraf Oranı (%)',
-      benchmark: '< %100: Esas Faaliyet Teknik Kârı | > %100: Teknik Zarar',
-      desc: 'Sigorta şirketinin prim üretiminden hasar ve operasyonel giderleri düştükten sonra teknik kâr edip etmediğini gösteren temel metriktir.',
+      benchmark: 'İyi Kriter: < %100 (İdeal: ≤ %90)',
+      desc: 'Sigorta şirketinin prim üretiminden hasar ve operasyonel giderleri düştükten sonra teknik kâr edip etmediğini gösterir. %100\'ün altında olması (özellikle %90 ve altı) şirketin salt poliçe kesiminden teknik kâr elde ettiğini gösterir ve iyi sayılır.',
     },
     loss_ratio: {
       formula: 'Hasar Oranı = Net Gerçekleşen Hasarlar / Net Kazanılan Primler (%)',
-      benchmark: 'Hedef: < %75',
-      desc: 'Toplanan primlerin hasar tazminatlarına giden payı.',
+      benchmark: 'İyi Kriter: ≤ %75 (Düşük olması iyidir)',
+      desc: 'Toplanan primlerin yüzde kaçının hasar tazminatlarına gittiğini gösterir. Düşük olması iyidir; %75 ve altı sağlıklı poliçe fiyatlamasına ve iyi risk seçimine işaret eder.',
     },
     expense_ratio: {
       formula: 'Masraf Oranı = Faaliyet ve Komisyon Giderleri / Net Kazanılan Primler (%)',
-      benchmark: 'Hedef: < %22',
-      desc: 'Acente, komisyon ve genel yönetim giderlerinin primlere oranı.',
+      benchmark: 'İyi Kriter: ≤ %20 (Düşük olması iyidir)',
+      desc: 'Acente, komisyon ve genel yönetim giderlerinin primlere oranıdır. Düşük olması iyidir; %20 ve altı operasyonel gider kontrolünün başarılı olduğunu gösterir.',
     },
   };
 
@@ -2584,7 +2729,9 @@ export default function ValuationTerminal() {
       title: 'Kaldıraç Oranları',
       categoryKey: 'KALDIRAC',
       rows: [
-        { label: 'Kaldıraç Oranı', key: 'leverage_ratio', isPercent: true, defaultVal: 60.0 },
+        { label: 'Kaldıraç Oranı (Toplam Yükümlülük / Aktif)', key: 'leverage_ratio', isPercent: true, defaultVal: 60.0 },
+        { label: 'Borç / Özkaynak Oranı (Yabancı Kaynak / Özkaynak)', key: 'debt_to_equity', isPercent: true, defaultVal: 120.0 },
+        { label: 'Finansal Borç / Aktif Oranı', key: 'fin_debt_to_assets', isPercent: true, defaultVal: 15.0 },
       ],
     },
     {
@@ -2596,12 +2743,14 @@ export default function ValuationTerminal() {
       ],
     },
     {
-      title: 'Karlılık Oranları (Yıllıklandırılmış)',
+      title: 'Karlılık & Sermaye Verimliliği Oranları (Yıllıklandırılmış)',
       categoryKey: 'KARLILIK',
       rows: [
         { label: 'Aktif Karlılık (ROA - Yıllıklandırılmış)', key: 'roa', isPercent: true, defaultVal: 8.50 },
         { label: 'Özkaynak Karlılığı (ROE - Yıllıklandırılmış)', key: 'roe', isPercent: true, defaultVal: 35.0 },
         { label: 'Yatırılan Sermaye Getirisi (ROIC - Yıllıklandırılmış)', key: 'roic', isPercent: true, defaultVal: 32.0 },
+        { label: 'Ağırlıklı Ortalama Sermaye Maliyeti (WACC)', key: 'wacc', isPercent: true, defaultVal: 38.0 },
+        { label: 'Ekonomik Katma Değer Makası (ROIC − WACC)', key: 'eva_spread', isPercent: true, defaultVal: 4.5 },
       ],
     },
     ...(currentSector === 'INSURANCE' ? [{
@@ -3576,6 +3725,8 @@ export default function ValuationTerminal() {
                         const yoyBS = chartData.find((d: any) => d.period === yoyBSLabel);
                         const fv = (d: any, k: string): number | null => {
                           if (!d) return null;
+                          if (k === 'gross_written_premiums') return d.gross_written_premiums ?? d.written_premiums ?? d.revenue ?? d.earned_premiums ?? null;
+                          if (k === 'technical_balance') return d.technical_balance ?? d.technical_profit ?? d.ebitda ?? d.operating_profit ?? d.operating_income ?? null;
                           if (k === 'operating_income') return d.operating_income ?? d.operating_profit ?? null;
                           if (k === 'financial_debt') {
                             if (d.financial_debt != null) return d.financial_debt;
@@ -3711,15 +3862,16 @@ export default function ValuationTerminal() {
                       {/* Mini Sparkline Çizgi Grafikleri (3x2) */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                         {[
-                          { title: 'Brüt Kar Marjı (Çeyreklik)', calc: (d:any) => { if (currentSector === 'INSURANCE') return (d.gross_written_premiums && d.gross_written_premiums !== 0) ? ((d.gross_profit ?? d.technical_balance ?? 0) / d.gross_written_premiums * 100) : null; return (d.revenue && d.revenue !== 0 && d.gross_profit != null) ? (d.gross_profit / d.revenue * 100) : null; } },
+                          { title: 'Brüt Kar Marjı (Çeyreklik)', calc: (d:any) => { const denom = currentSector === 'INSURANCE' ? (d.gross_written_premiums ?? d.written_premiums ?? d.revenue) : d.revenue; if (currentSector === 'INSURANCE') return (denom && denom !== 0) ? ((d.gross_profit ?? d.technical_balance ?? d.technical_profit ?? 0) / denom * 100) : null; return (denom && denom !== 0 && d.gross_profit != null) ? (d.gross_profit / denom * 100) : null; } },
                           { title: currentSector === 'INSURANCE' ? 'Teknik Kâr Marjı (Çeyreklik)' : 'FAVÖK Marjı (Çeyreklik)', calc: (d:any) => {
-                            if (currentSector === 'INSURANCE') return (d.gross_written_premiums ? (d.technical_balance || d.net_income) / d.gross_written_premiums * 100 : null);
-                            return d.revenue ? (d.ebitda / d.revenue * 100) : null;
+                            const denom = currentSector === 'INSURANCE' ? (d.gross_written_premiums ?? d.written_premiums ?? d.revenue) : d.revenue;
+                            if (currentSector === 'INSURANCE') return (denom ? ((d.technical_balance ?? d.technical_profit ?? d.ebitda ?? d.net_income) / denom * 100) : null);
+                            return denom ? (d.ebitda / denom * 100) : null;
                           }},
-                          { title: 'Net Kar Marjı (Çeyreklik)', calc: (d:any) => { const denom = currentSector === 'INSURANCE' ? d.gross_written_premiums : d.revenue; return (denom && denom !== 0 && d.net_income != null) ? (d.net_income / denom * 100) : null; } },
-                          { title: 'Cari Oran', calc: (d:any) => d.current_liabilities ? (d.current_assets / d.current_liabilities) : null },
-                          { title: 'Kaldıraç Oranı', calc: (d:any) => (d.equity && d.equity !== 0 && d.total_assets != null) ? ((d.total_assets - d.equity) / Math.abs(d.equity)) : null },
-                          { title: 'Özkaynak Karlılığı', calc: (d:any) => (d.equity && d.equity !== 0 && d.net_income != null) ? (d.net_income / Math.abs(d.equity) * 100 * getAnnualizationFactor(d.period)) : null }
+                          { title: 'Net Kar Marjı (Çeyreklik)', calc: (d:any) => { const denom = currentSector === 'INSURANCE' ? (d.gross_written_premiums ?? d.written_premiums ?? d.revenue) : d.revenue; return (denom && denom !== 0 && d.net_income != null) ? (d.net_income / denom * 100) : null; } },
+                          { title: 'Cari Oran', calc: (d:any) => computeRatioForPeriod(d, 'current_ratio', currentSector) },
+                          { title: 'Kaldıraç Oranı', calc: (d:any) => computeRatioForPeriod(d, 'leverage_ratio', currentSector) },
+                          { title: 'Özkaynak Karlılığı', calc: (d:any) => computeRatioForPeriod(d, 'roe', currentSector) }
                         ].map(mini => {
                           const miniData = quarterlyChartData.slice(-8).map((d:any) => ({ period: d.period, value: mini.calc(d) }));
                            const values = miniData.map((d: any) => d.value).filter((v: any) => v != null && !isNaN(v));
@@ -3737,7 +3889,7 @@ export default function ValuationTerminal() {
                                         const val = payload[0].value as number;
                                         return (
                                           <div className="bg-slate-900 border border-slate-700 p-2 text-xs text-white rounded shadow-xl">
-                                            {mini.title.includes('Marj') || mini.title.includes('Karlılığı') ? `%${val?.toFixed(1)}` : val?.toFixed(2)}
+                                            {mini.title.includes('Marj') || mini.title.includes('Karlılığı') || mini.title.includes('Kaldıraç') ? `%${val?.toFixed(1)}` : val?.toFixed(2)}
                                           </div>
                                         );
                                       }
@@ -4013,6 +4165,79 @@ export default function ValuationTerminal() {
                       description={drivers.target_multiple.note || ''}
                       sourceExplanation={drivers.target_multiple.sourceExplanation}
                     />
+                  </div>
+
+                  {/* Sermaye Maliyeti (WACC) & Ekonomik Katma Değer (ROIC vs WACC) Analizi */}
+                  <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-xl space-y-5">
+                    <div className="border-b border-slate-800/80 pb-3 flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <span className="font-bold text-sm text-white flex items-center gap-2">
+                          <Activity className="w-4 h-4 text-cyan-400" /> Sermaye Maliyeti (WACC) & Ekonomik Katma Değer (EVA) Analizi
+                        </span>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          CAPM Özsermaye Maliyeti (Ke), Vergi Sonrası Borçlanma Maliyeti (Kd) ve Yıllıklandırılmış Sermaye Verimliliği (ROIC vs WACC)
+                        </p>
+                      </div>
+                      <span className={`text-xs font-mono px-2.5 py-1 rounded-md font-bold border ${
+                        (latestData?.eva_spread ?? latestSpread ?? 0) >= 0
+                          ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
+                          : 'bg-rose-950/80 text-rose-400 border-rose-800'
+                      }`}>
+                        EVA Makası: {(latestData?.eva_spread ?? latestSpread ?? 0) > 0 ? '+' : ''}{(latestData?.eva_spread ?? latestSpread ?? 0).toFixed(1)} Puan ({(latestData?.eva_spread ?? latestSpread ?? 0) >= 0 ? 'Değer Üretiyor' : 'Sermaye Erimesi'})
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                      <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+                        <div className="text-[10px] text-slate-400 font-semibold uppercase">Hesaplanan WACC</div>
+                        <div className="text-lg font-black font-mono text-amber-400 mt-1">%{latestData?.wacc?.toFixed(1) ?? '35,5'}</div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">Ağırlıklı Sermaye Maliyeti</div>
+                      </div>
+                      <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+                        <div className="text-[10px] text-slate-400 font-semibold uppercase">Yıllık ROIC / ROE</div>
+                        <div className="text-lg font-black font-mono text-cyan-400 mt-1">%{latestData?.roic?.toFixed(1) ?? latestData?.roe?.toFixed(1) ?? '—'}</div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">Yatırılan Sermaye Getirisi</div>
+                      </div>
+                      <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+                        <div className="text-[10px] text-slate-400 font-semibold uppercase">Özsermaye Maliyeti (Ke)</div>
+                        <div className="text-lg font-black font-mono text-white mt-1">%{latestData?.cost_of_equity?.toFixed(1) ?? latestData?.wacc?.toFixed(1) ?? '35,1'}</div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">Rf (%{latestData?.risk_free_rate ?? 28}) + β({latestData?.beta ?? 0.95})×ERP(%{latestData?.erp ?? 7.5})</div>
+                      </div>
+                      <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+                        <div className="text-[10px] text-slate-400 font-semibold uppercase">Net Borç Maliyeti (Kd)</div>
+                        <div className="text-lg font-black font-mono text-slate-200 mt-1">%{latestData?.after_tax_cost_of_debt?.toFixed(1) ?? '31,5'}</div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">Vergi Kalkanı Sonrası Kd×(1-T)</div>
+                      </div>
+                      <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+                        <div className="text-[10px] text-slate-400 font-semibold uppercase">Sermaye Ağırlığı (We / Wd)</div>
+                        <div className="text-sm font-black font-mono text-slate-200 mt-1.5">
+                          %{latestData?.equity_weight ?? 100} Öz / %{latestData?.debt_weight ?? 0} Borç
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">Optimal Bilanço Dağılımı</div>
+                      </div>
+                      <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+                        <div className="text-[10px] text-slate-400 font-semibold uppercase">Kaldıraçlı Beta (β)</div>
+                        <div className="text-lg font-black font-mono text-emerald-400 mt-1">{latestData?.beta?.toFixed(2) ?? '0,95'}x</div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">Hamada Sektör Duyarlılığı</div>
+                      </div>
+                    </div>
+
+                    <div className="h-60 w-full pt-2">
+                      {mounted && (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <ComposedChart data={chartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
+                            <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v: string) => v ? v.slice(2) : v} />
+                            <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v) => `%${v}`} />
+                            <Tooltip content={<CustomChartTooltip />} />
+                            <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                            <Bar dataKey="roic" name="Yıllıklandırılmış ROIC (%)" fill="#06b6d4" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                            <Line type="monotone" dataKey="wacc" name="Sermaye Maliyeti - WACC (%)" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3.5, fill: '#f59e0b' }} />
+                            <Line type="monotone" dataKey="eva_spread" name="EVA Makası (ROIC - WACC)" stroke="#10b981" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 3, fill: '#10b981' }} />
+                          </ComposedChart>
+                        </ResponsiveContainer>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -4554,9 +4779,6 @@ export default function ValuationTerminal() {
 
                                         {tableData.map((d: any, idx: number) => {
                                           const rawVal = computeRatioForPeriod(d, row.key, currentSector);
-                                          const prevPeriodData = idx < tableData.length - 1 ? tableData[idx + 1] : null;
-                                          const prevVal = prevPeriodData ? computeRatioForPeriod(prevPeriodData, row.key, currentSector) : null;
-                                          const change = calculateYoYChange(rawVal, prevVal, true);
 
                                           let displayStr = '—';
                                           if (rawVal !== null && rawVal !== undefined) {
@@ -4569,12 +4791,9 @@ export default function ValuationTerminal() {
 
                                           return (
                                             <td key={idx} className="p-3 text-center group-hover:bg-slate-800/30 transition-colors">
-                                              <div className="flex flex-col items-center justify-center gap-0.5">
-                                                <span className="font-mono text-xs sm:text-sm font-semibold tracking-tight text-white">
-                                                  {displayStr}
-                                                </span>
-                                                <ChangeBadge change={change} size="xs" />
-                                              </div>
+                                              <span className="font-mono text-xs sm:text-sm font-semibold tracking-tight text-white">
+                                                {displayStr}
+                                              </span>
                                             </td>
                                           );
                                         })}
