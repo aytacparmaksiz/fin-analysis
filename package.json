@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node tests/stress_test_suite.mjs && node tests/valuation_and_markdown.test.mjs && node tests/pdf_filter_and_timeout.test.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.24.0",

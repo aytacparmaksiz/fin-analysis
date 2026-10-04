@@ -104,7 +104,7 @@ export const KNOWN_BIST_DIRECTORY: Record<string, BistCompanyMetadata> = {
  * Hisse kodundan şirket profilini ve muhasebe grubunu saptar
  */
 export function resolveBistCompanyMeta(rawTicker: string): BistCompanyMetadata {
-  const cleanTicker = (rawTicker || '').toUpperCase().trim();
+  const cleanTicker = (rawTicker || '').toUpperCase().replace(/\.IS$/i, '').trim();
   if (KNOWN_BIST_DIRECTORY[cleanTicker]) {
     return KNOWN_BIST_DIRECTORY[cleanTicker];
   }

@@ -157,7 +157,7 @@ export async function fetchAllIsYatirimMultiples(): Promise<Record<string, IsYat
  * Belirli bir hissenin İş Yatırım resmi piyasa çarpanlarını getirir
  */
 export async function getIsYatirimMultiplesForTicker(rawTicker: string): Promise<IsYatirimStockMultiples | null> {
-  const ticker = (rawTicker || '').toUpperCase().trim().replace(/[^A-Z0-9]/g, '');
+  const ticker = (rawTicker || '').toUpperCase().replace(/\.IS$/i, '').trim().replace(/[^A-Z0-9]/g, '');
   if (!ticker) return null;
 
   const all = await fetchAllIsYatirimMultiples();

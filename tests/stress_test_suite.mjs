@@ -24,6 +24,9 @@ import {
   SECTOR_DEFINITIONS
 } from '../lib/sectors.ts';
 
+import { resolveBistCompanyMeta } from '../lib/bist-service.ts';
+import { getIsYatirimMultiplesForTicker } from '../lib/isyatirim-service.ts';
+
 describe('Comprehensive Financial Terminal Stress Test Suite', () => {
 
   describe('1. parseFinancialNumber Edge Cases', () => {
@@ -728,6 +731,111 @@ describe('Comprehensive Financial Terminal Stress Test Suite', () => {
         assert.ok(result.drivers.target_multiple.value != null);
       });
     }
+  });
+
+  describe('11. Advanced Stress Tests: TTK 376 Insolvency, Formula Parity & Cross-Format YoY', () => {
+    it('optimizeFinalDecision unconditionally forces ALMA when equity is negative even if rawDecision was NÖTR', () => {
+      const res = optimizeFinalDecision({
+        ticker: 'BATIK',
+        sector: 'INDUSTRIAL',
+        rawDecision: 'NÖTR',
+        marginOfSafety: 10,
+        latestData: { equity: -1500000 },
+        scoreResult: { totalScore: 50, categoryScores: {} }
+      });
+      assert.equal(res.finalDecision, 'ALMA');
+      assert.ok(res.overrideApplied);
+      assert.ok(res.overrideReason?.includes('TTK 376'));
+    });
+
+    it('Holding sector valuation correctly applies 0.70x target multiple without forcing 0.85x floor', () => {
+      const holdingData = {
+        ticker: 'SAHOL',
+        sector: 'HOLDING',
+        financial_history: [
+          { period: '2024/12', equity: 100000000, revenue: 50000000, roe: 30 },
+          { period: '2025/12', equity: 120000000, revenue: 60000000, roe: 35 }
+        ],
+        drivers: {
+          target_multiple: { value: '0.70x (%30 İskonto)' }
+        }
+      };
+      const result = computeSectorValuationAndDrivers(holdingData, '100.0', 'HOLDING');
+      assert.ok(result.valuation.formula_display.includes('0,70') || result.valuation.formula_display.includes('0.70'));
+    });
+
+    it('REIT sector valuation formula string reflects clamped target multiple', () => {
+      const reitData = {
+        ticker: 'EKGYO',
+        sector: 'REIT',
+        financial_history: [
+          { period: '2024/12', equity: 50000000, revenue: 20000000 },
+          { period: '2025/12', equity: 60000000, revenue: 25000000 }
+        ],
+        drivers: {
+          target_multiple: { value: '0.75x (%25 İskonto)' }
+        }
+      };
+      const result = computeSectorValuationAndDrivers(reitData, '10.0', 'REIT');
+      assert.ok(result.valuation.formula_display.includes('0.75x') || result.valuation.formula_display.includes('0,75x'));
+    });
+
+    it('Tech sector valuation enforces TTK 376 haircut when equity <= 0 even with positive revenue', () => {
+      const techData = {
+        ticker: 'TECHBATIK',
+        sector: 'TECH',
+        financial_history: [
+          { period: '2024/12', equity: -500000, revenue: 10000000 },
+          { period: '2025/12', equity: -1000000, revenue: 15000000 }
+        ]
+      };
+      const result = computeSectorValuationAndDrivers(techData, '50.0', 'TECH');
+      assert.equal(result.valuation.fair_value, 10.0); // 50 * 0.20
+      assert.ok(result.valuation.formula_display.includes('TTK 376'));
+    });
+
+    it('Industrial sector valuation enforces TTK 376 haircut when equity <= 0 even with positive EBITDA', () => {
+      const indData = {
+        ticker: 'INDBATIK',
+        sector: 'INDUSTRIAL',
+        financial_history: [
+          { period: '2024/12', equity: -500000, revenue: 10000000, ebitda: 2000000 },
+          { period: '2025/12', equity: -1000000, revenue: 15000000, ebitda: 3000000 }
+        ]
+      };
+      const result = computeSectorValuationAndDrivers(indData, '50.0', 'INDUSTRIAL');
+      assert.equal(result.valuation.fair_value, 10.0); // 50 * 0.20
+      assert.ok(result.valuation.formula_display.includes('TTK 376'));
+    });
+
+    it('parsePeriodSortKey handles cross-format periods and year offsets', () => {
+      const key2025_3 = parsePeriodSortKey('2025/3');
+      const key2024_03 = parsePeriodSortKey('2024/03');
+      const key2025_q1 = parsePeriodSortKey('2025/Q1');
+      assert.equal(key2025_3, 202503);
+      assert.equal(key2024_03, 202403);
+      assert.equal(key2025_q1, 202503);
+      assert.equal(key2025_3 - 100, key2024_03);
+
+      const key2024_annual = parsePeriodSortKey('2024');
+      const key2023_12 = parsePeriodSortKey('2023/12');
+      assert.equal(key2024_annual, 202412);
+      assert.equal(key2023_12, 202312);
+      assert.equal(key2024_annual - 100, key2023_12);
+    });
+
+    it('resolveBistCompanyMeta strips .IS suffix and correctly finds AGESA in directory', () => {
+      const meta = resolveBistCompanyMeta('AGESA.IS');
+      assert.equal(meta.ticker, 'AGESA');
+      assert.equal(meta.sector, 'INSURANCE');
+      assert.equal(meta.financialGroup, 'UFRS_K');
+      assert.equal(meta.shareCount, 180000000);
+    });
+
+    it('getIsYatirimMultiplesForTicker strips .IS suffix correctly', async () => {
+      const res = await getIsYatirimMultiplesForTicker('NONEXISTENT_XYZ.IS');
+      assert.equal(res, null);
+    });
   });
 
 });

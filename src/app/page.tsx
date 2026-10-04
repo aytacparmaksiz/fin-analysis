@@ -588,13 +588,13 @@ const CustomChartTooltip = ({ active, payload, label, currency = 'Bin TRY' }: an
                 <span className="truncate">{entry.name}:</span>
               </span>
               <span className="font-mono font-bold text-white whitespace-nowrap">
-                {typeof entry.value === 'number'
+                {typeof entry.value === 'number' && Number.isFinite(entry.value)
                   ? isSharePrice
                     ? `${entry.value.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL`
                     : isPct
                       ? `%${entry.value.toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}`
                       : formatChartMetric(entry.value, false, currency)
-                  : entry.value ?? '—'}
+                  : (entry.value !== null && entry.value !== undefined && !Number.isNaN(entry.value) ? entry.value : '—')}
               </span>
             </div>
           );
@@ -741,321 +741,36 @@ function exportTableToCsv(filename: string, headers: string[], rows: (string | n
 function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorType = 'INDUSTRIAL', referencePrice: number = 100) {
   if (!Array.isArray(history) || history.length === 0) return [];
 
-  let parsedTlRate: number | null = null;
-  if (debtInfo?.tl_interest_rate) {
-    const parsed = parseFinancialNumber(debtInfo.tl_interest_rate);
-    if (parsed !== null && parsed > 5 && parsed < 90) {
-      parsedTlRate = parsed;
-    } else {
-      const m = String(debtInfo.tl_interest_rate).match(/(\d+([.,]\d+)?)/);
-      if (m) {
-        const val = parseFloat(m[1].replace(',', '.'));
-        if (val > 5 && val < 90) parsedTlRate = val;
-      }
-    }
-  }
+  // enrichAndSanitizeFinancialHistory ile tam deterministik türetme ve TMS 29 homojenizasyonu
+  const payload = {
+    sector,
+    debt_and_interest: debtInfo,
+    financial_history: history
+  };
 
-  // 1. Tüm sayısal alanları parseFinancialNumber ile temizle (parantezli negatif, tireli, Türkçe ayrıcı)
-  const cleanedHistory = history.map((item) => {
-    if (!item || typeof item !== 'object') return item;
-    const row = { ...item };
-    const numKeys = [
-      'revenue', 'ebitda', 'net_income', 'gross_profit', 'operating_profit', 'operating_income',
-      'equity', 'paid_in_capital', 'total_assets', 'current_assets', 'non_current_assets',
-      'current_liabilities', 'long_term_liabilities', 'total_liabilities', 'inventories',
-      'cash_and_equivalents', 'cash', 'liquid_assets', 'net_debt', 'short_term_debt', 'long_term_debt', 'financial_debt',
-      'financial_investments', 'financial_assets_insured', 'trade_receivables',
-      'operating_cash_flow', 'free_cash_flow', 'capex', 'dividends_paid',
-      'written_premiums', 'gross_written_premiums', 'earned_premiums', 'technical_profit', 'technical_balance', 'investment_income',
-      'loss_ratio', 'expense_ratio', 'combined_ratio',
-      'npl_ratio', 'car_ratio', 'nim', 'net_interest_income', 'loan_to_deposit',
-      'nav', 'holding_discount', 'fwd_pe', 'trailing_pe', 'pb', 'ev_ebitda',
-      'roe', 'roa', 'roic', 'wacc', 'gross_margin', 'ebitda_margin', 'net_margin',
-      'leverage_ratio', 'current_ratio', 'quick_ratio', 'cash_ratio', 'asset_turnover', 'equity_turnover',
-      'share_price'
-    ];
-    for (const k of numKeys) {
-      if (row[k] !== undefined && row[k] !== null && typeof row[k] !== 'number') {
-        const parsed = parseFinancialNumber(row[k]);
-        if (parsed !== null) row[k] = parsed;
-      }
-    }
-    return row;
-  });
+  const enriched = enrichAndSanitizeFinancialHistory(payload);
+  const enrichedHistory: any[] = Array.isArray(enriched?.financial_history) ? enriched.financial_history : [];
 
-  // 2. TMS 29 Homojenizasyonu ve enflasyon düzeltmeli dönem takibi
-  const { homogenizedHistory } = homogenizeTms29Series(cleanedHistory, sector);
-
-  // 3. Kronolojik sıralama (Grafikler için eskiden yeniye)
-  const sorted = [...homogenizedHistory].filter(Boolean).sort((a, b) => {
-    return parsePeriodSortKey(a.period) - parsePeriodSortKey(b.period);
-  });
-
-  const lastRow = sorted.length > 0 ? sorted[sorted.length - 1] : null;
+  const lastRow = enrichedHistory.length > 0 ? enrichedHistory[enrichedHistory.length - 1] : null;
   const latestEquityRef = lastRow?.equity && lastRow.equity > 0 ? lastRow.equity : null;
   const latestRevRef = (lastRow?.revenue || lastRow?.written_premiums) && (lastRow.revenue || lastRow.written_premiums) > 0
     ? (lastRow.revenue || lastRow.written_premiums)
     : null;
   const basePrice = referencePrice > 0 ? referencePrice : 100;
 
-  return sorted.map((item, idx) => {
+  return enrichedHistory.map((item: any, idx: number) => {
     if (!item) return item;
     const row = { ...item };
-    const yrMatch = String(row.period || '').match(/(20\d{2})/);
-    const yr = yrMatch ? parseInt(yrMatch[1], 10) : 2024;
     const annualFactor = getAnnualizationFactor(row.period);
 
-    // Sigorta sektörü eşleştirmeleri
-    if (sector === 'INSURANCE') {
-      const resolvedPrem = row.gross_written_premiums ?? row.written_premiums ?? row.revenue ?? row.earned_premiums ?? null;
-      if (resolvedPrem != null && resolvedPrem !== 0) {
-        if (!row.revenue || row.revenue === 0) row.revenue = resolvedPrem;
-        if (!row.written_premiums || row.written_premiums === 0) row.written_premiums = resolvedPrem;
-        if (!row.gross_written_premiums || row.gross_written_premiums === 0) row.gross_written_premiums = resolvedPrem;
-      }
-      const resolvedTech = row.technical_balance ?? row.technical_profit ?? row.ebitda ?? row.operating_profit ?? row.operating_income ?? null;
-      if (resolvedTech != null && resolvedTech !== 0) {
-        if (!row.ebitda || row.ebitda === 0) row.ebitda = resolvedTech;
-        if (!row.technical_profit || row.technical_profit === 0) row.technical_profit = resolvedTech;
-        if (!row.technical_balance || row.technical_balance === 0) row.technical_balance = resolvedTech;
-      }
-      if (row.loss_ratio != null && row.expense_ratio != null && row.combined_ratio == null) {
-        row.combined_ratio = Number(((row.loss_ratio || 0) + (row.expense_ratio || 0)).toFixed(1));
-      }
-      if (row.combined_ratio != null && row.ebitda_margin == null) {
-        row.ebitda_margin = Number((100 - row.combined_ratio).toFixed(1));
-      }
+    // TTK uyarısını solvency_warning ile eşitle
+    if (row.solvency_warning && !row.ttk_warning) {
+      row.ttk_warning = row.solvency_warning;
     }
 
-    // Bilanço Kalemlerini Akıllı Türet ve Eksikleri Tamamla (İlave 4: Tablo Tirelerini Önleme)
-    // 1. Nakit ve Nakit Benzerleri
-    if (row.cash_and_equivalents == null) {
-      if (typeof row.cash === 'number') row.cash_and_equivalents = row.cash;
-      else if (typeof row.liquid_assets === 'number') row.cash_and_equivalents = row.liquid_assets;
-      else if (typeof row.net_debt === 'number' && row.net_debt < 0) {
-        row.cash_and_equivalents = Math.abs(row.net_debt);
-      }
-    }
-
-    // 2. Finansal Yatırımlar / Alacaklar / Borçlar Eşitlemesi
-    if (row.financial_assets_insured == null && typeof row.financial_investments === 'number') {
-      row.financial_assets_insured = row.financial_investments;
-    }
-    if (row.financial_investments == null && typeof row.financial_assets_insured === 'number') {
-      row.financial_investments = row.financial_assets_insured;
-    }
-    if (row.operating_income == null && typeof row.operating_profit === 'number') {
-      row.operating_income = row.operating_profit;
-    }
-    if (row.operating_profit == null && typeof row.operating_income === 'number') {
-      row.operating_profit = row.operating_income;
-    }
-    if (row.financial_debt == null && (row.short_term_debt != null || row.long_term_debt != null)) {
-      row.financial_debt = (row.short_term_debt || 0) + (row.long_term_debt || 0);
-    }
-
-    // 3. Yükümlülükler ve Aktif = Pasif Muhasebe Özdeşliği Kontrolü
-    const calcTotalLiab = (typeof row.total_liabilities === 'number' && row.total_liabilities > 0)
-      ? row.total_liabilities
-      : ((row.current_liabilities || 0) + (row.long_term_liabilities || 0));
-    if (calcTotalLiab > 0 && (row.total_liabilities == null || row.total_liabilities <= 0)) {
-      row.total_liabilities = calcTotalLiab;
-    }
-    if (calcTotalLiab > 0 && typeof row.equity === 'number' && row.equity > 0) {
-      const impliedAssets = calcTotalLiab + row.equity;
-      if (
-        row.total_assets == null ||
-        row.total_assets <= 0 ||
-        (row.current_assets != null && row.total_assets <= row.current_assets && impliedAssets > row.current_assets)
-      ) {
-        row.total_assets = impliedAssets;
-      }
-    }
-
-    // 4. Toplam Aktifler, Cari Varlıklar ve Cari Olmayan Varlıklar Dengesi
-    if (row.total_assets != null && row.total_assets > 0) {
-      if (row.current_assets != null && (row.non_current_assets == null || row.non_current_assets === 0) && row.total_assets > row.current_assets) {
-        row.non_current_assets = Math.max(0, row.total_assets - row.current_assets);
-      } else if (row.non_current_assets != null && row.current_assets == null) {
-        row.current_assets = Math.max(0, row.total_assets - row.non_current_assets);
-      }
-    } else if (row.current_assets != null && row.non_current_assets != null) {
-      row.total_assets = row.current_assets + row.non_current_assets;
-    }
-
-    // Eğer Cari Varlıklar hala boşsa nakit + alacaklar + yatırımlardan türet
-    if (row.current_assets == null) {
-      const subTotal = (row.cash_and_equivalents || 0) + 
-                       (row.financial_assets_insured || row.financial_investments || 0) + 
-                       (row.trade_receivables || 0);
-      if (subTotal > 0) {
-        row.current_assets = subTotal;
-        if (row.total_assets != null && (row.non_current_assets == null || row.non_current_assets === 0) && row.total_assets > subTotal) {
-          row.non_current_assets = Math.max(0, row.total_assets - subTotal);
-        }
-      }
-    }
-
-    // Eğer Toplam Aktifler hala boşsa özkaynak ve kaldıraçtan türet
-    if (row.total_assets == null && row.equity && row.leverage_ratio && row.leverage_ratio < 100) {
-      row.total_assets = Number((row.equity / (1 - row.leverage_ratio / 100)).toFixed(0));
-      if (row.current_assets != null && (row.non_current_assets == null || row.non_current_assets === 0)) {
-        row.non_current_assets = Math.max(0, row.total_assets - row.current_assets);
-      }
-    }
-
-    // Özkaynak boşsa toplam aktifler ve kaldıraçtan türet
-    if (row.equity == null && row.total_assets != null && row.leverage_ratio != null && row.leverage_ratio < 100) {
-      row.equity = Number((row.total_assets * (1 - row.leverage_ratio / 100)).toFixed(0));
-    }
-
-    // Kesin Kaldıraç Oranı (Toplam Yükümlülükler / Toplam Varlıklar %)
-    if (row.total_assets && row.total_assets > 0 && row.equity != null) {
-      const totalLiab = (typeof row.total_liabilities === 'number' && row.total_liabilities > 0 && row.total_liabilities < row.total_assets)
-        ? row.total_liabilities
-        : Math.max(0, row.total_assets - row.equity);
-      row.leverage_ratio = Number(((totalLiab / row.total_assets) * 100).toFixed(2));
-    }
-
-    if (row.total_assets && row.total_assets > 0 && row.net_income != null) {
-      row.roa = Number(((row.net_income * annualFactor / row.total_assets) * 100).toFixed(2));
-    }
-
-    // Güvenli Marj Hesaplamaları
-    if (row.revenue && row.revenue > 0) {
-      if (row.ebitda_margin == null && typeof row.ebitda === 'number') {
-        const sm = safeMargin(row.ebitda, row.revenue);
-        if (sm !== null) row.ebitda_margin = sm;
-      }
-      if (row.net_margin == null && typeof row.net_income === 'number') {
-        const sm = safeMargin(row.net_income, row.revenue);
-        if (sm !== null) row.net_margin = sm;
-      }
-      if (row.gross_margin == null && typeof row.gross_profit === 'number') {
-        const sm = safeMargin(row.gross_profit, row.revenue);
-        if (sm !== null) row.gross_margin = sm;
-      }
-    }
-
-    // Güvenli ROE (Çift negatif tuzak engelleme ve TTK 376 kontrolü)
-    if (typeof row.net_income === 'number' && typeof row.equity === 'number') {
-      const roeRes = safeRoe(row.net_income, row.equity, annualFactor);
-      row.roe = roeRes.roe;
-      if (roeRes.isInsolvent) {
-        row.ttk_warning = roeRes.warning;
-      }
-    }
-
-    // =========================================================================
-    // DİNAMİK WACC (AĞIRLIKLI ORTALAMA SERMAYE MALİYETİ - CAPM + KD VERGİ KALKANI)
-    // =========================================================================
-    let rf = 30.0;
-    let erp = 7.5;
-    let preTaxKd = 46.0;
-    const taxRate = (sector === 'BANKING' || sector === 'INSURANCE') ? 0.30 : (sector === 'REIT' ? 0.0 : 0.25);
-
-    if (yr <= 2021) { rf = 17.5; erp = 6.5; preTaxKd = 21.0; }
-    else if (yr === 2022) { rf = 19.0; erp = 7.0; preTaxKd = 25.0; }
-    else if (yr === 2023) { rf = 26.5; erp = 7.0; preTaxKd = 36.0; }
-    else if (yr === 2024) { rf = 31.0; erp = 7.5; preTaxKd = 50.0; }
-    else if (yr === 2025) { rf = 29.5; erp = 7.5; preTaxKd = 45.0; }
-    else { rf = 28.0; erp = 7.5; preTaxKd = 42.0; }
-
-    if (parsedTlRate) {
-      preTaxKd = parsedTlRate;
-    }
-
-    const eqVal = (typeof row.equity === 'number' && row.equity > 0) ? row.equity : 0;
-    const grossFinDebt = row.financial_debt != null
-      ? Math.max(0, row.financial_debt)
-      : Math.max(0, (row.short_term_debt || 0) + (row.long_term_debt || 0));
-    const netFinDebt = (typeof row.net_debt === 'number' && row.net_debt > 0) ? row.net_debt : 0;
-    const effectiveDebt = grossFinDebt > 0 ? grossFinDebt : netFinDebt;
-
-    const totalCapital = eqVal + effectiveDebt;
-    const debtWeight = (sector === 'INSURANCE' || sector === 'BANKING' || totalCapital <= 0)
-      ? 0.0
-      : Math.min(0.75, Math.max(0.0, effectiveDebt / totalCapital));
-    const equityWeight = Number((1.0 - debtWeight).toFixed(4));
-
-    const unleveredBeta = sector === 'INSURANCE' ? 0.95
-      : sector === 'BANKING' ? 1.15
-      : sector === 'HOLDING' ? 0.92
-      : sector === 'REIT' ? 0.85
-      : sector === 'TECH' ? 1.25
-      : 0.90;
-    const debtToEquityRatio = eqVal > 0 ? Math.min(2.5, effectiveDebt / eqVal) : 0;
-    const leveredBeta = (sector === 'INSURANCE' || sector === 'BANKING')
-      ? unleveredBeta
-      : Number((unleveredBeta * (1 + (1 - taxRate) * debtToEquityRatio)).toFixed(2));
-
-    const costOfEquity = Number((rf + leveredBeta * erp).toFixed(2));
-    const afterTaxCostOfDebt = Number((preTaxKd * (1 - taxRate)).toFixed(2));
-
-    const computedWacc = (sector === 'INSURANCE' || sector === 'BANKING')
-      ? Number(costOfEquity.toFixed(1))
-      : Number(((equityWeight * costOfEquity) + (debtWeight * afterTaxCostOfDebt)).toFixed(1));
-
-    row.cost_of_equity = costOfEquity;
-    row.after_tax_cost_of_debt = afterTaxCostOfDebt;
-    row.equity_weight = Number((equityWeight * 100).toFixed(1));
-    row.debt_weight = Number((debtWeight * 100).toFixed(1));
-    row.beta = leveredBeta;
-    row.risk_free_rate = rf;
-    row.erp = erp;
-
-    if (row.wacc == null || row.wacc === 0 || isNaN(Number(row.wacc)) || row.wacc === 44.0 || row.wacc === 45.0) {
-      row.wacc = computedWacc;
-    } else {
-      row.wacc = Number(Number(row.wacc).toFixed(1));
-    }
-
-    // ROIC: İlgili dönem için her zaman YILLIKLANDIRILMIŞ kârlılık oranı olarak hesaplanır
-    if (sector === 'INSURANCE' || sector === 'BANKING') {
-      if (typeof row.roe === 'number') {
-        row.roic = Number(row.roe.toFixed(1));
-      }
-    } else {
-      const equity = typeof row.equity === 'number' && row.equity > 0 ? row.equity : 0;
-      const netDebt = typeof row.net_debt === 'number' && row.net_debt > 0 ? row.net_debt : 0;
-      const investedCapital = equity + netDebt;
-
-      const opIncomeVal = row.operating_profit ?? row.operating_income ?? null;
-      const opNopat = (typeof opIncomeVal === 'number' && opIncomeVal !== 0)
-        ? opIncomeVal * (1 - taxRate)
-        : ((typeof row.ebitda === 'number' && row.ebitda > 0) ? row.ebitda * 0.70 : 0);
-
-      const rawNopat = (opNopat !== 0)
-        ? opNopat
-        : (typeof row.net_income === 'number' ? row.net_income : 0);
-
-      const annualizedNopat = rawNopat * annualFactor;
-
-      if (investedCapital > 0 && annualizedNopat !== 0) {
-        const calculated = (annualizedNopat / investedCapital) * 100;
-        if (calculated >= -100 && calculated <= 250) {
-          row.roic = Number(calculated.toFixed(1));
-        } else if (typeof row.roe === 'number') {
-          row.roic = Number(row.roe.toFixed(1));
-        } else {
-          row.roic = null;
-        }
-      } else if (typeof row.roe === 'number') {
-        row.roic = Number(row.roe.toFixed(1));
-      } else if (row.roic != null && !isNaN(Number(row.roic))) {
-        row.roic = Number(Number(row.roic).toFixed(1));
-      } else {
-        row.roic = null;
-      }
-    }
-
-    row.eva_spread = (typeof row.roic === 'number' && typeof row.wacc === 'number')
-      ? Number((row.roic - row.wacc).toFixed(1))
-      : null;
-
-    // Tarihsel Hisse Fiyatı (share_price) kontrolü: Boşsa özsermaye/hasılat gelişimiyle orantılı türet
+    // UI Tarihsel Hisse Fiyatı (share_price) kontrolü: Boşsa özsermaye/hasılat gelişimiyle orantılı türet
     if (typeof row.share_price !== 'number' || isNaN(row.share_price) || row.share_price <= 0) {
-      if (idx === sorted.length - 1) {
+      if (idx === enrichedHistory.length - 1) {
         row.share_price = Number(basePrice.toFixed(2));
       } else if (latestEquityRef && typeof row.equity === 'number' && row.equity > 0) {
         const ratio = Math.max(0.08, Math.min(1.5, row.equity / latestEquityRef));
@@ -1064,7 +779,7 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
         const ratio = Math.max(0.08, Math.min(1.5, (row.revenue * annualFactor) / latestRevRef));
         row.share_price = Number((basePrice * ratio).toFixed(2));
       } else {
-        const stepFactor = Math.max(0.15, Math.pow(0.84, sorted.length - 1 - idx));
+        const stepFactor = Math.max(0.15, Math.pow(0.84, enrichedHistory.length - 1 - idx));
         row.share_price = Number((basePrice * stepFactor).toFixed(2));
       }
     }
@@ -2340,17 +2055,10 @@ export default function ValuationTerminal() {
   // Önceki Yılın Aynı Çeyreğini Bulma (Gerçek YoY Kıyaslaması - İlave 3)
   const findSameQuarterLastYear = (currPeriod: string, hist: any[]) => {
     if (!currPeriod || !hist || hist.length === 0) return null;
-    const match = String(currPeriod).match(/(20\d{2})[\/\s\-_]?(q\d|\d+)/i);
-    if (!match) return null;
-    const curYear = parseInt(match[1], 10);
-    const qPart = match[2].toUpperCase();
-    const prevYear = curYear - 1;
-    return hist.find(h => {
-      if (!h || !h.period) return false;
-      const hMatch = String(h.period).match(/(20\d{2})[\/\s\-_]?(q\d|\d+)/i);
-      if (!hMatch) return false;
-      return parseInt(hMatch[1], 10) === prevYear && hMatch[2].toUpperCase() === qPart;
-    }) || null;
+    const currKey = parsePeriodSortKey(currPeriod);
+    if (!currKey) return null;
+    const targetKey = currKey - 100;
+    return hist.find(h => h && h.period && parsePeriodSortKey(h.period) === targetKey) || null;
   };
 
   const sameQuarterLastYear = latestData ? findSameQuarterLastYear(latestData.period, chartData) : null;
@@ -4154,13 +3862,16 @@ export default function ValuationTerminal() {
                       {/* Mini Sparkline Çizgi Grafikleri (3x2) */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                         {[
-                          { title: 'Brüt Kar Marjı (Çeyreklik)', calc: (d:any) => { const denom = currentSector === 'INSURANCE' ? (d.gross_written_premiums ?? d.written_premiums ?? d.revenue) : d.revenue; if (currentSector === 'INSURANCE') return (denom && denom !== 0) ? ((d.gross_profit ?? d.technical_balance ?? d.technical_profit ?? 0) / denom * 100) : null; return (denom && denom !== 0 && d.gross_profit != null) ? (d.gross_profit / denom * 100) : null; } },
+                          { title: 'Brüt Kar Marjı (Çeyreklik)', calc: (d:any) => { const denom = currentSector === 'INSURANCE' ? (d.gross_written_premiums ?? d.written_premiums ?? d.revenue) : d.revenue; if (currentSector === 'INSURANCE') { const num = d.gross_profit ?? d.technical_balance ?? d.technical_profit; return (denom && denom > 0 && num != null && !isNaN(num)) ? (num / denom * 100) : null; } return (denom && denom > 0 && d.gross_profit != null && !isNaN(d.gross_profit)) ? (d.gross_profit / denom * 100) : null; } },
                           { title: currentSector === 'INSURANCE' ? 'Teknik Kâr Marjı (Çeyreklik)' : 'FAVÖK Marjı (Çeyreklik)', calc: (d:any) => {
                             const denom = currentSector === 'INSURANCE' ? (d.gross_written_premiums ?? d.written_premiums ?? d.revenue) : d.revenue;
-                            if (currentSector === 'INSURANCE') return (denom ? ((d.technical_balance ?? d.technical_profit ?? d.ebitda ?? d.net_income) / denom * 100) : null);
-                            return denom ? (d.ebitda / denom * 100) : null;
+                            if (currentSector === 'INSURANCE') {
+                              const num = d.technical_balance ?? d.technical_profit ?? d.ebitda ?? d.net_income;
+                              return (denom && denom > 0 && num != null && !isNaN(num)) ? (num / denom * 100) : null;
+                            }
+                            return (denom && denom > 0 && d.ebitda != null && !isNaN(d.ebitda)) ? (d.ebitda / denom * 100) : null;
                           }},
-                          { title: 'Net Kar Marjı (Çeyreklik)', calc: (d:any) => { const denom = currentSector === 'INSURANCE' ? (d.gross_written_premiums ?? d.written_premiums ?? d.revenue) : d.revenue; return (denom && denom !== 0 && d.net_income != null) ? (d.net_income / denom * 100) : null; } },
+                          { title: 'Net Kar Marjı (Çeyreklik)', calc: (d:any) => { const denom = currentSector === 'INSURANCE' ? (d.gross_written_premiums ?? d.written_premiums ?? d.revenue) : d.revenue; return (denom && denom > 0 && d.net_income != null && !isNaN(d.net_income)) ? (d.net_income / denom * 100) : null; } },
                           { title: 'Cari Oran', calc: (d:any) => computeRatioForPeriod(d, 'current_ratio', currentSector) },
                           { title: 'Kaldıraç Oranı', calc: (d:any) => computeRatioForPeriod(d, 'leverage_ratio', currentSector) },
                           { title: 'Özkaynak Karlılığı', calc: (d:any) => computeRatioForPeriod(d, 'roe', currentSector) }

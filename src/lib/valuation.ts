@@ -301,17 +301,6 @@ export function homogenizeTms29Series(
   }
 
   // 1. Doğru geçiş tespiti için seriyi eskiden yeniye kronolojik sırala
-  const parsePeriodSortKey = (p: string) => {
-    const yr = String(p || '').match(/(20\d{2})/);
-    const year = yr ? parseInt(yr[1], 10) : 2024;
-    let q = 12;
-    if (/(?:q1|1\.ç|1ç|\/0?3\b|3a\b)/i.test(p)) q = 3;
-    else if (/(?:q2|2\.ç|2ç|\/0?6\b|6a\b)/i.test(p)) q = 6;
-    else if (/(?:q3|3\.ç|3ç|\/0?9\b|9a\b)/i.test(p)) q = 9;
-    else if (/(?:q4|4\.ç|4ç|\/12\b|12a\b)/i.test(p)) q = 12;
-    return year * 100 + q;
-  };
-
   const sorted = [...history].sort((a, b) => parsePeriodSortKey(a?.period) - parsePeriodSortKey(b?.period));
 
   const isFinancialSector = sector === 'BANKING' || sector === 'INSURANCE';
@@ -803,16 +792,6 @@ export function calculateSectorScore(
 ): SectorScoreResult {
   const history: any[] = Array.isArray(data?.financial_history) ? data.financial_history : [];
   // Seriyi kronolojik sıralayarak en güncel dönemi doğru tespit et
-  const parsePeriodSortKey = (p: string) => {
-    const yr = String(p || '').match(/(20\d{2})/);
-    const year = yr ? parseInt(yr[1], 10) : 2024;
-    let q = 12;
-    if (/(?:q1|1\.ç|1ç|\/0?3\b|3a\b)/i.test(p)) q = 3;
-    else if (/(?:q2|2\.ç|2ç|\/0?6\b|6a\b)/i.test(p)) q = 6;
-    else if (/(?:q3|3\.ç|3ç|\/0?9\b|9a\b)/i.test(p)) q = 9;
-    else if (/(?:q4|4\.ç|4ç|\/12\b|12a\b)/i.test(p)) q = 12;
-    return year * 100 + q;
-  };
   const sortedHistory = [...history].sort((a, b) => parsePeriodSortKey(a?.period) - parsePeriodSortKey(b?.period));
   const latest = sortedHistory.length > 0 ? sortedHistory[sortedHistory.length - 1] : null;
 
@@ -1311,17 +1290,19 @@ export function optimizeFinalDecision({
   let overrideApplied = false;
   let overrideReason: string | undefined = undefined;
 
-  // FALSE POSITIVE (HATALI AL) ENGELLEME KURALLARI:
-  if (rawDecision === 'AL') {
-    // 1. Kural: Negatif Özkaynak / Borca Batıklık (TTK 376)
-    const equity = parseFinancialNumber(effectiveLatestData?.equity);
-    if (equity !== null && equity <= 0) {
+  // 1. Kural: Negatif Özkaynak / Borca Batıklık (TTK 376) - Her durumda ALMA olmalıdır
+  const equity = parseFinancialNumber(effectiveLatestData?.equity);
+  if (equity !== null && equity <= 0) {
+    if (finalDecision !== 'ALMA') {
       finalDecision = 'ALMA';
       overrideApplied = true;
       overrideReason = 'Teknik İflas (TTK 376): Özkaynaklar negatiftir, AL kararı kesinlikle verilemez.';
-      safetyFlags.push('Negatif Özkaynak');
     }
+    safetyFlags.push('Negatif Özkaynak');
+  }
 
+  // FALSE POSITIVE (HATALI AL) ENGELLEME KURALLARI:
+  if (rawDecision === 'AL' && !overrideApplied) {
     // 2. Kural: Sanayi Sektörü Makyajlı Bilanço Koruması (Net Kâr pozitif ama İşletme Nakit Akışı negatif)
     const netIncome = parseFinancialNumber(effectiveLatestData?.net_income);
     const ocf = parseFinancialNumber(effectiveLatestData?.operating_cash_flow);
@@ -1981,9 +1962,10 @@ export function computeSectorValuationAndDrivers(
       const navPerShare = totalEquityFull / effectiveShareCount;
       const forwardEquityGrowth = roe > 0 ? Math.min(0.75, Math.max(0.25, (roe / 100) * 0.85)) : 0.25;
       const forwardNavPerShare = navPerShare * (1 + forwardEquityGrowth);
-      const rawFair = forwardNavPerShare * Math.max(0.85, targetMultipleNum);
+      const clampedMultiple = Math.max(0.50, Math.min(0.95, targetMultipleNum));
+      const rawFair = forwardNavPerShare * clampedMultiple;
       fairValue = Number(Math.max(currentPrice * 0.55, rawFair).toFixed(2));
-      formulaStr = `12A İleri NAD/Pay = ${forwardNavPerShare.toFixed(2).replace('.', ',')} TL × ${Math.max(0.85, targetMultipleNum)} = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+      formulaStr = `12A İleri NAD/Pay = ${forwardNavPerShare.toFixed(2).replace('.', ',')} TL × ${clampedMultiple.toFixed(2).replace('.', ',')} = ${fairValue.toFixed(2).replace('.', ',')} TL`;
     }
   } else if (sector === 'REIT') {
     modelName = '12 Aylık İleriye Dönük Net Aktif Değeri (NAD) & Portföy Ekspertiz İskonto Modeli';
@@ -1999,9 +1981,10 @@ export function computeSectorValuationAndDrivers(
       const navPerShare = totalEquityFull / effectiveShareCount;
       const forwardNavGrowth = 0.35; // %35 portföy ekspertiz genişlemesi
       const forwardNavPerShare = navPerShare * (1 + forwardNavGrowth);
-      const rawFair = forwardNavPerShare * Math.max(0.65, Math.min(0.90, targetMultipleNum));
+      const clampedMultiple = Math.max(0.65, Math.min(0.90, targetMultipleNum));
+      const rawFair = forwardNavPerShare * clampedMultiple;
       fairValue = Number(Math.max(currentPrice * 0.50, rawFair).toFixed(2));
-      formulaStr = `Cari NAD/Pay = ${navPerShare.toFixed(2).replace('.', ',')} TL | 12A İleri NAD/Pay = ${forwardNavPerShare.toFixed(2).replace('.', ',')} TL × ${targetMultipleNum}x = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+      formulaStr = `Cari NAD/Pay = ${navPerShare.toFixed(2).replace('.', ',')} TL | 12A İleri NAD/Pay = ${forwardNavPerShare.toFixed(2).replace('.', ',')} TL × ${clampedMultiple.toFixed(2).replace('.', ',')}x = ${fairValue.toFixed(2).replace('.', ',')} TL`;
     }
   } else if (sector === 'TECH') {
     modelName = '12 Aylık İleriye Dönük Rule of 40, FD/Satışlar & Nakit Akış Hibrit Modeli';
@@ -2014,11 +1997,11 @@ export function computeSectorValuationAndDrivers(
     const totalEquityFull = latestEq * unitScale;
     const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
 
-    if (totalEquityFull < 0 && revFull <= 0) {
+    if (totalEquityFull <= 0) {
       isInsolvent = true;
-      boundaryWarning = 'Şirket özkaynakları ve hasılat üretimi negatiftir.';
-      fairValue = Number((currentPrice * 0.30).toFixed(2));
-      formulaStr = 'Negatif Özkaynak ve Hasılat (Risk Tabanı)';
+      boundaryWarning = 'Şirket özkaynakları negatiftir (TTK 376 Borca Batıklık). Hisse başı adil değer tasfiye/risk tabanına çekilmiştir.';
+      fairValue = Number((currentPrice * 0.20).toFixed(2));
+      formulaStr = `Özkaynaklar Negatif (TTK 376) = ${totalEquityFull.toLocaleString('tr-TR')} TL (Risk Tabanı)`;
     } else {
       const clampedRevGrowth = Math.min(0.85, Math.max(0.25, revGrowth / 100));
       const forwardRev = revFull > 0 ? revFull * (1 + clampedRevGrowth) : 0;
@@ -2061,11 +2044,11 @@ export function computeSectorValuationAndDrivers(
     const totalEquityFull = latestEq * unitScale;
     const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
 
-    if (totalEquityFull < 0 && ebitdaFull <= 0) {
+    if (totalEquityFull <= 0) {
       isInsolvent = true;
-      boundaryWarning = 'Şirket özkaynakları ve FAVÖK üretimi negatiftir (TTK 376 Borca Batıklık).';
-      fairValue = Number((currentPrice * 0.30).toFixed(2));
-      formulaStr = `Negatif Özkaynak ve FAVÖK (Risk Tabanı)`;
+      boundaryWarning = 'Şirket özkaynakları negatiftir (TTK 376 Borca Batıklık). Hisse başı adil değer tasfiye/risk tabanına çekilmiştir.';
+      fairValue = Number((currentPrice * 0.20).toFixed(2));
+      formulaStr = `Özkaynaklar Negatif (TTK 376) = ${totalEquityFull.toLocaleString('tr-TR')} TL (Risk Tabanı)`;
     } else {
       const clampedRevGrowth = Math.min(0.85, Math.max(0.25, revGrowth / 100));
       const clampedNetGrowth = Math.min(0.85, Math.max(0.25, netGrowth / 100));
