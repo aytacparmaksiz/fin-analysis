@@ -766,16 +766,43 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
     } else {
       const equity = typeof item.equity === 'number' && item.equity > 0 ? item.equity : 0;
       const netDebt = typeof item.net_debt === 'number' && item.net_debt > 0 ? item.net_debt : 0;
-      const investedCapital = equity + netDebt;
+      const finDebt = typeof item.financial_debt === 'number' && item.financial_debt > 0 ? item.financial_debt : 0;
 
-      const opIncomeVal = item.operating_profit ?? item.operating_income ?? null;
+      // Standart Yatırılan Sermaye (Invested Capital): Özkaynak + Finansal Borç (veya pozitif Net Borç)
+      let investedCapital = equity + (finDebt > 0 ? finDebt : netDebt);
+
+      // Perakende / Sanayi için aktif tabanlı kontrol (Asset-based invested capital)
+      if (typeof item.total_assets === 'number' && item.total_assets > 0) {
+        const curLiab = typeof item.current_liabilities === 'number' ? item.current_liabilities : 0;
+        const nonOpLiab = Math.max(0, curLiab - (typeof item.short_term_debt === 'number' ? item.short_term_debt : 0));
+        const assetBasedCap = item.total_assets - nonOpLiab;
+        if (assetBasedCap > investedCapital && assetBasedCap < item.total_assets * 1.5) {
+          investedCapital = (investedCapital * 0.5) + (assetBasedCap * 0.5);
+        }
+      }
+
+      // NOPAT = EBIT * (1 - t)
+      // EBIT sırasıyla: operating_profit, operating_income, EBITDA türetimi veya Brüt Kâr türetimi
+      let opIncomeVal = item.operating_profit ?? item.operating_income ?? null;
+      if (opIncomeVal === null || opIncomeVal === 0) {
+        if (typeof item.ebitda === 'number' && item.ebitda > 0) {
+          opIncomeVal = item.ebitda * 0.72; // EBITDA'dan amortisman arındırılmış EBIT
+        } else if (typeof item.gross_profit === 'number' && item.gross_profit > 0) {
+          opIncomeVal = item.gross_profit * 0.45; // Brüt kârdan operasyonel faaliyet kârı
+        } else if (typeof item.revenue === 'number' && item.revenue > 0) {
+          opIncomeVal = item.revenue * 0.052; // Sektörel faaliyet marjı
+        }
+      }
+
       const opNopat = (typeof opIncomeVal === 'number' && opIncomeVal !== 0)
         ? opIncomeVal * (1 - taxRate)
-        : ((typeof item.ebitda === 'number' && item.ebitda > 0) ? item.ebitda * (1 - taxRate) : 0);
+        : 0;
 
+      // TMS 29 parasal pozisyon kaybı veya finansman giderleri ile negatifleşmiş net kâra 
+      // yalnızca gerçek bir operasyonel kâr yoksa ve net kâr pozitifse başvurulur.
       const rawNopat = (opNopat !== 0)
         ? opNopat
-        : (typeof item.net_income === 'number' ? item.net_income : 0);
+        : ((typeof item.net_income === 'number' && item.net_income > 0) ? item.net_income : 0);
 
       // İlgili dönem çarpanı (3A -> x4, 6A -> x2, 9A -> x1.33, 12A -> x1) ile yıllıklandırılmış NOPAT
       const annualizedNopat = rawNopat * annualFactor;
@@ -1902,9 +1929,61 @@ export function computeSectorValuationAndDrivers(
       targetMultipleStr = 'FD/Satışlar 4,2x (Rule of 40 Bazlı)';
       targetMultipleExpl = 'Yüksek büyüme ve yazılım operasyonel nakit dönüşümüne göre FD/Satışlar çarpanı';
     } else {
-      targetMultipleNum = 6.5;
-      targetMultipleStr = 'FD/FAVÖK 6,5x';
-      targetMultipleExpl = 'Sektör medyanı ve sermaye maliyeti (WACC) bazlı hedef operasyonel çarpan';
+      // DİNAMİK SANAYİ / HİZMET / TİCARET HEDEF FD/FAVÖK ÇARPANI
+      const tickerUpper = String(extractedData?.ticker || '').toUpperCase();
+      let baseMultiple = 6.0;
+      let sectorName = 'Sanayi ve Hizmet';
+
+      if (['MGROS', 'BIMAS', 'SOKM', 'BIZIM', 'CRFSA'].includes(tickerUpper)) {
+        baseMultiple = 5.6;
+        sectorName = 'Gıda Perakendesi';
+      } else if (['THYAO', 'PGSUS', 'TAVHL', 'CLEBI'].includes(tickerUpper)) {
+        baseMultiple = 6.8;
+        sectorName = 'Havacılık ve Lojistik';
+      } else if (['ASELS', 'SDTTR', 'MIATK', 'OTKAR'].includes(tickerUpper)) {
+        baseMultiple = 7.5;
+        sectorName = 'Savunma ve İleri Teknoloji';
+      } else if (['FROTO', 'TOASO', 'TTRAK', 'DOAS', 'TMSN'].includes(tickerUpper)) {
+        baseMultiple = 6.5;
+        sectorName = 'Otomotiv ve Yan Sanayi';
+      } else if (['EREGL', 'KRDMD', 'KOZAL', 'KOZAA', 'IPEKE'].includes(tickerUpper)) {
+        baseMultiple = 5.0;
+        sectorName = 'Demir Çelik ve Madencilik';
+      } else if (['TUPRS', 'PETKM', 'AYGAZ', 'AKSEN', 'ENJSA'].includes(tickerUpper)) {
+        baseMultiple = 5.5;
+        sectorName = 'Enerji ve Rafineri';
+      } else if (['TCELL', 'TTKOM'].includes(tickerUpper)) {
+        baseMultiple = 5.4;
+        sectorName = 'Telekomünikasyon';
+      } else if (['ARCLK', 'VESBE', 'VESTL'].includes(tickerUpper)) {
+        baseMultiple = 5.8;
+        sectorName = 'Dayanıklı Tüketim';
+      }
+
+      // EVA Spread (ROIC vs WACC) etkisi:
+      // ROIC sermaye maliyetini aşıyorsa çarpan primi, altındaysa çarpan iskontosu
+      const roicVal = parseFinancialNumber(latest?.roic);
+      const waccVal = parseFinancialNumber(latest?.wacc) ?? 35.3;
+      let evaAdj = 1.0;
+      if (roicVal !== null && waccVal !== null) {
+        const spread = roicVal - waccVal;
+        if (spread > 0) {
+          evaAdj = 1.0 + Math.min(0.20, spread * 0.01);
+        } else {
+          evaAdj = Math.max(0.75, 1.0 - Math.min(0.25, Math.abs(spread) * 0.006));
+        }
+      }
+
+      // Canlı piyasa çarpanı varsa (İş Yatırım) dengele
+      const liveEvEbitda = parseFinancialNumber(extractedData?.marketMultiples?.ev_ebitda);
+      let derivedMultiple = baseMultiple * evaAdj;
+      if (liveEvEbitda !== null && liveEvEbitda >= 3.0 && liveEvEbitda <= 15.0) {
+        derivedMultiple = (derivedMultiple * 0.60) + (liveEvEbitda * 0.40);
+      }
+
+      targetMultipleNum = Number(Math.max(4.0, Math.min(9.5, derivedMultiple)).toFixed(1));
+      targetMultipleStr = `FD/FAVÖK ${targetMultipleNum.toString().replace('.', ',')}x`;
+      targetMultipleExpl = `${sectorName} tabanı (${baseMultiple.toFixed(1)}x), sermaye maliyeti (WACC %${waccVal.toFixed(1)}) ve ROIC kârlılığı bazlı hedef çarpan`;
     }
   }
 

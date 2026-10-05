@@ -656,13 +656,61 @@ function parseYearAndQuarter(p: string): { year: number; q: number } | null {
   return { year, q };
 }
 
+function isYearSeriesCumulative(sorted: any[], year: number): boolean {
+  const yearItems = sorted.filter(d => {
+    const info = parseYearAndQuarter(d.period);
+    return info && info.year === year && info.q >= 1 && info.q <= 4;
+  }).sort((a, b) => (parseYearAndQuarter(a.period)?.q || 0) - (parseYearAndQuarter(b.period)?.q || 0));
+
+  if (yearItems.length < 2) return false;
+
+  const q1 = yearItems.find(d => parseYearAndQuarter(d.period)?.q === 1);
+  const q2 = yearItems.find(d => parseYearAndQuarter(d.period)?.q === 2);
+  const q3 = yearItems.find(d => parseYearAndQuarter(d.period)?.q === 3);
+
+  const revKey = q1?.revenue != null ? 'revenue' : (q1?.gross_written_premiums != null ? 'gross_written_premiums' : 'net_income');
+
+  if (q1 && q2 && q1[revKey] != null && q2[revKey] != null) {
+    const v1 = Math.abs(q1[revKey]);
+    const v2 = Math.abs(q2[revKey]);
+    if (v1 > 0) {
+      // 6 aylık kümülatif toplam normalde 3 aylık toplamın en az ~1.35x katıdır
+      return v2 >= v1 * 1.35;
+    }
+  }
+
+  if (q2 && q3 && q2[revKey] != null && q3[revKey] != null) {
+    const v2 = Math.abs(q2[revKey]);
+    const v3 = Math.abs(q3[revKey]);
+    if (v2 > 0) {
+      return v3 >= v2 * 1.25;
+    }
+  }
+
+  return false;
+}
+
 function computeIncrementalQuarterlyData(rawData: any[]): any[] {
   if (!rawData || rawData.length === 0) return rawData;
   const sorted = [...rawData].sort((a, b) => parsePeriodSortKey(a.period) - parsePeriodSortKey(b.period));
+
+  const cumulativeYears = new Set<number>();
+  const allYears = Array.from(new Set(sorted.map(d => parseYearAndQuarter(d.period)?.year).filter((y): y is number => y != null)));
+  for (const yr of allYears) {
+    if (isYearSeriesCumulative(sorted, yr)) {
+      cumulativeYears.add(yr);
+    }
+  }
+
   return sorted.map((item) => {
     const period = item.period || '';
     const info = parseYearAndQuarter(period);
     if (!info || info.q <= 1) return { ...item };
+
+    // Eğer bu yılın çeyrekleri kümülatif değilse (zaten münferit/tek çeyreklik veriyse), çıkarma yapma!
+    if (!cumulativeYears.has(info.year)) {
+      return { ...item };
+    }
 
     const prevItem = sorted.find(d => {
       const dInfo = parseYearAndQuarter(d.period);
@@ -673,7 +721,13 @@ function computeIncrementalQuarterlyData(rawData: any[]): any[] {
     const result: any = { ...item };
     for (const field of CUMULATIVE_FIELDS) {
       if (item[field] != null && prevItem[field] != null) {
-        result[field] = item[field] - prevItem[field];
+        const diff = item[field] - prevItem[field];
+        // Mantık kontrolü: Hasılat veya prim üretiminde çıkarma sonucu negatif olamaz
+        if ((field === 'revenue' || field === 'gross_written_premiums') && diff <= 0) {
+          result[field] = item[field];
+        } else {
+          result[field] = diff;
+        }
       }
     }
     return result;
@@ -3694,54 +3748,8 @@ export default function ValuationTerminal() {
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <h2 className="text-lg font-black text-white tracking-tight">{activeReport.ticker}</h2>
-                      <span className="text-xs font-mono font-bold text-slate-200 bg-[#090D16] px-2.5 py-0.5 rounded-md border border-slate-800">
+                      <span className="text-sm font-mono font-bold text-emerald-400 bg-[#090D16] px-3 py-0.5 rounded-md border border-slate-800">
                         {activeReport.price} TL
-                      </span>
-                      
-                      {valuationInfo?.fair_value != null && (
-                        <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                          Adil Değer: {typeof valuationInfo.fair_value === 'number' ? valuationInfo.fair_value.toFixed(2) : valuationInfo.fair_value} TL
-                        </span>
-                      )}
-                      {piyasaDegeriStr && (
-                        <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/30">
-                          Piyasa Değeri: {piyasaDegeriStr}
-                        </span>
-                      )}
-
-                      {marketMultiples && (
-                        <>
-                          {marketMultiples.pe != null && (
-                            <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-md bg-emerald-950/40 text-emerald-300 border border-emerald-800/60" title="Fiyat / Kazanç Oranı (İş Yatırım)">
-                              F/K: {marketMultiples.pe.toFixed(1)}
-                            </span>
-                          )}
-                          {marketMultiples.pb != null && (
-                            <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-md bg-cyan-950/40 text-cyan-300 border border-cyan-800/60" title="Piyasa Değeri / Defter Değeri (İş Yatırım)">
-                              PD/DD: {marketMultiples.pb.toFixed(2)}
-                            </span>
-                          )}
-                          {marketMultiples.ev_ebitda != null && (
-                            <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-md bg-amber-950/40 text-amber-300 border border-amber-800/60" title="Firma Değeri / FAVÖK (İş Yatırım)">
-                              FD/FAVÖK: {marketMultiples.ev_ebitda.toFixed(1)}
-                            </span>
-                          )}
-                          {marketMultiples.free_float_pct != null && (
-                            <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-md bg-slate-900 text-slate-300 border border-slate-800" title="Fiili Dolaşım Oranı (İş Yatırım)">
-                              Halka Açıklık: %{marketMultiples.free_float_pct.toFixed(0)}
-                            </span>
-                          )}
-                        </>
-                      )}
-
-                      <span className={`text-xs font-bold px-2.5 py-0.5 rounded-md border ${
-                        activeReport.decision === 'AL'
-                          ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
-                          : activeReport.decision === 'ALMA'
-                          ? 'bg-rose-950/80 text-rose-400 border-rose-800'
-                          : 'bg-amber-950/80 text-amber-400 border-amber-800'
-                      }`}>
-                        {activeReport.decision}
                       </span>
                       <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-slate-900 text-slate-400 border border-slate-800">
                         {sectorMeta.badge}
@@ -3755,16 +3763,27 @@ export default function ValuationTerminal() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-3">
                   {activeReport.score && (
-                    <div className="text-right bg-[#090D16] border border-slate-800 px-3.5 py-1.5 rounded-xl">
-                      <div className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Skor</div>
-                      <div className="text-xl font-black font-mono text-emerald-400">{activeReport.score}<span className="text-xs text-slate-600 font-normal">/100</span></div>
+                    <div className="text-right bg-[#090D16] border border-slate-800 px-3 py-1.5 rounded-xl flex flex-col items-end min-w-[95px]">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Skor</span>
+                        <span className="text-lg font-black font-mono text-emerald-400">{activeReport.score}<span className="text-[10px] text-slate-600 font-normal">/100</span></span>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 mt-1 rounded border ${
+                        activeReport.decision === 'AL'
+                          ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
+                          : activeReport.decision === 'ALMA'
+                          ? 'bg-rose-950/80 text-rose-400 border-rose-800'
+                          : 'bg-amber-950/80 text-amber-400 border-amber-800'
+                      }`}>
+                        {activeReport.decision}
+                      </span>
                     </div>
                   )}
                   <button
                     onClick={() => deleteReport(activeReport.id)}
-                    className="p-2 bg-slate-900 hover:bg-rose-950 text-slate-400 hover:text-rose-400 rounded-xl border border-slate-800 transition cursor-pointer"
+                    className="p-2.5 bg-slate-900 hover:bg-rose-950 text-slate-400 hover:text-rose-400 rounded-xl border border-slate-800 transition cursor-pointer"
                     title="Raporu Sil"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -6119,27 +6138,7 @@ export default function ValuationTerminal() {
                         </div>
                       )}
 
-                      {/* Hızlı Hafıza Kartı (Executive Memory Anchor) */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-950/80 border border-slate-800/90 p-4 rounded-xl mb-6 print:hidden">
-                        <div className="space-y-0.5">
-                          <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Güncel Fiyat</span>
-                          <span className="text-base sm:text-lg font-mono font-bold text-white">{valuationInfo.current_price} TL</span>
-                        </div>
-                        <div className="space-y-0.5">
-                          <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Hesaplanan Adil Değer</span>
-                          <span className="text-base sm:text-lg font-mono font-black text-emerald-400">{valuationInfo.fair_value} TL</span>
-                        </div>
-                        <div className="space-y-0.5">
-                          <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Senaryo Bandı (Ayı – Boğa)</span>
-                          <span className="text-xs sm:text-sm font-mono font-bold text-cyan-300">{valuationInfo.bear_price} TL – {valuationInfo.bull_price} TL</span>
-                        </div>
-                        <div className="space-y-0.5">
-                          <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Getiri / İskonto Potansiyeli</span>
-                          <span className={`text-base sm:text-lg font-mono font-black ${valuationInfo.discount_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            {valuationInfo.discount_pct >= 0 ? `+%${valuationInfo.discount_pct}` : `%${valuationInfo.discount_pct}`}
-                          </span>
-                        </div>
-                      </div>
+
 
                       {/* ITEM 1: KÂR KALİTESİ & NAKİT AKIŞI TEŞHİSİ (BÖLÜM II ÇAPASI) */}
                       <div className="mb-8">
