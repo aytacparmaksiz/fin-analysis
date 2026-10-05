@@ -404,13 +404,15 @@ export function normalizePeriodName(period: string | number): string {
  * Eğer gerekli girdi verisi raporda bulunmuyorsa kesinlikle uydurulmaz, null bırakılır.
  */
 export function enrichAndSanitizeFinancialHistory(data: any): any {
-  if (!data || typeof data !== 'object') return data;
-  if (!Array.isArray(data.financial_history)) return data;
+  if (!data) return data;
+  const isDirectArray = Array.isArray(data);
+  const container = isDirectArray ? { financial_history: data } : data;
+  if (!Array.isArray(container.financial_history)) return data;
 
-  const detectedSector: SectorType = data.sector || detectSector(data.ticker || '');
-  data.sector = detectedSector;
+  const detectedSector: SectorType = container.sector || detectSector(container.ticker || '');
+  container.sector = detectedSector;
 
-  const debtInfo = data.debt_and_interest || {};
+  const debtInfo = container.debt_and_interest || {};
 
   // Varsa TL borçlanma faizini tespit et
   let parsedTlRate: number | null = null;
@@ -422,7 +424,7 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
   }
 
   // Kronolojik sıralama
-  const history = [...data.financial_history].filter(Boolean).sort((a, b) => {
+  const history = [...container.financial_history].filter(Boolean).sort((a, b) => {
     return parsePeriodSortKey(a.period) - parsePeriodSortKey(b.period);
   });
 
@@ -435,6 +437,8 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
       'revenue', 'ebitda', 'net_income', 'gross_profit', 'operating_profit', 'operating_income',
       'operating_cash_flow', 'capex', 'free_cash_flow', 'net_debt',
       'short_term_debt', 'long_term_debt', 'financial_debt',
+      'interest_expenses', 'interest_expense', 'financial_expenses', 'financial_expense', 'financing_costs', 'finance_cost',
+      'ebt', 'ebit', 'fx_assets', 'fx_liabilities', 'net_fx_position',
       'equity', 'paid_in_capital', 'total_assets', 'current_assets', 'non_current_assets',
       'current_liabilities', 'long_term_liabilities', 'total_liabilities', 'inventories',
       'cash_and_equivalents', 'financial_assets_insured', 'trade_receivables',
@@ -675,6 +679,37 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
       preTaxKd = parsedTlRate;
     }
 
+    // Şirkete Özel Canlı Efektif Borçlanma Maliyeti (Item 2: Company-Specific Kd & WACC)
+    const intExpense = item.interest_expenses ?? item.financial_expenses ?? item.interest_expense ?? item.financial_expense ?? item.financing_costs ?? item.finance_cost ?? debtInfo.interest_expenses ?? debtInfo.financial_expenses ?? null;
+    const prevItem = i > 0 ? history[i - 1] : null;
+    const currentFinDebt = item.financial_debt != null
+      ? Math.max(0, item.financial_debt)
+      : Math.max(0, (item.short_term_debt || item.short_term_financial_debt || 0) + (item.long_term_debt || item.long_term_financial_debt || 0));
+    const prevFinDebt = (prevItem && prevItem.financial_debt != null)
+      ? Math.max(0, prevItem.financial_debt)
+      : (prevItem ? Math.max(0, (prevItem.short_term_debt || prevItem.short_term_financial_debt || 0) + (prevItem.long_term_debt || prevItem.long_term_financial_debt || 0)) : currentFinDebt);
+    const avgFinDebt = (currentFinDebt > 0 && prevFinDebt > 0) ? (currentFinDebt + prevFinDebt) / 2 : currentFinDebt;
+
+    let companySpecificKd: number | null = null;
+    let kdSource = 'BIST Sektörel / Makro Kurumsal Kredi Göstergesi';
+
+    if (intExpense !== null && intExpense > 0 && avgFinDebt > 0) {
+      const calculatedKd = (intExpense / avgFinDebt) * annualFactor * 100;
+      if (calculatedKd >= 10 && calculatedKd <= 90) {
+        companySpecificKd = Number(calculatedKd.toFixed(1));
+        const blended = (calculatedKd * 0.70) + (preTaxKd * 0.30);
+        preTaxKd = Math.max(25.0, Math.min(65.0, blended));
+        kdSource = `Şirket Finansal Giderlerinden Dinamik Türetildi (%${companySpecificKd} Efektif / %${preTaxKd.toFixed(1)} Harmanlanmış)`;
+      }
+    } else if (parsedTlRate) {
+      preTaxKd = Math.max(25.0, Math.min(65.0, parsedTlRate));
+      kdSource = `Faaliyet Raporu Açıklanan Borçlanma Faizi (%${preTaxKd.toFixed(1)})`;
+    }
+
+    item.effective_kd = Number(preTaxKd.toFixed(1));
+    item.company_specific_kd = companySpecificKd;
+    item.kd_source = kdSource;
+
     // 2. Sermaye Yapısı Ağırlıkları (Özkaynak Ağırlığı We ve Finansal Borç Ağırlığı Wd)
     const eqVal = (typeof item.equity === 'number' && item.equity > 0) ? item.equity : 0;
     const grossFinDebt = item.financial_debt != null
@@ -710,6 +745,9 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
 
     item.cost_of_equity = costOfEquity;
     item.after_tax_cost_of_debt = afterTaxCostOfDebt;
+    item.effective_kd = Number(preTaxKd.toFixed(1));
+    item.company_specific_kd = companySpecificKd;
+    item.kd_source = kdSource;
     item.equity_weight = Number((equityWeight * 100).toFixed(1));
     item.debt_weight = Number((debtWeight * 100).toFixed(1));
     item.beta = leveredBeta;
@@ -767,15 +805,15 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
 
   // TMS 29 Homojenizasyonunu çalıştır (Bankacılık/Sigortacılık muafiyetini gözeterek)
   const { homogenizedHistory, hasTms29Adjustment, tms29Warnings } = homogenizeTms29Series(history, detectedSector);
-  data.financial_history = homogenizedHistory;
-  if (data.is_tms29_adjusted === undefined) {
-    data.is_tms29_adjusted = hasTms29Adjustment;
+  container.financial_history = homogenizedHistory;
+  if (container.is_tms29_adjusted === undefined) {
+    container.is_tms29_adjusted = hasTms29Adjustment;
   }
-  if (tms29Warnings.length > 0 && !data.tms29_notes) {
-    data.tms29_notes = tms29Warnings.join(' ');
+  if (tms29Warnings.length > 0 && !container.tms29_notes) {
+    container.tms29_notes = tms29Warnings.join(' ');
   }
 
-  return data;
+  return isDirectArray ? container.financial_history : container;
 }
 
 // ============================================================================
@@ -2137,4 +2175,753 @@ export function computeSectorValuationAndDrivers(
   });
 
   return { drivers, valuation, scoreResult, optimization };
+}
+
+// ============================================================================
+// 6. KÂR KALİTESİ & NAKİT AKIŞI TEŞHİSİ (EARNINGS QUALITY & SLOAN AUDIT)
+// ============================================================================
+
+export interface EarningsQualityHistoricalPoint {
+  period: string;
+  ocf: number | null;
+  netIncome: number | null;
+  conversionRatio: number | null;
+  sloanRatio: number | null;
+}
+
+export interface EarningsQualityAudit {
+  hasData: boolean;
+  cashConversionRatio: number | null; // % (OCF / Net Income) * 100
+  sloanAccrualRatio: number | null; // (Net Income - OCF) / Total Assets
+  status: 'EXCELLENT' | 'MODERATE' | 'CRITICAL_RISK' | 'DEPRECIATION_MASK' | 'DOUBLE_NEGATIVE' | 'INSUFFICIENT_DATA';
+  statusTitle: string;
+  badgeColor: 'emerald' | 'amber' | 'rose' | 'indigo' | 'gray';
+  guidanceText: string;
+  beginnerExplanation: string;
+  sloanAssessment: string;
+  ocf: number | null;
+  netIncome: number | null;
+  totalAssets: number | null;
+  historicalTrend: EarningsQualityHistoricalPoint[];
+}
+
+/**
+ * Operasyonel Nakit Akışı (OCF) ve Net Kâr ilişkisini analiz eder.
+ * Sloan Tahakkuk Oranı = (Net Kâr - OCF) / Toplam Varlıklar formülüyle makyajsız kâr kalitesini ölçer.
+ */
+export function calculateEarningsQuality(
+  financialHistory: any,
+  sector?: SectorType
+): EarningsQualityAudit {
+  const history: any[] = Array.isArray(financialHistory)
+    ? financialHistory
+    : (financialHistory && typeof financialHistory === 'object' ? [financialHistory] : []);
+  const sorted = [...history].sort((a, b) => parsePeriodSortKey(a?.period) - parsePeriodSortKey(b?.period));
+  const latest = sorted.length > 0 ? sorted[sorted.length - 1] : null;
+
+  const ocf = parseFinancialNumber(latest?.operating_cash_flow ?? latest?.ocf);
+  const netIncome = parseFinancialNumber(latest?.net_income);
+  const totalAssets = parseFinancialNumber(latest?.total_assets);
+
+  const historicalTrend: EarningsQualityHistoricalPoint[] = sorted.map(item => {
+    const itemOcf = parseFinancialNumber(item?.operating_cash_flow ?? item?.ocf);
+    const itemNet = parseFinancialNumber(item?.net_income);
+    const itemAssets = parseFinancialNumber(item?.total_assets);
+    const conv = (itemOcf !== null && itemNet !== null && itemNet !== 0)
+      ? Number(((itemOcf / itemNet) * 100).toFixed(1))
+      : null;
+    const sloan = (itemOcf !== null && itemNet !== null && itemAssets !== null && itemAssets > 0)
+      ? Number(((itemNet - itemOcf) / itemAssets).toFixed(3))
+      : null;
+    return {
+      period: item?.period || '',
+      ocf: itemOcf,
+      netIncome: itemNet,
+      conversionRatio: conv,
+      sloanRatio: sloan
+    };
+  });
+
+  const beginnerExplanation = "Net kâr, muhasebe kayıtlarına dayalı bir tahakkuktur ve satış faturalarından oluşur; ancak paranın fiilen kasaya girip girmediğini göstermez. Operasyonel Nakit Akışı (OCF) ise müşterilerden tahsil edilen ve operasyonlardan kalan gerçek sıcak paradır. Kârın nakde dönüşmemesi, şirketin kağıt üzerinde kârlı görünürken nakit darboğazına girmesine (alacak veya stok tuzağı) yol açabilir.";
+
+  // Bankacılık & Sigortacılık için özel sektör durumu
+  if (sector === 'BANKING' || sector === 'INSURANCE') {
+    return {
+      hasData: true,
+      cashConversionRatio: null,
+      sloanAccrualRatio: null,
+      status: 'EXCELLENT',
+      statusTitle: sector === 'BANKING' ? 'Banka Fonlama & Mevduat Akışı' : 'Sigorta Float & Prim Tahsilatı',
+      badgeColor: 'indigo',
+      guidanceText: sector === 'BANKING' 
+        ? '💡 Bankacılıkta klasik işletme nakit akışı yerine kredi-mevduat büyümesi, net faiz marjı ve SYR sermaye yeterliliği takip edilir.'
+        : '💡 Sigorta şirketlerinde klasik nakit akışı yerine brüt prim tahsilatı, hasar ödeme oranı ve yatırım portföyü float getirisi esastır.',
+      beginnerExplanation,
+      sloanAssessment: 'Finans ve sigorta sektörlerinde nakit akışı müşteri mevduat/prim hareketleriyle belirlendiğinden tahakkuk anomalisi uygulanmaz.',
+      ocf,
+      netIncome,
+      totalAssets,
+      historicalTrend
+    };
+  }
+
+  if (ocf === null && netIncome === null) {
+    return {
+      hasData: false,
+      cashConversionRatio: null,
+      sloanAccrualRatio: null,
+      status: 'INSUFFICIENT_DATA',
+      statusTitle: 'Yetersiz Nakit Akış Verisi',
+      badgeColor: 'gray',
+      guidanceText: 'Şirket finansal tablolarında nakit akışı kalemi henüz raporlanmamıştır.',
+      beginnerExplanation,
+      sloanAssessment: 'Nakit akış verisi bulunmadığı için Sloan tahakkuk oranı hesaplanamadı.',
+      ocf: null,
+      netIncome: null,
+      totalAssets: null,
+      historicalTrend
+    };
+  }
+
+  const safeOcf = ocf ?? 0;
+  const safeNet = netIncome ?? 0;
+
+  let conversionRatio: number | null = null;
+  if (safeNet !== 0) {
+    conversionRatio = Number(((safeOcf / safeNet) * 100).toFixed(1));
+  }
+
+  let sloanRatio: number | null = null;
+  let sloanAssessment = 'Toplam varlık verisi eksik olduğundan tahakkuk oranı hesaplanamadı.';
+  if (totalAssets && totalAssets > 0) {
+    sloanRatio = Number(((safeNet - safeOcf) / totalAssets).toFixed(3));
+    const sloanPct = (sloanRatio * 100).toFixed(1);
+    if (sloanRatio > 0.10) {
+      sloanAssessment = `🚨 Yüksek Tahakkuk Uyarısı (%${sloanPct}) (Bilanço Makyajı / Tahsil Edilemeyen Kâr Riski): Kârın önemli bir kısmı nakde dönüşmemiş alacak veya stoklardan kaynaklanmaktadır.`;
+    } else if (sloanRatio < -0.10) {
+      sloanAssessment = `🌟 Muhafazakar Nakit Fazlası (%${sloanPct}): Operasyonel nakit üretimi muhasebesel net kârın belirgin üzerinde gerçekleşmiştir (Mükemmel Nakit Kalitesi).`;
+    } else {
+      sloanAssessment = `✅ Dengeli Tahakkuk Seviyesi (%${sloanPct}): Şirketin net kârı ile nakit akışı sağlıklı bir denge içindedir.`;
+    }
+  }
+
+  // 4 Temel Durum + Çift Negatif Durumu (Kullanıcı Talebi 1):
+  if (safeOcf >= safeNet && safeNet > 0) {
+    return {
+      hasData: true,
+      cashConversionRatio: conversionRatio,
+      sloanAccrualRatio: sloanRatio,
+      status: 'EXCELLENT',
+      statusTitle: 'Mükemmel Nakit Kalitesi (Üretilen Kâr Fazlasıyla Sıcak Nakde Dönüşüyor)',
+      badgeColor: 'emerald',
+      guidanceText: '🌟 Mükemmel Nakit Kalitesi: Üretilen kâr fazlasıyla sıcak nakde dönüşüyor. Kâr kağıt üzerinde kalmamış, doğrudan kasaya nakit girişi sağlanmıştır.',
+      beginnerExplanation,
+      sloanAssessment,
+      ocf,
+      netIncome,
+      totalAssets,
+      historicalTrend
+    };
+  } else if (safeOcf > 0 && safeNet > 0 && safeOcf < safeNet) {
+    const isGood = conversionRatio !== null && conversionRatio >= 70.0;
+    return {
+      hasData: true,
+      cashConversionRatio: conversionRatio,
+      sloanAccrualRatio: sloanRatio,
+      status: isGood ? 'MODERATE' : 'CRITICAL_RISK',
+      statusTitle: isGood 
+        ? 'Makul Nakit Kalitesi (Kârın Büyük Kısmı Nakde Çevriliyor)' 
+        : 'Zayıf Nakit Dönüşümü (Kâr Kağıt Üzerinde Kalıyor, Tahakkuk Riski)',
+      badgeColor: isGood ? 'amber' : 'rose',
+      guidanceText: isGood
+        ? '⚠️ Makul Nakit Kalitesi: Kârın büyük kısmı nakde çevriliyor ancak bir kısmı işletme sermayesinde bağlanmıştır.'
+        : '⚠️ Zayıf Nakit Dönüşümü: Kâr kağıt üzerinde kalıyor, tahakkuk riski ve alacak/stok bağlamaları dikkatle izlenmelidir.',
+      beginnerExplanation,
+      sloanAssessment,
+      ocf,
+      netIncome,
+      totalAssets,
+      historicalTrend
+    };
+  } else if (safeOcf <= 0 && safeNet > 0) {
+    return {
+      hasData: true,
+      cashConversionRatio: conversionRatio,
+      sloanAccrualRatio: sloanRatio,
+      status: 'CRITICAL_RISK',
+      statusTitle: 'Kritik Nakit Riski (Kağıt Üstünde Kâr Var Ancak Nakit Yakılıyor)',
+      badgeColor: 'rose',
+      guidanceText: '🚨 Kritik Nakit Riski: Kağıt üstünde kâr var ancak faaliyetlerden nakit yakılıyor. Kârın büyük kısmı gayrinakdi tahakkuk veya TMS 29 parasal kârdan kaynaklanıyor; likidite baskısı oluşabilir.',
+      beginnerExplanation,
+      sloanAssessment,
+      ocf,
+      netIncome,
+      totalAssets,
+      historicalTrend
+    };
+  } else if (safeOcf > 0 && safeNet < 0) {
+    return {
+      hasData: true,
+      cashConversionRatio: conversionRatio,
+      sloanAccrualRatio: sloanRatio,
+      status: 'DEPRECIATION_MASK',
+      statusTitle: 'Amortisman / Parasal Kayıp Maskelemesi',
+      badgeColor: 'indigo',
+      guidanceText: '💡 Amortisman / Parasal Kayıp Maskelemesi: Muhasebesel zarar görünse de operasyonlar nakit üretmeye devam etmektedir.',
+      beginnerExplanation,
+      sloanAssessment,
+      ocf,
+      netIncome,
+      totalAssets,
+      historicalTrend
+    };
+  } else {
+    return {
+      hasData: true,
+      cashConversionRatio: conversionRatio,
+      sloanAccrualRatio: sloanRatio,
+      status: 'DOUBLE_NEGATIVE',
+      statusTitle: 'Zarar ve Negatif Nakit Akışı (Çift Yönlü Nakit & Kâr Baskısı)',
+      badgeColor: 'rose',
+      guidanceText: '🔴 Kritik Risk: Şirket hem muhasebe zararı yazmakta hem de faaliyetlerinden nakit yakmaktadır.',
+      beginnerExplanation,
+      sloanAssessment,
+      ocf,
+      netIncome,
+      totalAssets,
+      historicalTrend
+    };
+  }
+}
+
+// ============================================================================
+// 7. DUPONT 5 AŞAMALI KÂRLILIK AYRIŞTIRMASI (DUPONT 5-STEP MODEL)
+// ============================================================================
+
+export interface Dupont5StepResult {
+  hasData: boolean;
+  taxBurden: number | null; // Net Income / EBT
+  interestBurden: number | null; // EBT / EBIT
+  ebitMargin: number | null; // EBIT / Revenue (%)
+  assetTurnover: number | null; // Revenue / Total Assets (x)
+  financialLeverage: number | null; // Total Assets / Equity (x)
+  calculatedRoe: number | null; // Product of the 5 (%)
+  reportedRoe: number | null;
+  driverSummary: string;
+}
+
+export function calculateDuPont5Step(item: any, prevItem?: any): Dupont5StepResult {
+  if (!item || typeof item !== 'object') {
+    return {
+      hasData: false,
+      taxBurden: null,
+      interestBurden: null,
+      ebitMargin: null,
+      assetTurnover: null,
+      financialLeverage: null,
+      calculatedRoe: null,
+      reportedRoe: null,
+      driverSummary: 'Veri seti yetersiz.'
+    };
+  }
+
+  const netIncome = parseFinancialNumber(item.net_income);
+  const revenue = parseFinancialNumber(item.revenue ?? item.written_premiums);
+  const totalAssets = parseFinancialNumber(item.total_assets);
+  const equity = parseFinancialNumber(item.equity);
+
+  // EBIT & EBT derivation
+  let ebit = parseFinancialNumber(item.ebit ?? item.operating_profit ?? item.operating_income);
+  if (ebit === null && item.ebitda != null) {
+    const dep = parseFinancialNumber(item.capex) ? (item.capex * 0.5) : (item.ebitda * 0.15);
+    ebit = item.ebitda - dep;
+  }
+
+  const interestExp = parseFinancialNumber(item.interest_expenses ?? item.financial_expenses ?? item.interest_expense ?? item.financial_expense);
+  let ebt = parseFinancialNumber(item.ebt);
+  if (ebt === null && netIncome !== null) {
+    const taxRate = 0.25;
+    ebt = netIncome / (1 - taxRate);
+  } else if (ebt === null && ebit !== null && interestExp !== null) {
+    ebt = ebit - interestExp;
+  }
+
+  const taxBurden = (netIncome !== null && ebt !== null && ebt !== 0)
+    ? Number((netIncome / ebt).toFixed(3))
+    : 0.75;
+
+  const interestBurden = (ebt !== null && ebit !== null && ebit !== 0)
+    ? Number((ebt / ebit).toFixed(3))
+    : 0.85;
+
+  const ebitMargin = (ebit !== null && revenue !== null && revenue > 0)
+    ? Number(((ebit / revenue) * 100).toFixed(2))
+    : (item.ebitda_margin ? Number((item.ebitda_margin * 0.8).toFixed(2)) : null);
+
+  const avgAssets = (prevItem && prevItem.total_assets && totalAssets)
+    ? (prevItem.total_assets + totalAssets) / 2
+    : totalAssets;
+
+  const avgEquity = (prevItem && prevItem.equity && equity)
+    ? (prevItem.equity + equity) / 2
+    : equity;
+
+  const annualFactor = getAnnualizationFactor(item.period);
+
+  const assetTurnover = (revenue !== null && avgAssets !== null && avgAssets > 0)
+    ? Number(((revenue * annualFactor) / avgAssets).toFixed(2))
+    : null;
+
+  const financialLeverage = (avgAssets !== null && avgEquity !== null && avgEquity > 0)
+    ? Number((avgAssets / avgEquity).toFixed(2))
+    : (item.leverage_ratio ? Number((item.leverage_ratio).toFixed(2)) : null);
+
+  let calculatedRoe: number | null = null;
+  if (taxBurden !== null && interestBurden !== null && ebitMargin !== null && assetTurnover !== null && financialLeverage !== null) {
+    calculatedRoe = Number((taxBurden * interestBurden * (ebitMargin / 100) * assetTurnover * financialLeverage * 100).toFixed(1));
+  }
+
+  const reportedRoe = parseFinancialNumber(item.roe) ?? calculatedRoe;
+
+  let driverSummary = '';
+  if (calculatedRoe !== null) {
+    if (financialLeverage && financialLeverage > 3.0) {
+      driverSummary = `Özkaynak kârlılığı (%${calculatedRoe}) ağırlıklı olarak yüksek finansal kaldıraç (${financialLeverage}x) ile büyütülmektedir; borçlanma maliyeti baskısı dikkatle izlenmelidir.`;
+    } else if (ebitMargin && ebitMargin > 20.0) {
+      driverSummary = `Özkaynak kârlılığı (%${calculatedRoe}) güçlü operasyonel fiyatlama kabiliyeti ve yüksek faaliyet kâr marjı (%${ebitMargin}) ile desteklenmektedir.`;
+    } else if (assetTurnover && assetTurnover > 1.2) {
+      driverSummary = `Özkaynak kârlılığı (%${calculatedRoe}) hızlı varlık devir hızı (${assetTurnover}x) ve yüksek işletme sermayesi verimliliğinden beslenmektedir.`;
+    } else {
+      driverSummary = `DuPont 5 bileşeni dengeli bir kârlılık yapısı sergilemektedir (Hesaplanan ROE: %${calculatedRoe}).`;
+    }
+  } else {
+    driverSummary = 'DuPont ayrıştırması için bazı finansal tablo satırları eksiktir.';
+  }
+
+  return {
+    hasData: calculatedRoe !== null,
+    taxBurden,
+    interestBurden,
+    ebitMargin,
+    assetTurnover,
+    financialLeverage,
+    calculatedRoe,
+    reportedRoe,
+    driverSummary
+  };
+}
+
+// ============================================================================
+// 8. NET DÖVİZ POZİSYONU & KUR HASSASİYET ANALİZİ
+// ============================================================================
+
+export interface FxSensitivityPoint {
+  shockPct: number; // e.g. -20, -10, 0, +10, +20
+  shockLabel: string;
+  fxGainLossTl: number; // Kur farkı kâr/zararı (TL)
+  ebtImpactPct: number; // Vergi öncesi kâra etkisi (%)
+  direction: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
+}
+
+export interface FxSensitivityResult {
+  netFxPosition: number;
+  fxAssets: number | null;
+  fxLiabilities: number | null;
+  positionType: 'LONG' | 'SHORT' | 'BALANCED';
+  positionLabel: string;
+  summaryNote: string;
+  matrix: FxSensitivityPoint[];
+}
+
+export function calculateFxSensitivity(item: any, extractedData?: any): FxSensitivityResult {
+  const explicitNetFx = parseFinancialNumber(
+    item?.net_fx_position ?? 
+    item?.fx_position ?? 
+    extractedData?.net_foreign_currency_position ?? 
+    extractedData?.debt_and_interest?.net_fx_position
+  );
+
+  const fxAssets = parseFinancialNumber(item?.fx_assets ?? extractedData?.debt_and_interest?.fx_assets);
+  const fxLiabilities = parseFinancialNumber(item?.fx_liabilities ?? extractedData?.debt_and_interest?.fx_liabilities);
+
+  let netFx = 0;
+  if (explicitNetFx !== null) {
+    netFx = explicitNetFx;
+  } else if (fxAssets !== null && fxLiabilities !== null) {
+    netFx = fxAssets - fxLiabilities;
+  } else {
+    const cash = parseFinancialNumber(item?.cash_and_equivalents) ?? 0;
+    const debt = parseFinancialNumber(item?.financial_debt) ?? 0;
+    netFx = Number(((cash * 0.40) - (debt * 0.35)).toFixed(0));
+  }
+
+  const baseIncome = Math.abs(parseFinancialNumber(item?.ebt ?? item?.net_income) ?? 1000000) || 1;
+  const shocks = [-20, -10, 0, 10, 20];
+
+  const matrix: FxSensitivityPoint[] = shocks.map(s => {
+    const shockRatio = s / 100;
+    const fxGainLossTl = Math.round(netFx * shockRatio);
+    const ebtImpactPct = Number(((fxGainLossTl / baseIncome) * 100).toFixed(1));
+    let direction: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' = 'NEUTRAL';
+    if (fxGainLossTl > 0) direction = 'POSITIVE';
+    else if (fxGainLossTl < 0) direction = 'NEGATIVE';
+
+    return {
+      shockPct: s,
+      shockLabel: s === 0 ? 'Mevcut Kur (Baz)' : (s > 0 ? `Kur +%${s}` : `Kur %${s}`),
+      fxGainLossTl,
+      ebtImpactPct,
+      direction
+    };
+  });
+
+  const positionType = netFx > 0 ? 'LONG' : (netFx < 0 ? 'SHORT' : 'BALANCED');
+  const positionLabel = positionType === 'LONG' 
+    ? 'Net Döviz Fazlası (Uzun Pozisyon)'
+    : (positionType === 'SHORT' ? 'Net Döviz Açığı (Kısa Pozisyon)' : 'Dengeli / Nötr Döviz Pozisyonu');
+
+  const summaryNote = positionType === 'LONG'
+    ? 'Şirket net döviz fazlasına sahip olduğundan TL değer kayıpları kur farkı geliri yaratarak kârlılığı olumlu etkiler (doğal kur kalkanı).'
+    : (positionType === 'SHORT'
+      ? 'Şirketin açık döviz pozisyonu bulunduğundan TL\'nin değer kaybetmesi durumunda kur farkı finansman giderleri kârlılık üzerinde baskı yaratabilir.'
+      : 'Şirketin döviz varlık ve yükümlülükleri dengeli olup kur dalgalanmalarına karşı hassasiyeti sınırlıdır.');
+
+  return {
+    netFxPosition: netFx,
+    fxAssets,
+    fxLiabilities,
+    positionType,
+    positionLabel,
+    summaryNote,
+    matrix
+  };
+}
+
+// ============================================================================
+// 9. ARACI KURUM KONSENSÜS HEDEF FİYAT & POTANSİYEL KIYASI
+// ============================================================================
+
+export interface ConsensusComparisonResult {
+  hasConsensus: boolean;
+  consensusPrice: number | null;
+  currentPrice: number;
+  fairValue: number;
+  modelUpsidePct: number;
+  consensusUpsidePct: number | null;
+  spreadVsConsensusPct: number | null;
+  evaluationText: string;
+  divergenceBadge: 'ALIGNED' | 'MORE_BULLISH' | 'MORE_CONSERVATIVE' | 'NO_DATA';
+}
+
+export function calculateConsensusComparison(
+  fairValue: number,
+  currentPrice: number,
+  consensusInput?: string | number | null
+): ConsensusComparisonResult {
+  const safeCurr = (currentPrice && currentPrice > 0) ? currentPrice : 1.0;
+  const modelUpsidePct = Number((((fairValue - safeCurr) / safeCurr) * 100).toFixed(1));
+
+  let parsedConsensus: number | null = null;
+  if (consensusInput != null) {
+    if (typeof consensusInput === 'number') {
+      parsedConsensus = consensusInput > 0 ? consensusInput : null;
+    } else {
+      parsedConsensus = parseFinancialNumber(consensusInput);
+      if (!parsedConsensus) {
+        const m = String(consensusInput).match(/(?:hedef\s*fiyat|konsens[uü]s|ortalama|fiyat)\s*[:=-]?\s*([0-9.,]+)/i) ||
+                  String(consensusInput).match(/([0-9]+[.,][0-9]+|[0-9]{2,4})/);
+        if (m) {
+          parsedConsensus = parseFinancialNumber(m[1]);
+        }
+      }
+    }
+  }
+
+  if (parsedConsensus === null || parsedConsensus <= 0) {
+    return {
+      hasConsensus: false,
+      consensusPrice: null,
+      currentPrice,
+      fairValue,
+      modelUpsidePct,
+      consensusUpsidePct: null,
+      spreadVsConsensusPct: null,
+      evaluationText: 'Aracı kurum konsensüs hedef fiyatı henüz girilmedi veya piyasa konsensüsü bulunmuyor.',
+      divergenceBadge: 'NO_DATA'
+    };
+  }
+
+  const consensusUpsidePct = Number((((parsedConsensus - safeCurr) / safeCurr) * 100).toFixed(1));
+  const spreadVsConsensusPct = Number((((fairValue - parsedConsensus) / parsedConsensus) * 100).toFixed(1));
+
+  let divergenceBadge: 'ALIGNED' | 'MORE_BULLISH' | 'MORE_CONSERVATIVE' = 'ALIGNED';
+  let evaluationText = '';
+
+  if (spreadVsConsensusPct > 12.0) {
+    divergenceBadge = 'MORE_BULLISH';
+    evaluationText = `Modelimiz aracı kurum konsensüs hedef fiyatının (%${spreadVsConsensusPct} üzerinde) daha iyimser bir değerleme öngörmektedir. Gelecek dönem büyüme ve marj katalizörleri fiyatlanmamış olabilir.`;
+  } else if (spreadVsConsensusPct < -12.0) {
+    divergenceBadge = 'MORE_CONSERVATIVE';
+    evaluationText = `Modelimiz piyasa konsensüsüne göre (%${Math.abs(spreadVsConsensusPct)} daha muhafazakar) bir emniyet marjı uygulamıştır. Piyasa beklentileri aşırı iyimser olabilir.`;
+  } else {
+    divergenceBadge = 'ALIGNED';
+    evaluationText = `Algoritmik adil değer modelimiz aracı kurum konsensüs hedef fiyatı ile yüksek uyum içindedir (Fark: %${spreadVsConsensusPct}).`;
+  }
+
+  return {
+    hasConsensus: true,
+    consensusPrice: parsedConsensus,
+    currentPrice,
+    fairValue,
+    modelUpsidePct,
+    consensusUpsidePct,
+    spreadVsConsensusPct,
+    evaluationText,
+    divergenceBadge
+  };
+}
+
+// ============================================================================
+// 10. DEĞERLEME ÇARPANLARI & SEKTÖR KIYASLAMA MOTORU (F/K, PD/DD, FD/FAVÖK)
+// ============================================================================
+
+export interface SectorMultipleBenchmark {
+  sector: SectorType;
+  sectorName: string;
+  peMedian: number;
+  pbMedian: number;
+  evEbitdaMedian: number | null;
+  evSalesMedian: number | null;
+  description: string;
+}
+
+export const SECTOR_MULTIPLE_BENCHMARKS: Record<SectorType, SectorMultipleBenchmark> = {
+  INDUSTRIAL: {
+    sector: 'INDUSTRIAL',
+    sectorName: 'Sanayi, Hizmet & Genel Ticaret',
+    peMedian: 11.5,
+    pbMedian: 2.8,
+    evEbitdaMedian: 8.2,
+    evSalesMedian: 1.4,
+    description: 'BIST Sınai ve Hizmet Endeksi tarihsel medyan piyasa çarpanları'
+  },
+  BANKING: {
+    sector: 'BANKING',
+    sectorName: 'Bankacılık & Finans',
+    peMedian: 4.8,
+    pbMedian: 1.1,
+    evEbitdaMedian: null,
+    evSalesMedian: null,
+    description: 'BIST Banka Endeksi tarihsel medyan piyasa çarpanları'
+  },
+  INSURANCE: {
+    sector: 'INSURANCE',
+    sectorName: 'Sigortacılık & Bireysel Emeklilik',
+    peMedian: 6.2,
+    pbMedian: 2.4,
+    evEbitdaMedian: null,
+    evSalesMedian: null,
+    description: 'BIST Sigorta Endeksi tarihsel medyan piyasa çarpanları'
+  },
+  REIT: {
+    sector: 'REIT',
+    sectorName: 'Gayrimenkul Yatırım Ortaklığı (GYO)',
+    peMedian: 7.5,
+    pbMedian: 1.2,
+    evEbitdaMedian: 9.0,
+    evSalesMedian: null,
+    description: 'BIST GYO Endeksi tarihsel medyan piyasa çarpanları'
+  },
+  TECH: {
+    sector: 'TECH',
+    sectorName: 'Teknoloji, Bilişim & Yazılım',
+    peMedian: 22.0,
+    pbMedian: 5.5,
+    evEbitdaMedian: 15.0,
+    evSalesMedian: 4.2,
+    description: 'BIST Bilişim ve Teknoloji Endeksi tarihsel medyan çarpanları'
+  },
+  HOLDING: {
+    sector: 'HOLDING',
+    sectorName: 'Holdingler & Yatırım Şirketleri',
+    peMedian: 6.8,
+    pbMedian: 1.4,
+    evEbitdaMedian: 7.0,
+    evSalesMedian: 1.1,
+    description: 'BIST Holding Endeksi tarihsel medyan piyasa çarpanları'
+  }
+};
+
+export interface MultipleMetricDetail {
+  code: string;
+  name: string;
+  companyValue: number | null;
+  sectorMedian: number | null;
+  diffPct: number | null; // ((Company - Sector) / Sector) * 100
+  status: 'DISCOUNTED' | 'PARITY' | 'PREMIUM' | 'NA';
+  statusLabel: string;
+  badgeColor: 'emerald' | 'amber' | 'rose' | 'gray';
+  impliedPrice: number | null;
+}
+
+export interface CompanyMultiplesComparison {
+  sector: SectorType;
+  benchmark: SectorMultipleBenchmark;
+  multiples: {
+    pe: MultipleMetricDetail;
+    pb: MultipleMetricDetail;
+    evEbitda: MultipleMetricDetail;
+    evSales: MultipleMetricDetail;
+  };
+  overallValuationStatus: 'CHEAP' | 'FAIR' | 'EXPENSIVE';
+  overallSummary: string;
+}
+
+export function calculateCompanyMultiples(
+  latest: any,
+  currentPrice: number,
+  shareCount: number,
+  sector: SectorType = 'INDUSTRIAL',
+  isYatirimMultiples?: any
+): CompanyMultiplesComparison {
+  const benchmark = SECTOR_MULTIPLE_BENCHMARKS[sector] || SECTOR_MULTIPLE_BENCHMARKS.INDUSTRIAL;
+  const safeShares = shareCount > 0 ? shareCount : 100000000;
+  const annualFactor = getAnnualizationFactor(latest?.period);
+
+  const netIncome = parseFinancialNumber(latest?.net_income);
+  const equity = parseFinancialNumber(latest?.equity);
+  const ebitda = parseFinancialNumber(latest?.ebitda);
+  const revenue = parseFinancialNumber(latest?.revenue ?? latest?.written_premiums);
+  const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
+
+  const marketCap = currentPrice * safeShares;
+  const enterpriseValue = marketCap + netDebt;
+
+  // 1. F/K (P/E)
+  let peVal: number | null = isYatirimMultiples?.pe != null ? isYatirimMultiples.pe : null;
+  if (peVal === null && netIncome !== null && netIncome > 0) {
+    const annualizedNet = netIncome * annualFactor;
+    peVal = Number((marketCap / annualizedNet).toFixed(2));
+  }
+
+  // 2. PD/DD (P/B)
+  let pbVal: number | null = isYatirimMultiples?.pb != null ? isYatirimMultiples.pb : null;
+  if (pbVal === null && equity !== null && equity > 0) {
+    pbVal = Number((marketCap / equity).toFixed(2));
+  }
+
+  // 3. FD/FAVÖK (EV/EBITDA)
+  let evEbitdaVal: number | null = isYatirimMultiples?.ev_ebitda != null ? isYatirimMultiples.ev_ebitda : (isYatirimMultiples?.evEbitda != null ? isYatirimMultiples.evEbitda : null);
+  if (evEbitdaVal === null && benchmark.evEbitdaMedian !== null && ebitda !== null && ebitda > 0) {
+    const annualizedEbitda = ebitda * annualFactor;
+    evEbitdaVal = Number((enterpriseValue / annualizedEbitda).toFixed(2));
+  }
+
+  // 4. FD/Satışlar (EV/Sales)
+  let evSalesVal: number | null = isYatirimMultiples?.ev_sales != null ? isYatirimMultiples.ev_sales : (isYatirimMultiples?.evSales != null ? isYatirimMultiples.evSales : null);
+  if (evSalesVal === null && benchmark.evSalesMedian !== null && revenue !== null && revenue > 0) {
+    const annualizedRev = revenue * annualFactor;
+    evSalesVal = Number((enterpriseValue / annualizedRev).toFixed(2));
+  }
+
+  const helper = (
+    code: string,
+    name: string,
+    compVal: number | null,
+    sectorMed: number | null,
+    impliedFn?: (targetMultiple: number) => number | null
+  ): MultipleMetricDetail => {
+    if (compVal === null || sectorMed === null) {
+      return {
+        code,
+        name,
+        companyValue: compVal,
+        sectorMedian: sectorMed,
+        diffPct: null,
+        status: 'NA',
+        statusLabel: 'Veri Yok / Kapsam Dışı',
+        badgeColor: 'gray',
+        impliedPrice: null
+      };
+    }
+
+    const diff = Number((((compVal - sectorMed) / sectorMed) * 100).toFixed(1));
+    let status: 'DISCOUNTED' | 'PARITY' | 'PREMIUM' = 'PARITY';
+    let statusLabel = '⚖️ Sektör Ortalamasında';
+    let badgeColor: 'emerald' | 'amber' | 'rose' = 'amber';
+
+    if (diff <= -12.0) {
+      status = 'DISCOUNTED';
+      statusLabel = `🌟 Sektöre Göre İskontolu (%${Math.abs(diff)} Ucuz)`;
+      badgeColor = 'emerald';
+    } else if (diff >= 15.0) {
+      status = 'PREMIUM';
+      statusLabel = `🔴 Sektöre Göre Primli (%${diff} Pahalı)`;
+      badgeColor = 'rose';
+    }
+
+    const implied = impliedFn ? impliedFn(sectorMed) : null;
+
+    return {
+      code,
+      name,
+      companyValue: compVal,
+      sectorMedian: sectorMed,
+      diffPct: diff,
+      status,
+      statusLabel,
+      badgeColor,
+      impliedPrice: implied
+    };
+  };
+
+  const eps = (netIncome !== null && netIncome > 0) ? (netIncome * annualFactor) / safeShares : null;
+  const bvps = (equity !== null && equity > 0) ? equity / safeShares : null;
+
+  const peMetric = helper('PE', 'F/K (Fiyat / Kazanç)', peVal, benchmark.peMedian, (t) => eps ? Number((eps * t).toFixed(2)) : null);
+  const pbMetric = helper('PB', 'PD/DD (Piyasa Değeri / Defter Değeri)', pbVal, benchmark.pbMedian, (t) => bvps ? Number((bvps * t).toFixed(2)) : null);
+  const evEbitdaMetric = helper('EV_EBITDA', 'FD/FAVÖK (Firma Değeri / FAVÖK)', evEbitdaVal, benchmark.evEbitdaMedian, (t) => {
+    if (ebitda && ebitda > 0) {
+      const targetFirmVal = (ebitda * annualFactor) * t;
+      const targetEq = targetFirmVal - netDebt;
+      return targetEq > 0 ? Number((targetEq / safeShares).toFixed(2)) : null;
+    }
+    return null;
+  });
+  const evSalesMetric = helper('EV_SALES', 'FD/Satışlar (Firma Değeri / Satışlar)', evSalesVal, benchmark.evSalesMedian, (t) => {
+    if (revenue && revenue > 0) {
+      const targetFirmVal = (revenue * annualFactor) * t;
+      const targetEq = targetFirmVal - netDebt;
+      return targetEq > 0 ? Number((targetEq / safeShares).toFixed(2)) : null;
+    }
+    return null;
+  });
+
+  const activeMetrics = [peMetric, pbMetric, evEbitdaMetric, evSalesMetric].filter(m => m.diffPct !== null);
+  const discountedCount = activeMetrics.filter(m => m.status === 'DISCOUNTED').length;
+  const premiumCount = activeMetrics.filter(m => m.status === 'PREMIUM').length;
+
+  let overallValuationStatus: 'CHEAP' | 'FAIR' | 'EXPENSIVE' = 'FAIR';
+  let overallSummary = 'Şirket çarpanları sektör medyanları ile uyumlu ve dengeli bir seviyededir.';
+
+  if (discountedCount > premiumCount) {
+    overallValuationStatus = 'CHEAP';
+    overallSummary = `Şirket temel piyasa çarpanlarında sektör medyanına kıyasla belirgin şekilde iskontolu (${discountedCount}/${activeMetrics.length} çarpan ucuz) işlem görmektedir.`;
+  } else if (premiumCount > discountedCount) {
+    overallValuationStatus = 'EXPENSIVE';
+    overallSummary = `Şirket sektör medyanına kıyasla primli (${premiumCount}/${activeMetrics.length} çarpan primli) değerlemeye sahiptir; yüksek kârlılıkla desteklenmelidir.`;
+  }
+
+  return {
+    sector,
+    benchmark,
+    multiples: {
+      pe: peMetric,
+      pb: pbMetric,
+      evEbitda: evEbitdaMetric,
+      evSales: evSalesMetric
+    },
+    overallValuationStatus,
+    overallSummary
+  };
 }

@@ -86,12 +86,12 @@ SEKTÖREL KURALLAR (SİGORTACILIK & BİREYSEL EMEKLİLİK - Örn: AGESA, ANHYT, 
      > **Değerleme Formülü:** Hedef PD/DD = (ROE − Uzun Vadeli Büyüme) / (Sermaye Maliyeti − Uzun Vadeli Büyüme)
 
 RAPOR FORMATI KESİNLİKLE ŞU BAŞLIKLARLA OLMALIDIR:
-### Yönetici Özeti ve Temel Yatırım Tezi
-### 1. Çok Yıllı Bilanço Gücü, Nakit ve Yatırım Portföyü (2022–2026)
-### 2. Teknik Kârlılık, Bileşik Oran ve Özkaynak Getirisi (ROE vs. Sermaye Maliyeti)
-### 3. Faaliyet Raporu, Sunum Analizi ve Gelecek Dönem Olumlu Katalizörler
-### 4. İleriye Dönük Değerleme, Adil Değer ve Senaryo Analizi
-### 5. Sektörel Puanlama Karnesi ve Nihai Karar
+### I. Yönetici Özeti ve Temel Yatırım Tezi
+### II. Nakit Akışı, Portföy ve Kâr Kalitesi Teşhisi (Bileşik Oran ve Float Verimi)
+### III. Sektörel Karne ve Rekabet Konumu (Pazar Payı ve Büyüme)
+### IV. Sermaye Maliyeti (Ke / WACC) ve Gordon Değerleme Modeli
+### V. Değer Sürücüleri ve Hassasiyet Tablosu
+### VI. Temel Riskler, Katalizörler ve Nihai Karar
 
 | Metrik | Puan | Max | Gerekçe |
 | :--- | :--- | :--- | :--- |
@@ -124,6 +124,14 @@ SEKTÖREL KURALLAR (BANKACILIK SEKTÖRÜ - Örn: GARAN, AKBNK, ISCTR, YKBNK):
    | Komisyon Büyümesi & Dijital Bankacılık | X | 25 | ... |
    | **Toplam Puan** | **X** | **100** | ... |
 
+RAPOR FORMATI KESİNLİKLE ŞU BAŞLIKLARLA OLMALIDIR:
+### I. Yönetici Özeti ve Temel Yatırım Tezi
+### II. Aktif Kalitesi, Fonlama ve Kâr Kalitesi Teşhisi (NIM ve Komisyon Gücü)
+### III. Sektörel Karne ve Rekabet Konumu (TGA Rasyosu ve SYR Tamponu)
+### IV. Sermaye Maliyeti (Ke / WACC) ve Gordon Değerleme Modeli
+### V. Değer Sürücüleri ve Hassasiyet Tablosu
+### VI. Temel Riskler, Katalizörler ve Nihai Karar
+
 Analist Kararı: [AL / ALMA / NÖTR]
 Yatırım Tezi: [1-2 net, duru Türkçe ve vurucu cümle ile nihai değerlendirme gerekçesi.]
 Kilit Katalizörler: [Fiyatı adil değere taşıyacak 2-3 somut şirket katalizörü.]
@@ -142,6 +150,14 @@ SEKTÖREL KURALLAR (HOLDİNG SEKTÖRÜ - Örn: KCHOL, SAHOL, AGHOL):
    | NAD İskontosu & Kurumsal Katalizörler | X | 25 | ... |
    | **Toplam Puan** | **X** | **100** | ... |
 
+RAPOR FORMATI KESİNLİKLE ŞU BAŞLIKLARLA OLMALIDIR:
+### I. Yönetici Özeti ve Temel Yatırım Tezi
+### II. Nakit Akışı, Solo Likidite ve Kâr Kalitesi Teşhisi (Temettü Akışı ve Borçsuzluk)
+### III. Sektörel Karne ve Rekabet Konumu (İştirak Portföy Çeşitliliği)
+### IV. WACC ve İskontolu Değerleme Modeli (NAD / SOTP)
+### V. Değer Sürücüleri ve Kur Hassasiyet Tablosu
+### VI. Temel Riskler, Katalizörler ve Nihai Karar
+
 Analist Kararı: [AL / ALMA / NÖTR]
 Yatırım Tezi: [1-2 net, duru Türkçe ve vurucu cümle ile nihai değerlendirme gerekçesi.]
 Kilit Katalizörler: [Fiyatı adil değere taşıyacak 2-3 somut şirket katalizörü.]
@@ -154,28 +170,27 @@ ${universalSafetyRules}
 
 RAPOR FORMATI KESİNLİKLE ŞU BAŞLIKLARLA VE YAPIDA OLMALIDIR:
 
-### Yönetici Özeti ve Temel Yatırım Tezi
+### I. Yönetici Özeti ve Temel Yatırım Tezi
 (Şirketin iş modeli, rekabet üstünlüğü, güncel çarpan konumu ve en kritik temel bulguların özeti.)
 
-### 1. Çok Yıllı Sermaye Tahsisi, Likidite ve Borç Profili (2022–2026)
-(Net işletme sermayesi döngüsü, cari oran, likidite oranı, nakit oranı ve borçluluk yapısının yıllar içindeki seyri.)
+### II. Nakit Akışı ve Kâr Kalitesi Teşhisi (OCF, Nakit Dönüşümü ve Sloan Tahakkuk Oranı)
+- **Nakit Dönüşüm Oranı (OCF / Net Kâr):** Kârın kağıt üzerinde mi kaldığı yoksa kasaya sıcak nakit mi girdiği analizi.
+- **Sloan Tahakkuk Oranı ve Bilanço Makyajı Teşhisi:** Gayrinakdi tahakkukların ve alacak/stok bağlamalarının değerlendirilmesi.
+- **Yatırım Harcamaları ve Serbest Nakit Akışı (FCF):** Buffett Kazancı ve serbest nakit üretim gücü.
 
-### 2. Kârlılık Kalitesi ve Sermaye Verimliliği (Yıllıklandırılmış ROIC vs. WACC)
-- **5 Yıllık Marj Trendi:** Brüt kâr, FAVÖK ve Net kâr marjlarının tarihsel gelişimi.
-- **Yıllıklandırılmış ROIC ve WACC Makası:** Yatırılan sermaye getirisinin (ROIC) sermaye maliyetini (WACC) aşıp aşmadığı.
+### III. Sektörel Karne ve Rekabet Konumu (DuPont 5 Aşamalı Kârlılık Ayrıştırması)
+- **DuPont Kârlılık Ayrıştırması:** ROE'nin vergi yükü, faiz yükü, EBIT marjı, aktif devir hızı ve kaldıraç bileşenleri.
+- **Sektörel Puanlama Karnesi:** Finansal sağlık, sermaye verimliliği ve moat gücü.
 
-### 3. Nakit Akış Kalitesi ve Hissedar Kazancı
-- **İşletme Nakit Akışı (OCF) ve Nakit Dönüşümü:** Net kârın nakde dönüşme kalitesi.
-- **Yatırım Harcamaları ve Serbest Nakit Akışı (FCF):** Yatırım harcamaları sonrası kalan serbest nakit üretim gücü.
-
-### 4. Faaliyet Raporu, Sunum Analizi ve Gelecek Dönem Olumlu Katalizörler
-(Faaliyet raporları ve yatırımcı sunumlarında gelecek dönem hedefleri için olumlu bulunan somut konular, yeni yatırımlar ve yönetimin geçmiş hedeflerini tutturma başarısı.)
-
-### 5. İleriye Dönük Değerleme, Adil Değer ve Senaryo Analizi
+### IV. WACC ve İskontolu Değerleme Modeli (Şirkete Özel Borçlanma Maliyeti Kd ve Hibrit Değerleme)
+- **Sermaye Maliyeti (WACC):** Şirketin efektif borçlanma faizi (Kd), özkaynak maliyeti (Ke) ve sermaye yapısı ağırlıkları.
 - **İleriye Dönük Çarpanlar ve Hibrit Adil Değer:** FD/FAVÖK, F/K ve PD/DD bazlı adil değer hesaplaması ve iskonto oranı.
+
+### V. Değer Sürücüleri, Net Döviz Pozisyonu ve Hassasiyet Tablosu
+- **Net Döviz Pozisyonu ve Kur Hassasiyeti:** Döviz varlık/yükümlülük dengesi ve olası kur hareketlerinin kâra etkisi.
 - **Ayı ve Boğa Senaryoları:** En kötü ve en iyi senaryo hedef fiyatları ile duyarlılık analizi.
 
-### 6. Sektörel Puanlama Karnesi ve Nihai Karar
+### VI. Temel Riskler, Katalizörler ve Nihai Karar
 
 | Metrik | Puan | Max | Gerekçe |
 | :--- | :--- | :--- | :--- |
@@ -230,12 +245,26 @@ ${typeof extractedData === 'string' ? extractedData : JSON.stringify(extractedDa
 
 
     if (previousReport) {
-      prompt += `\nÖnceki Dönem Raporu ve Skoru (Referans Karşılaştırma):
-Dönem: ${previousReport.createdAt}
+      const prevFv = previousReport.fairValue;
+      const currFv = valuation.fair_value;
+      let fvDiffTxt = '';
+      if (prevFv && !isNaN(Number(prevFv)) && Number(prevFv) > 0) {
+        const diff = Number((((currFv - Number(prevFv)) / Number(prevFv)) * 100).toFixed(1));
+        const sign = diff >= 0 ? '+' : '';
+        fvDiffTxt = `(Önceki Çeyrek Adil Değer: ${prevFv} TL -> Güncel Çeyrek: ${currFv} TL [%${sign}${diff} Değişim])`;
+      }
+
+      prompt += `\nÖnceki Dönem Raporu, Çeyreklik Hafıza ve Yönetim Hedef Gerçekleşmesi (Dönemsel Beslenme):
+Dönem / Tarih: ${previousReport.period || previousReport.createdAt}
 Önceki Karar: ${previousReport.decision}
 Önceki Skor: ${previousReport.score || 'N/A'}/100
 Önceki Fiyat: ${previousReport.price} TL
-Lütfen bu çeyrekteki yeni veriler ışığında önceki tezin nasıl evrildiğini, skorun neden değiştiğini raporda açıkça belirt.
+Önceki Adil Değer: ${previousReport.fairValue || 'Belirtilmedi'} TL ${fvDiffTxt}
+${previousReport.extractedData?.future_targets_summary ? `Önceki Çeyrekte Açıklanan Yönetim Hedefleri: ${previousReport.extractedData.future_targets_summary}\n` : ''}
+
+ZORUNLU TALİMAT (Önceki Raporla Karşılaştırma & Çeyreklik Hafıza):
+1. Raporunun 'I. Yönetici Özeti' ve 'VI. Temel Riskler & Katalizörler' bölümlerinde şirketin bir önceki çeyreğe göre adil değerinin ve analist skorunun nasıl evrildiğini ${fvDiffTxt} açıkça belirt.
+2. Yönetimin bir önceki çeyrekte beyan ettiği hedefleri yeni finansal sonuçlarda tutup tutturamadığını (hedef gerçekleşme karnesi) nesnel olarak değerlendir.
 `;
     }
 
