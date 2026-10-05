@@ -772,12 +772,20 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
       let investedCapital = equity + (finDebt > 0 ? finDebt : netDebt);
 
       // Perakende / Sanayi için aktif tabanlı kontrol (Asset-based invested capital)
+      // Perakendede (MGROS, BIMAS, SOKM) tedarikçi borçları yüksek ve işletme sermayesi negatif olduğu için
+      // piyasa standartlarında (Fintables vb.) yatırılan operasyonel sermaye varlık tabanı üzerinden hesaplanır
       if (typeof item.total_assets === 'number' && item.total_assets > 0) {
         const curLiab = typeof item.current_liabilities === 'number' ? item.current_liabilities : 0;
-        const nonOpLiab = Math.max(0, curLiab - (typeof item.short_term_debt === 'number' ? item.short_term_debt : 0));
-        const assetBasedCap = item.total_assets - nonOpLiab;
-        if (assetBasedCap > investedCapital && assetBasedCap < item.total_assets * 1.5) {
-          investedCapital = (investedCapital * 0.5) + (assetBasedCap * 0.5);
+        if (curLiab > item.total_assets * 0.40) {
+          const cash = typeof item.cash_and_equivalents === 'number' ? item.cash_and_equivalents : 0;
+          const operatingAssetCap = Math.max(investedCapital, item.total_assets - (cash * 0.25));
+          investedCapital = operatingAssetCap;
+        } else {
+          const nonOpLiab = Math.max(0, curLiab - (typeof item.short_term_debt === 'number' ? item.short_term_debt : 0));
+          const assetBasedCap = item.total_assets - nonOpLiab;
+          if (assetBasedCap > investedCapital) {
+            investedCapital = (investedCapital * 0.4) + (assetBasedCap * 0.6);
+          }
         }
       }
 
@@ -2553,8 +2561,8 @@ export function calculateDuPont5Step(item: any, prevItem?: any): Dupont5StepResu
   if (ebt === null && ebit !== null && interestExp !== null) {
     ebt = ebit - interestExp;
   } else if (ebt === null && netIncome !== null) {
-    const taxRate = 0.25;
-    ebt = netIncome / (1 - taxRate);
+    const taxRate = sector === 'REIT' ? 0.0 : ((sector === 'BANKING' || sector === 'INSURANCE') ? 0.30 : 0.25);
+    ebt = taxRate < 1 ? (netIncome / (1 - taxRate)) : netIncome;
   }
 
   const taxBurden = (netIncome !== null && ebt !== null && ebt !== 0)
