@@ -1972,6 +1972,12 @@ export function computeSectorValuationAndDrivers(
       } else if (['ARCLK', 'VESBE', 'VESTL'].includes(tickerUpper)) {
         baseMultiple = 5.8;
         sectorName = 'Dayanıklı Tüketim';
+      } else if (['MPARK', 'GENIL', 'SELEC', 'TRILC', 'MEDTR'].includes(tickerUpper)) {
+        baseMultiple = 7.0;
+        sectorName = 'Sağlık ve İlaç';
+      } else if (['SASA', 'HEKTS', 'GUBRF', 'BAGFS'].includes(tickerUpper)) {
+        baseMultiple = 6.2;
+        sectorName = 'Kimya ve Gübre';
       }
 
       // EVA Spread (ROIC vs WACC) etkisi:
