@@ -1905,25 +1905,31 @@ export function computeSectorValuationAndDrivers(
     const g = 25.0; // Uzun vadeli nominal büyüme varsayımı
 
     if (sector === 'INSURANCE' || sector === 'BANKING') {
-      // Gordon Modeli: Hedef PD/DD = (ROE - g) / (Ke - g)
-      // Sıfıra bölünme ve negatif payda koruması: Math.max(3.0, ke - g)
-      const safeKeMinusG = Math.max(3.0, ke - g);
-      if (roe > 0) {
-        if (roe > g) {
-          const calculatedPb = (roe - g) / safeKeMinusG;
-          targetMultipleNum = Number(Math.max(0.6, Math.min(6.0, calculatedPb)).toFixed(1));
-          targetMultipleExpl = `Gordon Büyüme Modeli: (ROE: %${roe.toFixed(1)} - g: %${g}) / (Ke: %${ke.toFixed(1)} - g: %${g}) = ${targetMultipleNum}x`;
-        } else {
-          const modestPb = roe / Math.max(10.0, ke);
-          targetMultipleNum = Number(Math.max(0.4, Math.min(2.5, modestPb)).toFixed(1));
-          targetMultipleExpl = `Ilımlı/Düşük ROE (%${roe.toFixed(1)} <= g: %${g}): Defter Değeri Kârlılık Çarpanı (ROE / Ke = ${targetMultipleNum}x) uygulandı.`;
-        }
-      } else {
-        // Negatif ROE koruması: Gordon uygulanamaz, muhafazakar taban
-        targetMultipleNum = 0.5;
-        targetMultipleExpl = `Negatif/Zarar ROE (%${roe.toFixed(1)}): Muhafazakar defter değeri iskonto çarpanı (0.5x) uygulandı.`;
+      // Finansal Kurumlar ve Sigortacılık için Kârlılık, Sermaye Maliyeti ve AUM Bazlı P/B Modeli
+      const livePb = parseFinancialNumber(extractedData?.marketMultiples?.pb);
+      const sectorPbBase = sector === 'INSURANCE' ? 2.4 : 1.25;
+
+      const safeKe = Math.max(10.0, ke);
+      // ROE / Ke kârlılık çarpanı
+      const roeKeFactor = roe > 0 ? (roe / safeKe) : 0.5;
+
+      let fundamentalPb = sectorPbBase * Math.max(0.65, Math.min(2.5, roeKeFactor));
+      if (roe > g && (ke - g) > 2.0) {
+        const gordonPb = (roe - g) / Math.max(4.0, ke - g);
+        fundamentalPb = Math.max(sectorPbBase * 0.7, Math.min(5.0, (gordonPb * 0.5) + (sectorPbBase * 0.5)));
       }
+
+      // Canlı piyasa çarpanı varsa (İş Yatırım) dengele
+      let finalPb = fundamentalPb;
+      if (livePb !== null && livePb >= 0.5 && livePb <= 8.0) {
+        finalPb = (fundamentalPb * 0.45) + (livePb * 0.55);
+      }
+
+      const minPb = sector === 'INSURANCE' ? 1.4 : 0.8;
+      const maxPb = sector === 'INSURANCE' ? 4.5 : 2.5;
+      targetMultipleNum = Number(Math.max(minPb, Math.min(maxPb, finalPb)).toFixed(1));
       targetMultipleStr = `PD/DD ${targetMultipleNum.toString().replace('.', ',')}x`;
+      targetMultipleExpl = `${sector === 'INSURANCE' ? 'Sigortacılık & Emeklilik AUM primi' : 'Bankacılık'} tabanı (${sectorPbBase}x), ROE (%${roe.toFixed(1)}) ve sermaye maliyeti (Ke %${ke.toFixed(1)}) bazlı hedef çarpan`;
     } else if (sector === 'HOLDING') {
       targetMultipleNum = 0.70; // %30 iskonto
       targetMultipleStr = 'NAD Çarpanı 0,70x (%30 İskonto)';
@@ -2529,7 +2535,7 @@ export interface Dupont5StepResult {
   driverSummary: string;
 }
 
-export function calculateDuPont5Step(item: any, prevItem?: any): Dupont5StepResult {
+export function calculateDuPont5Step(item: any, sectorOrPrev?: any, sectorOverride?: SectorType): Dupont5StepResult {
   if (!item || typeof item !== 'object') {
     return {
       hasData: false,
@@ -2543,6 +2549,18 @@ export function calculateDuPont5Step(item: any, prevItem?: any): Dupont5StepResu
       driverSummary: 'Veri seti yetersiz.'
     };
   }
+
+  // Sektörü esnek parametrelerden veya nesneden çıkar
+  let resolvedSector: SectorType = 'INDUSTRIAL';
+  if (typeof sectorOrPrev === 'string') {
+    resolvedSector = sectorOrPrev as SectorType;
+  } else if (typeof sectorOverride === 'string') {
+    resolvedSector = sectorOverride;
+  } else if (item?.sector) {
+    resolvedSector = item.sector as SectorType;
+  }
+
+  const prevItem = (sectorOrPrev && typeof sectorOrPrev === 'object') ? sectorOrPrev : null;
 
   const netIncome = parseFinancialNumber(item.net_income);
   const revenue = parseFinancialNumber(item.revenue ?? item.written_premiums);
@@ -2561,7 +2579,7 @@ export function calculateDuPont5Step(item: any, prevItem?: any): Dupont5StepResu
   if (ebt === null && ebit !== null && interestExp !== null) {
     ebt = ebit - interestExp;
   } else if (ebt === null && netIncome !== null) {
-    const taxRate = sector === 'REIT' ? 0.0 : ((sector === 'BANKING' || sector === 'INSURANCE') ? 0.30 : 0.25);
+    const taxRate = resolvedSector === 'REIT' ? 0.0 : ((resolvedSector === 'BANKING' || resolvedSector === 'INSURANCE') ? 0.30 : 0.25);
     ebt = taxRate < 1 ? (netIncome / (1 - taxRate)) : netIncome;
   }
 
