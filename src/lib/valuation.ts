@@ -2265,7 +2265,7 @@ export function calculateEarningsQuality(
     };
   }
 
-  if (ocf === null && netIncome === null) {
+  if (ocf === null) {
     return {
       hasData: false,
       cashConversionRatio: null,
@@ -2273,17 +2273,17 @@ export function calculateEarningsQuality(
       status: 'INSUFFICIENT_DATA',
       statusTitle: 'Yetersiz Nakit Akış Verisi',
       badgeColor: 'gray',
-      guidanceText: 'Şirket finansal tablolarında nakit akışı kalemi henüz raporlanmamıştır.',
+      guidanceText: 'Şirket finansal tablolarında İşletme Nakit Akışı (OCF) kalemi henüz raporlanmamıştır.',
       beginnerExplanation,
       sloanAssessment: 'Nakit akış verisi bulunmadığı için Sloan tahakkuk oranı hesaplanamadı.',
       ocf: null,
-      netIncome: null,
-      totalAssets: null,
+      netIncome,
+      totalAssets,
       historicalTrend
     };
   }
 
-  const safeOcf = ocf ?? 0;
+  const safeOcf = ocf;
   const safeNet = netIncome ?? 0;
 
   let conversionRatio: number | null = null;
@@ -2305,16 +2305,16 @@ export function calculateEarningsQuality(
     }
   }
 
-  // 4 Temel Durum + Çift Negatif Durumu (Kullanıcı Talebi 1):
+  // 4 Temel Durum + Çift Negatif & Sıfır Kâr Durumu (Kullanıcı Talebi 1):
   if (safeOcf >= safeNet && safeNet > 0) {
     return {
       hasData: true,
       cashConversionRatio: conversionRatio,
       sloanAccrualRatio: sloanRatio,
       status: 'EXCELLENT',
-      statusTitle: 'Mükemmel Nakit Kalitesi (Üretilen Kâr Fazlasıyla Sıcak Nakde Dönüşüyor)',
+      statusTitle: 'Mükemmel Nakit Kalitesi (Üretilen Kâr Sıcak Nakde Dönüşüyor)',
       badgeColor: 'emerald',
-      guidanceText: '🌟 Mükemmel Nakit Kalitesi: Üretilen kâr fazlasıyla sıcak nakde dönüşüyor. Kâr kağıt üzerinde kalmamış, doğrudan kasaya nakit girişi sağlanmıştır.',
+      guidanceText: '🌟 Yüksek / Mükemmel Nakit Kalitesi: Kâr kağıt üzerinde kalmamış, sıcak nakde dönüşüyor ve doğrudan kasaya nakit girişi sağlanmaktadır. Tahsilat kabiliyeti çok güçlü.',
       beginnerExplanation,
       sloanAssessment,
       ocf,
@@ -2330,12 +2330,12 @@ export function calculateEarningsQuality(
       sloanAccrualRatio: sloanRatio,
       status: isGood ? 'MODERATE' : 'CRITICAL_RISK',
       statusTitle: isGood 
-        ? 'Makul Nakit Kalitesi (Kârın Büyük Kısmı Nakde Çevriliyor)' 
+        ? 'Ilımlı / Makul Nakit Kalitesi (Kârın Büyük Kısmı Nakde Çevriliyor)' 
         : 'Zayıf Nakit Dönüşümü (Kâr Kağıt Üzerinde Kalıyor, Tahakkuk Riski)',
       badgeColor: isGood ? 'amber' : 'rose',
       guidanceText: isGood
-        ? '⚠️ Makul Nakit Kalitesi: Kârın büyük kısmı nakde çevriliyor ancak bir kısmı işletme sermayesinde bağlanmıştır.'
-        : '⚠️ Zayıf Nakit Dönüşümü: Kâr kağıt üzerinde kalıyor, tahakkuk riski ve alacak/stok bağlamaları dikkatle izlenmelidir.',
+        ? '⚠️ Ilımlı / Makul Nakit Kalitesi: Kârın büyük kısmı nakde dönmektedir, kalan kısım işletme sermayesine veya stoklara bağlanmıştır.'
+        : '🚨 Zayıf Nakit Dönüşümü: Kâr kağıt üzerinde kalıyor, tahsilat gecikmeleri veya yüksek stok birikimi çalışma sermayesini eritiyor.',
       beginnerExplanation,
       sloanAssessment,
       ocf,
@@ -2351,7 +2351,7 @@ export function calculateEarningsQuality(
       status: 'CRITICAL_RISK',
       statusTitle: 'Kritik Nakit Riski (Kağıt Üstünde Kâr Var Ancak Nakit Yakılıyor)',
       badgeColor: 'rose',
-      guidanceText: '🚨 Kritik Nakit Riski: Kağıt üstünde kâr var ancak faaliyetlerden nakit yakılıyor. Kârın büyük kısmı gayrinakdi tahakkuk veya TMS 29 parasal kârdan kaynaklanıyor; likidite baskısı oluşabilir.',
+      guidanceText: '🚨 Kritik Nakit Riski: Şirket kârlı görünmesine rağmen nakit yakılıyor! Operasyonlardan nakit üretilememiştir. Gayrinakdi gelirler veya alacak tahsilat krizine dikkat. Likidite baskısı oluşabilir.',
       beginnerExplanation,
       sloanAssessment,
       ocf,
@@ -2368,6 +2368,38 @@ export function calculateEarningsQuality(
       statusTitle: 'Amortisman / Parasal Kayıp Maskelemesi',
       badgeColor: 'indigo',
       guidanceText: '💡 Amortisman / Parasal Kayıp Maskelemesi: Muhasebesel zarar görünse de operasyonlar nakit üretmeye devam etmektedir.',
+      beginnerExplanation,
+      sloanAssessment,
+      ocf,
+      netIncome,
+      totalAssets,
+      historicalTrend
+    };
+  } else if (safeOcf > 0 && safeNet === 0) {
+    return {
+      hasData: true,
+      cashConversionRatio: null,
+      sloanAccrualRatio: sloanRatio,
+      status: 'EXCELLENT',
+      statusTitle: 'Pozitif Nakit Akışı (Güçlü Operasyonel Tahsilat)',
+      badgeColor: 'emerald',
+      guidanceText: '💡 Pozitif Nakit Akışı: Şirket başabaş net kâr açıklasa da faaliyetlerinden sıcak nakit üretmeye devam etmektedir.',
+      beginnerExplanation,
+      sloanAssessment,
+      ocf,
+      netIncome,
+      totalAssets,
+      historicalTrend
+    };
+  } else if (safeOcf <= 0 && safeNet === 0) {
+    return {
+      hasData: true,
+      cashConversionRatio: null,
+      sloanAccrualRatio: sloanRatio,
+      status: 'MODERATE',
+      statusTitle: 'Başabaş Noktası & Durgun Nakit',
+      badgeColor: 'amber',
+      guidanceText: '⚠️ Başabaş Noktası: Şirket dönem net kârı ve operasyonel nakit üretimi sıfır sınırındadır.',
       beginnerExplanation,
       sloanAssessment,
       ocf,
@@ -2439,11 +2471,11 @@ export function calculateDuPont5Step(item: any, prevItem?: any): Dupont5StepResu
 
   const interestExp = parseFinancialNumber(item.interest_expenses ?? item.financial_expenses ?? item.interest_expense ?? item.financial_expense);
   let ebt = parseFinancialNumber(item.ebt);
-  if (ebt === null && netIncome !== null) {
+  if (ebt === null && ebit !== null && interestExp !== null) {
+    ebt = ebit - interestExp;
+  } else if (ebt === null && netIncome !== null) {
     const taxRate = 0.25;
     ebt = netIncome / (1 - taxRate);
-  } else if (ebt === null && ebit !== null && interestExp !== null) {
-    ebt = ebit - interestExp;
   }
 
   const taxBurden = (netIncome !== null && ebt !== null && ebt !== 0)
@@ -2474,7 +2506,7 @@ export function calculateDuPont5Step(item: any, prevItem?: any): Dupont5StepResu
 
   const financialLeverage = (avgAssets !== null && avgEquity !== null && avgEquity > 0)
     ? Number((avgAssets / avgEquity).toFixed(2))
-    : (item.leverage_ratio ? Number((item.leverage_ratio).toFixed(2)) : null);
+    : null;
 
   let calculatedRoe: number | null = null;
   if (taxBurden !== null && interestBurden !== null && ebitMargin !== null && assetTurnover !== null && financialLeverage !== null) {
@@ -2484,7 +2516,9 @@ export function calculateDuPont5Step(item: any, prevItem?: any): Dupont5StepResu
   const reportedRoe = parseFinancialNumber(item.roe) ?? calculatedRoe;
 
   let driverSummary = '';
-  if (calculatedRoe !== null) {
+  if (avgEquity !== null && avgEquity <= 0) {
+    driverSummary = 'Şirket özkaynakları negatiftir (TTK 376 Borca Batıklık). Negatif sermaye nedeniyle DuPont kaldıraç çarpanı hesaplanamaz.';
+  } else if (calculatedRoe !== null) {
     if (financialLeverage && financialLeverage > 3.0) {
       driverSummary = `Özkaynak kârlılığı (%${calculatedRoe}) ağırlıklı olarak yüksek finansal kaldıraç (${financialLeverage}x) ile büyütülmektedir; borçlanma maliyeti baskısı dikkatle izlenmelidir.`;
     } else if (ebitMargin && ebitMargin > 20.0) {
@@ -2499,7 +2533,7 @@ export function calculateDuPont5Step(item: any, prevItem?: any): Dupont5StepResu
   }
 
   return {
-    hasData: calculatedRoe !== null,
+    hasData: calculatedRoe !== null || (avgEquity !== null && avgEquity <= 0),
     taxBurden,
     interestBurden,
     ebitMargin,
@@ -2555,13 +2589,15 @@ export function calculateFxSensitivity(item: any, extractedData?: any): FxSensit
     netFx = Number(((cash * 0.40) - (debt * 0.35)).toFixed(0));
   }
 
-  const baseIncome = Math.abs(parseFinancialNumber(item?.ebt ?? item?.net_income) ?? 1000000) || 1;
+  const rawBase = parseFinancialNumber(item?.ebt ?? item?.net_income);
+  const baseIncome = (rawBase !== null && Math.abs(rawBase) >= 1e-4) ? Math.abs(rawBase) : 1000000;
   const shocks = [-20, -10, 0, 10, 20];
 
   const matrix: FxSensitivityPoint[] = shocks.map(s => {
     const shockRatio = s / 100;
     const fxGainLossTl = Math.round(netFx * shockRatio);
-    const ebtImpactPct = Number(((fxGainLossTl / baseIncome) * 100).toFixed(1));
+    const rawImpact = (fxGainLossTl / baseIncome) * 100;
+    const ebtImpactPct = Number(Math.max(-999, Math.min(999, rawImpact)).toFixed(1));
     let direction: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' = 'NEUTRAL';
     if (fxGainLossTl > 0) direction = 'POSITIVE';
     else if (fxGainLossTl < 0) direction = 'NEGATIVE';
@@ -2782,7 +2818,8 @@ export function calculateCompanyMultiples(
   currentPrice: number,
   shareCount: number,
   sector: SectorType = 'INDUSTRIAL',
-  isYatirimMultiples?: any
+  isYatirimMultiples?: any,
+  currency?: string
 ): CompanyMultiplesComparison {
   const benchmark = SECTOR_MULTIPLE_BENCHMARKS[sector] || SECTOR_MULTIPLE_BENCHMARKS.INDUSTRIAL;
   const safeShares = shareCount > 0 ? shareCount : 100000000;
@@ -2794,33 +2831,51 @@ export function calculateCompanyMultiples(
   const revenue = parseFinancialNumber(latest?.revenue ?? latest?.written_premiums);
   const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
 
+  // Borsa İstanbul bilançoları standart olarak Bin TL cinsindendir.
+  const normCurr = String(currency || latest?.currency || '').trim().toLowerCase();
+  const refScale = Math.abs(netIncome ?? equity ?? revenue ?? 0);
+  const isBinTry = normCurr.includes('bin') || normCurr.includes('thousand') || (!normCurr && refScale > 0 && refScale < 50000000 && safeShares >= 1000000);
+  const unitScale = isBinTry ? 1000 : 1;
+
+  const scaledNet = (netIncome !== null) ? netIncome * unitScale : null;
+  const scaledEquity = (equity !== null) ? equity * unitScale : null;
+  const scaledEbitda = (ebitda !== null) ? ebitda * unitScale : null;
+  const scaledRevenue = (revenue !== null) ? revenue * unitScale : null;
+  const scaledNetDebt = netDebt * unitScale;
+
   const marketCap = currentPrice * safeShares;
-  const enterpriseValue = marketCap + netDebt;
+  const enterpriseValue = marketCap + scaledNetDebt;
 
   // 1. F/K (P/E)
   let peVal: number | null = isYatirimMultiples?.pe != null ? isYatirimMultiples.pe : null;
-  if (peVal === null && netIncome !== null && netIncome > 0) {
-    const annualizedNet = netIncome * annualFactor;
+  if (peVal === null && scaledNet !== null && scaledNet > 0) {
+    const annualizedNet = scaledNet * annualFactor;
     peVal = Number((marketCap / annualizedNet).toFixed(2));
+  } else if (peVal === null && scaledNet !== null && scaledNet < 0) {
+    peVal = Number((marketCap / (scaledNet * annualFactor)).toFixed(2));
   }
 
   // 2. PD/DD (P/B)
   let pbVal: number | null = isYatirimMultiples?.pb != null ? isYatirimMultiples.pb : null;
-  if (pbVal === null && equity !== null && equity > 0) {
-    pbVal = Number((marketCap / equity).toFixed(2));
+  if (pbVal === null && scaledEquity !== null && scaledEquity > 0) {
+    pbVal = Number((marketCap / scaledEquity).toFixed(2));
+  } else if (pbVal === null && scaledEquity !== null && scaledEquity < 0) {
+    pbVal = Number((marketCap / scaledEquity).toFixed(2));
   }
 
   // 3. FD/FAVÖK (EV/EBITDA)
   let evEbitdaVal: number | null = isYatirimMultiples?.ev_ebitda != null ? isYatirimMultiples.ev_ebitda : (isYatirimMultiples?.evEbitda != null ? isYatirimMultiples.evEbitda : null);
-  if (evEbitdaVal === null && benchmark.evEbitdaMedian !== null && ebitda !== null && ebitda > 0) {
-    const annualizedEbitda = ebitda * annualFactor;
+  if (evEbitdaVal === null && benchmark.evEbitdaMedian !== null && scaledEbitda !== null && scaledEbitda > 0) {
+    const annualizedEbitda = scaledEbitda * annualFactor;
     evEbitdaVal = Number((enterpriseValue / annualizedEbitda).toFixed(2));
+  } else if (evEbitdaVal === null && benchmark.evEbitdaMedian !== null && scaledEbitda !== null && scaledEbitda < 0) {
+    evEbitdaVal = Number((enterpriseValue / (scaledEbitda * annualFactor)).toFixed(2));
   }
 
   // 4. FD/Satışlar (EV/Sales)
   let evSalesVal: number | null = isYatirimMultiples?.ev_sales != null ? isYatirimMultiples.ev_sales : (isYatirimMultiples?.evSales != null ? isYatirimMultiples.evSales : null);
-  if (evSalesVal === null && benchmark.evSalesMedian !== null && revenue !== null && revenue > 0) {
-    const annualizedRev = revenue * annualFactor;
+  if (evSalesVal === null && benchmark.evSalesMedian !== null && scaledRevenue !== null && scaledRevenue > 0) {
+    const annualizedRev = scaledRevenue * annualFactor;
     evSalesVal = Number((enterpriseValue / annualizedRev).toFixed(2));
   }
 
@@ -2841,6 +2896,20 @@ export function calculateCompanyMultiples(
         status: 'NA',
         statusLabel: 'Veri Yok / Kapsam Dışı',
         badgeColor: 'gray',
+        impliedPrice: null
+      };
+    }
+
+    if (compVal <= 0) {
+      return {
+        code,
+        name,
+        companyValue: compVal,
+        sectorMedian: sectorMed,
+        diffPct: null,
+        status: 'NA',
+        statusLabel: '⚠️ Negatif Çarpan (Net Zarar / Negatif Özkaynak)',
+        badgeColor: 'rose',
         impliedPrice: null
       };
     }
@@ -2875,23 +2944,23 @@ export function calculateCompanyMultiples(
     };
   };
 
-  const eps = (netIncome !== null && netIncome > 0) ? (netIncome * annualFactor) / safeShares : null;
-  const bvps = (equity !== null && equity > 0) ? equity / safeShares : null;
+  const eps = (scaledNet !== null && scaledNet > 0) ? (scaledNet * annualFactor) / safeShares : null;
+  const bvps = (scaledEquity !== null && scaledEquity > 0) ? scaledEquity / safeShares : null;
 
   const peMetric = helper('PE', 'F/K (Fiyat / Kazanç)', peVal, benchmark.peMedian, (t) => eps ? Number((eps * t).toFixed(2)) : null);
   const pbMetric = helper('PB', 'PD/DD (Piyasa Değeri / Defter Değeri)', pbVal, benchmark.pbMedian, (t) => bvps ? Number((bvps * t).toFixed(2)) : null);
   const evEbitdaMetric = helper('EV_EBITDA', 'FD/FAVÖK (Firma Değeri / FAVÖK)', evEbitdaVal, benchmark.evEbitdaMedian, (t) => {
-    if (ebitda && ebitda > 0) {
-      const targetFirmVal = (ebitda * annualFactor) * t;
-      const targetEq = targetFirmVal - netDebt;
+    if (scaledEbitda && scaledEbitda > 0) {
+      const targetFirmVal = (scaledEbitda * annualFactor) * t;
+      const targetEq = targetFirmVal - scaledNetDebt;
       return targetEq > 0 ? Number((targetEq / safeShares).toFixed(2)) : null;
     }
     return null;
   });
   const evSalesMetric = helper('EV_SALES', 'FD/Satışlar (Firma Değeri / Satışlar)', evSalesVal, benchmark.evSalesMedian, (t) => {
-    if (revenue && revenue > 0) {
-      const targetFirmVal = (revenue * annualFactor) * t;
-      const targetEq = targetFirmVal - netDebt;
+    if (scaledRevenue && scaledRevenue > 0) {
+      const targetFirmVal = (scaledRevenue * annualFactor) * t;
+      const targetEq = targetFirmVal - scaledNetDebt;
       return targetEq > 0 ? Number((targetEq / safeShares).toFixed(2)) : null;
     }
     return null;

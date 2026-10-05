@@ -424,6 +424,7 @@ export async function POST(req: Request) {
     let price = '';
     let category: DocumentCategory | '' = '';
     let previousData: any = null;
+    let previousReport: any = null;
     let documents: { name: string; text: string; category?: string }[] = [];
     let pdfFiles: File[] = [];
     let filesFinancial: File[] = [];
@@ -436,6 +437,7 @@ export async function POST(req: Request) {
       price = json.price || '';
       category = (json.category || '').toLowerCase() as DocumentCategory;
       previousData = json.previousData || null;
+      previousReport = json.previousReport || null;
 
       if (json.categorizedDocuments) {
         const cat = json.categorizedDocuments;
@@ -464,6 +466,13 @@ export async function POST(req: Request) {
       if (prevDataStr) {
         try {
           previousData = JSON.parse(prevDataStr);
+        } catch {}
+      }
+
+      const prevReportStr = formData.get('previousReport') as string;
+      if (prevReportStr) {
+        try {
+          previousReport = JSON.parse(prevReportStr);
         } catch {}
       }
 
@@ -784,12 +793,16 @@ ${!isInsurance && !isBanking ? `   * SANAYİ / HİZMET / DİĞER:
       const prompt = `Şirket: ${ticker.toUpperCase()} (Sektör: ${targetSector}).
 Toplam ${actDocs.length} adet faaliyet raporu/doküman yüklendi: ${actDocs.map(d => d.name).join(', ')}.
 ${officialActualsText}
+${previousReport ? `\nÖNCEKİ DÖNEM ANALİZ RAPORU VE YÖNETİM HEDEFLERİ (DÖNEMSEL BESLENME):
+- Önceki Dönem / Tarih: ${previousReport.period || previousReport.createdAt}
+- Önceki Adil Değer: ${previousReport.fairValue} TL
+- Önceki Çeyrekte Belirtilen Yönetim Hedefleri: ${previousReport.extractedData?.future_targets_summary || 'Belirtilmedi'}\n` : ''}
 Aşağıda şirkete ait çok yıllı faaliyet raporlarının yönetim, hedefler, operasyonel performans ve risk bölümleri yer almaktadır:
 
 ${docTexts}
 
 GÖREVLER:
-1. Yönetim Rehberlik Karnesi ('guidance_track_record'): Yüklenen tüm faaliyet raporlarındaki yılları (örn: 2022, 2023, 2024, 2025, 2026) KAPSAYACAK ŞEKİLDE her yıl için yönetimin sayısal veya stratejik/operasyonel hedeflerini ve yıl sonu gerçekleşmelerini çıkar. Asla sadece tek yılla sınırlı kalma ve 'guidance_given' alanına kesinlikle "null" yazma!
+1. Yönetim Rehberlik Karnesi ('guidance_track_record'): Yüklenen tüm faaliyet raporlarındaki yılları (örn: 2022, 2023, 2024, 2025, 2026) KAPSAYACAK ŞEKİLDE her yıl için yönetimin sayısal veya stratejik/operasyonel hedeflerini ve yıl sonu gerçekleşmelerini çıkar. ${previousReport ? "Yönetimin önceki çeyrekte beyan ettiği hedeflerin bu dönem tutup tutmadığını (hedef gerçekleşme karnesi) nesnel olarak değerlendirerek 'guidance_track_record' listesine yansıt. " : ""}Asla sadece tek yılla sınırlı kalma ve 'guidance_given' alanına kesinlikle "null" yazma!
 2. Gelecek Dönem Hedefleri İçin Olumlu Bulunan Konular ('positive_outlook_highlights'): Faaliyet raporlarında şirketin gelecek dönem hedefleri, yeni yatırımları, kapasite/şube/dijital kanal büyümeleri ve marj iyileştirmeleri arasında olumlu bulunan en az 4-6 somut konuyu çıkar.
 3. Faaliyet Raporu Stratejik Özeti ('report_executive_summary'): Raporların bütüncül değerlendirmesini ve yönetimin gelecek vizyonunu özetle.
 4. Şirketin güçlü yönlerini (pros) ve riskli/zayıf yönlerini (cons) ('pros_cons') somut faaliyet raporu verileriyle çıkar.
@@ -849,6 +862,10 @@ GÖREVLER:
       const prompt = `Şirket: ${ticker.toUpperCase()} (Sektör: ${targetSector}).
 Toplam ${presDocs.length} adet yatırımcı sunumu yüklendi: ${presDocs.map(d => d.name).join(', ')}.
 ${officialActualsText}
+${previousReport ? `\nÖNCEKİ DÖNEM ANALİZİ VE YÖNETİM HEDEFLERİ (DÖNEMSEL BESLENME):
+- Önceki Dönem / Tarih: ${previousReport.period || previousReport.createdAt}
+- Önceki Çeyrek Adil Değer: ${previousReport.fairValue} TL
+- Önceki Yönetim Hedefleri: ${previousReport.extractedData?.future_targets_summary || 'Belirtilmedi'}\n` : ''}
 Aşağıda şirketin Yatırımcı Sunumu ve Gelecek Stratejisi dokümanları yer almaktadır:
 
 ${docTexts}
@@ -948,7 +965,7 @@ GÖREVLER:
       const response = await generateWithRateLimitAndBackoff({
         ai,
         baseParams: {
-          contents: [`Şirket: ${ticker.toUpperCase()}.\n${docTexts}`],
+          contents: [`Şirket: ${ticker.toUpperCase()}.${previousReport ? `\nÖnceki Dönem: ${previousReport.period || previousReport.createdAt}, Önceki Çeyrek Adil Değer: ${previousReport.fairValue} TL, Önceki Yönetim Hedefleri: ${previousReport.extractedData?.future_targets_summary || 'Belirtilmedi'}` : ''}\n${docTexts}`],
           config: {
             systemInstruction: activitySystemInstruction,
             temperature: 0.0,

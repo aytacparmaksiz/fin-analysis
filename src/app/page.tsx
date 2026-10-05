@@ -1411,6 +1411,8 @@ export default function ValuationTerminal() {
         fair_value_drivers: bistData.drivers || bistData.fair_value_drivers
       };
 
+      const prevSavedForTicker = savedReports.find(r => r.ticker === targetTicker);
+
       // OPSİYONEL ADIM 2: Faaliyet Raporları (Alan 2) Varsa Zenginleştir
       if (activityFiles.length > 0) {
         setPipelineStep(2);
@@ -1445,7 +1447,8 @@ export default function ValuationTerminal() {
                   price: livePriceStr,
                   category: 'activity',
                   documents: activityDocs,
-                  previousData: currentData
+                  previousData: currentData,
+                  previousReport: prevSavedForTicker || null
                 })
               }),
               setStatusMessage
@@ -1501,7 +1504,8 @@ export default function ValuationTerminal() {
                   price: livePriceStr,
                   category: 'presentation',
                   documents: presentationDocs,
-                  previousData: currentData
+                  previousData: currentData,
+                  previousReport: prevSavedForTicker || null
                 })
               }),
               setStatusMessage
@@ -1716,13 +1720,16 @@ export default function ValuationTerminal() {
           setPipelineProgress(66);
           setStatusMessage(`[2. Aşama / 3]: Faaliyet raporundan yönetim hedefleri ve riskler ayıklanıyor...`);
 
+          const normUploadTicker = (ticker || '').toUpperCase().trim();
+          const prevSavedForUpload = savedReports.find(r => r.ticker === normUploadTicker);
+
           let res2: Response;
           if (activityDocs.length > 0) {
             res2 = await fetchWithClientRetry(
               () => fetch('/api/extract', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ticker, price, category: 'activity', documents: activityDocs, previousData: currentData })
+                body: JSON.stringify({ ticker, price, category: 'activity', documents: activityDocs, previousData: currentData, previousReport: prevSavedForUpload || null })
               }),
               setStatusMessage
             );
@@ -1732,6 +1739,7 @@ export default function ValuationTerminal() {
             fd.append('price', price);
             fd.append('category', 'activity');
             fd.append('previousData', JSON.stringify(currentData));
+            if (prevSavedForUpload) fd.append('previousReport', JSON.stringify(prevSavedForUpload));
             activityFiles.forEach(f => fd.append('files_activity', f));
             res2 = await fetchWithClientRetry(
               () => fetch('/api/extract', { method: 'POST', body: fd }),
@@ -1777,13 +1785,16 @@ export default function ValuationTerminal() {
           setPipelineProgress(90);
           setStatusMessage(`[3. Aşama / 3]: Yatırımcı sunumundan ileriye dönük hedefler entegre ediliyor...`);
 
+          const normUploadTickerPres = (ticker || '').toUpperCase().trim();
+          const prevSavedForUploadPres = savedReports.find(r => r.ticker === normUploadTickerPres);
+
           let res3: Response;
           if (presentationDocs.length > 0) {
             res3 = await fetchWithClientRetry(
               () => fetch('/api/extract', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ticker, price, category: 'presentation', documents: presentationDocs, previousData: currentData })
+                body: JSON.stringify({ ticker, price, category: 'presentation', documents: presentationDocs, previousData: currentData, previousReport: prevSavedForUploadPres || null })
               }),
               setStatusMessage
             );
@@ -1793,6 +1804,7 @@ export default function ValuationTerminal() {
             fd.append('price', price);
             fd.append('category', 'presentation');
             fd.append('previousData', JSON.stringify(currentData));
+            if (prevSavedForUploadPres) fd.append('previousReport', JSON.stringify(prevSavedForUploadPres));
             presentationFiles.forEach(f => fd.append('files_presentation', f));
             res3 = await fetchWithClientRetry(
               () => fetch('/api/extract', { method: 'POST', body: fd }),
@@ -1835,9 +1847,7 @@ export default function ValuationTerminal() {
   const handleEvaluate = async () => {
     setLoading(true);
     setError(null);
-    setStatusMessage('Sektörel değerleme modeli, çarpan analizi ve kurumsal karne üretiliyor...');
-
-    const normalizedTicker = ticker.toUpperCase().trim();
+    const normalizedTicker = (ticker || extractedData?.ticker || '').toUpperCase().trim();
     const previousReportsForTicker = savedReports.filter(r => r.ticker === normalizedTicker);
     const previousReport = previousReportsForTicker.length > 0 ? previousReportsForTicker[0] : null;
 
@@ -2852,8 +2862,8 @@ export default function ValuationTerminal() {
 
   const companyMultiplesData = useMemo(() => {
     const sc = parseFinancialNumber(currentExtractedData?.shares_outstanding ?? currentExtractedData?.share_count) ?? 180000000;
-    return calculateCompanyMultiples(latestPeriodItem, valuationInfo.current_price || currentMarketPrice, sc, currentSector, marketMultiples);
-  }, [latestPeriodItem, valuationInfo.current_price, currentMarketPrice, currentExtractedData?.shares_outstanding, currentExtractedData?.share_count, currentSector, marketMultiples]);
+    return calculateCompanyMultiples(latestPeriodItem, valuationInfo.current_price || currentMarketPrice, sc, currentSector, marketMultiples, currentExtractedData?.currency);
+  }, [latestPeriodItem, valuationInfo.current_price, currentMarketPrice, currentExtractedData?.shares_outstanding, currentExtractedData?.share_count, currentSector, marketMultiples, currentExtractedData?.currency]);
 
   const previousQuarterComparison = useMemo(() => {
     if (!currentTicker) return null;
@@ -2874,6 +2884,194 @@ export default function ValuationTerminal() {
       currDecision: dynamicValuationResult.optimization?.finalDecision
     };
   }, [savedReports, currentTicker, activeReport?.id, valuationInfo.fair_value, dynamicValuationResult]);
+
+  const renderEarningsQualityCard = (options?: { id?: string }) => (
+    <div id={options?.id} className={`bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-xl space-y-5 ${options?.id ? 'scroll-mt-24' : ''}`}>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+        <div className="flex items-center gap-3">
+          <div className={`p-2.5 rounded-xl border ${
+            earningsQuality.badgeColor === 'emerald'
+              ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
+              : earningsQuality.badgeColor === 'amber'
+              ? 'bg-amber-500/10 border-amber-500/25 text-amber-400'
+              : earningsQuality.badgeColor === 'rose'
+              ? 'bg-rose-500/10 border-rose-500/25 text-rose-400'
+              : 'bg-indigo-500/10 border-indigo-500/25 text-indigo-400'
+          }`}>
+            <Zap className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
+                Kâr Kalitesi & Nakit Dönüşüm Teşhisi (Earnings Quality Audit)
+              </h3>
+              <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                Otomatik Denetim
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Operasyonel Nakit Akışı (OCF) vs. Net Kâr ve Sloan Tahakkuk Oranı Analizi
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowCashQualityExplainer(prev => !prev)}
+          className="flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 bg-cyan-950/40 hover:bg-cyan-950/70 border border-cyan-800/50 px-3 py-1.5 rounded-lg transition cursor-pointer self-start sm:self-auto"
+        >
+          <Info className="w-3.5 h-3.5" />
+          <span>{showCashQualityExplainer ? 'Rehberi Gizle' : 'Yatırımcı Rehberi (Nedir?)'}</span>
+        </button>
+      </div>
+
+      {/* Durum Yönlendirme Şeridi */}
+      <div className={`p-4 rounded-xl border leading-relaxed text-xs sm:text-sm font-medium flex items-start gap-3 ${
+        earningsQuality.badgeColor === 'emerald'
+          ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-200'
+          : earningsQuality.badgeColor === 'amber'
+          ? 'bg-amber-950/40 border-amber-800/60 text-amber-200'
+          : earningsQuality.badgeColor === 'rose'
+          ? 'bg-rose-950/40 border-rose-800/60 text-rose-200'
+          : 'bg-indigo-950/40 border-indigo-800/60 text-indigo-200'
+      }`}>
+        <div className="flex-1">
+          <div className="font-bold text-sm mb-1">{earningsQuality.statusTitle}</div>
+          <div>{earningsQuality.guidanceText}</div>
+        </div>
+      </div>
+
+      {/* Tecrübesiz Yatırımcı Açıklama Kutusu */}
+      {showCashQualityExplainer && (
+        <div className="bg-slate-950/80 border border-cyan-900/40 p-4 rounded-xl text-xs text-slate-300 space-y-2">
+          <div className="font-bold text-cyan-300 flex items-center gap-1.5">
+            <Sparkles className="w-4 h-4" /> Tecrübesiz Yatırımcı İçin Temel Kural:
+          </div>
+          <p className="leading-relaxed">
+            {earningsQuality.beginnerExplanation}
+          </p>
+          <div className="pt-2 border-t border-slate-800 flex items-center gap-2 text-[11px] text-slate-400">
+            <span className="font-bold text-slate-300">Sloan Tahakkuk Oranı =</span>
+            <span className="font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-800">(Net Kâr − OCF) / Toplam Varlıklar</span>
+            <span>(Oranın sıfıra yakın veya eksi olması kârın kasaya fiilen girdiğini gösterir).</span>
+          </div>
+        </div>
+      )}
+
+      {/* 4 Temel Metrik Kartı */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+          <span className="text-[10px] text-slate-400 uppercase font-semibold block">Nakit Dönüşüm Oranı</span>
+          <div className="text-xl font-black font-mono mt-1 text-white">
+            {earningsQuality.cashConversionRatio != null ? `%${earningsQuality.cashConversionRatio}` : '—'}
+          </div>
+          <span className="text-[10px] text-slate-500 block mt-0.5">OCF / Net Kâr (Hedef: &gt;%100)</span>
+        </div>
+
+        <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+          <span className="text-[10px] text-slate-400 uppercase font-semibold block">Sloan Tahakkuk Oranı</span>
+          <div className={`text-xl font-black font-mono mt-1 ${
+            earningsQuality.sloanAccrualRatio != null && earningsQuality.sloanAccrualRatio < 0.05
+              ? 'text-emerald-400'
+              : 'text-amber-400'
+          }`}>
+            {earningsQuality.sloanAccrualRatio != null ? `%${(earningsQuality.sloanAccrualRatio * 100).toFixed(1)}` : '—'}
+          </div>
+          <span className="text-[10px] text-slate-500 block mt-0.5">Tahakkuk / Aktif Oranı</span>
+        </div>
+
+        <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+          <span className="text-[10px] text-slate-400 uppercase font-semibold block">İşletme Nakit Akışı (OCF)</span>
+          <div className="text-lg font-black font-mono mt-1 text-emerald-400 truncate">
+            {formatAmount(earningsQuality.ocf, unitMode, false, '', '', currentExtractedData?.currency)}
+          </div>
+          <span className="text-[10px] text-slate-500 block mt-0.5">Operasyonel Sıcak Para</span>
+        </div>
+
+        <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+          <span className="text-[10px] text-slate-400 uppercase font-semibold block">Raporlanan Net Kâr</span>
+          <div className="text-lg font-black font-mono mt-1 text-cyan-400 truncate">
+            {formatAmount(earningsQuality.netIncome, unitMode, false, '', '', currentExtractedData?.currency)}
+          </div>
+          <span className="text-[10px] text-slate-500 block mt-0.5">Muhasebesel Kâr / Zarar</span>
+        </div>
+      </div>
+
+      {/* Sloan Tahakkuk Değerlendirmesi */}
+      <div className="bg-slate-950/60 border border-slate-800/70 p-3 rounded-xl text-xs text-slate-300 flex items-center justify-between flex-wrap gap-2">
+        <span className="font-semibold text-slate-200">Tahakkuk Anomalisi Denetimi:</span>
+        <span className="font-mono text-xs">{earningsQuality.sloanAssessment}</span>
+      </div>
+    </div>
+  );
+
+  const renderDuPontCard = () => (
+    <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+      <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+        <div className="flex items-center gap-2">
+          <Activity className="w-4 h-4 text-emerald-400" />
+          <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
+            DuPont 5 Aşamalı Kârlılık Ayrıştırması (DuPont ROE Modeli)
+          </h3>
+        </div>
+        <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-0.5 rounded">
+          ROE = %{dupontResult.calculatedRoe != null ? dupontResult.calculatedRoe : (latestPeriodItem?.roe || '—')}
+        </span>
+      </div>
+
+      <p className="text-xs text-slate-400">
+        Özkaynak kârlılığını (ROE) oluşturan 5 temel motor: Vergi Yükü × Faiz Yükü × Faaliyet Marjı × Aktif Devir Hızı × Finansal Kaldıraç
+      </p>
+
+      {/* 5 Aşamalı Boru Hattı Gösterimi */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-2">
+        <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800 text-center">
+          <div className="text-[10px] text-slate-400 font-semibold uppercase">1. Vergi Yükü</div>
+          <div className="text-base font-black font-mono text-white mt-1">
+            {dupontResult.taxBurden != null ? `${dupontResult.taxBurden}x` : '—'}
+          </div>
+          <div className="text-[9px] text-slate-500 mt-0.5">Net Kâr / EBT</div>
+        </div>
+
+        <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800 text-center">
+          <div className="text-[10px] text-slate-400 font-semibold uppercase">2. Faiz Yükü</div>
+          <div className="text-base font-black font-mono text-white mt-1">
+            {dupontResult.interestBurden != null ? `${dupontResult.interestBurden}x` : '—'}
+          </div>
+          <div className="text-[9px] text-slate-500 mt-0.5">EBT / EBIT</div>
+        </div>
+
+        <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800 text-center">
+          <div className="text-[10px] text-slate-400 font-semibold uppercase">3. Faaliyet Marjı</div>
+          <div className="text-base font-black font-mono text-cyan-300 mt-1">
+            {dupontResult.ebitMargin != null ? `%${dupontResult.ebitMargin}` : '—'}
+          </div>
+          <div className="text-[9px] text-slate-500 mt-0.5">EBIT / Hasılat</div>
+        </div>
+
+        <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800 text-center">
+          <div className="text-[10px] text-slate-400 font-semibold uppercase">4. Aktif Devri</div>
+          <div className="text-base font-black font-mono text-amber-300 mt-1">
+            {dupontResult.assetTurnover != null ? `${dupontResult.assetTurnover}x` : '—'}
+          </div>
+          <div className="text-[9px] text-slate-500 mt-0.5">Hasılat / Aktif</div>
+        </div>
+
+        <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800 text-center col-span-2 sm:col-span-1">
+          <div className="text-[10px] text-slate-400 font-semibold uppercase">5. Kaldıraç</div>
+          <div className="text-base font-black font-mono text-rose-300 mt-1">
+            {dupontResult.financialLeverage != null ? `${dupontResult.financialLeverage}x` : '—'}
+          </div>
+          <div className="text-[9px] text-slate-500 mt-0.5">Aktif / Özkaynak</div>
+        </div>
+      </div>
+
+      <div className="bg-slate-950/70 border border-slate-800 p-3 rounded-xl text-xs text-slate-300 leading-relaxed">
+        <span className="font-bold text-white">💡 Kârlılık Teşhisi: </span>
+        <span>{dupontResult.driverSummary}</span>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#0B0F19] text-slate-100 flex flex-col md:flex-row font-sans">
@@ -3992,192 +4190,12 @@ export default function ValuationTerminal() {
                       {/* ========================================================================= */}
                       {/* ITEM 1: KÂR KALİTESİ & NAKİT DÖNÜŞÜM TEŞHİSİ (EARNINGS QUALITY AUDIT)    */}
                       {/* ========================================================================= */}
-                      <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-xl space-y-5">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2.5 rounded-xl border ${
-                              earningsQuality.badgeColor === 'emerald'
-                                ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
-                                : earningsQuality.badgeColor === 'amber'
-                                ? 'bg-amber-500/10 border-amber-500/25 text-amber-400'
-                                : earningsQuality.badgeColor === 'rose'
-                                ? 'bg-rose-500/10 border-rose-500/25 text-rose-400'
-                                : 'bg-indigo-500/10 border-indigo-500/25 text-indigo-400'
-                            }`}>
-                              <Zap className="w-5 h-5" />
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
-                                  Kâr Kalitesi & Nakit Dönüşüm Teşhisi (Earnings Quality Audit)
-                                </h3>
-                                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
-                                  Otomatik Denetim
-                                </span>
-                              </div>
-                              <p className="text-xs text-slate-400 mt-0.5">
-                                Operasyonel Nakit Akışı (OCF) vs. Net Kâr ve Sloan Tahakkuk Oranı Analizi
-                              </p>
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => setShowCashQualityExplainer(prev => !prev)}
-                            className="flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 bg-cyan-950/40 hover:bg-cyan-950/70 border border-cyan-800/50 px-3 py-1.5 rounded-lg transition cursor-pointer self-start sm:self-auto"
-                          >
-                            <Info className="w-3.5 h-3.5" />
-                            <span>{showCashQualityExplainer ? 'Rehberi Gizle' : 'Yatırımcı Rehberi (Nedir?)'}</span>
-                          </button>
-                        </div>
-
-                        {/* Durum Yönlendirme Şeridi (Kullanıcı Talebi 1: Tecrübesiz Yatırımcı Yönlendirmesi) */}
-                        <div className={`p-4 rounded-xl border leading-relaxed text-xs sm:text-sm font-medium flex items-start gap-3 ${
-                          earningsQuality.badgeColor === 'emerald'
-                            ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-200'
-                            : earningsQuality.badgeColor === 'amber'
-                            ? 'bg-amber-950/40 border-amber-800/60 text-amber-200'
-                            : earningsQuality.badgeColor === 'rose'
-                            ? 'bg-rose-950/40 border-rose-800/60 text-rose-200'
-                            : 'bg-indigo-950/40 border-indigo-800/60 text-indigo-200'
-                        }`}>
-                          <div className="flex-1">
-                            <div className="font-bold text-sm mb-1">{earningsQuality.statusTitle}</div>
-                            <div>{earningsQuality.guidanceText}</div>
-                          </div>
-                        </div>
-
-                        {/* Tecrübesiz Yatırımcı Açıklama Kutusu (Eğitici Not) */}
-                        {showCashQualityExplainer && (
-                          <div className="bg-slate-950/80 border border-cyan-900/40 p-4 rounded-xl text-xs text-slate-300 space-y-2">
-                            <div className="font-bold text-cyan-300 flex items-center gap-1.5">
-                              <Sparkles className="w-4 h-4" /> Tecrübesiz Yatırımcı İçin Temel Kural:
-                            </div>
-                            <p className="leading-relaxed">
-                              {earningsQuality.beginnerExplanation}
-                            </p>
-                            <div className="pt-2 border-t border-slate-800 flex items-center gap-2 text-[11px] text-slate-400">
-                              <span className="font-bold text-slate-300">Sloan Tahakkuk Oranı =</span>
-                              <span className="font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-800">(Net Kâr − OCF) / Toplam Varlıklar</span>
-                              <span>(Oranın sıfıra yakın veya eksi olması kârın kasaya fiilen girdiğini gösterir).</span>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* 4 Temel Metrik Kartı */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                          <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
-                            <span className="text-[10px] text-slate-400 uppercase font-semibold block">Nakit Dönüşüm Oranı</span>
-                            <div className="text-xl font-black font-mono mt-1 text-white">
-                              {earningsQuality.cashConversionRatio != null ? `%${earningsQuality.cashConversionRatio}` : '—'}
-                            </div>
-                            <span className="text-[10px] text-slate-500 block mt-0.5">OCF / Net Kâr (Hedef: &gt;%100)</span>
-                          </div>
-
-                          <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
-                            <span className="text-[10px] text-slate-400 uppercase font-semibold block">Sloan Tahakkuk Oranı</span>
-                            <div className={`text-xl font-black font-mono mt-1 ${
-                              earningsQuality.sloanAccrualRatio != null && earningsQuality.sloanAccrualRatio < 0.05
-                                ? 'text-emerald-400'
-                                : 'text-amber-400'
-                            }`}>
-                              {earningsQuality.sloanAccrualRatio != null ? `%${(earningsQuality.sloanAccrualRatio * 100).toFixed(1)}` : '—'}
-                            </div>
-                            <span className="text-[10px] text-slate-500 block mt-0.5">Tahakkuk / Aktif Oranı</span>
-                          </div>
-
-                          <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
-                            <span className="text-[10px] text-slate-400 uppercase font-semibold block">İşletme Nakit Akışı (OCF)</span>
-                            <div className="text-lg font-black font-mono mt-1 text-emerald-400 truncate">
-                              {formatAmount(earningsQuality.ocf, unitMode, false, '', '', currentExtractedData?.currency)}
-                            </div>
-                            <span className="text-[10px] text-slate-500 block mt-0.5">Operasyonel Sıcak Para</span>
-                          </div>
-
-                          <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
-                            <span className="text-[10px] text-slate-400 uppercase font-semibold block">Raporlanan Net Kâr</span>
-                            <div className="text-lg font-black font-mono mt-1 text-cyan-400 truncate">
-                              {formatAmount(earningsQuality.netIncome, unitMode, false, '', '', currentExtractedData?.currency)}
-                            </div>
-                            <span className="text-[10px] text-slate-500 block mt-0.5">Muhasebesel Kâr / Zarar</span>
-                          </div>
-                        </div>
-
-                        {/* Sloan Tahakkuk Değerlendirmesi */}
-                        <div className="bg-slate-950/60 border border-slate-800/70 p-3 rounded-xl text-xs text-slate-300 flex items-center justify-between flex-wrap gap-2">
-                          <span className="font-semibold text-slate-200">Tahakkuk Anomalisi Denetimi:</span>
-                          <span className="font-mono text-xs">{earningsQuality.sloanAssessment}</span>
-                        </div>
-                      </div>
+                      {renderEarningsQualityCard()}
 
                       {/* ========================================================================= */}
                       {/* ITEM 3A: DUPONT 5 AŞAMALI KÂRLILIK AYRIŞTIRMASI                           */}
                       {/* ========================================================================= */}
-                      <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-                          <div className="flex items-center gap-2">
-                            <Activity className="w-4 h-4 text-emerald-400" />
-                            <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
-                              DuPont 5 Aşamalı Kârlılık Ayrıştırması (DuPont ROE Modeli)
-                            </h3>
-                          </div>
-                          <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-0.5 rounded">
-                            ROE = %{dupontResult.calculatedRoe != null ? dupontResult.calculatedRoe : (latestPeriodItem?.roe || '—')}
-                          </span>
-                        </div>
-
-                        <p className="text-xs text-slate-400">
-                          Özkaynak kârlılığını (ROE) oluşturan 5 temel motor: Vergi Yükü × Faiz Yükü × Faaliyet Marjı × Aktif Devir Hızı × Finansal Kaldıraç
-                        </p>
-
-                        {/* 5 Aşamalı Boru Hattı Gösterimi */}
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-2">
-                          <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800 text-center">
-                            <div className="text-[10px] text-slate-400 font-semibold uppercase">1. Vergi Yükü</div>
-                            <div className="text-base font-black font-mono text-white mt-1">
-                              {dupontResult.taxBurden != null ? `${dupontResult.taxBurden}x` : '—'}
-                            </div>
-                            <div className="text-[9px] text-slate-500 mt-0.5">Net Kâr / EBT</div>
-                          </div>
-
-                          <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800 text-center">
-                            <div className="text-[10px] text-slate-400 font-semibold uppercase">2. Faiz Yükü</div>
-                            <div className="text-base font-black font-mono text-white mt-1">
-                              {dupontResult.interestBurden != null ? `${dupontResult.interestBurden}x` : '—'}
-                            </div>
-                            <div className="text-[9px] text-slate-500 mt-0.5">EBT / EBIT</div>
-                          </div>
-
-                          <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800 text-center">
-                            <div className="text-[10px] text-slate-400 font-semibold uppercase">3. Faaliyet Marjı</div>
-                            <div className="text-base font-black font-mono text-cyan-300 mt-1">
-                              {dupontResult.ebitMargin != null ? `%${dupontResult.ebitMargin}` : '—'}
-                            </div>
-                            <div className="text-[9px] text-slate-500 mt-0.5">EBIT / Hasılat</div>
-                          </div>
-
-                          <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800 text-center">
-                            <div className="text-[10px] text-slate-400 font-semibold uppercase">4. Aktif Devri</div>
-                            <div className="text-base font-black font-mono text-amber-300 mt-1">
-                              {dupontResult.assetTurnover != null ? `${dupontResult.assetTurnover}x` : '—'}
-                            </div>
-                            <div className="text-[9px] text-slate-500 mt-0.5">Hasılat / Aktif</div>
-                          </div>
-
-                          <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800 text-center col-span-2 sm:col-span-1">
-                            <div className="text-[10px] text-slate-400 font-semibold uppercase">5. Kaldıraç</div>
-                            <div className="text-base font-black font-mono text-rose-300 mt-1">
-                              {dupontResult.financialLeverage != null ? `${dupontResult.financialLeverage}x` : '—'}
-                            </div>
-                            <div className="text-[9px] text-slate-500 mt-0.5">Aktif / Özkaynak</div>
-                          </div>
-                        </div>
-
-                        <div className="bg-slate-950/70 border border-slate-800 p-3 rounded-xl text-xs text-slate-300 leading-relaxed">
-                          <span className="font-bold text-white">💡 Kârlılık Teşhisi: </span>
-                          <span>{dupontResult.driverSummary}</span>
-                        </div>
-                      </div>
+                      {renderDuPontCard()}
 
                       {/* ========================================================================= */}
                       {/* ITEM 3B: NET DÖVİZ POZİSYONU & KUR HASSASİYET ANALİZİ                      */}
@@ -4715,6 +4733,11 @@ export default function ValuationTerminal() {
                           <span className="font-mono text-emerald-300 font-bold text-sm">
                             %{latestData?.effective_kd || (latestData?.after_tax_cost_of_debt ? Number((latestData.after_tax_cost_of_debt / 0.75).toFixed(1)) : '46.0')}
                           </span>
+                          {latestData?.company_specific_kd != null && (
+                            <span className="text-[11px] text-cyan-400 ml-1.5 font-mono">
+                              (Mali Tablo Efektif Faizi: %{latestData.company_specific_kd})
+                            </span>
+                          )}
                           <span className="text-[11px] text-slate-400 ml-1.5">(Brüt Ticari Borçlanma Faizi)</span>
                         </div>
                       </div>
@@ -4857,6 +4880,9 @@ export default function ValuationTerminal() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Item 3A: DuPont 5 Aşamalı Kârlılık Ayrıştırması */}
+                    {renderDuPontCard()}
 
                   {/* Üst Çubuk: Sekmeler (Görsel 2) & Tutar Birimi Seçici (İlave 2) */}
                   <div className="flex flex-wrap items-center justify-between gap-3 bg-[#111827]/80 border border-slate-800 p-3.5 rounded-xl shadow-md">
@@ -5528,8 +5554,14 @@ export default function ValuationTerminal() {
                               data={chartData.slice(-8).map((d: any) => {
                                 const shares = parseFinancialNumber(currentExtractedData?.shares_outstanding ?? currentExtractedData?.share_count) ?? 180000000;
                                 const mCap = (d.share_price || valuationInfo.current_price) * shares;
-                                const pe = (d.net_income && d.net_income > 0) ? Number((mCap / (d.net_income * (getAnnualizationFactor(d.period)))).toFixed(1)) : null;
-                                const pb = (d.equity && d.equity > 0) ? Number((mCap / d.equity).toFixed(1)) : null;
+                                const normCurr = String(currentExtractedData?.currency || d.currency || '').trim().toLowerCase();
+                                const refScale = Math.abs(d.net_income ?? d.equity ?? 0);
+                                const isBinTry = normCurr.includes('bin') || normCurr.includes('thousand') || (!normCurr && refScale > 0 && refScale < 50000000 && shares >= 1000000);
+                                const chartUnitScale = isBinTry ? 1000 : 1;
+                                const scaledNet = d.net_income != null ? d.net_income * chartUnitScale : null;
+                                const scaledEquity = d.equity != null ? d.equity * chartUnitScale : null;
+                                const pe = (scaledNet && scaledNet > 0) ? Number((mCap / (scaledNet * (getAnnualizationFactor(d.period)))).toFixed(1)) : null;
+                                const pb = (scaledEquity && scaledEquity > 0) ? Number((mCap / scaledEquity).toFixed(1)) : null;
                                 return {
                                   period: d.period,
                                   pe: (pe && pe > 0 && pe < 80) ? pe : null,
@@ -6107,6 +6139,11 @@ export default function ValuationTerminal() {
                             {valuationInfo.discount_pct >= 0 ? `+%${valuationInfo.discount_pct}` : `%${valuationInfo.discount_pct}`}
                           </span>
                         </div>
+                      </div>
+
+                      {/* ITEM 1: KÂR KALİTESİ & NAKİT AKIŞI TEŞHİSİ (BÖLÜM II ÇAPASI) */}
+                      <div className="mb-8">
+                        {renderEarningsQualityCard({ id: 'sec-ii' })}
                       </div>
 
                       <ReactMarkdown

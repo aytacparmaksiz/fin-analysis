@@ -316,5 +316,56 @@ describe('Enhancements Test Suite (Items 1, 2, 3, 5, 6)', () => {
       const result = calculateCompanyMultiples(item, 10, 50, 'UNKNOWN_SECTOR');
       assert.equal(result.benchmark.sectorName, SECTOR_MULTIPLE_BENCHMARKS.INDUSTRIAL.sectorName);
     });
+
+    it('correctly normalizes Bin TRY currency scale avoiding 1000x multiple distortion', () => {
+      // Net Income: 1,000,000 Bin TRY (= 1 Billion TL)
+      // Shares: 100,000,000, Price: 20 TL => Market Cap = 2 Billion TL
+      // Expected P/E = 2,000,000,000 / 1,000,000,000 = 2.0x (NOT 2000x)
+      const item = {
+        period: '2024/12',
+        net_income: 1000000,
+        equity: 5000000,
+        ebitda: 1500000,
+        revenue: 10000000,
+        net_debt: 500000
+      };
+      const result = calculateCompanyMultiples(item, 20, 100000000, 'INDUSTRIAL', null, 'Bin TRY');
+
+      assert.equal(result.multiples.pe.companyValue, 2.0);
+      assert.equal(result.multiples.pb.companyValue, 0.4);
+      assert.ok(result.multiples.pe.impliedPrice !== null);
+    });
+
+    it('gracefully handles losing companies with negative multiples without false discount badges', () => {
+      const item = {
+        period: '2024/12',
+        net_income: -500000,
+        equity: -100000,
+        ebitda: -50000
+      };
+      const result = calculateCompanyMultiples(item, 15, 10000000, 'INDUSTRIAL', null, 'Bin TRY');
+
+      assert.ok(result.multiples.pe.companyValue !== null && result.multiples.pe.companyValue < 0);
+      assert.equal(result.multiples.pe.status, 'NA');
+      assert.equal(result.multiples.pe.badgeColor, 'rose');
+      assert.match(result.multiples.pe.statusLabel, /Negatif Çarpan/);
+      assert.equal(result.multiples.pe.impliedPrice, null);
+    });
+  });
+
+  describe('Edge Case: TTK 376 Negative Equity in DuPont Decomposition', () => {
+    it('detects negative equity and prevents invalid massive positive ROE leverage multiplier', () => {
+      const item = {
+        net_income: -50,
+        ebit: -20,
+        interest_expenses: 10,
+        revenue: 200,
+        total_assets: 100,
+        equity: -30
+      };
+      const dupont = calculateDuPont5Step(item);
+      assert.equal(dupont.hasData, true);
+      assert.match(dupont.driverSummary, /TTK 376 Borca Batıklık/);
+    });
   });
 });
