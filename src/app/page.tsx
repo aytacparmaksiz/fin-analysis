@@ -12,7 +12,8 @@ import {
   TrendingUp, BarChart3, Target, Calendar, ArrowUpRight, ArrowDownRight, Minus,
   DollarSign, ShieldCheck, Activity, Layers, Sparkles, Download, Upload,
   Trophy, Award, Trash2, ArrowUpDown, Filter, Copy, Percent, PieChart, Info,
-  PanelLeftClose, PanelLeftOpen, Pin, PinOff, Zap, Bookmark
+  PanelLeftClose, PanelLeftOpen, Pin, PinOff, Zap, Bookmark,
+  Cloud, CloudOff, Server, Check, ExternalLink
 } from 'lucide-react';
 
 import {
@@ -1051,10 +1052,54 @@ export default function ValuationTerminal() {
   const [error, setError] = useState<string | null>(null);
 
   const [isCloudConfigured, setIsCloudConfigured] = useState<boolean | null>(null);
+  const [isServerConfigured, setIsServerConfigured] = useState<boolean>(false);
+  const [storageType, setStorageType] = useState<'supabase' | 'server-file' | 'local-only'>('local-only');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [customSupabaseUrl, setCustomSupabaseUrl] = useState('');
+  const [customSupabaseKey, setCustomSupabaseKey] = useState('');
+  const [syncTestState, setSyncTestState] = useState<{ status: 'idle' | 'loading' | 'success' | 'error'; message: string }>({ status: 'idle', message: '' });
+  const [copiedSql, setCopiedSql] = useState(false);
 
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [activeReportId, setActiveReportId] = useState<string | null>(null);
+
+  const savedReportsRef = useRef<SavedReport[]>(savedReports);
+  useEffect(() => {
+    savedReportsRef.current = savedReports;
+  }, [savedReports]);
+
+  // Senkronizasyon HTTP başlıklarını hazırla (localStorage veya env)
+  const getSyncHeaders = useCallback((): Record<string, string> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (typeof window !== 'undefined') {
+      const url = localStorage.getItem('fin_custom_supabase_url');
+      const key = localStorage.getItem('fin_custom_supabase_key');
+      if (url) headers['x-supabase-url'] = url;
+      if (key) headers['x-supabase-key'] = key;
+    }
+    return headers;
+  }, []);
+
+  const getPendingUploadIds = useCallback((): Set<string> => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      const stored = localStorage.getItem('fin_pending_upload_ids');
+      if (stored) {
+        const arr = JSON.parse(stored);
+        if (Array.isArray(arr)) return new Set(arr);
+      }
+    } catch {}
+    return new Set();
+  }, []);
+
+  const setPendingUploadIds = useCallback((ids: Set<string>) => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('fin_pending_upload_ids', JSON.stringify(Array.from(ids)));
+    } catch {}
+  }, []);
 
   // Kenar Çubuğu Katlanabilirlik ve Sabitleme Durumu (Item 6)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -1100,6 +1145,7 @@ export default function ValuationTerminal() {
     return [...reports].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   };
 
+  // Raporu sil: Hem yerelden hem sunucu/bulut deposundan sil ve diğer cihazlara/sekmelere ilet
   const deleteReport = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const reportToDelete = savedReports.find(r => r.id === id);
@@ -1111,12 +1157,28 @@ export default function ValuationTerminal() {
         localStorage.setItem('fin_valuation_reports', JSON.stringify(updated));
       } catch (err) {}
 
+      // Bekleyen yükleme kuyruğundan da çıkar
+      const pendingIds = getPendingUploadIds();
+      if (pendingIds.has(id)) {
+        pendingIds.delete(id);
+        setPendingUploadIds(pendingIds);
+      }
+
+      // Aynı bilgisayardaki açık diğer tarayıcı sekmelerine anında bildir
+      try {
+        const bc = new BroadcastChannel('fin_sync_channel');
+        bc.postMessage({ type: 'DELETE', id });
+        bc.close();
+      } catch {}
+
+      // Sunucuya ve Supabase bulutuna DELETE isteği ilet
       try {
         await fetch(`/api/reports?id=${encodeURIComponent(id)}`, {
           method: 'DELETE',
+          headers: getSyncHeaders(),
         });
       } catch (err) {
-        console.warn('Buluttan silme başarısız:', err);
+        console.warn('Sunucudan/buluttan silme başarısız:', err);
       }
 
       if (activeReportId === id) {
@@ -1158,6 +1220,84 @@ export default function ValuationTerminal() {
     setActiveTab('ozet');
   };
 
+  // Merkezi Senkronizasyon Fonksiyonu (Single Source of Truth)
+  const syncWithCloud = useCallback(async (showSyncing = true) => {
+    try {
+      if (showSyncing) setIsSyncing(true);
+      const headers = getSyncHeaders();
+      const res = await fetch('/api/reports', {
+        headers,
+        cache: 'no-store'
+      });
+      if (res.ok) {
+        const text = await res.text();
+        let json: any = null;
+        try {
+          json = JSON.parse(text);
+        } catch {
+          console.warn('Geçersiz reports JSON yanıtı');
+        }
+        if (json) {
+          const cloudConfigured = Boolean(json.isCloudConfigured);
+          const serverConfigured = Boolean(json.isServerConfigured);
+          setIsCloudConfigured(cloudConfigured);
+          setIsServerConfigured(serverConfigured);
+          const stType = json.storageType || (cloudConfigured ? 'supabase' : (serverConfigured ? 'server-file' : 'local-only'));
+          setStorageType(stType);
+
+          const remoteReports: SavedReport[] = Array.isArray(json.reports) ? json.reports : [];
+          const remoteIdSet = new Set(remoteReports.map(r => r.id));
+          const pendingIds = getPendingUploadIds();
+
+          // Yerelde olup henüz sunucuya yüklenmemiş yeni raporlar varsa sunucuya gönder
+          const localList: SavedReport[] = savedReportsRef.current;
+          const pendingToUpload: SavedReport[] = [];
+          for (const r of localList) {
+            if (pendingIds.has(r.id) && !remoteIdSet.has(r.id)) {
+              pendingToUpload.push(r);
+            }
+          }
+
+          if (pendingToUpload.length > 0) {
+            for (const p of pendingToUpload) {
+              try {
+                await fetch('/api/reports', {
+                  method: 'POST',
+                  headers,
+                  body: JSON.stringify({ report: p })
+                });
+                pendingIds.delete(p.id);
+              } catch {}
+            }
+            setPendingUploadIds(pendingIds);
+          }
+
+          // Nihai senkronize liste: Sunucudaki resmi liste + henüz yüklenemeyen yerel taslaklar
+          // Başka bir bilgisayarda silinmiş raporlar remoteReports'ta yer almayacağı için otomatik olarak elenir!
+          const finalMerged = [...remoteReports, ...pendingToUpload.filter(p => pendingIds.has(p.id))];
+          setSavedReports(finalMerged);
+          try {
+            localStorage.setItem('fin_valuation_reports', JSON.stringify(finalMerged));
+          } catch {}
+          setLastSyncTime(new Date().toLocaleTimeString('tr-TR'));
+
+          // Eğer açık olan aktif rapor başka cihazda silindiyse güvenli çıkış yap
+          setActiveReportId(currentId => {
+            if (currentId && !finalMerged.some(r => r.id === currentId)) {
+              setStep('leaderboard');
+              return null;
+            }
+            return currentId;
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Senkronizasyon hatası:', err);
+    } finally {
+      if (showSyncing) setIsSyncing(false);
+    }
+  }, [getSyncHeaders, getPendingUploadIds, setPendingUploadIds]);
+
   useEffect(() => {
     setMounted(true);
     let localData: SavedReport[] = [];
@@ -1166,47 +1306,49 @@ export default function ValuationTerminal() {
       if (stored) {
         localData = JSON.parse(stored);
       }
+      const savedUrl = localStorage.getItem('fin_custom_supabase_url');
+      const savedKey = localStorage.getItem('fin_custom_supabase_key');
+      if (savedUrl) setCustomSupabaseUrl(savedUrl);
+      if (savedKey) setCustomSupabaseKey(savedKey);
     } catch (e) {}
 
     setSavedReports(localData);
-    // Açılışta doğrudan şirket raporu yerine Yeni Analiz ekranı gelsin
     setActiveReportId(null);
     setStep('input');
 
-    const syncWithCloud = async () => {
-      try {
-        setIsSyncing(true);
-        const res = await fetch('/api/reports');
-        if (res.ok) {
-          const text = await res.text();
-          let json: any = null;
-          try {
-            json = JSON.parse(text);
-          } catch {
-            console.warn('Geçersiz reports JSON yanıtı');
-          }
-          if (json) {
-            setIsCloudConfigured(Boolean(json.isCloudConfigured));
-            if (json.isCloudConfigured && Array.isArray(json.reports) && json.reports.length > 0) {
-              const combinedMap = new Map<string, SavedReport>();
-              localData.forEach(r => combinedMap.set(r.id, r));
-              json.reports.forEach((r: SavedReport) => combinedMap.set(r.id, r));
+    // İlk senkronizasyonu başlat
+    syncWithCloud(true);
 
-              const merged = Array.from(combinedMap.values());
-              setSavedReports(merged);
-              localStorage.setItem('fin_valuation_reports', JSON.stringify(merged));
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('Cloud sync error:', err);
-      } finally {
-        setIsSyncing(false);
-      }
+    // Sekmeler ve pencereler arası focus olduğunda anında eşitle
+    const handleFocus = () => {
+      syncWithCloud(false);
     };
+    window.addEventListener('focus', handleFocus);
 
-    syncWithCloud();
-  }, []);
+    // 15 saniyede bir arka planda sessiz eşitleme
+    const syncInterval = setInterval(() => {
+      syncWithCloud(false);
+    }, 15000);
+
+    // Sekmeler arası anlık haberleşme (BroadcastChannel)
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('fin_sync_channel');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'DELETE') {
+          setSavedReports(prev => prev.filter(r => r.id !== event.data.id));
+        } else if (event.data?.type === 'SYNC') {
+          syncWithCloud(false);
+        }
+      };
+    } catch {}
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(syncInterval);
+      if (bc) bc.close();
+    };
+  }, [syncWithCloud]);
 
   const saveReport = async (newReport: SavedReport) => {
     const updated = [newReport, ...savedReports.filter(r => r.id !== newReport.id)];
@@ -1215,14 +1357,79 @@ export default function ValuationTerminal() {
       localStorage.setItem('fin_valuation_reports', JSON.stringify(updated));
     } catch (e) {}
 
+    // Bekleyen senkronizasyon listesine ekle
+    const pendingIds = getPendingUploadIds();
+    pendingIds.add(newReport.id);
+    setPendingUploadIds(pendingIds);
+
+    // Diğer sekmelere bildir
     try {
-      await fetch('/api/reports', {
+      const bc = new BroadcastChannel('fin_sync_channel');
+      bc.postMessage({ type: 'SYNC' });
+      bc.close();
+    } catch {}
+
+    try {
+      const res = await fetch('/api/reports', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getSyncHeaders(),
         body: JSON.stringify({ report: newReport }),
       });
+      if (res.ok) {
+        pendingIds.delete(newReport.id);
+        setPendingUploadIds(pendingIds);
+        setLastSyncTime(new Date().toLocaleTimeString('tr-TR'));
+      }
     } catch (err) {
       console.warn('Buluta kaydetme başarısız, yerelde saklandı:', err);
+    }
+  };
+
+  const testSupabaseConnection = async () => {
+    setSyncTestState({ status: 'loading', message: 'Supabase bağlantısı test ediliyor...' });
+    try {
+      const headers: Record<string, string> = {};
+      if (customSupabaseUrl.trim()) headers['x-supabase-url'] = customSupabaseUrl.trim();
+      if (customSupabaseKey.trim()) headers['x-supabase-key'] = customSupabaseKey.trim();
+
+      const res = await fetch('/api/reports?action=test-connection', { headers });
+      const data = await res.json();
+      if (data.connected) {
+        setSyncTestState({
+          status: 'success',
+          message: data.message || `Bağlantı başarılı! (${data.count ?? 0} adet rapor bulundu)`,
+        });
+      } else {
+        setSyncTestState({
+          status: 'error',
+          message: data.message || 'Bağlantı kurulamadı. Lütfen bilgileri kontrol edin.',
+        });
+      }
+    } catch (err: any) {
+      setSyncTestState({
+        status: 'error',
+        message: `Bağlantı hatası: ${err?.message || 'Sunucuya ulaşılamadı'}`,
+      });
+    }
+  };
+
+  const saveCustomSyncSettings = async () => {
+    try {
+      if (customSupabaseUrl.trim()) {
+        localStorage.setItem('fin_custom_supabase_url', customSupabaseUrl.trim());
+      } else {
+        localStorage.removeItem('fin_custom_supabase_url');
+      }
+      if (customSupabaseKey.trim()) {
+        localStorage.setItem('fin_custom_supabase_key', customSupabaseKey.trim());
+      } else {
+        localStorage.removeItem('fin_custom_supabase_key');
+      }
+      await syncWithCloud(true);
+      alert('Senkronizasyon ayarları başarıyla kaydedildi ve veriler eşitlendi!');
+      setIsSyncModalOpen(false);
+    } catch (e) {
+      alert('Ayarlar kaydedilemedi.');
     }
   };
 
@@ -3327,11 +3534,35 @@ export default function ValuationTerminal() {
               </span>
               <span className="text-slate-700">|</span>
               <span className="text-slate-400 font-medium text-xs hidden sm:inline">Değerleme Terminali</span>
-              {isCloudConfigured && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-full">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Senkron
+              <button
+                type="button"
+                onClick={() => setIsSyncModalOpen(true)}
+                title="Cihazlar arası veri senkronizasyonu ve bulut ayarları"
+                className={`inline-flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-1 rounded-full border transition cursor-pointer ${
+                  storageType === 'supabase'
+                    ? 'text-emerald-400 bg-emerald-950/60 border-emerald-800/80 hover:bg-emerald-900/60'
+                    : storageType === 'server-file'
+                    ? 'text-sky-400 bg-sky-950/60 border-sky-800/80 hover:bg-sky-900/60'
+                    : 'text-amber-400 bg-amber-950/60 border-amber-800/80 hover:bg-amber-900/60'
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  storageType === 'supabase'
+                    ? 'bg-emerald-400 animate-pulse'
+                    : storageType === 'server-file'
+                    ? 'bg-sky-400'
+                    : 'bg-amber-400'
+                }`} />
+                <span>
+                  {isSyncing 
+                    ? 'Eşitleniyor...' 
+                    : storageType === 'supabase' 
+                    ? 'Bulut Senkron' 
+                    : storageType === 'server-file' 
+                    ? 'Sunucu Senkron' 
+                    : 'Senkron Ayarla'}
                 </span>
-              )}
+              </button>
             </div>
           </div>
 
@@ -6588,6 +6819,200 @@ export default function ValuationTerminal() {
 
         </div>
       </main>
+
+      {/* CİHAZLAR ARASI VERİ SENKRONİZASYONU & BULUT AYARLARI MODALI */}
+      {isSyncModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-[#0D1322] border border-slate-700/80 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Başlığı */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-xl border ${
+                  storageType === 'supabase'
+                    ? 'bg-emerald-950/70 border-emerald-800/70 text-emerald-400'
+                    : storageType === 'server-file'
+                    ? 'bg-sky-950/70 border-sky-800/70 text-sky-400'
+                    : 'bg-amber-950/70 border-amber-800/70 text-amber-400'
+                }`}>
+                  <Cloud className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    Cihazlar Arası Senkronizasyon
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                      storageType === 'supabase'
+                        ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
+                        : storageType === 'server-file'
+                        ? 'bg-sky-950 text-sky-400 border-sky-800'
+                        : 'bg-amber-950 text-amber-400 border-amber-800'
+                    }`}>
+                      {storageType === 'supabase' ? 'Supabase Bulut Aktif' : storageType === 'server-file' ? 'Sunucu Dosya Deposu Aktif' : 'Yerel Mod'}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Farklı bilgisayar ve cihazlarda yapılan analizleri ve silmeleri anında eşitleyin.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSyncModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Durum & İstatistik Kartı */}
+            <div className="grid grid-cols-2 gap-3 bg-slate-900/80 border border-slate-800 p-3.5 rounded-xl text-xs">
+              <div>
+                <span className="text-slate-400 block text-[11px]">Kayıtlı Rapor Sayısı</span>
+                <span className="font-mono font-bold text-white text-base mt-0.5 block">
+                  {savedReports.length} Rapor
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px]">Son Eşitleme</span>
+                <span className="font-mono font-medium text-emerald-400 text-xs mt-1 block">
+                  {lastSyncTime ? `${lastSyncTime}` : 'Az önce eşitlendi'}
+                </span>
+              </div>
+            </div>
+
+            {/* Manuel Eşitleme Butonu */}
+            <div className="flex items-center justify-between bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl">
+              <span className="text-xs text-slate-300">
+                Diğer bilgisayarlardaki en güncel değişiklikleri şimdi çek:
+              </span>
+              <button
+                type="button"
+                onClick={() => syncWithCloud(true)}
+                disabled={isSyncing}
+                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition disabled:opacity-50 cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                {isSyncing ? 'Eşitleniyor...' : 'Şimdi Eşitle'}
+              </button>
+            </div>
+
+            {/* Supabase Bulut Veritabanı Ayarları */}
+            <div className="space-y-3 border-t border-slate-800/80 pt-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <Database className="w-4 h-4 text-cyan-400" />
+                  Supabase Bulut Veritabanı Bilgileri (Kalıcı Çapraz Cihaz Senkronizasyonu)
+                </span>
+                <a
+                  href="https://supabase.com"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[11px] text-cyan-400 hover:underline flex items-center gap-1"
+                >
+                  supabase.com <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Vercel gibi sunucusuz platformlarda farklı cihazlar arası kalıcı eşitleme için ücretsiz bir Supabase projesi bağlayabilirsiniz. Buraya gireceğiniz bilgiler doğrudan bu tarayıcıya kaydedilir ve sunucuya iletilir.
+              </p>
+
+              <div className="space-y-2.5 text-xs">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                    Supabase Proje URL (Project URL)
+                  </label>
+                  <input
+                    type="text"
+                    value={customSupabaseUrl}
+                    onChange={(e) => setCustomSupabaseUrl(e.target.value)}
+                    placeholder="https://xyzcompany.supabase.co"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                    Supabase Anon / Service Role API Key
+                  </label>
+                  <input
+                    type="password"
+                    value={customSupabaseKey}
+                    onChange={(e) => setCustomSupabaseKey(e.target.value)}
+                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+              </div>
+
+              {/* Test Durumu Mesajı */}
+              {syncTestState.status !== 'idle' && (
+                <div className={`p-2.5 rounded-lg text-xs flex items-center gap-2 ${
+                  syncTestState.status === 'success' ? 'bg-emerald-950/70 border border-emerald-800 text-emerald-300' :
+                  syncTestState.status === 'error' ? 'bg-rose-950/70 border border-rose-800 text-rose-300' :
+                  'bg-slate-900 border border-slate-700 text-slate-300'
+                }`}>
+                  {syncTestState.status === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
+                  {syncTestState.status === 'error' && <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0" />}
+                  {syncTestState.status === 'loading' && <RefreshCw className="w-4 h-4 animate-spin flex-shrink-0" />}
+                  <span>{syncTestState.message}</span>
+                </div>
+              )}
+
+              {/* Aksiyon Butonları */}
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={testSupabaseConnection}
+                  disabled={syncTestState.status === 'loading'}
+                  className="flex-1 py-2 px-3 rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition cursor-pointer"
+                >
+                  Bağlantıyı Test Et
+                </button>
+                <button
+                  type="button"
+                  onClick={saveCustomSyncSettings}
+                  className="flex-1 py-2 px-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold transition cursor-pointer shadow-sm"
+                >
+                  Ayarları Kaydet & Eşitle
+                </button>
+              </div>
+
+              {/* Tek Tıkla Tablo Kodu Kopyalama */}
+              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80 space-y-2 mt-2">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-semibold text-slate-400">Gerekli Supabase SQL Tablosu:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sql = "CREATE TABLE IF NOT EXISTS valuation_reports (id TEXT PRIMARY KEY, ticker TEXT NOT NULL, price TEXT, created_at TEXT, period TEXT, report TEXT, decision TEXT, score TEXT, sector TEXT, extracted_data JSONB, updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW());";
+                      navigator.clipboard.writeText(sql);
+                      setCopiedSql(true);
+                      setTimeout(() => setCopiedSql(false), 2000);
+                    }}
+                    className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-mono transition cursor-pointer"
+                  >
+                    {copiedSql ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    {copiedSql ? 'Kopyalandı!' : 'SQL Kopyala'}
+                  </button>
+                </div>
+                <code className="text-[10px] font-mono text-slate-400 block overflow-x-auto whitespace-pre p-2 bg-slate-900/80 rounded border border-slate-800">
+                  {`CREATE TABLE IF NOT EXISTS valuation_reports (
+  id TEXT PRIMARY KEY,
+  ticker TEXT NOT NULL,
+  price TEXT,
+  created_at TEXT,
+  period TEXT,
+  report TEXT,
+  decision TEXT,
+  score TEXT,
+  sector TEXT,
+  extracted_data JSONB,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);`}
+                </code>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
