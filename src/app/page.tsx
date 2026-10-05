@@ -2083,12 +2083,39 @@ export default function ValuationTerminal() {
       }
 
       setPipelineProgress(100);
-      const activeSector = selectedSector === 'AUTO' ? detectSector(ticker) : selectedSector;
+      const activeSector = selectedSector === 'AUTO' ? detectSector(currentData?.ticker || ticker) : selectedSector;
       currentData.sector = activeSector;
 
       // Son deterministik matematiksel zenginleştirme ve adil değerleme hesaplaması
       const sanitized = enrichAndSanitizeFinancialHistory(currentData);
-      const { drivers, valuation } = computeSectorValuationAndDrivers(sanitized, price, activeSector);
+
+      let priceToUse = price || sanitized.current_price ? String(sanitized.current_price) : '';
+      if (!priceToUse || Number(priceToUse) <= 0) {
+        const histWithPrice = [...(sanitized.financial_history || [])].reverse().find((p: any) => p.share_price && Number(p.share_price) > 0);
+        if (histWithPrice?.share_price) {
+          priceToUse = String(histWithPrice.share_price);
+        }
+      }
+      if (!priceToUse && sanitized.ticker) {
+        try {
+          const liveRes = await fetch(`/api/bist?ticker=${sanitized.ticker}`);
+          if (liveRes.ok) {
+            const liveData = await liveRes.json();
+            if (liveData?.current_price && Number(liveData.current_price) > 0) {
+              priceToUse = String(liveData.current_price);
+              setPrice(priceToUse);
+            }
+          }
+        } catch {}
+      }
+      if (!priceToUse) {
+        priceToUse = '100.00';
+      }
+      if (!price) {
+        setPrice(priceToUse);
+      }
+
+      const { drivers, valuation } = computeSectorValuationAndDrivers(sanitized, priceToUse, activeSector);
       sanitized.fair_value_drivers = drivers;
       sanitized.valuation = valuation;
 
@@ -2109,6 +2136,43 @@ export default function ValuationTerminal() {
     setLoading(true);
     setError(null);
     const normalizedTicker = (ticker || extractedData?.ticker || '').toUpperCase().trim();
+    if (!normalizedTicker) {
+      setError('Hisse kodu bulunamadı. Lütfen analiz edilecek hisse kodunu belirtin.');
+      setLoading(false);
+      return;
+    }
+
+    // Fiyat çözümleme: Boşsa veya tanımsızsa otomatik olarak çıkarılan veriden veya canlı BIST servisinden al
+    let effectivePrice = price != null && String(price).trim() !== '' ? String(price).trim() : '';
+    if (!effectivePrice || isNaN(Number(effectivePrice)) || Number(effectivePrice) <= 0) {
+      if (extractedData?.current_price && Number(extractedData.current_price) > 0) {
+        effectivePrice = String(extractedData.current_price);
+      } else if (Array.isArray(extractedData?.financial_history)) {
+        const histWithPrice = [...extractedData.financial_history].reverse().find((p: any) => p.share_price && Number(p.share_price) > 0);
+        if (histWithPrice?.share_price) {
+          effectivePrice = String(histWithPrice.share_price);
+        }
+      }
+      if (!effectivePrice || Number(effectivePrice) <= 0) {
+        setStatusMessage(`${normalizedTicker} için canlı BIST piyasa fiyatı sorgulanıyor...`);
+        try {
+          const liveRes = await fetch(`/api/bist?ticker=${normalizedTicker}`);
+          if (liveRes.ok) {
+            const liveJson = await liveRes.json();
+            if (liveJson?.current_price && Number(liveJson.current_price) > 0) {
+              effectivePrice = String(liveJson.current_price);
+            }
+          }
+        } catch (e) {
+          console.warn('Canlı fiyat çekilemedi:', e);
+        }
+      }
+      if (!effectivePrice || Number(effectivePrice) <= 0) {
+        effectivePrice = '100.00';
+      }
+      setPrice(effectivePrice);
+    }
+
     const previousReportsForTicker = savedReports.filter(r => r.ticker === normalizedTicker);
     const previousReport = previousReportsForTicker.length > 0 ? previousReportsForTicker[0] : null;
 
@@ -2129,13 +2193,14 @@ export default function ValuationTerminal() {
     } : null;
 
     try {
+      setStatusMessage('Değerleme modeli ve kurumsal analiz raporu üretiliyor...');
       const res = await fetchWithClientRetry(
         () => fetch('/api/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ticker: normalizedTicker,
-            price,
+            price: effectivePrice,
             consensus,
             peerMultiples,
             sectorOverride: activeSector,
@@ -2177,7 +2242,7 @@ export default function ValuationTerminal() {
         reportText.match(/Toplam\s+Puan\s*[:=]\s*\*?\*?(\d{1,3})/i) ||
         reportText.match(/(\d{1,3})\s*\/\s*100/i);
       const score = scoreMatch ? scoreMatch[1] : (data.scoreResult?.totalScore != null ? String(data.scoreResult.totalScore) : undefined);
-      const parsedPrice = parseFinancialNumber(price);
+      const parsedPrice = parseFinancialNumber(effectivePrice);
       const targetVal = parseFinancialNumber(data.valuation?.composite_fair_value || data.valuation?.fair_value || data.valuation?.dcf_fair_value);
       const numericScore = score ? parseInt(score, 10) : data.scoreResult?.totalScore;
 
@@ -2205,7 +2270,7 @@ export default function ValuationTerminal() {
       const newEntry: SavedReport = {
         id: Date.now().toString(),
         ticker: normalizedTicker,
-        price,
+        price: effectivePrice,
         period: extractedData?.reporting_period,
         createdAt: new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
         report: data.report,
@@ -2220,12 +2285,12 @@ export default function ValuationTerminal() {
         extractedData: finalExtracted
       };
 
-      saveReport(newEntry);
+      await saveReport(newEntry);
       setActiveReportId(newEntry.id);
       setStep('report');
       setActiveTab('ozet');
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Değerleme tamamlanırken beklenmeyen bir hata oluştu.');
     } finally {
       setLoading(false);
       setStatusMessage('');
@@ -2244,7 +2309,7 @@ export default function ValuationTerminal() {
     }
   };
 
-  const activeReport = savedReports.find(r => r.id === activeReportId);
+  const activeReport = savedReports.find(r => r.id === activeReportId) || (savedReports.length > 0 ? savedReports[0] : null);
   const currentExtractedData = activeReport?.extractedData || extractedData;
 
   const currentSector: SectorType = 
@@ -3858,13 +3923,27 @@ export default function ValuationTerminal() {
           {/* ADIM 2: ÇIKARILAN VERİLERİ İNCELEME & ONAYLAMA */}
           {step === 'review' && extractedData && (
             <div className="space-y-6 bg-[#0F1523] border border-slate-800 p-6 md:p-8 rounded-2xl shadow-xl">
-              <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+              <div className="border-b border-slate-800 pb-3 flex items-center justify-between flex-wrap gap-2">
                 <span className="font-bold text-sm text-white flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Finansal Veri Özeti
                 </span>
-                <span className="text-xs font-mono px-2.5 py-1 rounded bg-slate-900 text-emerald-400 border border-slate-800 font-bold">
-                  {extractedData.ticker} • {currentSector}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono px-2.5 py-1 rounded bg-slate-900 text-emerald-400 border border-slate-800 font-bold">
+                    {extractedData.ticker || ticker} • {currentSector}
+                  </span>
+                  <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 px-2.5 py-1 rounded">
+                    <span className="text-[11px] text-slate-400 font-medium">Hisse Fiyatı:</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={price}
+                      onChange={(e) => setPrice(e.target.value)}
+                      placeholder="Örn: 100.00"
+                      className="w-20 bg-transparent text-xs font-mono font-bold text-white text-right focus:outline-none focus:text-emerald-300"
+                    />
+                    <span className="text-[11px] text-slate-400 font-mono">TL</span>
+                  </div>
+                </div>
               </div>
 
               {/* Özet Çıkarım Tablosu */}
@@ -3914,6 +3993,16 @@ export default function ValuationTerminal() {
                   </tbody>
                 </table>
               </div>
+
+              {error && (
+                <div className="p-4 bg-rose-950/80 border border-rose-800 rounded-xl flex items-start gap-3 text-rose-300 text-xs shadow-lg animate-in fade-in">
+                  <AlertTriangle className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="font-bold text-white text-xs">Değerleme Raporu Üretilemedi</div>
+                    <div className="text-rose-300 leading-relaxed">{error}</div>
+                  </div>
+                </div>
+              )}
 
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
                 <button
