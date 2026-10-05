@@ -1101,6 +1101,72 @@ export default function ValuationTerminal() {
     } catch {}
   }, []);
 
+  // Silinmiş rapor kimlikleri (Tombstones - Silinen raporların buluttan veya diğer cihazlardan hortlamasını engeller)
+  const getDeletedReportIds = useCallback((): Set<string> => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      const stored = localStorage.getItem('fin_deleted_report_ids');
+      if (stored) {
+        const arr = JSON.parse(stored);
+        if (Array.isArray(arr)) return new Set(arr);
+      }
+    } catch {}
+    return new Set();
+  }, []);
+
+  const addDeletedReportId = useCallback((id: string) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const current = getDeletedReportIds();
+      current.add(id);
+      localStorage.setItem('fin_deleted_report_ids', JSON.stringify(Array.from(current)));
+    } catch {}
+  }, [getDeletedReportIds]);
+
+  const removeDeletedReportId = useCallback((id: string) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const current = getDeletedReportIds();
+      if (current.has(id)) {
+        current.delete(id);
+        localStorage.setItem('fin_deleted_report_ids', JSON.stringify(Array.from(current)));
+      }
+    } catch {}
+  }, [getDeletedReportIds]);
+
+  // Bulut ile başarıyla senkronize edilmiş raporların kimlikleri
+  const getSyncedReportIds = useCallback((): Set<string> => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      const stored = localStorage.getItem('fin_synced_report_ids');
+      if (stored) {
+        const arr = JSON.parse(stored);
+        if (Array.isArray(arr)) return new Set(arr);
+      }
+    } catch {}
+    return new Set();
+  }, []);
+
+  const addSyncedReportId = useCallback((id: string) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const current = getSyncedReportIds();
+      current.add(id);
+      localStorage.setItem('fin_synced_report_ids', JSON.stringify(Array.from(current)));
+    } catch {}
+  }, [getSyncedReportIds]);
+
+  const removeSyncedReportId = useCallback((id: string) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const current = getSyncedReportIds();
+      if (current.has(id)) {
+        current.delete(id);
+        localStorage.setItem('fin_synced_report_ids', JSON.stringify(Array.from(current)));
+      }
+    } catch {}
+  }, [getSyncedReportIds]);
+
   // Kenar Çubuğu Katlanabilirlik ve Sabitleme Durumu (Item 6)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSidebarPinned, setIsSidebarPinned] = useState(true);
@@ -1151,6 +1217,10 @@ export default function ValuationTerminal() {
     const reportToDelete = savedReports.find(r => r.id === id);
     const tickerName = reportToDelete?.ticker || 'bu';
     if (confirm(`${tickerName} hissesine ait değerleme raporunu silmek istediğinize emin misiniz?`)) {
+      // 1. Tombstone olarak kaydet (tekrar hortlamasını önler)
+      addDeletedReportId(id);
+      removeSyncedReportId(id);
+
       const updated = savedReports.filter(r => r.id !== id);
       setSavedReports(updated);
       try {
@@ -1182,8 +1252,13 @@ export default function ValuationTerminal() {
       }
 
       if (activeReportId === id) {
-        setActiveReportId(null);
-        setStep('leaderboard');
+        if (updated.length > 0) {
+          setActiveReportId(updated[0].id);
+          setStep('report');
+        } else {
+          setActiveReportId(null);
+          setStep('input');
+        }
       }
     }
   };
@@ -1246,46 +1321,110 @@ export default function ValuationTerminal() {
           setStorageType(stType);
 
           const remoteReports: SavedReport[] = Array.isArray(json.reports) ? json.reports : [];
-          const remoteIdSet = new Set(remoteReports.map(r => r.id));
+          const deletedIds = getDeletedReportIds();
+          const syncedIds = getSyncedReportIds();
           const pendingIds = getPendingUploadIds();
 
-          // Yerelde olup henüz sunucuya yüklenmemiş yeni raporlar varsa sunucuya gönder
-          const localList: SavedReport[] = savedReportsRef.current;
-          const pendingToUpload: SavedReport[] = [];
-          for (const r of localList) {
-            if (pendingIds.has(r.id) && !remoteIdSet.has(r.id)) {
-              pendingToUpload.push(r);
+          // Yerel raporları al (state ref veya localStorage)
+          let currentLocal: SavedReport[] = savedReportsRef.current;
+          if (currentLocal.length === 0 && typeof window !== 'undefined') {
+            try {
+              const stored = localStorage.getItem('fin_valuation_reports');
+              if (stored) currentLocal = JSON.parse(stored);
+            } catch {}
+          }
+
+          // Eğer yerelde silinmiş ama sunucuda hala duran varsa, sunucuya DELETE isteği gönder
+          for (const rem of remoteReports) {
+            if (deletedIds.has(rem.id)) {
+              fetch(`/api/reports?id=${encodeURIComponent(rem.id)}`, {
+                method: 'DELETE',
+                headers,
+              }).catch(() => {});
             }
           }
 
-          if (pendingToUpload.length > 0) {
-            for (const p of pendingToUpload) {
-              try {
-                await fetch('/api/reports', {
-                  method: 'POST',
-                  headers,
-                  body: JSON.stringify({ report: p })
-                });
-                pendingIds.delete(p.id);
-              } catch {}
+          let finalMerged: SavedReport[] = [];
+
+          if (cloudConfigured) {
+            // BULUT (Supabase) YAPILANDIRILMIŞ DURUM:
+            // 1. remoteReports'tan silinmemiş olanları al
+            const activeRemotes = remoteReports.filter(r => !deletedIds.has(r.id));
+            const remoteMap = new Map<string, SavedReport>();
+            activeRemotes.forEach(r => {
+              remoteMap.set(r.id, r);
+              syncedIds.add(r.id);
+            });
+
+            // 2. Yerelde olup sunucuda olmayanları incele:
+            // - Eğer daha önce bulutla senkronize EDİLMİŞSE ve şu an remote'ta YOKSA -> başka PC'de silinmiştir, elenir!
+            // - Eğer daha önce hiç senkronize EDİLMEMİŞSE (veya pending listesindeyse) -> bu PC'de yeni üretilmiştir, sunucuya yüklenir!
+            const toUpload: SavedReport[] = [];
+            for (const loc of currentLocal) {
+              if (deletedIds.has(loc.id)) continue;
+              if (remoteMap.has(loc.id)) continue;
+
+              if (syncedIds.has(loc.id)) {
+                // Başka bilgisayarda silinmiş
+                continue;
+              } else {
+                // Bu bilgisayarda yeni analiz edilmiş, buluta yüklenmeli
+                toUpload.push(loc);
+                remoteMap.set(loc.id, loc);
+              }
             }
-            setPendingUploadIds(pendingIds);
+
+            // Yeni yerel raporları buluta yükle
+            if (toUpload.length > 0) {
+              for (const item of toUpload) {
+                try {
+                  await fetch('/api/reports', {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ report: item })
+                  });
+                  syncedIds.add(item.id);
+                  pendingIds.delete(item.id);
+                } catch {}
+              }
+            }
+
+            finalMerged = Array.from(remoteMap.values());
+            try {
+              localStorage.setItem('fin_synced_report_ids', JSON.stringify(Array.from(syncedIds)));
+              localStorage.setItem('fin_pending_upload_ids', JSON.stringify(Array.from(pendingIds)));
+            } catch {}
+          } else {
+            // YEREL / SERVER-FILE MODU (Supabase yok, Vercel read-only veya yerel mod):
+            // KURAL: Sunucudan boş dizi gelse dahi KULLANICININ YEREL VERİSİ ASLA SİLİNMEZ!
+            const mergedMap = new Map<string, SavedReport>();
+            for (const loc of currentLocal) {
+              if (!deletedIds.has(loc.id)) {
+                mergedMap.set(loc.id, loc);
+              }
+            }
+            for (const rem of remoteReports) {
+              if (!deletedIds.has(rem.id) && !mergedMap.has(rem.id)) {
+                mergedMap.set(rem.id, rem);
+              }
+            }
+            finalMerged = Array.from(mergedMap.values());
           }
 
-          // Nihai senkronize liste: Sunucudaki resmi liste + henüz yüklenemeyen yerel taslaklar
-          // Başka bir bilgisayarda silinmiş raporlar remoteReports'ta yer almayacağı için otomatik olarak elenir!
-          const finalMerged = [...remoteReports, ...pendingToUpload.filter(p => pendingIds.has(p.id))];
+          // Sıralama: En yeniden en eskiye
+          finalMerged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
           setSavedReports(finalMerged);
           try {
             localStorage.setItem('fin_valuation_reports', JSON.stringify(finalMerged));
           } catch {}
           setLastSyncTime(new Date().toLocaleTimeString('tr-TR'));
 
-          // Eğer açık olan aktif rapor başka cihazda silindiyse güvenli çıkış yap
+          // ASLA setStep('leaderboard') ÇAĞRILMAZ!
+          // Sadece aktif rapor silindiyse güvenle ilk rapora veya boşa geçilir
           setActiveReportId(currentId => {
             if (currentId && !finalMerged.some(r => r.id === currentId)) {
-              setStep('leaderboard');
-              return null;
+              return finalMerged.length > 0 ? finalMerged[0].id : null;
             }
             return currentId;
           });
@@ -1296,7 +1435,7 @@ export default function ValuationTerminal() {
     } finally {
       if (showSyncing) setIsSyncing(false);
     }
-  }, [getSyncHeaders, getPendingUploadIds, setPendingUploadIds]);
+  }, [getSyncHeaders, getPendingUploadIds, setPendingUploadIds, getDeletedReportIds, getSyncedReportIds]);
 
   useEffect(() => {
     setMounted(true);
@@ -1313,8 +1452,15 @@ export default function ValuationTerminal() {
     } catch (e) {}
 
     setSavedReports(localData);
-    setActiveReportId(null);
-    setStep('input');
+
+    // Eğer yerel kayıtlı rapor varsa doğrudan son raporu aç (Özet sekmesi); yoksa AGESA demo yükle
+    if (localData.length > 0) {
+      setActiveReportId(localData[0].id);
+      setStep('report');
+      setActiveTab('ozet');
+    } else {
+      loadAgesaDemo();
+    }
 
     // İlk senkronizasyonu başlat
     syncWithCloud(true);
@@ -1351,6 +1497,9 @@ export default function ValuationTerminal() {
   }, [syncWithCloud]);
 
   const saveReport = async (newReport: SavedReport) => {
+    // Silinmişler listesinde varsa çıkar
+    removeDeletedReportId(newReport.id);
+
     const updated = [newReport, ...savedReports.filter(r => r.id !== newReport.id)];
     setSavedReports(updated);
     try {
@@ -1378,6 +1527,7 @@ export default function ValuationTerminal() {
       if (res.ok) {
         pendingIds.delete(newReport.id);
         setPendingUploadIds(pendingIds);
+        addSyncedReportId(newReport.id);
         setLastSyncTime(new Date().toLocaleTimeString('tr-TR'));
       }
     } catch (err) {
