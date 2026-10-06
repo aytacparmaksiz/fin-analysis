@@ -228,6 +228,13 @@ Kilit Katalizörler: [Fiyatı adil değere taşıyacak 2-3 somut şirket kataliz
 Riskler & Emniyet Marjı: [Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek temel riskler.]`;
     }
 
+    const precomputedScorecardTable = `
+| Metrik | Puan | Max | Gerekçe |
+| :--- | :--- | :--- | :--- |
+${(scoreResult.breakdown || []).map((b: any) => `| ${b.category} | ${b.score} | ${b.maxScore} | ${b.reason} |`).join('\n')}
+| **Toplam Puan** | **${scoreResult.totalScore}** | **100** | ${scoreResult.totalScore >= 75 ? 'Güçlü operasyonel performans ve yüksek iskonto.' : 'Sektörel standartlara uyum.'} |
+`.trim();
+
     let prompt = `Hisse Kodu: ${resolvedTicker}
 Rapor Tarihi: ${currentDateStr}
 Sektör Modu: ${sectorDef.title} (${sector})
@@ -247,6 +254,7 @@ HESAPLANAN DİNAMİK DEĞERLEME VE ADİL DEĞER ÇERÇEVESİ (RAPORUNDA BU DEĞE
 - 2. Değer Sürücüsü (${drivers.net_income_growth.label}): %${drivers.net_income_growth.value}
 - 3. Değer Sürücüsü (${drivers.margin.label}): %${drivers.margin.value}
 - 4. Değer Sürücüsü (${drivers.target_multiple.label}): ${drivers.target_multiple.value}
+${valuation.gordon_formula_text ? `- Ön-Hesaplanmış Değerleme Formülü Metni: ${valuation.gordon_formula_text}\n` : ''}
 
 ALGORİTMİK FİNANSAL SAĞLIK VE KARAR OPTİMİZASYONU:
 - Sektörel Analiz Skoru: ${scoreResult.totalScore}/100
@@ -254,12 +262,19 @@ ALGORİTMİK FİNANSAL SAĞLIK VE KARAR OPTİMİZASYONU:
 ${optimization.overrideApplied ? `- Emniyet Marjı Müdahalesi: ${optimization.overrideReason}\n` : ''}
 ${optimization.conditionalWarnings.length > 0 ? `- Sınır Koşulları ve Gri Alan: ${optimization.conditionalWarnings.join('; ')}\n` : ''}
 
+ZORUNLU VE DOĞRULANMIŞ PUANLAMA TABLOSU (VI. BÖLÜMDE BU TABLOYU BİREBİR KOPYALAYACAKSIN):
+${precomputedScorecardTable}
+
 DİKKAT VE TUTARLILIK KURALI:
 1. Raporunun Değerleme bölümünde belirteceğin Hisse Başı Adil Değer KESİNLİKLE yukarıda verilen **${valuation.fair_value} TL** olmalıdır.
 2. Ayı Senaryosu taban hedef fiyatı KESİNLİKLE **${valuation.bear_price} TL** olmalıdır.
 3. Boğa Senaryosu tavan hedef fiyatı KESİNLİKLE **${valuation.bull_price} TL** olmalıdır (Güncel fiyat olan ${activePrice} TL'nin ve Adil Değer olan ${valuation.fair_value} TL'nin üzerindedir).
-4. KESİNLİKLE '$' VEYA '$$' KULLANMA: Formülleri ve rakamları yazarken hiçbir yerde dolar ($) işareti kullanma! Tüm formülleri düz Türkçe metin olarak '> **Değerleme Özeti:** Hisse Başı Adil Değer = **${valuation.fair_value} TL** (Ayı Senaryosu: **${valuation.bear_price} TL** | Boğa Senaryosu: **${valuation.bull_price} TL**)' şeklinde yaz.
-5. KESİNLİKLE YABANCI KELİME KULLANMA: 'Storytelling', 'bancassurance', 'moat', 'guidance' gibi kelimeler yerine 'Temel Yatırım Tezi', 'banka sigortacılığı', 'rekabet üstünlüğü', 'yönetim hedefleri' ifadelerini kullan.
+4. IV. BÖLÜMDEKİ DEĞERLEME FORMÜLÜNÜ KESİNLİKLE ŞU DOĞRULANMIŞ METİNDEN BİREBİR KOPYALA (ARİTMETİK SAYILARI KENDİNDEN DEĞİŞTİRME):
+> **Değerleme Formülü:** ${valuation.gordon_formula_text || `Hedef Çarpan = ${drivers.target_multiple?.value} | Adil Değer = ${valuation.fair_value} TL`}
+5. VI. BÖLÜMDEKİ PUANLAMA TABLOSUNU KESİNLİKLE YUKARIDA VERİLEN DOĞRULANMIŞ TABLODAN BİREBİR KOPYALA. Tablodaki hiçbir satırın puanını, max puanını veya gerekçesindeki rasyo sayısını (ROIC, WACC, Solvency vb.) ASLA değiştirme veya kendinden uydurma!
+6. KESİNLİKLE '$' VEYA '$$' KULLANMA: Formülleri ve rakamları yazarken hiçbir yerde dolar ($) işareti kullanma! Tüm formülleri düz Türkçe metin olarak '> **Değerleme Özeti:** Hisse Başı Adil Değer = **${valuation.fair_value} TL** (Ayı Senaryosu: **${valuation.bear_price} TL** | Boğa Senaryosu: **${valuation.bull_price} TL**)' şeklinde yaz.
+7. KESİNLİKLE YABANCI KELİME KULLANMA: 'Storytelling', 'bancassurance', 'moat', 'guidance' gibi kelimeler yerine 'Temel Yatırım Tezi', 'banka sigortacılığı', 'rekabet üstünlüğü', 'yönetim hedefleri' ifadelerini kullan.
+8. SİGORTACILIK İÇİN BİLEŞİK ORAN UYUMU: Bileşik Oran = Hasar Oranı + Masraf Oranı (komisyon ve faaliyet giderleri) toplamıdır. Rakamların toplamı kesinlikle birbirini tutmalıdır.
 
 Doğrulanmış ve Raporlardan Birebir Çıkarılmış Çok Yıllı Finansal Zaman Serisi & Rehberlik Veri Seti:
 ${typeof extractedData === 'string' ? extractedData : JSON.stringify(extractedData, null, 2)}
@@ -414,11 +429,8 @@ function generateAlgorithmicReportFallback(params: {
 
 | Metrik | Puan | Max | Gerekçe |
 | :--- | :--- | :--- | :--- |
-| ${isIns ? 'Teknik Kârlılık & Bileşik Oran' : isBank ? 'Kredi Kalitesi & Risk Yönetimi' : 'Finansal Sağlık & Likidite'} | ${Math.round(scoreResult.totalScore * 0.25)} | 25 | Sektörel standartlara uyum |
-| ${isIns ? 'Portföy / Yatırım Getirisi' : isBank ? 'Net Faiz Marjı & Fonlama' : 'Sermaye Verimliliği'} | ${Math.round(scoreResult.totalScore * 0.25)} | 25 | Sermaye kârlılık rasyoları |
-| ${isIns ? 'Sermaye Yeterliliği & ROE' : isBank ? 'Sermaye Yeterliliği (SYR)' : 'Nakit Kalitesi ve Emniyet Marjı'} | ${Math.round(scoreResult.totalScore * 0.25)} | 25 | Emniyet marjı ve likidite tamponu |
-| ${isIns ? 'Prim Büyümesi & Pazar Payı' : isBank ? 'Komisyon Büyümesi' : 'Gelecek Hedefleri ve Büyüme'} | ${Math.max(0, scoreResult.totalScore - Math.round(scoreResult.totalScore * 0.25) * 3)} | 25 | Büyüme ve pazar payı görünümü |
-| **Toplam Puan** | **${scoreResult.totalScore}** | **100** | Model Skoru |
+${(scoreResult.breakdown || []).map((b: any) => `| ${b.category} | ${b.score} | ${b.maxScore} | ${b.reason} |`).join('\n')}
+| **Toplam Puan** | **${scoreResult.totalScore}** | **100** | ${scoreResult.totalScore >= 75 ? 'Güçlü operasyonel performans ve yüksek iskonto.' : 'Sektörel standartlara uyum.'} |
 
 Analist Kararı: [${optimization.finalDecision}]
 Yatırım Tezi: ${ticker} hissesi için hesaplanan adil değer ${valuation.fair_value} TL olup, güncel ${price} TL fiyatına kıyasla %${valuation.discount_pct} potansiyel barındırmaktadır.

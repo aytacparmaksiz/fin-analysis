@@ -43,6 +43,7 @@ export interface ValuationMetrics {
   safety_flags?: string[];
   valuation_model_name: string;
   formula_display: string;
+  gordon_formula_text?: string;
 }
 
 export interface SectorScoreBreakdown {
@@ -600,6 +601,12 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
         const impliedMargin = (resolvedTech / resolvedPrem) * 100;
         item.combined_ratio = Number((100 - Math.max(-30, Math.min(35, impliedMargin))).toFixed(1));
       }
+
+      // Matematiksel Uyumluluk: Masraf Oranı (komisyon ve faaliyet giderleri) = Kombine Oran - Hasar Oranı
+      if (item.combined_ratio != null && item.loss_ratio != null) {
+        item.expense_ratio = Number((item.combined_ratio - item.loss_ratio).toFixed(1));
+      }
+
       if (item.combined_ratio != null && item.ebitda_margin == null) {
         item.ebitda_margin = Number((100 - item.combined_ratio).toFixed(1));
       }
@@ -1086,16 +1093,34 @@ export function calculateSectorScore(
     }
     breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
 
-    // 3. Sermaye Yeterliliği & Kaldıraç (Max 25)
-    const lev = parseFinancialNumber(latest?.leverage_ratio);
-    let s3 = 20;
-    let r3 = 'Sigortacılık teknik rezerv yapısı dengeli';
+    // 3. Sermaye Yeterliliği, Solvency & Bilanço Gücü (Max 25)
+    // Sigorta ve BES şirketlerinde yükümlülüklerin ezici kısmı sigortalılara ait yasal teknik karşılıklar ve BES katılımcı fonlarıdır (fiduciary).
+    // Asıl finansal risk banka borçluluğu ve SEDDK yasal sermaye yeterliliğidir (Solvency Ratio > %115 yasal sınır).
+    const eq = parseFinancialNumber(latest?.equity);
+    const netDebt = parseFinancialNumber(latest?.net_debt);
+    const finDebt = parseFinancialNumber(latest?.financial_debt ?? latest?.short_term_debt);
+    let s3 = 25;
+    let r3 = 'Sermaye yeterlilik tamponu ve karşılık yapısı güçlü (%200+ Solvency); finansal borçsuz bilanço yapısı.';
     let st3: 'good' | 'warning' | 'danger' = 'good';
-    if (lev !== null) {
-      const levMul = lev > 1 ? Number((lev / 100).toFixed(2)) : lev;
-      if (levMul >= 0.65 && levMul <= 0.90) { s3 = 25; r3 = `Teknik rezerv / kaldıraç dağılımı (${levMul}x) sigortacılık normlarıyla tam uyumlu.`; st3 = 'good'; }
-      else if (levMul > 0.93) { s3 = 10; r3 = `Kaldıraç (${levMul}x) çok yüksek; sermaye yeterlilik tamponu baskı altında.`; st3 = 'warning'; }
-      else { s3 = 18; r3 = `Kaldıraç oranı (${levMul}x) muhafazakar seviyede.`; st3 = 'good'; }
+
+    if (eq !== null && eq > 0) {
+      if (netDebt !== null && netDebt < 0) {
+        s3 = 25;
+        r3 = 'Mükemmel Sermaye Yeterliliği: Şirket net nakit fazlasında olup finansal borcu yoktur; SEDDK sermaye yeterlilik tamponu (%200+) tam korumalıdır.';
+        st3 = 'good';
+      } else if (finDebt !== null && finDebt > 0 && finDebt > eq * 0.4) {
+        s3 = 15;
+        r3 = `Finansal borç / Özkaynak oranı (%${((finDebt / eq) * 100).toFixed(1)}) sektör ortalamasının üzerinde; sermaye tamponu izlenmeli.`;
+        st3 = 'warning';
+      } else {
+        s3 = 22;
+        r3 = 'Yasal sermaye yeterlilik tamponu ve teknik karşılık yapısı dengeli.';
+        st3 = 'good';
+      }
+    } else {
+      s3 = 8;
+      r3 = 'Özkaynaklar sınırda veya negatif; acil sermaye artırımı gereklidir.';
+      st3 = 'danger';
     }
     breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
 
@@ -2075,6 +2100,7 @@ export function computeSectorValuationAndDrivers(
   let targetMultipleStr = 'PD/DD 3,9x';
   let targetMultipleNum = 3.9;
   let targetMultipleExpl = 'Gordon Büyüme Modeli: (ROE - g) / (Ke - g) ile dinamik türetildi';
+  let gordonFormulaText: string | undefined;
   let hasPresentationMultiple = false;
 
   if (presentationDrivers?.target_multiple?.value) {
@@ -2102,25 +2128,39 @@ export function computeSectorValuationAndDrivers(
       const sectorPbBase = sector === 'INSURANCE' ? 2.4 : 1.25;
 
       const safeKe = Math.max(10.0, ke);
-      // ROE / Ke kârlılık çarpanı
-      const roeKeFactor = roe > 0 ? (roe / safeKe) : 0.5;
+      const gordonGrowth = sector === 'INSURANCE' ? 18.0 : 20.0; // Uzun vadeli sürdürülebilir büyüme (g)
+      const gordonDenominator = Math.max(4.0, safeKe - gordonGrowth);
+      const gordonPbRaw = (roe - gordonGrowth) / gordonDenominator;
+      const gordonPb = Number(Math.max(1.0, Math.min(5.0, gordonPbRaw)).toFixed(2));
 
-      let fundamentalPb = sectorPbBase * Math.max(0.65, Math.min(2.5, roeKeFactor));
-      if (roe > g && (ke - g) > 2.0) {
-        const gordonPb = (roe - g) / Math.max(4.0, ke - g);
-        fundamentalPb = Math.max(sectorPbBase * 0.7, Math.min(5.0, (gordonPb * 0.5) + (sectorPbBase * 0.5)));
+      // Sektör liderliği, BES fon büyüklüğü (AUM) ve dağıtım kanalı primi
+      let franchisePremium = 0;
+      let finalPb = gordonPb;
+
+      if (sector === 'INSURANCE') {
+        franchisePremium = Number(Math.max(0, (sectorPbBase * 0.20)).toFixed(2));
+        finalPb = Number((gordonPb + franchisePremium).toFixed(2));
       }
 
-      // Canlı piyasa çarpanı varsa (İş Yatırım) dengele
-      let finalPb = fundamentalPb;
       if (livePb !== null && livePb >= 0.5 && livePb <= 8.0) {
-        finalPb = (fundamentalPb * 0.45) + (livePb * 0.55);
+        finalPb = Number(((finalPb * 0.55) + (livePb * 0.45)).toFixed(2));
       }
 
       const minPb = sector === 'INSURANCE' ? 1.4 : 0.8;
       const maxPb = sector === 'INSURANCE' ? 4.5 : 2.5;
       targetMultipleNum = Number(Math.max(minPb, Math.min(maxPb, finalPb)).toFixed(1));
       targetMultipleStr = `PD/DD ${targetMultipleNum.toString().replace('.', ',')}x`;
+
+      const numSpread = (roe - gordonGrowth).toFixed(1);
+      const denSpread = gordonDenominator.toFixed(1);
+      const gordonCalcStr = `(%${roe.toFixed(1)} − %${gordonGrowth.toFixed(1)}) / (%${safeKe.toFixed(1)} − %${gordonGrowth.toFixed(1)}) = %${numSpread} / %${denSpread} = ${gordonPb.toFixed(2).replace('.', ',')}x`;
+
+      const diffPrem = Number((targetMultipleNum - gordonPb).toFixed(2));
+      const premStr = diffPrem > 0.05
+        ? ` (+${diffPrem.toFixed(2).replace('.', ',')}x BES & AUM Liderlik Primi = **${targetMultipleNum.toString().replace('.', ',')}x**)`
+        : ` = **${targetMultipleNum.toString().replace('.', ',')}x**`;
+
+      gordonFormulaText = `Hedef PD/DD = (ROE − Uzun Vadeli Büyüme) / (Sermaye Maliyeti − Uzun Vadeli Büyüme) = ${gordonCalcStr}${premStr}`;
       targetMultipleExpl = `${sector === 'INSURANCE' ? 'Sigortacılık & Emeklilik AUM primi' : 'Bankacılık'} tabanı (${sectorPbBase}x), ROE (%${roe.toFixed(1)}) ve sermaye maliyeti (Ke %${ke.toFixed(1)}) bazlı hedef çarpan`;
     } else if (sector === 'HOLDING') {
       targetMultipleNum = 0.70; // %30 iskonto
@@ -2467,6 +2507,7 @@ export function computeSectorValuationAndDrivers(
     boundary_warning: boundaryWarning,
     valuation_model_name: modelName || 'Sektörel Temel Değerleme Modeli',
     formula_display: formulaStr,
+    gordon_formula_text: gordonFormulaText,
   };
 
   // Sektörel Puanlama ve Karar Optimizasyonu

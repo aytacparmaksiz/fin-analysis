@@ -1173,7 +1173,7 @@ export const OFFICIAL_ISYATIRIM_CACHE: Record<string, any[]> = {
       "investment_income": 4521267217,
       "financial_assets_insured": 52721311258,
       "loss_ratio": 62,
-      "expense_ratio": 8.7,
+      "expense_ratio": 19.6,
       "combined_ratio": 81.6,
       "share_price": 242.9,
       "ebitda_margin": 18.4,
