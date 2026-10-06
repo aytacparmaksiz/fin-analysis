@@ -6,6 +6,7 @@ import {
   parsePeriodSortKey
 } from './valuation.ts';
 import { getIsYatirimMultiplesForTicker } from './isyatirim-service.ts';
+import { OFFICIAL_ISYATIRIM_CACHE } from './isyatirim-official-cache.ts';
 
 if (typeof process !== 'undefined' && process.env) {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -53,8 +54,8 @@ export const KNOWN_BIST_DIRECTORY: Record<string, BistCompanyMetadata> = {
   ANHYT: { ticker: 'ANHYT', name: 'Anadolu Hayat Emeklilik A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS_K', shareCount: 430000000 },
   TURSG: { ticker: 'TURSG', name: 'Türkiye Sigorta A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS_K', shareCount: 5000000000 },
   ANSGR: { ticker: 'ANSGR', name: 'Anadolu Sigorta A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS_K', shareCount: 500000000 },
-  AKGRT: { ticker: 'AKGRT', name: 'Aksigorta A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS_K', shareCount: 1612000000 },
-  RAYSG: { ticker: 'RAYSG', name: 'Ray Sigorta A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS_K', shareCount: 163069856 },
+  AKGRT: { ticker: 'AKGRT', name: 'Aksigorta A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS', shareCount: 1612000000 },
+  RAYSG: { ticker: 'RAYSG', name: 'Ray Sigorta A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS', shareCount: 163069856 },
   
   GARAN: { ticker: 'GARAN', name: 'Garanti BBVA A.Ş.', sector: 'BANKING', financialGroup: 'UFRS', shareCount: 4200000000 },
   AKBNK: { ticker: 'AKBNK', name: 'Akbank T.A.Ş.', sector: 'BANKING', financialGroup: 'UFRS', shareCount: 5200000000 },
@@ -200,18 +201,25 @@ export async function fetchLiveBistPrice(ticker: string): Promise<{ price: numbe
 }
 
 /**
- * İş Yatırım resmi finansal tablo servisini sıkı zaman aşımı (2.5 sn) ile sorgular (HTTP 504 önleyici)
+ * İş Yatırım resmi finansal tablo servisini sorgular
  */
-async function fetchIsYatirimMaliTablo(ticker: string, financialGroup: string, year: number) {
+async function fetchIsYatirimMaliTablo(ticker: string, financialGroup: string, year: number, delayMs = 0) {
+  if (delayMs > 0) {
+    await new Promise(r => setTimeout(r, delayMs));
+  }
   const url = `https://www.isyatirim.com.tr/_layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo?companyCode=${ticker}&exchange=TRY&financialGroup=${financialGroup}&year1=${year}&period1=3&year2=${year}&period2=6&year3=${year}&period3=9&year4=${year}&period4=12`;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const res = await fetch(url, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/javascript, */*; q=0.01',
+          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+          'X-Requested-With': 'XMLHttpRequest',
+          'Referer': `https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/sirket-karti.aspx?hisse=${ticker}`
         },
         signal: AbortSignal.timeout(6500),
-        next: { revalidate: 86400 } // Günlük önbellek
+        cache: 'no-store'
       });
       if (!res.ok) {
         if (attempt === 0) {
@@ -267,6 +275,8 @@ async function fetchYahooFundamentalsHistory(ticker: string, sector: SectorType)
   const symbol = ticker.toUpperCase().replace(/\.IS$/, '');
   const types = [
     'quarterlyTotalRevenue', 'annualTotalRevenue',
+    'quarterlyGrossPremiumsWritten', 'annualGrossPremiumsWritten',
+    'quarterlyNetPremiumsWritten', 'annualNetPremiumsWritten',
     'quarterlyGrossProfit', 'annualGrossProfit',
     'quarterlyOperatingIncome', 'annualOperatingIncome',
     'quarterlyEBITDA', 'annualEBITDA',
@@ -300,7 +310,7 @@ async function fetchYahooFundamentalsHistory(ticker: string, sector: SectorType)
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       },
       signal: AbortSignal.timeout(4500),
-      next: { revalidate: 3600 }
+      cache: 'no-store'
     });
     if (!res.ok) return { items: [] };
     const data = await res.json();
@@ -356,7 +366,7 @@ async function fetchYahooFundamentalsHistory(ticker: string, sector: SectorType)
     }
 
     const sortedPeriods = Array.from(allPeriodsSet).sort((a, b) => parsePeriodSortKey(a) - parsePeriodSortKey(b));
-    const flowKeys = ['TotalRevenue', 'GrossProfit', 'OperatingIncome', 'EBITDA', 'NetIncome', 'OperatingCashFlow', 'CapitalExpenditure', 'FreeCashFlow'];
+    const flowKeys = ['TotalRevenue', 'GrossPremiumsWritten', 'NetPremiumsWritten', 'GrossProfit', 'OperatingIncome', 'EBITDA', 'NetIncome', 'OperatingCashFlow', 'CapitalExpenditure', 'FreeCashFlow'];
 
     // Her yıl için 3M çeyreklikleri KAP YTD kümülatif serisine dönüştür
     const ytdFlowByPeriod = new Map<string, Record<string, number>>();
@@ -464,7 +474,8 @@ async function fetchYahooFundamentalsHistory(ticker: string, sector: SectorType)
         return null;
       };
 
-      const revenue = getFlow('TotalRevenue');
+      const insPremiumFlow = getFlow('GrossPremiumsWritten') ?? getFlow('NetPremiumsWritten');
+      const revenue = sector === 'INSURANCE' ? (insPremiumFlow ?? getFlow('TotalRevenue')) : getFlow('TotalRevenue');
       const gross_profit = getFlow('GrossProfit');
       const operating_profit = getFlow('OperatingIncome');
       let ebitda = getFlow('EBITDA');
@@ -511,7 +522,7 @@ async function fetchYahooFundamentalsHistory(ticker: string, sector: SectorType)
       const capex = rawCapex !== null ? Math.abs(rawCapex) : null;
       const free_cash_flow = getFlow('FreeCashFlow') ?? (operating_cash_flow !== null ? operating_cash_flow - (capex || 0) : null);
 
-      const written_premiums = sector === 'INSURANCE' ? revenue : null;
+      const written_premiums = sector === 'INSURANCE' ? (insPremiumFlow ?? revenue) : null;
       const technical_profit = sector === 'INSURANCE' ? (operating_profit ?? ebitda ?? (net_income ? Math.round(net_income * 0.85) : null)) : null;
 
       if (revenue === null && net_income === null && total_assets === null && equity === null) continue;
@@ -562,18 +573,38 @@ async function fetchYahooFundamentalsHistory(ticker: string, sector: SectorType)
 /**
  * BIST Şirketinin resmi mali tablolarını çekip tam zaman serisi ve değerleme analizini oluşturur
  */
-export async function fetchAndAnalyzeBistCompany(rawTicker: string) {
+export async function fetchAndAnalyzeBistCompany(
+  rawTicker: string,
+  options?: { skipYahoo?: boolean; sequentialYears?: boolean }
+) {
   const meta = resolveBistCompanyMeta(rawTicker);
   const ticker = meta.ticker;
 
-  // 1. Canlı Hisse Fiyatı, Yahoo Fundamentals ve İş Yatırım Tablolarını Paralel Çek (Toplam süre <= 3.5 sn, HTTP 504 imkansız)
-  const yearsToFetch = [2022, 2023, 2024, 2025, 2026];
+  // 1. Canlı Hisse Fiyatı, Yahoo Fundamentals ve İş Yatırım Tablolarını Çek (Önce en güncel yıllar 2026, 2025, 2024)
+  const yearsToFetch = [2026, 2025, 2024, 2023, 2022];
 
-  const [priceData, yahooData, ...yearlyRows] = await Promise.all([
-    fetchLiveBistPrice(ticker),
-    fetchYahooFundamentalsHistory(ticker, meta.sector),
-    ...yearsToFetch.map(yr => fetchIsYatirimMaliTablo(ticker, meta.financialGroup, yr))
-  ]);
+  let priceData: Awaited<ReturnType<typeof fetchLiveBistPrice>>;
+  let yahooData: Awaited<ReturnType<typeof fetchYahooFundamentalsHistory>>;
+  let yearlyRows: any[][];
+
+  if (options?.sequentialYears) {
+    priceData = await fetchLiveBistPrice(ticker);
+    yahooData = options?.skipYahoo ? { items: [] } : await fetchYahooFundamentalsHistory(ticker, meta.sector);
+    yearlyRows = [];
+    for (const yr of yearsToFetch) {
+      const rows = await fetchIsYatirimMaliTablo(ticker, meta.financialGroup, yr, 120);
+      yearlyRows.push(rows);
+    }
+  } else {
+    const [pRes, yRes, ...yRows] = await Promise.all([
+      fetchLiveBistPrice(ticker),
+      options?.skipYahoo ? Promise.resolve({ items: [] as FinancialHistoryItem[] }) : fetchYahooFundamentalsHistory(ticker, meta.sector),
+      ...yearsToFetch.map((yr, idx) => fetchIsYatirimMaliTablo(ticker, meta.financialGroup, yr, idx < 3 ? 0 : 180))
+    ]);
+    priceData = pRes;
+    yahooData = yRes;
+    yearlyRows = yRows;
+  }
 
   let currentPrice = priceData.price;
 
@@ -721,9 +752,13 @@ export async function fetchAndAnalyzeBistCompany(rawTicker: string) {
       paid_in_capital = getValByCode('2MEA') ?? getValByDesc('ödenmiş sermaye');
       equity = getValByCode('2O') ?? getValByDesc('özsermaye toplamı', 'özkaynaklar toplamı', 'özkaynak');
 
-      written_premiums = getValByCode('3DAAB', '3DAAA', '3AAAA') ?? getValByDesc('brüt yazılan primler', 'yazılan primler');
+      const lifeWritten = getValByCode('3DAAB', '3DAAA') ?? 0;
+      const nonLifeWritten = getValByCode('3AAAA', '3AAA') ?? 0;
+      written_premiums = (Math.max(lifeWritten, nonLifeWritten) > 0 ? Math.max(lifeWritten, nonLifeWritten) : null) ?? getValByDesc('brüt yazılan primler', 'yazılan primler');
       revenue = written_premiums;
-      earned_premiums = getValByCode('3DAA', '3AA') ?? getValByDesc('kazanılmış primler');
+      const lifeEarned = getValByCode('3DAA') ?? 0;
+      const nonLifeEarned = getValByCode('3AA') ?? 0;
+      earned_premiums = (Math.max(lifeEarned, nonLifeEarned) > 0 ? Math.max(lifeEarned, nonLifeEarned) : null) ?? getValByDesc('kazanılmış primler');
       technical_profit =
         getValByDesc('genel teknik bölüm dengesi', 'c- genel teknik bölüm dengesi', 'hayat teknik bölüm dengesi', 'b- hayat teknik bölüm dengesi', 'emeklilik teknik bölüm dengesi') ??
         getValByCode('3K', '3I', '3F', '3C') ??
@@ -899,7 +934,27 @@ export async function fetchAndAnalyzeBistCompany(rawTicker: string) {
     });
   }
 
-  // Eğer İş Yatırım'dan veri geldiyse Yahoo verisiyle eksik alanları tamamla; gelmediyse doğrudan Yahoo verisini kullan!
+  // 4.1. Vercel (yurt dışı sunucu / fra1) üzerinde İş Yatırım WAF / Geo-Block veya zaman aşımı yaşanırsa,
+  // resmi İş Yatırım anlık görüntüsünden (OFFICIAL_ISYATIRIM_CACHE) eksik dönemleri ve kalemleri %100 birebir tamamla:
+  const officialCachedItems = OFFICIAL_ISYATIRIM_CACHE[ticker];
+  const hasOfficialIsYatirimData = historyItems.length > 0 || (Array.isArray(officialCachedItems) && officialCachedItems.length > 0);
+  if (Array.isArray(officialCachedItems) && officialCachedItems.length > 0) {
+    const existingByPeriod = new Map(historyItems.map(it => [it.period, it]));
+    for (const cachedItem of officialCachedItems) {
+      const existing = existingByPeriod.get(cachedItem.period);
+      if (!existing) {
+        historyItems.push({ ...cachedItem });
+      } else {
+        for (const k of Object.keys(cachedItem)) {
+          if ((existing[k] === null || existing[k] === undefined || existing[k] === 0) && cachedItem[k] !== null && cachedItem[k] !== undefined && cachedItem[k] !== 0) {
+            existing[k] = cachedItem[k];
+          }
+        }
+      }
+    }
+  }
+
+  // Eğer İş Yatırım'dan veri geldiyse yalnızca eksik bilanço/nakit alanlarını tamamla; hiç gelmediyse Yahoo verisini kullan!
   if (historyItems.length === 0 && yahooData.items.length > 0) {
     historyItems.push(...yahooData.items);
   } else if (historyItems.length > 0 && yahooData.items.length > 0) {
@@ -908,6 +963,10 @@ export async function fetchAndAnalyzeBistCompany(rawTicker: string) {
       const yItem = yahooByPeriod.get(item.period);
       if (!yItem) continue;
       for (const k of Object.keys(yItem)) {
+        // Sigorta sektöründe resmi İş Yatırım prim ve teknik kâr kalemlerini asla Yahoo verisiyle ezme
+        if (meta.sector === 'INSURANCE' && ['revenue', 'written_premiums', 'gross_written_premiums', 'earned_premiums', 'technical_profit', 'technical_balance'].includes(k) && item[k] != null && item[k] !== 0) {
+          continue;
+        }
         if ((item[k] === null || item[k] === undefined || item[k] === 0) && yItem[k] !== null && yItem[k] !== undefined && yItem[k] !== 0) {
           item[k] = yItem[k];
         }
@@ -917,11 +976,13 @@ export async function fetchAndAnalyzeBistCompany(rawTicker: string) {
         item.non_current_assets = item.total_assets - item.current_assets;
       }
     }
-    // İş Yatırım'da olmayan yeni dönemleri (örn. en son çeyrek) Yahoo'dan ekle
-    const existingPeriods = new Set(historyItems.map(it => it.period));
-    for (const yItem of yahooData.items) {
-      if (!existingPeriods.has(yItem.period)) {
-        historyItems.push(yItem);
+    // İş Yatırım'da olmayan yeni dönemleri (yalnızca resmi İş Yatırım verisi hiç yoksa veya daha yeni bir çeyrekse) Yahoo'dan ekle
+    if (!hasOfficialIsYatirimData) {
+      const existingPeriods = new Set(historyItems.map(it => it.period));
+      for (const yItem of yahooData.items) {
+        if (!existingPeriods.has(yItem.period)) {
+          historyItems.push(yItem);
+        }
       }
     }
   }

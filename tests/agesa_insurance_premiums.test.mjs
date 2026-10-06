@@ -132,5 +132,21 @@ test('AGESA Insurance & Pension AUM Plausibility & Scale Guard Test Suite', asyn
     assert.ok(dupont.financialLeverage > 35 && dupont.financialLeverage < 50, `Expected AUM multiplier ~41-45x, got ${dupont.financialLeverage}`);
     assert.ok(dupont.driverSummary.toLowerCase().includes('emeklilik yatırım fonları (aum)'), `Expected AUM explanation in DuPont summary, got: ${dupont.driverSummary}`);
   });
+
+  await t.test('verifies OFFICIAL_ISYATIRIM_CACHE for AGESA matches exact İş Yatırım last 4 quarters (15.448.697.576, 7.051.153.447, 24.073.963.541, 17.196.901.939)', async () => {
+    const { OFFICIAL_ISYATIRIM_CACHE } = await import('../lib/isyatirim-official-cache.ts');
+    const agesaHistory = OFFICIAL_ISYATIRIM_CACHE['AGESA'];
+    assert.ok(Array.isArray(agesaHistory) && agesaHistory.length >= 16, 'Expected AGESA history in OFFICIAL_ISYATIRIM_CACHE');
+    const last4 = agesaHistory.slice(-4);
+    assert.deepEqual(
+      last4.map(x => ({ period: x.period, written_premiums: x.written_premiums })),
+      [
+        { period: '2025/09', written_premiums: 17196901939 },
+        { period: '2025/12', written_premiums: 24073963541 },
+        { period: '2026/03', written_premiums: 7051153447 },
+        { period: '2026/06', written_premiums: 15448697576 }
+      ]
+    );
+  });
 });
 

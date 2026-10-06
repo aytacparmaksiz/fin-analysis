@@ -1507,7 +1507,7 @@ export default function ValuationTerminal() {
 
     try {
       const res = await fetchWithClientRetry(
-        () => fetch(`/api/bist?ticker=${targetTicker}`),
+        () => fetch(`/api/bist?ticker=${encodeURIComponent(targetTicker)}&t=${Date.now()}`, { cache: 'no-store' }),
         setStatusMessage
       );
       const bistData = await parseApiResponse(res, `${targetTicker} için BIST verisi çekilemedi.`);
