@@ -67,10 +67,11 @@ const financialExtractionSchema: Schema = {
           trade_receivables: { type: Type.NUMBER, description: 'Esas Faaliyetlerden Alacaklar' },
 
           // Sektörel Özel Kalemler (Sigorta & Emeklilik)
-          written_premiums: { type: Type.NUMBER, description: 'Brüt Yazılan Primler (Sigorta)' },
+          written_premiums: { type: Type.NUMBER, description: 'Brüt Yazılan Primler (SADECE Gelir Tablosu Teknik Bölümdeki Brüt Prim Üretimi, Hayat + Hayat Dışı toplamı. Asla Emeklilik Fon Portföyü / AUM ile karıştırma!)' },
           earned_premiums: { type: Type.NUMBER, description: 'Net Kazanılan Primler (Sigorta)' },
           technical_profit: { type: Type.NUMBER, description: 'Teknik Bölüm Dengesi / Kârı (Sigorta)' },
           investment_income: { type: Type.NUMBER, description: 'Net Yatırım / Finansal Gelirler (Sigorta)' },
+          pension_aum: { type: Type.NUMBER, description: 'Emeklilik Fon Büyüklüğü / Katılımcıların Fon Tutarı (AUM) - Bilançodaki Emeklilik Faaliyetlerinden Borçlar veya Katılımcı Fon Payları (Örn: 79-150 Milyar TL). Kesinlikle Prim değildir!' },
           loss_ratio: { type: Type.NUMBER, description: 'Hasar/Prim Oranı (%)' },
           expense_ratio: { type: Type.NUMBER, description: 'Masraf Oranı (%)' },
           combined_ratio: { type: Type.NUMBER, description: 'Kombine / Bileşik Oran (%)' },
@@ -302,7 +303,7 @@ VERİ VE SAYI OKUMA KURALLARI:
 3. KESİNLİKLE FİNANSAL HALÜSİNASYON GÖRME: Raporlarda açıkça bulunmayan hiçbir rakamı uydurma. Eğer bir veri tabloda yer almıyorsa null bırak.
 4. TMS 29 (ENFLASYON MUHASEBESİ): Raporlanan finansal tabloların TMS 29 standardına göre enflasyona göre düzeltilip düzeltilmediğini kontrol et. Her dönem için 'is_tms29' bayrağını (true/false) işaretle.
 5. SEKTÖREL KURALLAR:
-   - Sigorta için Brüt Prim Üretimi 'revenue', Teknik Bölüm Dengesi 'ebitda', Kombine Oran 'combined_ratio' içine alınır.
+   - Sigortacılık & Emeklilik: 'written_premiums' ve 'revenue' alanına SADECE VE SADECE Gelir Tablosu Teknik Bölümdeki "Brüt Yazılan Primler" (Hayat + Hayat Dışı toplamı) yazılır. BİLANÇODAKİ "Emeklilik Faaliyetlerinden Borçlar", "Katılımcıların Fon Payları", "Fon Büyüklüğü / AUM" veya "Riski Hayat Poliçesi Sahiplerine Ait Finansal Yatırımlar" (70-150 Milyar TL gibi devasa rakamlar) KESİNLİKLE prim veya hasılat DEĞİLDİR! Bunlar 'pension_aum' ve 'financial_assets_insured' içine yazılır, prim alanına ASLA konulamaz!
    - Bankacılık için Net Faiz Geliri 'revenue' içine alınır; FAVÖK aranmaz.
    - Holding için Net Aktif Değeri (NAD) ve temettüler çıkarılır.`;
 
@@ -583,15 +584,18 @@ ${docTexts || 'Ekli dokümandaki görsel finansal tabloları analiz et.'}
 GÖREVLER:
 1. Bu belgede geçen HER BİR DÖNEM (yıl veya çeyrek, örn: 2022, 2023, 2024, 2025, 2026/06) için 'financial_history' listesine ayrı bir nesne ekle.
 2. SEKTÖREL VERİ ÇIKARIMI (%100 GERÇEK VE RESMİ VERİLER):
-${isInsurance ? `   * SİGORTACILIK / EMEKLİLİK (ÖRN: AGESA, ANHYT, TURSG):
-     - Brüt Prim Üretimi (Yazılan Primler): 'written_premiums' ve 'revenue' alanlarına tam aynı tutarı yaz.
-     - Teknik Kâr / Teknik Bölüm Dengesi: 'technical_profit' ve 'ebitda' alanlarına tam aynı tutarı yaz.
+${isInsurance ? `   * SİGORTACILIK VE BİREYSEL EMEKLİLİK (ÖRN: AGESA, ANHYT, TURSG, ANSGR):
+     - KRİTİK KURAL (BRÜT PRİM ÜRETİMİ VS EMEKLİLİK FON BÜYÜKLÜĞÜ):
+       * 'written_premiums' ve 'revenue' alanlarına SADECE VE SADECE Gelir Tablosu Teknik Bölümdeki (I. ve II. Teknik Bölüm altındaki) "1.1.1- Brüt Yazılan Primler (+)" tutarını (Hayat Dışı + Hayat toplamı) yaz.
+       * DİKKAT (KESİNLİKLE UYULMALIDIR): Bilançoda pasifteki "Emeklilik Faaliyetlerinden Borçlar", "Katılımcıların Fon Payları", veya aktifteki "Riski Hayat Poliçesi Sahiplerine Ait Finansal Yatırımlar", veya faaliyet raporundaki "Bireysel Emeklilik Fon Büyüklüğü / AUM" (bu rakamlar 70-150 Milyar TL seviyesindedir, örn: 79.165.845.909 TL) KESİNLİKLE PRİM ÜRETİMİ DEĞİLDİR! Bu bilanço fon büyüklüğü rakamlarını 'pension_aum' ve 'financial_assets_insured' alanına yaz, ASLA 'written_premiums' veya 'revenue' içine YAZMA!
+     - Teknik Kâr / Teknik Bölüm Dengesi: 'technical_profit' ve 'ebitda' alanlarına Teknik Bölüm Gelir Tablosundaki Teknik Bölüm Dengesini yaz.
      - Net Kâr: 'net_income' alanına Gelir Tablosundaki Dönem Net Kârını yaz.
      - Toplam Özkaynaklar: 'equity' alanına yaz.
      - Toplam Aktifler: 'total_assets' alanına yaz.
      - Cari Varlıklar: 'current_assets' alanına bilançodaki Cari Varlıklar toplamını yaz.
      - Nakit ve Benzerleri: 'cash_and_equivalents' alanına yaz.
      - Finansal Varlıklar: 'financial_assets_insured' alanına yaz.
+     - Emeklilik Fon Büyüklüğü (AUM): 'pension_aum' alanına katılımcıların fon tutarını yaz.
      - Kombine Oran (%): Varsa 'combined_ratio' alanına yaz (örn: 92.5).` : ''}
 ${isBanking ? `   * BANKACILIK:
      - Net Faiz Geliri: 'net_interest_income' ve 'revenue' alanlarına tam aynı tutarı yaz.

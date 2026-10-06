@@ -239,7 +239,10 @@ function formatAmount(
   // Raw verinin bin TL mi tam TL mi olduğunu tespit et
   const normCurrency = (currency || '').trim().toLowerCase();
   let isRawInThousands = true;
-  if (normCurrency.includes('bin') || normCurrency.includes('thousand')) {
+  if (Math.abs(val) > 20_000_000_000) {
+    // 20 Milyar'ın üzerindeki değerler Bin TL olamaz (20 Trilyon TL), kesinlikle Tam TL'dir
+    isRawInThousands = false;
+  } else if (normCurrency.includes('bin') || normCurrency.includes('thousand')) {
     isRawInThousands = true;
   } else if (normCurrency.includes('milyon') || normCurrency.includes('million')) {
     isRawInThousands = false;
@@ -4187,12 +4190,12 @@ export default function ValuationTerminal() {
                                 { k: 'current_assets', l: 'Dönen Varlıklar' },
                                 { k: 'non_current_assets', l: 'Duran Varlıklar' },
                                 { k: 'total_assets', l: 'Toplam Varlıklar' },
-                                { k: 'financial_debt', l: 'Finansal Borçlar' },
-                                { k: 'net_debt', l: 'Net Borç' },
+                                currentSector === 'INSURANCE' ? { k: 'pension_aum', l: 'Emeklilik Fon Büyüklüğü (AUM)' } : { k: 'financial_debt', l: 'Finansal Borçlar' },
+                                currentSector === 'INSURANCE' ? { k: 'financial_assets_insured', l: 'Sigortalı Finansal Varlıklar' } : { k: 'net_debt', l: 'Net Borç' },
                                 { k: 'equity', l: 'Özkaynaklar' }
                               ].map((rowConfig: any) => {
-                                const v1 = fv(latestBS, rowConfig.k);
-                                const v2 = fv(yoyBS, rowConfig.k);
+                                const v1 = rowConfig.k === 'pension_aum' && fv(latestBS, 'pension_aum') == null ? fv(latestBS, 'financial_assets_insured') : fv(latestBS, rowConfig.k);
+                                const v2 = rowConfig.k === 'pension_aum' && fv(yoyBS, 'pension_aum') == null ? fv(yoyBS, 'financial_assets_insured') : fv(yoyBS, rowConfig.k);
                                 const chg = (v1 != null && v2 != null && v2 !== 0) ? ((v1 - v2) / Math.abs(v2) * 100).toFixed(1) : null;
                                 return (
                                   <tr key={rowConfig.k} className="hover:bg-slate-800/30">
