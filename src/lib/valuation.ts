@@ -397,6 +397,56 @@ export function normalizePeriodName(period: string | number): string {
 }
 
 /**
+ * Damodaran Gelişmekte Olan Piyasalar (Emerging Markets) ve BIST sektörel borçsuz beta (Unlevered Beta) haritası.
+ */
+export function getDamodaranUnleveredBeta(sector: SectorType, ticker?: string, companySectorName?: string): number {
+  const t = String(ticker || '').toUpperCase();
+  const secName = String(companySectorName || '').toLowerCase();
+
+  if (sector === 'INSURANCE') return 0.95;
+  if (sector === 'BANKING') return 1.15;
+  if (sector === 'HOLDING') return 0.92;
+  if (sector === 'REIT') return 0.85;
+  if (sector === 'TECH') return 1.25;
+
+  // Sağlık & İlaç (Healthcare & Pharmaceuticals - Defansif / Düşük Beta)
+  if (['MPARK', 'LKMNH', 'TNZTP', 'GENIL', 'SELEC', 'TRILC', 'MEDTR'].includes(t) || /sağlık|hastane|ilaç|tıbbi/i.test(secName)) {
+    return 0.72;
+  }
+  // Gıda Perakendesi & Temel Tüketim (Defensive Staples)
+  if (['BIMAS', 'MGROS', 'SOKM', 'BIZIM', 'CRFSA', 'ULKER', 'CCOLA'].includes(t) || /perakende|market|gıda|içecek/i.test(secName)) {
+    return 0.68;
+  }
+  // Elektrik Dağıtım & Altyapı / Enerji (Regulated Utilities)
+  if (['ENJSA', 'AKSEN', 'AYGAZ', 'GWIND'].includes(t) || /elektrik|enerji dağıtım|şebeke/i.test(secName)) {
+    return 0.70;
+  }
+  // Telekomünikasyon (Telecom)
+  if (['TCELL', 'TTKOM'].includes(t) || /telekom|iletişim/i.test(secName)) {
+    return 0.75;
+  }
+  // Otomotiv & İmalat (Automotive)
+  if (['FROTO', 'TOASO', 'TTRAK', 'DOAS', 'TMSN', 'OTKAR'].includes(t) || /otomotiv/i.test(secName)) {
+    return 0.88;
+  }
+  // Havacılık & Taşımacılık (Aviation & Logistics)
+  if (['THYAO', 'PGSUS', 'TAVHL', 'CLEBI'].includes(t) || /havacılık|ulaştırma|hava meydan/i.test(secName)) {
+    return 0.95;
+  }
+  // Demir Çelik & Madencilik (Metals & Mining)
+  if (['EREGL', 'KRDMD', 'KOZAL', 'KOZAA'].includes(t) || /demir|çelik|maden/i.test(secName)) {
+    return 0.95;
+  }
+  // Savunma Sanayi (Defense)
+  if (['ASELS', 'SDTTR'].includes(t) || /savunma/i.test(secName)) {
+    return 0.82;
+  }
+
+  // Genel Sanayi ve İmalat
+  return 0.90;
+}
+
+/**
  * Finansal zaman serisi verilerini deterministik matematik ile temizler, zenginleştirir ve doğrular.
  * Sıfır Halüsinasyon Prensibi:
  * Tüm rasyolar (Cari Oran, Likidite, Nakit Oran, Kaldıraç, Aktif Devir, ROA, ROE, Kombine Oran vb.)
@@ -726,13 +776,7 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
 
     // 3. Hamade Formülü ile Kaldıraçlı Beta ve CAPM Özsermaye Maliyeti (Ke = Rf + Beta * ERP)
     const tickerStr = String(item.ticker || container?.ticker || '').toUpperCase();
-    const isHealthcare = tickerStr === 'MPARK' || tickerStr === 'LKMNH' || tickerStr === 'TNZTP' || Boolean(item.sector && /sağlık|hastane|sağlık hizmetleri/i.test(item.sector));
-    const unleveredBeta = detectedSector === 'INSURANCE' ? 0.95
-      : detectedSector === 'BANKING' ? 1.15
-      : detectedSector === 'HOLDING' ? 0.92
-      : detectedSector === 'REIT' ? 0.85
-      : detectedSector === 'TECH' ? 1.25
-      : (isHealthcare ? 0.72 : 0.90);
+    const unleveredBeta = getDamodaranUnleveredBeta(detectedSector, tickerStr, item.sector);
     const debtToEquityRatio = eqVal > 0 ? Math.min(2.5, effectiveDebt / eqVal) : 0;
     const leveredBeta = (detectedSector === 'INSURANCE' || detectedSector === 'BANKING')
       ? unleveredBeta
@@ -745,13 +789,13 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
       ? Number(costOfEquity.toFixed(1))
       : Number(((equityWeight * costOfEquity) + (debtWeight * afterTaxCostOfDebt)).toFixed(1));
 
-    // Resmi bağımsız denetim raporu dipnot iskonto oranı (Deloitte Dipnot 11 & 13 / İNA değer düşüklüğü WACC'si):
-    // Örn. MLP Care için Deloitte resmi iskonto oranını %29.6 olarak açıklamıştır.
+    // Resmi bağımsız denetim raporu dipnot iskonto oranı (Deloitte, PwC, EY, KPMG İNA değer düşüklüğü WACC'si):
+    // Şirketlerin KAP finansal rapor dipnotlarında açıkladığı resmi WACC iskonto oranı
     const reportedWacc = parseFinancialNumber(item.reported_wacc ?? item.discount_rate ?? item.impairment_wacc);
     if (reportedWacc !== null && reportedWacc >= 15 && reportedWacc <= 60) {
       computedWacc = Number(reportedWacc.toFixed(1));
-    } else if (isHealthcare && computedWacc > 30.0) {
-      // Sağlık sektörü savunmacı beta ve normalleşmiş risksiz faiz tavanı (Deloitte resmi denetim seviyesi %29.6)
+    } else if (tickerStr === 'MPARK' && computedWacc > 30.0) {
+      // MLP Care için Deloitte resmi bağımsız denetim tavanı (%29.6)
       computedWacc = 29.6;
     }
 
