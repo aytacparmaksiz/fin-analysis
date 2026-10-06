@@ -1,43 +1,28 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const envSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
-const envSupabaseKey = 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
+const supabaseKey = 
   process.env.SUPABASE_SERVICE_ROLE_KEY || 
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
   process.env.SUPABASE_ANON_KEY || 
   '';
 
-let defaultClient: SupabaseClient | null = null;
-const clientCache = new Map<string, SupabaseClient>();
+let supabaseClient: SupabaseClient | null = null;
 
-export function getSupabase(customUrl?: string, customKey?: string): SupabaseClient | null {
-  const url = (customUrl || envSupabaseUrl || '').trim();
-  const key = (customKey || envSupabaseKey || '').trim();
-
-  if (!url || !key) {
+export function getSupabase(): SupabaseClient | null {
+  if (!supabaseUrl || !supabaseKey) {
     return null;
   }
-
-  const cacheKey = `${url}::${key.slice(-10)}`;
-  if (clientCache.has(cacheKey)) {
-    return clientCache.get(cacheKey)!;
+  if (!supabaseClient) {
+    supabaseClient = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        persistSession: false,
+      },
+    });
   }
-
-  const client = createClient(url, key, {
-    auth: {
-      persistSession: false,
-    },
-  });
-
-  clientCache.set(cacheKey, client);
-  if (!customUrl && !customKey) {
-    defaultClient = client;
-  }
-  return client;
+  return supabaseClient;
 }
 
-export function isSupabaseConfigured(customUrl?: string, customKey?: string): boolean {
-  const url = (customUrl || envSupabaseUrl || '').trim();
-  const key = (customKey || envSupabaseKey || '').trim();
-  return Boolean(url && key);
+export function isSupabaseConfigured(): boolean {
+  return Boolean(supabaseUrl && supabaseKey);
 }
