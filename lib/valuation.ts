@@ -454,13 +454,13 @@ export function getDamodaranUnleveredBeta(sector: SectorType, ticker?: string, c
  * saf TypeScript fonksiyonları ile resmi denetlenmiş verilerden türetilir.
  * Eğer gerekli girdi verisi raporda bulunmuyorsa kesinlikle uydurulmaz, null bırakılır.
  */
-export function enrichAndSanitizeFinancialHistory(data: any): any {
+export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: SectorType): any {
   if (!data) return data;
   const isDirectArray = Array.isArray(data);
   const container = isDirectArray ? { financial_history: data } : data;
   if (!Array.isArray(container.financial_history)) return data;
 
-  const detectedSector: SectorType = container.sector || detectSector(container.ticker || '');
+  const detectedSector: SectorType = sectorOverride || container.sector || detectSector(container.ticker || '');
   container.sector = detectedSector;
 
   const debtInfo = container.debt_and_interest || {};
@@ -1870,6 +1870,8 @@ export function computeSectorValuationAndDrivers(
   optimization: FinalDecisionOptimization;
 } {
   const sector: SectorType = sectorOverride || extractedData?.sector || 'INDUSTRIAL';
+  // Güvenlik ve Tutarlılık: Finansal geçmişi TMS 29, Fisher Reel WACC ve sektörel rasyolarla zenginleştir ve doğrula
+  enrichAndSanitizeFinancialHistory(extractedData, sector);
   const history: any[] = Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : [];
 
   const rawPrice = parseFinancialNumber(inputPriceStr || extractedData?.valuation?.current_price || '118.50');
@@ -1877,7 +1879,7 @@ export function computeSectorValuationAndDrivers(
   const shareCount = parseShareCountNumber(extractedData?.share_count);
 
   // TMS 29 Homojenizasyonunu çalıştır
-  const { homogenizedHistory, tms29Warnings } = homogenizeTms29Series(history);
+  const { homogenizedHistory, tms29Warnings } = homogenizeTms29Series(history, sector);
 
   // Kronolojik sıralama
   const sortedHistory = [...homogenizedHistory].sort((a, b) => {

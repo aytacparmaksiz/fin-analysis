@@ -884,7 +884,11 @@ export async function fetchAndAnalyzeBistCompany(
     let long_term_debt: number | null = null;
     let net_debt: number | null = null;
     let operating_cash_flow: number | null = null;
+    let grossOcf: number | null = null;
+    let netOcf: number | null = null;
     let capex: number | null = null;
+    let tangibleCapex: number | null = null;
+    let totalCapex: number | null = null;
     let free_cash_flow: number | null = null;
     let trade_receivables: number | null = null;
     let inventories: number | null = null;
@@ -1065,8 +1069,14 @@ export async function fetchAndAnalyzeBistCompany(
         ebitda = operating_profit + (amort !== null ? Math.abs(amort) : (revenue ? Math.abs(revenue) * 0.05 : 0));
       }
 
-      operating_cash_flow = getValByCode('4CAE', '4A') ?? getValByDesc('işletme faaliyetlerinden nakit akışları', 'işletme faaliyetlerinden nakit');
-      capex = getValByCode('4CBD') ?? getValByDesc('maddi ve maddi olmayan duran varlıkların alımından kaynaklanan nakit çıkışları', 'maddi duran varlık alım');
+      const grossOcf = getValByCode('4A') ?? getValByDesc('işletme sermayesinde gerçekleşen değişimler öncesi', 'faaliyetlerden kaynaklanan nakit akışları');
+      const netOcf = getValByCode('4CAE', '4A_NET') ?? getValByDesc('işletme faaliyetlerinden kaynaklanan net nakit', 'işletme faaliyetlerinden net nakit');
+      operating_cash_flow = netOcf ?? grossOcf ?? getValByCode('4CAE', '4A') ?? getValByDesc('işletme faaliyetlerinden nakit akışları', 'işletme faaliyetlerinden nakit');
+
+      const tangibleCapex = getValByCode('4CBD', '4CBDA') ?? getValByDesc('maddi ve maddi olmayan duran varlıkların alımından kaynaklanan nakit çıkışları', 'maddi duran varlık alım');
+      const totalCapex = getValByCode('4CB') ?? getValByDesc('yatırım faaliyetlerinden kaynaklanan nakit');
+      capex = tangibleCapex ?? totalCapex ?? getValByCode('4CBD') ?? getValByDesc('maddi ve maddi olmayan duran varlıkların alımından kaynaklanan nakit çıkışları', 'maddi duran varlık alım');
+
       if (operating_cash_flow !== null) {
         free_cash_flow = operating_cash_flow - Math.abs(capex || (revenue ? Math.abs(revenue) * 0.04 : 0));
       }
@@ -1098,8 +1108,13 @@ export async function fetchAndAnalyzeBistCompany(
       financial_debt,
       net_debt,
       operating_cash_flow,
+      gross_operating_cash_flow: grossOcf,
+      net_operating_cash_flow: netOcf ?? operating_cash_flow,
       capex,
+      tangible_capex: tangibleCapex,
+      total_investing_outflow: totalCapex,
       free_cash_flow,
+      gross_free_cash_flow: grossOcf !== null ? (grossOcf - Math.abs(totalCapex || capex || 0)) : null,
       trade_receivables,
       inventories,
       written_premiums,

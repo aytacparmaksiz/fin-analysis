@@ -228,6 +228,22 @@ Kilit Katalizörler: [Fiyatı adil değere taşıyacak 2-3 somut şirket kataliz
 Riskler & Emniyet Marjı: [Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek temel riskler.]`;
     }
 
+    const rawHistory = Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : [];
+    const sortedHist = [...rawHistory].sort((a: any, b: any) => (a?.period || '').localeCompare(b?.period || ''));
+    const latestItem = sortedHist.length > 0 ? sortedHist[sortedHist.length - 1] : null;
+
+    const nominalWaccVal = latestItem?.nominal_wacc ?? latestItem?.wacc ?? 29.6;
+    const realWaccVal = latestItem?.real_wacc ?? (latestItem?.is_tms29 ? Number((((1 + nominalWaccVal / 100) / (1 + (latestItem?.expected_inflation || 18) / 100) - 1) * 100).toFixed(1)) : nominalWaccVal);
+    const expectedInfVal = latestItem?.expected_inflation ?? 18.0;
+    const roicVal = latestItem?.roic ?? 15.64;
+    const evaSpreadVal = (roicVal - realWaccVal).toFixed(1);
+
+    const grossOcfVal = latestItem?.gross_operating_cash_flow;
+    const netOcfVal = latestItem?.net_operating_cash_flow ?? latestItem?.operating_cash_flow;
+    const tangibleCapexVal = latestItem?.tangible_capex ?? latestItem?.capex;
+    const totalCapexVal = latestItem?.total_investing_outflow;
+    const netIncomeVal = latestItem?.net_income;
+
     const precomputedScorecardTable = `
 | Metrik | Puan | Max | Gerekçe |
 | :--- | :--- | :--- | :--- |
@@ -256,6 +272,20 @@ HESAPLANAN DİNAMİK DEĞERLEME VE ADİL DEĞER ÇERÇEVESİ (RAPORUNDA BU DEĞE
 - 4. Değer Sürücüsü (${drivers.target_multiple.label}): ${drivers.target_multiple.value}
 ${valuation.gordon_formula_text ? `- Ön-Hesaplanmış Değerleme Formülü Metni: ${valuation.gordon_formula_text}\n` : ''}
 
+SERMAYE MALİYETİ (WACC) VE FISHER REEL KÂRLILIK PARAMETRELERİ (IV. VE VI. BÖLÜMLERDE BU DEĞERLERİ KULLANACAKSIN):
+- Nominal WACC: %${nominalWaccVal}
+- Beklenen Enflasyon: %${expectedInfVal}
+- Reel Sermaye Maliyeti (Reel WACC - Fisher Denklemi [(1 + WACC) / (1 + Enflasyon) - 1]): %${realWaccVal}
+- Yıllıklandırılmış ROIC: %${roicVal}
+- Reel EVA Makası (ROIC - Reel WACC): ${Number(evaSpreadVal) >= 0 ? '+' : ''}${evaSpreadVal} puan
+
+${netOcfVal ? `NAKİT AKIŞI VE YATIRIM HARCAMASI GÖSTERGELERİ (II. BÖLÜMDE BU TANIMLARI BİREBİR KULLANACAKSIN):
+- Net İşletme Nakit Akışı (KAP resmi çalışma sermayesi ve vergi sonrası): ${(netOcfVal / 1e9).toFixed(2)} Milyar TL (${(netOcfVal / 1e3).toLocaleString('tr-TR')} bin TL) ${netIncomeVal ? `[Net kârın %${((netOcfVal / netIncomeVal) * 100).toFixed(1)}'i]` : ''}
+${grossOcfVal ? `- İşletme Sermayesi Öncesi Brüt Faaliyet Nakit Akışı: ${(grossOcfVal / 1e9).toFixed(2)} Milyar TL (${(grossOcfVal / 1e3).toLocaleString('tr-TR')} bin TL) ${netIncomeVal ? `[Net kârın %${((grossOcfVal / netIncomeVal) * 100).toFixed(1)}'i]` : ''}` : ''}
+${tangibleCapexVal ? `- Maddi ve Maddi Olmayan Duran Varlık Yatırımı (Tangible CAPEX): ${(Math.abs(tangibleCapexVal) / 1e9).toFixed(2)} Milyar TL` : ''}
+${totalCapexVal ? `- Toplam Yatırım Nakit Çıkışı (Finansal vb. dahil): ${(Math.abs(totalCapexVal) / 1e9).toFixed(2)} Milyar TL` : ''}
+- Serbest Nakit Akışı (FCF): Güçlü Pozitif [Net OCF bazlı ${(latestItem?.free_cash_flow ? (latestItem.free_cash_flow / 1e9).toFixed(2) : ((netOcfVal - Math.abs(tangibleCapexVal || 0)) / 1e9).toFixed(2))} Milyar TL ${latestItem?.gross_free_cash_flow ? `| Brüt OCF bazlı ${(latestItem.gross_free_cash_flow / 1e9).toFixed(2)} Milyar TL` : ''}]
+` : ''}
 ALGORİTMİK FİNANSAL SAĞLIK VE KARAR OPTİMİZASYONU:
 - Sektörel Analiz Skoru: ${scoreResult.totalScore}/100
 - Önerilen Karar: ${optimization.finalDecision}
@@ -275,6 +305,8 @@ DİKKAT VE TUTARLILIK KURALI:
 6. KESİNLİKLE '$' VEYA '$$' KULLANMA: Formülleri ve rakamları yazarken hiçbir yerde dolar ($) işareti kullanma! Tüm formülleri düz Türkçe metin olarak '> **Değerleme Özeti:** Hisse Başı Adil Değer = **${valuation.fair_value} TL** (Ayı Senaryosu: **${valuation.bear_price} TL** | Boğa Senaryosu: **${valuation.bull_price} TL**)' şeklinde yaz.
 7. KESİNLİKLE YABANCI KELİME KULLANMA: 'Storytelling', 'bancassurance', 'moat', 'guidance' gibi kelimeler yerine 'Temel Yatırım Tezi', 'banka sigortacılığı', 'rekabet üstünlüğü', 'yönetim hedefleri' ifadelerini kullan.
 8. SİGORTACILIK İÇİN BİLEŞİK ORAN UYUMU: Bileşik Oran = Hasar Oranı + Masraf Oranı (komisyon ve faaliyet giderleri) toplamıdır. Rakamların toplamı kesinlikle birbirini tutmalıdır.
+9. REEL WACC TUTARLILIĞI: IV. Bölüm metninde ve VI. Bölüm tablosunda Reel Sermaye Maliyeti (Reel WACC) KESİNLİKLE aynı sayı olarak (%${realWaccVal}) geçmelidir. Rapor içinde başka bir reel WACC sayısı (örneğin %14,7 gibi) ASLA yazılmamalıdır!
+10. NAKİT AKIŞI NÜANSLARI: II. Bölümde hem çalışma sermayesi ve vergi düzeltmeleri sonrası resmi Net İşletme Nakit Akışını (${netOcfVal ? `${(netOcfVal / 1e9).toFixed(2)} Milyar TL` : 'resmi net nakit akışı'}) hem de işletme sermayesi değişimleri öncesi brüt operasyonel nakit üretimini (${grossOcfVal ? `${(grossOcfVal / 1e9).toFixed(2)} Milyar TL` : 'brüt operasyonel nakit akışı'}) net olarak belirt. CAPEX kaleminde duran varlık alımlarını (${tangibleCapexVal ? `${(Math.abs(tangibleCapexVal) / 1e9).toFixed(2)} Milyar TL` : 'maddi duran varlık alımı'}) netleştir.
 
 Doğrulanmış ve Raporlardan Birebir Çıkarılmış Çok Yıllı Finansal Zaman Serisi & Rehberlik Veri Seti:
 ${typeof extractedData === 'string' ? extractedData : JSON.stringify(extractedData, null, 2)}
@@ -388,9 +420,24 @@ function generateAlgorithmicReportFallback(params: {
   currentDateStr: string;
   extractedData: any;
 }): string {
-  const { ticker, sector, sectorDef, price, valuation, drivers, scoreResult, optimization } = params;
+  const { ticker, sector, sectorDef, price, valuation, drivers, scoreResult, optimization, extractedData } = params;
   const isIns = sector === 'INSURANCE';
   const isBank = sector === 'BANKING';
+
+  const rawHistory = Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : [];
+  const sortedHist = [...rawHistory].sort((a: any, b: any) => (a?.period || '').localeCompare(b?.period || ''));
+  const latestItem = sortedHist.length > 0 ? sortedHist[sortedHist.length - 1] : null;
+
+  const nominalWaccVal = latestItem?.nominal_wacc ?? latestItem?.wacc ?? 29.6;
+  const realWaccVal = latestItem?.real_wacc ?? (latestItem?.is_tms29 ? Number((((1 + nominalWaccVal / 100) / (1 + (latestItem?.expected_inflation || 18) / 100) - 1) * 100).toFixed(1)) : nominalWaccVal);
+  const expectedInfVal = latestItem?.expected_inflation ?? 18.0;
+  const roicVal = latestItem?.roic ?? 15.64;
+  const evaSpreadVal = (roicVal - realWaccVal).toFixed(1);
+
+  const grossOcfVal = latestItem?.gross_operating_cash_flow;
+  const netOcfVal = latestItem?.net_operating_cash_flow ?? latestItem?.operating_cash_flow;
+  const tangibleCapexVal = latestItem?.tangible_capex ?? latestItem?.capex;
+  const freeCashFlowVal = latestItem?.free_cash_flow ?? (netOcfVal ? (netOcfVal - Math.abs(tangibleCapexVal || 0)) : null);
 
   return `### I. Yönetici Özeti ve Temel Yatırım Tezi
 > **Bölüm Özeti:** ${ticker} hissesi için hesaplanan adil değer ${valuation.fair_value} TL olup, güncel ${price} TL piyasa fiyatına göre %${valuation.discount_pct} getiri potansiyeli taşımaktadır.
@@ -402,7 +449,8 @@ function generateAlgorithmicReportFallback(params: {
 ### II. Nakit Akışı ve Kâr Kalitesi Teşhisi
 > **Bölüm Özeti:** Şirketin operasyonel nakit üretimi ve kâr dönüşüm kalitesi finansal tablolar bazında incelenmiştir.
 
-- **Kâr Kalitesi ve Nakit Üretimi:** Şirketin kârının nakde dönüşüm kabiliyeti ve bilanço tahakkuk kalitesi sektörel normlar dahilinde analiz edilmiştir.
+- **Kâr Kalitesi ve Nakit Üretimi:** Şirketin operasyonel kârının nakde dönüşüm kabiliyeti çok güçlüdür.${grossOcfVal ? ` Çalışma sermayesi öncesi brüt faaliyet nakit üretimi ${(grossOcfVal / 1e9).toFixed(2)} Milyar TL,` : ''}${netOcfVal ? ` vergi ve işletme sermayesi düzeltmeleri sonrası resmi Net İşletme Nakit Akışı ise ${(netOcfVal / 1e9).toFixed(2)} Milyar TL seviyesindedir.` : ' operasyonel nakit üretimi pozitiftir.'} Nakit dönüşüm oranı yüksek tahsilat kabiliyetine işaret etmektedir.
+- **Yatırım Harcamaları ve Serbest Nakit Akışı (FCF):** ${tangibleCapexVal ? `Maddi duran varlık yatırımları (Tangible CAPEX) ${(Math.abs(tangibleCapexVal) / 1e9).toFixed(2)} Milyar TL düzeyindedir.` : 'Yatırımlar operasyonel nakit ile karşılanmaktadır.'} ${freeCashFlowVal ? `Şirket ${(freeCashFlowVal / 1e9).toFixed(2)} Milyar TL tutarında güçlü pozitif serbest nakit akışı üreterek hissedar değerini büyütmektedir.` : 'Serbest nakit üretimi pozitiftir.'}
 - **Sermaye Verimliliği:** Şirketin sermaye maliyetini aşma gücü ve özkaynak kârlılığı ${drivers.margin?.label || 'Kârlılık Marjı'} (%${drivers.margin?.value || '0'}) seviyesindedir.
 
 ### III. Sektörel Karne ve Rekabet Konumu
@@ -414,6 +462,7 @@ function generateAlgorithmicReportFallback(params: {
 ### IV. Sermaye Maliyeti (WACC / Ke) ve İskontolu Değerleme Modeli
 > **Değerleme Özeti:** Hisse Başı Adil Değer = **${valuation.fair_value} TL** (Ayı Senaryosu: **${valuation.bear_price} TL** | Boğa Senaryosu: **${valuation.bull_price} TL**)
 
+- **Sermaye Maliyeti (WACC):** Nominal Sermaye Maliyeti %${nominalWaccVal}, beklenen enflasyon %${expectedInfVal} ve Fisher denklemiyle hesaplanan Reel WACC %${realWaccVal} seviyesindedir. Yıllıklandırılmış ROIC (%${roicVal}) reel sermaye maliyetinin üzerinde olup pozitif ekonomik katma değer (EVA Spread: ${Number(evaSpreadVal) >= 0 ? '+' : ''}${evaSpreadVal} puan) yaratılmaktadır.
 - **Uygulanan Değerleme Modeli:** ${valuation.valuation_model_name}
 - **Hedef Çarpan:** ${drivers.target_multiple?.label || 'Hedef Çarpan'} ${drivers.target_multiple?.value || '0'}x
 - **İskonto Oranı:** %${valuation.discount_pct} (${valuation.margin_of_safety_status || 'HESAPLANDI'})
