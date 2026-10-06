@@ -694,6 +694,15 @@ function computeIncrementalQuarterlyData(rawData: any[]): any[] {
   if (!rawData || rawData.length === 0) return rawData;
   const sorted = [...rawData].sort((a, b) => parsePeriodSortKey(a.period) - parsePeriodSortKey(b.period));
 
+  // Hangi yılların alt çeyrekleri (Q1, Q2 veya Q3) olduğunu tespit et
+  const yearHasSubQuarters = new Set<number>();
+  for (const d of sorted) {
+    const info = parseYearAndQuarter(d.period);
+    if (info && info.q >= 1 && info.q <= 3) {
+      yearHasSubQuarters.add(info.year);
+    }
+  }
+
   const cumulativeYears = new Set<number>();
   const allYears = Array.from(new Set(sorted.map(d => parseYearAndQuarter(d.period)?.year).filter((y): y is number => y != null)));
   for (const yr of allYears) {
@@ -705,7 +714,21 @@ function computeIncrementalQuarterlyData(rawData: any[]): any[] {
   return sorted.map((item) => {
     const period = item.period || '';
     const info = parseYearAndQuarter(period);
-    if (!info || info.q <= 1) return { ...item };
+    if (!info) return { ...item };
+
+    // 1. Durum: Yalnızca yıllık sonucu olan dönemler (örn. 2022/12, 2023/12, 2024/12 veya 2024 ve o yılın Q1..Q3 verisi yok)
+    // KAP'ta bu veriler 12 aylık toplamdır. Çeyreklik (3 aylık) grafiklerde ölçek anomalisini önlemek için akış kalemleri 4'e bölünür.
+    if ((info.q === 4 || info.q === 0) && !yearHasSubQuarters.has(info.year)) {
+      const result: any = { ...item, _isAnnualScaled: true, _rawCumulative: { ...item } };
+      for (const field of CUMULATIVE_FIELDS) {
+        if (typeof item[field] === 'number' && !isNaN(item[field])) {
+          result[field] = Math.round(item[field] / 4);
+        }
+      }
+      return result;
+    }
+
+    if (info.q <= 1) return { ...item };
 
     // Eğer bu yılın çeyrekleri kümülatif değilse (zaten münferit/tek çeyreklik veriyse), çıkarma yapma!
     if (!cumulativeYears.has(info.year)) {
@@ -743,10 +766,21 @@ function computeTtmChartData(quarterlyData: any[], _rawData?: any[]): any[] {
     return info && info.q >= 1 && info.q <= 3;
   });
   if (!hasSubYearQuarters) {
-    return quarterlyData;
+    return quarterlyData.map(d => (d._isAnnualScaled && d._rawCumulative ? { ...d, ...d._rawCumulative } : d));
   }
 
   return quarterlyData.map((item, idx) => {
+    // Eğer bu dönem yıllık ölçeklendirilmiş bir dönemse, TTM değeri doğrudan orijinal 12 aylık toplamıdır
+    if (item._isAnnualScaled && item._rawCumulative) {
+      const res: any = { ...item };
+      for (const field of CUMULATIVE_FIELDS) {
+        if (item._rawCumulative[field] != null) {
+          res[field] = item._rawCumulative[field];
+        }
+      }
+      return res;
+    }
+
     const result: any = { ...item };
     const sliceStart = Math.max(0, idx - 3);
     const window = quarterlyData.slice(sliceStart, idx + 1);
@@ -3179,22 +3213,22 @@ export default function ValuationTerminal() {
   return (
     <div className="min-h-screen bg-[#0B0F19] text-slate-100 flex flex-col md:flex-row font-sans">
       
-      {/* Sol Kenar Çubuğu: Arşiv & Skor Takibi (Item 6: Katlanabilir ve Sabitlenebilir Kenar Çubuğu) */}
+      {/* Sol Kenar Çubuğu: Arşiv & Skor Takibi (Item 5: Kompakt Kenar Çubuğu ve Toggle Boyutu) */}
       <aside 
         className={`border-r border-slate-800 bg-[#0F172A]/90 flex flex-col flex-shrink-0 transition-all duration-300 print:hidden ${
-          isSidebarCollapsed ? 'w-full md:w-16' : 'w-full md:w-80'
+          isSidebarCollapsed ? 'w-full md:w-14' : 'w-full md:w-64'
         }`}
       >
         {/* Logo ve Başlık */}
-        <div className="p-3 sm:p-4 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 overflow-hidden">
-            <FairValueLogo className="w-8 h-8" />
+        <div className="p-2.5 sm:p-3 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <FairValueLogo className="w-7 h-7 flex-shrink-0" />
             {!isSidebarCollapsed && (
               <div className="min-w-0">
-                <div className="font-extrabold text-sm tracking-tight text-white flex items-center gap-1">
+                <div className="font-extrabold text-xs sm:text-sm tracking-tight text-white flex items-center gap-1">
                   FAIR <span className="text-emerald-400">VALUE</span>
                 </div>
-                <div className="text-[10px] text-slate-400 font-mono truncate">Terminal & Arşiv</div>
+                <div className="text-[9px] text-slate-400 font-mono truncate">Terminal & Arşiv</div>
               </div>
             )}
           </div>
@@ -3204,21 +3238,21 @@ export default function ValuationTerminal() {
               <button
                 type="button"
                 onClick={() => setIsSidebarPinned(p => !p)}
-                className={`p-1.5 rounded transition cursor-pointer ${
+                className={`p-1 rounded transition cursor-pointer ${
                   isSidebarPinned ? 'text-emerald-400 bg-emerald-950/60' : 'text-slate-400 hover:text-white bg-slate-800/60'
                 }`}
                 title={isSidebarPinned ? 'Kenar Çubuğu Sabitlendi' : 'Kenar Çubuğu Sabitliğini Kaldır'}
               >
-                {isSidebarPinned ? <Pin className="w-3.5 h-3.5" /> : <PinOff className="w-3.5 h-3.5" />}
+                {isSidebarPinned ? <Pin className="w-3 h-3" /> : <PinOff className="w-3 h-3" />}
               </button>
             )}
             <button
               type="button"
               onClick={() => setIsSidebarCollapsed(c => !c)}
-              className="p-1.5 text-slate-400 hover:text-white bg-slate-800/60 hover:bg-slate-700 rounded transition cursor-pointer"
+              className="p-1 text-slate-400 hover:text-white bg-slate-800/60 hover:bg-slate-700 rounded transition cursor-pointer"
               title={isSidebarCollapsed ? 'Kenar Çubuğunu Genişlet' : 'Kenar Çubuğunu Daralt'}
             >
-              {isSidebarCollapsed ? <PanelLeftOpen className="w-4 h-4 text-emerald-400" /> : <PanelLeftClose className="w-4 h-4" />}
+              {isSidebarCollapsed ? <PanelLeftOpen className="w-3.5 h-3.5 text-emerald-400" /> : <PanelLeftClose className="w-3.5 h-3.5" />}
             </button>
           </div>
         </div>
@@ -3226,22 +3260,26 @@ export default function ValuationTerminal() {
         {/* Daraltılmış Modda İkon Çubuğu */}
         {isSidebarCollapsed ? (
           <div className="flex-1 flex flex-col items-center py-4 space-y-2">
-            <div className="flex-1 overflow-y-auto space-y-2 w-full px-2 [scrollbar-width:none]">
+            <div className="flex-1 overflow-y-auto space-y-2 w-full px-1.5 [scrollbar-width:none]">
               {savedReports.map(item => (
                 <button
                   key={item.id}
                   onClick={() => { setActiveReportId(item.id); setStep('report'); }}
-                  className={`w-full py-2 rounded flex flex-col items-center justify-center font-bold text-[10px] transition cursor-pointer border ${
+                  className={`w-full py-1.5 rounded flex flex-col items-center justify-center font-bold text-[9px] transition cursor-pointer border ${
                     activeReportId === item.id && step === 'report'
-                      ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300'
+                      ? item.decision === 'AL'
+                        ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300'
+                        : item.decision === 'ALMA'
+                        ? 'bg-rose-950/80 border-rose-500 text-rose-300'
+                        : 'bg-amber-950/80 border-amber-500 text-amber-300'
                       : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
                   }`}
                   title={`${item.ticker} - ${item.decision} (${item.score || 'N/A'}/100)`}
                 >
-                  <span className="truncate max-w-[40px]">{item.ticker.slice(0, 4)}</span>
-                  <span className={`text-[8px] mt-0.5 px-1 rounded ${
+                  <span className="truncate max-w-[36px]">{item.ticker.slice(0, 4)}</span>
+                  <span className={`text-[8px] mt-0.5 px-1 rounded font-bold ${
                     item.decision === 'AL' ? 'text-emerald-400' :
-                    item.decision === 'ALMA' ? 'text-rose-400' : 'text-slate-400'
+                    item.decision === 'ALMA' ? 'text-rose-400' : 'text-amber-400'
                   }`}>
                     {item.decision}
                   </span>
@@ -3251,8 +3289,8 @@ export default function ValuationTerminal() {
           </div>
         ) : (
           <>
-            {/* Sıralama Filtresi & Kayıtlı Analiz Sayacı (Item 1 & 2: Hazır Örnek ve Mükerrer Butonlar Kaldırıldı) */}
-            <div className="p-3 border-b border-slate-800/80 bg-slate-950/40">
+            {/* Sıralama Filtresi & Kayıtlı Analiz Sayacı */}
+            <div className="p-2.5 border-b border-slate-800/80 bg-slate-950/40">
               <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
                 <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-300">
                   <History className="w-3.5 h-3.5 text-slate-400" />
@@ -3282,7 +3320,7 @@ export default function ValuationTerminal() {
             </div>
 
             {/* Kayıtlı Raporlar Listesi */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5">
               {savedReports.length === 0 ? (
                 <div className="text-center py-10 text-slate-500 text-xs">
                   <History className="w-8 h-8 mx-auto mb-2 opacity-40" />
@@ -3295,7 +3333,11 @@ export default function ValuationTerminal() {
                     onClick={() => { setActiveReportId(item.id); setStep('report'); }}
                     className={`p-2.5 rounded-lg border cursor-pointer transition flex items-center justify-between group ${
                       activeReportId === item.id && step === 'report'
-                        ? 'bg-slate-800 border-emerald-500/50 shadow-md shadow-emerald-950/20'
+                        ? item.decision === 'AL'
+                          ? 'bg-slate-800/90 border-emerald-500/60 shadow-md shadow-emerald-950/30 ring-1 ring-emerald-500/30'
+                          : item.decision === 'ALMA'
+                          ? 'bg-slate-800/90 border-rose-500/60 shadow-md shadow-rose-950/30 ring-1 ring-rose-500/30'
+                          : 'bg-slate-800/90 border-amber-500/60 shadow-md shadow-amber-950/30 ring-1 ring-amber-500/30'
                         : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800/60'
                     }`}
                   >
@@ -3308,9 +3350,9 @@ export default function ValuationTerminal() {
                         )}
                         <span className="font-bold text-sm text-white truncate">{item.ticker}</span>
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                          item.decision === 'AL' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
-                          item.decision === 'ALMA' ? 'bg-rose-950 text-rose-400 border border-rose-800' :
-                          'bg-slate-800 text-slate-400'
+                          item.decision === 'AL' ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/80' :
+                          item.decision === 'ALMA' ? 'bg-rose-950/80 text-rose-400 border border-rose-800/80' :
+                          'bg-amber-950/80 text-amber-400 border border-amber-800/80'
                         }`}>
                           {item.decision}
                         </span>
@@ -4075,26 +4117,7 @@ export default function ValuationTerminal() {
                           <div className="flex justify-between items-center mb-4">
                             <h3 className="text-sm font-bold text-white">Özet Gelir Tablosu (Bin TRY)</h3>
                             <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const rows = [
-                                    currentSector === 'INSURANCE' ? ['Prim Üretimi', formatAmount(fv(latestPeriod, 'gross_written_premiums'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyPeriod, 'gross_written_premiums'), 'bin', false, '', '', 'Bin TRY')] : ['Satışlar', formatAmount(fv(latestPeriod, 'revenue'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyPeriod, 'revenue'), 'bin', false, '', '', 'Bin TRY')],
-                                    currentSector === 'INSURANCE' ? null : ['Brüt Kar', formatAmount(fv(latestPeriod, 'gross_profit'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyPeriod, 'gross_profit'), 'bin', false, '', '', 'Bin TRY')],
-                                    currentSector === 'INSURANCE' ? null : ['Esas Faaliyet Karı', formatAmount(fv(latestPeriod, 'operating_income'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyPeriod, 'operating_income'), 'bin', false, '', '', 'Bin TRY')],
-                                    currentSector === 'INSURANCE' ? ['Teknik Bölüm Dengesi', formatAmount(fv(latestPeriod, 'technical_balance'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyPeriod, 'technical_balance'), 'bin', false, '', '', 'Bin TRY')] : ['FAVÖK', formatAmount(fv(latestPeriod, 'ebitda'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyPeriod, 'ebitda'), 'bin', false, '', '', 'Bin TRY')],
-                                    currentSector === 'INSURANCE' ? ['Yatırım Gelirleri', formatAmount(fv(latestPeriod, 'investment_income'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyPeriod, 'investment_income'), 'bin', false, '', '', 'Bin TRY')] : null,
-                                    ['Net Dönem Karı', formatAmount(fv(latestPeriod, 'net_income'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyPeriod, 'net_income'), 'bin', false, '', '', 'Bin TRY')]
-                                  ].filter(Boolean) as (string | number)[][];
-                                  exportTableToCsv(`${activeReport?.ticker || 'Sirket'}_Ozet_Gelir_Tablosu`, ['Kalem', latestPeriodLabel, yoyPeriodLabel], rows);
-                                }}
-                                className="text-[10px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-0.5 rounded border border-slate-700 transition flex items-center gap-1 cursor-pointer"
-                                title="Excel / CSV Olarak İndir"
-                              >
-                                <Download className="w-3 h-3 text-emerald-400" /> CSV
-                              </button>
                               <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">TRY</span>
-                              <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">{chartData.length} çeyrek</span>
                             </div>
                           </div>
                           <table className="w-full text-sm text-left">
@@ -4141,26 +4164,7 @@ export default function ValuationTerminal() {
                           <div className="flex justify-between items-center mb-4">
                             <h3 className="text-sm font-bold text-white">Özet Bilanço (Bin TRY)</h3>
                             <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const rows = [
-                                    ['Dönen Varlıklar', formatAmount(fv(latestBS, 'current_assets'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyBS, 'current_assets'), 'bin', false, '', '', 'Bin TRY')],
-                                    ['Duran Varlıklar', formatAmount(fv(latestBS, 'non_current_assets'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyBS, 'non_current_assets'), 'bin', false, '', '', 'Bin TRY')],
-                                    ['Toplam Varlıklar', formatAmount(fv(latestBS, 'total_assets'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyBS, 'total_assets'), 'bin', false, '', '', 'Bin TRY')],
-                                    ['Finansal Borçlar', formatAmount(fv(latestBS, 'financial_debt'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyBS, 'financial_debt'), 'bin', false, '', '', 'Bin TRY')],
-                                    ['Net Borç', formatAmount(fv(latestBS, 'net_debt'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyBS, 'net_debt'), 'bin', false, '', '', 'Bin TRY')],
-                                    ['Özkaynaklar', formatAmount(fv(latestBS, 'equity'), 'bin', false, '', '', 'Bin TRY'), formatAmount(fv(yoyBS, 'equity'), 'bin', false, '', '', 'Bin TRY')]
-                                  ];
-                                  exportTableToCsv(`${activeReport?.ticker || 'Sirket'}_Ozet_Bilanco`, ['Kalem', latestBS?.period || '', yoyBSLabel || ''], rows);
-                                }}
-                                className="text-[10px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-0.5 rounded border border-slate-700 transition flex items-center gap-1 cursor-pointer"
-                                title="Excel / CSV Olarak İndir"
-                              >
-                                <Download className="w-3 h-3 text-emerald-400" /> CSV
-                              </button>
                               <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">TRY</span>
-                              <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">{chartData.length} çeyrek</span>
                             </div>
                           </div>
                           <table className="w-full text-sm text-left">
@@ -5207,7 +5211,7 @@ export default function ValuationTerminal() {
                                     <tr key={rIdx} className={`hover:bg-slate-800/40 transition-colors group ${
                                       row.isHeader ? 'bg-slate-900/60 font-bold' : ''
                                     } ${row.highlight ? 'bg-emerald-950/20' : ''}`}>
-                                      <td className="p-3 pl-8 font-sans">
+                                      <td className={`p-3 font-sans ${row.isHeader ? 'pl-6' : 'pl-11 md:pl-12'}`}>
                                         <div className="flex items-center justify-between gap-3">
                                           <div>
                                             <div className={`text-xs md:text-sm tracking-tight ${row.isHeader ? 'font-bold text-white' : 'font-medium text-slate-200'}`}>
@@ -5280,7 +5284,7 @@ export default function ValuationTerminal() {
                                     <tr key={rIdx} className={`hover:bg-slate-800/40 transition-colors group ${
                                       row.isHeader ? 'bg-slate-900/60 font-bold' : ''
                                     } ${row.highlight ? 'bg-emerald-950/20' : ''}`}>
-                                      <td className="p-3 pl-8 font-sans">
+                                      <td className={`p-3 font-sans ${row.isHeader ? 'pl-6' : 'pl-11 md:pl-12'}`}>
                                         <div className="flex items-center justify-between gap-3">
                                           <div>
                                             <div className={`text-xs md:text-sm tracking-tight ${row.isHeader ? 'font-bold text-white' : 'font-medium text-slate-200'}`}>
@@ -5351,7 +5355,7 @@ export default function ValuationTerminal() {
                                     <tr key={rIdx} className={`hover:bg-slate-800/40 transition-colors group ${
                                       row.isHeader ? 'bg-slate-900/60 font-bold' : ''
                                     } ${row.highlight ? 'bg-emerald-950/20' : ''}`}>
-                                      <td className="p-3 pl-8 font-sans">
+                                      <td className={`p-3 font-sans ${row.isHeader ? 'pl-6' : 'pl-11 md:pl-12'}`}>
                                         <div className="flex items-center justify-between gap-3">
                                           <div>
                                             <div className={`text-xs md:text-sm tracking-tight ${row.isHeader ? 'font-bold text-white' : 'font-medium text-slate-200'}`}>
@@ -5429,7 +5433,7 @@ export default function ValuationTerminal() {
                                         className="hover:bg-slate-800/40 transition-colors group cursor-pointer"
                                         title="Formül ve standart açıklaması için tıklayın"
                                       >
-                                        <td className="p-3 pl-8 font-sans">
+                                        <td className="p-3 pl-11 md:pl-12 font-sans">
                                           <div className="flex items-center justify-between gap-3">
                                             <div className="flex items-center gap-1.5">
                                               <span className="font-semibold text-slate-200 text-xs md:text-sm tracking-tight group-hover:text-cyan-300 transition">
@@ -6289,32 +6293,37 @@ export default function ValuationTerminal() {
                           },
                           p: ({ children, ...props }) => {
                             const text = extractTextFromChildren(children);
-                            if (text.startsWith('Analist Kararı:') || text.startsWith('**Analist Kararı:') || text.startsWith('### Analist Kararı:')) {
-                              const isAlma = /\b(ALMA|SAT)\b/i.test(text);
-                              const isAl = /\b(AL)\b/i.test(text) && !isAlma;
-                              const verdict = isAl ? 'AL' : isAlma ? 'ALMA' : 'NÖTR';
-                              const verdictTitle = isAl 
+                            if (/Analist\s+Karar[ıi]/i.test(text)) {
+                              const verdictMatch = text.match(/Analist\s+Karar[ıi]\s*[:=-]?\s*\[?\s*\*?\*?\s*(ALMA|SAT|AL|NÖTR|NOTR|TUT)\s*\*?\*?\s*\]?/i);
+                              const matchedVerdict = verdictMatch ? verdictMatch[1].toUpperCase() : '';
+                              const isAlma = ['ALMA', 'SAT'].includes(matchedVerdict) || (/\b(ALMA|SAT)\b/i.test(text) && !/\b(AL)\b/i.test(text.replace(/\b(ALMA)\b/gi, '')));
+                              const isAl = ['AL'].includes(matchedVerdict) || (/\b(AL)\b/i.test(text) && !isAlma);
+                              const fallbackVerdict = activeReport?.decision || 'NÖTR';
+                              const verdict = isAl ? 'AL' : isAlma ? 'ALMA' : (verdictMatch ? 'NÖTR' : fallbackVerdict);
+                              const isVerdictAl = verdict === 'AL';
+                              const isVerdictAlma = verdict === 'ALMA';
+                              const verdictTitle = isVerdictAl 
                                 ? 'Kurumsal Alım & Portföy Ağırlığı Artır' 
-                                : isAlma 
+                                : isVerdictAlma 
                                 ? 'Riskli / Sermaye Kaybı Riski (Yatırım Önerilmez)' 
                                 : 'Bekle-Gör / Nötr (İskonto Marjı Sınırlı)';
 
-                              const cleanBody = text.replace(/^(?:#{1,3}\s*)?\*{0,2}Analist Kararı:\s*(ALMA|SAT|AL|NÖTR)?\*{0,2}\s*/i, '').trim();
+                              const cleanBody = text.replace(/^(?:#{1,3}\s*)?\*{0,2}Analist\s+Karar[ıi]\s*[:=-]?\s*\[?\s*\*?\*?\s*(?:ALMA|SAT|AL|NÖTR|NOTR|TUT)?\s*\*?\*?\]?\*{0,2}\s*/i, '').trim();
 
                               return (
                                 <div className={`my-8 rounded-2xl border p-6 md:p-8 shadow-2xl transition-all ${
-                                  isAl
+                                  isVerdictAl
                                     ? 'bg-gradient-to-br from-emerald-950/70 via-slate-900/95 to-slate-950 border-emerald-500/50 shadow-emerald-950/40 ring-1 ring-emerald-500/20'
-                                    : isAlma
+                                    : isVerdictAlma
                                     ? 'bg-gradient-to-br from-rose-950/70 via-slate-900/95 to-slate-950 border-rose-500/50 shadow-rose-950/40 ring-1 ring-rose-500/20'
                                     : 'bg-gradient-to-br from-amber-950/60 via-slate-900/95 to-slate-950 border-amber-500/50 shadow-amber-950/40 ring-1 ring-amber-500/20'
                                 }`}>
                                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 pb-5 border-b border-slate-800">
                                     <div className="flex items-center gap-4">
                                       <div className={`px-5 py-2.5 rounded-xl font-mono font-black text-xl tracking-wider shadow-lg flex items-center justify-center min-w-[90px] ${
-                                        isAl 
+                                        isVerdictAl 
                                           ? 'bg-emerald-500 text-white shadow-emerald-950/60' 
-                                          : isAlma 
+                                          : isVerdictAlma 
                                           ? 'bg-rose-500 text-white shadow-rose-950/60' 
                                           : 'bg-amber-500 text-slate-950 shadow-amber-950/60'
                                       }`}>
@@ -6325,7 +6334,7 @@ export default function ValuationTerminal() {
                                           Fon Yöneticisi & Baş Analist Nihai Kararı
                                         </div>
                                         <div className={`text-base font-extrabold ${
-                                          isAl ? 'text-emerald-300' : isAlma ? 'text-rose-300' : 'text-amber-300'
+                                          isVerdictAl ? 'text-emerald-300' : isVerdictAlma ? 'text-rose-300' : 'text-amber-300'
                                         }`}>
                                           {verdictTitle}
                                         </div>
@@ -6485,9 +6494,9 @@ export default function ValuationTerminal() {
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-bold font-mono text-emerald-400">{item.period || item.createdAt}</span>
                               <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                                item.decision === 'AL' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
-                                item.decision === 'ALMA' ? 'bg-rose-950 text-rose-400 border border-rose-800' :
-                                'bg-slate-800 text-slate-400'
+                                item.decision === 'AL' ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/80' :
+                                item.decision === 'ALMA' ? 'bg-rose-950/80 text-rose-400 border border-rose-800/80' :
+                                'bg-amber-950/80 text-amber-400 border border-amber-800/80'
                               }`}>
                                 {item.decision}
                               </span>
@@ -6615,9 +6624,9 @@ export default function ValuationTerminal() {
                               </td>
                               <td className="p-3.5">
                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                                  item.decision === 'AL' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
-                                  item.decision === 'ALMA' ? 'bg-rose-950 text-rose-400 border border-rose-800' :
-                                  'bg-slate-800 text-slate-400'
+                                  item.decision === 'AL' ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/80' :
+                                  item.decision === 'ALMA' ? 'bg-rose-950/80 text-rose-400 border border-rose-800/80' :
+                                  'bg-amber-950/80 text-amber-400 border border-amber-800/80'
                                 }`}>
                                   {item.decision}
                                 </span>
