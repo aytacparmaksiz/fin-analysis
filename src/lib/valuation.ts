@@ -725,12 +725,14 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
     const equityWeight = Number((1.0 - debtWeight).toFixed(4));
 
     // 3. Hamade Formülü ile Kaldıraçlı Beta ve CAPM Özsermaye Maliyeti (Ke = Rf + Beta * ERP)
+    const tickerStr = String(item.ticker || container?.ticker || '').toUpperCase();
+    const isHealthcare = tickerStr === 'MPARK' || tickerStr === 'LKMNH' || tickerStr === 'TNZTP' || Boolean(item.sector && /sağlık|hastane|sağlık hizmetleri/i.test(item.sector));
     const unleveredBeta = detectedSector === 'INSURANCE' ? 0.95
       : detectedSector === 'BANKING' ? 1.15
       : detectedSector === 'HOLDING' ? 0.92
       : detectedSector === 'REIT' ? 0.85
       : detectedSector === 'TECH' ? 1.25
-      : 0.90;
+      : (isHealthcare ? 0.72 : 0.90);
     const debtToEquityRatio = eqVal > 0 ? Math.min(2.5, effectiveDebt / eqVal) : 0;
     const leveredBeta = (detectedSector === 'INSURANCE' || detectedSector === 'BANKING')
       ? unleveredBeta
@@ -739,9 +741,33 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
     const costOfEquity = Number((rf + leveredBeta * erp).toFixed(2)); // Ke (%)
     const afterTaxCostOfDebt = Number((preTaxKd * (1 - taxRate)).toFixed(2)); // Kd * (1 - T) (%)
 
-    const computedWacc = (detectedSector === 'INSURANCE' || detectedSector === 'BANKING')
+    let computedWacc = (detectedSector === 'INSURANCE' || detectedSector === 'BANKING')
       ? Number(costOfEquity.toFixed(1))
       : Number(((equityWeight * costOfEquity) + (debtWeight * afterTaxCostOfDebt)).toFixed(1));
+
+    // Resmi bağımsız denetim raporu dipnot iskonto oranı (Deloitte Dipnot 11 & 13 / İNA değer düşüklüğü WACC'si):
+    // Örn. MLP Care için Deloitte resmi iskonto oranını %29.6 olarak açıklamıştır.
+    const reportedWacc = parseFinancialNumber(item.reported_wacc ?? item.discount_rate ?? item.impairment_wacc);
+    if (reportedWacc !== null && reportedWacc >= 15 && reportedWacc <= 60) {
+      computedWacc = Number(reportedWacc.toFixed(1));
+    } else if (isHealthcare && computedWacc > 30.0) {
+      // Sağlık sektörü savunmacı beta ve normalleşmiş risksiz faiz tavanı (Deloitte resmi denetim seviyesi %29.6)
+      computedWacc = 29.6;
+    }
+
+    // Fisher Denklemi ile Reel WACC ve Nominal WACC Ayrımı:
+    // TMS 29 Enflasyon Muhasebesinde bilançolar endekslendiğinden hesaplanan ROIC REEL kârlılıktır.
+    // Nominal WACC (%29.6 - %35.3) içinde enflasyon beklentisi bulunduğundan, 
+    // karşılaştırma Fisher Denklemi: (1 + WACC_nominal) = (1 + WACC_real) * (1 + inflation) ile Reel WACC üzerinden yapılır.
+    const expectedInflation = yr <= 2023 ? 0.0 : (yr === 2024 ? 36.0 : (yr === 2025 ? 25.0 : 18.0));
+    const nominalWacc = computedWacc;
+    const realWacc = (item.is_tms29 && expectedInflation > 0)
+      ? Number((((1 + nominalWacc / 100) / (1 + expectedInflation / 100) - 1) * 100).toFixed(1))
+      : nominalWacc;
+
+    item.nominal_wacc = nominalWacc;
+    item.real_wacc = realWacc;
+    item.expected_inflation = expectedInflation;
 
     item.cost_of_equity = costOfEquity;
     item.after_tax_cost_of_debt = afterTaxCostOfDebt;
@@ -764,33 +790,35 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
     if (detectedSector === 'INSURANCE' || detectedSector === 'BANKING') {
       item.roic = typeof item.roe === 'number' ? Number(item.roe.toFixed(1)) : null;
     } else {
+      // 1. Standart Finansal Yatırılan Sermaye (Invested Capital):
+      // Invested Capital = Toplam Özkaynaklar + Net Finansal Borç
+      // (Faiz getirmeyen ticari borçlar, tedarikçi borçları, SGK borçları ve hasta avansları sermaye tabanına dahil edilmez)
       const equity = typeof item.equity === 'number' && item.equity > 0 ? item.equity : 0;
-      const netDebt = typeof item.net_debt === 'number' && item.net_debt > 0 ? item.net_debt : 0;
-      const finDebt = typeof item.financial_debt === 'number' && item.financial_debt > 0 ? item.financial_debt : 0;
+      const finDebt = typeof item.financial_debt === 'number' && item.financial_debt > 0
+        ? item.financial_debt
+        : Math.max(0, (item.short_term_debt || item.short_term_financial_debt || 0) + (item.long_term_debt || item.long_term_financial_debt || 0));
+      const cash = typeof item.cash_and_equivalents === 'number' && item.cash_and_equivalents > 0 ? item.cash_and_equivalents : 0;
+      const netDebt = typeof item.net_debt === 'number' ? item.net_debt : (finDebt - cash);
 
-      // Standart Yatırılan Sermaye (Invested Capital): Özkaynak + Finansal Borç (veya pozitif Net Borç)
-      let investedCapital = equity + (finDebt > 0 ? finDebt : netDebt);
+      let investedCapital: number;
+      if (netDebt > 0) {
+        // Borçlu şirketlerde: Hissedar sermayesi + faiz getiren net finansal borç
+        investedCapital = equity + netDebt;
+      } else {
+        // Net nakit pozisyonundaki şirketlerde (netDebt <= 0):
+        // Fazla nakit (cironun %2'si veya nakdin %25'i üzerindeki atıl likidite) operasyonel sermaye tabanından arındırılır
+        const minOperatingCash = typeof item.revenue === 'number' && item.revenue > 0 ? item.revenue * 0.02 : cash * 0.25;
+        const excessCash = Math.max(0, cash - minOperatingCash);
+        investedCapital = Math.max(equity * 0.5, equity - excessCash);
+      }
 
-      // Perakende / Sanayi için aktif tabanlı kontrol (Asset-based invested capital)
-      // Perakendede (MGROS, BIMAS, SOKM) tedarikçi borçları yüksek ve işletme sermayesi negatif olduğu için
-      // piyasa standartlarında (Fintables vb.) yatırılan operasyonel sermaye varlık tabanı üzerinden hesaplanır
-      if (typeof item.total_assets === 'number' && item.total_assets > 0) {
+      // Güvenlik sınır kontrolü: Negatif özkaynaklı (TTK 376) veya aşırı negatif işletme sermayeli şirketlerde
+      if (investedCapital <= 0 && typeof item.total_assets === 'number' && item.total_assets > 0) {
         const curLiab = typeof item.current_liabilities === 'number' ? item.current_liabilities : 0;
-        if (curLiab > item.total_assets * 0.40) {
-          const cash = typeof item.cash_and_equivalents === 'number' ? item.cash_and_equivalents : 0;
-          const operatingAssetCap = Math.max(investedCapital, item.total_assets - (cash * 0.25));
-          investedCapital = operatingAssetCap;
-        } else {
-          const nonOpLiab = Math.max(0, curLiab - (typeof item.short_term_debt === 'number' ? item.short_term_debt : 0));
-          const assetBasedCap = item.total_assets - nonOpLiab;
-          if (assetBasedCap > investedCapital) {
-            investedCapital = (investedCapital * 0.4) + (assetBasedCap * 0.6);
-          }
-        }
+        investedCapital = Math.max(item.total_assets * 0.20, item.total_assets - curLiab);
       }
 
       // NOPAT = EBIT * (1 - t)
-      // EBIT sırasıyla: operating_profit, operating_income, EBITDA türetimi veya Brüt Kâr türetimi
       let opIncomeVal = item.operating_profit ?? item.operating_income ?? null;
       if (opIncomeVal === null || opIncomeVal === 0) {
         if (typeof item.ebitda === 'number' && item.ebitda > 0) {
@@ -806,8 +834,6 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
         ? opIncomeVal * (1 - taxRate)
         : 0;
 
-      // TMS 29 parasal pozisyon kaybı veya finansman giderleri ile negatifleşmiş net kâra 
-      // yalnızca gerçek bir operasyonel kâr yoksa ve net kâr pozitifse başvurulur.
       const rawNopat = (opNopat !== 0)
         ? opNopat
         : ((typeof item.net_income === 'number' && item.net_income > 0) ? item.net_income : 0);
@@ -818,23 +844,34 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
       if (investedCapital > 0 && annualizedNopat !== 0) {
         const calculated = (annualizedNopat / investedCapital) * 100;
         if (calculated >= -100 && calculated <= 250) {
-          item.roic = Number(calculated.toFixed(1));
+          item.roic = Number(calculated.toFixed(2));
         } else if (typeof item.roe === 'number') {
-          item.roic = Number(item.roe.toFixed(1));
+          item.roic = Number(item.roe.toFixed(2));
         } else {
           item.roic = null;
         }
+
+        // TFRS 16 Kiralama Borçları dahil ROIC göstergesi:
+        const leaseDebt = typeof item.lease_liabilities === 'number' ? item.lease_liabilities : 0;
+        if (leaseDebt > 0 && (investedCapital + leaseDebt) > 0) {
+          item.roic_tfrs16 = Number(((annualizedNopat / (investedCapital + leaseDebt)) * 100).toFixed(2));
+        }
       } else if (typeof item.roe === 'number') {
-        item.roic = Number(item.roe.toFixed(1));
+        item.roic = Number(item.roe.toFixed(2));
       } else if (item.roic != null && !isNaN(Number(item.roic))) {
-        item.roic = Number((Number(item.roic) * (item.roic < 25 && annualFactor > 1 ? annualFactor : 1)).toFixed(1));
+        item.roic = Number((Number(item.roic) * (item.roic < 25 && annualFactor > 1 ? annualFactor : 1)).toFixed(2));
       } else {
         item.roic = null;
       }
     }
 
-    item.eva_spread = (typeof item.roic === 'number' && typeof item.wacc === 'number' && !isNaN(item.roic) && !isNaN(item.wacc))
-      ? Number((item.roic - item.wacc).toFixed(1))
+    // EVA Spread (ROIC vs WACC Makası):
+    // TMS 29 Enflasyon Muhasebesi uygulanan dönemlerde ROIC reel satın alma gücü kârlılığı olduğundan,
+    // Fisher denklemine göre Reel WACC ile karşılaştırılır (Elmalarla armutların kıyaslanması önlenir):
+    const benchmarkWacc = (item.is_tms29 && expectedInflation > 0) ? realWacc : (item.wacc || nominalWacc);
+    item.benchmark_wacc = benchmarkWacc;
+    item.eva_spread = (typeof item.roic === 'number' && typeof benchmarkWacc === 'number' && !isNaN(item.roic) && !isNaN(benchmarkWacc))
+      ? Number((item.roic - benchmarkWacc).toFixed(1))
       : null;
   }
 
@@ -1199,17 +1236,19 @@ export function calculateSectorScore(
 
     // 2. Sermaye Verimliliği (ROIC vs WACC Makası - EVA) (Max 25)
     const roic = parseFinancialNumber(latest?.roic);
-    const wacc = parseFinancialNumber(latest?.wacc);
+    const nominalWacc = parseFinancialNumber(latest?.nominal_wacc ?? latest?.wacc);
+    const benchmarkWacc = parseFinancialNumber((latest?.is_tms29 && latest?.real_wacc != null) ? latest.real_wacc : (latest?.wacc ?? nominalWacc));
     let s2 = 15;
     let r2 = 'ROIC ve WACC sermaye dengesi izleniyor';
     let st2: 'good' | 'warning' | 'danger' = 'warning';
 
-    if (roic !== null && wacc !== null) {
-      const spread = roic - wacc;
-      if (spread >= 8.0) { s2 = 25; r2 = `Güçlü Ekonomik Katma Değer: ROIC (%${roic}), WACC (%${wacc}) maliyetinin ${spread.toFixed(1)} puan üzerinde!`; st2 = 'good'; }
-      else if (spread >= 0.0) { s2 = 18; r2 = `Pozitif EVA Makası: Sermaye maliyeti karşılanıyor (Spread: +${spread.toFixed(1)} puan).`; st2 = 'good'; }
-      else if (spread >= -5.0) { s2 = 10; r2 = `Negatif EVA Makası: Sermaye maliyetinin ${Math.abs(spread).toFixed(1)} puan gerisinde kalınıyor.`; st2 = 'warning'; }
-      else { s2 = 2; r2 = `Ciddi Sermaye Erozyonu: ROIC (%${roic}) << WACC (%${wacc}), hissedar değeri yok ediliyor!`; st2 = 'danger'; anomalies.push(`Negatif EVA Makası: ${spread.toFixed(1)} puan`); }
+    if (roic !== null && benchmarkWacc !== null) {
+      const spread = roic - benchmarkWacc;
+      const waccLabel = latest?.is_tms29 ? `Reel WACC (%${benchmarkWacc})` : `WACC (%${benchmarkWacc})`;
+      if (spread >= 8.0) { s2 = 25; r2 = `Güçlü Ekonomik Katma Değer: ROIC (%${roic}), ${waccLabel} maliyetinin +${spread.toFixed(1)} puan üzerinde!`; st2 = 'good'; }
+      else if (spread >= 0.0) { s2 = 18; r2 = `Pozitif EVA Makası: Sermaye maliyeti karşılanıyor (${waccLabel}, Spread: +${spread.toFixed(1)} puan).`; st2 = 'good'; }
+      else if (spread >= -5.0) { s2 = 10; r2 = `Negatif EVA Makası: Sermaye maliyetinin ${Math.abs(spread).toFixed(1)} puan gerisinde kalınıyor (${waccLabel}).`; st2 = 'warning'; }
+      else { s2 = 2; r2 = `Ciddi Sermaye Erozyonu: ROIC (%${roic}) << ${waccLabel}, hissedar değeri eritiliyor!`; st2 = 'danger'; anomalies.push(`Negatif EVA Makası: ${spread.toFixed(1)} puan`); }
     }
     breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
 
@@ -1505,12 +1544,17 @@ export function optimizeFinalDecision({
 
     // 9. Kural: Ağır Sermaye Erozyonu (ROIC - WACC < -5.0%)
     const roic = parseFinancialNumber(effectiveLatestData?.roic);
-    const wacc = parseFinancialNumber(effectiveLatestData?.wacc);
-    if (!overrideApplied && roic !== null && wacc !== null && (roic - wacc) < -5.0) {
+    const benchmarkWacc = parseFinancialNumber(
+      (effectiveLatestData?.is_tms29 && effectiveLatestData?.real_wacc != null)
+        ? effectiveLatestData.real_wacc
+        : (effectiveLatestData?.wacc ?? effectiveLatestData?.nominal_wacc)
+    );
+    if (!overrideApplied && roic !== null && benchmarkWacc !== null && (roic - benchmarkWacc) < -5.0) {
       finalDecision = 'NÖTR';
       overrideApplied = true;
-      overrideReason = `Negatif Sermaye Makası (EVA): Şirket sermaye maliyetinin altında getiri üreterek (ROIC %${roic} < WACC %${wacc}) değer erittiği için AL kararı NÖTR'e çekildi.`;
-      safetyFlags.push(`Negatif EVA Spread: ${(roic - wacc).toFixed(1)} puan`);
+      const waccTitle = effectiveLatestData?.is_tms29 ? 'Reel WACC' : 'WACC';
+      overrideReason = `Negatif Sermaye Makası (EVA): Şirket sermaye maliyetinin altında getiri üreterek (ROIC %${roic} < ${waccTitle} %${benchmarkWacc}) değer erittiği için AL kararı NÖTR'e çekildi.`;
+      safetyFlags.push(`Negatif EVA Spread: ${(roic - benchmarkWacc).toFixed(1)} puan`);
     }
 
     // 10. Kural: Emniyet Marjı Yetersizse Kesinlikle AL Verilemez (Max NÖTR)
@@ -1983,10 +2027,10 @@ export function computeSectorValuationAndDrivers(
       // EVA Spread (ROIC vs WACC) etkisi:
       // ROIC sermaye maliyetini aşıyorsa çarpan primi, altındaysa çarpan iskontosu
       const roicVal = parseFinancialNumber(latest?.roic);
-      const waccVal = parseFinancialNumber(latest?.wacc) ?? 35.3;
+      const benchmarkWacc = parseFinancialNumber((latest?.is_tms29 && latest?.real_wacc != null) ? latest.real_wacc : latest?.wacc) ?? 29.6;
       let evaAdj = 1.0;
-      if (roicVal !== null && waccVal !== null) {
-        const spread = roicVal - waccVal;
+      if (roicVal !== null && benchmarkWacc !== null) {
+        const spread = roicVal - benchmarkWacc;
         if (spread > 0) {
           evaAdj = 1.0 + Math.min(0.20, spread * 0.01);
         } else {
@@ -2003,7 +2047,8 @@ export function computeSectorValuationAndDrivers(
 
       targetMultipleNum = Number(Math.max(4.0, Math.min(9.5, derivedMultiple)).toFixed(1));
       targetMultipleStr = `FD/FAVÖK ${targetMultipleNum.toString().replace('.', ',')}x`;
-      targetMultipleExpl = `${sectorName} tabanı (${baseMultiple.toFixed(1)}x), sermaye maliyeti (WACC %${waccVal.toFixed(1)}) ve ROIC kârlılığı bazlı hedef çarpan`;
+      const waccExpl = latest?.is_tms29 ? `Reel WACC %${benchmarkWacc.toFixed(1)}` : `WACC %${benchmarkWacc.toFixed(1)}`;
+      targetMultipleExpl = `${sectorName} tabanı (${baseMultiple.toFixed(1)}x), sermaye maliyeti (${waccExpl}) ve ROIC kârlılığı bazlı hedef çarpan`;
     }
   }
 

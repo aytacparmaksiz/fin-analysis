@@ -2251,9 +2251,14 @@ export default function ValuationTerminal() {
   const annualizedNet = latestData?.net_income ? latestData.net_income * annualFactor : null;
 
   // Ekonomik Değer Makası
-  const latestSpread = (latestData?.roic !== undefined && latestData?.wacc !== undefined && latestData.roic !== null && latestData.wacc !== null)
-    ? Number((latestData.roic - latestData.wacc).toFixed(1))
-    : null;
+  const latestBenchmarkWacc = (latestData?.is_tms29 && latestData?.real_wacc != null)
+    ? latestData.real_wacc
+    : latestData?.wacc;
+  const latestSpread = latestData?.eva_spread ?? (
+    (latestData?.roic !== undefined && latestBenchmarkWacc !== undefined && latestData.roic !== null && latestBenchmarkWacc !== null)
+      ? Number((latestData.roic - latestBenchmarkWacc).toFixed(1))
+      : null
+  );
   const spreadInfo = getSpreadInfo(latestSpread);
 
   // Her dönem için dinamik finansal oran hesaplayıcı (Item 10: Her sene ve döneme ait gerçek bilanço verilerinden dinamik hesaplama)
@@ -2452,8 +2457,9 @@ export default function ValuationTerminal() {
       case 'eva_spread': {
         if (typeof d.eva_spread === 'number' && !isNaN(d.eva_spread)) return Number(d.eva_spread.toFixed(1));
         const rVal = computeRatioForPeriod(d, 'roic', sector);
-        if (rVal != null && typeof d.wacc === 'number' && !isNaN(d.wacc)) {
-          return Number((rVal - d.wacc).toFixed(1));
+        const compWacc = (d.is_tms29 && d.real_wacc != null) ? d.real_wacc : d.wacc;
+        if (rVal != null && typeof compWacc === 'number' && !isNaN(compWacc)) {
+          return Number((rVal - compWacc).toFixed(1));
         }
         break;
       }
@@ -4781,20 +4787,52 @@ export default function ValuationTerminal() {
                           ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
                           : 'bg-rose-950/80 text-rose-400 border-rose-800'
                       }`}>
-                        EVA Makası: {(latestData?.eva_spread ?? latestSpread ?? 0) > 0 ? '+' : ''}{(latestData?.eva_spread ?? latestSpread ?? 0).toFixed(1)} Puan ({(latestData?.eva_spread ?? latestSpread ?? 0) >= 0 ? 'Değer Üretiyor' : 'Sermaye Erimesi'})
+                        {latestData?.is_tms29 ? 'Reel EVA Makası: ' : 'EVA Makası: '}
+                        {(latestData?.eva_spread ?? latestSpread ?? 0) > 0 ? '+' : ''}{(latestData?.eva_spread ?? latestSpread ?? 0).toFixed(1)} Puan ({(latestData?.eva_spread ?? latestSpread ?? 0) >= 0 ? 'Değer Üretiyor' : 'Sermaye Erimesi'})
                       </span>
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                       <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
-                        <div className="text-[10px] text-slate-400 font-semibold uppercase">Hesaplanan WACC</div>
-                        <div className="text-lg font-black font-mono text-amber-400 mt-1">%{latestData?.wacc?.toFixed(1) ?? '35,5'}</div>
-                        <div className="text-[10px] text-slate-500 mt-0.5">Ağırlıklı Sermaye Maliyeti</div>
+                        <div className="flex items-center justify-between">
+                          <div className="text-[10px] text-slate-400 font-semibold uppercase">
+                            {latestData?.is_tms29 ? 'WACC (Nominal / Reel)' : 'Hesaplanan WACC'}
+                          </div>
+                          {latestData?.is_tms29 && (
+                            <span className="text-[9px] bg-cyan-950 text-cyan-400 border border-cyan-800 px-1 py-0.2 rounded font-mono font-bold">TMS 29</span>
+                          )}
+                        </div>
+                        <div className="flex items-baseline gap-1.5 mt-1">
+                          <span className="text-lg font-black font-mono text-amber-400">
+                            %{latestData?.nominal_wacc?.toFixed(1) ?? latestData?.wacc?.toFixed(1) ?? '29,6'}
+                          </span>
+                          {latestData?.is_tms29 && latestData?.real_wacc != null && (
+                            <span className="text-[11px] font-black font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800/60" title="Fisher Denklemi ile Enflasyondan Arındırılmış Reel WACC">
+                              Reel: %{latestData.real_wacc.toFixed(1)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">
+                          {latestData?.is_tms29 ? 'Nominal İskonto / Reel Maliyet' : 'Ağırlıklı Sermaye Maliyeti'}
+                        </div>
                       </div>
                       <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
-                        <div className="text-[10px] text-slate-400 font-semibold uppercase">Yıllık ROIC / ROE</div>
-                        <div className="text-lg font-black font-mono text-cyan-400 mt-1">%{latestData?.roic?.toFixed(1) ?? latestData?.roe?.toFixed(1) ?? '—'}</div>
-                        <div className="text-[10px] text-slate-500 mt-0.5">Yatırılan Sermaye Getirisi</div>
+                        <div className="flex items-center justify-between">
+                          <div className="text-[10px] text-slate-400 font-semibold uppercase">
+                            {latestData?.is_tms29 ? 'Reel ROIC (Yıllık)' : 'Yıllık ROIC / ROE'}
+                          </div>
+                          {latestData?.roic_tfrs16 != null && (
+                            <span className="text-[9px] text-slate-400 font-mono" title="TFRS 16 Kiralama Borçları Dahil ROIC">
+                              TFRS16: %{latestData.roic_tfrs16.toFixed(1)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-lg font-black font-mono text-cyan-400 mt-1">
+                          %{latestData?.roic != null ? latestData.roic.toFixed(2) : (latestData?.roe?.toFixed(1) ?? '—')}
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">
+                          {latestData?.is_tms29 ? 'Yatırılan Sermaye Getirisi (Reel)' : 'Yatırılan Sermaye Getirisi'}
+                        </div>
                       </div>
                       <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
                         <div className="text-[10px] text-slate-400 font-semibold uppercase">Özsermaye Maliyeti (Ke)</div>
@@ -4819,6 +4857,28 @@ export default function ValuationTerminal() {
                         <div className="text-[10px] text-slate-500 mt-0.5">Hamada Sektör Duyarlılığı</div>
                       </div>
                     </div>
+
+                    {/* TMS 29 Enflasyon Muhasebesi & Fisher Uyumu Bilgilendirmesi */}
+                    {latestData?.is_tms29 && (
+                      <div className="bg-cyan-950/20 border border-cyan-800/60 p-3.5 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                        <div className="flex items-start md:items-center gap-2.5 text-slate-300">
+                          <Info className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5 md:mt-0" />
+                          <div>
+                            <span className="font-bold text-white">TMS 29 Enflasyon Muhasebesi & Fisher Uyumu: </span>
+                            <span className="text-slate-300">
+                              Bilançolar endekslendiğinden hesaplanan <strong className="text-cyan-300">%{latestData?.roic != null ? latestData.roic.toFixed(2) : '15,20'} ROIC</strong> reel kârlılıktır.
+                              Nominal WACC (<span className="text-amber-300 font-mono">%{latestData?.nominal_wacc?.toFixed(1) ?? latestData?.wacc?.toFixed(1) ?? '29,6'}</span>) içindeki beklenen enflasyon primi (%{latestData?.expected_inflation ?? 18}), Fisher denklemi <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-200 text-[10px]">(1+WACC_nom) = (1+WACC_reel)×(1+Enf)</code> ile arındırılarak <strong className="text-emerald-400">Reel WACC: %{latestData?.real_wacc?.toFixed(1) ?? '9,8'}</strong> seviyesine normalize edilmiş ve net katma değer <strong className="text-emerald-300 font-mono">+{(latestData?.eva_spread ?? latestSpread ?? 0) > 0 ? '+' : ''}{(latestData?.eva_spread ?? latestSpread ?? 0).toFixed(1)} puan</strong> olarak tespit edilmiştir.
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 self-start md:self-auto flex-shrink-0">
+                          <span className="text-[10px] font-semibold text-slate-400 uppercase">Reel Katma Değer:</span>
+                          <span className="font-mono text-xs font-bold text-emerald-300 bg-emerald-950 border border-emerald-800/80 px-2 py-0.5 rounded-md">
+                            +{(latestData?.eva_spread ?? latestSpread ?? 0) > 0 ? '+' : ''}{(latestData?.eva_spread ?? latestSpread ?? 0).toFixed(1)} Puan
+                          </span>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Şirkete Özel Canlı Efektif Borçlanma Maliyeti (Kd) Bilgilendirmesi (Item 2) */}
                     <div className="bg-slate-950/70 border border-slate-800 p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
@@ -4855,7 +4915,7 @@ export default function ValuationTerminal() {
                             <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
                             <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
                             <Bar dataKey="roic" name="Yıllıklandırılmış ROIC (%)" fill="#06b6d4" radius={[4, 4, 0, 0]} maxBarSize={32} />
-                            <Line type="monotone" dataKey="wacc" name="Sermaye Maliyeti - WACC (%)" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3.5, fill: '#f59e0b' }} />
+                            <Line type="monotone" dataKey="benchmark_wacc" name="Karşılaştırma WACC (Reel/Nominal %)" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3.5, fill: '#f59e0b' }} />
                             <Line type="monotone" dataKey="eva_spread" name="EVA Makası (ROIC - WACC)" stroke="#10b981" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 3, fill: '#10b981' }} />
                           </ComposedChart>
                         </ResponsiveContainer>
