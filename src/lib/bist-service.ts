@@ -289,7 +289,7 @@ async function saveSupabaseMaliTablo(ticker: string, history: FinancialHistoryIt
 }
 
 /**
- * İş Yatırım tekil parti sorgusu
+ * İş Yatırım tekil parti sorgusu (2200ms sıkı zaman aşımı, sunucu içi uyutma yapmadan tek deneme)
  */
 async function fetchIsYatirimSingleBatch(
   ticker: string,
@@ -303,43 +303,29 @@ async function fetchIsYatirimSingleBatch(
   const q = `companyCode=${ticker}&exchange=TRY&financialGroup=${financialGroup}&year1=${params.year1}&period1=${params.period1}&year2=${params.year2}&period2=${params.period2}&year3=${params.year3}&period3=${params.period3}&year4=${params.year4}&period4=${params.period4}`;
   const url = `https://www.isyatirim.com.tr/_layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo?${q}`;
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-          'Accept': 'application/json, text/javascript, */*; q=0.01',
-          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-          'X-Requested-With': 'XMLHttpRequest',
-          'Referer': `https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/sirket-karti.aspx?hisse=${ticker}`
-        },
-        signal: AbortSignal.timeout(7500),
-        cache: 'no-store'
-      });
-      if (!res.ok) {
-        if (attempt === 0) {
-          await new Promise(r => setTimeout(r, 200));
-          continue;
-        }
-        return [];
-      }
-      const data = await res.json();
-      const rows = Array.isArray(data?.value) ? data.value : [];
-      if (rows.length > 0 || attempt === 1) return rows;
-    } catch (err) {
-      if (attempt === 0) {
-        await new Promise(r => setTimeout(r, 250));
-        continue;
-      }
-      console.warn(`[BistService] İş Yatırım batch zaman aşımı/hata (${ticker} - ${params.year1}/${params.period1}):`, err);
-    }
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/javascript, */*; q=0.01',
+        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Referer': `https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/sirket-karti.aspx?hisse=${ticker}`
+      },
+      signal: AbortSignal.timeout(2200),
+      cache: 'no-store'
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.value) ? data.value : [];
+  } catch {
+    return [];
   }
-  return [];
 }
 
 /**
  * İş Yatırım tüm ~600 BIST şirketleri için dinamik muhasebe grubu keşfi (Auto-Discovery)
- * ve çok yıllı kesintisiz çeyreklik parti çekim motoru
+ * ve çok yıllı kesintisiz çeyreklik parti çekim motoru (maks 2 aday, eşzamanlı parti alımı)
  */
 export async function fetchIsYatirimMaliTabloBatches(
   ticker: string,
@@ -351,16 +337,16 @@ export async function fetchIsYatirimMaliTabloBatches(
       ? ['UFRS_K', 'UFRS']
       : sector === 'BANKING'
       ? ['UFRS', 'UFRS_K']
-      : ['XI_29', 'UFRS', 'UFRS_K'];
+      : ['XI_29', 'UFRS'];
 
   const candidateGroups: ('XI_29' | 'UFRS' | 'UFRS_K')[] = preferredGroup
-    ? [preferredGroup, ...defaultCandidates.filter(g => g !== preferredGroup)]
-    : defaultCandidates;
+    ? [preferredGroup, ...defaultCandidates.filter(g => g !== preferredGroup)].slice(0, 2)
+    : defaultCandidates.slice(0, 2);
 
   let activeGroup: ('XI_29' | 'UFRS' | 'UFRS_K') | null = null;
   let batch1Rows: any[] = [];
 
-  // 1. Aşama: Batch 1 ile doğru muhasebe grubunu otomatik keşfet (Auto-Discovery)
+  // 1. Aşama: Batch 1 ile doğru muhasebe grubunu otomatik keşfet (Auto-Discovery - maks 2 deneme)
   for (const group of candidateGroups) {
     const rows = await fetchIsYatirimSingleBatch(ticker, group, BATCH_SPECS[0].params);
     if (rows.length >= 5) {
@@ -370,16 +356,14 @@ export async function fetchIsYatirimMaliTabloBatches(
     }
   }
 
-  // Eğer Batch 1'de bulunamadıysa (örneğin henüz 2026/06 açıklamamış şirketler), Batch 2 ile keşfet
+  // Eğer Batch 1'de bulunamadıysa (örneğin henüz 2026/06 açıklamamış şirketler), sadece ilk adayla Batch 2'yi dene
   let batch2Rows: any[] = [];
-  if (!activeGroup) {
-    for (const group of candidateGroups) {
-      const rows = await fetchIsYatirimSingleBatch(ticker, group, BATCH_SPECS[1].params);
-      if (rows.length >= 5) {
-        activeGroup = group;
-        batch2Rows = rows;
-        break;
-      }
+  if (!activeGroup && candidateGroups.length > 0) {
+    const primaryGroup = candidateGroups[0];
+    const rows = await fetchIsYatirimSingleBatch(ticker, primaryGroup, BATCH_SPECS[1].params);
+    if (rows.length >= 5) {
+      activeGroup = primaryGroup;
+      batch2Rows = rows;
     }
   }
 
@@ -387,22 +371,20 @@ export async function fetchIsYatirimMaliTabloBatches(
     return { rowsByBatch: [], activeGroup: null };
   }
 
-  // 2. Aşama: Keşfedilen aktif grup ile kalan partileri sıralı ve kontrollü (100ms aralıklı) çek
+  // 2. Aşama: Keşfedilen aktif grup ile kalan partileri eşzamanlı (Promise.all) çekerek ~1sn içinde tamamla
   const rowsByBatch: { spec: BatchSpec; rows: any[] }[] = [];
   rowsByBatch.push({ spec: BATCH_SPECS[0], rows: batch1Rows });
 
-  if (batch2Rows.length > 0) {
-    rowsByBatch.push({ spec: BATCH_SPECS[1], rows: batch2Rows });
-  } else {
-    const rows2 = await fetchIsYatirimSingleBatch(ticker, activeGroup, BATCH_SPECS[1].params, 100);
-    rowsByBatch.push({ spec: BATCH_SPECS[1], rows: rows2 });
-  }
+  const remainingPromises = [
+    batch2Rows.length > 0 ? Promise.resolve(batch2Rows) : fetchIsYatirimSingleBatch(ticker, activeGroup, BATCH_SPECS[1].params),
+    fetchIsYatirimSingleBatch(ticker, activeGroup, BATCH_SPECS[2].params),
+    fetchIsYatirimSingleBatch(ticker, activeGroup, BATCH_SPECS[3].params)
+  ];
 
-  const rows3 = await fetchIsYatirimSingleBatch(ticker, activeGroup, BATCH_SPECS[2].params, 100);
-  rowsByBatch.push({ spec: BATCH_SPECS[2], rows: rows3 });
-
-  const rows4 = await fetchIsYatirimSingleBatch(ticker, activeGroup, BATCH_SPECS[3].params, 100);
-  rowsByBatch.push({ spec: BATCH_SPECS[3], rows: rows4 });
+  const [r2, r3, r4] = await Promise.all(remainingPromises);
+  rowsByBatch.push({ spec: BATCH_SPECS[1], rows: r2 });
+  rowsByBatch.push({ spec: BATCH_SPECS[2], rows: r3 });
+  rowsByBatch.push({ spec: BATCH_SPECS[3], rows: r4 });
 
   return { rowsByBatch, activeGroup };
 }
@@ -765,10 +747,20 @@ export async function fetchAndAnalyzeBistCompany(
   if (cachedItems && cachedItems.length > 0) {
     priceData = await fetchLiveBistPrice(ticker);
   } else {
+    // Vercel Serverless Gateway Timeout (504) Koruması:
+    // Canlı İş Yatırım çağrısına 3800ms tavanı koyulur. Eğer İş Yatırım gecikir veya yanıt vermezse,
+    // anında 0ms gecikmeli OFFICIAL_ISYATIRIM_CACHE devreye girerek analizi tamamlar.
+    const isYatirimTimeout = new Promise<{ rowsByBatch: any[]; activeGroup: null }>((resolve) =>
+      setTimeout(() => resolve({ rowsByBatch: [], activeGroup: null }), 3800)
+    );
+
     const [pRes, yRes, bRes] = await Promise.all([
       fetchLiveBistPrice(ticker),
       options?.skipYahoo ? Promise.resolve({ items: [] as FinancialHistoryItem[] }) : fetchYahooFundamentalsHistory(ticker, meta.sector),
-      fetchIsYatirimMaliTabloBatches(ticker, meta.sector, meta.financialGroup)
+      Promise.race([
+        fetchIsYatirimMaliTabloBatches(ticker, meta.sector, meta.financialGroup),
+        isYatirimTimeout
+      ])
     ]);
     priceData = pRes;
     yahooData = yRes;

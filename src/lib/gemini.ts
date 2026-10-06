@@ -12,13 +12,11 @@ import crypto from 'crypto';
  */
 
 export const CANDIDATE_MODELS = [
-  'gemini-3.5-flash-lite',         // 500 RPD, 15 RPM, ~1.5s latency (ultra hızlı & yüksek kota)
+  'gemini-3.5-flash-lite',         // 500 RPD, 15 RPM, ~1.2s latency (ultra hızlı & yüksek kota)
+  'gemini-3-flash-preview',        // Hızlı ve stabil (~1.5s)
+  'gemini-3.1-flash-lite',         // Hızlı flash-lite (~1.4s)
   'gemini-2.5-flash',              // Güvenilir, yüksek kotalı ana model
   'gemini-flash-latest',           // Resmi en güncel flash alias
-  'gemini-3-flash-preview',        // Hızlı ve stabil
-  'gemini-3.1-flash-lite',         // Hızlı
-  'gemini-3.6-flash',              // Yedek
-  'gemini-3.7-flash',              // Yedek
   'gemini-3.8-flash',              // Kota aşımı geçtikten sonra fallback
 ];
 
@@ -260,8 +258,8 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
         };
       }
 
-      // Vercel serverless fonksiyon zaman aşımını engellemek için istek başına 45 saniye tavanı:
-      reqConfig.abortSignal = reqConfig.abortSignal || AbortSignal.timeout(45000);
+      // Vercel serverless fonksiyon zaman aşımını engellemek için istek başına 9 saniye tavanı:
+      reqConfig.abortSignal = reqConfig.abortSignal || AbortSignal.timeout(9000);
 
       const response = await ai.models.generateContent({
         ...baseParams,

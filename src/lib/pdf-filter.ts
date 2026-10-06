@@ -692,25 +692,25 @@ export async function extractSmartDocumentText(
 
   const pageTexts: string[] = new Array(totalPages).fill('');
 
-  // HEDEF SAYFA SEÇİMİ:
-  // 1. Faaliyet Raporları (activity): İlk 20 sayfa genellikle içindekiler ve yönetim kurulu özgeçmişleridir;
-  //    Finansal performans, pazar payı, riskler ve beklentiler 20-90. sayfalarda ve rapor sonundadır.
-  // 2. Yatırımcı Sunumu (presentation): Guidance ve gelecek hedefleri genellikle sunumun son slaytlarındadır (20-50. slayt).
+  // HEDEF SAYFA SEÇİMİ (Vercel Serverless 10sn Gateway Timeout koruması):
+  // 1. Faaliyet Raporları (activity): İlk 12 sayfa (özet/mesajlar) ve son 8 sayfa (beklentiler & riskler)
+  // 2. Yatırımcı Sunumu (presentation): İlk 10 slayt ve son 8 slayt (guidance & hedefler)
+  // 3. Finansal Tablolar (financial): İlk 22 sayfa (Bilanço, Gelir, Nakit Akış & Temel Dipnotlar)
   let targetPageNumbers: number[] = [];
   if (category === 'activity') {
     const pageSet = new Set<number>();
-    const frontLimit = Math.min(90, totalPages);
+    const frontLimit = Math.min(12, totalPages);
     for (let p = 1; p <= frontLimit; p++) pageSet.add(p);
-    for (let p = Math.max(1, totalPages - 20); p <= totalPages; p++) pageSet.add(p);
+    for (let p = Math.max(1, totalPages - 8); p <= totalPages; p++) pageSet.add(p);
     targetPageNumbers = Array.from(pageSet).sort((a, b) => a - b);
   } else if (category === 'presentation') {
     const pageSet = new Set<number>();
-    const frontLimit = Math.min(50, totalPages);
+    const frontLimit = Math.min(10, totalPages);
     for (let p = 1; p <= frontLimit; p++) pageSet.add(p);
-    for (let p = Math.max(1, totalPages - 12); p <= totalPages; p++) pageSet.add(p);
+    for (let p = Math.max(1, totalPages - 8); p <= totalPages; p++) pageSet.add(p);
     targetPageNumbers = Array.from(pageSet).sort((a, b) => a - b);
   } else {
-    const limit = Math.min(28, totalPages);
+    const limit = Math.min(22, totalPages);
     targetPageNumbers = Array.from({ length: limit }, (_, i) => i + 1);
   }
 
@@ -718,14 +718,24 @@ export async function extractSmartDocumentText(
   await Promise.all(
     targetPageNumbers.map(async (pageNum) => {
       try {
-        const page = await pdf.getPage(pageNum);
-        const content = await page.getTextContent();
-        const pageText = (content.items || [])
-          .filter((item: any) => item.str != null)
-          .map((item: any) => item.str + (item.hasEOL ? '\n' : ''))
-          .join('');
-        pageTexts[pageNum - 1] = pageText;
-        totalExtractedChars += pageText.trim().length;
+        const pagePromise = (async () => {
+          const page = await pdf.getPage(pageNum);
+          const content = await page.getTextContent();
+          return (content.items || [])
+            .filter((item: any) => item.str != null)
+            .map((item: any) => item.str + (item.hasEOL ? '\n' : ''))
+            .join('');
+        })();
+
+        const timeoutPromise = new Promise<string>((resolve) =>
+          setTimeout(() => resolve(''), 1500)
+        );
+
+        const pageText = await Promise.race([pagePromise, timeoutPromise]);
+        if (pageText) {
+          pageTexts[pageNum - 1] = pageText;
+          totalExtractedChars += pageText.trim().length;
+        }
       } catch (pageErr) {
         console.warn(`[PDFFilter] Sayfa ${pageNum} metni okunamadı:`, pageErr);
       }

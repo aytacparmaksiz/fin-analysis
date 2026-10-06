@@ -72,7 +72,7 @@ import {
 import { extractSmartFinancialText, extractSmartDocumentText, splitScannedPdfIntoChunks, DocumentCategory } from '@/lib/pdf-filter';
 
 // Gateway Timeout, kurumsal proxy ve HTML hata sayfalarını yakalayan güvenli API yanıt ayrıştırıcısı
-async function parseApiResponse(res: Response, defaultError: string): Promise<any> {
+async function parseApiResponse(res: Response, defaultError: string, context?: 'bist' | 'extract' | 'analyze'): Promise<any> {
   const status = res.status;
   const rawText = await res.text();
 
@@ -85,6 +85,12 @@ async function parseApiResponse(res: Response, defaultError: string): Promise<an
   const isPayloadTooLarge = status === 413 || (isHtml && (/function_payload_too_large/i.test(rawText) || /payload\s*too\s*large/i.test(rawText)));
 
   if (isTimeout) {
+    if (context === 'bist' || /bist/i.test(defaultError)) {
+      throw new Error('BIST veri sunucusu yanıt süresi aşıldı (Zaman Aşımı / HTTP 504). Lütfen birkaç saniye sonra analizi tekrar deneyin.');
+    }
+    if (context === 'analyze' || /değerleme/i.test(defaultError)) {
+      throw new Error('Değerleme raporu hesaplama süresi aşıldı (Zaman Aşımı / HTTP 504). Lütfen analizi tekrar başlatın.');
+    }
     throw new Error('Sunucu yanıt süresi aşıldı (Gateway Timeout). Lütfen sadece finansal tabloları içeren sayfaları yüklemeyi deneyin.');
   }
 
@@ -1522,7 +1528,7 @@ export default function ValuationTerminal() {
         () => fetch(`/api/bist?ticker=${encodeURIComponent(targetTicker)}&t=${Date.now()}`, { cache: 'no-store' }),
         setStatusMessage
       );
-      const bistData = await parseApiResponse(res, `${targetTicker} için BIST verisi çekilemedi.`);
+      const bistData = await parseApiResponse(res, `${targetTicker} için BIST verisi çekilemedi.`, 'bist');
       if (!bistData || !Array.isArray(bistData.financial_history) || bistData.financial_history.length === 0) {
         throw new Error(`${targetTicker} için BIST mali tablosu bulunamadı.`);
       }
@@ -2068,7 +2074,7 @@ export default function ValuationTerminal() {
         setStatusMessage
       );
 
-      const data = await parseApiResponse(res, 'Değerleme tamamlanamadı.');
+      const data = await parseApiResponse(res, 'Değerleme tamamlanamadı.', 'analyze');
 
       let rawDecision: 'AL' | 'ALMA' | 'NÖTR' = 'NÖTR';
       const reportText = data?.report || '';
