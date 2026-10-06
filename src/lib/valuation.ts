@@ -478,6 +478,13 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
     return parsePeriodSortKey(a.period) - parsePeriodSortKey(b.period);
   });
 
+  // Tarihsel seride Tam TL (>= 500M) dönem olup olmadığını tespit et
+  const hasFullTlPeriodInSeries = history.some(h => {
+    const eq = typeof h?.equity === 'number' ? Math.abs(h.equity) : 0;
+    const rev = typeof h?.revenue === 'number' ? Math.abs(h.revenue) : (typeof h?.written_premiums === 'number' ? Math.abs(h.written_premiums) : 0);
+    return eq >= 500_000_000 || rev >= 500_000_000;
+  });
+
   for (let i = 0; i < history.length; i++) {
     const item = history[i];
     if (!item) continue;
@@ -609,26 +616,14 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
       'written_premiums', 'gross_written_premiums', 'earned_premiums', 'technical_profit', 'technical_balance',
       'investment_income', 'pension_aum', 'net_interest_income'
     ];
-    const isContainerFullTl = containerCurr === 'try' || containerCurr === 'tl' || containerCurr.includes('tam');
-    const itemEqAbs = Math.abs(item.equity || 0);
-    const itemRevAbs = Math.abs(item.revenue || item.written_premiums || 0);
-
-    if (
-      isContainerBin &&
-      itemEqAbs > 500_000_000 &&
-      itemRevAbs > 500_000_000
-    ) {
-      for (const mf of monetaryFields) {
-        if (typeof item[mf] === 'number' && item[mf] !== 0) {
-          item[mf] = Math.round(item[mf] / 1000);
-        }
-      }
-    } else if (
-      isContainerFullTl &&
-      itemEqAbs > 0 && itemEqAbs < 250_000_000 &&
-      (itemRevAbs === 0 || itemRevAbs < 250_000_000)
-    ) {
-      // Konteyner 'TRY' (Tam TL) iken bu dönem KAP PDF'ten 'Bin TRY' olarak (örn. 15.448.698) gelmişse 1000 ile çarparak Tam TL'ye eşitle:
+    // Standart Kural: Sistemimizdeki tüm finansal zaman serisi tutarları tek tip 'Tam TL' (TRY) olarak normalize edilir.
+    // Eğer girdi 'Bin TRY' olarak gelmişse (örn. KAP PDF tablosundan 15.448.698 olarak), 1000 ile çarparak Tam TL'ye yükseltilir.
+    // Asla var olan Tam TL tutarları 1000'e bölünmez!
+    const itemEqAbs = typeof item.equity === 'number' ? Math.abs(item.equity) : 0;
+    const itemRevAbs = typeof item.revenue === 'number' ? Math.abs(item.revenue) : (typeof item.written_premiums === 'number' ? Math.abs(item.written_premiums) : 0);
+    const isPeriodInThousands = (isContainerBin && itemEqAbs < 250_000_000) ||
+                                (hasFullTlPeriodInSeries && itemEqAbs > 0 && itemEqAbs < 250_000_000 && (itemRevAbs === 0 || itemRevAbs < 250_000_000));
+    if (isPeriodInThousands) {
       for (const mf of monetaryFields) {
         if (typeof item[mf] === 'number' && item[mf] !== 0) {
           item[mf] = Math.round(item[mf] * 1000);
@@ -2257,8 +2252,17 @@ export function computeSectorValuationAndDrivers(
   const isClearlyThousands =
     (paidCapSample > 0 && paidCapSample < 10_000_000 && shareCount >= 5_000_000) ||
     (eqScaleSample > 0 && eqScaleSample < 250_000_000 && (revScaleSample === 0 || revScaleSample < 250_000_000));
-  const isBinTry = normCurr.includes('bin') || normCurr.includes('thousand') || isClearlyThousands;
-  const unitScale = isBinTry ? 1000 : 1;
+  
+  const isAlreadyTamTl = (eqScaleSample >= 250_000_000) || 
+                         (revScaleSample >= 250_000_000) ||
+                         (normCurr === 'tl' || normCurr === 'try' || normCurr.includes('tam'));
+
+  let unitScale = 1;
+  if (!isAlreadyTamTl) {
+    if (normCurr.includes('bin') || normCurr.includes('thousand') || isClearlyThousands) {
+      unitScale = 1000;
+    }
+  }
 
   // Borsa İstanbul'da 1 TL nominal Ödenmiş Sermaye = 1 Adet Pay (Lot).
   const rawPaidCap = parseFinancialNumber(latest?.paid_in_capital);
@@ -2821,15 +2825,22 @@ export function calculateDuPont5Step(item: any, sectorOrPrev?: any, sectorOverri
 
   const annualFactor = getAnnualizationFactor(item.period);
 
-  const rawAssetTurnover = (revenue !== null && avgAssets !== null && avgAssets > 0)
-    ? ((revenue * annualFactor) / avgAssets)
+  const insFiduciary = resolvedSector === 'INSURANCE' 
+    ? (parseFinancialNumber(item.pension_aum ?? item.financial_assets_insured) ?? 0)
+    : 0;
+  const operationalAssets = (avgAssets !== null && insFiduciary > 0)
+    ? Math.max(avgAssets * 0.15, avgAssets - insFiduciary)
+    : avgAssets;
+
+  const rawAssetTurnover = (revenue !== null && operationalAssets !== null && operationalAssets > 0)
+    ? ((revenue * annualFactor) / operationalAssets)
     : null;
   const assetTurnover = rawAssetTurnover !== null
     ? Number(rawAssetTurnover.toFixed(rawAssetTurnover < 0.2 ? 3 : 2))
     : null;
 
-  const financialLeverage = (avgAssets !== null && avgEquity !== null && avgEquity > 0)
-    ? Number((avgAssets / avgEquity).toFixed(2))
+  const financialLeverage = (operationalAssets !== null && avgEquity !== null && avgEquity > 0)
+    ? Number((operationalAssets / avgEquity).toFixed(2))
     : null;
 
   let calculatedRoe: number | null = null;
@@ -3159,7 +3170,7 @@ export function calculateCompanyMultiples(
   const revenue = parseFinancialNumber(latest?.revenue ?? latest?.written_premiums);
   const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
 
-  // Borsa İstanbul bilançoları standart olarak Bin TL cinsindendir.
+  // Borsa İstanbul bilançoları standart olarak Bin TL veya Tam TL cinsindendir.
   const normCurr = String(currency || latest?.currency || '').trim().toLowerCase();
   const eqScaleSample = Math.abs(equity ?? 0);
   const revScaleSample = Math.abs(revenue ?? 0);
@@ -3167,8 +3178,18 @@ export function calculateCompanyMultiples(
   const isClearlyThousands =
     (paidCapSample > 0 && paidCapSample < 10_000_000 && safeShares >= 5_000_000) ||
     (eqScaleSample > 0 && eqScaleSample < 250_000_000 && (revScaleSample === 0 || revScaleSample < 250_000_000) && safeShares >= 1_000_000);
-  const isBinTry = normCurr.includes('bin') || normCurr.includes('thousand') || isClearlyThousands;
-  const unitScale = isBinTry ? 1000 : 1;
+
+  // Eğer veriler zaten Tam TL ise asla 1000 ile çarparak Trilyonlara şişirme
+  const isAlreadyTamTl = (equity !== null && Math.abs(equity) >= 250_000_000) || 
+                         (revenue !== null && Math.abs(revenue) >= 250_000_000) ||
+                         (normCurr === 'tl' || normCurr === 'try' || normCurr.includes('tam'));
+
+  let unitScale = 1;
+  if (!isAlreadyTamTl) {
+    if (normCurr.includes('bin') || normCurr.includes('thousand') || isClearlyThousands) {
+      unitScale = 1000;
+    }
+  }
 
   const scaledNet = (netIncome !== null) ? netIncome * unitScale : null;
   const scaledEquity = (equity !== null) ? equity * unitScale : null;

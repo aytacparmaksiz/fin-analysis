@@ -7,6 +7,7 @@ import {
 } from './valuation.ts';
 import { getIsYatirimMultiplesForTicker } from './isyatirim-service.ts';
 import { OFFICIAL_ISYATIRIM_CACHE } from './isyatirim-official-cache.ts';
+import { getSupabase, isSupabaseConfigured } from './supabase.ts';
 
 if (typeof process !== 'undefined' && process.env) {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -200,14 +201,108 @@ export async function fetchLiveBistPrice(ticker: string): Promise<{ price: numbe
   return { price: 100.0, historicalPrices: {} };
 }
 
+// Sunucu belleği kalıcı finansal tablo önbelleği (6 saat TTL)
+const MEMORY_FINANCIAL_CACHE = new Map<string, { data: FinancialHistoryItem[]; timestamp: number }>();
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
+export interface BatchSpec {
+  params: {
+    year1: number; period1: number;
+    year2: number; period2: number;
+    year3: number; period3: number;
+    year4: number; period4: number;
+  };
+  periods: [string, string, string, string];
+}
+
 /**
- * İş Yatırım resmi finansal tablo servisini sorgular
+ * İş Yatırım resmi API'si çeyreklik dönemleri contiguous (ardışık) 4'erli bloklar halinde kabul eder.
+ * 4 parti ile 2022/09'dan 2026/06'ya kadar kesintisiz 16 çeyreklik resmi denetlenmiş zaman serisi oluşturulur.
  */
-async function fetchIsYatirimMaliTablo(ticker: string, financialGroup: string, year: number, delayMs = 0) {
+export const BATCH_SPECS: BatchSpec[] = [
+  {
+    params: { year1: 2026, period1: 6, year2: 2026, period2: 3, year3: 2025, period3: 12, year4: 2025, period4: 9 },
+    periods: ['2026/06', '2026/03', '2025/12', '2025/09']
+  },
+  {
+    params: { year1: 2025, period1: 6, year2: 2025, period2: 3, year3: 2024, period3: 12, year4: 2024, period4: 9 },
+    periods: ['2025/06', '2025/03', '2024/12', '2024/09']
+  },
+  {
+    params: { year1: 2024, period1: 6, year2: 2024, period2: 3, year3: 2023, period3: 12, year4: 2023, period4: 9 },
+    periods: ['2024/06', '2024/03', '2023/12', '2023/09']
+  },
+  {
+    params: { year1: 2023, period1: 6, year2: 2023, period2: 3, year3: 2022, period3: 12, year4: 2022, period4: 9 },
+    periods: ['2023/06', '2023/03', '2022/12', '2022/09']
+  }
+];
+
+/**
+ * Supabase üzerinden BIST mali tablolarını sorgular (varsa ve 24 saatten taze ise)
+ */
+async function getSupabaseMaliTablo(ticker: string): Promise<FinancialHistoryItem[] | null> {
+  try {
+    if (!isSupabaseConfigured()) return null;
+    const supabase = getSupabase();
+    if (!supabase) return null;
+
+    const { data, error } = await supabase
+      .from('bist_mali_tablolar')
+      .select('financial_history, updated_at')
+      .eq('ticker', ticker.toUpperCase())
+      .maybeSingle();
+
+    if (error || !data || !Array.isArray(data.financial_history) || data.financial_history.length === 0) {
+      return null;
+    }
+    const age = Date.now() - new Date(data.updated_at || 0).getTime();
+    if (age > 24 * 60 * 60 * 1000) {
+      return null; // 24 saatten eskiyse canlı kaynaktan tazelemeyi dene
+    }
+    return data.financial_history as FinancialHistoryItem[];
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Supabase tablosuna resmi BIST mali tablolarını kaydeder (cihazlar ve sunucular arası kalıcılık)
+ */
+async function saveSupabaseMaliTablo(ticker: string, history: FinancialHistoryItem[]): Promise<void> {
+  try {
+    if (!isSupabaseConfigured() || !history || history.length === 0) return;
+    const supabase = getSupabase();
+    if (!supabase) return null as any;
+
+    await supabase
+      .from('bist_mali_tablolar')
+      .upsert({
+        ticker: ticker.toUpperCase(),
+        financial_history: history,
+        currency: 'TRY',
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'ticker' });
+  } catch {
+    // Non-blocking
+  }
+}
+
+/**
+ * İş Yatırım tekil parti sorgusu
+ */
+async function fetchIsYatirimSingleBatch(
+  ticker: string,
+  financialGroup: string,
+  params: BatchSpec['params'],
+  delayMs = 0
+): Promise<any[]> {
   if (delayMs > 0) {
     await new Promise(r => setTimeout(r, delayMs));
   }
-  const url = `https://www.isyatirim.com.tr/_layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo?companyCode=${ticker}&exchange=TRY&financialGroup=${financialGroup}&year1=${year}&period1=3&year2=${year}&period2=6&year3=${year}&period3=9&year4=${year}&period4=12`;
+  const q = `companyCode=${ticker}&exchange=TRY&financialGroup=${financialGroup}&year1=${params.year1}&period1=${params.period1}&year2=${params.year2}&period2=${params.period2}&year3=${params.year3}&period3=${params.period3}&year4=${params.year4}&period4=${params.period4}`;
+  const url = `https://www.isyatirim.com.tr/_layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo?${q}`;
+
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const res = await fetch(url, {
@@ -218,12 +313,12 @@ async function fetchIsYatirimMaliTablo(ticker: string, financialGroup: string, y
           'X-Requested-With': 'XMLHttpRequest',
           'Referer': `https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/sirket-karti.aspx?hisse=${ticker}`
         },
-        signal: AbortSignal.timeout(6500),
+        signal: AbortSignal.timeout(7500),
         cache: 'no-store'
       });
       if (!res.ok) {
         if (attempt === 0) {
-          await new Promise(r => setTimeout(r, 350));
+          await new Promise(r => setTimeout(r, 200));
           continue;
         }
         return [];
@@ -233,13 +328,83 @@ async function fetchIsYatirimMaliTablo(ticker: string, financialGroup: string, y
       if (rows.length > 0 || attempt === 1) return rows;
     } catch (err) {
       if (attempt === 0) {
-        await new Promise(r => setTimeout(r, 400));
+        await new Promise(r => setTimeout(r, 250));
         continue;
       }
-      console.warn(`[BistService] İş Yatırım tablosu zaman aşımı/hata (${ticker} - ${year}):`, err);
+      console.warn(`[BistService] İş Yatırım batch zaman aşımı/hata (${ticker} - ${params.year1}/${params.period1}):`, err);
     }
   }
   return [];
+}
+
+/**
+ * İş Yatırım tüm ~600 BIST şirketleri için dinamik muhasebe grubu keşfi (Auto-Discovery)
+ * ve çok yıllı kesintisiz çeyreklik parti çekim motoru
+ */
+export async function fetchIsYatirimMaliTabloBatches(
+  ticker: string,
+  sector: SectorType,
+  preferredGroup?: 'XI_29' | 'UFRS' | 'UFRS_K'
+): Promise<{ rowsByBatch: { spec: BatchSpec; rows: any[] }[]; activeGroup: string | null }> {
+  const defaultCandidates: ('XI_29' | 'UFRS' | 'UFRS_K')[] = 
+    sector === 'INSURANCE'
+      ? ['UFRS_K', 'UFRS']
+      : sector === 'BANKING'
+      ? ['UFRS', 'UFRS_K']
+      : ['XI_29', 'UFRS', 'UFRS_K'];
+
+  const candidateGroups: ('XI_29' | 'UFRS' | 'UFRS_K')[] = preferredGroup
+    ? [preferredGroup, ...defaultCandidates.filter(g => g !== preferredGroup)]
+    : defaultCandidates;
+
+  let activeGroup: ('XI_29' | 'UFRS' | 'UFRS_K') | null = null;
+  let batch1Rows: any[] = [];
+
+  // 1. Aşama: Batch 1 ile doğru muhasebe grubunu otomatik keşfet (Auto-Discovery)
+  for (const group of candidateGroups) {
+    const rows = await fetchIsYatirimSingleBatch(ticker, group, BATCH_SPECS[0].params);
+    if (rows.length >= 5) {
+      activeGroup = group;
+      batch1Rows = rows;
+      break;
+    }
+  }
+
+  // Eğer Batch 1'de bulunamadıysa (örneğin henüz 2026/06 açıklamamış şirketler), Batch 2 ile keşfet
+  let batch2Rows: any[] = [];
+  if (!activeGroup) {
+    for (const group of candidateGroups) {
+      const rows = await fetchIsYatirimSingleBatch(ticker, group, BATCH_SPECS[1].params);
+      if (rows.length >= 5) {
+        activeGroup = group;
+        batch2Rows = rows;
+        break;
+      }
+    }
+  }
+
+  if (!activeGroup) {
+    return { rowsByBatch: [], activeGroup: null };
+  }
+
+  // 2. Aşama: Keşfedilen aktif grup ile kalan partileri sıralı ve kontrollü (100ms aralıklı) çek
+  const rowsByBatch: { spec: BatchSpec; rows: any[] }[] = [];
+  rowsByBatch.push({ spec: BATCH_SPECS[0], rows: batch1Rows });
+
+  if (batch2Rows.length > 0) {
+    rowsByBatch.push({ spec: BATCH_SPECS[1], rows: batch2Rows });
+  } else {
+    const rows2 = await fetchIsYatirimSingleBatch(ticker, activeGroup, BATCH_SPECS[1].params, 100);
+    rowsByBatch.push({ spec: BATCH_SPECS[1], rows: rows2 });
+  }
+
+  const rows3 = await fetchIsYatirimSingleBatch(ticker, activeGroup, BATCH_SPECS[2].params, 100);
+  rowsByBatch.push({ spec: BATCH_SPECS[2], rows: rows3 });
+
+  const rows4 = await fetchIsYatirimSingleBatch(ticker, activeGroup, BATCH_SPECS[3].params, 100);
+  rowsByBatch.push({ spec: BATCH_SPECS[3], rows: rows4 });
+
+  return { rowsByBatch, activeGroup };
 }
 
 /**
@@ -580,60 +745,61 @@ export async function fetchAndAnalyzeBistCompany(
   const meta = resolveBistCompanyMeta(rawTicker);
   const ticker = meta.ticker;
 
-  // 1. Canlı Hisse Fiyatı, Yahoo Fundamentals ve İş Yatırım Tablolarını Çek (Önce en güncel yıllar 2026, 2025, 2024)
-  const yearsToFetch = [2026, 2025, 2024, 2023, 2022];
-
-  let priceData: Awaited<ReturnType<typeof fetchLiveBistPrice>>;
-  let yahooData: Awaited<ReturnType<typeof fetchYahooFundamentalsHistory>>;
-  let yearlyRows: any[][];
-
-  if (options?.sequentialYears) {
-    priceData = await fetchLiveBistPrice(ticker);
-    yahooData = options?.skipYahoo ? { items: [] } : await fetchYahooFundamentalsHistory(ticker, meta.sector);
-    yearlyRows = [];
-    for (const yr of yearsToFetch) {
-      const rows = await fetchIsYatirimMaliTablo(ticker, meta.financialGroup, yr, 120);
-      yearlyRows.push(rows);
-    }
+  // 0. Kalıcı ve hızlı önbelleği kontrol et (RAM / Supabase)
+  const memCached = MEMORY_FINANCIAL_CACHE.get(ticker);
+  let cachedItems: FinancialHistoryItem[] | null = null;
+  if (memCached && (Date.now() - memCached.timestamp < CACHE_TTL_MS) && memCached.data.length > 0) {
+    cachedItems = memCached.data;
   } else {
-    const [pRes, yRes, ...yRows] = await Promise.all([
+    cachedItems = await getSupabaseMaliTablo(ticker);
+    if (cachedItems && cachedItems.length > 0) {
+      MEMORY_FINANCIAL_CACHE.set(ticker, { data: cachedItems, timestamp: Date.now() });
+    }
+  }
+
+  // 1. Canlı Hisse Fiyatı, Yahoo Fundamentals ve İş Yatırım Parti Verilerini Çek
+  let priceData: Awaited<ReturnType<typeof fetchLiveBistPrice>>;
+  let yahooData: Awaited<ReturnType<typeof fetchYahooFundamentalsHistory>> = { items: [] };
+  let batchResults: Awaited<ReturnType<typeof fetchIsYatirimMaliTabloBatches>> = { rowsByBatch: [], activeGroup: null };
+
+  if (cachedItems && cachedItems.length > 0) {
+    priceData = await fetchLiveBistPrice(ticker);
+  } else {
+    const [pRes, yRes, bRes] = await Promise.all([
       fetchLiveBistPrice(ticker),
       options?.skipYahoo ? Promise.resolve({ items: [] as FinancialHistoryItem[] }) : fetchYahooFundamentalsHistory(ticker, meta.sector),
-      ...yearsToFetch.map((yr, idx) => fetchIsYatirimMaliTablo(ticker, meta.financialGroup, yr, idx < 3 ? 0 : 180))
+      fetchIsYatirimMaliTabloBatches(ticker, meta.sector, meta.financialGroup)
     ]);
     priceData = pRes;
     yahooData = yRes;
-    yearlyRows = yRows;
+    batchResults = bRes;
   }
 
   let currentPrice = priceData.price;
 
   // 3. Dönemlere Göre Matris Oluştur
   const periodMap = new Map<string, Record<string, number>>();
-  const periodsInOrder = [
-    { key: 'value1', month: '03' },
-    { key: 'value2', month: '06' },
-    { key: 'value3', month: '09' },
-    { key: 'value4', month: '12' }
-  ];
+  const periodKeys = ['value1', 'value2', 'value3', 'value4'];
 
-  for (let i = 0; i < yearsToFetch.length; i++) {
-    const year = yearsToFetch[i];
-    const rows = yearlyRows[i] || [];
+  for (const { spec, rows } of batchResults.rowsByBatch) {
+    if (!rows || rows.length === 0) continue;
 
-    for (const p of periodsInOrder) {
-      const periodName = `${year}/${p.month}`;
+    for (let idx = 0; idx < 4; idx++) {
+      const periodName = spec.periods[idx];
+      const valKey = periodKeys[idx];
+
+      if (periodMap.has(periodName)) continue;
+
       const periodDict: Record<string, number> = {};
       let hasData = false;
 
       for (const row of rows) {
-        const valStr = row[p.key];
+        const valStr = row[valKey];
         const numVal = parseFinancialNumber(valStr);
         if (numVal !== null) {
           const code = (row.itemCode || '').trim();
           const desc = (row.itemDescTr || '').trim().toLowerCase();
-          
-          // Aynı açıklamaya sahip alt toplam satırı varsa sıfır olan başlık satırının üzerine yazmasını sağla
+
           if (code && (periodDict[`code_${code}`] === undefined || numVal !== 0)) {
             periodDict[`code_${code}`] = numVal;
           }
@@ -652,6 +818,10 @@ export async function fetchAndAnalyzeBistCompany(
 
   // 4. Dönem Sözlüklerinden Standart FinancialHistoryItem Nesnelerini Çıkar
   const historyItems: FinancialHistoryItem[] = [];
+
+  if (cachedItems && cachedItems.length > 0) {
+    historyItems.push(...cachedItems.map(it => ({ ...it })));
+  }
 
   for (const [period, dict] of periodMap.entries()) {
     const getValByCode = (...codes: string[]): number | null => {
@@ -752,22 +922,41 @@ export async function fetchAndAnalyzeBistCompany(
       paid_in_capital = getValByCode('2MEA') ?? getValByDesc('ödenmiş sermaye');
       equity = getValByCode('2O') ?? getValByDesc('özsermaye toplamı', 'özkaynaklar toplamı', 'özkaynak');
 
-      const lifeWritten = getValByCode('3DAAB', '3DAAA') ?? 0;
-      const nonLifeWritten = getValByCode('3AAAA', '3AAA') ?? 0;
-      written_premiums = (Math.max(lifeWritten, nonLifeWritten) > 0 ? Math.max(lifeWritten, nonLifeWritten) : null) ?? getValByDesc('brüt yazılan primler', 'yazılan primler');
+      // Prim Üretimi: 
+      // 3DAAB: Hayat Brüt Yazılan Primler (AGESA, ANHYT vb.)
+      // 3AAAA: Hayat Dışı Brüt Yazılan Primler (AKGRT, TURSG, ANSGR vb.)
+      const lifeWritten = getValByCode('3DAAB') ?? getValByDesc('1.1.1- brüt yazılan primler');
+      const nonLifeWritten = getValByCode('3AAAA') ?? getValByDesc('brüt yazılan primler');
+      if (lifeWritten !== null && nonLifeWritten !== null && (lifeWritten > 0 || nonLifeWritten > 0)) {
+        written_premiums = (lifeWritten > 0 && nonLifeWritten > 0) ? (lifeWritten + nonLifeWritten) : Math.max(lifeWritten, nonLifeWritten);
+      } else {
+        written_premiums = lifeWritten ?? nonLifeWritten ?? getValByDesc('brüt yazılan primler', 'yazılan primler');
+      }
       revenue = written_premiums;
-      const lifeEarned = getValByCode('3DAA') ?? 0;
-      const nonLifeEarned = getValByCode('3AA') ?? 0;
-      earned_premiums = (Math.max(lifeEarned, nonLifeEarned) > 0 ? Math.max(lifeEarned, nonLifeEarned) : null) ?? getValByDesc('kazanılmış primler');
+
+      const lifeEarned = getValByCode('3DAA');
+      const nonLifeEarned = getValByCode('3AA');
+      if (lifeEarned !== null && nonLifeEarned !== null && (lifeEarned > 0 || nonLifeEarned > 0)) {
+        earned_premiums = (lifeEarned > 0 && nonLifeEarned > 0) ? (lifeEarned + nonLifeEarned) : Math.max(lifeEarned, nonLifeEarned);
+      } else {
+        earned_premiums = lifeEarned ?? nonLifeEarned ?? getValByDesc('kazanılmış primler');
+      }
+
+      // Genel Teknik Kâr / Bölüm Dengesi:
+      // 3K: J- Genel Teknik Bölüm Dengesi (Tüm branşların konsolide teknik kârı)
+      // 3F: F- Teknik Bölüm Dengesi- Hayat
+      // 3C/3H: C- Teknik Bölüm Dengesi- Hayat Dışı
       technical_profit =
-        getValByDesc('genel teknik bölüm dengesi', 'c- genel teknik bölüm dengesi', 'hayat teknik bölüm dengesi', 'b- hayat teknik bölüm dengesi', 'emeklilik teknik bölüm dengesi') ??
-        getValByCode('3K', '3I', '3F', '3C') ??
+        getValByCode('3K') ??
+        getValByCode('3F') ??
+        getValByDesc('genel teknik bölüm dengesi', 'j- genel teknik bölüm dengesi') ??
+        getValByDesc('hayat teknik bölüm dengesi', 'f- teknik bölüm dengesi- hayat') ??
+        getValByCode('3C', '3H') ??
         getValByDesc('teknik bölüm dengesi');
+
       investment_income = getValByCode('3L', '3DB', '3DAEA') ?? getValByDesc('yatırım gelirleri', 'teknik olmayan bölümden aktarılan yatırım gelirleri');
       net_income = getValByCode('2MEZ', '3NJA', '3Z') ?? getValByDesc('dönem net karı veya zararı', 'dönem net karı', 'dönem net kar', 'ana ortaklık payları');
 
-      // Hayat & Emeklilik şirketlerinde (örn. AGESA) 3C 'Hayat Dışı Teknik Bölüm Dengesi' çok küçük (~%0.2) kalabildiğinden,
-      // teknik kâr net kârın ve prim üretiminin yanında anomalik derecede küçükse (<%3) gerçek teknik dengeyi kurtar:
       if (
         written_premiums &&
         written_premiums > 0 &&
@@ -934,25 +1123,19 @@ export async function fetchAndAnalyzeBistCompany(
     });
   }
 
-  // 4.1. Vercel (yurt dışı sunucu / fra1) üzerinde İş Yatırım WAF / Geo-Block veya zaman aşımı yaşanırsa,
-  // resmi İş Yatırım anlık görüntüsünden (OFFICIAL_ISYATIRIM_CACHE) eksik dönemleri ve kalemleri %100 birebir tamamla:
-  const officialCachedItems = OFFICIAL_ISYATIRIM_CACHE[ticker];
-  const hasOfficialIsYatirimData = historyItems.length > 0 || (Array.isArray(officialCachedItems) && officialCachedItems.length > 0);
-  if (Array.isArray(officialCachedItems) && officialCachedItems.length > 0) {
-    const existingByPeriod = new Map(historyItems.map(it => [it.period, it]));
-    for (const cachedItem of officialCachedItems) {
-      const existing = existingByPeriod.get(cachedItem.period);
-      if (!existing) {
-        historyItems.push({ ...cachedItem });
-      } else {
-        for (const k of Object.keys(cachedItem)) {
-          if ((existing[k] === null || existing[k] === undefined || existing[k] === 0) && cachedItem[k] !== null && cachedItem[k] !== undefined && cachedItem[k] !== 0) {
-            existing[k] = cachedItem[k];
-          }
-        }
-      }
+  // 4.1. Canlı İş Yatırım verisi geldiyse hem bellek önbelleğine hem de Supabase'e kaydet:
+  if (historyItems.length > 0 && (!cachedItems || cachedItems.length === 0)) {
+    MEMORY_FINANCIAL_CACHE.set(ticker, { data: historyItems, timestamp: Date.now() });
+    saveSupabaseMaliTablo(ticker, historyItems);
+  } else if (historyItems.length === 0) {
+    // Canlı veri çekilemediyse paketlenmiş resmi İş Yatırım anlık görüntüsünden (OFFICIAL_ISYATIRIM_CACHE) tamamla:
+    const officialCachedItems = OFFICIAL_ISYATIRIM_CACHE[ticker];
+    if (Array.isArray(officialCachedItems) && officialCachedItems.length > 0) {
+      historyItems.push(...officialCachedItems.map(it => ({ ...it })));
+      MEMORY_FINANCIAL_CACHE.set(ticker, { data: historyItems, timestamp: Date.now() });
     }
   }
+  const hasOfficialIsYatirimData = historyItems.length > 0;
 
   // Eğer İş Yatırım'dan veri geldiyse yalnızca eksik bilanço/nakit alanlarını tamamla; hiç gelmediyse Yahoo verisini kullan!
   if (historyItems.length === 0 && yahooData.items.length > 0) {

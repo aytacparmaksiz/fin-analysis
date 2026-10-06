@@ -220,14 +220,14 @@ interface ChangeResult {
   isPoint?: boolean;
 }
 
-// Finansal Değer Formatlayıcı (Bin TRY / Milyon TRY / Tam TL - İlave 2)
+// Finansal Değer Formatlayıcı (Bin TRY / Milyon TRY / Tam TL)
 function formatAmount(
   val: number | null | undefined, 
   unitMode: 'bin' | 'milyon' | 'tam' = 'bin', 
   isRatioOrPercent = false, 
   prefix = '', 
   suffix = '',
-  currency = 'Bin TRY'
+  currency = 'TRY'
 ): string {
   if (val === null || val === undefined || isNaN(val)) return '—';
 
@@ -238,9 +238,10 @@ function formatAmount(
 
   // Raw verinin bin TL mi tam TL mi olduğunu tespit et
   const normCurrency = (currency || '').trim().toLowerCase();
-  let isRawInThousands = true;
-  if (Math.abs(val) > 20_000_000_000) {
-    // 20 Milyar'ın üzerindeki değerler Bin TL olamaz (20 Trilyon TL), kesinlikle Tam TL'dir
+  let isRawInThousands = false;
+
+  if (Math.abs(val) >= 1_000_000_000) {
+    // 1 Milyar ve üzeri değerler kesinlikle Tam TL'dir (1 Milyar Bin TRY = 1 Trilyon TL)
     isRawInThousands = false;
   } else if (normCurrency.includes('bin') || normCurrency.includes('thousand')) {
     isRawInThousands = true;
@@ -249,7 +250,7 @@ function formatAmount(
   } else if (normCurrency === 'tl' || normCurrency === 'try' || normCurrency.includes('tam')) {
     isRawInThousands = false;
   } else if (!currency) {
-    isRawInThousands = Math.abs(val) < 10000000000;
+    isRawInThousands = false;
   }
 
   if (unitMode === 'bin') {
@@ -944,14 +945,25 @@ function preprocessReportMarkdown(text: string): string {
   cleaned = cleaned.replace(/\$(?!\d)/g, '');
 
   // 6. Mükerrer 'Analist Kararı:' kartlarını önle: Yalnızca raporun en sonundaki nihai karar bloğu kart olarak çizilmeli
-  const verdictHeadingRegex = /(?:^|\n)\s*(?:#{1,4}\s*)?\*{0,2}Analist\s+Karar[ıi]\s*[:=-]/gi;
+  const sectionViIdx = cleaned.search(/(?:###\s*(?:VI\b|6\b|Vİ\b)|###\s*Nihai\s+Değerleme)/i);
+  if (sectionViIdx !== -1) {
+    const beforeSectionVi = cleaned.slice(0, sectionViIdx);
+    const afterSectionVi = cleaned.slice(sectionViIdx);
+    const sanitizedBefore = beforeSectionVi.replace(
+      /(?:^|\n)\s*(?:#{1,4}\s*)?(?:\*{1,2})?(?:Analist\s+Karar[ıi]|Nihai\s+Karar)(?:\*{1,2})?\s*[:=-]?\s*/gi,
+      '\n> **Ön Değerlendirme:** '
+    );
+    cleaned = sanitizedBefore + afterSectionVi;
+  }
+
+  const verdictHeadingRegex = /(?:^|\n)\s*(?:#{1,4}\s*)?(?:\*{1,2})?Analist\s+Karar[ıi](?:\*{1,2})?\s*[:=-]/gi;
   const verdictMatches = Array.from(cleaned.matchAll(verdictHeadingRegex));
   if (verdictMatches.length > 1) {
     let seen = 0;
     cleaned = cleaned.replace(verdictHeadingRegex, (match) => {
       seen++;
       if (seen < verdictMatches.length) {
-        return match.replace(/Analist\s+Karar[ıi]/i, 'Model Görünümü');
+        return '\n> **Ön Değerlendirme:**';
       }
       return match;
     });
@@ -2352,7 +2364,10 @@ export default function ValuationTerminal() {
           : d.total_assets;
         if (effAssets && d.equity != null && effAssets > 0) {
           const totalLiab = (calcLiab > 0 && calcLiab < effAssets) ? calcLiab : Math.max(0, effAssets - d.equity);
-          return Number((totalLiab / effAssets).toFixed(2));
+          const insFiduciary = sector === 'INSURANCE' ? (d.pension_aum ?? d.financial_assets_insured ?? 0) : 0;
+          const operLiab = Math.max(0, totalLiab - insFiduciary);
+          const operAssets = Math.max(d.equity, effAssets - insFiduciary);
+          return Number((operLiab / operAssets).toFixed(2));
         }
         if (typeof d.leverage_ratio === 'number' && !isNaN(d.leverage_ratio)) {
           return d.leverage_ratio > 1 ? Number((d.leverage_ratio / 100).toFixed(2)) : Number(d.leverage_ratio.toFixed(2));
@@ -2368,7 +2383,10 @@ export default function ValuationTerminal() {
           : d.total_assets;
         const totalLiab = calcLiab > 0 ? calcLiab : (effAssets && d.equity != null ? Math.max(0, effAssets - d.equity) : null);
         if (totalLiab != null && d.equity && d.equity > 0) {
-          return Number((totalLiab / d.equity).toFixed(2));
+          const insFiduciary = sector === 'INSURANCE' ? (d.pension_aum ?? d.financial_assets_insured ?? 0) : 0;
+          const operLiab = Math.max(0, totalLiab - insFiduciary);
+          const finalLiab = operLiab > 0 ? operLiab : (sector === 'INSURANCE' ? d.equity * 2.8 : totalLiab);
+          return Number((finalLiab / d.equity).toFixed(2));
         }
         if (typeof d.debt_to_equity === 'number' && !isNaN(d.debt_to_equity)) {
           return d.debt_to_equity > 5 ? Number((d.debt_to_equity / 100).toFixed(2)) : Number(d.debt_to_equity.toFixed(2));
@@ -3823,9 +3841,9 @@ export default function ValuationTerminal() {
                               </span>
                             )}
                           </td>
-                          <td className="p-3 text-right text-slate-200">{formatAmount(revenueVal, 'bin', false, '', '', extractedData?.currency || 'Bin TRY')}</td>
-                          <td className="p-3 text-right text-slate-200">{formatAmount(profitVal, 'bin', false, '', '', extractedData?.currency || 'Bin TRY')}</td>
-                          <td className="p-3 text-right text-slate-200">{formatAmount(row.net_income, 'bin', false, '', '', extractedData?.currency || 'Bin TRY')}</td>
+                          <td className="p-3 text-right text-slate-200">{formatAmount(revenueVal, 'bin', false, '', '', extractedData?.currency || 'TRY')}</td>
+                          <td className="p-3 text-right text-slate-200">{formatAmount(profitVal, 'bin', false, '', '', extractedData?.currency || 'TRY')}</td>
+                          <td className="p-3 text-right text-slate-200">{formatAmount(row.net_income, 'bin', false, '', '', extractedData?.currency || 'TRY')}</td>
                           <td className="p-3 text-right text-slate-200">{marginText}</td>
                           <td className="p-3 text-right font-bold text-emerald-400">{returnText}</td>
                         </tr>
@@ -4186,8 +4204,8 @@ export default function ValuationTerminal() {
                               ].filter(Boolean).map((rowConfig: any) => (
                                 <tr key={rowConfig.k} className="hover:bg-slate-800/30">
                                   <td className="py-2">{rowConfig.l}</td>
-                                  <td className="py-2 text-right font-mono">{formatAmount(fv(latestPeriod, rowConfig.k), 'bin', false, '', '', currentExtractedData?.currency || 'Bin TRY')}</td>
-                                  <td className="py-2 text-right font-mono">{formatAmount(fv(yoyPeriod, rowConfig.k), 'bin', false, '', '', currentExtractedData?.currency || 'Bin TRY')}</td>
+                                  <td className="py-2 text-right font-mono">{formatAmount(fv(latestPeriod, rowConfig.k), 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
+                                  <td className="py-2 text-right font-mono">{formatAmount(fv(yoyPeriod, rowConfig.k), 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
                                   <td className="py-2 text-right font-mono">
                                     {(() => {
                                       const v1 = fv(latestPeriod, rowConfig.k);
@@ -4237,8 +4255,8 @@ export default function ValuationTerminal() {
                                 return (
                                   <tr key={rowConfig.k} className="hover:bg-slate-800/30">
                                     <td className="py-2">{rowConfig.l}</td>
-                                    <td className="py-2 text-right font-mono">{formatAmount(v1, 'bin', false, '', '', currentExtractedData?.currency || 'Bin TRY')}</td>
-                                    <td className="py-2 text-right font-mono">{formatAmount(v2, 'bin', false, '', '', currentExtractedData?.currency || 'Bin TRY')}</td>
+                                    <td className="py-2 text-right font-mono">{formatAmount(v1, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
+                                    <td className="py-2 text-right font-mono">{formatAmount(v2, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
                                     <td className="py-2 text-right font-mono">
                                       {chg ? (
                                         <span className={Number(chg) > 0 ? 'text-emerald-400' : Number(chg) < 0 ? 'text-rose-400' : 'text-slate-400'}>

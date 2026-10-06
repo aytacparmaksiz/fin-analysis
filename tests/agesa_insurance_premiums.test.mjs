@@ -31,20 +31,21 @@ test('AGESA Insurance & Pension AUM Plausibility & Scale Guard Test Suite', asyn
     const sanitized = enrichAndSanitizeFinancialHistory(rawAgesaInput);
     const row = sanitized.financial_history[0];
 
-    // 1. Assert written_premiums is rescued to ~15.7M Bin TRY (~15.7 Billion TL) instead of 79 Billion!
-    assert.ok(row.written_premiums > 14_000_000 && row.written_premiums < 17_000_000, 
-      `Expected written_premiums ~15.700.000 Bin TRY, got: ${row.written_premiums}`);
-    assert.equal(row.written_premiums, 15700000);
-    assert.equal(row.revenue, 15700000);
+    // 1. Assert written_premiums is rescued to ~15.7M Bin TRY (~15.7 Billion TL Tam TL) instead of 79 Billion!
+    assert.ok(row.written_premiums > 14_000_000_000 && row.written_premiums < 17_000_000_000, 
+      `Expected written_premiums ~15.700.000.000 Tam TL, got: ${row.written_premiums}`);
+    assert.equal(row.written_premiums, 15700000000);
+    assert.equal(row.revenue, 15700000000);
 
-    // 2. Assert pension_aum holds the 79 Billion AUM figure (normalized to Bin TRY: 79.165.846 Bin TRY)
-    assert.ok(row.pension_aum > 75_000_000 && row.pension_aum < 85_000_000,
-      `Expected pension_aum ~79.165.846 Bin TRY, got: ${row.pension_aum}`);
-    assert.equal(row.pension_aum, 79165846);
+    // 2. Assert pension_aum holds the 79 Billion AUM figure in Tam TL
+    assert.ok(row.pension_aum > 75_000_000_000 && row.pension_aum < 85_000_000_000,
+      `Expected pension_aum ~79.165.845.909 Tam TL, got: ${row.pension_aum}`);
+    assert.equal(row.pension_aum, 79165845909);
 
-    // 3. Assert monetary scale was correctly normalized from Tam TL to Bin TRY
-    assert.equal(row.equity, 12716575); // 12.7M Bin TRY
-    assert.equal(row.net_income, 2850000); // 2.85M Bin TRY
+    // 3. Assert monetary scale is stored in Tam TL and formats to Bin TRY in UI
+    assert.equal(row.equity, 12716575000); // 12.7 Mr TL Tam TL
+    assert.equal(row.net_income, 2850000000); // 2.85 Mr TL Tam TL
+    assert.equal(Math.round(row.equity / 1000), 12716575); // 12.7M Bin TRY in UI
   });
 
   await t.test('preserves standard insurance written premiums when already valid and realistic', () => {
@@ -67,9 +68,10 @@ test('AGESA Insurance & Pension AUM Plausibility & Scale Guard Test Suite', asyn
     const sanitized = enrichAndSanitizeFinancialHistory(normalInsuranceInput);
     const row = sanitized.financial_history[0];
 
-    assert.equal(row.written_premiums, 24500000);
-    assert.equal(row.revenue, 24500000);
-    assert.equal(row.equity, 28000000);
+    assert.equal(row.written_premiums, 24500000000);
+    assert.equal(row.revenue, 24500000000);
+    assert.equal(row.equity, 28000000000);
+    assert.equal(Math.round(row.written_premiums / 1000), 24500000);
   });
 
   await t.test('fixes AGESA 15.448.698 Bin TRY scale, 0.2% technical margin, 0.5 TL fair value, 0.28 TL implied price, and 45x DuPont AUM explanation', () => {
