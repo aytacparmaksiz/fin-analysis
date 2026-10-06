@@ -7,6 +7,10 @@ import {
 } from './valuation.ts';
 import { getIsYatirimMultiplesForTicker } from './isyatirim-service.ts';
 
+if (typeof process !== 'undefined' && process.env) {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
+
 export interface FinancialHistoryItem {
   period: string;
   revenue: number | null;
@@ -205,7 +209,7 @@ async function fetchIsYatirimMaliTablo(ticker: string, financialGroup: string, y
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       },
-      signal: AbortSignal.timeout(2500),
+      signal: AbortSignal.timeout(5000),
       next: { revalidate: 86400 } // Günlük önbellek
     });
     if (!res.ok) return [];
@@ -357,12 +361,27 @@ async function fetchYahooFundamentalsHistory(ticker: string, sector: SectorType)
       const p09: Record<string, number> = {};
       const p12: Record<string, number> = {};
 
+      const prevYearQ4 = qMap.get(`${String(Number(yr) - 1)}/12`) || {};
+
       for (const fk of flowKeys) {
         const vAnn = ann[fk];
-        const vQ1 = q1[fk];
+        let vQ1 = q1[fk];
         const vQ2 = q2[fk];
         const vQ3 = q3[fk];
         const vQ4 = q4[fk];
+        const vPrevQ4 = prevYearQ4[fk];
+
+        // Yahoo Finance çeyreklik veri anomalisi / outlier temizliği
+        // (Örn: AGESA 2026/03 64.1B emeklilik fonu değerleme farkının TotalRevenue'ya karışması):
+        if (fk === 'TotalRevenue' && vQ1 !== undefined && vQ1 > 0) {
+          const peers = [vQ2, vQ3, vQ4, vPrevQ4].filter((v): v is number => typeof v === 'number' && v > 0);
+          if (peers.length > 0) {
+            const avgPeer = peers.reduce((s, x) => s + x, 0) / peers.length;
+            if (vQ1 > avgPeer * 2.8) {
+              vQ1 = Math.round(avgPeer * 0.95);
+            }
+          }
+        }
 
         // Q1 (03)
         if (vQ1 !== undefined) {

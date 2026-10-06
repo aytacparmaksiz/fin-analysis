@@ -3786,9 +3786,9 @@ export default function ValuationTerminal() {
                               </span>
                             )}
                           </td>
-                          <td className="p-3 text-right text-slate-200">{formatAmount(revenueVal, 'bin')}</td>
-                          <td className="p-3 text-right text-slate-200">{formatAmount(profitVal, 'bin')}</td>
-                          <td className="p-3 text-right text-slate-200">{formatAmount(row.net_income, 'bin')}</td>
+                          <td className="p-3 text-right text-slate-200">{formatAmount(revenueVal, 'bin', false, '', '', extractedData?.currency || 'Bin TRY')}</td>
+                          <td className="p-3 text-right text-slate-200">{formatAmount(profitVal, 'bin', false, '', '', extractedData?.currency || 'Bin TRY')}</td>
+                          <td className="p-3 text-right text-slate-200">{formatAmount(row.net_income, 'bin', false, '', '', extractedData?.currency || 'Bin TRY')}</td>
                           <td className="p-3 text-right text-slate-200">{marginText}</td>
                           <td className="p-3 text-right font-bold text-emerald-400">{returnText}</td>
                         </tr>
