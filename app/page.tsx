@@ -840,14 +840,15 @@ function exportTableToCsv(filename: string, headers: string[], rows: (string | n
   }
 }
 
-function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorType = 'INDUSTRIAL', referencePrice: number = 100) {
+function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorType = 'INDUSTRIAL', referencePrice: number = 100, currency: string = 'Bin TRY') {
   if (!Array.isArray(history) || history.length === 0) return [];
 
   // enrichAndSanitizeFinancialHistory ile tam deterministik türetme ve TMS 29 homojenizasyonu
   const payload = {
     sector,
+    currency: currency || 'Bin TRY',
     debt_and_interest: debtInfo,
-    financial_history: history
+    financial_history: history.map((it: any) => (it && typeof it === 'object' ? { ...it } : it))
   };
 
   const enriched = enrichAndSanitizeFinancialHistory(payload);
@@ -942,7 +943,21 @@ function preprocessReportMarkdown(text: string): string {
   // Metin içinde kalan yalnız '$' işaretlerini (eğer Amerikan Doları $100 değilse) temizle
   cleaned = cleaned.replace(/\$(?!\d)/g, '');
 
-  // 6. Fazla boş satırları normalize et
+  // 6. Mükerrer 'Analist Kararı:' kartlarını önle: Yalnızca raporun en sonundaki nihai karar bloğu kart olarak çizilmeli
+  const verdictHeadingRegex = /(?:^|\n)\s*(?:#{1,4}\s*)?\*{0,2}Analist\s+Karar[ıi]\s*[:=-]/gi;
+  const verdictMatches = Array.from(cleaned.matchAll(verdictHeadingRegex));
+  if (verdictMatches.length > 1) {
+    let seen = 0;
+    cleaned = cleaned.replace(verdictHeadingRegex, (match) => {
+      seen++;
+      if (seen < verdictMatches.length) {
+        return match.replace(/Analist\s+Karar[ıi]/i, 'Model Görünümü');
+      }
+      return match;
+    });
+  }
+
+  // 7. Fazla boş satırları normalize et
   cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
 
   return cleaned.trim();
@@ -1560,6 +1575,7 @@ export default function ValuationTerminal() {
               currentData = {
                 ...currentData,
                 ...result2.data,
+                currency: currentData.currency,
                 financial_history: currentData.financial_history // Resmi BIST mali tablolarını koru
               };
             }
@@ -1617,6 +1633,7 @@ export default function ValuationTerminal() {
               currentData = {
                 ...currentData,
                 ...result3.data,
+                currency: currentData.currency,
                 financial_history: currentData.financial_history // Resmi BIST mali tablolarını koru
               };
             }
@@ -2144,7 +2161,8 @@ export default function ValuationTerminal() {
     rawChartData, 
     currentExtractedData?.debt_and_interest,
     currentSector,
-    refMarketPrice
+    refMarketPrice,
+    currentExtractedData?.currency || 'Bin TRY'
   );
   const quarterlyChartData = useMemo(() => computeIncrementalQuarterlyData(chartData), [chartData]);
   const ttmChartData = useMemo(() => computeTtmChartData(quarterlyChartData, chartData), [quarterlyChartData, chartData]);
@@ -2885,12 +2903,15 @@ export default function ValuationTerminal() {
 
   // Dinamik Değer Sürücüleri ve Değerleme Hesaplaması (Item 2 & 3: Tek ve Tutarlı Kaynak)
   const dynamicValuationResult = useMemo(() => {
+    const harmonizedExtracted = currentExtractedData
+      ? { ...currentExtractedData, financial_history: chartData }
+      : currentExtractedData;
     return computeSectorValuationAndDrivers(
-      currentExtractedData,
+      harmonizedExtracted,
       activeReport?.price || price,
       currentSector
     );
-  }, [currentExtractedData, activeReport?.price, price, currentSector]);
+  }, [currentExtractedData, chartData, activeReport?.price, price, currentSector]);
 
   // Rapor metninde önceden yazılmış adil değer varsa (Item 2: Rapor ile Kart Uyuşmazlığını Sıfırlama)
   const reportValuation = useMemo(() => {
@@ -2994,8 +3015,8 @@ export default function ValuationTerminal() {
   }, [chartData, currentSector]);
 
   const dupontResult = useMemo(() => {
-    return calculateDuPont5Step(latestPeriodItem, previousPeriodItem);
-  }, [latestPeriodItem, previousPeriodItem]);
+    return calculateDuPont5Step(latestPeriodItem, previousPeriodItem, currentSector);
+  }, [latestPeriodItem, previousPeriodItem, currentSector]);
 
   const fxSensitivity = useMemo(() => {
     return calculateFxSensitivity(latestPeriodItem, currentExtractedData);
@@ -3166,7 +3187,9 @@ export default function ValuationTerminal() {
       </div>
 
       <p className="text-xs text-slate-400">
-        Özkaynak kârlılığını (ROE) oluşturan 5 temel motor: Vergi Yükü × Faiz Yükü × Faaliyet Marjı × Aktif Devir Hızı × Finansal Kaldıraç
+        {currentSector === 'INSURANCE'
+          ? 'Özkaynak kârlılığını (ROE) oluşturan 5 temel motor: Vergi Yükü × Yatırım Katkısı × Teknik Kâr Marjı × Aktif Devri × Fon & Rezerv Çarpanı'
+          : 'Özkaynak kârlılığını (ROE) oluşturan 5 temel motor: Vergi Yükü × Faiz Yükü × Faaliyet Marjı × Aktif Devir Hızı × Finansal Kaldıraç'}
       </p>
 
       {/* 5 Aşamalı Boru Hattı Gösterimi */}
@@ -3180,19 +3203,27 @@ export default function ValuationTerminal() {
         </div>
 
         <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800 text-center">
-          <div className="text-[10px] text-slate-400 font-semibold uppercase">2. Faiz Yükü</div>
+          <div className="text-[10px] text-slate-400 font-semibold uppercase">
+            {currentSector === 'INSURANCE' ? '2. Yatırım Katkısı' : '2. Faiz Yükü'}
+          </div>
           <div className="text-base font-black font-mono text-white mt-1">
             {dupontResult.interestBurden != null ? `${dupontResult.interestBurden}x` : '—'}
           </div>
-          <div className="text-[9px] text-slate-500 mt-0.5">EBT / EBIT</div>
+          <div className="text-[9px] text-slate-500 mt-0.5">
+            {currentSector === 'INSURANCE' ? 'EBT / Teknik Kâr' : 'EBT / EBIT'}
+          </div>
         </div>
 
         <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800 text-center">
-          <div className="text-[10px] text-slate-400 font-semibold uppercase">3. Faaliyet Marjı</div>
+          <div className="text-[10px] text-slate-400 font-semibold uppercase">
+            {currentSector === 'INSURANCE' ? '3. Teknik Kâr Marjı' : '3. Faaliyet Marjı'}
+          </div>
           <div className="text-base font-black font-mono text-cyan-300 mt-1">
             {dupontResult.ebitMargin != null ? `%${dupontResult.ebitMargin}` : '—'}
           </div>
-          <div className="text-[9px] text-slate-500 mt-0.5">EBIT / Hasılat</div>
+          <div className="text-[9px] text-slate-500 mt-0.5">
+            {currentSector === 'INSURANCE' ? 'Teknik Kâr / Prim' : 'EBIT / Hasılat'}
+          </div>
         </div>
 
         <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800 text-center">
@@ -3200,15 +3231,21 @@ export default function ValuationTerminal() {
           <div className="text-base font-black font-mono text-amber-300 mt-1">
             {dupontResult.assetTurnover != null ? `${dupontResult.assetTurnover}x` : '—'}
           </div>
-          <div className="text-[9px] text-slate-500 mt-0.5">Hasılat / Aktif</div>
+          <div className="text-[9px] text-slate-500 mt-0.5">
+            {currentSector === 'INSURANCE' ? 'Prim / Aktif (AUM Dahil)' : 'Hasılat / Aktif'}
+          </div>
         </div>
 
         <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800 text-center col-span-2 sm:col-span-1">
-          <div className="text-[10px] text-slate-400 font-semibold uppercase">5. Kaldıraç</div>
+          <div className="text-[10px] text-slate-400 font-semibold uppercase">
+            {currentSector === 'INSURANCE' ? '5. Fon & Rezerv Çarpanı' : '5. Kaldıraç'}
+          </div>
           <div className="text-base font-black font-mono text-rose-300 mt-1">
             {dupontResult.financialLeverage != null ? `${dupontResult.financialLeverage}x` : '—'}
           </div>
-          <div className="text-[9px] text-slate-500 mt-0.5">Aktif / Özkaynak</div>
+          <div className="text-[9px] text-slate-500 mt-0.5">
+            {currentSector === 'INSURANCE' ? 'Aktif (AUM Dahil) / Özkaynak' : 'Aktif / Özkaynak'}
+          </div>
         </div>
       </div>
 
@@ -5714,8 +5751,8 @@ export default function ValuationTerminal() {
                                 const shares = parseFinancialNumber(currentExtractedData?.shares_outstanding ?? currentExtractedData?.share_count) ?? 180000000;
                                 const mCap = (d.share_price || valuationInfo.current_price) * shares;
                                 const normCurr = String(currentExtractedData?.currency || d.currency || '').trim().toLowerCase();
-                                const refScale = Math.abs(d.net_income ?? d.equity ?? 0);
-                                const isBinTry = normCurr.includes('bin') || normCurr.includes('thousand') || (!normCurr && refScale > 0 && refScale < 50000000 && shares >= 1000000);
+                                const refScale = Math.abs(d.equity ?? d.net_income ?? 0);
+                                const isBinTry = normCurr.includes('bin') || normCurr.includes('thousand') || (refScale > 0 && refScale < 250_000_000 && shares >= 1_000_000);
                                 const chartUnitScale = isBinTry ? 1000 : 1;
                                 const scaledNet = d.net_income != null ? d.net_income * chartUnitScale : null;
                                 const scaledEquity = d.equity != null ? d.equity * chartUnitScale : null;
@@ -6356,7 +6393,7 @@ export default function ValuationTerminal() {
                           },
                           p: ({ children, ...props }) => {
                             const text = extractTextFromChildren(children);
-                            if (/Analist\s+Karar[ıi]/i.test(text)) {
+                            if (/^\s*(?:#{1,4}\s*)?\*{0,2}Analist\s+Karar[ıi]\s*[:=-]/i.test(text)) {
                               const verdictMatch = text.match(/Analist\s+Karar[ıi]\s*[:=-]?\s*\[?\s*\*?\*?\s*(ALMA|SAT|AL|NÖTR|NOTR|TUT)\s*\*?\*?\s*\]?/i);
                               const matchedVerdict = verdictMatch ? verdictMatch[1].toUpperCase() : '';
                               const isAlma = ['ALMA', 'SAT'].includes(matchedVerdict) || (/\b(ALMA|SAT)\b/i.test(text) && !/\b(AL)\b/i.test(text.replace(/\b(ALMA)\b/gi, '')));

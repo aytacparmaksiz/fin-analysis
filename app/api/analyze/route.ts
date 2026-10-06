@@ -75,6 +75,7 @@ AKADEMİK OKUNABİLİRLİK, BİLİŞSEL TASARIM VE DİL KURALLARI (ZORUNLU):
    - Uzun ve yorucu duvar paragrafları yazma! Her paragraf en fazla 3 cümleden oluşmalıdır.
    - Maddeli analizlerde her maddenin ilk 3-5 kelimesini **kalın (bold) anahtar kavram** olarak başlat (Örn: **Güçlü Özkaynak Kârlılığı:** Şirket son dönemde %62,9 ROE üreterek...). Bu teknik okuyucunun gözünün metni %40 daha hızlı taramasını ve bilginin kalıcı olmasını sağlar.
    - Her ana bölümün hemen altına ` + "`> **Bölüm Özeti:** ...`" + ` şeklinde 1 cümlelik net bir çıkarım kutusu ekle.
+4. TEKİL NİHAİ KARAR KURALI: 'Analist Kararı:' satırını SADECE raporun en sonunda (Bölüm VI altında) 1 kez yaz. Bölüm I (Yönetici Özeti) içinde 'Analist Kararı:' ifadesini tekrarlama.
 `;
 
     const universalSafetyRules = `
@@ -379,7 +380,7 @@ function generateAlgorithmicReportFallback(params: {
   return `### I. Yönetici Özeti ve Temel Yatırım Tezi
 > **Bölüm Özeti:** ${ticker} hissesi için hesaplanan adil değer ${valuation.fair_value} TL olup, güncel ${price} TL piyasa fiyatına göre %${valuation.discount_pct} getiri potansiyeli taşımaktadır.
 
-**Temel Yatırım Tezi:** ${ticker}, ${sectorDef.title} sektöründe faaliyet göstermektedir. Yapılan ${valuation.valuation_model_name} analizine göre hissenin hesaplanan adil değeri **${valuation.fair_value} TL** seviyesindedir. Piyasa fiyatı olan **${price} TL** üzerinden yapılan emniyet marjı değerlendirmesi sonucunda analist kararı **${optimization.finalDecision}** olarak belirlenmiştir.
+**Temel Yatırım Tezi:** ${ticker}, ${sectorDef.title} sektöründe faaliyet göstermektedir. Yapılan ${valuation.valuation_model_name} analizine göre hissenin hesaplanan adil değeri **${valuation.fair_value} TL** seviyesindedir. Piyasa fiyatı olan **${price} TL** üzerinden yapılan emniyet marjı değerlendirmesi sonucunda model görünümü **${optimization.finalDecision}** yönünde şekillenmiştir.
 
 **Finansal Sağlık Skoru:** Şirket 100 üzerinden **${scoreResult.totalScore}** puan alarak sektörel finansal dayanıklılık ve sermaye verimliliği kriterlerini sağlamıştır.
 

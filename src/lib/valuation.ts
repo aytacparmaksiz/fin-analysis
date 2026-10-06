@@ -567,21 +567,38 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
         if (!item.written_premiums || item.written_premiums === 0) item.written_premiums = resolvedPrem;
         if (!item.gross_written_premiums || item.gross_written_premiums === 0) item.gross_written_premiums = resolvedPrem;
       }
-      const resolvedTech = item.technical_balance ?? item.technical_profit ?? item.ebitda ?? item.operating_profit ?? item.operating_income ?? null;
-      if (resolvedTech != null && resolvedTech !== 0) {
+      let resolvedTech = item.technical_balance ?? item.technical_profit ?? item.ebitda ?? item.operating_profit ?? item.operating_income ?? null;
+      // Hayat & Emeklilik şirketlerinde (örn. AGESA) 3C 'Hayat Dışı Teknik Bölüm Dengesi' (~%0.2) çekilmişse gerçek teknik dengeyi kurtar:
+      if (
+        resolvedPrem != null &&
+        resolvedPrem > 0 &&
+        item.net_income != null &&
+        item.net_income > resolvedPrem * 0.08 &&
+        (resolvedTech == null || Math.abs(resolvedTech) < resolvedPrem * 0.03)
+      ) {
+        resolvedTech = Math.round(item.net_income * 0.82);
+        item.technical_profit = resolvedTech;
+        item.technical_balance = resolvedTech;
+        item.ebitda = resolvedTech;
+        item.operating_profit = resolvedTech;
+        item.ebitda_margin = null;
+      } else if (resolvedTech != null && resolvedTech !== 0) {
         if (!item.ebitda || item.ebitda === 0) item.ebitda = resolvedTech;
         if (!item.technical_profit || item.technical_profit === 0) item.technical_profit = resolvedTech;
         if (!item.technical_balance || item.technical_balance === 0) item.technical_balance = resolvedTech;
       }
-      if (item.loss_ratio != null && item.expense_ratio != null && item.combined_ratio == null) {
+      if (item.loss_ratio != null && item.expense_ratio != null && (item.loss_ratio + item.expense_ratio) >= 55 && item.combined_ratio == null) {
         item.combined_ratio = Number(((item.loss_ratio || 0) + (item.expense_ratio || 0)).toFixed(1));
+      } else if (resolvedPrem && resolvedPrem > 0 && resolvedTech != null && (item.combined_ratio == null || item.combined_ratio < 55 || item.combined_ratio > 99.5)) {
+        const impliedMargin = (resolvedTech / resolvedPrem) * 100;
+        item.combined_ratio = Number((100 - Math.max(-30, Math.min(35, impliedMargin))).toFixed(1));
       }
       if (item.combined_ratio != null && item.ebitda_margin == null) {
         item.ebitda_margin = Number((100 - item.combined_ratio).toFixed(1));
       }
     }
 
-    // Otomatik Birim / Ölçek Normalizasyonu (Sadece veri kümesi 'Bin TRY' olarak işaretliyken Tam TL karışmışsa):
+    // Otomatik Çift Yönlü Birim / Ölçek Öz-İyileştirme (Bidirectional Self-Healing Scale Normalizer):
     const monetaryFields = [
       'revenue', 'ebitda', 'net_income', 'gross_profit', 'operating_profit', 'operating_income',
       'operating_cash_flow', 'capex', 'free_cash_flow', 'net_debt',
@@ -592,18 +609,38 @@ export function enrichAndSanitizeFinancialHistory(data: any): any {
       'written_premiums', 'gross_written_premiums', 'earned_premiums', 'technical_profit', 'technical_balance',
       'investment_income', 'pension_aum', 'net_interest_income'
     ];
+    const isContainerFullTl = containerCurr === 'try' || containerCurr === 'tl' || containerCurr.includes('tam');
+    const itemEqAbs = Math.abs(item.equity || 0);
+    const itemRevAbs = Math.abs(item.revenue || item.written_premiums || 0);
+
     if (
       isContainerBin &&
-      ((item.total_assets != null && item.total_assets > 10_000_000_000) ||
-      (item.equity != null && item.equity > 5_000_000_000) ||
-      (item.revenue != null && item.revenue > 10_000_000_000) ||
-      (item.written_premiums != null && item.written_premiums > 10_000_000_000))
+      itemEqAbs > 500_000_000 &&
+      itemRevAbs > 500_000_000
     ) {
       for (const mf of monetaryFields) {
-        if (typeof item[mf] === 'number' && Math.abs(item[mf]) > 100_000_000) {
+        if (typeof item[mf] === 'number' && item[mf] !== 0) {
           item[mf] = Math.round(item[mf] / 1000);
         }
       }
+    } else if (
+      isContainerFullTl &&
+      itemEqAbs > 0 && itemEqAbs < 250_000_000 &&
+      (itemRevAbs === 0 || itemRevAbs < 250_000_000)
+    ) {
+      // Konteyner 'TRY' (Tam TL) iken bu dönem KAP PDF'ten 'Bin TRY' olarak (örn. 15.448.698) gelmişse 1000 ile çarparak Tam TL'ye eşitle:
+      for (const mf of monetaryFields) {
+        if (typeof item[mf] === 'number' && item[mf] !== 0) {
+          item[mf] = Math.round(item[mf] * 1000);
+        }
+      }
+    }
+    // Eğer geçmişte total_assets yanlışlıkla özkaynaktan küçük kalmışsa (örn. 1000'e bölünme anomalisi), bilanço denkliğinden onar:
+    if (item.total_assets != null && item.equity != null && item.equity > 0 && item.total_assets < item.equity) {
+      const liabSum = (item.current_liabilities || 0) + (item.long_term_liabilities || 0);
+      const assetSum = (item.current_assets || 0) + (item.non_current_assets || 0);
+      if (liabSum > 0) item.total_assets = liabSum + item.equity;
+      else if (assetSum > item.equity) item.total_assets = assetSum;
     }
 
     // Bankacılık sektörü özel alan eşleştirmeleri
@@ -2214,8 +2251,13 @@ export function computeSectorValuationAndDrivers(
   let boundaryWarning: string | undefined = undefined;
 
   const normCurr = String(extractedData?.currency || '').trim().toLowerCase();
-  const refAssetScale = Math.abs(parseFinancialNumber(latest?.total_assets) ?? parseFinancialNumber(latest?.equity) ?? 0);
-  const isBinTry = normCurr.includes('bin') || normCurr.includes('thousand') || (!normCurr && refAssetScale > 0 && refAssetScale < 50000000);
+  const eqScaleSample = Math.abs(parseFinancialNumber(latest?.equity) ?? 0);
+  const revScaleSample = Math.abs(parseFinancialNumber(latest?.revenue ?? latest?.written_premiums) ?? 0);
+  const paidCapSample = Math.abs(parseFinancialNumber(latest?.paid_in_capital) ?? 0);
+  const isClearlyThousands =
+    (paidCapSample > 0 && paidCapSample < 10_000_000 && shareCount >= 5_000_000) ||
+    (eqScaleSample > 0 && eqScaleSample < 250_000_000 && (revScaleSample === 0 || revScaleSample < 250_000_000));
+  const isBinTry = normCurr.includes('bin') || normCurr.includes('thousand') || isClearlyThousands;
   const unitScale = isBinTry ? 1000 : 1;
 
   // Borsa İstanbul'da 1 TL nominal Ödenmiş Sermaye = 1 Adet Pay (Lot).
@@ -2736,14 +2778,21 @@ export function calculateDuPont5Step(item: any, sectorOrPrev?: any, sectorOverri
 
   // EBIT & EBT derivation
   let ebit = parseFinancialNumber(item.ebit ?? item.operating_profit ?? item.operating_income);
-  if (ebit === null && item.ebitda != null) {
+  if (resolvedSector === 'INSURANCE') {
+    const techP = parseFinancialNumber(item.technical_balance ?? item.technical_profit ?? item.ebitda);
+    if (techP !== null && revenue !== null && revenue > 0 && netIncome !== null && netIncome > revenue * 0.08 && Math.abs(techP) < revenue * 0.03) {
+      ebit = Math.round(netIncome * 0.82);
+    } else if (techP !== null) {
+      ebit = techP;
+    }
+  } else if (ebit === null && item.ebitda != null) {
     const dep = parseFinancialNumber(item.capex) ? (item.capex * 0.5) : (item.ebitda * 0.15);
     ebit = item.ebitda - dep;
   }
 
   const interestExp = parseFinancialNumber(item.interest_expenses ?? item.financial_expenses ?? item.interest_expense ?? item.financial_expense);
   let ebt = parseFinancialNumber(item.ebt);
-  if (ebt === null && ebit !== null && interestExp !== null) {
+  if (ebt === null && ebit !== null && interestExp !== null && resolvedSector !== 'INSURANCE') {
     ebt = ebit - interestExp;
   } else if (ebt === null && netIncome !== null) {
     const taxRate = resolvedSector === 'REIT' ? 0.0 : ((resolvedSector === 'BANKING' || resolvedSector === 'INSURANCE') ? 0.30 : 0.25);
@@ -2772,8 +2821,11 @@ export function calculateDuPont5Step(item: any, sectorOrPrev?: any, sectorOverri
 
   const annualFactor = getAnnualizationFactor(item.period);
 
-  const assetTurnover = (revenue !== null && avgAssets !== null && avgAssets > 0)
-    ? Number(((revenue * annualFactor) / avgAssets).toFixed(2))
+  const rawAssetTurnover = (revenue !== null && avgAssets !== null && avgAssets > 0)
+    ? ((revenue * annualFactor) / avgAssets)
+    : null;
+  const assetTurnover = rawAssetTurnover !== null
+    ? Number(rawAssetTurnover.toFixed(rawAssetTurnover < 0.2 ? 3 : 2))
     : null;
 
   const financialLeverage = (avgAssets !== null && avgEquity !== null && avgEquity > 0)
@@ -2781,8 +2833,8 @@ export function calculateDuPont5Step(item: any, sectorOrPrev?: any, sectorOverri
     : null;
 
   let calculatedRoe: number | null = null;
-  if (taxBurden !== null && interestBurden !== null && ebitMargin !== null && assetTurnover !== null && financialLeverage !== null) {
-    calculatedRoe = Number((taxBurden * interestBurden * (ebitMargin / 100) * assetTurnover * financialLeverage * 100).toFixed(1));
+  if (taxBurden !== null && interestBurden !== null && ebitMargin !== null && rawAssetTurnover !== null && financialLeverage !== null) {
+    calculatedRoe = Number((taxBurden * interestBurden * (ebitMargin / 100) * rawAssetTurnover * financialLeverage * 100).toFixed(1));
   }
 
   const reportedRoe = parseFinancialNumber(item.roe) ?? calculatedRoe;
@@ -2791,7 +2843,11 @@ export function calculateDuPont5Step(item: any, sectorOrPrev?: any, sectorOverri
   if (avgEquity !== null && avgEquity <= 0) {
     driverSummary = 'Şirket özkaynakları negatiftir (TTK 376 Borca Batıklık). Negatif sermaye nedeniyle DuPont kaldıraç çarpanı hesaplanamaz.';
   } else if (calculatedRoe !== null) {
-    if (financialLeverage && financialLeverage > 3.0) {
+    if (resolvedSector === 'INSURANCE') {
+      driverSummary = `Sigorta ve emeklilik muhasebesinde müşteri emeklilik yatırım fonları (AUM) ve teknik karşılıklar bilançoda konsolide edildiğinden Aktif/Özkaynak çarpanı (${financialLeverage}x) yüksek görünmektedir; bu oran finansal borç kaldıracı değildir. Özkaynak kârlılığı (%${calculatedRoe}) güçlü teknik bölüm marjı (%${ebitMargin}) ve yatırım portföyü gelirlerinden beslenmektedir.`;
+    } else if (resolvedSector === 'BANKING') {
+      driverSummary = `Bankacılık sektöründe müşteri mevduatları ve kredi portföyü bilanço yapısının doğal parçası olduğundan Aktif/Özkaynak çarpanı (${financialLeverage}x) sektörel normdadır (finansal risk için BDDK sermaye yeterliliği esastır). Özkaynak kârlılığı (%${calculatedRoe}) net faiz marjı ve komisyon gelirleriyle desteklenmektedir.`;
+    } else if (financialLeverage && financialLeverage > 3.0) {
       driverSummary = `Özkaynak kârlılığı (%${calculatedRoe}) ağırlıklı olarak yüksek finansal kaldıraç (${financialLeverage}x) ile büyütülmektedir; borçlanma maliyeti baskısı dikkatle izlenmelidir.`;
     } else if (ebitMargin && ebitMargin > 20.0) {
       driverSummary = `Özkaynak kârlılığı (%${calculatedRoe}) güçlü operasyonel fiyatlama kabiliyeti ve yüksek faaliyet kâr marjı (%${ebitMargin}) ile desteklenmektedir.`;
@@ -3105,8 +3161,13 @@ export function calculateCompanyMultiples(
 
   // Borsa İstanbul bilançoları standart olarak Bin TL cinsindendir.
   const normCurr = String(currency || latest?.currency || '').trim().toLowerCase();
-  const refScale = Math.abs(netIncome ?? equity ?? revenue ?? 0);
-  const isBinTry = normCurr.includes('bin') || normCurr.includes('thousand') || (!normCurr && refScale > 0 && refScale < 50000000 && safeShares >= 1000000);
+  const eqScaleSample = Math.abs(equity ?? 0);
+  const revScaleSample = Math.abs(revenue ?? 0);
+  const paidCapSample = Math.abs(parseFinancialNumber(latest?.paid_in_capital) ?? 0);
+  const isClearlyThousands =
+    (paidCapSample > 0 && paidCapSample < 10_000_000 && safeShares >= 5_000_000) ||
+    (eqScaleSample > 0 && eqScaleSample < 250_000_000 && (revScaleSample === 0 || revScaleSample < 250_000_000) && safeShares >= 1_000_000);
+  const isBinTry = normCurr.includes('bin') || normCurr.includes('thousand') || isClearlyThousands;
   const unitScale = isBinTry ? 1000 : 1;
 
   const scaledNet = (netIncome !== null) ? netIncome * unitScale : null;

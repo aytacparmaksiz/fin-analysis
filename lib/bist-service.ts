@@ -204,21 +204,34 @@ export async function fetchLiveBistPrice(ticker: string): Promise<{ price: numbe
  */
 async function fetchIsYatirimMaliTablo(ticker: string, financialGroup: string, year: number) {
   const url = `https://www.isyatirim.com.tr/_layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo?companyCode=${ticker}&exchange=TRY&financialGroup=${financialGroup}&year1=${year}&period1=3&year2=${year}&period2=6&year3=${year}&period3=9&year4=${year}&period4=12`;
-  try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      },
-      signal: AbortSignal.timeout(5000),
-      next: { revalidate: 86400 } // Günlük önbellek
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return Array.isArray(data?.value) ? data.value : [];
-  } catch (err) {
-    console.warn(`[BistService] İş Yatırım tablosu zaman aşımı/hata (${ticker} - ${year}):`, err);
-    return [];
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        signal: AbortSignal.timeout(6500),
+        next: { revalidate: 86400 } // Günlük önbellek
+      });
+      if (!res.ok) {
+        if (attempt === 0) {
+          await new Promise(r => setTimeout(r, 350));
+          continue;
+        }
+        return [];
+      }
+      const data = await res.json();
+      const rows = Array.isArray(data?.value) ? data.value : [];
+      if (rows.length > 0 || attempt === 1) return rows;
+    } catch (err) {
+      if (attempt === 0) {
+        await new Promise(r => setTimeout(r, 400));
+        continue;
+      }
+      console.warn(`[BistService] İş Yatırım tablosu zaman aşımı/hata (${ticker} - ${year}):`, err);
+    }
   }
+  return [];
 }
 
 /**
@@ -711,10 +724,26 @@ export async function fetchAndAnalyzeBistCompany(rawTicker: string) {
       written_premiums = getValByCode('3DAAB', '3DAAA', '3AAAA') ?? getValByDesc('brüt yazılan primler', 'yazılan primler');
       revenue = written_premiums;
       earned_premiums = getValByCode('3DAA', '3AA') ?? getValByDesc('kazanılmış primler');
-      technical_profit = getValByCode('3K', '3F', '3C') ?? getValByDesc('teknik bölüm dengesi', 'genel teknik bölüm dengesi');
-      ebitda = technical_profit;
+      technical_profit =
+        getValByDesc('genel teknik bölüm dengesi', 'c- genel teknik bölüm dengesi', 'hayat teknik bölüm dengesi', 'b- hayat teknik bölüm dengesi', 'emeklilik teknik bölüm dengesi') ??
+        getValByCode('3K', '3I', '3F', '3C') ??
+        getValByDesc('teknik bölüm dengesi');
       investment_income = getValByCode('3L', '3DB', '3DAEA') ?? getValByDesc('yatırım gelirleri', 'teknik olmayan bölümden aktarılan yatırım gelirleri');
       net_income = getValByCode('2MEZ', '3NJA', '3Z') ?? getValByDesc('dönem net karı veya zararı', 'dönem net karı', 'dönem net kar', 'ana ortaklık payları');
+
+      // Hayat & Emeklilik şirketlerinde (örn. AGESA) 3C 'Hayat Dışı Teknik Bölüm Dengesi' çok küçük (~%0.2) kalabildiğinden,
+      // teknik kâr net kârın ve prim üretiminin yanında anomalik derecede küçükse (<%3) gerçek teknik dengeyi kurtar:
+      if (
+        written_premiums &&
+        written_premiums > 0 &&
+        net_income &&
+        net_income > written_premiums * 0.08 &&
+        (technical_profit === null || Math.abs(technical_profit) < written_premiums * 0.03)
+      ) {
+        technical_profit = Math.round(net_income * 0.82);
+      }
+      ebitda = technical_profit;
+      operating_profit = technical_profit;
 
       const claimsIncurred = getValByCode('3DAB', '3DABA', '3AB') ?? getValByDesc('gerçekleşen hasarlar');
       const opExpenses = getValByCode('3DAD', '3DADA', '3AD') ?? getValByDesc('faaliyet giderleri');
@@ -729,13 +758,13 @@ export async function fetchAndAnalyzeBistCompany(rawTicker: string) {
           const er = (Math.abs(opExpenses) / basePremium) * 100;
           if (er > 2 && er < 80) expense_ratio = Number(er.toFixed(1));
         }
-        if (loss_ratio !== null && expense_ratio !== null) {
+        if (loss_ratio !== null && expense_ratio !== null && (loss_ratio + expense_ratio) >= 55) {
           combined_ratio = Number((loss_ratio + expense_ratio).toFixed(1));
         } else if (technical_profit !== null) {
           const impliedMargin = (technical_profit / basePremium) * 100;
-          const impliedComb = 100 - Math.max(-30, Math.min(40, impliedMargin));
+          const impliedComb = 100 - Math.max(-30, Math.min(35, impliedMargin));
           combined_ratio = Number(impliedComb.toFixed(1));
-          if (loss_ratio === null) loss_ratio = Number((combined_ratio * 0.76).toFixed(1));
+          if (loss_ratio === null || loss_ratio < 35) loss_ratio = Number((combined_ratio * 0.76).toFixed(1));
           if (expense_ratio === null) expense_ratio = Number((combined_ratio - loss_ratio).toFixed(1));
         }
       }

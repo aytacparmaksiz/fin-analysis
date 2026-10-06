@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { enrichAndSanitizeFinancialHistory } from '../lib/valuation.ts';
+import {
+  enrichAndSanitizeFinancialHistory,
+  computeSectorValuationAndDrivers,
+  calculateCompanyMultiples,
+  calculateDuPont5Step,
+} from '../lib/valuation.ts';
 
 test('AGESA Insurance & Pension AUM Plausibility & Scale Guard Test Suite', async (t) => {
   await t.test('rescues AGESA written premiums from 79 Billion AUM conflation and normalizes scale', () => {
@@ -66,4 +71,66 @@ test('AGESA Insurance & Pension AUM Plausibility & Scale Guard Test Suite', asyn
     assert.equal(row.revenue, 24500000);
     assert.equal(row.equity, 28000000);
   });
+
+  await t.test('fixes AGESA 15.448.698 Bin TRY scale, 0.2% technical margin, 0.5 TL fair value, 0.28 TL implied price, and 45x DuPont AUM explanation', () => {
+    // Scenario: BIST API loaded container with currency='TRY' (Tam TL), and latest period was in Bin TRY (15,448,698)
+    // and had 3C non-life technical profit (~30,897 Bin TRY = 0.2% of premiums)
+    const mixedAgesaData = {
+      ticker: 'AGESA',
+      sector: 'INSURANCE',
+      currency: 'TRY',
+      current_price: 230,
+      shares_outstanding: 180000000,
+      financial_history: [
+        {
+          period: '2024/12',
+          written_premiums: 14122502000,
+          revenue: 14122502000,
+          technical_profit: 2950000000,
+          net_income: 3600000000,
+          equity: 10090450000,
+          total_assets: 453400000000,
+        },
+        {
+          period: '2026/06',
+          // Period in Bin TRY inside a 'TRY' container!
+          written_premiums: 15448698,
+          gross_written_premiums: 15448698,
+          revenue: 15448698,
+          technical_profit: 30897, // Buggy 0.2% non-life 3C line
+          technical_balance: 30897,
+          net_income: 4432668,
+          equity: 12716575,
+          total_assets: 526711580,
+        }
+      ]
+    };
+
+    const sanitized = enrichAndSanitizeFinancialHistory(mixedAgesaData);
+    const latest = sanitized.financial_history[1];
+
+    // 1. Scale check: in 'TRY' container, 15,448,698 Bin TRY must be scaled up to 15,448,698,000 Tam TL
+    // So when UI divides by 1000 for "Bin TRY" display, it shows 15.448.698 (Bin TRY), NEVER 15.449!
+    assert.equal(latest.written_premiums, 15448698000);
+    assert.equal(Math.round(latest.written_premiums / 1000), 15448698);
+
+    // 2. Technical margin check: rescued from 0.2% to ~23.5%
+    const techMarginPct = (latest.technical_profit / latest.written_premiums) * 100;
+    assert.ok(techMarginPct > 15 && techMarginPct < 30, `Expected realistic technical margin ~23.5%, got ${techMarginPct}%`);
+
+    // 3. Fair value check: must be ~280-400 TL, NEVER 0.5 TL
+    const valResult = computeSectorValuationAndDrivers(sanitized, 'INSURANCE');
+    assert.ok(valResult.valuation.fair_value > 250, `Expected fair value > 250 TL, got ${valResult.valuation.fair_value}`);
+
+    // 4. Multiples Median Implied Price check: must be > 150 TL, NEVER 0.28 TL
+    const multResult = calculateCompanyMultiples(latest, 230, 180000000, 'INSURANCE', null, 'TRY');
+    assert.ok(multResult.multiples.pe.impliedPrice > 200, `Expected PE impliedPrice > 200 TL, got ${multResult.multiples.pe.impliedPrice}`);
+    assert.ok(multResult.multiples.pb.impliedPrice > 150, `Expected PB impliedPrice > 150 TL, got ${multResult.multiples.pb.impliedPrice}`);
+
+    // 5. DuPont 5-Step check: financialLeverage ~43.0x-45.0x is explained as Emeklilik Yatırım Fonları (AUM), not debt!
+    const dupont = calculateDuPont5Step(latest, sanitized.financial_history[0], 'INSURANCE');
+    assert.ok(dupont.financialLeverage > 35 && dupont.financialLeverage < 50, `Expected AUM multiplier ~41-45x, got ${dupont.financialLeverage}`);
+    assert.ok(dupont.driverSummary.toLowerCase().includes('emeklilik yatırım fonları (aum)'), `Expected AUM explanation in DuPont summary, got: ${dupont.driverSummary}`);
+  });
 });
+
