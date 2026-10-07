@@ -417,3 +417,193 @@ Analist Kararı: AL
 Yatırım Tezi: Güçlü teknik kârlılık, %70+ sürdürülebilir ROE ve %38,6 güvenlik marjı ile AGESA portföyde yüksek kurumsal ağırlıkla taşınmaya uygundur.
 Kilit Katalizörler: BES ve otomatik katılım fon büyüklüğünde pazar liderliği, Akbank dağıtım çarpanı ve 4,92 Milyar TL net yatırım geliri üretimi.
 Riskler & Emniyet Marjı: Taban hedef fiyat (Ayı Senaryosu): 95,00 TL. Enflasyon muhasebesi kaynaklı teknik kâr oynaklığı ve finansal piyasa getirileri izlenmelidir.`;
+
+export const VESBE_SAMPLE_DATA = {
+  ticker: 'VESBE',
+  company_name: 'Vestel Beyaz Eşya Sanayi ve Ticaret A.Ş.',
+  currency: 'Bin TRY',
+  reporting_period: '2026/06',
+  share_count: '1.600.000.000',
+  shares_outstanding: 1600000000,
+  sector: 'INDUSTRIAL',
+  current_price: 3.95,
+  financial_history: [
+    {
+      period: '2024/12',
+      date: '31.12.2024',
+      revenue: 68500000,
+      ebitda: 6100000,
+      operating_income: 4900000,
+      net_income: 3800000,
+      gross_profit: 13200000,
+      equity: 37500000,
+      net_debt: 18200000,
+      total_assets: 67000000,
+      current_assets: 34000000,
+      current_liabilities: 27000000,
+      current_ratio: 1.26,
+      operating_cash_flow: 5200000,
+      free_cash_flow: 3100000,
+      capex: 2100000,
+      roe: 10.1,
+      ebitda_margin: 8.9,
+      roic: 9.5,
+      wacc: 31.0,
+      share_price: 3.50,
+    },
+    {
+      period: '2025/06',
+      date: '30.06.2025',
+      revenue: 33200000,
+      ebitda: 2800000,
+      operating_income: 2100000,
+      net_income: 1400000,
+      gross_profit: 6200000,
+      equity: 38400000,
+      net_debt: 19800000,
+      total_assets: 69500000,
+      current_assets: 33500000,
+      current_liabilities: 28000000,
+      current_ratio: 1.20,
+      operating_cash_flow: 2100000,
+      free_cash_flow: 1100000,
+      capex: 1000000,
+      roe: 7.3,
+      ebitda_margin: 8.4,
+      roic: 7.8,
+      wacc: 32.0,
+      share_price: 3.75,
+    },
+    {
+      period: '2025/12',
+      date: '31.12.2025',
+      revenue: 65000000,
+      ebitda: 3500000,
+      operating_income: 2400000,
+      net_income: 1200000,
+      gross_profit: 11800000,
+      equity: 39200000,
+      net_debt: 21000000,
+      total_assets: 71000000,
+      current_assets: 33000000,
+      current_liabilities: 29000000,
+      current_ratio: 1.14,
+      operating_cash_flow: 1800000,
+      free_cash_flow: 200000,
+      capex: 1600000,
+      roe: 4.4,
+      ebitda_margin: 5.4,
+      roic: 6.2,
+      wacc: 32.0,
+      share_price: 3.85,
+    },
+    {
+      period: '2026/03',
+      date: '31.03.2026',
+      revenue: 16800000,
+      ebitda: 150000,
+      operating_income: -120000,
+      net_income: -850000,
+      gross_profit: 2600000,
+      equity: 39800000,
+      net_debt: 23500000,
+      total_assets: 73000000,
+      current_assets: 31000000,
+      current_liabilities: 28500000,
+      current_ratio: 1.09,
+      operating_cash_flow: -800000,
+      free_cash_flow: -1200000,
+      capex: 400000,
+      roe: -2.1,
+      ebitda_margin: 0.9,
+      roic: 0.8,
+      wacc: 34.0,
+      share_price: 3.90,
+    },
+    {
+      period: '2026/06',
+      date: '30.06.2026',
+      revenue: 34127000,
+      ebitda: -623445,
+      operating_income: -1150000,
+      net_income: -2277301,
+      gross_profit: 4850000,
+      equity: 41300000,
+      net_debt: 26229065,
+      total_assets: 75000000,
+      current_assets: 29000000,
+      current_liabilities: 27000000,
+      current_ratio: 1.07,
+      operating_cash_flow: -2540000,
+      free_cash_flow: -3100000,
+      capex: 560000,
+      roe: -11.2,
+      ebitda_margin: -1.8,
+      roic: -4.5,
+      wacc: 35.0,
+      share_price: 3.95,
+    }
+  ],
+  marketMultiples: {
+    pe: null,
+    pb: 0.15,
+    ev_ebitda: null,
+    ev_sales: 0.45,
+    free_float_pct: 17.5,
+    market_cap_mn_tl: 6320
+  }
+};
+
+export const VESBE_SAMPLE_REPORT_TEXT = `### I. Yönetici Özeti ve Temel Yatırım Tezi
+
+> **Bölüm Özeti:** Vestel Beyaz Eşya (VESBE), Avrupa pazarındaki talep daralması ve yüksek finansman giderleri nedeniyle 2026/06 döneminde operasyonel zarara geçmiş olup, sermaye kaybı riski nedeniyle ALMA tavsiyesini korumaktadır.
+
+- **Operasyonel Zarar ve Negatif FAVÖK:** Şirket 2026 yılının ilk 6 ayında 34,13 Milyar TL ciro üretmesine karşın maliyet baskıları sonucu -623,45 Milyon TL negatif FAVÖK açıklamıştır.
+- **Sermaye Erozyonu:** Son 6 ayda kaydedilen -2,28 Milyar TL net zarar özkaynaklar üzerinde baskı oluşturmaktadır.
+- **Değerleme Özeti:** Sıkıntılı Şirket Varlık Tabanı Modeline göre Hisse Başı Adil Değer **3,38 TL** olarak hesaplanmıştır. Cari 3,95 TL fiyata göre şirket %14,4 primlidir (iskonto yoktur).
+
+### II. Nakit Akışı, Likidite ve Kâr Kalitesi Teşhisi
+
+> **Bölüm Özeti:** Şirket hem net zarar açıklamakta hem de operasyonlarından nakit yakmaktadır; nakit dönüşüm oranı uygulanamaz durumdadır (N/A).
+
+- **Çift Yönlü Nakit Yakımı:** İşletme Nakit Akışı (OCF) -2,54 Milyar TL olup negatif bölgededir.
+- **Borçluluk Yükü:** Net Finansal Borç 26,23 Milyar TL seviyesine ulaşmıştır. Negatif FAVÖK ortamında borç çevrim kapasitesi zayıflamıştır.
+- **Çalışma Sermayesi:** Cari oran 1,07 seviyesinde olup likidite tamponu sınırlıdır.
+
+### III. Sektörel Karne ve Rekabet Konumu (DuPont Analizi)
+
+> **Bölüm Özeti:** DuPont ayrıştırması, kârlılık erozyonunun temel kaynağının hem zayıflayan operasyonel marjlar hem de artan faiz yükü olduğunu göstermektedir.
+
+- **DuPont Ayrıştırması:** Negatif faaliyet marjı ve yüksek finansman giderleri özkaynak kârlılığını (ROE) -%11,2 seviyesine çekmiştir.
+- **Sektörel Konum:** Şirket Avrupa pazarında güçlü ODM pazar payına sahip olmakla birlikte, nihai talep toparlanana kadar marj baskısının sürmesi beklenmektedir.
+
+### IV. WACC ve İskontolu Değerleme Modeli
+
+> **Bölüm Özeti:** Negatif FAVÖK ortamında klasik FD/FAVÖK çarpanı matematiksel olarak anlamsız olduğundan, Sıkıntılı Şirket / Varlık Tabanı İskonto Modeli esas alınmıştır.
+
+- **Değerleme Modeli:** Sıkıntılı Şirket / Varlık Tabanı İskonto Modeli (Distressed Turnaround Model)
+- **Model Hesabı:** 12A İleri Defter Değeri (22,97 TL) × Hak Edilen Sıkıntılı PD/DD (0,147x) = **3,38 TL**
+- **Çarpan Gerekçesi:** Taban çarpan (0,378x) × Sermaye Korunma (%89,0) × Özkaynak Ağırlığı (%61,2) × Likidite Tamponu (%71,6) = 0,147x.
+
+### V. Değer Sürücüleri ve Hassasiyet Tablosu
+
+> **Bölüm Özeti:** Senaryo analizinde operasyonel toparlanma ve olası stres koşulları modellenmiştir.
+
+- **Ayı Senaryosu (Taban Fiyat):** **2,16 TL** (Derinleşen zarar ve ek finansman maliyeti riski)
+- **Baz Senaryo (Adil Değer):** **3,38 TL** (Mevcut bilanço varlık tabanı)
+- **Boğa Senaryosu (Tavan Fiyat):** **5,23 TL** (Avrupa talebinin canlanması ve FAVÖK'ün pozitife dönmesi)
+
+### VI. Temel Riskler, Katalizörler ve Nihai Karar
+
+| Metrik | Puan | Max | Gerekçe |
+| :--- | :--- | :--- | :--- |
+| Finansal Sağlık & Likidite | 2 | 25 | Net Borç 26,23 Mr TL; Net Borç/FAVÖK negatif / anlamsız |
+| Sermaye Verimliliği (ROIC > WACC) | 0 | 25 | ROIC -%4,5 negatif; WACC sermaye maliyetinin altında |
+| Nakit Kalitesi ve Güvenlik Marjı | 3 | 25 | OCF -2,54 Mr TL negatif; nakit dönüşümü uygulanamaz |
+| Gelecek Hedefleri, Katalizör ve Büyüme | 10 | 25 | Güçlü üretim altyapısı ve ODM ihracat ağı |
+| **Toplam Puan** | **15** | **100** | **Yüksek Finansal Risk** |
+
+Analist Kararı: ALMA
+Yatırım Tezi: Vestel Beyaz Eşya, operasyonel zarar, negatif nakit akışı ve yüksek finansal borçluluk nedeniyle yüksek risk taşımaktadır. Güncel 3,95 TL fiyat adil değerin (3,38 TL) üzerinde olup güvenlik marjı bulunmamaktadır.
+Kilit Katalizörler: Avrupa beyaz eşya talebinde faiz indirimleri kaynaklı canlanma, girdi maliyetlerinde düşüş ve operasyonel nakit akışının pozitife dönmesi.
+Riskler & Emniyet Marjı: Ayı senaryosu taban fiyatı: 2,16 TL. Devam eden nakit yakımı ve borç çevrim maliyeti izlenmelidir.`;

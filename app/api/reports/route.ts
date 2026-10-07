@@ -1,15 +1,90 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
+import { 
+  AGESA_SAMPLE_DATA, AGESA_SAMPLE_REPORT_TEXT, 
+  VESBE_SAMPLE_DATA, VESBE_SAMPLE_REPORT_TEXT 
+} from '@/lib/sample-data';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-// GET: Tüm değerleme raporlarını buluttan çek
-export async function GET() {
+// GET: Değerleme raporlarını buluttan veya ticker bazında çek
+export async function GET(req: NextRequest) {
   try {
+    const url = new URL(req.url);
+    const requestedTicker = url.searchParams.get('ticker')?.toUpperCase().trim();
+
     const supabase = getSupabase();
-    if (!supabase || !isSupabaseConfigured()) {
+    const isConfigured = Boolean(supabase && isSupabaseConfigured());
+
+    if (requestedTicker) {
+      // 1. Önce Supabase'de ara
+      if (isConfigured && supabase) {
+        const { data, error } = await supabase
+          .from('valuation_reports')
+          .select('*')
+          .eq('ticker', requestedTicker)
+          .order('updated_at', { ascending: false })
+          .limit(1);
+
+        if (!error && data && data.length > 0) {
+          const row = data[0];
+          const report = {
+            id: row.id,
+            ticker: row.ticker,
+            price: row.price,
+            createdAt: row.created_at,
+            period: row.period,
+            report: row.report,
+            decision: row.decision,
+            score: row.score,
+            extractedData: row.extracted_data,
+          };
+          return NextResponse.json({ success: true, report, source: 'cloud' });
+        }
+      }
+
+      // 2. Hazır resmi modellerde ara (VESBE, AGESA)
+      if (requestedTicker === 'VESBE') {
+        const vesbeReport = {
+          id: 'report-vesbe',
+          ticker: 'VESBE',
+          price: '3.95',
+          period: '2026/06',
+          createdAt: '7 Ekim 2026, 17:30',
+          decision: 'ALMA',
+          score: '15',
+          sector: 'INDUSTRIAL',
+          report: VESBE_SAMPLE_REPORT_TEXT,
+          extractedData: VESBE_SAMPLE_DATA,
+        };
+        return NextResponse.json({ success: true, report: vesbeReport, source: 'official_sample' });
+      }
+
+      if (requestedTicker === 'AGESA') {
+        const agesaReport = {
+          id: 'demo-agesa',
+          ticker: 'AGESA',
+          price: '118.50',
+          period: '2026/Q2',
+          createdAt: '28 Eylül 2026, 14:15',
+          decision: 'AL',
+          score: '96',
+          sector: 'INSURANCE',
+          report: AGESA_SAMPLE_REPORT_TEXT,
+          extractedData: AGESA_SAMPLE_DATA,
+        };
+        return NextResponse.json({ success: true, report: agesaReport, source: 'official_sample' });
+      }
+
+      return NextResponse.json({ 
+        success: false, 
+        message: `${requestedTicker} için kayıtlı rapor bulunamadı.` 
+      }, { status: 404 });
+    }
+
+    if (!supabase || !isConfigured) {
       return NextResponse.json({ 
         reports: [], 
         isCloudConfigured: false, 

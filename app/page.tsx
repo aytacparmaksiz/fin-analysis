@@ -12,7 +12,8 @@ import {
   TrendingUp, BarChart3, Target, Calendar, ArrowUpRight, ArrowDownRight, Minus,
   DollarSign, ShieldCheck, Activity, Layers, Sparkles, Download, Upload,
   Trophy, Award, Trash2, ArrowUpDown, Filter, Copy, Percent, PieChart, Info,
-  PanelLeftClose, PanelLeftOpen, Pin, PinOff, Zap, Bookmark
+  PanelLeftClose, PanelLeftOpen, Pin, PinOff, Zap, Bookmark,
+  Share2, Check
 } from 'lucide-react';
 
 import {
@@ -37,7 +38,9 @@ import {
 
 import { 
   AGESA_SAMPLE_DATA, 
-  AGESA_SAMPLE_REPORT_TEXT 
+  AGESA_SAMPLE_REPORT_TEXT,
+  VESBE_SAMPLE_DATA,
+  VESBE_SAMPLE_REPORT_TEXT
 } from '@/lib/sample-data';
 
 import {
@@ -1025,7 +1028,7 @@ function getSpreadInfo(spread: number | null) {
   }
 }
 
-export default function ValuationTerminal() {
+export default function ValuationTerminal({ initialTicker }: { initialTicker?: string } = {}) {
   const [mounted, setMounted] = useState(false);
   const [ticker, setTicker] = useState('');
   const [price, setPrice] = useState('');
@@ -1125,6 +1128,7 @@ export default function ValuationTerminal() {
 
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [activeReportId, setActiveReportId] = useState<string | null>(null);
+  const activeReport = useMemo(() => savedReports.find(r => r.id === activeReportId), [savedReports, activeReportId]);
 
   // Kenar Çubuğu Katlanabilirlik ve Sabitleme Durumu (Item 6)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -1201,12 +1205,13 @@ export default function ValuationTerminal() {
     }
   };
 
-  // Demo / Örnek Şirket Yükleme (AGESA - Sigortacılık veya THYAO)
-  const loadAgesaDemo = () => {
+  // Demo / Örnek Şirket Yükleme (AGESA - Sigortacılık veya Emeklilik)
+  const loadAgesaDemo = useCallback(() => {
     const agesaReport: SavedReport = {
       id: 'demo-agesa',
       ticker: 'AGESA',
       price: '118.50',
+      fairValue: '164.20',
       period: '2026/Q2',
       createdAt: '28 Eylül 2026, 14:15',
       decision: 'AL',
@@ -1216,14 +1221,14 @@ export default function ValuationTerminal() {
       extractedData: AGESA_SAMPLE_DATA,
     };
 
-    const exists = savedReports.some(r => r.ticker === 'AGESA');
-    if (!exists) {
-      const updated = [agesaReport, ...savedReports];
-      setSavedReports(updated);
+    setSavedReports(prev => {
+      const exists = prev.some(r => r.ticker === 'AGESA');
+      const updated = exists ? prev : [agesaReport, ...prev];
       try {
         localStorage.setItem('fin_valuation_reports', JSON.stringify(updated));
       } catch (e) {}
-    }
+      return updated;
+    });
 
     setTicker('AGESA');
     setPrice('118.50');
@@ -1231,7 +1236,125 @@ export default function ValuationTerminal() {
     setActiveReportId(agesaReport.id);
     setStep('report');
     setActiveTab('ozet');
-  };
+  }, []);
+
+  // Demo / Örnek Şirket Yükleme (VESBE - Sanayi / Dayanıklı Tüketim)
+  const loadVesbeDemo = useCallback(() => {
+    const vesbeReport: SavedReport = {
+      id: 'demo-vesbe',
+      ticker: 'VESBE',
+      price: '3.95',
+      fairValue: '3.36',
+      period: '2026/06',
+      createdAt: '7 Ekim 2026, 17:00',
+      decision: 'ALMA',
+      score: '10',
+      sector: 'INDUSTRIAL',
+      report: VESBE_SAMPLE_REPORT_TEXT,
+      extractedData: VESBE_SAMPLE_DATA,
+    };
+
+    setSavedReports(prev => {
+      const exists = prev.some(r => r.ticker === 'VESBE');
+      const updated = exists ? prev : [vesbeReport, ...prev];
+      try {
+        localStorage.setItem('fin_valuation_reports', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    setTicker('VESBE');
+    setPrice('3.95');
+    setExtractedData(VESBE_SAMPLE_DATA);
+    setActiveReportId(vesbeReport.id);
+    setStep('report');
+    setActiveTab('ozet');
+  }, []);
+
+  // Doğrudan URL veya Harici Çağrı ile Hisse Yükleme (/analysis/[ticker])
+  const loadTickerDirect = useCallback(async (targetTicker: string, currentSaved?: SavedReport[]) => {
+    const t = (targetTicker || '').trim().toUpperCase();
+    if (!t) return;
+
+    if (t === 'VESBE') {
+      loadVesbeDemo();
+      return;
+    }
+    if (t === 'AGESA') {
+      loadAgesaDemo();
+      return;
+    }
+
+    const reportList = currentSaved ?? savedReports;
+    const existing = reportList.find(r => r.ticker?.toUpperCase() === t);
+    if (existing) {
+      setActiveReportId(existing.id);
+      setTicker(existing.ticker);
+      if (existing.price) setPrice(existing.price);
+      if (existing.extractedData) setExtractedData(existing.extractedData);
+      setStep('report');
+      setActiveTab('ozet');
+      return;
+    }
+
+    // Bulut API üzerinden kontrol et (/api/reports?ticker=XYZ)
+    try {
+      const res = await fetch(`/api/reports?ticker=${encodeURIComponent(t)}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.report && json.report.ticker) {
+          const apiReport: SavedReport = json.report;
+          setSavedReports(prev => {
+            const has = prev.some(r => r.id === apiReport.id || r.ticker === apiReport.ticker);
+            const next = has ? prev : [apiReport, ...prev];
+            try {
+              localStorage.setItem('fin_valuation_reports', JSON.stringify(next));
+            } catch {}
+            return next;
+          });
+          setActiveReportId(apiReport.id);
+          setTicker(apiReport.ticker);
+          if (apiReport.price) setPrice(apiReport.price);
+          if (apiReport.extractedData) setExtractedData(apiReport.extractedData);
+          setStep('report');
+          setActiveTab('ozet');
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('Direct ticker cloud fetch error:', err);
+    }
+
+    // Rapor henüz üretilmemişse: Ticker'ı forma doldur ve anlık BIST fiyatını çek
+    setTicker(t);
+    setStep('input');
+    try {
+      const bistRes = await fetch(`/api/bist?ticker=${encodeURIComponent(t)}`);
+      if (bistRes.ok) {
+        const bistData = await bistRes.json();
+        if (bistData?.price) {
+          setPrice(String(bistData.price));
+        }
+      }
+    } catch {}
+  }, [savedReports, loadVesbeDemo, loadAgesaDemo]);
+
+  // Paylaşılabilir Analiz Linki Kopyalama
+  const [copiedShareLink, setCopiedShareLink] = useState(false);
+  const handleShareLink = useCallback(async () => {
+    const activeTicker = activeReport?.ticker || ticker;
+    if (!activeTicker) return;
+    const shareUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/analysis/${activeTicker.toUpperCase()}`
+      : `/analysis/${activeTicker.toUpperCase()}`;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopiedShareLink(true);
+      setTimeout(() => setCopiedShareLink(false), 2500);
+    } catch (err) {
+      prompt('Paylaşılabilir Analiz Linki:', shareUrl);
+    }
+  }, [activeReport?.ticker, ticker]);
 
   useEffect(() => {
     setMounted(true);
@@ -1244,9 +1367,20 @@ export default function ValuationTerminal() {
     } catch (e) {}
 
     setSavedReports(localData);
-    
-    // Yerelde kayıtlı rapor varsa doğrudan son raporu aç; yoksa AGESA demo yükle
-    if (localData.length > 0) {
+
+    // Doğrudan URL veya initialTicker kontrolü (/analysis/VESBE veya /report/VESBE)
+    let pathTicker = '';
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.match(/\/(?:analysis|report)\/([A-Za-z0-9_]+)/i);
+      if (match && match[1]) {
+        pathTicker = match[1].toUpperCase();
+      }
+    }
+    const targetTicker = (initialTicker || pathTicker || '').trim().toUpperCase();
+
+    if (targetTicker) {
+      loadTickerDirect(targetTicker, localData);
+    } else if (localData.length > 0) {
       setActiveReportId(localData[0].id);
       setStep('report');
       setActiveTab('ozet');
@@ -1288,6 +1422,25 @@ export default function ValuationTerminal() {
 
     syncWithCloud();
   }, []);
+
+  // initialTicker değişirse otomatik yükle
+  useEffect(() => {
+    if (initialTicker && mounted) {
+      loadTickerDirect(initialTicker);
+    }
+  }, [initialTicker, mounted, loadTickerDirect]);
+
+  // Adres Çubuğu Senkronizasyonu (Shareable URL: /analysis/HISSE_KODU)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && mounted) {
+      if (step === 'report' && activeReport?.ticker) {
+        const targetPath = `/analysis/${activeReport.ticker.toUpperCase()}`;
+        if (window.location.pathname !== targetPath && !window.location.pathname.startsWith('/report/')) {
+          window.history.replaceState(null, '', targetPath);
+        }
+      }
+    }
+  }, [step, activeReport?.ticker, mounted]);
 
   const saveReport = async (newReport: SavedReport) => {
     const updated = [newReport, ...savedReports.filter(r => r.id !== newReport.id)];
@@ -2162,7 +2315,6 @@ export default function ValuationTerminal() {
     }
   };
 
-  const activeReport = savedReports.find(r => r.id === activeReportId);
   const currentExtractedData = activeReport?.extractedData || extractedData;
 
   const currentSector: SectorType = 
@@ -3599,13 +3751,19 @@ export default function ValuationTerminal() {
                   <span className="text-slate-500 text-[11px] font-medium mr-1">
                     Hızlı Seçim:
                   </span>
-                  {['AGESA', 'THYAO', 'EREGL', 'TUPRS', 'GARAN', 'ASELS', 'KCHOL', 'BIMAS', 'FROTO', 'SISE'].map((sym) => (
+                  {['VESBE', 'AGESA', 'THYAO', 'EREGL', 'TUPRS', 'GARAN', 'ASELS', 'KCHOL', 'BIMAS', 'FROTO', 'SISE'].map((sym) => (
                     <button
                       key={sym}
                       type="button"
                       onClick={() => {
-                        setTicker(sym);
-                        handleBistDirectAnalysis(sym);
+                        if (sym === 'VESBE') {
+                          loadVesbeDemo();
+                        } else if (sym === 'AGESA') {
+                          loadAgesaDemo();
+                        } else {
+                          setTicker(sym);
+                          handleBistDirectAnalysis(sym);
+                        }
                       }}
                       className={`px-2.5 py-1 rounded-md text-[11px] font-mono font-semibold border transition cursor-pointer ${
                         ticker === sym
@@ -3979,6 +4137,25 @@ export default function ValuationTerminal() {
                       </span>
                     </div>
                   )}
+                  <button
+                    type="button"
+                    onClick={handleShareLink}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-[#090D16] hover:bg-emerald-950/60 text-slate-300 hover:text-emerald-300 rounded-xl border border-slate-800 hover:border-emerald-700/50 transition cursor-pointer text-xs font-semibold"
+                    title="Paylaşılabilir Rapor Linkini Kopyala (/analysis/HISSE)"
+                  >
+                    {copiedShareLink ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-emerald-400 font-bold">Kopyalandı</span>
+                      </>
+                    ) : (
+                      <>
+                        <Share2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="hidden sm:inline">Paylaş</span>
+                      </>
+                    )}
+                  </button>
+
                   <button
                     onClick={() => deleteReport(activeReport.id)}
                     className="p-2.5 bg-slate-900 hover:bg-rose-950 text-slate-400 hover:text-rose-400 rounded-xl border border-slate-800 transition cursor-pointer"
@@ -6200,6 +6377,25 @@ export default function ValuationTerminal() {
                           <>
                             <Copy className="w-3.5 h-3.5" />
                             <span>Kopyala</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleShareLink}
+                        className="flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold px-3 py-1.5 rounded-lg transition cursor-pointer border border-slate-700 shadow-sm"
+                        title="Paylaşılabilir Analiz Linkini Kopyala (/analysis/HISSE)"
+                      >
+                        {copiedShareLink ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span className="text-emerald-400 font-bold">Link Kopyalandı</span>
+                          </>
+                        ) : (
+                          <>
+                            <Share2 className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Paylaş</span>
                           </>
                         )}
                       </button>
