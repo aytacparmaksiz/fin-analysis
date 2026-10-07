@@ -45,6 +45,7 @@ import {
 
 import { getStaticReport, SavedReport } from '@/lib/report-resolver';
 export type { SavedReport };
+import { generateFullAuditMarkdown } from '@/lib/export-markdown';
 
 import {
   computeSectorValuationAndDrivers,
@@ -1128,7 +1129,19 @@ export default function ValuationTerminal({
 
   const [savedReports, setSavedReports] = useState<SavedReport[]>(defaultReport ? [defaultReport] : []);
   const [activeReportId, setActiveReportId] = useState<string | null>(defaultReport ? defaultReport.id : null);
-  const activeReport = useMemo(() => savedReports.find(r => r.id === activeReportId), [savedReports, activeReportId]);
+  const activeReport = useMemo(() => {
+    if (activeReportId) {
+      const found = savedReports.find(r => r.id === activeReportId);
+      if (found) return found;
+    }
+    const currentTicker = (ticker || initialTicker || '').trim().toUpperCase();
+    if (currentTicker) {
+      const byTicker = savedReports.find(r => r.ticker?.toUpperCase() === currentTicker);
+      if (byTicker) return byTicker;
+    }
+    if (defaultReport) return defaultReport;
+    return savedReports[0] || null;
+  }, [savedReports, activeReportId, ticker, initialTicker, defaultReport]);
 
   // Kenar Çubuğu Katlanabilirlik ve Sabitleme Durumu (Item 6)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -1393,6 +1406,20 @@ export default function ValuationTerminal({
     }
   }, [activeReport?.ticker, ticker]);
 
+  // NotebookLM İçin Tüm Metin & Tablo Verilerini Kopyalama
+  const [copiedNotebookLM, setCopiedNotebookLM] = useState(false);
+  const handleCopyNotebookLM = useCallback(async () => {
+    if (!activeReport) return;
+    const fullMd = generateFullAuditMarkdown(activeReport);
+    try {
+      await navigator.clipboard.writeText(fullMd);
+      setCopiedNotebookLM(true);
+      setTimeout(() => setCopiedNotebookLM(false), 2500);
+    } catch (err) {
+      prompt('NotebookLM İçin Bütüncül Markdown Metni:', fullMd);
+    }
+  }, [activeReport]);
+
   useEffect(() => {
     setMounted(true);
     let localData: SavedReport[] = [];
@@ -1405,9 +1432,11 @@ export default function ValuationTerminal({
 
     // EĞER defaultReport (SSR'den gelen veya statik hazır model) tanımlıysa ve yerel depoda yoksa birleştir
     if (defaultReport) {
-      const exists = localData.some(r => r.id === defaultReport.id || r.ticker?.toUpperCase() === defaultReport.ticker?.toUpperCase());
-      if (!exists) {
+      const idx = localData.findIndex(r => r.id === defaultReport.id || r.ticker?.toUpperCase() === defaultReport.ticker?.toUpperCase());
+      if (idx === -1) {
         localData = [defaultReport, ...localData];
+      } else {
+        localData[idx] = defaultReport;
       }
     }
 
@@ -1424,6 +1453,13 @@ export default function ValuationTerminal({
     const targetTicker = (initialTicker || pathTicker || '').trim().toUpperCase();
 
     if (targetTicker) {
+      const matched = localData.find(r => r.ticker?.toUpperCase() === targetTicker) || defaultReport;
+      if (matched) {
+        setActiveReportId(matched.id);
+        setTicker(matched.ticker);
+        if (matched.price) setPrice(matched.price);
+        if (matched.extractedData) setExtractedData(matched.extractedData);
+      }
       loadTickerDirect(targetTicker, localData);
     } else if (localData.length > 0) {
       setActiveReportId(localData[0].id);
@@ -3497,7 +3533,7 @@ export default function ValuationTerminal({
       <aside 
         className={`border-r border-slate-800 bg-[#0F172A]/90 flex flex-col flex-shrink-0 transition-all duration-300 print:hidden ${
           isSidebarCollapsed ? 'w-full md:w-14' : 'w-full md:w-64'
-        }`}
+        } max-h-56 md:max-h-none overflow-y-auto`}
       >
         {/* Logo ve Başlık */}
         <div className="p-2.5 sm:p-3 border-b border-slate-800 flex items-center justify-between">
@@ -4153,6 +4189,43 @@ export default function ValuationTerminal({
             </div>
           )}
 
+          {/* EKSİK RAPOR DURUMU: Step report ama activeReport yok ve loading bitti ise boş ekran yerine yönlendirici kart */}
+          {step === 'report' && !activeReport && !loading && (
+            <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-10 text-center space-y-4 shadow-xl">
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+                <FileText className="w-7 h-7" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-lg font-bold text-white tracking-tight">
+                  {ticker || initialTicker || 'Seçili'} İçin Kayıtlı Rapor Bulunamadı
+                </h3>
+                <p className="text-xs text-slate-400 font-mono max-w-md mx-auto">
+                  {error || 'Bu hisse için yerel hafızada henüz hazır bir rapor bulunmuyor. Resmi BIST verilerini çekerek analizi başlatabilirsiniz.'}
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = (ticker || initialTicker || '').trim();
+                    if (target) handleBistDirectAnalysis(target);
+                  }}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-emerald-950/40 flex items-center gap-2 cursor-pointer transition"
+                >
+                  <Zap className="w-4 h-4" />
+                  <span>{(ticker || initialTicker || 'Hisse')} Canlı Analizini Başlat</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep('input')}
+                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl border border-slate-700 cursor-pointer transition"
+                >
+                  <span>Arama Ekranına Dön</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ADIM 3: RAPOR, GRAFİK TERMİNALİ, FİNANSAL TABLOLAR, ADİL DEĞER VE PROS/CONS */}
           {step === 'report' && activeReport && (
             <div className="space-y-5">
@@ -4214,6 +4287,25 @@ export default function ValuationTerminal({
                       <>
                         <Share2 className="w-3.5 h-3.5 text-emerald-400" />
                         <span className="hidden sm:inline">Paylaş</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCopyNotebookLM}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-[#090D16] hover:bg-cyan-950/60 text-slate-300 hover:text-cyan-300 rounded-xl border border-slate-800 hover:border-cyan-700/50 transition cursor-pointer text-xs font-semibold"
+                    title="Tüm Finansal Tabloları ve Raporu NotebookLM İçin Markdown Olarak Kopyala"
+                  >
+                    {copiedNotebookLM ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-cyan-400" />
+                        <span className="text-cyan-400 font-bold">Kopyalandı</span>
+                      </>
+                    ) : (
+                      <>
+                        <Bookmark className="w-3.5 h-3.5 text-cyan-400" />
+                        <span className="hidden sm:inline">NotebookLM</span>
                       </>
                     )}
                   </button>
@@ -4335,7 +4427,8 @@ export default function ValuationTerminal({
 
               
               {/* SEKME 0: ÖZET RAPOR */}
-              <div className={activeTab === 'ozet' ? 'space-y-6' : 'hidden print:hidden'}>
+              {activeTab === 'ozet' && (
+                <div className="space-y-6">
                   {chartData.length === 0 ? (
                     <div className="p-8 text-center text-slate-500 bg-[#0F1523] rounded-xl border border-slate-800 text-sm">
                       Grafik verisi bulunamadı.
@@ -4777,6 +4870,7 @@ export default function ValuationTerminal({
                     </>
                   )}
                 </div>
+              )}
 
               {/* SEKME 1: GRAFİK TERMİNALİ (4'LÜ IZGARA) */}
               {activeTab === 'overview' && (
@@ -6915,6 +7009,262 @@ export default function ValuationTerminal({
                   </div>
                 </div>
               )}
+
+              {/* NOTEBOOKLM & YAPAY ZEKA ÇAPRAZ SORGULAMA İÇİN BÜTÜNCÜL DENETİM VERİ HAVUZU (SEMANTIC HTML) */}
+              {(() => {
+                const ext = activeReport.extractedData || {};
+                const history: any[] = Array.isArray(ext.financial_history) ? [...ext.financial_history] : [];
+                const sortedHistory = [...history].sort((a, b) => (b.period || '').localeCompare(a.period || ''));
+                if (sortedHistory.length === 0) return null;
+                const periods = sortedHistory.map(h => h.period || '-');
+
+                const fmtNum = (val: any, divisor = 1, isPct = false) => {
+                  if (val === null || val === undefined || isNaN(Number(val))) return '—';
+                  const num = Number(val) / divisor;
+                  return isPct 
+                    ? `%${num.toFixed(1)}` 
+                    : num.toLocaleString('tr-TR', { maximumFractionDigits: 1 });
+                };
+
+                const bsRows = [
+                  { label: 'Dönen Varlıklar', key: 'current_assets' },
+                  { label: 'Nakit ve Nakit Benzerleri', key: 'cash_and_equivalents' },
+                  { label: 'Finansal Varlıklar', key: 'financial_assets_insured' },
+                  { label: 'Ticari Alacaklar', key: 'trade_receivables' },
+                  { label: 'Stoklar', key: 'inventories' },
+                  { label: 'Duran Varlıklar', key: 'non_current_assets' },
+                  { label: 'Toplam Varlıklar', key: 'total_assets' },
+                  { label: 'Kısa Vadeli Yükümlülükler', key: 'current_liabilities' },
+                  { label: 'Finansal Borçlar (Kısa + Uzun)', key: 'financial_debt' },
+                  { label: 'Net Finansal Borç', key: 'net_debt' },
+                  { label: 'Toplam Özkaynaklar', key: 'equity' },
+                ];
+
+                const isInsurance = activeReport.sector === 'INSURANCE';
+                const isRows = isInsurance ? [
+                  { label: 'Brüt Yazılan Primler (Hasılat)', key: 'gross_written_premiums' },
+                  { label: 'Kazanılan Primler', key: 'earned_premiums' },
+                  { label: 'Teknik Bölüm Dengesi / Kârı', key: 'technical_balance' },
+                  { label: 'Yatırım Gelirleri', key: 'investment_income' },
+                  { label: 'Net Dönem Kârı', key: 'net_income' },
+                ] : [
+                  { label: 'Satış Gelirleri (Hasılat)', key: 'revenue' },
+                  { label: 'Brüt Kâr', key: 'gross_profit' },
+                  { label: 'Esas Faaliyet Kârı', key: 'operating_income' },
+                  { label: 'FAVÖK (EBITDA)', key: 'ebitda' },
+                  { label: 'Net Finansman Giderleri', key: 'financial_expenses' },
+                  { label: 'Net Dönem Kârı / (Zararı)', key: 'net_income' },
+                ];
+
+                const cfRows = [
+                  { label: 'İşletme Nakit Akışı (OCF)', key: 'operating_cash_flow' },
+                  { label: 'Maddi Duran Varlık Alımları (CAPEX)', key: 'capex' },
+                  { label: 'Serbest Nakit Akışı (FCF)', key: 'free_cash_flow' },
+                ];
+
+                const ratioRows: { label: string; key: string; isPct?: boolean }[] = [
+                  { label: 'Cari Oran (Dönen Varlık / KV Borç)', key: 'current_ratio' },
+                  { label: 'Likidite (Asit-Test) Oranı', key: 'quick_ratio' },
+                  { label: 'Nakit Oran', key: 'cash_ratio' },
+                  { label: 'Kaldıraç Oranı (Toplam Borç / Özkaynak)', key: 'leverage_ratio', isPct: true },
+                  { label: 'Aktif Devir Hızı', key: 'asset_turnover' },
+                  { label: 'Özkaynak Devir Hızı', key: 'equity_turnover' },
+                  { label: 'Özkaynak Kârlılığı (ROE)', key: 'roe', isPct: true },
+                  { label: 'Aktif Kârlılığı (ROA)', key: 'roa', isPct: true },
+                  { label: 'FAVÖK Marjı', key: 'ebitda_margin', isPct: true },
+                  { label: 'Net Kâr Marjı', key: 'net_margin', isPct: true },
+                  { label: 'Yatırılan Sermaye Kârlılığı (ROIC)', key: 'roic', isPct: true },
+                  { label: 'Ağırlıklı Ortalama Sermaye Maliyeti (WACC)', key: 'wacc', isPct: true },
+                  { label: 'EVA Makası (ROIC - WACC)', key: 'eva_spread', isPct: true },
+                ];
+
+                return (
+                  <section 
+                    id="notebooklm-denetim-dosyasi" 
+                    className="mt-10 pt-8 border-t border-slate-800 space-y-6 text-slate-300"
+                    aria-label="NotebookLM ve Çapraz Denetim Veri Havuzu"
+                  >
+                    <div className="bg-[#0B0F19] border border-cyan-900/40 p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Bookmark className="w-5 h-5 text-cyan-400" />
+                          <h3 className="text-base font-bold text-white tracking-tight">
+                            NotebookLM & Yapay Zeka Çapraz Sorgulama Veri Havuzu
+                          </h3>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800">
+                            100% Tam Finansal Veri
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+                          Bu alan, NotebookLM ve yapay zeka ajanlarının tek bir bağlantı üzerinden ({activeReport.ticker}) tüm çeyreklik bilançoları, gelir tablolarını, nakit akışını, rasyoları ve değerleme modellerini eksiksiz okuyup doğrulaması için semantik HTML olarak sunulmaktadır.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleCopyNotebookLM}
+                          className="px-4 py-2 bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 font-semibold text-xs rounded-xl border border-cyan-700/60 flex items-center gap-2 transition cursor-pointer"
+                        >
+                          {copiedNotebookLM ? <Check className="w-4 h-4 text-cyan-400" /> : <Bookmark className="w-4 h-4 text-cyan-400" />}
+                          <span>{copiedNotebookLM ? 'Markdown Kopyalandı' : 'NotebookLM İçin Kopyala'}</span>
+                        </button>
+                        <a
+                          href={`/api/export?ticker=${encodeURIComponent(activeReport.ticker)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-mono rounded-xl border border-slate-800 transition flex items-center gap-1.5"
+                          title="Ham Markdown API Çıktısı"
+                        >
+                          <FileText className="w-3.5 h-3.5 text-slate-400" />
+                          <span>.md Çıktı</span>
+                        </a>
+                      </div>
+                    </div>
+
+                    {/* Bilanço Tablosu */}
+                    <div className="bg-[#0F1523] border border-slate-800 rounded-xl p-4 overflow-hidden space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+                          Bilanço Veri Havuzu (Bin TRY)
+                        </h4>
+                        <span className="text-[10px] font-mono text-slate-500">{periods.length} Dönem</span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-left border-collapse">
+                          <thead className="bg-slate-900/90 text-slate-400 font-mono text-[11px] border-b border-slate-800">
+                            <tr>
+                              <th className="p-2.5 font-bold">Bilanço Kalemi</th>
+                              {periods.map(p => (
+                                <th key={p} className="p-2.5 text-right font-bold">{p}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60 font-mono text-[11px]">
+                            {bsRows.map(row => (
+                              <tr key={row.key} className="hover:bg-slate-900/50">
+                                <td className="p-2 text-slate-300 font-sans font-medium">{row.label}</td>
+                                {sortedHistory.map((h, i) => (
+                                  <td key={i} className="p-2 text-right text-slate-300">
+                                    {fmtNum(h[row.key] ?? h[row.key === 'financial_debt' ? 'short_term_debt' : row.key], 1000)}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Gelir Tablosu */}
+                    <div className="bg-[#0F1523] border border-slate-800 rounded-xl p-4 overflow-hidden space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                          Gelir Tablosu Veri Havuzu (Bin TRY)
+                        </h4>
+                        <span className="text-[10px] font-mono text-slate-500">{periods.length} Dönem</span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-left border-collapse">
+                          <thead className="bg-slate-900/90 text-slate-400 font-mono text-[11px] border-b border-slate-800">
+                            <tr>
+                              <th className="p-2.5 font-bold">Gelir Kalemi</th>
+                              {periods.map(p => (
+                                <th key={p} className="p-2.5 text-right font-bold">{p}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60 font-mono text-[11px]">
+                            {isRows.map(row => (
+                              <tr key={row.key} className="hover:bg-slate-900/50">
+                                <td className="p-2 text-slate-300 font-sans font-medium">{row.label}</td>
+                                {sortedHistory.map((h, i) => (
+                                  <td key={i} className="p-2 text-right text-slate-300">
+                                    {fmtNum(h[row.key] ?? h[row.key === 'gross_written_premiums' ? 'written_premiums' : row.key], 1000)}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Nakit Akış Tablosu */}
+                    <div className="bg-[#0F1523] border border-slate-800 rounded-xl p-4 overflow-hidden space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                          Nakit Akış ve Likidite Havuzu (Bin TRY)
+                        </h4>
+                        <span className="text-[10px] font-mono text-slate-500">{periods.length} Dönem</span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-left border-collapse">
+                          <thead className="bg-slate-900/90 text-slate-400 font-mono text-[11px] border-b border-slate-800">
+                            <tr>
+                              <th className="p-2.5 font-bold">Nakit Kalemi</th>
+                              {periods.map(p => (
+                                <th key={p} className="p-2.5 text-right font-bold">{p}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60 font-mono text-[11px]">
+                            {cfRows.map(row => (
+                              <tr key={row.key} className="hover:bg-slate-900/50">
+                                <td className="p-2 text-slate-300 font-sans font-medium">{row.label}</td>
+                                {sortedHistory.map((h, i) => (
+                                  <td key={i} className="p-2 text-right text-slate-300">
+                                    {fmtNum(h[row.key], 1000)}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Rasyolar Tablosu */}
+                    <div className="bg-[#0F1523] border border-slate-800 rounded-xl p-4 overflow-hidden space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-violet-400"></span>
+                          Finansal Rasyolar ve Verimlilik Göstergeleri
+                        </h4>
+                        <span className="text-[10px] font-mono text-slate-500">{periods.length} Dönem</span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-left border-collapse">
+                          <thead className="bg-slate-900/90 text-slate-400 font-mono text-[11px] border-b border-slate-800">
+                            <tr>
+                              <th className="p-2.5 font-bold">Rasyo / Gösterge</th>
+                              {periods.map(p => (
+                                <th key={p} className="p-2.5 text-right font-bold">{p}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60 font-mono text-[11px]">
+                            {ratioRows.map(row => (
+                              <tr key={row.key} className="hover:bg-slate-900/50">
+                                <td className="p-2 text-slate-300 font-sans font-medium">{row.label}</td>
+                                {sortedHistory.map((h, i) => (
+                                  <td key={i} className="p-2 text-right text-slate-300">
+                                    {fmtNum(h[row.key], 1, row.isPct)}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                  </section>
+                );
+              })()}
 
             </div>
           )}
