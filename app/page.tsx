@@ -3153,10 +3153,16 @@ export default function ValuationTerminal() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
           <span className="text-[10px] text-slate-400 uppercase font-semibold block">Nakit Dönüşüm Oranı</span>
-          <div className="text-xl font-black font-mono mt-1 text-white">
-            {earningsQuality.cashConversionRatio != null ? `%${earningsQuality.cashConversionRatio}` : '—'}
+          <div className={`text-xl font-black font-mono mt-1 ${
+            earningsQuality.status === 'DOUBLE_NEGATIVE' ? 'text-rose-400' : 'text-white'
+          }`}>
+            {earningsQuality.status === 'DOUBLE_NEGATIVE'
+              ? 'A.D. (Çift Zarar)'
+              : (earningsQuality.cashConversionRatio != null ? `%${earningsQuality.cashConversionRatio}` : '—')}
           </div>
-          <span className="text-[10px] text-slate-500 block mt-0.5">OCF / Net Kâr (Hedef: &gt;%100)</span>
+          <span className="text-[10px] text-slate-500 block mt-0.5">
+            {earningsQuality.status === 'DOUBLE_NEGATIVE' ? 'Zarar & Nakit Yakımı (Uygulanamaz)' : 'OCF / Net Kâr (Hedef: >%100)'}
+          </span>
         </div>
 
         <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">

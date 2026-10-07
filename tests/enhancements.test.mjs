@@ -94,9 +94,10 @@ describe('Enhancements Test Suite (Items 1, 2, 3, 5, 6)', () => {
       });
 
       assert.equal(result.hasData, true);
+      assert.equal(result.cashConversionRatio, null); // Two negative numbers must NEVER produce a positive conversion ratio
       assert.equal(result.status, 'DOUBLE_NEGATIVE');
       assert.match(result.statusTitle, /Zarar ve Negatif Nakit Akışı/);
-      assert.match(result.guidanceText, /hem muhasebe zararı yazmakta hem de faaliyetlerinden nakit yakmaktadır/);
+      assert.match(result.guidanceText, /hem muhasebesel net zarar/);
     });
 
     it('handles missing or zero data gracefully', () => {
