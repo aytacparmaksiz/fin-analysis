@@ -112,9 +112,12 @@ describe('VESBE & Distressed Loss-Making Valuation Stress Test Suite', () => {
     assert.equal(eqResult.badgeColor, 'rose');
     assert.match(eqResult.statusTitle, /Zarar ve Negatif Nakit Akışı/i);
     assert.match(eqResult.guidanceText, /Nakit Dönüşüm Oranı uygulanamaz \(N\/A\)/i);
+    // Sloan assessment must NEVER claim "sağlıklı bir denge içindedir" when burning cash and posting net losses!
+    assert.match(eqResult.sloanAssessment, /Çift Yönlü Zarar ve Nakit Yakımı/i);
+    assert.doesNotMatch(eqResult.sloanAssessment, /sağlıklı bir denge/i);
   });
 
-  it('4. Decision & Fair Value Harmonization: High upside (+689%) is strictly prevented when Recommendation is ALMA', () => {
+  it('4. Decision & Pure Fair Value Consistency: Model calculates authentic math without arbitrary curPrice clamping, and formula matches 100%', () => {
     const result = computeSectorValuationAndDrivers({
       extractedData: vesbeExtractedData,
       sector: 'INDUSTRIAL',
@@ -127,11 +130,12 @@ describe('VESBE & Distressed Loss-Making Valuation Stress Test Suite', () => {
     assert.equal(optimization.finalDecision, 'ALMA');
     assert.ok(scoreResult.totalScore < 40);
 
-    // Fair value must be harmonized and capped at/below market price (no illogical +689% upside!)
-    assert.ok(valuation.fair_value <= marketPrice);
-    assert.ok(valuation.discount_pct <= 0); // Downside risk, not positive premium!
+    // Fair value is pure mathematical model calculation (never clamped by curPrice * 0.85)
     assert.equal(valuation.margin_of_safety, 0);
     assert.equal(valuation.margin_of_safety_status, 'UNSAFE');
-    assert.match(valuation.boundary_warning || '', /Sermaye Kaybı & Risk İskontosu/i);
+    assert.match(valuation.boundary_warning || '', /Sermaye Kaybı & Risk Uyarısı/i);
+
+    // Formula display and fair_value must match 100% with zero discrepancy (resolving 8.45 TL vs 3.31 TL bug)
+    assert.ok(valuation.formula_display.includes(`${valuation.fair_value.toFixed(2).replace('.', ',')} TL`));
   });
 });

@@ -3168,9 +3168,11 @@ export default function ValuationTerminal() {
         <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
           <span className="text-[10px] text-slate-400 uppercase font-semibold block">Sloan Tahakkuk Oranı</span>
           <div className={`text-xl font-black font-mono mt-1 ${
-            earningsQuality.sloanAccrualRatio != null && earningsQuality.sloanAccrualRatio < 0.05
-              ? 'text-emerald-400'
-              : 'text-amber-400'
+            earningsQuality.status === 'DOUBLE_NEGATIVE'
+              ? 'text-rose-400'
+              : (earningsQuality.sloanAccrualRatio != null && earningsQuality.sloanAccrualRatio < 0.05
+                ? 'text-emerald-400'
+                : 'text-amber-400')
           }`}>
             {earningsQuality.sloanAccrualRatio != null ? `%${(earningsQuality.sloanAccrualRatio * 100).toFixed(1)}` : '—'}
           </div>
@@ -3179,7 +3181,9 @@ export default function ValuationTerminal() {
 
         <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
           <span className="text-[10px] text-slate-400 uppercase font-semibold block">İşletme Nakit Akışı (OCF)</span>
-          <div className="text-lg font-black font-mono mt-1 text-emerald-400 truncate">
+          <div className={`text-lg font-black font-mono mt-1 truncate ${
+            (earningsQuality.ocf != null && earningsQuality.ocf < 0) ? 'text-rose-400' : 'text-emerald-400'
+          }`}>
             {formatAmount(earningsQuality.ocf, unitMode, false, '', '', currentExtractedData?.currency)}
           </div>
           <span className="text-[10px] text-slate-500 block mt-0.5">Operasyonel Sıcak Para</span>
@@ -3187,7 +3191,9 @@ export default function ValuationTerminal() {
 
         <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
           <span className="text-[10px] text-slate-400 uppercase font-semibold block">Raporlanan Net Kâr</span>
-          <div className="text-lg font-black font-mono mt-1 text-cyan-400 truncate">
+          <div className={`text-lg font-black font-mono mt-1 truncate ${
+            (earningsQuality.netIncome != null && earningsQuality.netIncome < 0) ? 'text-rose-400' : 'text-cyan-400'
+          }`}>
             {formatAmount(earningsQuality.netIncome, unitMode, false, '', '', currentExtractedData?.currency)}
           </div>
           <span className="text-[10px] text-slate-500 block mt-0.5">Muhasebesel Kâr / Zarar</span>

@@ -790,7 +790,7 @@ describe('Comprehensive Financial Terminal Stress Test Suite', () => {
         ]
       };
       const result = computeSectorValuationAndDrivers(techData, '50.0', 'TECH');
-      assert.equal(result.valuation.fair_value, 10.0); // 50 * 0.20
+      assert.equal(result.valuation.fair_value, 0.05); // True liquidation floor, not arbitrary fraction of market price
       assert.ok(result.valuation.formula_display.includes('TTK 376'));
     });
 
@@ -804,7 +804,7 @@ describe('Comprehensive Financial Terminal Stress Test Suite', () => {
         ]
       };
       const result = computeSectorValuationAndDrivers(indData, '50.0', 'INDUSTRIAL');
-      assert.equal(result.valuation.fair_value, 10.0); // 50 * 0.20
+      assert.equal(result.valuation.fair_value, 0.05); // True liquidation floor, not arbitrary fraction of market price
       assert.ok(result.valuation.formula_display.includes('TTK 376'));
     });
 
