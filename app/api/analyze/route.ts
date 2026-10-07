@@ -310,9 +310,10 @@ DİKKAT VE TUTARLILIK KURALI:
 10. NAKİT AKIŞI NÜANSLARI: II. Bölümde hem çalışma sermayesi ve vergi düzeltmeleri sonrası resmi Net İşletme Nakit Akışını (${netOcfVal ? `${(netOcfVal / 1e9).toFixed(2)} Milyar TL` : 'resmi net nakit akışı'}) hem de işletme sermayesi değişimleri öncesi brüt operasyonel nakit üretimini (${grossOcfVal ? `${(grossOcfVal / 1e9).toFixed(2)} Milyar TL` : 'brüt operasyonel nakit akışı'}) net olarak belirt. CAPEX kaleminde duran varlık alımlarını (${tangibleCapexVal ? `${(Math.abs(tangibleCapexVal) / 1e9).toFixed(2)} Milyar TL` : 'maddi duran varlık alımı'}) netleştir.
 11. ÇİFT NEGATİF NAKİT & KÂR KURALI: Şirketin hem Net Dönem Kârı hem de İşletme Nakit Akışı (OCF) negatif ise, Nakit Dönüşüm Oranını pozitif yüzde olarak (iki eksinin bölümü pozitif çıkar diye) ASLA gösterme ve başarılı gibi yorumlama! 'N/A (Çift Yönlü Nakit & Kâr Baskısı - Hem net zarar hem nakit yakımı)' olarak açıkla.
 12. NEGATİF FAVÖK KURALI: Şirketin FAVÖK'ü negatif ise, değerleme modelini asla klasik 'FD/FAVÖK' olarak sunma ve negatif FAVÖK ile pozitif çarpanı çarparak hedef fiyat türetmeye kalkma! Değerleme modelini '${valuation.valuation_model_name}' olarak adlandır ve İskontolu PD/DD varlık modeli üzerinden açıkla.
-13. ADİL DEĞER VE KARAR İLİŞKİSİ: Raporunda belirtilen Hisse Başı Adil Değer (${valuation.fair_value} TL) modelin hesapladığı net matematiksel değerdir; rapordaki tüm metinlerde ve formüllerde kesinlikle birebir aynı sayı (${valuation.fair_value} TL) kullanılmalıdır. Eğer Nihai Yatırım Kararı 'ALMA' ise:
-    a) Eğer piyasa fiyatı (${activePrice} TL) adil değerin üzerindeyse, hissenin piyasada pahalı işlem gördüğü ve kâr satışı / aşırı değerleme riski taşıdığı belirtilmelidir.
-    b) Eğer adil değer piyasa fiyatının üzerindeyse ancak şirket operasyonel zarar, sermaye erozyonu veya yüksek borç yükü nedeniyle 'ALMA' almışsa; varlık tabanının (${valuation.fair_value} TL) teorik bir defter değeri desteği sunmasına rağmen, negatif FAVÖK, nakit yakımı ve borç baskısı sürdükçe yatırımın yüksek sermaye kaybı riski taşıdığı ve emniyet marjından yoksun (UNSAFE) olduğu açıkça gerekçelendirilmelidir.
+13. ADİL DEĞER VE KARAR İLİŞKİSİ: Raporunda belirtilen Hisse Başı Adil Değer (${valuation.fair_value} TL) modelin hesapladığı net değerdir; rapordaki tüm metinlerde ve formüllerde kesinlikle birebir aynı sayı (${valuation.fair_value} TL) kullanılmalıdır. Eski veya alternatif hiçbir sayıyı (örneğin 9,64 TL gibi) ASLA KULLANMA!
+Eğer Nihai Yatırım Kararı 'ALMA' ise:
+    a) Eğer hisse fiyatı (${activePrice} TL) adil değerin (${valuation.fair_value} TL) üzerindeyse (${valuation.discount_pct < 0 ? `%${Math.abs(valuation.discount_pct)} primli` : ''}), hissenin piyasada adil değerinin üzerinde primli işlem gördüğü (İskonto Yok / Primli) ve operasyonel riskler nedeniyle sermaye kaybı riski taşıdığı net olarak vurgulanmalıdır. Emniyet marjı durumu 'UNSAFE' (Güvensiz / İskonto Yok) olarak belirtilmelidir.
+    b) Ayı Senaryosu taban hedefi ${valuation.bear_price} TL olup, ağır nakit sıkıntısı ve kriz koşullarını yansıtmaktadır.
 
 Doğrulanmış ve Raporlardan Birebir Çıkarılmış Çok Yıllı Finansal Zaman Serisi & Rehberlik Veri Seti:
 ${typeof extractedData === 'string' ? extractedData : JSON.stringify(extractedData, null, 2)}
@@ -349,7 +350,7 @@ ZORUNLU TALİMAT (Önceki Raporla Karşılaştırma & Çeyreklik Hafıza):
       JSON.stringify(extractedData?.positive_outlook_highlights || []) +
       JSON.stringify(extractedData?.guidance_track_record || [])
     );
-    const cacheKey = `analyze_v4_${resolvedTicker}_${extractedData?.reporting_period || 'latest'}_${activePrice}_${sector}_${docEnrichmentHash}`;
+    const cacheKey = `analyze_v5_${resolvedTicker}_${extractedData?.reporting_period || 'latest'}_${activePrice}_${sector}_${docEnrichmentHash}`;
 
     let reportText = '';
     if (apiKey) {

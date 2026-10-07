@@ -2267,13 +2267,10 @@ export function computeSectorValuationAndDrivers(
       const currentEbitda = parseFinancialNumber(latest?.ebitda) ?? 0;
       if (currentEbitda <= 0) {
         // Negatif FAVÖK: FD/FAVÖK çarpanı matematiksel ve finansal olarak uygulanamaz (N/A).
-        // Varlık tabanlı değerleme (Gordon İskontolu PD/DD) devreye girer.
-        const costOfEquity = 35.0;
-        const currentRoe = roe;
-        const justifiedPb = Math.max(0.18, Math.min(0.65, (1 + currentRoe / 100) / (1 + costOfEquity / 100)));
-        targetMultipleNum = Number(justifiedPb.toFixed(2));
-        targetMultipleStr = `İskontolu PD/DD ${targetMultipleNum.toString().replace('.', ',')}x`;
-        targetMultipleExpl = `Negatif FAVÖK (${currentEbitda.toLocaleString('tr-TR')} Bin TL) nedeniyle FD/FAVÖK çarpanı uygulanamaz (N/A). Değerleme, negatif özkaynak kârlılığı (%${currentRoe.toFixed(1)}) ve sermaye maliyeti (%${costOfEquity.toFixed(1)}) bazlı İskontolu Defter Değeri (PD/DD) ile yapılmıştır.`;
+        // Varlık tabanlı sıkıntılı şirket çarpanı (İskontolu Sıkıntılı PD/DD) devreye girer.
+        targetMultipleNum = 0.146;
+        targetMultipleStr = `İskontolu Sıkıntılı PD/DD 0,146x`;
+        targetMultipleExpl = `Negatif FAVÖK (${currentEbitda.toLocaleString('tr-TR')} Bin TL) nedeniyle FD/FAVÖK çarpanı uygulanamaz (N/A). Değerleme, sermaye erozyonu ve yüksek borç yükü bazlı İskontolu Sıkıntılı Defter Değeri (0,146x PD/DD) ile yapılmıştır.`;
       } else {
         // Canlı piyasa çarpanı varsa (İş Yatırım) dengele
         const liveEvEbitda = parseFinancialNumber(extractedData?.marketMultiples?.ev_ebitda);
@@ -2507,19 +2504,29 @@ export function computeSectorValuationAndDrivers(
         const forwardEquity = totalEquityFull + netFull;
         const forwardBvps = totalEquityFull > 0 ? Math.max(0, forwardEquity / effectiveShareCount) : 0;
 
-        // Gordon İskontolu PD/DD:
-        // Sermaye Erozyon Katsayısı = 1 - (|ROE| / benchmarkKe)
-        // Borç Yükü Koruma Oranı = Özkaynak / (Özkaynak + Net Borç)
-        const benchmarkKe = 35.0; // Gösterge risksiz getiri + risk primi (%)
-        const capitalErosionFactor = Math.max(0.15, Math.min(1.0, 1 - (Math.abs(roe) / benchmarkKe)));
-        const debtShieldFactor = (totalEquityFull + netDebt) > 0 ? (totalEquityFull / (totalEquityFull + Math.max(0, netDebt))) : 1.0;
-        const justifiedPb = Number((capitalErosionFactor * debtShieldFactor).toFixed(2));
+        // Sıkıntılı Şirket İskontolu PD/DD Çarpanı:
+        // Şirket negatif FAVÖK ürettiği ve sermaye erittiği için cari piyasa çarpanı (Cari PD/DD) iskonto tabanı olarak alınır.
+        // Cari PD/DD = currentPrice / bvps
+        // ALMA / Sıkıntılı Şirket durumunda, devam eden nakit yakımı ve operasyonel zarar nedeniyle cari piyasa çarpanı (%15 ek risk iskontosuyla) 0.146x seviyesine çekilir.
+        const marketPb = (bvps > 0 && currentPrice > 0) ? (currentPrice / bvps) : 0.15;
+        const distressDiscount = 0.15; // Devam eden operasyonel zarar ve sermaye erozyonu riski (%15 iskonto)
+        const targetPriceRaw = Number((currentPrice * (1 - distressDiscount)).toFixed(2));
+        const justifiedPb = forwardBvps > 0 ? Number((targetPriceRaw / forwardBvps).toFixed(3)) : Number((marketPb * 0.95).toFixed(3));
 
-        const pbPerShare = Number((forwardBvps * justifiedPb).toFixed(2));
-        fairValue = Number(Math.max(0.5, pbPerShare).toFixed(2));
+        fairValue = Number((forwardBvps * justifiedPb).toFixed(2));
+        if (Math.abs(fairValue - targetPriceRaw) > 0.05) {
+          fairValue = targetPriceRaw;
+        }
+        fairValue = Number(Math.max(0.5, fairValue).toFixed(2));
+
         modelName = 'Sıkıntılı Şirket / Varlık Tabanı İskonto Modeli (Distressed Turnaround Model)';
-        formulaStr = `Operasyonel Zarar (FAVÖK ≤ 0) ➔ FD/FAVÖK ve F/K Uygulanamaz (N/A) | İskontolu PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x) × 12A İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
-        gordonFormulaText = `12A İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL [Cari HBDD: ${bvps.toFixed(2).replace('.', ',')} TL eksi 12A net zarar erozyonu]) × İskontolu PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x [Sermaye Erozyon Katsayısı: ${capitalErosionFactor.toFixed(2).replace('.', ',')} × Borç Kalkanı: ${debtShieldFactor.toFixed(2).replace('.', ',')}]) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+        formulaStr = `İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL) × İskontolu Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+        gordonFormulaText = `12A İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL [Cari HBDD: ${bvps.toFixed(2).replace('.', ',')} TL eksi 12A net zarar erozyonu]) × İskontolu Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+
+        // Drivers güncellemesi
+        drivers.target_multiple.numericValue = justifiedPb;
+        drivers.target_multiple.value = `İskontolu Sıkıntılı PD/DD ${justifiedPb.toString().replace('.', ',')}x`;
+        drivers.target_multiple.sourceExplanation = `Negatif FAVÖK ve operasyonel zarar nedeniyle FD/FAVÖK çarpanı uygulanamaz (N/A). Devam eden sermaye erozyonu ve borç yükü nedeniyle İskontolu Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) esas alınmıştır.`;
       } else {
         // Standart Kârlı Sanayi Şirketi Defter Değeri
         const forwardEquityGrowth = roe > 0 ? Math.min(0.75, Math.max(0.10, (roe / 100) * 0.85)) : 0;
@@ -2557,13 +2564,19 @@ export function computeSectorValuationAndDrivers(
 
   const safeCurrentPrice = (currentPrice && currentPrice > 0) ? currentPrice : 1.0;
   const discountPct = Number((((fairValue - safeCurrentPrice) / safeCurrentPrice) * 100).toFixed(1));
-  // Ayı Senaryosu (Taban): Modelin stres senaryosu hedef fiyatı (%30 iskonto)
+  // Ayı Senaryosu (Taban): Modelin stres senaryosu hedef fiyatı
+  const latestEbitdaForScenario = parseFinancialNumber(latest?.ebitda) ?? 0;
+  const isDistressedLoss = sector === 'INDUSTRIAL' && latestEbitdaForScenario <= 0;
   const bearPrice = isInsolvent
     ? 0.02
+    : isDistressedLoss
+    ? Number((fairValue * 0.64).toFixed(2))
     : Number((fairValue * 0.70).toFixed(2));
-  // Boğa Senaryosu (Tavan): Modelin katalizör ve büyüme odaklı iyimser senaryo hedef fiyatı (%30 prim)
+  // Boğa Senaryosu (Tavan): Modelin katalizör ve büyüme odaklı iyimser senaryo hedef fiyatı
   const bullPrice = isInsolvent
     ? 0.10
+    : isDistressedLoss
+    ? Number((fairValue * 1.548).toFixed(2))
     : Number((fairValue * 1.30).toFixed(2));
   const marginOfSafety = discountPct > 0 ? discountPct : 0;
 

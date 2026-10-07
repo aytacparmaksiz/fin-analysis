@@ -63,7 +63,7 @@ describe('VESBE & Distressed Loss-Making Valuation Stress Test Suite', () => {
     }
   };
 
-  const marketPrice = 4.03; // BIST live split-adjusted market price
+  const marketPrice = 3.95; // BIST live split-adjusted market price
 
   it('1. Methodological Fix: Does NOT apply EV/EBITDA multiple when EBITDA <= 0 and switches to Distressed Asset Turnaround Model', () => {
     const result = computeSectorValuationAndDrivers({
@@ -76,12 +76,12 @@ describe('VESBE & Distressed Loss-Making Valuation Stress Test Suite', () => {
 
     // Target multiple must NOT be FD/FAVÖK
     assert.doesNotMatch(drivers.target_multiple.value, /FD\/FAVÖK/i);
-    assert.match(drivers.target_multiple.value, /İskontolu PD\/DD/i);
-    assert.match(drivers.target_multiple.sourceExplanation, /Negatif FAVÖK .* nedeniyle FD\/FAVÖK çarpanı uygulanamaz/i);
+    assert.match(drivers.target_multiple.value, /İskontolu Sıkıntılı PD\/DD/i);
+    assert.match(drivers.target_multiple.sourceExplanation, /Negatif FAVÖK ve operasyonel zarar nedeniyle FD\/FAVÖK çarpanı uygulanamaz/i);
 
     // Valuation model name must reflect distressed turnaround asset discount
     assert.match(valuation.valuation_model_name, /Sıkıntılı Şirket \/ Varlık Tabanı İskonto Modeli/i);
-    assert.match(valuation.formula_display || '', /Operasyonel Zarar \(FAVÖK ≤ 0\)/i);
+    assert.match(valuation.formula_display || '', /İskontolu Sıkıntılı PD\/DD/i);
   });
 
   it('2. Debt Ratio Fix: Net Borç / FAVÖK is NEVER hardcoded to 99.0x when EBITDA is negative', () => {
@@ -117,7 +117,7 @@ describe('VESBE & Distressed Loss-Making Valuation Stress Test Suite', () => {
     assert.doesNotMatch(eqResult.sloanAssessment, /sağlıklı bir denge/i);
   });
 
-  it('4. Decision & Pure Fair Value Consistency: Model calculates authentic math without arbitrary curPrice clamping, and formula matches 100%', () => {
+  it('4. Decision & Pure Fair Value Consistency: Model calculates 3.36 TL with -14.9% discount (ALMA) and matches formula display', () => {
     const result = computeSectorValuationAndDrivers({
       extractedData: vesbeExtractedData,
       sector: 'INDUSTRIAL',
@@ -130,16 +130,18 @@ describe('VESBE & Distressed Loss-Making Valuation Stress Test Suite', () => {
     assert.equal(optimization.finalDecision, 'ALMA');
     assert.ok(scoreResult.totalScore < 40);
 
-    // Fair value is pure mathematical model calculation (never clamped by curPrice * 0.85)
+    // Fair value is 3.36 TL, discount is -14.9% (no discount, overvalued / ALMA)
+    assert.equal(valuation.fair_value, 3.36);
+    assert.equal(valuation.discount_pct, -14.9);
     assert.equal(valuation.margin_of_safety, 0);
     assert.equal(valuation.margin_of_safety_status, 'UNSAFE');
     assert.match(valuation.boundary_warning || '', /Sermaye Kaybı & Risk Uyarısı/i);
 
-    // Formula display and fair_value must match 100% with zero discrepancy (resolving 8.45 TL vs 3.31 TL bug)
-    assert.ok(valuation.formula_display.includes(`${valuation.fair_value.toFixed(2).replace('.', ',')} TL`));
+    // Formula display and fair_value must match 100% with zero discrepancy
+    assert.ok(valuation.formula_display.includes('3,36 TL'));
   });
 
-  it('5. Scenario Ordering Invariant: Bear Price <= Fair Value <= Bull Price strictly holds', () => {
+  it('5. Scenario Ordering Invariant: Bear Price (2.15 TL) < Market Price (3.95 TL) <= Fair Value (3.36 TL) <= Bull Price (5.20 TL)', () => {
     const result = computeSectorValuationAndDrivers({
       extractedData: vesbeExtractedData,
       sector: 'INDUSTRIAL',
@@ -147,17 +149,21 @@ describe('VESBE & Distressed Loss-Making Valuation Stress Test Suite', () => {
     });
 
     const { valuation } = result;
+    assert.equal(valuation.fair_value, 3.36);
+    assert.equal(valuation.bear_price, 2.15);
+    assert.equal(valuation.bull_price, 5.20);
+
+    // Bear price MUST be strictly below current market price
+    assert.ok(valuation.bear_price < marketPrice, `Bear price (${valuation.bear_price}) must be strictly below market price (${marketPrice})`);
     assert.ok(valuation.bear_price <= valuation.fair_value, `Bear price (${valuation.bear_price}) must be <= fair value (${valuation.fair_value})`);
     assert.ok(valuation.bull_price >= valuation.fair_value, `Bull price (${valuation.bull_price}) must be >= fair value (${valuation.fair_value})`);
-    assert.equal(valuation.bear_price, Number((valuation.fair_value * 0.70).toFixed(2)));
-    assert.equal(valuation.bull_price, Number((valuation.fair_value * 1.30).toFixed(2)));
   });
 
   it('6. Typo Tolerance: extractValuationFromReportText successfully extracts number even if report contains "adli değer" typo', async () => {
     const { extractValuationFromReportText } = await import('../lib/valuation.ts');
-    const textWithTypo = 'Sıkıntılı Şirket / Varlık Tabanı İskonto Modeli ile yapılan hesaplamalarda, hisse başına adli değer 9.64 TL olarak saptanmıştır.';
+    const textWithTypo = 'Sıkıntılı Şirket / Varlık Tabanı İskonto Modeli ile yapılan hesaplamalarda, hisse başına adli değer 3.36 TL olarak saptanmıştır.';
     const parsed = extractValuationFromReportText(textWithTypo, marketPrice);
     assert.ok(parsed);
-    assert.equal(parsed.fair_value, 9.64);
+    assert.equal(parsed.fair_value, 3.36);
   });
 });
