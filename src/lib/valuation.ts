@@ -1912,7 +1912,7 @@ export function computeSectorValuationAndDrivers(
 
   const rawPrice = parseFinancialNumber(effectivePriceStr || extractedData?.valuation?.current_price || '118.50');
   const currentPrice = (rawPrice !== null && rawPrice > 0) ? rawPrice : 118.50;
-  const shareCount = parseShareCountNumber(extractedData?.share_count);
+  const shareCount = parseShareCountNumber(extractedData?.share_count ?? extractedData?.shares_outstanding);
 
   // TMS 29 Homojenizasyonunu çalıştır
   const { homogenizedHistory, tms29Warnings } = homogenizeTms29Series(history, sector);
@@ -2340,9 +2340,9 @@ export function computeSectorValuationAndDrivers(
     (paidCapSample > 0 && paidCapSample < 10_000_000 && shareCount >= 5_000_000) ||
     (eqScaleSample > 0 && eqScaleSample < 250_000_000 && (revScaleSample === 0 || revScaleSample < 250_000_000));
   
-  const isAlreadyTamTl = (eqScaleSample >= 250_000_000) || 
+  const isAlreadyTamTl = !isClearlyThousands && ((eqScaleSample >= 250_000_000) || 
                          (revScaleSample >= 250_000_000) ||
-                         (normCurr === 'tl' || normCurr === 'try' || normCurr.includes('tam'));
+                         (normCurr.includes('tam')));
 
   let unitScale = 1;
   if (!isAlreadyTamTl) {
@@ -2500,33 +2500,45 @@ export function computeSectorValuationAndDrivers(
 
       if (ebitdaFull <= 0) {
         // OPERASYONEL ZARAR & SIKINTILI ŞİRKET VARLIK TABANI MODELİ (DISTRESSED TURNAROUND):
+        // PURE FUNDAMENTAL VALUATION: Hisse fiyatından (currentPrice) KESİNLİKLE bağımsızdır!
         // 12 aylık beklenen net zarar özkaynaktan düşülerek ileri defter değeri türetilir
         const forwardEquity = totalEquityFull + netFull;
         const forwardBvps = totalEquityFull > 0 ? Math.max(0, forwardEquity / effectiveShareCount) : 0;
 
-        // Sıkıntılı Şirket İskontolu PD/DD Çarpanı:
-        // Şirket negatif FAVÖK ürettiği ve sermaye erittiği için cari piyasa çarpanı (Cari PD/DD) iskonto tabanı olarak alınır.
-        // Cari PD/DD = currentPrice / bvps
-        // ALMA / Sıkıntılı Şirket durumunda, devam eden nakit yakımı ve operasyonel zarar nedeniyle cari piyasa çarpanı (%15 ek risk iskontosuyla) 0.146x seviyesine çekilir.
-        const marketPb = (bvps > 0 && currentPrice > 0) ? (currentPrice / bvps) : 0.15;
-        const distressDiscount = 0.15; // Devam eden operasyonel zarar ve sermaye erozyonu riski (%15 iskonto)
-        const targetPriceRaw = Number((currentPrice * (1 - distressDiscount)).toFixed(2));
-        const justifiedPb = forwardBvps > 0 ? Number((targetPriceRaw / forwardBvps).toFixed(3)) : Number((marketPb * 0.95).toFixed(3));
+        // 1. Sermaye Erozyon Oranı (Capital Burn Rate): Şirketin 12 aylık zararı özkaynakların yüzde kaçını eritiyor?
+        const erosionRate = totalEquityFull > 0 ? Math.min(0.90, Math.abs(netFull) / totalEquityFull) : 0.90;
+        const capitalRetentionFactor = Math.max(0.10, 1.0 - erosionRate);
+
+        // 2. Sermaye Yapısı Güvencesi (Equity Cushion / Solvency Factor): Varlık ve borç yükü dengesi
+        const safeNetDebt = Math.max(0, netDebt);
+        const totalCapital = totalEquityFull + safeNetDebt;
+        const equityWeight = totalCapital > 0 ? (totalEquityFull / totalCapital) : 0.20;
+
+        // 3. Kısa Vadeli Likidite Güvencesi (Working Capital Buffer): Cari Oran gücü
+        const latestCr = parseFinancialNumber(latest?.current_ratio);
+        const latestCa = parseFinancialNumber(latest?.current_assets);
+        const latestCl = parseFinancialNumber(latest?.current_liabilities);
+        const computedCr = (latestCa !== null && latestCl !== null && latestCl > 0) ? (latestCa / latestCl) : (latestCr ?? 1.0);
+        const liquidityBuffer = Math.min(1.0, Math.max(0.35, computedCr / 1.5));
+
+        // 4. Sanayi Varlık Tabanı Çevrim Çarpanı (Base Tangible Asset Turnaround Multiple):
+        // Kriz/dönüşüm döngüsündeki sanayi varlıkları için döngüsel dip çarpan tabanı (0.378x)
+        const baseMultiple = 0.378;
+
+        // Hak Edilen Sıkıntılı PD/DD Çarpanı: Tamamen bilanço dinamiklerinin çarpımıdır (Piyasa fiyatı 0 etkilidir!)
+        const justifiedPb = Number((baseMultiple * capitalRetentionFactor * equityWeight * liquidityBuffer).toFixed(3));
 
         fairValue = Number((forwardBvps * justifiedPb).toFixed(2));
-        if (Math.abs(fairValue - targetPriceRaw) > 0.05) {
-          fairValue = targetPriceRaw;
-        }
         fairValue = Number(Math.max(0.5, fairValue).toFixed(2));
 
         modelName = 'Sıkıntılı Şirket / Varlık Tabanı İskonto Modeli (Distressed Turnaround Model)';
-        formulaStr = `İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL) × İskontolu Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
-        gordonFormulaText = `12A İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL [Cari HBDD: ${bvps.toFixed(2).replace('.', ',')} TL eksi 12A net zarar erozyonu]) × İskontolu Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+        formulaStr = `İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL) × Hak Edilen Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+        gordonFormulaText = `12A İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL [Cari HBDD: ${bvps.toFixed(2).replace('.', ',')} TL eksi 12A net zarar erozyonu]) × Hak Edilen Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x [Taban: ${baseMultiple}x × Sermaye Korunma: %${(capitalRetentionFactor * 100).toFixed(1)} × Özkaynak Ağırlığı: %${(equityWeight * 100).toFixed(1)} × Likidite Tamponu: %${(liquidityBuffer * 100).toFixed(1)}]) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
 
         // Drivers güncellemesi
         drivers.target_multiple.numericValue = justifiedPb;
-        drivers.target_multiple.value = `İskontolu Sıkıntılı PD/DD ${justifiedPb.toString().replace('.', ',')}x`;
-        drivers.target_multiple.sourceExplanation = `Negatif FAVÖK ve operasyonel zarar nedeniyle FD/FAVÖK çarpanı uygulanamaz (N/A). Devam eden sermaye erozyonu ve borç yükü nedeniyle İskontolu Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) esas alınmıştır.`;
+        drivers.target_multiple.value = `Hak Edilen Sıkıntılı PD/DD ${justifiedPb.toString().replace('.', ',')}x`;
+        drivers.target_multiple.sourceExplanation = `Negatif FAVÖK ve operasyonel zarar nedeniyle FD/FAVÖK çarpanı uygulanamaz (N/A). Hisse piyasa fiyatından tamamen bağımsız olarak; sermaye erozyonu (%${(erosionRate * 100).toFixed(1)}), borç yükü (Özkaynak/Toplam Sermaye: %${(equityWeight * 100).toFixed(1)}) ve çalışma sermayesi likiditesi (${computedCr.toFixed(2)}x Cari Oran) üzerinden Hak Edilen Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) hesaplanmıştır.`;
       } else {
         // Standart Kârlı Sanayi Şirketi Defter Değeri
         const forwardEquityGrowth = roe > 0 ? Math.min(0.75, Math.max(0.10, (roe / 100) * 0.85)) : 0;

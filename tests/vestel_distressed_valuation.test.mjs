@@ -41,9 +41,9 @@ describe('VESBE & Distressed Loss-Making Valuation Stress Test Suite', () => {
         net_income: -2277301, // Official net loss: -2.28 Mr TL
         operating_cash_flow: -2540000, // Official OCF: -2.54 Mr TL (cash burning)
         free_cash_flow: -3100000,
-        equity: 28000000, // ~28 Mr TL
+        equity: 41300000, // Official TMS 29 Equity: 41.30 Mr TL (yielding 25.81 TL BVPS and 22.97 TL forward BVPS)
         net_debt: 26229065, // Official Net Debt: 26.23 Mr TL
-        total_assets: 58000000,
+        total_assets: 75000000, // Official TMS 29 Total Assets: 75.00 Mr TL
         current_assets: 29000000,
         current_liabilities: 27000000,
         current_ratio: 1.07,
@@ -55,11 +55,11 @@ describe('VESBE & Distressed Loss-Making Valuation Stress Test Suite', () => {
     ],
     marketMultiples: {
       pe: null,
-      pb: 0.23,
+      pb: 0.15,
       ev_ebitda: null,
       ev_sales: 0.45,
       free_float_pct: 17.5,
-      market_cap_mn_tl: 6448
+      market_cap_mn_tl: 6320
     }
   };
 
@@ -76,12 +76,12 @@ describe('VESBE & Distressed Loss-Making Valuation Stress Test Suite', () => {
 
     // Target multiple must NOT be FD/FAVÖK
     assert.doesNotMatch(drivers.target_multiple.value, /FD\/FAVÖK/i);
-    assert.match(drivers.target_multiple.value, /İskontolu Sıkıntılı PD\/DD/i);
+    assert.match(drivers.target_multiple.value, /Hak Edilen Sıkıntılı PD\/DD/i);
     assert.match(drivers.target_multiple.sourceExplanation, /Negatif FAVÖK ve operasyonel zarar nedeniyle FD\/FAVÖK çarpanı uygulanamaz/i);
 
     // Valuation model name must reflect distressed turnaround asset discount
     assert.match(valuation.valuation_model_name, /Sıkıntılı Şirket \/ Varlık Tabanı İskonto Modeli/i);
-    assert.match(valuation.formula_display || '', /İskontolu Sıkıntılı PD\/DD/i);
+    assert.match(valuation.formula_display || '', /Hak Edilen Sıkıntılı PD\/DD/i);
   });
 
   it('2. Debt Ratio Fix: Net Borç / FAVÖK is NEVER hardcoded to 99.0x when EBITDA is negative', () => {
@@ -117,7 +117,7 @@ describe('VESBE & Distressed Loss-Making Valuation Stress Test Suite', () => {
     assert.doesNotMatch(eqResult.sloanAssessment, /sağlıklı bir denge/i);
   });
 
-  it('4. Decision & Pure Fair Value Consistency: Model calculates 3.36 TL with -14.9% discount (ALMA) and matches formula display', () => {
+  it('4. Decision & Pure Fair Value Consistency: Model calculates 3.38 TL with -14.4% discount (ALMA) from balance sheet with zero price bias', () => {
     const result = computeSectorValuationAndDrivers({
       extractedData: vesbeExtractedData,
       sector: 'INDUSTRIAL',
@@ -130,18 +130,18 @@ describe('VESBE & Distressed Loss-Making Valuation Stress Test Suite', () => {
     assert.equal(optimization.finalDecision, 'ALMA');
     assert.ok(scoreResult.totalScore < 40);
 
-    // Fair value is 3.36 TL, discount is -14.9% (no discount, overvalued / ALMA)
-    assert.equal(valuation.fair_value, 3.36);
-    assert.equal(valuation.discount_pct, -14.9);
+    // Fair value is 3.38 TL, discount is -14.4% (no discount, overvalued / ALMA)
+    assert.equal(valuation.fair_value, 3.38);
+    assert.equal(valuation.discount_pct, -14.4);
     assert.equal(valuation.margin_of_safety, 0);
     assert.equal(valuation.margin_of_safety_status, 'UNSAFE');
     assert.match(valuation.boundary_warning || '', /Sermaye Kaybı & Risk Uyarısı/i);
 
     // Formula display and fair_value must match 100% with zero discrepancy
-    assert.ok(valuation.formula_display.includes('3,36 TL'));
+    assert.ok(valuation.formula_display.includes('3,38 TL'));
   });
 
-  it('5. Scenario Ordering Invariant: Bear Price (2.15 TL) < Market Price (3.95 TL) <= Fair Value (3.36 TL) <= Bull Price (5.20 TL)', () => {
+  it('5. Scenario Ordering Invariant: Bear Price (2.16 TL) < Market Price (3.95 TL) <= Fair Value (3.38 TL) <= Bull Price (5.23 TL)', () => {
     const result = computeSectorValuationAndDrivers({
       extractedData: vesbeExtractedData,
       sector: 'INDUSTRIAL',
@@ -149,9 +149,9 @@ describe('VESBE & Distressed Loss-Making Valuation Stress Test Suite', () => {
     });
 
     const { valuation } = result;
-    assert.equal(valuation.fair_value, 3.36);
-    assert.equal(valuation.bear_price, 2.15);
-    assert.equal(valuation.bull_price, 5.20);
+    assert.equal(valuation.fair_value, 3.38);
+    assert.equal(valuation.bear_price, 2.16);
+    assert.equal(valuation.bull_price, 5.23);
 
     // Bear price MUST be strictly below current market price
     assert.ok(valuation.bear_price < marketPrice, `Bear price (${valuation.bear_price}) must be strictly below market price (${marketPrice})`);
@@ -161,9 +161,19 @@ describe('VESBE & Distressed Loss-Making Valuation Stress Test Suite', () => {
 
   it('6. Typo Tolerance: extractValuationFromReportText successfully extracts number even if report contains "adli değer" typo', async () => {
     const { extractValuationFromReportText } = await import('../lib/valuation.ts');
-    const textWithTypo = 'Sıkıntılı Şirket / Varlık Tabanı İskonto Modeli ile yapılan hesaplamalarda, hisse başına adli değer 3.36 TL olarak saptanmıştır.';
+    const textWithTypo = 'Sıkıntılı Şirket / Varlık Tabanı İskonto Modeli ile yapılan hesaplamalarda, hisse başına adli değer 3.38 TL olarak saptanmıştır.';
     const parsed = extractValuationFromReportText(textWithTypo, marketPrice);
     assert.ok(parsed);
-    assert.equal(parsed.fair_value, 3.36);
+    assert.equal(parsed.fair_value, 3.38);
+  });
+
+  it('7. Price-Independence Invariant: Fair Value is 100% independent of current market price and never reverse-engineered', () => {
+    const lowPriceRes = computeSectorValuationAndDrivers({ extractedData: vesbeExtractedData, sector: 'INDUSTRIAL', marketPrice: 1.50 });
+    const midPriceRes = computeSectorValuationAndDrivers({ extractedData: vesbeExtractedData, sector: 'INDUSTRIAL', marketPrice: 3.95 });
+    const highPriceRes = computeSectorValuationAndDrivers({ extractedData: vesbeExtractedData, sector: 'INDUSTRIAL', marketPrice: 10.00 });
+
+    assert.equal(lowPriceRes.valuation.fair_value, 3.38);
+    assert.equal(midPriceRes.valuation.fair_value, 3.38);
+    assert.equal(highPriceRes.valuation.fair_value, 3.38);
   });
 });

@@ -350,7 +350,7 @@ ZORUNLU TALİMAT (Önceki Raporla Karşılaştırma & Çeyreklik Hafıza):
       JSON.stringify(extractedData?.positive_outlook_highlights || []) +
       JSON.stringify(extractedData?.guidance_track_record || [])
     );
-    const cacheKey = `analyze_v5_${resolvedTicker}_${extractedData?.reporting_period || 'latest'}_${activePrice}_${sector}_${docEnrichmentHash}`;
+    const cacheKey = `analyze_v6_${resolvedTicker}_${extractedData?.reporting_period || 'latest'}_${activePrice}_${sector}_${docEnrichmentHash}`;
 
     let reportText = '';
     if (apiKey) {
