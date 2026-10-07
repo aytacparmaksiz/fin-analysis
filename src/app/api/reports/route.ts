@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
-import { 
-  AGESA_SAMPLE_DATA, AGESA_SAMPLE_REPORT_TEXT, 
-  VESBE_SAMPLE_DATA, VESBE_SAMPLE_REPORT_TEXT 
-} from '@/lib/sample-data';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -43,39 +39,6 @@ export async function GET(req: NextRequest) {
           };
           return NextResponse.json({ success: true, report, source: 'cloud' });
         }
-      }
-
-      // 2. Hazır resmi modellerde ara (VESBE, AGESA)
-      if (requestedTicker === 'VESBE') {
-        const vesbeReport = {
-          id: 'report-vesbe',
-          ticker: 'VESBE',
-          price: '3.95',
-          period: '2026/06',
-          createdAt: '7 Ekim 2026, 17:30',
-          decision: 'ALMA',
-          score: '15',
-          sector: 'INDUSTRIAL',
-          report: VESBE_SAMPLE_REPORT_TEXT,
-          extractedData: VESBE_SAMPLE_DATA,
-        };
-        return NextResponse.json({ success: true, report: vesbeReport, source: 'official_sample' });
-      }
-
-      if (requestedTicker === 'AGESA') {
-        const agesaReport = {
-          id: 'demo-agesa',
-          ticker: 'AGESA',
-          price: '118.50',
-          period: '2026/Q2',
-          createdAt: '28 Eylül 2026, 14:15',
-          decision: 'AL',
-          score: '96',
-          sector: 'INSURANCE',
-          report: AGESA_SAMPLE_REPORT_TEXT,
-          extractedData: AGESA_SAMPLE_DATA,
-        };
-        return NextResponse.json({ success: true, report: agesaReport, source: 'official_sample' });
       }
 
       return NextResponse.json({ 
@@ -182,9 +145,10 @@ export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
+    const ticker = searchParams.get('ticker')?.toUpperCase().trim();
 
-    if (!id) {
-      return NextResponse.json({ success: false, message: 'Rapor ID belirtilmedi' }, { status: 400 });
+    if (!id && !ticker) {
+      return NextResponse.json({ success: false, message: 'Rapor ID veya Ticker belirtilmedi' }, { status: 400 });
     }
 
     const supabase = getSupabase();
@@ -196,10 +160,20 @@ export async function DELETE(req: NextRequest) {
       });
     }
 
-    const { error } = await supabase
-      .from('valuation_reports')
-      .delete()
-      .eq('id', id);
+    let error = null;
+    if (ticker) {
+      const res = await supabase
+        .from('valuation_reports')
+        .delete()
+        .eq('ticker', ticker);
+      error = res.error;
+    } else if (id) {
+      const res = await supabase
+        .from('valuation_reports')
+        .delete()
+        .eq('id', id);
+      error = res.error;
+    }
 
     if (error) {
       console.error('Supabase delete error:', error);

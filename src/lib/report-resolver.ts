@@ -1,9 +1,3 @@
-import { 
-  AGESA_SAMPLE_DATA, 
-  AGESA_SAMPLE_REPORT_TEXT, 
-  VESBE_SAMPLE_DATA, 
-  VESBE_SAMPLE_REPORT_TEXT 
-} from '@/lib/sample-data';
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 import { SectorType } from '@/lib/sectors';
 
@@ -27,56 +21,20 @@ export interface SavedReport {
 }
 
 /**
- * Statik olarak hazır olan doğrulanmış resmi modelleri döndürür (Senkron).
- * Hem SSR (Server Side Rendering) hem de İstemci tarafı ilk mount için 0 ms gecikmeyle çalışır.
+ * Statik olarak hazır model döndürmez; kullanıcı veya veritabanı haricinde suni rapor üretilmesini engeller.
  */
 export function getStaticReport(ticker: string): SavedReport | null {
-  const norm = (ticker || '').trim().toUpperCase();
-  if (norm === 'VESBE') {
-    return {
-      id: 'demo-vesbe',
-      ticker: 'VESBE',
-      price: '3.95',
-      fairValue: '3.38',
-      period: '2026/06',
-      createdAt: '7 Ekim 2026, 17:00',
-      decision: 'ALMA',
-      score: '15',
-      sector: 'INDUSTRIAL',
-      report: VESBE_SAMPLE_REPORT_TEXT,
-      extractedData: VESBE_SAMPLE_DATA,
-    };
-  }
-  if (norm === 'AGESA') {
-    return {
-      id: 'demo-agesa',
-      ticker: 'AGESA',
-      price: '118.50',
-      fairValue: '164.20',
-      period: '2026/Q2',
-      createdAt: '28 Eylül 2026, 14:15',
-      decision: 'AL',
-      score: '96',
-      sector: 'INSURANCE',
-      report: AGESA_SAMPLE_REPORT_TEXT,
-      extractedData: AGESA_SAMPLE_DATA,
-    };
-  }
   return null;
 }
 
 /**
- * Dinamik rotalar ve SSR için ticker'a ait raporu çözer (Statik model veya Supabase).
+ * Dinamik rotalar ve SSR için ticker'a ait raporu çözer (Yalnızca gerçek Supabase kayıtları).
  */
 export async function getReportForTicker(ticker: string): Promise<SavedReport | null> {
   const norm = (ticker || '').trim().toUpperCase();
   if (!norm) return null;
 
-  // 1. Doğrulanmış resmi model (VESBE, AGESA)
-  const staticReport = getStaticReport(norm);
-  if (staticReport) return staticReport;
-
-  // 2. Bulut Supabase veritabanı (Tanımlıysa)
+  // Bulut Supabase veritabanı (Tanımlıysa)
   try {
     const supabase = getSupabase();
     if (supabase && isSupabaseConfigured()) {

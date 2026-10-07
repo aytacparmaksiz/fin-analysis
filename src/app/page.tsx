@@ -36,14 +36,7 @@ import {
   SECTOR_DEFINITIONS 
 } from '@/lib/sectors';
 
-import { 
-  AGESA_SAMPLE_DATA, 
-  AGESA_SAMPLE_REPORT_TEXT,
-  VESBE_SAMPLE_DATA,
-  VESBE_SAMPLE_REPORT_TEXT
-} from '@/lib/sample-data';
-
-import { getStaticReport, SavedReport } from '@/lib/report-resolver';
+import { SavedReport } from '@/lib/report-resolver';
 export type { SavedReport };
 import { generateFullAuditMarkdown } from '@/lib/export-markdown';
 
@@ -1022,8 +1015,8 @@ export default function ValuationTerminal({
   initialReport?: SavedReport | null;
   initialTab?: 'ozet' | 'overview' | 'fairvalue' | 'tables' | 'multiples' | 'proscons' | 'guidance' | 'report' | 'history';
 } = {}) {
-  // SSR'den gelen initialReport veya ilk senkron render için getStaticReport
-  const defaultReport = initialReport || (initialTicker ? getStaticReport(initialTicker) : null);
+  // SSR'den gelen initialReport (Yalnızca veritabanında kayıtlı gerçek raporlar)
+  const defaultReport = initialReport || null;
 
   const [mounted, setMounted] = useState(false);
   const [ticker, setTicker] = useState(defaultReport?.ticker || initialTicker || '');
@@ -1080,15 +1073,15 @@ export default function ValuationTerminal({
     });
   };
 
-  // Aşama durumu: defaultReport varsa veya initialTicker girilmişse DOĞRUDAN 'report' görünümünü aktif hale getir (Arama formunu atla)
+  // Aşama durumu: Yalnızca kayıtlı rapor varsa 'report', aksi halde doğrudan 'input' (Arama ve analiz formu)
   const [step, setStep] = useState<'input' | 'review' | 'report' | 'leaderboard'>(
-    defaultReport ? 'report' : (initialTicker ? 'report' : 'input')
+    defaultReport ? 'report' : 'input'
   );
   const [extractedData, setExtractedData] = useState<any>(defaultReport?.extractedData || null);
 
   // Ana Sekmeler
   const [activeTab, setActiveTab] = useState<'ozet' | 'overview' | 'fairvalue' | 'tables' | 'multiples' | 'proscons' | 'guidance' | 'report' | 'history'>(
-    initialTab || (initialTicker ? 'report' : 'ozet')
+    initialTab || 'ozet'
   );
 
   // Finansal Tablolar Alt Sekmeleri (Görsel 2)
@@ -1118,10 +1111,8 @@ export default function ValuationTerminal({
   const [leaderboardSearch, setLeaderboardSearch] = useState('');
   const [leaderboardFilter, setLeaderboardFilter] = useState<'ALL' | 'AL' | 'NÖTR' | 'ALMA'>('ALL');
 
-  const [loading, setLoading] = useState<boolean>(!defaultReport && Boolean(initialTicker));
-  const [statusMessage, setStatusMessage] = useState<string>(
-    (!defaultReport && Boolean(initialTicker)) ? `${initialTicker} verileri ve analiz raporu hazırlanıyor...` : ''
-  );
+  const [loading, setLoading] = useState<boolean>(false);
+  const [statusMessage, setStatusMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
 
   const [isCloudConfigured, setIsCloudConfigured] = useState<boolean | null>(null);
@@ -1139,8 +1130,11 @@ export default function ValuationTerminal({
       const byTicker = savedReports.find(r => r.ticker?.toUpperCase() === currentTicker);
       if (byTicker) return byTicker;
     }
-    if (defaultReport) return defaultReport;
-    return savedReports[0] || null;
+    if (defaultReport && (!currentTicker || defaultReport.ticker?.toUpperCase() === currentTicker)) {
+      return defaultReport;
+    }
+    // ASLA başka bir şirketin raporuna otomatik olarak atlama
+    return null;
   }, [savedReports, activeReportId, ticker, initialTicker, defaultReport]);
 
   // Kenar Çubuğu Katlanabilirlik ve Sabitleme Durumu (Item 6)
@@ -1192,99 +1186,51 @@ export default function ValuationTerminal({
     const reportToDelete = savedReports.find(r => r.id === id);
     const tickerName = reportToDelete?.ticker || 'bu';
     if (confirm(`${tickerName} hissesine ait değerleme raporunu silmek istediğinize emin misiniz?`)) {
-      const updated = savedReports.filter(r => r.id !== id);
+      // 1. O hisseye ait TÜM kopyaları/kayıtları yerel hafızadan temizle (farklı tarihlerde yapılmış olsa bile)
+      const updated = savedReports.filter(r => r.id !== id && r.ticker?.toUpperCase() !== tickerName.toUpperCase());
       setSavedReports(updated);
       try {
         localStorage.setItem('fin_valuation_reports', JSON.stringify(updated));
       } catch (err) {}
 
+      // 2. Buluttan hem ID hem de ticker bazında sil
       try {
-        await fetch(`/api/reports?id=${encodeURIComponent(id)}`, {
+        await fetch(`/api/reports?id=${encodeURIComponent(id)}&ticker=${encodeURIComponent(tickerName)}`, {
           method: 'DELETE',
         });
       } catch (err) {
         console.warn('Buluttan silme başarısız:', err);
       }
 
-      if (activeReportId === id) {
+      // 3. Ekran ve URL senkronizasyonu:
+      if (activeReport?.ticker?.toUpperCase() === tickerName.toUpperCase() || activeReportId === id) {
         if (updated.length > 0) {
+          // Listede kalan ilk raporu göster ve URL'yi güncelle
           setActiveReportId(updated[0].id);
+          setTicker(updated[0].ticker);
           setStep('report');
+          if (typeof window !== 'undefined') {
+            window.history.replaceState(null, '', `/analysis/${updated[0].ticker.toUpperCase()}`);
+          }
         } else {
+          // Başka rapor kalmadıysa DOĞRUDAN ANA SAYFAYA DÖN ve URL'yi '/' yap
           setActiveReportId(null);
+          setTicker('');
           setStep('input');
+          if (typeof window !== 'undefined') {
+            window.history.replaceState(null, '', '/');
+          }
         }
       }
     }
   };
-
-  // Demo / Örnek Şirket Yükleme (AGESA - Sigortacılık veya Emeklilik)
-  const loadAgesaDemo = useCallback(() => {
-    const agesaReport = getStaticReport('AGESA')!;
-    setSavedReports(prev => {
-      const exists = prev.some(r => r.ticker === 'AGESA');
-      const updated = exists ? prev : [agesaReport, ...prev];
-      try {
-        localStorage.setItem('fin_valuation_reports', JSON.stringify(updated));
-      } catch (e) {}
-      return updated;
-    });
-
-    setTicker('AGESA');
-    setPrice('118.50');
-    setExtractedData(agesaReport.extractedData);
-    setActiveReportId(agesaReport.id);
-    setStep('report');
-    setActiveTab('ozet');
-    setLoading(false);
-  }, []);
-
-  // Demo / Örnek Şirket Yükleme (VESBE - Sanayi / Dayanıklı Tüketim)
-  const loadVesbeDemo = useCallback(() => {
-    const vesbeReport = getStaticReport('VESBE')!;
-    setSavedReports(prev => {
-      const exists = prev.some(r => r.ticker === 'VESBE');
-      const updated = exists ? prev : [vesbeReport, ...prev];
-      try {
-        localStorage.setItem('fin_valuation_reports', JSON.stringify(updated));
-      } catch (e) {}
-      return updated;
-    });
-
-    setTicker('VESBE');
-    setPrice('3.95');
-    setExtractedData(vesbeReport.extractedData);
-    setActiveReportId(vesbeReport.id);
-    setStep('report');
-    setActiveTab('ozet');
-    setLoading(false);
-  }, []);
 
   // Doğrudan URL veya Harici Çağrı ile Hisse Yükleme (/analysis/[ticker])
   const loadTickerDirect = useCallback(async (targetTicker: string, currentSaved?: SavedReport[]) => {
     const t = (targetTicker || '').trim().toUpperCase();
     if (!t) return;
 
-    // 1. Statik hazır modeller (VESBE, AGESA)
-    const staticRep = getStaticReport(t);
-    if (staticRep) {
-      setSavedReports(prev => {
-        const exists = prev.some(r => r.ticker === t);
-        const updated = exists ? prev : [staticRep, ...prev];
-        try { localStorage.setItem('fin_valuation_reports', JSON.stringify(updated)); } catch {}
-        return updated;
-      });
-      setActiveReportId(staticRep.id);
-      setTicker(staticRep.ticker);
-      setPrice(staticRep.price);
-      setExtractedData(staticRep.extractedData);
-      setStep('report');
-      setActiveTab(initialTab || (initialTicker ? 'report' : 'ozet'));
-      setLoading(false);
-      return;
-    }
-
-    // 2. Mevcut kaydedilmiş veya yerel depodaki raporlar
+    // 1. Mevcut kaydedilmiş yerel depodaki raporlar
     const reportList = currentSaved ?? savedReports;
     const existing = reportList.find(r => r.ticker?.toUpperCase() === t);
     if (existing) {
@@ -1293,27 +1239,24 @@ export default function ValuationTerminal({
       if (existing.price) setPrice(existing.price);
       if (existing.extractedData) setExtractedData(existing.extractedData);
       setStep('report');
-      setActiveTab(initialTab || (initialTicker ? 'report' : 'ozet'));
+      setActiveTab(initialTab || 'ozet');
       setLoading(false);
       return;
     }
 
-    // 3. Bulut veritabanı (/api/reports?ticker=XYZ)
+    // 2. Bulut veritabanında var mı?
     setLoading(true);
-    setStep('report');
-    setStatusMessage(`${t} bulut kayıtları ve değerleme modelleri kontrol ediliyor...`);
+    setStatusMessage(`${t} bulut kayıtları kontrol ediliyor...`);
     try {
       const res = await fetch(`/api/reports?ticker=${encodeURIComponent(t)}`);
       if (res.ok) {
         const json = await res.json();
-        if (json?.report && json.report.ticker) {
+        if (json?.report && json.report.ticker?.toUpperCase() === t) {
           const apiReport: SavedReport = json.report;
           setSavedReports(prev => {
-            const has = prev.some(r => r.id === apiReport.id || r.ticker === apiReport.ticker);
+            const has = prev.some(r => r.id === apiReport.id || r.ticker?.toUpperCase() === t);
             const next = has ? prev : [apiReport, ...prev];
-            try {
-              localStorage.setItem('fin_valuation_reports', JSON.stringify(next));
-            } catch {}
+            try { localStorage.setItem('fin_valuation_reports', JSON.stringify(next)); } catch {}
             return next;
           });
           setActiveReportId(apiReport.id);
@@ -1321,7 +1264,7 @@ export default function ValuationTerminal({
           if (apiReport.price) setPrice(apiReport.price);
           if (apiReport.extractedData) setExtractedData(apiReport.extractedData);
           setStep('report');
-          setActiveTab(initialTab || (initialTicker ? 'report' : 'ozet'));
+          setActiveTab(initialTab || 'ozet');
           setLoading(false);
           return;
         }
@@ -1330,64 +1273,12 @@ export default function ValuationTerminal({
       console.warn('Direct ticker cloud fetch error:', err);
     }
 
-    // 4. Auto-Fetch: Arama formu ekranını atlayarak doğrudan canlı veri çekme ve analiz
-    setStatusMessage(`⚡ Borsa İstanbul resmi mali tabloları ve canlı piyasa fiyatı çekiliyor: ${t}...`);
-    try {
-      const bistRes = await fetch(`/api/bist?ticker=${encodeURIComponent(t)}&t=${Date.now()}`);
-      if (bistRes.ok) {
-        const bistData = await bistRes.json();
-        if (bistData && Array.isArray(bistData.financial_history) && bistData.financial_history.length > 0) {
-          const currentPriceStr = String(bistData.current_price || '100');
-          setPrice(currentPriceStr);
-          setExtractedData(bistData);
-          setStatusMessage(`Değerleme modeli çalıştırılıyor: ${t}...`);
-
-          const analyzeRes = await fetch('/api/analyze', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              ticker: t,
-              price: currentPriceStr,
-              sector: bistData.sector,
-              financialHistory: bistData.financial_history,
-              valuation: bistData.valuation,
-              drivers: bistData.drivers || bistData.fair_value_drivers
-            })
-          });
-
-          if (analyzeRes.ok) {
-            const analyzeJson = await analyzeRes.json();
-            if (analyzeJson?.report) {
-              const newReport: SavedReport = {
-                id: Date.now().toString(),
-                ticker: t,
-                price: currentPriceStr,
-                fairValue: String(analyzeJson.valuation?.composite_fair_value || analyzeJson.valuation?.fair_value || ''),
-                period: bistData.reporting_period || '2026/06',
-                createdAt: new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-                report: analyzeJson.report,
-                decision: analyzeJson.optimization?.finalDecision || analyzeJson.decision || 'NÖTR',
-                score: String(analyzeJson.scoreResult?.totalScore || '50'),
-                sector: bistData.sector,
-                extractedData: { ...bistData, valuation: analyzeJson.valuation, fair_value_drivers: analyzeJson.drivers }
-              };
-              saveReport(newReport);
-              setActiveReportId(newReport.id);
-              setStep('report');
-              setActiveTab(initialTab || (initialTicker ? 'report' : 'ozet'));
-              setLoading(false);
-              return;
-            }
-          }
-        }
-      }
-    } catch (e: any) {
-      console.warn('Auto-fetch failure:', e);
-    }
-
+    // 3. Rapor hiçbir yerde yoksa: KULLANICININ İSTEDİĞİ GİBİ DOĞRUDAN ANA SAYFA GELİR
+    setActiveReportId(null);
+    setTicker(t);
     setStep('input');
     setLoading(false);
-  }, [savedReports]);
+  }, [savedReports, initialTab]);
 
   // Paylaşılabilir Analiz Linki Kopyalama
   const [copiedShareLink, setCopiedShareLink] = useState(false);
@@ -1453,20 +1344,28 @@ export default function ValuationTerminal({
     const targetTicker = (initialTicker || pathTicker || '').trim().toUpperCase();
 
     if (targetTicker) {
-      const matched = localData.find(r => r.ticker?.toUpperCase() === targetTicker) || defaultReport;
+      const matched = localData.find(r => r.ticker?.toUpperCase() === targetTicker) || (defaultReport?.ticker?.toUpperCase() === targetTicker ? defaultReport : null);
       if (matched) {
         setActiveReportId(matched.id);
         setTicker(matched.ticker);
         if (matched.price) setPrice(matched.price);
         if (matched.extractedData) setExtractedData(matched.extractedData);
+        setStep('report');
+        if (!initialTab) setActiveTab('ozet');
+        setLoading(false);
+      } else {
+        // Yerel depoda yoksa buluttan kontrol et. Bulutta da yoksa loadTickerDirect step='input' yapacaktır.
+        loadTickerDirect(targetTicker, localData);
       }
-      loadTickerDirect(targetTicker, localData);
     } else if (localData.length > 0) {
       setActiveReportId(localData[0].id);
       setStep('report');
       if (!initialTab) setActiveTab('ozet');
     } else {
-      loadAgesaDemo();
+      setActiveReportId(null);
+      setTicker('');
+      setStep('input');
+      setLoading(false);
     }
 
     const syncWithCloud = async () => {
@@ -1484,11 +1383,17 @@ export default function ValuationTerminal({
           if (json) {
             setIsCloudConfigured(Boolean(json.isCloudConfigured));
             if (json.isCloudConfigured && Array.isArray(json.reports) && json.reports.length > 0) {
-              const combinedMap = new Map<string, SavedReport>();
-              localData.forEach(r => combinedMap.set(r.id, r));
-              json.reports.forEach((r: SavedReport) => combinedMap.set(r.id, r));
-
-              const merged = Array.from(combinedMap.values());
+              const tickerMap = new Map<string, SavedReport>();
+              const allReports = [...localData, ...json.reports].sort(
+                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+              );
+              for (const rep of allReports) {
+                const sym = (rep.ticker || '').toUpperCase();
+                if (sym && !tickerMap.has(sym)) {
+                  tickerMap.set(sym, rep);
+                }
+              }
+              const merged = Array.from(tickerMap.values());
               setSavedReports(merged);
               localStorage.setItem('fin_valuation_reports', JSON.stringify(merged));
             }
@@ -1504,13 +1409,6 @@ export default function ValuationTerminal({
     syncWithCloud();
   }, []);
 
-  // initialTicker değişirse otomatik yükle
-  useEffect(() => {
-    if (initialTicker && mounted) {
-      loadTickerDirect(initialTicker);
-    }
-  }, [initialTicker, mounted, loadTickerDirect]);
-
   // Adres Çubuğu Senkronizasyonu (Shareable URL: /analysis/HISSE_KODU)
   useEffect(() => {
     if (typeof window !== 'undefined' && mounted) {
@@ -1519,12 +1417,16 @@ export default function ValuationTerminal({
         if (window.location.pathname !== targetPath && !window.location.pathname.startsWith('/report/')) {
           window.history.replaceState(null, '', targetPath);
         }
+      } else if (step === 'input') {
+        if (window.location.pathname.startsWith('/analysis/') || window.location.pathname.startsWith('/report/')) {
+          window.history.replaceState(null, '', '/');
+        }
       }
     }
   }, [step, activeReport?.ticker, mounted]);
 
   const saveReport = async (newReport: SavedReport) => {
-    const updated = [newReport, ...savedReports.filter(r => r.id !== newReport.id)];
+    const updated = [newReport, ...savedReports.filter(r => r.id !== newReport.id && r.ticker?.toUpperCase() !== newReport.ticker?.toUpperCase())];
     setSavedReports(updated);
     try {
       localStorage.setItem('fin_valuation_reports', JSON.stringify(updated));
@@ -3837,14 +3739,8 @@ export default function ValuationTerminal({
                       key={sym}
                       type="button"
                       onClick={() => {
-                        if (sym === 'VESBE') {
-                          loadVesbeDemo();
-                        } else if (sym === 'AGESA') {
-                          loadAgesaDemo();
-                        } else {
-                          setTicker(sym);
-                          handleBistDirectAnalysis(sym);
-                        }
+                        setTicker(sym);
+                        handleBistDirectAnalysis(sym);
                       }}
                       className={`px-2.5 py-1 rounded-md text-[11px] font-mono font-semibold border transition cursor-pointer ${
                         ticker === sym
