@@ -1015,9 +1015,11 @@ function getSpreadInfo(spread: number | null) {
 export default function ValuationTerminal({
   initialTicker,
   initialReport,
+  initialTab,
 }: {
   initialTicker?: string;
   initialReport?: SavedReport | null;
+  initialTab?: 'ozet' | 'overview' | 'fairvalue' | 'tables' | 'multiples' | 'proscons' | 'guidance' | 'report' | 'history';
 } = {}) {
   // SSR'den gelen initialReport veya ilk senkron render için getStaticReport
   const defaultReport = initialReport || (initialTicker ? getStaticReport(initialTicker) : null);
@@ -1084,8 +1086,9 @@ export default function ValuationTerminal({
   const [extractedData, setExtractedData] = useState<any>(defaultReport?.extractedData || null);
 
   // Ana Sekmeler
-  
-  const [activeTab, setActiveTab] = useState<'ozet' | 'overview' | 'fairvalue' | 'tables' | 'multiples' | 'proscons' | 'guidance' | 'report' | 'history'>('ozet');
+  const [activeTab, setActiveTab] = useState<'ozet' | 'overview' | 'fairvalue' | 'tables' | 'multiples' | 'proscons' | 'guidance' | 'report' | 'history'>(
+    initialTab || (initialTicker ? 'report' : 'ozet')
+  );
 
   // Finansal Tablolar Alt Sekmeleri (Görsel 2)
   const [tableSubTab, setTableSubTab] = useState<'bilanco' | 'gelir' | 'nakit' | 'oranlar'>('bilanco');
@@ -1263,7 +1266,7 @@ export default function ValuationTerminal({
       setPrice(staticRep.price);
       setExtractedData(staticRep.extractedData);
       setStep('report');
-      setActiveTab('ozet');
+      setActiveTab(initialTab || (initialTicker ? 'report' : 'ozet'));
       setLoading(false);
       return;
     }
@@ -1277,7 +1280,7 @@ export default function ValuationTerminal({
       if (existing.price) setPrice(existing.price);
       if (existing.extractedData) setExtractedData(existing.extractedData);
       setStep('report');
-      setActiveTab('ozet');
+      setActiveTab(initialTab || (initialTicker ? 'report' : 'ozet'));
       setLoading(false);
       return;
     }
@@ -1305,7 +1308,7 @@ export default function ValuationTerminal({
           if (apiReport.price) setPrice(apiReport.price);
           if (apiReport.extractedData) setExtractedData(apiReport.extractedData);
           setStep('report');
-          setActiveTab('ozet');
+          setActiveTab(initialTab || (initialTicker ? 'report' : 'ozet'));
           setLoading(false);
           return;
         }
@@ -1358,7 +1361,7 @@ export default function ValuationTerminal({
               saveReport(newReport);
               setActiveReportId(newReport.id);
               setStep('report');
-              setActiveTab('ozet');
+              setActiveTab(initialTab || (initialTicker ? 'report' : 'ozet'));
               setLoading(false);
               return;
             }
@@ -1400,6 +1403,14 @@ export default function ValuationTerminal({
       }
     } catch (e) {}
 
+    // EĞER defaultReport (SSR'den gelen veya statik hazır model) tanımlıysa ve yerel depoda yoksa birleştir
+    if (defaultReport) {
+      const exists = localData.some(r => r.id === defaultReport.id || r.ticker?.toUpperCase() === defaultReport.ticker?.toUpperCase());
+      if (!exists) {
+        localData = [defaultReport, ...localData];
+      }
+    }
+
     setSavedReports(localData);
 
     // Doğrudan URL veya initialTicker kontrolü (/analysis/VESBE veya /report/VESBE)
@@ -1417,7 +1428,7 @@ export default function ValuationTerminal({
     } else if (localData.length > 0) {
       setActiveReportId(localData[0].id);
       setStep('report');
-      setActiveTab('ozet');
+      if (!initialTab) setActiveTab('ozet');
     } else {
       loadAgesaDemo();
     }
@@ -4324,8 +4335,7 @@ export default function ValuationTerminal({
 
               
               {/* SEKME 0: ÖZET RAPOR */}
-              {activeTab === 'ozet' && (
-                <div className="space-y-6">
+              <div className={activeTab === 'ozet' ? 'space-y-6' : 'hidden print:hidden'}>
                   {chartData.length === 0 ? (
                     <div className="p-8 text-center text-slate-500 bg-[#0F1523] rounded-xl border border-slate-800 text-sm">
                       Grafik verisi bulunamadı.
@@ -4767,7 +4777,6 @@ export default function ValuationTerminal({
                     </>
                   )}
                 </div>
-              )}
 
               {/* SEKME 1: GRAFİK TERMİNALİ (4'LÜ IZGARA) */}
               {activeTab === 'overview' && (
@@ -6368,8 +6377,7 @@ export default function ValuationTerminal({
               })()}
 
               {/* SEKME 6: DEĞERLEME RAPORU (BİLİŞSEL & AKADEMİK OKUNABİLİRLİK TASARIMI) */}
-              {activeTab === 'report' && (
-                <div className="space-y-4">
+              <div id="kurumsal-degerleme-raporu" className={activeTab === 'report' ? 'space-y-4' : 'hidden print:block'}>
                   <div className="flex flex-wrap items-center justify-between gap-3 bg-[#111827] border border-slate-800 px-5 py-3.5 rounded-xl shadow-md print:hidden">
                     <div className="flex flex-wrap items-center gap-3">
                       <div className="flex items-center gap-2">
@@ -6832,7 +6840,6 @@ export default function ValuationTerminal({
                     </div>
                   </div>
                 </div>
-              )}
 
               {/* SEKME 7: ÇEYREKLİK SKOR TAKİBİ */}
               {activeTab === 'history' && (

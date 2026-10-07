@@ -19,5 +19,5 @@ export default async function ReportTickerPage({ params }: Props) {
   const resolved = await params;
   const cleanTicker = (resolved?.ticker || '').toUpperCase().trim();
   const initialReport = await getReportForTicker(cleanTicker);
-  return <ValuationTerminal initialTicker={cleanTicker} initialReport={initialReport} />;
+  return <ValuationTerminal initialTicker={cleanTicker} initialReport={initialReport} initialTab="report" />;
 }
