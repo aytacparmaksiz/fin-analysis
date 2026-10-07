@@ -76,6 +76,7 @@ AKADEMİK OKUNABİLİRLİK, BİLİŞSEL TASARIM VE DİL KURALLARI (ZORUNLU):
    - Maddeli analizlerde her maddenin ilk 3-5 kelimesini **kalın (bold) anahtar kavram** olarak başlat (Örn: **Güçlü Özkaynak Kârlılığı:** Şirket son dönemde %62,9 ROE üreterek...). Bu teknik okuyucunun gözünün metni %40 daha hızlı taramasını ve bilginin kalıcı olmasını sağlar.
    - Her ana bölümün hemen altına ` + "`> **Bölüm Özeti:** ...`" + ` şeklinde 1 cümlelik net bir çıkarım kutusu ekle.
 4. TEKİL NİHAİ KARAR KURALI: 'Analist Kararı:' satırını SADECE raporun en sonunda (Bölüm VI altında) 1 kez yaz. Bölüm I (Yönetici Özeti) içinde 'Analist Kararı:' ifadesini tekrarlama.
+5. TİPOGRAFİK VE DİL YASAĞI: 'adil değer' (fair value) yerine asla yanlışlıkla veya sehven 'adli değer' (adli tıp / adliye) YAZMA! Değerleme metinlerinde her zaman 'adil değer' kelimesini doğru yaz.
 `;
 
     const universalSafetyRules = `
@@ -348,7 +349,7 @@ ZORUNLU TALİMAT (Önceki Raporla Karşılaştırma & Çeyreklik Hafıza):
       JSON.stringify(extractedData?.positive_outlook_highlights || []) +
       JSON.stringify(extractedData?.guidance_track_record || [])
     );
-    const cacheKey = `analyze_v3_${resolvedTicker}_${extractedData?.reporting_period || 'latest'}_${activePrice}_${sector}_${docEnrichmentHash}`;
+    const cacheKey = `analyze_v4_${resolvedTicker}_${extractedData?.reporting_period || 'latest'}_${activePrice}_${sector}_${docEnrichmentHash}`;
 
     let reportText = '';
     if (apiKey) {
@@ -367,6 +368,11 @@ ZORUNLU TALİMAT (Önceki Raporla Karşılaştırma & Çeyreklik Hafıza):
           cacheKey,
         });
         reportText = response?.text || '';
+        if (reportText) {
+          reportText = reportText
+            .replace(/\badli\s+değer\b/gi, 'adil değer')
+            .replace(/\badli\s+deger\b/gi, 'adil değer');
+        }
       } catch (llmErr: any) {
         console.warn(`[Analyze] LLM çağrısı yapılamadı veya zaman aşımına uğradı (${llmErr?.message}), kurumsal algoritmik rapor üretiliyor...`);
       }

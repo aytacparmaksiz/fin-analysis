@@ -138,4 +138,26 @@ describe('VESBE & Distressed Loss-Making Valuation Stress Test Suite', () => {
     // Formula display and fair_value must match 100% with zero discrepancy (resolving 8.45 TL vs 3.31 TL bug)
     assert.ok(valuation.formula_display.includes(`${valuation.fair_value.toFixed(2).replace('.', ',')} TL`));
   });
+
+  it('5. Scenario Ordering Invariant: Bear Price <= Fair Value <= Bull Price strictly holds', () => {
+    const result = computeSectorValuationAndDrivers({
+      extractedData: vesbeExtractedData,
+      sector: 'INDUSTRIAL',
+      marketPrice
+    });
+
+    const { valuation } = result;
+    assert.ok(valuation.bear_price <= valuation.fair_value, `Bear price (${valuation.bear_price}) must be <= fair value (${valuation.fair_value})`);
+    assert.ok(valuation.bull_price >= valuation.fair_value, `Bull price (${valuation.bull_price}) must be >= fair value (${valuation.fair_value})`);
+    assert.equal(valuation.bear_price, Number((valuation.fair_value * 0.70).toFixed(2)));
+    assert.equal(valuation.bull_price, Number((valuation.fair_value * 1.30).toFixed(2)));
+  });
+
+  it('6. Typo Tolerance: extractValuationFromReportText successfully extracts number even if report contains "adli değer" typo', async () => {
+    const { extractValuationFromReportText } = await import('../lib/valuation.ts');
+    const textWithTypo = 'Sıkıntılı Şirket / Varlık Tabanı İskonto Modeli ile yapılan hesaplamalarda, hisse başına adli değer 9.64 TL olarak saptanmıştır.';
+    const parsed = extractValuationFromReportText(textWithTypo, marketPrice);
+    assert.ok(parsed);
+    assert.equal(parsed.fair_value, 9.64);
+  });
 });

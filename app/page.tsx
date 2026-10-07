@@ -2077,7 +2077,10 @@ export default function ValuationTerminal() {
       const data = await parseApiResponse(res, 'Değerleme tamamlanamadı.', 'analyze');
 
       let rawDecision: 'AL' | 'ALMA' | 'NÖTR' = 'NÖTR';
-      const reportText = data?.report || '';
+      const cleanReport = (data?.report || '')
+        .replace(/\badli\s+değer\b/gi, 'adil değer')
+        .replace(/\badli\s+deger\b/gi, 'adil değer');
+      const reportText = cleanReport;
       const decisionMatch = reportText.match(/Analist\s+Karar[ıi]\s*[:=-]\s*\[?\s*\*?\*?\s*(ALMA|SAT|AL|NÖTR|NOTR|TUT)\s*\*?\*?\s*\]?/i);
       if (decisionMatch) {
         const d = decisionMatch[1].toUpperCase();
@@ -2120,9 +2123,10 @@ export default function ValuationTerminal() {
         id: Date.now().toString(),
         ticker: normalizedTicker,
         price: effectivePrice,
+        fairValue: String(targetVal ?? data.valuation?.fair_value ?? ''),
         period: extractedData?.reporting_period,
         createdAt: new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-        report: data.report,
+        report: cleanReport,
         decision: finalDecision,
         rawDecision: rawDecision !== finalDecision ? rawDecision : undefined,
         overrideReason: opt?.overrideReason,
@@ -2986,20 +2990,17 @@ export default function ValuationTerminal() {
   };
 
   if (!valuationInfo.fair_value || valuationInfo.fair_value <= 0) {
-    valuationInfo.fair_value = reportValuation?.fair_value || dynamicValuationResult.valuation.fair_value || Number((currentMarketPrice * 1.15).toFixed(2));
+    valuationInfo.fair_value = dynamicValuationResult.valuation.fair_value || reportValuation?.fair_value || 0;
   }
 
-  // Ayı Senaryosu taban fiyatı kontrolü: Hem adil değerin hem güncel fiyatın altında mantıklı bir taban olmalı
-  const maxAllowedBear = Number(Math.min(valuationInfo.fair_value * 0.85, currentMarketPrice * 0.85).toFixed(2));
-  const minAllowedBear = Number(( Math.min(valuationInfo.fair_value, currentMarketPrice) * 0.45 ).toFixed(2));
-  if (!valuationInfo.bear_price || valuationInfo.bear_price > maxAllowedBear || valuationInfo.bear_price < minAllowedBear) {
-    valuationInfo.bear_price = Number(Math.min(valuationInfo.fair_value * 0.78, currentMarketPrice * 0.82).toFixed(2));
+  // Ayı Senaryosu taban fiyatı kontrolü: Modelin stres senaryosu hedef fiyatı (%30 iskonto, daima <= adil değer)
+  if (!valuationInfo.bear_price || valuationInfo.bear_price <= 0 || valuationInfo.bear_price > valuationInfo.fair_value) {
+    valuationInfo.bear_price = dynamicValuationResult.valuation.bear_price || Number((valuationInfo.fair_value * 0.70).toFixed(2));
   }
 
-  // Boğa Senaryosu tavan fiyatı kontrolü: KESİNLİKLE hem Adil Değerin (%25+) hem de Güncel Piyasa Fiyatının (%18+) üzerinde olmalıdır!
-  const minRequiredBull = Number(Math.max(valuationInfo.fair_value * 1.25, currentMarketPrice * 1.18).toFixed(2));
-  if (!valuationInfo.bull_price || valuationInfo.bull_price < minRequiredBull) {
-    valuationInfo.bull_price = minRequiredBull;
+  // Boğa Senaryosu tavan fiyatı kontrolü: Modelin iyimser senaryo hedef fiyatı (%30 prim, daima >= adil değer)
+  if (!valuationInfo.bull_price || valuationInfo.bull_price <= 0 || valuationInfo.bull_price < valuationInfo.fair_value) {
+    valuationInfo.bull_price = dynamicValuationResult.valuation.bull_price || Number((valuationInfo.fair_value * 1.30).toFixed(2));
   }
 
   // İskonto oranını ve güvenlik marjını matematiksel olarak tutarlı güncelle

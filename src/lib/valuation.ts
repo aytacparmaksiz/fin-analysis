@@ -1822,15 +1822,15 @@ export function extractValuationFromReportText(
   // KaTeX veya düz metin veya markdown (**) içinden Adil Değer eşleştirmeleri
   const fairValueRegexes = [
     // LaTeX \mathbf ile son sonuç: \text{Adil Değer} = ... = \mathbf{411,62\text{ TL}}
-    /(?:Adil\s+De[ğg]er|Hedef\s+Fiyat|Muhafazakar\s+Adil\s+De[ğg]er)[^\n\r]*?=\s*\\mathbf\{\s*([0-9]+[.,][0-9]{1,2})\s*(?:\\text\{\s*)?TL\s*\}?\s*\}/i,
+    /(?:(?:Adil|Adli)\s+De[ğg]er|Hedef\s+Fiyat|Muhafazakar\s+(?:Adil|Adli)\s+De[ğg]er)[^\n\r]*?=\s*\\mathbf\{\s*([0-9]+[.,][0-9]{1,2})\s*(?:\\text\{\s*)?TL\s*\}?\s*\}/i,
     // LaTeX formülü ile: \text{Adil Değer} = 411,62 TL veya \text{Adil Değer} = \mathbf{...}
-    /\\text\{\s*(?:Adil\s+De[ğg]er|Hedef\s+Fiyat|Muhafazakar\s+Adil\s+De[ğg]er)\s*\}\s*=\s*(?:\\mathbf\{)?\s*([0-9]+[.,][0-9]{1,2})\s*(?:\\text\{\s*)?TL/i,
+    /\\text\{\s*(?:(?:Adil|Adli)\s+De[ğg]er|Hedef\s+Fiyat|Muhafazakar\s+(?:Adil|Adli)\s+De[ğg]er)\s*\}\s*=\s*(?:\\mathbf\{)?\s*([0-9]+[.,][0-9]{1,2})\s*(?:\\text\{\s*)?TL/i,
     // Markdown veya düz metin: **Adil Değer:** 411,62 TL, **Adil Değer**: 411,62 TL veya Adil Değer: 411.62 TL
-    /(?:Adil\s+De[ğg]er|Hedef\s+Fiyat|Muhafazakar\s+Adil\s+De[ğg]er)[^\n\r0-9]{0,35}[:=][*_\s]*([0-9]+[.,][0-9]{1,2})[*_\s]*(?:\\text\{)?\s*TL/i,
+    /(?:(?:Adil|Adli)\s+De[ğg]er|Hedef\s+Fiyat|Muhafazakar\s+(?:Adil|Adli)\s+De[ğg]er)[^\n\r0-9]{0,35}[:=][*_\s]*([0-9]+[.,][0-9]{1,2})[*_\s]*(?:\\text\{)?\s*TL/i,
     // - Adil Değer: 411.62 TL veya - Hedef Fiyat: 411.62 TL
-    /(?:Adil\s+De[ğg]er|Hedef\s+Fiyat)\s*[:=-]\s*([0-9]+[.,][0-9]{1,2})\s*TL/i,
-    // Hisse Başı Adil Değer: 411.62 TL
-    /(?:Hisse\s+Ba[şs][ıi]\s+)?Adil\s+De[ğg]er[^\n\r0-9]{0,25}[:=]\s*([0-9]+[.,][0-9]{1,2})\s*TL/i,
+    /(?:(?:Adil|Adli)\s+De[ğg]er|Hedef\s+Fiyat)\s*[:=-]\s*([0-9]+[.,][0-9]{1,2})\s*TL/i,
+    // Hisse Başı Adil Değer: 411.62 TL veya hisse başına adil değer 411.62 TL
+    /(?:Hisse\s+Ba[şs][ıi]\s+)?(?:Adil|Adli)\s+De[ğg]er[^\n\r0-9]{0,25}[:=]?\s*([0-9]+[.,][0-9]{1,2})\s*TL/i,
   ];
 
   for (const reg of fairValueRegexes) {
