@@ -107,6 +107,7 @@ export class IsYatirimApiAdapter {
     let revenue: number | null = null;
     let gross_profit: number | null = null;
     let operating_profit: number | null = null;
+    let ebt: number | null = null;
     let net_income: number | null = null;
     let ebitda: number | null = null;
     let current_assets: number | null = null;
@@ -181,6 +182,7 @@ export class IsYatirimApiAdapter {
         getValByDesc('teknik bölüm dengesi');
 
       investment_income = getValByCode('3L', '3DB', '3DAEA') ?? getValByDesc('yatırım gelirleri', 'teknik olmayan bölümden aktarılan yatırım gelirleri');
+      ebt = getValByCode('3G', '3I', '3M') ?? getValByDesc('vergi öncesi kar');
       net_income = getValByCode('2MEZ', '3NJA', '3Z') ?? getValByDesc('dönem net karı veya zararı', 'dönem net karı', 'dönem net kar', 'ana ortaklık payları');
 
       if (
@@ -250,6 +252,7 @@ export class IsYatirimApiAdapter {
       revenue = getValByCode('3C', '3CA') ?? getValByDesc('net faiz geliri veya gideri', 'net faiz geliri');
       gross_profit = getValByCode('3H', '3I') ?? getValByDesc('brüt faaliyet karı', 'faaliyet gelirleri toplamı');
       operating_profit = getValByCode('3M', '3N', '3H') ?? getValByDesc('net faaliyet karı veya zararı', 'sürdürülen faaliyetler vergi öncesi');
+      ebt = getValByCode('3N', '3I', '3M') ?? getValByDesc('sürdürülen faaliyetler vergi öncesi', 'vergi öncesi kar');
       ebitda = operating_profit ?? gross_profit;
       net_income = getValByCode('3Z', '3U', '2OZ', '2MEZ') ?? getValByDesc('dönem net karı veya zararı', 'dönem net karı', 'net dönem karı');
 
@@ -328,6 +331,7 @@ export class IsYatirimApiAdapter {
       }
 
       net_income = getValByCode('2OCF', '3Z', '3U', '2MEZ', '2OV') ?? getValByDesc('dönem net karı veya zararı', 'dönem karı (zararı)', 'dönem net kar', 'ana ortaklık payları');
+      ebt = getValByCode('3I', '3M', '3N') ?? getValByDesc('sürdürülen faaliyetler vergi öncesi karı', 'vergi öncesi karı', 'vergi öncesi kar');
 
       const amort = getValByCode('4B', '4CAB') ?? getValByDesc('amortisman ve itfa gideri ile ilgili düzeltmeler', 'amortisman');
       if (operating_profit !== null) {
@@ -376,6 +380,7 @@ export class IsYatirimApiAdapter {
       operating_income: operating_profit,
       ebitda,
       net_income,
+      ebt,
       current_assets,
       non_current_assets,
       total_assets,

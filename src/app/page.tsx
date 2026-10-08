@@ -66,7 +66,13 @@ import {
   cleanAndParseJson,
   syncReportTextWithValuation
 } from '@/lib/valuation';
-import { FinancialRatioEngine, type UnifiedFinancialMetrics } from '@/lib/ratio-engine';
+import { 
+  FinancialRatioEngine, 
+  type UnifiedFinancialMetrics,
+  computeFinancialChange,
+  type FinancialMetricSemantics,
+  type FinancialChangeResult
+} from '@/lib/ratio-engine';
 import { extractSmartFinancialText, extractSmartDocumentText, splitScannedPdfIntoChunks, DocumentCategory } from '@/lib/pdf-filter';
 
 // Gateway Timeout, kurumsal proxy ve HTML hata sayfalarını yakalayan güvenli API yanıt ayrıştırıcısı
@@ -203,6 +209,8 @@ interface ChangeResult {
   isNegative: boolean;
   isZero: boolean;
   isPoint?: boolean;
+  color?: 'emerald' | 'rose' | 'slate';
+  isStatusText?: boolean;
 }
 
 // Finansal Değer Formatlayıcı (Bin TRY / Milyon TRY / Tam TL)
@@ -260,39 +268,32 @@ function formatFileSize(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
-// Yıllık / Dönemsel Değişim Hesaplama
+// Yıllık / Dönemsel Değişim Hesaplama (Platform Standart Finansal Semantik)
 function calculateYoYChange(
   current: number | null | undefined, 
   previous: number | null | undefined, 
-  isMargin = false
+  isMargin = false,
+  semantics?: FinancialMetricSemantics
 ): ChangeResult | null {
   if (current === null || current === undefined || isNaN(current)) return null;
-  if (previous === null || previous === undefined || isNaN(previous) || previous === 0) return null;
+  if (previous === null || previous === undefined || isNaN(previous)) return null;
 
-  if (isMargin) {
-    const diff = Number((current - previous).toFixed(1));
-    return {
-      value: diff,
-      text: diff > 0 ? `+${diff.toFixed(1)} puan` : `${diff.toFixed(1)} puan`,
-      isPositive: diff > 0,
-      isNegative: diff < 0,
-      isZero: diff === 0,
-      isPoint: true
-    };
-  } else {
-    const pct = Number((((current - previous) / Math.abs(previous)) * 100).toFixed(1));
-    return {
-      value: pct,
-      text: pct > 0 ? `+${pct.toFixed(0)}%` : `${pct.toFixed(0)}%`,
-      isPositive: pct > 0,
-      isNegative: pct < 0,
-      isZero: pct === 0,
-      isPoint: false
-    };
-  }
+  const resolvedSemantics: FinancialMetricSemantics = semantics ?? (isMargin ? 'MARGIN' : 'PROFIT');
+  const res = computeFinancialChange(current, previous, resolvedSemantics, isMargin);
+
+  return {
+    value: res.percentChange ?? 0,
+    text: res.formattedLabel,
+    isPositive: res.badgeColor === 'green',
+    isNegative: res.badgeColor === 'red',
+    isZero: res.badgeColor === 'neutral',
+    isPoint: isMargin,
+    color: res.badgeColor === 'green' ? 'emerald' : (res.badgeColor === 'red' ? 'rose' : 'slate'),
+    isStatusText: res.isTextStatus
+  };
 }
 
-// Görsel 1 & 3 Değişim Rozeti (YoY Change Badge: ↑ %11, ↓ %11, — %0)
+// Görsel 1 & 3 Değişim Rozeti (YoY / Dönemsel / Status Badge)
 function ChangeBadge({ 
   change, 
   invert = false, 
@@ -310,6 +311,22 @@ function ChangeBadge({
     );
   }
 
+  if (change.isStatusText) {
+    const colorClass = change.color === 'emerald'
+      ? 'text-emerald-400 bg-emerald-950/40 border-emerald-800/50'
+      : change.color === 'rose'
+      ? 'text-rose-400 bg-rose-950/40 border-rose-800/50'
+      : 'text-slate-400 bg-slate-800/40 border-slate-700/50';
+
+    return (
+      <span className={`inline-flex items-center px-1.5 py-0.5 rounded font-sans font-semibold border ${colorClass} ${
+        size === 'xs' ? 'text-[9px]' : 'text-[10px]'
+      }`}>
+        {change.text}
+      </span>
+    );
+  }
+
   if (change.isZero) {
     return (
       <span className="inline-flex items-center gap-0.5 text-[10px] font-mono font-medium text-slate-400">
@@ -318,13 +335,12 @@ function ChangeBadge({
     );
   }
 
-  const isGood = invert ? change.isNegative : change.isPositive;
-
+  const isGood = change.color ? change.color === 'emerald' : (invert ? change.isNegative : change.isPositive);
   const colorClass = isGood
     ? 'text-emerald-400'
-    : 'text-rose-400';
+    : (change.color === 'slate' ? 'text-slate-400' : 'text-rose-400');
 
-  const iconText = change.isPositive ? '↑' : '↓';
+  const iconText = change.value > 0 ? '↑' : (change.value < 0 ? '↓' : '—');
 
   return (
     <span
@@ -2373,21 +2389,26 @@ export default function ValuationTerminal({
 
   // YoY Büyüme (Aynı Çeyreğe Göre - Mevsimsellikten ve Yanıltıcı Çeyreklik Düşüşten Arındırılmış)
   const yoyRevChange = sameQuarterLastYear 
-    ? calculateYoYChange(latestData?.revenue, sameQuarterLastYear?.revenue)
-    : calculateYoYChange(latestData?.revenue ? latestData.revenue * annualFactor : null, prevData?.revenue);
+    ? calculateYoYChange(latestData?.revenue, sameQuarterLastYear?.revenue, false, 'REVENUE')
+    : calculateYoYChange(latestData?.revenue ? latestData.revenue * annualFactor : null, prevData?.revenue, false, 'REVENUE');
 
   const yoyEbitdaChange = sameQuarterLastYear 
-    ? calculateYoYChange(latestData?.ebitda, sameQuarterLastYear?.ebitda)
-    : calculateYoYChange(latestData?.ebitda ? latestData.ebitda * annualFactor : null, prevData?.ebitda);
+    ? calculateYoYChange(latestData?.ebitda, sameQuarterLastYear?.ebitda, false, 'PROFIT')
+    : calculateYoYChange(latestData?.ebitda ? latestData.ebitda * annualFactor : null, prevData?.ebitda, false, 'PROFIT');
 
   const yoyNetChange = sameQuarterLastYear 
-    ? calculateYoYChange(latestData?.net_income, sameQuarterLastYear?.net_income)
-    : calculateYoYChange(latestData?.net_income ? latestData.net_income * annualFactor : null, prevData?.net_income);
+    ? calculateYoYChange(latestData?.net_income, sameQuarterLastYear?.net_income, false, 'PROFIT')
+    : calculateYoYChange(latestData?.net_income ? latestData.net_income * annualFactor : null, prevData?.net_income, false, 'PROFIT');
 
-  // Yıllıklandırılmış (TTM) Değerler
-  const annualizedRevenue = latestData?.revenue ? latestData.revenue * annualFactor : null;
-  const annualizedEbitda = latestData?.ebitda ? latestData.ebitda * annualFactor : null;
-  const annualizedNet = latestData?.net_income ? latestData.net_income * annualFactor : null;
+  // Kural 2: Yıllıklandırma ve TTM (Son 12 Ay) Standardı
+  const ttmFinancials = useMemo(() => {
+    if (!latestData || chartData.length === 0) return null;
+    return FinancialRatioEngine.calculateTtmFinancials(chartData, latestData, currentSector, 1.0);
+  }, [chartData, latestData, currentSector]);
+
+  const ttmRevenue = ttmFinancials?.revenue ?? (latestData?.revenue ? latestData.revenue * annualFactor : null);
+  const ttmEbitda = ttmFinancials?.ebitda ?? (latestData?.ebitda ? latestData.ebitda * annualFactor : null);
+  const ttmNet = ttmFinancials?.netIncome ?? (latestData?.net_income ? latestData.net_income * annualFactor : null);
 
   // Ekonomik Değer Makası
   const latestBenchmarkWacc = (latestData?.is_tms29 && latestData?.real_wacc != null)
@@ -4360,8 +4381,8 @@ export default function ValuationTerminal({
                         const yoyPeriodLabel = latestPeriodLabel ? `${String(Number(latestPeriodLabel.slice(0,4)) - 1)}/${latestPeriodLabel.slice(5)}` : '';
                         const yoyPeriod = chartData.find((d: any) => d.period === yoyPeriodLabel);
                         const latestBS = chartData[chartData.length - 1];
-                        const yoyBSLabel = latestBS?.period ? `${String(Number(latestBS.period.slice(0,4)) - 1)}/${latestBS.period.slice(5)}` : '';
-                        const yoyBS = chartData.find((d: any) => d.period === yoyBSLabel);
+                        const prevBS = chartData.length >= 2 ? chartData[chartData.length - 2] : null;
+                        const prevBSLabel = prevBS?.period || 'Önceki Çeyrek';
                         const fv = (d: any, k: string): number | null => {
                           if (!d) return null;
                           if (k === 'gross_written_premiums') return d.gross_written_premiums ?? d.written_premiums ?? d.revenue ?? d.earned_premiums ?? null;
@@ -4474,36 +4495,46 @@ export default function ValuationTerminal({
                                 <th className="pb-2 font-medium">Kalem</th>
                                 <th className="pb-2 font-medium text-right">{latestPeriodLabel}</th>
                                 <th className="pb-2 font-medium text-right">{yoyPeriodLabel}</th>
-                                <th className="pb-2 font-medium text-right">YoY %</th>
+                                <th className="pb-2 font-medium text-right">%</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800/50 text-slate-300">
                               {[
-                                currentSector === 'INSURANCE' ? { k: 'gross_written_premiums', l: 'Prim Üretimi' } : { k: 'revenue', l: 'Satışlar' },
-                                currentSector === 'INSURANCE' ? null : { k: 'gross_profit', l: 'Brüt Kar' },
-                                currentSector === 'INSURANCE' ? null : { k: 'operating_income', l: 'Esas Faaliyet Karı' },
-                                currentSector === 'INSURANCE' ? { k: 'technical_balance', l: 'Teknik Bölüm Dengesi' } : { k: 'ebitda', l: 'FAVÖK' },
-                                currentSector === 'INSURANCE' ? { k: 'investment_income', l: 'Yatırım Gelirleri' } : null,
-                                { k: 'net_income', l: 'Net Dönem Karı' }
-                              ].filter(Boolean).map((rowConfig: any) => (
-                                <tr key={rowConfig.k} className="hover:bg-slate-800/30">
-                                  <td className="py-2">{rowConfig.l}</td>
-                                  <td className="py-2 text-right font-mono">{formatAmount(fv(latestPeriod, rowConfig.k), 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
-                                  <td className="py-2 text-right font-mono">{formatAmount(fv(yoyPeriod, rowConfig.k), 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
-                                  <td className="py-2 text-right font-mono">
-                                    {(() => {
-                                      const v1 = fv(latestPeriod, rowConfig.k);
-                                      const v2 = fv(yoyPeriod, rowConfig.k);
-                                      const chg = (v1 != null && v2 != null && v2 !== 0) ? ((v1 - v2) / Math.abs(v2) * 100).toFixed(1) : null;
-                                      return chg ? (
-                                        <span className={rowConfig.k === 'net_debt' ? (Number(chg) < 0 ? 'text-emerald-400' : Number(chg) > 0 ? 'text-rose-400' : 'text-slate-400') : (Number(chg) > 0 ? 'text-emerald-400' : Number(chg) < 0 ? 'text-rose-400' : 'text-slate-400')}>
-                                          {Number(chg) > 0 ? '+' : ''}{chg}%
+                                currentSector === 'INSURANCE' 
+                                  ? { k: 'gross_written_premiums', l: 'Prim Üretimi', semantics: 'REVENUE' as const } 
+                                  : { k: 'revenue', l: 'Satışlar', semantics: 'REVENUE' as const },
+                                currentSector === 'INSURANCE' ? null : { k: 'gross_profit', l: 'Brüt Kar', semantics: 'PROFIT' as const },
+                                currentSector === 'INSURANCE' ? null : { k: 'operating_income', l: 'Esas Faaliyet Karı', semantics: 'PROFIT' as const },
+                                currentSector === 'INSURANCE' 
+                                  ? { k: 'technical_balance', l: 'Teknik Bölüm Dengesi', semantics: 'PROFIT' as const } 
+                                  : { k: 'ebitda', l: 'FAVÖK', semantics: 'PROFIT' as const },
+                                currentSector === 'INSURANCE' ? { k: 'investment_income', l: 'Yatırım Gelirleri', semantics: 'PROFIT' as const } : null,
+                                { k: 'net_income', l: 'Net Dönem Karı', semantics: 'PROFIT' as const }
+                              ].filter(Boolean).map((rowConfig: any) => {
+                                const v1 = fv(latestPeriod, rowConfig.k);
+                                const v2 = fv(yoyPeriod, rowConfig.k);
+                                const changeRes = computeFinancialChange(v1, v2, rowConfig.semantics);
+                                return (
+                                  <tr key={rowConfig.k} className="hover:bg-slate-800/30">
+                                    <td className="py-2">{rowConfig.l}</td>
+                                    <td className="py-2 text-right font-mono">{formatAmount(v1, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
+                                    <td className="py-2 text-right font-mono">{formatAmount(v2, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
+                                    <td className="py-2 text-right font-mono">
+                                      {changeRes.formattedLabel === '—' ? (
+                                        <span className="text-slate-500">—</span>
+                                      ) : changeRes.isTextStatus ? (
+                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold border ${changeRes.badgeClass}`}>
+                                          {changeRes.formattedLabel}
                                         </span>
-                                      ) : '—';
-                                    })()}
-                                  </td>
-                                </tr>
-                              ))}
+                                      ) : (
+                                        <span className={`font-semibold ${changeRes.badgeColor === 'green' ? 'text-emerald-400' : changeRes.badgeColor === 'red' ? 'text-rose-400' : 'text-slate-400'}`}>
+                                          {changeRes.formattedLabel}
+                                        </span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
@@ -4520,33 +4551,43 @@ export default function ValuationTerminal({
                               <tr className="text-slate-400 border-b border-slate-800">
                                 <th className="pb-2 font-medium">Kalem</th>
                                 <th className="pb-2 font-medium text-right">{latestBS?.period}</th>
-                                <th className="pb-2 font-medium text-right">{yoyBSLabel}</th>
-                                <th className="pb-2 font-medium text-right">YoY %</th>
+                                <th className="pb-2 font-medium text-right">{prevBSLabel}</th>
+                                <th className="pb-2 font-medium text-right">%</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800/50 text-slate-300">
                               {[
-                                { k: 'current_assets', l: 'Dönen Varlıklar' },
-                                { k: 'non_current_assets', l: 'Duran Varlıklar' },
-                                { k: 'total_assets', l: 'Toplam Varlıklar' },
-                                currentSector === 'INSURANCE' ? { k: 'financial_assets_insured', l: 'Riski Sigortalılara Ait Finansal Yatırımlar (Bilanço İçi)' } : { k: 'financial_debt', l: 'Finansal Borçlar' },
-                                currentSector === 'INSURANCE' ? { k: 'pension_aum', l: 'Emeklilik Fon Büyüklüğü (AUM - Bilanço Dışı)' } : { k: 'net_debt', l: 'Net Borç' },
-                                { k: 'equity', l: 'Özkaynaklar' }
+                                { k: 'current_assets', l: 'Dönen Varlıklar', semantics: 'NEUTRAL' as const },
+                                { k: 'non_current_assets', l: 'Duran Varlıklar', semantics: 'NEUTRAL' as const },
+                                { k: 'total_assets', l: 'Toplam Varlıklar', semantics: 'NEUTRAL' as const },
+                                currentSector === 'INSURANCE' 
+                                  ? { k: 'financial_assets_insured', l: 'Riski Sigortalılara Ait Finansal Yatırımlar (Bilanço İçi)', semantics: 'NEUTRAL' as const } 
+                                  : { k: 'financial_debt', l: 'Finansal Borçlar', semantics: 'DEBT' as const },
+                                currentSector === 'INSURANCE' 
+                                  ? { k: 'pension_aum', l: 'Emeklilik Fon Büyüklüğü (AUM - Bilanço Dışı)', semantics: 'NEUTRAL' as const } 
+                                  : { k: 'net_debt', l: 'Net Borç', semantics: 'DEBT' as const },
+                                { k: 'equity', l: 'Özkaynaklar', semantics: 'PROFIT' as const }
                               ].map((rowConfig: any) => {
                                 const v1 = fv(latestBS, rowConfig.k);
-                                const v2 = fv(yoyBS, rowConfig.k);
-                                const chg = (v1 != null && v2 != null && v2 !== 0) ? ((v1 - v2) / Math.abs(v2) * 100).toFixed(1) : null;
+                                const v2 = fv(prevBS, rowConfig.k);
+                                const changeRes = computeFinancialChange(v1, v2, rowConfig.semantics);
                                 return (
                                   <tr key={rowConfig.k} className="hover:bg-slate-800/30">
                                     <td className="py-2">{rowConfig.l}</td>
                                     <td className="py-2 text-right font-mono">{formatAmount(v1, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
                                     <td className="py-2 text-right font-mono">{formatAmount(v2, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
                                     <td className="py-2 text-right font-mono">
-                                      {chg ? (
-                                        <span className={Number(chg) > 0 ? 'text-emerald-400' : Number(chg) < 0 ? 'text-rose-400' : 'text-slate-400'}>
-                                          {Number(chg) > 0 ? '+' : ''}{chg}%
+                                      {changeRes.formattedLabel === '—' ? (
+                                        <span className="text-slate-500">—</span>
+                                      ) : changeRes.isTextStatus ? (
+                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold border ${changeRes.badgeClass}`}>
+                                          {changeRes.formattedLabel}
                                         </span>
-                                      ) : '—'}
+                                      ) : (
+                                        <span className={`font-semibold ${changeRes.badgeColor === 'green' ? 'text-emerald-400' : changeRes.badgeColor === 'red' ? 'text-rose-400' : 'text-slate-400'}`}>
+                                          {changeRes.formattedLabel}
+                                        </span>
+                                      )}
                                     </td>
                                   </tr>
                                 );
@@ -4907,12 +4948,12 @@ export default function ValuationTerminal({
                           <div className="flex items-center gap-1.5">
                             <ChangeBadge change={yoyRevChange} size="sm" />
                             <span className="text-[10px] text-slate-400 font-medium">
-                              {sameQuarterLastYear ? `YoY (${sameQuarterLastYear.period})` : 'Yıllık'}
+                              {sameQuarterLastYear ? `YoY (${sameQuarterLastYear.period})` : 'Dönemsel'}
                             </span>
                           </div>
-                          {annualizedRevenue && (
+                          {ttmRevenue && (
                             <div className="text-[10px] text-slate-400 font-mono">
-                              Yıllık: <strong className="text-slate-200">{formatAmount(annualizedRevenue, unitMode, false, '', '', currentExtractedData?.currency)}</strong>
+                              TTM (Son 12 Ay): <strong className="text-slate-200">{formatAmount(ttmRevenue, unitMode, false, '', '', currentExtractedData?.currency)}</strong>
                             </div>
                           )}
                         </div>
@@ -4933,12 +4974,12 @@ export default function ValuationTerminal({
                           <div className="flex items-center gap-1.5">
                             <ChangeBadge change={yoyEbitdaChange} size="sm" />
                             <span className="text-[10px] text-slate-400 font-medium">
-                              {sameQuarterLastYear ? `YoY (${sameQuarterLastYear.period})` : 'Yıllık'}
+                              {sameQuarterLastYear ? `YoY (${sameQuarterLastYear.period})` : 'Dönemsel'}
                             </span>
                           </div>
-                          {annualizedEbitda && (
+                          {ttmEbitda && (
                             <div className="text-[10px] text-slate-400 font-mono">
-                              Yıllık: <strong className="text-slate-200">{formatAmount(annualizedEbitda, unitMode, false, '', '', currentExtractedData?.currency)}</strong>
+                              TTM (Son 12 Ay): <strong className="text-slate-200">{formatAmount(ttmEbitda, unitMode, false, '', '', currentExtractedData?.currency)}</strong>
                             </div>
                           )}
                         </div>
@@ -4959,12 +5000,12 @@ export default function ValuationTerminal({
                           <div className="flex items-center gap-1.5">
                             <ChangeBadge change={yoyNetChange} size="sm" />
                             <span className="text-[10px] text-slate-400 font-medium">
-                              {sameQuarterLastYear ? `YoY (${sameQuarterLastYear.period})` : 'Yıllık'}
+                              {sameQuarterLastYear ? `YoY (${sameQuarterLastYear.period})` : 'Dönemsel'}
                             </span>
                           </div>
-                          {annualizedNet && (
+                          {ttmNet && (
                             <div className="text-[10px] text-slate-400 font-mono">
-                              Yıllık: <strong className="text-emerald-300">{formatAmount(annualizedNet, unitMode, false, '', '', currentExtractedData?.currency)}</strong>
+                              TTM (Son 12 Ay): <strong className="text-emerald-300">{formatAmount(ttmNet, unitMode, false, '', '', currentExtractedData?.currency)}</strong>
                             </div>
                           )}
                         </div>
@@ -5249,7 +5290,10 @@ export default function ValuationTerminal({
                                         const val = d[row.key] ?? d[row.fallbackKey || ''];
                                         const prevPeriodData = idx < tableData.length - 1 ? tableData[idx + 1] : null;
                                         const prevVal = prevPeriodData ? (prevPeriodData[row.key] ?? prevPeriodData[row.fallbackKey || '']) : null;
-                                        const change = calculateYoYChange(val, prevVal, false);
+                                        const isDebt = row.key === 'net_debt' || row.key === 'financial_debt' || row.key === 'short_term_debt' || row.key === 'long_term_debt';
+                                        const isNeutral = ['total_assets', 'current_assets', 'non_current_assets', 'paid_in_capital'].includes(row.key);
+                                        const semantics: FinancialMetricSemantics = isDebt ? 'DEBT' : (isNeutral ? 'NEUTRAL' : 'PROFIT');
+                                        const change = calculateYoYChange(val, prevVal, false, semantics);
 
                                         return (
                                           <td key={idx} className="p-3 text-center group-hover:bg-slate-800/30 transition-colors">
@@ -5322,7 +5366,9 @@ export default function ValuationTerminal({
                                         const val = d[row.key] ?? d[row.fallbackKey || ''];
                                         const prevPeriodData = idx < tableData.length - 1 ? tableData[idx + 1] : null;
                                         const prevVal = prevPeriodData ? (prevPeriodData[row.key] ?? prevPeriodData[row.fallbackKey || '']) : null;
-                                        const change = calculateYoYChange(val, prevVal, row.isMargin);
+                                        const isRevenue = row.key === 'revenue' || row.key === 'gross_written_premiums';
+                                        const semantics: FinancialMetricSemantics = isRevenue ? 'REVENUE' : (row.isMargin ? 'MARGIN' : 'PROFIT');
+                                        const change = calculateYoYChange(val, prevVal, row.isMargin, semantics);
 
                                         return (
                                           <td key={idx} className="p-3 text-center group-hover:bg-slate-800/30 transition-colors">
@@ -5393,7 +5439,8 @@ export default function ValuationTerminal({
                                         const val = d[row.key] ?? (row.fallbackKey ? d[row.fallbackKey] : undefined);
                                         const prevPeriodData = idx < tableData.length - 1 ? tableData[idx + 1] : null;
                                         const prevVal = prevPeriodData ? (prevPeriodData[row.key] ?? (row.fallbackKey ? prevPeriodData[row.fallbackKey] : undefined)) : null;
-                                        const change = calculateYoYChange(val, prevVal, false);
+                                        const semantics: FinancialMetricSemantics = row.invert ? 'DEBT' : 'PROFIT';
+                                        const change = calculateYoYChange(val, prevVal, false, semantics);
 
                                         return (
                                           <td key={idx} className="p-3 text-center group-hover:bg-slate-800/30 transition-colors">

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 
 import { IsYatirimApiAdapter } from '../lib/isyatirim-adapter.ts';
 import { FinancialDataValidator } from '../lib/financial-validator.ts';
-import { FinancialRatioEngine } from '../lib/ratio-engine.ts';
+import { FinancialRatioEngine, computeFinancialChange } from '../lib/ratio-engine.ts';
+import { calculateDuPont5Step } from '../lib/valuation.ts';
 
 test('Financial Pipeline & Ratio Engine Architecture Test Suite', async (t) => {
 
@@ -161,5 +162,101 @@ test('Financial Pipeline & Ratio Engine Architecture Test Suite', async (t) => {
     // 4. DuPont 5-Aşamalı Ayrıştırma
     assert.ok(metrics.dupont !== null);
     assert.ok(metrics.dupont.calculatedRoe > 0);
+  });
+
+  await t.test('5. TTM Standard: Exact formula TTM = (2026/06) + (2025/12) - (2025/06)', () => {
+    const series = [
+      { period: '2025/06', revenue: 500, net_income: 50 },
+      { period: '2025/12', revenue: 1200, net_income: 140 },
+      { period: '2026/06', revenue: 700, net_income: 90 }
+    ];
+
+    const ttm = FinancialRatioEngine.calculateTtmFinancials(series, series[2], 'INDUSTRIAL', 1.0);
+    // TTM revenue = 700 + 1200 - 500 = 1400
+    assert.equal(ttm.revenue, 1400);
+    // TTM net income = 90 + 140 - 50 = 180
+    assert.equal(ttm.netIncome, 180);
+    assert.equal(ttm.isAnnualizedFallback, false);
+
+    // Year-end period (2025/12) directly uses year-end data
+    const ttmYearEnd = FinancialRatioEngine.calculateTtmFinancials(series, series[1], 'INDUSTRIAL', 1.0);
+    assert.equal(ttmYearEnd.revenue, 1200);
+    assert.equal(ttmYearEnd.netIncome, 140);
+    assert.equal(ttmYearEnd.isAnnualizedFallback, false);
+  });
+
+  await t.test('6. computeFinancialChange: Zarardan Kâra Geçiş ve Negatif Taban Büyüme Semantiği', () => {
+    // 1. Zarardan kâra geçiş -> "Kâra Geçti" (Yeşil)
+    const toProfit = computeFinancialChange(528_000_000, -1_900_000_000, 'PROFIT');
+    assert.equal(toProfit.formattedLabel, 'Kâra Geçti');
+    assert.equal(toProfit.badgeColor, 'green');
+    assert.equal(toProfit.isTextStatus, true);
+
+    // 2. Kârdan zarara geçiş -> "Zarara Geçti" (Kırmızı)
+    const toLoss = computeFinancialChange(-200_000, 500_000, 'PROFIT');
+    assert.equal(toLoss.formattedLabel, 'Zarara Geçti');
+    assert.equal(toLoss.badgeColor, 'red');
+    assert.equal(toLoss.isTextStatus, true);
+
+    // 3. İki dönem de negatif - Zarar Azaldı (-100 -> -50) -> "Zarar Azaldı (%50)" (Yeşil)
+    const lossReduced = computeFinancialChange(-50_000, -100_000, 'PROFIT');
+    assert.equal(lossReduced.formattedLabel, 'Zarar Azaldı (%50)');
+    assert.equal(lossReduced.badgeColor, 'green');
+    assert.equal(lossReduced.isTextStatus, true);
+
+    // 4. İki dönem de negatif - Zarar Arttı (-50 -> -100) -> "Zarar Arttı (%100)" (Kırmızı)
+    const lossIncreased = computeFinancialChange(-100_000, -50_000, 'PROFIT');
+    assert.equal(lossIncreased.formattedLabel, 'Zarar Arttı (%100)');
+    assert.equal(lossIncreased.badgeColor, 'red');
+    assert.equal(lossIncreased.isTextStatus, true);
+  });
+
+  await t.test('7. computeFinancialChange: Net Borç Semantiği (Borç Azalışı = YEŞİL, Borç Artışı = KIRMIZI)', () => {
+    // 1. Borç azaldı (1000 -> 500: -50%) -> KESİNLİKLE YEŞİL!
+    const debtReduced = computeFinancialChange(500, 1000, 'DEBT');
+    assert.equal(debtReduced.formattedLabel, '-%50');
+    assert.equal(debtReduced.badgeColor, 'green');
+
+    // 2. Borç arttı (500 -> 1000: +100%) -> KESİNLİKLE KIRMIZI!
+    const debtIncreased = computeFinancialChange(1000, 500, 'DEBT');
+    assert.equal(debtIncreased.formattedLabel, '+%100');
+    assert.equal(debtIncreased.badgeColor, 'red');
+
+    // 3. Borçtan net nakde geçiş (500 -> -200) -> "Net Nakde Geçti" (Yeşil)
+    const toNetCash = computeFinancialChange(-200, 500, 'DEBT');
+    assert.equal(toNetCash.formattedLabel, 'Net Nakde Geçti');
+    assert.equal(toNetCash.badgeColor, 'green');
+
+    // 4. Net nakitten borca geçiş (-200 -> 300) -> "Net Borca Geçti" (Kırmızı)
+    const toNetDebt = computeFinancialChange(300, -200, 'DEBT');
+    assert.equal(toNetDebt.formattedLabel, 'Net Borca Geçti');
+    assert.equal(toNetDebt.badgeColor, 'red');
+
+    // 5. Nötr büyüklük (Toplam Varlıklar 100 -> 150) -> neutral renk
+    const assetsChange = computeFinancialChange(150, 100, 'NEUTRAL');
+    assert.equal(assetsChange.badgeColor, 'neutral');
+  });
+
+  await t.test('8. DuPont 5-Step Identity assertion with mapped EBT', () => {
+    const item = {
+      period: '2026/06',
+      revenue: 100_000,
+      ebit: 15_000,
+      ebt: 12_000,
+      net_income: 9_000,
+      total_assets: 80_000,
+      equity: 40_000,
+      sector: 'INDUSTRIAL'
+    };
+
+    const dupont = calculateDuPont5Step(item);
+    assert.ok(dupont.hasData);
+    // Tax Burden = Net Income / EBT = 9000 / 12000 = 0.75
+    assert.equal(dupont.taxBurden, 0.75);
+    // Interest Burden = EBT / EBIT = 12000 / 15000 = 0.8
+    assert.equal(dupont.interestBurden, 0.8);
+    // Tax Burden * Interest Burden = 0.75 * 0.8 = 0.6 = Net Income / EBIT (9000 / 15000)
+    const product = Number((dupont.taxBurden * dupont.interestBurden).toFixed(3));
+    assert.equal(product, 0.6);
   });
 });

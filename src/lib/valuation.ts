@@ -876,20 +876,30 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     // DİNAMİK WACC (AĞIRLIKLI ORTALAMA SERMAYE MALİYETİ - CAPM + KD VERGİ KALKANI)
     // =========================================================================
     // 1. Dönem Bazlı Makro Parametreler (10Y TR Tahvil Risksiz Faiz Rf, ERP ve Borçlanma Faizi Kd)
-    let rf = 30.0; // Risksiz faiz oranı (10Y TR Gösterge Tahvil %)
-    let erp = 7.5; // Türkiye Hisse Senedi Risk Primi (ERP %)
+    // Kural 6: Çoklu Currency ve Döviz Ağırlıklı Borç Yapısı Standardı
+    const reportCurrency = String(item.currency || container?.currency || 'TRY').toUpperCase();
+    const isForeignCurrency = ['USD', 'EUR', 'GBP'].includes(reportCurrency);
+
+    let rf = 30.0; // Risksiz faiz oranı
+    let erp = 7.5; // Hisse Senedi Risk Primi
     let preTaxKd = 46.0; // Kurumsal Ticari Kredi Faizi (%)
     const taxRate = (detectedSector === 'BANKING' || detectedSector === 'INSURANCE') ? 0.30 : (detectedSector === 'REIT' ? 0.0 : 0.25);
 
-    if (yr <= 2021) { rf = 17.5; erp = 6.5; preTaxKd = 21.0; }
-    else if (yr === 2022) { rf = 19.0; erp = 7.0; preTaxKd = 25.0; }
-    else if (yr === 2023) { rf = 26.5; erp = 7.0; preTaxKd = 36.0; }
-    else if (yr === 2024) { rf = 31.0; erp = 7.5; preTaxKd = 50.0; }
-    else if (yr === 2025) { rf = 29.5; erp = 7.5; preTaxKd = 45.0; }
-    else { rf = 28.0; erp = 7.5; preTaxKd = 42.0; }
+    if (isForeignCurrency) {
+      rf = reportCurrency === 'EUR' ? 2.8 : 4.25; // 10Y US Treasury / German Bund
+      erp = 5.5; // Gelişmiş/Global ERP
+      preTaxKd = parsedTlRate || (reportCurrency === 'EUR' ? 5.5 : 6.8); // SOFR/EURIBOR + spread
+    } else {
+      if (yr <= 2021) { rf = 17.5; erp = 6.5; preTaxKd = 21.0; }
+      else if (yr === 2022) { rf = 19.0; erp = 7.0; preTaxKd = 25.0; }
+      else if (yr === 2023) { rf = 26.5; erp = 7.0; preTaxKd = 36.0; }
+      else if (yr === 2024) { rf = 31.0; erp = 7.5; preTaxKd = 50.0; }
+      else if (yr === 2025) { rf = 29.5; erp = 7.5; preTaxKd = 45.0; }
+      else { rf = 28.0; erp = 7.5; preTaxKd = 42.0; }
 
-    if (parsedTlRate) {
-      preTaxKd = parsedTlRate;
+      if (parsedTlRate) {
+        preTaxKd = parsedTlRate;
+      }
     }
 
     // Şirkete Özel Canlı Efektif Borçlanma Maliyeti (Item 2: Company-Specific Kd & WACC)
@@ -904,18 +914,33 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     const avgFinDebt = (currentFinDebt > 0 && prevFinDebt > 0) ? (currentFinDebt + prevFinDebt) / 2 : currentFinDebt;
 
     let companySpecificKd: number | null = null;
-    let kdSource = 'BIST Sektörel / Makro Kurumsal Kredi Göstergesi';
+    let kdSource = isForeignCurrency 
+      ? `Global Gösterge Borçlanma Faizi (${reportCurrency} SOFR/EURIBOR)`
+      : 'BIST Sektörel / Makro Kurumsal Kredi Göstergesi';
 
     if (intExpense !== null && intExpense > 0 && avgFinDebt > 0) {
       const calculatedKd = (intExpense / avgFinDebt) * annualFactor * 100;
-      if (calculatedKd >= 10 && calculatedKd <= 90) {
+      const isFxHeavyDebt = !isForeignCurrency && calculatedKd >= 4.0 && calculatedKd < 22.0;
+
+      if (calculatedKd >= 3.0 && calculatedKd <= 90.0) {
         companySpecificKd = Number(calculatedKd.toFixed(1));
         const blended = (calculatedKd * 0.70) + (preTaxKd * 0.30);
-        preTaxKd = Math.max(25.0, Math.min(65.0, blended));
-        kdSource = `Şirket Finansal Giderlerinden Dinamik Türetildi (%${companySpecificKd} Efektif / %${preTaxKd.toFixed(1)} Harmanlanmış)`;
+
+        if (isForeignCurrency) {
+          preTaxKd = Math.max(3.0, Math.min(22.0, blended));
+          kdSource = `Şirket Finansal Giderlerinden Dinamik Türetildi (%${companySpecificKd} Efektif ${reportCurrency} / %${preTaxKd.toFixed(1)} Harmanlanmış)`;
+        } else if (isFxHeavyDebt) {
+          preTaxKd = Math.max(6.0, Math.min(65.0, (calculatedKd * 0.80) + (preTaxKd * 0.20)));
+          kdSource = `Döviz/Reeskont Ağırlıklı Kredi Portföyü (%${companySpecificKd} Efektif / %${preTaxKd.toFixed(1)} Harmanlanmış)`;
+        } else {
+          preTaxKd = Math.max(18.0, Math.min(65.0, blended));
+          kdSource = `Şirket Finansal Giderlerinden Dinamik Türetildi (%${companySpecificKd} Efektif / %${preTaxKd.toFixed(1)} Harmanlanmış)`;
+        }
       }
     } else if (parsedTlRate) {
-      preTaxKd = Math.max(25.0, Math.min(65.0, parsedTlRate));
+      preTaxKd = isForeignCurrency 
+        ? Math.max(3.0, Math.min(25.0, parsedTlRate))
+        : Math.max(18.0, Math.min(65.0, parsedTlRate));
       kdSource = `Faaliyet Raporu Açıklanan Borçlanma Faizi (%${preTaxKd.toFixed(1)})`;
     }
 

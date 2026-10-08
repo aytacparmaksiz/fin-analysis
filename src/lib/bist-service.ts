@@ -23,6 +23,7 @@ export interface FinancialHistoryItem {
   operating_profit: number | null;
   ebitda: number | null;
   net_income: number | null;
+  ebt?: number | null;
   current_assets: number | null;
   non_current_assets: number | null;
   total_assets: number | null;
