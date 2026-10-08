@@ -162,17 +162,27 @@ export async function DELETE(req: NextRequest) {
 
     let error = null;
     if (ticker) {
-      const res = await supabase
+      // 1. Ticker ile case-insensitive ve standart arama ile tüm kayıtları sil
+      const resTicker = await supabase
+        .from('valuation_reports')
+        .delete()
+        .ilike('ticker', ticker);
+      if (resTicker.error) error = resTicker.error;
+
+      // 2. Ayrıca birebir eşitlik ile de sil
+      await supabase
         .from('valuation_reports')
         .delete()
         .eq('ticker', ticker);
-      error = res.error;
-    } else if (id) {
-      const res = await supabase
+    }
+
+    if (id) {
+      // 3. ID belirtilmişse o ID'ye ait kaydı da sil
+      const resId = await supabase
         .from('valuation_reports')
         .delete()
         .eq('id', id);
-      error = res.error;
+      if (resId.error && !error) error = resId.error;
     }
 
     if (error) {

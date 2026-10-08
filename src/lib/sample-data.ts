@@ -528,12 +528,13 @@ export const VESBE_SAMPLE_DATA = {
       operating_income: -1150000,
       net_income: -2277301,
       gross_profit: 4850000,
-      equity: 41300000,
+      equity: 41291882,
       net_debt: 26229065,
-      total_assets: 75000000,
-      current_assets: 29000000,
-      current_liabilities: 27000000,
-      current_ratio: 1.07,
+      total_assets: 98191665,
+      current_assets: 34100169,
+      non_current_assets: 64091496,
+      current_liabilities: 43763784,
+      current_ratio: 0.78,
       operating_cash_flow: -2540000,
       free_cash_flow: -3100000,
       capex: 560000,
@@ -544,6 +545,32 @@ export const VESBE_SAMPLE_DATA = {
       share_price: 3.95,
     }
   ],
+  guidance_track_record: [
+    {
+      year_or_period: '2025',
+      guidance_given: '%8-10 FAVÖK Marjı ve Reel Satış Büyümesi',
+      actual_realized: 'FAVÖK Marjı %5,4 (Hedefin Altında)',
+      status: 'KISMEN BAŞARILI',
+      analysis: 'Avrupa beyaz eşya pazarındaki talep daralması marjları baskıladı.',
+    },
+    {
+      year_or_period: '2026/06',
+      guidance_given: 'Pozitif Operasyonel FAVÖK ve Marj İyileşmesi',
+      actual_realized: 'FAVÖK: -623,45 Milyon TL (-0,62 Milyar TL)',
+      status: 'BAŞARISIZ',
+      analysis: 'İhracat pazarlarındaki yavaşlama ve artan girdi maliyetleri nedeniyle operasyonel FAVÖK zarara döndü.',
+    },
+  ],
+  valuation: {
+    current_price: 3.95,
+    fair_value: 2.46,
+    discount_pct: -37.7,
+    target_pb: 0.107,
+    current_pb: 0.153,
+    bear_price: 1.57,
+    bull_price: 3.81,
+    margin_of_safety: 0,
+  },
   marketMultiples: {
     pe: null,
     pb: 0.15,
@@ -560,7 +587,7 @@ export const VESBE_SAMPLE_REPORT_TEXT = `### I. Yönetici Özeti ve Temel Yatır
 
 - **Operasyonel Zarar ve Negatif FAVÖK:** Şirket 2026 yılının ilk 6 ayında 34,13 Milyar TL ciro üretmesine karşın maliyet baskıları sonucu -623,45 Milyon TL negatif FAVÖK açıklamıştır.
 - **Sermaye Erozyonu:** Son 6 ayda kaydedilen -2,28 Milyar TL net zarar özkaynaklar üzerinde baskı oluşturmaktadır.
-- **Değerleme Özeti:** Sıkıntılı Şirket Varlık Tabanı Modeline göre Hisse Başı Adil Değer **3,38 TL** olarak hesaplanmıştır. Cari 3,95 TL fiyata göre şirket %14,4 primlidir (iskonto yoktur).
+- **Değerleme Özeti:** Sıkıntılı Şirket Varlık Tabanı Modeline göre Hisse Başı Adil Değer **2,46 TL** olarak hesaplanmıştır. Cari 3,95 TL fiyata göre şirket %37,7 primlidir (güvenlik marjı bulunmamaktadır).
 
 ### II. Nakit Akışı, Likidite ve Kâr Kalitesi Teşhisi
 
@@ -568,7 +595,7 @@ export const VESBE_SAMPLE_REPORT_TEXT = `### I. Yönetici Özeti ve Temel Yatır
 
 - **Çift Yönlü Nakit Yakımı:** İşletme Nakit Akışı (OCF) -2,54 Milyar TL olup negatif bölgededir.
 - **Borçluluk Yükü:** Net Finansal Borç 26,23 Milyar TL seviyesine ulaşmıştır. Negatif FAVÖK ortamında borç çevrim kapasitesi zayıflamıştır.
-- **Çalışma Sermayesi:** Cari oran 1,07 seviyesinde olup likidite tamponu sınırlıdır.
+- **Çalışma Sermayesi:** Cari oran 0,78 seviyesinde olup kısa vadeli borç çevirme riski taşımaktadır.
 
 ### III. Sektörel Karne ve Rekabet Konumu (DuPont Analizi)
 
@@ -582,16 +609,16 @@ export const VESBE_SAMPLE_REPORT_TEXT = `### I. Yönetici Özeti ve Temel Yatır
 > **Bölüm Özeti:** Negatif FAVÖK ortamında klasik FD/FAVÖK çarpanı matematiksel olarak anlamsız olduğundan, Sıkıntılı Şirket / Varlık Tabanı İskonto Modeli esas alınmıştır.
 
 - **Değerleme Modeli:** Sıkıntılı Şirket / Varlık Tabanı İskonto Modeli (Distressed Turnaround Model)
-- **Model Hesabı:** 12A İleri Defter Değeri (22,97 TL) × Hak Edilen Sıkıntılı PD/DD (0,147x) = **3,38 TL**
-- **Çarpan Gerekçesi:** Taban çarpan (0,378x) × Sermaye Korunma (%89,0) × Özkaynak Ağırlığı (%61,2) × Likidite Tamponu (%71,6) = 0,147x.
+- **Model Hesabı:** 12A İleri Defter Değeri (22,97 TL) × Hak Edilen Sıkıntılı PD/DD (0,107x) = **2,46 TL**
+- **Çarpan Gerekçesi:** Taban çarpan (0,378x) × Sermaye Korunma (%89,0) × Özkaynak Ağırlığı (%42,1) × Likidite Tamponu (%71,6) = 0,107x.
 
 ### V. Değer Sürücüleri ve Hassasiyet Tablosu
 
 > **Bölüm Özeti:** Senaryo analizinde operasyonel toparlanma ve olası stres koşulları modellenmiştir.
 
-- **Ayı Senaryosu (Taban Fiyat):** **2,16 TL** (Derinleşen zarar ve ek finansman maliyeti riski)
-- **Baz Senaryo (Adil Değer):** **3,38 TL** (Mevcut bilanço varlık tabanı)
-- **Boğa Senaryosu (Tavan Fiyat):** **5,23 TL** (Avrupa talebinin canlanması ve FAVÖK'ün pozitife dönmesi)
+- **Ayı Senaryosu (Taban Fiyat):** **1,57 TL** (Derinleşen zarar ve ek finansman maliyeti riski)
+- **Baz Senaryo (Adil Değer):** **2,46 TL** (Mevcut bilanço varlık tabanı)
+- **Boğa Senaryosu (Tavan Fiyat):** **3,81 TL** (Avrupa talebinin canlanması ve FAVÖK'ün pozitife dönmesi)
 
 ### VI. Temel Riskler, Katalizörler ve Nihai Karar
 
@@ -604,6 +631,6 @@ export const VESBE_SAMPLE_REPORT_TEXT = `### I. Yönetici Özeti ve Temel Yatır
 | **Toplam Puan** | **15** | **100** | **Yüksek Finansal Risk** |
 
 Analist Kararı: ALMA
-Yatırım Tezi: Vestel Beyaz Eşya, operasyonel zarar, negatif nakit akışı ve yüksek finansal borçluluk nedeniyle yüksek risk taşımaktadır. Güncel 3,95 TL fiyat adil değerin (3,38 TL) üzerinde olup güvenlik marjı bulunmamaktadır.
+Yatırım Tezi: Vestel Beyaz Eşya, operasyonel zarar, negatif nakit akışı ve yüksek finansal borçluluk nedeniyle yüksek risk taşımaktadır. Güncel 3,95 TL fiyat adil değerin (2,46 TL) üzerinde olup güvenlik marjı bulunmamaktadır.
 Kilit Katalizörler: Avrupa beyaz eşya talebinde faiz indirimleri kaynaklı canlanma, girdi maliyetlerinde düşüş ve operasyonel nakit akışının pozitife dönmesi.
-Riskler & Emniyet Marjı: Ayı senaryosu taban fiyatı: 2,16 TL. Devam eden nakit yakımı ve borç çevrim maliyeti izlenmelidir.`;
+Riskler & Emniyet Marjı: Ayı senaryosu taban fiyatı: 1,57 TL. Devam eden nakit yakımı ve borç çevrim maliyeti izlenmelidir.`;

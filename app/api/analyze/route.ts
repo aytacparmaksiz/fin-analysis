@@ -392,6 +392,8 @@ ZORUNLU TALİMAT (Önceki Raporla Karşılaştırma & Çeyreklik Hafıza):
         currentDateStr,
         extractedData
       });
+    }
+
     // Rapor metnindeki tüm hedef fiyat ve senaryo sayılarını hesaplanan model çıktılarıyla %100 senkronize et
     reportText = syncReportTextWithValuation(reportText, valuation);
 
