@@ -98,4 +98,28 @@ test('MPARK (MLP Care) WACC, ROIC, and TMS 29 Fisher Alignment Test Suite', asyn
     assert.equal(optimization.finalDecision, 'AL', `Expected AL decision, got ${optimization.finalDecision}`);
     assert.equal(optimization.overrideApplied, false, 'No false-positive override should be applied');
   });
+
+  await t.test('verifies MPARK 5 critical metrics via IsYatirimApiAdapter & FinancialRatioEngine', async () => {
+    const { fetchAndAnalyzeBistCompany } = await import('../lib/bist-service.ts');
+    const result = await fetchAndAnalyzeBistCompany('MPARK', { forceRefresh: true });
+    assert.ok(result.success, 'Fetch should succeed');
+
+    const latest = result.financial_history[result.financial_history.length - 1];
+    const duranVarliklarBin = Math.round(latest.non_current_assets / 1000);
+    const aktifToplamiBin = Math.round(latest.total_assets / 1000);
+    const esasFaaliyetKariBin = Math.round(latest.operating_profit / 1000);
+    const dupontMargin = result.unified_metrics?.dupont?.ebitMargin;
+    const fcfBin = Math.round(latest.free_cash_flow / 1000);
+
+    // a) Duran Varlıklar: 71.955.709 Bin TL
+    assert.equal(duranVarliklarBin, 71955709, 'Duran Varlıklar must equal 71.955.709 Bin TL');
+    // b) Aktif Toplamı: 95.303.606 Bin TL
+    assert.equal(aktifToplamiBin, 95303606, 'Aktif Toplamı must equal 95.303.606 Bin TL');
+    // c) Esas Faaliyet Kârı: 5.200.867 Bin TL
+    assert.equal(esasFaaliyetKariBin, 5200867, 'Esas Faaliyet Kârı must equal 5.200.867 Bin TL');
+    // d) DuPont Faaliyet Marjı: %15,24
+    assert.equal(dupontMargin, 15.24, 'DuPont Faaliyet Marjı must equal 15.24%');
+    // e) Serbest Nakit Akışı: 4.458.911 Bin TL
+    assert.equal(fcfBin, 4458911, 'FCF must equal 4.458.911 Bin TL');
+  });
 });

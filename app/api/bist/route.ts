@@ -17,7 +17,8 @@ export async function GET(req: NextRequest) {
     }
 
     const cleanTicker = ticker.toUpperCase().trim().replace(/[^A-Z0-9]/g, '');
-    const result = await fetchAndAnalyzeBistCompany(cleanTicker);
+    const isRefresh = searchParams.get('refresh') === 'true';
+    const result = await fetchAndAnalyzeBistCompany(cleanTicker, { forceRefresh: isRefresh });
 
     return NextResponse.json(result, {
       headers: {

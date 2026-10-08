@@ -298,7 +298,7 @@ export class IsYatirimApiAdapter {
       // (Diğer faaliyet gelir ve giderleri dahil TFRS ana kalemi) olarak eşlenir.
       // 3H (Net Faaliyet Kar/Zararı) sadece Brüt Kar - Genel Yönetim/Pazarlama/ArGe olduğu için TEK BAŞINA ESAS ALINMAZ.
       const tfrsOperatingProfit = 
-        getValByCode('3HACA', '3DEA') ?? 
+        getValByCode('3DF', '3HACA', '3DEA') ?? 
         getValByDesc(
           'faaliyet karı (zararı)',
           'esas faaliyet karı (zararı)',

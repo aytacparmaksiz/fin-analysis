@@ -776,22 +776,34 @@ async function fetchYahooFundamentalsHistory(ticker: string, sector: SectorType)
   }
 }
 
+export function clearBistCache(ticker?: string): void {
+  if (ticker) {
+    MEMORY_FINANCIAL_CACHE.delete(ticker.toUpperCase().trim());
+  } else {
+    MEMORY_FINANCIAL_CACHE.clear();
+  }
+}
+
 /**
  * BIST Şirketinin resmi mali tablolarını çekip tam zaman serisi ve değerleme analizini oluşturur
  */
 export async function fetchAndAnalyzeBistCompany(
   rawTicker: string,
-  options?: { skipYahoo?: boolean; sequentialYears?: boolean }
+  options?: { skipYahoo?: boolean; sequentialYears?: boolean; forceRefresh?: boolean }
 ) {
   const meta = resolveBistCompanyMeta(rawTicker);
   const ticker = meta.ticker;
 
+  if (options?.forceRefresh) {
+    MEMORY_FINANCIAL_CACHE.delete(ticker);
+  }
+
   // 0. Kalıcı ve hızlı önbelleği kontrol et (RAM / Supabase)
-  const memCached = MEMORY_FINANCIAL_CACHE.get(ticker);
+  const memCached = options?.forceRefresh ? null : MEMORY_FINANCIAL_CACHE.get(ticker);
   let cachedItems: FinancialHistoryItem[] | null = null;
-  if (memCached && (Date.now() - memCached.timestamp < CACHE_TTL_MS) && memCached.data.length > 0) {
+  if (!options?.forceRefresh && memCached && (Date.now() - memCached.timestamp < CACHE_TTL_MS) && memCached.data.length > 0) {
     cachedItems = memCached.data;
-  } else {
+  } else if (!options?.forceRefresh) {
     cachedItems = await getSupabaseMaliTablo(ticker);
     if (cachedItems && cachedItems.length > 0) {
       MEMORY_FINANCIAL_CACHE.set(ticker, { data: cachedItems, timestamp: Date.now() });
