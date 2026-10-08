@@ -2126,7 +2126,9 @@ export default function ValuationTerminal({
     const sanitizedHistory = sanitizeHistoryData(
       extractedData?.financial_history || [], 
       extractedData?.debt_and_interest,
-      activeSector
+      activeSector,
+      Number(effectivePrice) || 100,
+      extractedData?.currency || 'TRY'
     );
 
     const enrichedExtractedData = extractedData ? {

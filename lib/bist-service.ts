@@ -260,6 +260,13 @@ async function getSupabaseMaliTablo(ticker: string): Promise<FinancialHistoryIte
     if (age > 24 * 60 * 60 * 1000) {
       return null; // 24 saatten eskiyse canlı kaynaktan tazelemeyi dene
     }
+    // Mükerrer prim toplamı anomalisi koruması (AGESA / ANHYT):
+    if (Array.isArray(data.financial_history)) {
+      const p2606 = data.financial_history.find((x: any) => x.period === '2026/06');
+      if (ticker.toUpperCase() === 'AGESA' && p2606 && p2606.written_premiums > 18_000_000_000) {
+        return null; // Eski hatalı mükerrer toplam önbelleği geçersiz kıl
+      }
+    }
     return data.financial_history as FinancialHistoryItem[];
   } catch {
     return null;
@@ -899,6 +906,7 @@ export async function fetchAndAnalyzeBistCompany(
     let technical_profit: number | null = null;
     let investment_income: number | null = null;
     let financial_assets_insured: number | null = null;
+    let pension_aum: number | null = null;
     let loss_ratio: number | null = null;
     let expense_ratio: number | null = null;
     let combined_ratio: number | null = null;
@@ -907,35 +915,38 @@ export async function fetchAndAnalyzeBistCompany(
       cash_and_equivalents = getValByCode('1A') ?? getValByDesc('nakit ve nakit benzer');
       financial_assets_insured = getValByCode('1B') ?? getValByDesc('finansal varlıklar ile riski sigortalılara ait', 'riski sigortalılara ait finansal', 'finansal varlıklar');
       trade_receivables = getValByCode('1C') ?? getValByDesc('esas faaliyetlerden alacaklar', 'sigortacılık faaliyetlerinden alacaklar');
+      pension_aum = getValByCode('1JH', '2KD') ?? getValByDesc('emeklilik faaliyetlerinden borçlar', 'emeklilik faaliyetlerinden alacaklar');
       current_assets = getValByCode('1H') ?? getValByDesc('cari varlıklar toplamı', 'dönen varlıklar toplamı');
       non_current_assets = getValByCode('1S') ?? getValByDesc('cari olmayan varlıklar toplamı', 'duran varlıklar toplamı');
       total_assets = getValByCode('1T', '1Z') ?? getValByDesc('varlıklar toplamı', 'aktif toplamı', 'toplam varlık') ?? (((current_assets || 0) + (non_current_assets || 0)) || null);
 
       current_liabilities = getValByCode('2I') ?? getValByDesc('kısa vadeli yükümlülükler toplamı', 'kısa vadeli yükümlülükler');
-      long_term_liabilities = getValByCode('2MDZ') ?? getValByDesc('uzun vadeli yükümlülükler toplamı', 'uzun vadeli yükümlülülükler');
+      long_term_liabilities = getValByCode('2MDZ') ?? getValByDesc('uzun vadeli yükümlülükler toplamı', 'uzun vadeli yükümlülükler');
       total_liabilities = (current_liabilities || 0) + (long_term_liabilities || 0);
 
       paid_in_capital = getValByCode('2MEA') ?? getValByDesc('ödenmiş sermaye');
       equity = getValByCode('2O') ?? getValByDesc('özsermaye toplamı', 'özkaynaklar toplamı', 'özkaynak');
 
       // Prim Üretimi: 
-      // 3DAAB: Hayat Brüt Yazılan Primler (AGESA, ANHYT vb.)
-      // 3AAAA: Hayat Dışı Brüt Yazılan Primler (AKGRT, TURSG, ANSGR vb.)
+      // 3DAAB: Hayat Brüt Yazılan Primler (AGESA, ANHYT vb. Hayat & Emeklilik şirketleri)
+      // 3AAAA: Hayat Dışı Brüt Yazılan Primler (AKGRT, TURSG, ANSGR vb. Elementer sigorta şirketleri)
       const lifeWritten = getValByCode('3DAAB') ?? getValByDesc('1.1.1- brüt yazılan primler');
       const nonLifeWritten = getValByCode('3AAAA') ?? getValByDesc('brüt yazılan primler');
-      if (lifeWritten !== null && nonLifeWritten !== null && (lifeWritten > 0 || nonLifeWritten > 0)) {
-        written_premiums = (lifeWritten > 0 && nonLifeWritten > 0) ? (lifeWritten + nonLifeWritten) : Math.max(lifeWritten, nonLifeWritten);
+      if (lifeWritten !== null && lifeWritten > 0) {
+        // Hayat ve Emeklilik Şirketleri (AGESA, ANHYT vb.): Resmi Brüt Yazılan Prim 3DAAB'dir.
+        written_premiums = lifeWritten;
       } else {
-        written_premiums = lifeWritten ?? nonLifeWritten ?? getValByDesc('brüt yazılan primler', 'yazılan primler');
+        // Hayat Dışı Sigorta Şirketleri (TURSG, ANSGR, AKGRT vb.): Resmi Brüt Yazılan Prim 3AAAA'dır.
+        written_premiums = nonLifeWritten ?? getValByDesc('brüt yazılan primler', 'yazılan primler');
       }
       revenue = written_premiums;
 
       const lifeEarned = getValByCode('3DAA');
       const nonLifeEarned = getValByCode('3AA');
-      if (lifeEarned !== null && nonLifeEarned !== null && (lifeEarned > 0 || nonLifeEarned > 0)) {
-        earned_premiums = (lifeEarned > 0 && nonLifeEarned > 0) ? (lifeEarned + nonLifeEarned) : Math.max(lifeEarned, nonLifeEarned);
+      if (lifeEarned !== null && lifeEarned > 0) {
+        earned_premiums = lifeEarned;
       } else {
-        earned_premiums = lifeEarned ?? nonLifeEarned ?? getValByDesc('kazanılmış primler');
+        earned_premiums = nonLifeEarned ?? getValByDesc('kazanılmış primler');
       }
 
       // Genel Teknik Kâr / Bölüm Dengesi:
@@ -1124,6 +1135,7 @@ export async function fetchAndAnalyzeBistCompany(
       technical_balance: technical_profit,
       investment_income,
       financial_assets_insured,
+      pension_aum,
       loss_ratio,
       expense_ratio,
       combined_ratio
