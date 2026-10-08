@@ -5,7 +5,7 @@ import {
   generateWithRateLimitAndBackoff, 
   computeContentHash 
 } from '@/lib/gemini';
-import { computeSectorValuationAndDrivers } from '@/lib/valuation';
+import { computeSectorValuationAndDrivers, syncReportTextWithValuation } from '@/lib/valuation';
 import { fetchLiveBistPrice } from '@/lib/bist-service';
 
 export const runtime = 'nodejs';
@@ -392,7 +392,8 @@ ZORUNLU TALİMAT (Önceki Raporla Karşılaştırma & Çeyreklik Hafıza):
         currentDateStr,
         extractedData
       });
-    }
+    // Rapor metnindeki tüm hedef fiyat ve senaryo sayılarını hesaplanan model çıktılarıyla %100 senkronize et
+    reportText = syncReportTextWithValuation(reportText, valuation);
 
     return NextResponse.json({ 
       report: reportText, 
