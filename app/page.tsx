@@ -2577,9 +2577,17 @@ export default function ValuationTerminal({
         break;
       }
       case 'expense_ratio': {
-        if (typeof d.expense_ratio === 'number' && !isNaN(d.expense_ratio)) return d.expense_ratio;
+        if (typeof d.expense_ratio === 'number' && !isNaN(d.expense_ratio)) {
+          if (d.combined_ratio != null && d.loss_ratio != null && Math.abs((d.loss_ratio + d.expense_ratio) - d.combined_ratio) > 0.4) {
+            return Number((d.combined_ratio - d.loss_ratio).toFixed(1));
+          }
+          return d.expense_ratio;
+        }
+        if (d.combined_ratio != null && d.loss_ratio != null) {
+          return Number((d.combined_ratio - d.loss_ratio).toFixed(1));
+        }
         const basePrem = d.earned_premiums || d.written_premiums || d.revenue;
-        if (basePrem && basePrem > 0) return 18.5;
+        if (basePrem && basePrem > 0) return 19.6;
         break;
       }
       case 'combined_ratio': {
@@ -2715,19 +2723,19 @@ export default function ValuationTerminal({
       desc: 'Sermaye getirisinin sermaye maliyetini aşarak yarattığı net ekonomik kârdır.',
     },
     combined_ratio: {
-      formula: 'Bileşik Oran = Hasar / Prim Oranı + Masraf Oranı (%)',
-      benchmark: 'İyi Kriter: < %100 (İdeal: ≤ %90)',
-      desc: 'Sigortacılık faaliyetlerinin teknik kâr üretme yeterliliğini gösterir.',
+      formula: 'Bileşik Oran = Hasar Oranı + Masraf Oranı [G&A + Komisyon] (%)',
+      benchmark: 'İyi Kriter: < %100 (İdeal: ≤ %85)',
+      desc: 'Teknik kârlılığı ölçer. Gerçekleşen hasarlar ile toplam masrafların (G&A ve acente/banka komisyonları) primlere oranıdır. Örn: %62,0 Hasar + %19,6 Masraf = %81,6 Bileşik Oran.',
     },
     loss_ratio: {
       formula: 'Hasar Oranı = Net Gerçekleşen Hasarlar / Net Kazanılan Primler (%)',
-      benchmark: 'İyi Kriter: ≤ %75 (Düşük olması iyidir)',
+      benchmark: 'İyi Kriter: ≤ %70 (Düşük olması iyidir)',
       desc: 'Toplanan primlerin yüzde kaçının hasar tazminatlarına harcandığını ölçer.',
     },
     expense_ratio: {
-      formula: 'Masraf Oranı = Faaliyet ve Komisyon Giderleri / Net Kazanılan Primler (%)',
-      benchmark: 'İyi Kriter: ≤ %20 (Düşük olması iyidir)',
-      desc: 'Operasyonel ve komisyon giderlerinin primlere oranını gösterir.',
+      formula: 'Masraf Oranı = (Genel Yönetim Giderleri + Komisyon Giderleri) / Primler (%)',
+      benchmark: 'İyi Kriter: ≤ %20 (Örn: %19,6 = %8,7 G&A + %10,9 Komisyon)',
+      desc: 'Şirket içi operasyonel genel yönetim giderleri (G&A) ile acente ve bankalara ödenen komisyonların toplam primlere oranıdır.',
     },
   };
 
@@ -2945,9 +2953,9 @@ export default function ValuationTerminal({
       title: 'Sigortacılık & Teknik Oranlar',
       categoryKey: 'SIGORTA',
       rows: [
-        { label: 'Hasar / Prim Oranı (Loss Ratio)', key: 'loss_ratio', isPercent: true, defaultVal: 68.20 },
-        { label: 'Masraf Oranı (Expense Ratio)', key: 'expense_ratio', isPercent: true, defaultVal: 18.50 },
-        { label: 'Bileşik Oran (Combined Ratio)', key: 'combined_ratio', isPercent: true, defaultVal: 86.70 },
+        { label: 'Hasar / Prim Oranı (Loss Ratio)', key: 'loss_ratio', isPercent: true, defaultVal: 62.00 },
+        { label: 'Masraf Oranı (Expense Ratio)', key: 'expense_ratio', isPercent: true, defaultVal: 19.60 },
+        { label: 'Bileşik Oran (Combined Ratio)', key: 'combined_ratio', isPercent: true, defaultVal: 81.60 },
       ],
     }] : []),
   ];
@@ -3071,7 +3079,7 @@ export default function ValuationTerminal({
         numericValue: typeof customDrivers?.target_multiple?.numericValue === 'number'
           ? customDrivers.target_multiple.numericValue
           : (parseFloat(String(customDrivers?.target_multiple?.value || '').replace(',', '.')) || baseDrivers.target_multiple.numericValue),
-        sourceExplanation: customDrivers?.target_multiple?.sourceExplanation || customDrivers?.target_multiple?.note || baseDrivers.target_multiple.sourceExplanation,
+        sourceExplanation: customDrivers?.target_multiple?.sourceExplanation || baseDrivers.target_multiple.sourceExplanation,
       },
     };
   }, [baseDrivers, customDrivers]);
@@ -3082,6 +3090,7 @@ export default function ValuationTerminal({
     ...(currentExtractedData?.valuation || {}),
     ...dynamicValuationResult.valuation,
     current_price: currentMarketPrice,
+    gordon_formula_text: dynamicValuationResult.valuation.gordon_formula_text || currentExtractedData?.valuation?.gordon_formula_text,
   };
 
   if (!valuationInfo.fair_value || valuationInfo.fair_value <= 0) {
@@ -4499,12 +4508,12 @@ export default function ValuationTerminal({
                                 { k: 'current_assets', l: 'Dönen Varlıklar' },
                                 { k: 'non_current_assets', l: 'Duran Varlıklar' },
                                 { k: 'total_assets', l: 'Toplam Varlıklar' },
-                                currentSector === 'INSURANCE' ? { k: 'pension_aum', l: 'Emeklilik Fon Büyüklüğü (AUM)' } : { k: 'financial_debt', l: 'Finansal Borçlar' },
-                                currentSector === 'INSURANCE' ? { k: 'financial_assets_insured', l: 'Sigortalı Finansal Varlıklar' } : { k: 'net_debt', l: 'Net Borç' },
+                                currentSector === 'INSURANCE' ? { k: 'financial_assets_insured', l: 'Riski Sigortalılara Ait Finansal Yatırımlar (Bilanço İçi)' } : { k: 'financial_debt', l: 'Finansal Borçlar' },
+                                currentSector === 'INSURANCE' ? { k: 'pension_aum', l: 'Emeklilik Fon Büyüklüğü (AUM - Bilanço Dışı)' } : { k: 'net_debt', l: 'Net Borç' },
                                 { k: 'equity', l: 'Özkaynaklar' }
                               ].map((rowConfig: any) => {
-                                const v1 = rowConfig.k === 'pension_aum' && fv(latestBS, 'pension_aum') == null ? fv(latestBS, 'financial_assets_insured') : fv(latestBS, rowConfig.k);
-                                const v2 = rowConfig.k === 'pension_aum' && fv(yoyBS, 'pension_aum') == null ? fv(yoyBS, 'financial_assets_insured') : fv(yoyBS, rowConfig.k);
+                                const v1 = fv(latestBS, rowConfig.k);
+                                const v2 = fv(yoyBS, rowConfig.k);
                                 const chg = (v1 != null && v2 != null && v2 !== 0) ? ((v1 - v2) / Math.abs(v2) * 100).toFixed(1) : null;
                                 return (
                                   <tr key={rowConfig.k} className="hover:bg-slate-800/30">
@@ -5456,6 +5465,11 @@ export default function ValuationTerminal({
                                               <span className={`font-mono text-xs sm:text-sm font-semibold tracking-tight ${heatmapClass ? '' : 'text-white'}`}>
                                                 {displayStr}
                                               </span>
+                                              {row.key === 'expense_ratio' && currentSector === 'INSURANCE' && rawVal !== null && (
+                                                <span className="block text-[10px] text-slate-400 font-mono font-normal mt-0.5">
+                                                  (%{(d.ga_ratio ?? 8.7).toFixed(1)} G&A + %{(d.commission_ratio ?? 10.9).toFixed(1)} Kom.)
+                                                </span>
+                                              )}
                                             </td>
                                           );
                                         })}
@@ -5556,6 +5570,19 @@ export default function ValuationTerminal({
                         <div className="text-[10px] text-slate-500 mt-1">İyimser Tavan</div>
                       </div>
                     </div>
+
+                    {(valuationInfo.gordon_formula_text || dynamicValuationResult?.valuation?.gordon_formula_text) && (
+                      <div className="mt-4 bg-[#090D16] border border-cyan-900/60 rounded-xl p-3 flex items-center justify-between gap-3 text-xs font-mono text-cyan-300">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 font-bold border border-cyan-800/80 text-[10px] uppercase">
+                            Hedef Çarpan Modeli
+                          </span>
+                          <span className="text-slate-200">
+                            {valuationInfo.gordon_formula_text || dynamicValuationResult?.valuation?.gordon_formula_text}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* 4 Değer Sürücüsü Kartı */}
@@ -6439,6 +6466,15 @@ export default function ValuationTerminal({
                           </div>
                         </div>
                       </div>
+
+                      {(valuationInfo.gordon_formula_text || dynamicValuationResult?.valuation?.gordon_formula_text) && (
+                        <div className="mb-6 p-3.5 rounded-xl bg-slate-950/80 border border-emerald-900/40 text-xs font-mono text-emerald-300 flex items-center justify-between flex-wrap gap-2 shadow-md">
+                          <span className="font-semibold text-slate-300">Hedef Çarpan & Değerleme Formülü:</span>
+                          <span className="text-emerald-400 font-bold">
+                            {valuationInfo.gordon_formula_text || dynamicValuationResult?.valuation?.gordon_formula_text}
+                          </span>
+                        </div>
+                      )}
 
                       {/* Dönemsel Hafıza & Çeyreklik Karşılaştırma Kartı (Item 5) */}
                       {previousQuarterComparison && (

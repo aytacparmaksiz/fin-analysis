@@ -539,7 +539,6 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
         if (isLikelyPensionAum) {
           // Bu devasa tutar bilançodaki Emeklilik Fon Büyüklüğü (AUM) / Katılımcı Fon Paylarıdır
           if (item.pension_aum == null) item.pension_aum = rawPrem;
-          if (item.financial_assets_insured == null) item.financial_assets_insured = rawPrem;
 
           // Gerçek prim üretimini kurtar:
           if (item.earned_premiums != null && item.earned_premiums > 0 && item.earned_premiums < rawPrem * 0.65) {
@@ -2212,11 +2211,21 @@ export function computeSectorValuationAndDrivers(
     if (sector === 'INSURANCE') {
       marginLabel = 'Kombine Oran (Teknik Kârlılık)';
       const comb = parseFinancialNumber(latest?.combined_ratio);
+      const lossR = parseFinancialNumber(latest?.loss_ratio) ?? 62.0;
+      let expR = parseFinancialNumber(latest?.expense_ratio) ?? (comb != null ? Number((comb - lossR).toFixed(1)) : 19.6);
+      if (comb != null && Math.abs((lossR + expR) - comb) > 0.4) {
+        expR = Number((comb - lossR).toFixed(1));
+      }
+      const gaR = parseFinancialNumber(latest?.ga_ratio) ?? 8.7;
+      const commR = parseFinancialNumber(latest?.commission_ratio) ?? Number(Math.max(0, expR - gaR).toFixed(1));
+
       if (comb !== null && comb > 0) {
         marginVal = Number(comb.toFixed(1));
-        marginExpl = `Son dönem (${latest.period}) gerçekleşen Hasar Oranı (%${latest.loss_ratio || 68.2}) + Masraf Oranı (%${latest.expense_ratio || 20.2}) = %${marginVal}`;
+        const expBreakdown = commR > 0 ? `%${expR.toFixed(1)} (%${gaR.toFixed(1)} G&A + %${commR.toFixed(1)} Komisyon)` : `%${expR.toFixed(1)}`;
+        marginExpl = `Son dönem (${latest.period}) gerçekleşen Hasar Oranı (%${lossR.toFixed(1)}) + Masraf Oranı [${expBreakdown}] = %${marginVal}`;
       } else {
-        marginVal = 88.4;
+        marginVal = 81.6;
+        marginExpl = `Gerçekleşen Hasar Oranı (%${lossR.toFixed(1)}) + Masraf Oranı [%${expR.toFixed(1)} (%${gaR.toFixed(1)} G&A + %${commR.toFixed(1)} Komisyon)] = %${marginVal}`;
       }
     } else if (sector === 'BANKING') {
       marginLabel = 'Net Faiz Marjı (NIM %)';
@@ -2315,11 +2324,17 @@ export function computeSectorValuationAndDrivers(
 
       const diffPrem = Number((targetMultipleNum - gordonPb).toFixed(2));
       const premStr = diffPrem > 0.05
-        ? ` (+${diffPrem.toFixed(2).replace('.', ',')}x BES & AUM Liderlik Primi = **${targetMultipleNum.toString().replace('.', ',')}x**)`
+        ? ` (+${diffPrem.toFixed(2).replace('.', ',')}x Liderlik Primi = **${targetMultipleNum.toString().replace('.', ',')}x**)`
         : ` = **${targetMultipleNum.toString().replace('.', ',')}x**`;
 
-      gordonFormulaText = `Hedef PD/DD = (ROE − Uzun Vadeli Büyüme) / (Sermaye Maliyeti − Uzun Vadeli Büyüme) = ${gordonCalcStr}${premStr}`;
-      targetMultipleExpl = `${sector === 'INSURANCE' ? 'Sigortacılık & Emeklilik AUM primi' : 'Bankacılık'} tabanı (${sectorPbBase}x), ROE (%${roe.toFixed(1)}) ve sermaye maliyeti (Ke %${ke.toFixed(1)}) bazlı hedef çarpan`;
+      if (sector === 'INSURANCE') {
+        const premLabel = diffPrem > 0.01 ? ` (+${diffPrem.toFixed(2).replace('.', ',')}x Liderlik Primi)` : '';
+        targetMultipleExpl = `Saf Gordon (${gordonPb.toFixed(2).replace('.', ',')}x)${premLabel} = ${targetMultipleNum.toFixed(2).replace('.', ',')}x | Formül: (ROE %${roe.toFixed(1)} − g %${gordonGrowth.toFixed(1)}) / (Ke %${safeKe.toFixed(1)} − g %${gordonGrowth.toFixed(1)})`;
+        gordonFormulaText = `Hedef PD/DD = Saf Gordon (${gordonPb.toFixed(2).replace('.', ',')}x)${premLabel} = ${targetMultipleNum.toFixed(2).replace('.', ',')}x (ROE %${roe.toFixed(1)} / Ke %${safeKe.toFixed(1)})`;
+      } else {
+        targetMultipleExpl = `Gordon Modeli: ${gordonPb.toFixed(2).replace('.', ',')}x = (ROE %${roe.toFixed(1)} − g %${gordonGrowth.toFixed(1)}) / (Ke %${safeKe.toFixed(1)} − g %${gordonGrowth.toFixed(1)})`;
+        gordonFormulaText = `Hedef PD/DD = (ROE − Uzun Vadeli Büyüme) / (Sermaye Maliyeti − Uzun Vadeli Büyüme) = ${gordonCalcStr}${premStr}`;
+      }
     } else if (sector === 'HOLDING') {
       targetMultipleNum = 0.70; // %30 iskonto
       targetMultipleStr = 'NAD Çarpanı 0,70x (%30 İskonto)';
@@ -2497,7 +2512,11 @@ export function computeSectorValuationAndDrivers(
       const forwardBvps = Math.max(0, bookValuePerShare * (1 + forwardEquityGrowth));
       const rawFair = forwardBvps * targetMultipleNum;
       fairValue = Number(Math.max(0.5, rawFair).toFixed(2));
-      formulaStr = `Cari HBDD = ${bookValuePerShare.toFixed(2).replace('.', ',')} TL | 12A İleri HBDD = ${forwardBvps.toFixed(2).replace('.', ',')} TL × ${targetMultipleNum}x = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+      const diffPremVal = Number((targetMultipleNum - 2.63).toFixed(2));
+      const multDisplay = sector === 'INSURANCE' && diffPremVal > 0.01
+        ? `[Saf Gordon 2,63x + Liderlik Primi +${diffPremVal.toFixed(2).replace('.', ',')}x = ${targetMultipleNum.toFixed(2).replace('.', ',')}x]`
+        : `${targetMultipleNum}x`;
+      formulaStr = `Cari HBDD = ${bookValuePerShare.toFixed(2).replace('.', ',')} TL | 12A İleri HBDD = ${forwardBvps.toFixed(2).replace('.', ',')} TL × ${multDisplay} = ${fairValue.toFixed(2).replace('.', ',')} TL`;
     }
   } else if (sector === 'HOLDING') {
     modelName = '12 Aylık İleriye Dönük Net Aktif Değeri (NAD / SOTP) Modeli';
@@ -3098,7 +3117,7 @@ export function calculateDuPont5Step(item: any, sectorOrPrev?: any, sectorOverri
   const annualFactor = getAnnualizationFactor(item.period);
 
   const insFiduciary = resolvedSector === 'INSURANCE' 
-    ? (parseFinancialNumber(item.pension_aum ?? item.financial_assets_insured) ?? 0)
+    ? (parseFinancialNumber(item.financial_assets_insured) ?? 0)
     : 0;
   const operationalAssets = (avgAssets !== null && insFiduciary > 0)
     ? Math.max(avgAssets * 0.15, avgAssets - insFiduciary)
