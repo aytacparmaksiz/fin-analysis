@@ -7,6 +7,7 @@ import {
 } from '@/lib/gemini';
 import { computeSectorValuationAndDrivers, syncReportTextWithValuation } from '@/lib/valuation';
 import { fetchLiveBistPrice } from '@/lib/bist-service';
+import { FinancialRatioEngine } from '@/lib/ratio-engine';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -245,6 +246,17 @@ Riskler & Emniyet Marjı: [Ayı senaryosu taban fiyatı, emniyet marjı ve izlen
     const totalCapexVal = latestItem?.total_investing_outflow;
     const netIncomeVal = latestItem?.net_income;
 
+    const shareCountNum = Number(extractedData?.shares_outstanding ?? extractedData?.share_count) || 180000000;
+    const currentPriceNum = Number(activePrice) || 100;
+    const unifiedMetrics = FinancialRatioEngine.computeMetrics({
+      ticker: resolvedTicker,
+      history: sortedHist,
+      currentPrice: currentPriceNum,
+      shareCount: shareCountNum,
+      sector,
+      currency: extractedData?.currency || 'TRY'
+    });
+
     const precomputedScorecardTable = `
 | Metrik | Puan | Max | Gerekçe |
 | :--- | :--- | :--- | :--- |
@@ -311,9 +323,17 @@ DİKKAT VE TUTARLILIK KURALI:
 11. ÇİFT NEGATİF NAKİT & KÂR KURALI: Şirketin hem Net Dönem Kârı hem de İşletme Nakit Akışı (OCF) negatif ise, Nakit Dönüşüm Oranını pozitif yüzde olarak (iki eksinin bölümü pozitif çıkar diye) ASLA gösterme ve başarılı gibi yorumlama! 'N/A (Çift Yönlü Nakit & Kâr Baskısı - Hem net zarar hem nakit yakımı)' olarak açıkla.
 12. NEGATİF FAVÖK KURALI: Şirketin FAVÖK'ü negatif ise, değerleme modelini asla klasik 'FD/FAVÖK' olarak sunma ve negatif FAVÖK ile pozitif çarpanı çarparak hedef fiyat türetmeye kalkma! Değerleme modelini '${valuation.valuation_model_name}' olarak adlandır ve İskontolu PD/DD varlık modeli üzerinden açıkla.
 13. ADİL DEĞER VE KARAR İLİŞKİSİ: Raporunda belirtilen Hisse Başı Adil Değer (${valuation.fair_value} TL) modelin hesapladığı net değerdir; rapordaki tüm metinlerde ve formüllerde kesinlikle birebir aynı sayı (${valuation.fair_value} TL) kullanılmalıdır. Eski veya alternatif hiçbir sayıyı (örneğin 9,64 TL gibi) ASLA KULLANMA!
+14. KESİNLİKLE UYULMASI GEREKEN TEK DOĞRULUK KAYNAĞI VE HALLÜSİNASYON ENGELLEYİCİ KURALLAR (STRICT GROUNDING CONSTRAINTS):
+- Aşağıdaki MERKEZİ DOĞRULUK KAYNAĞI (UNIFIED METRICS JSON) veri seti, şirketin denetlenmiş mali tablolarından deterministik olarak hesaplanmış tekil doğruluk kaynağıdır.
+- Raporda yer alan tüm operasyonel metrikler, rasyolar, çarpanlar, marjlar, şube/hastane/mağaza adetleri ve büyüme oranları KESİNLİKLE ve KESİNLİKLE bu JSON içeriği ile birebir aynı olmalıdır.
+- Verilen JSON verisi dışındaki rakam, adet ve oranları yuvarlama, tahmin etme veya dışarıdan bilgi ekleme. JSON içindeki metrikler arasında ASLA çelişki üretme (örn. bir bölümde 37 hastane derken diğerinde 36 hastane yazma).
+- Tüm finansal oranlar ve büyüklükler için KESİNLİKLE aşağıdaki doğrulanmış merkezi JSON verilerini esas al.
 Eğer Nihai Yatırım Kararı 'ALMA' ise:
     a) Eğer hisse fiyatı (${activePrice} TL) adil değerin (${valuation.fair_value} TL) üzerindeyse (${valuation.discount_pct < 0 ? `%${Math.abs(valuation.discount_pct)} primli` : ''}), hissenin piyasada adil değerinin üzerinde primli işlem gördüğü (İskonto Yok / Primli) ve operasyonel riskler nedeniyle sermaye kaybı riski taşıdığı net olarak vurgulanmalıdır. Emniyet marjı durumu 'UNSAFE' (Güvensiz / İskonto Yok) olarak belirtilmelidir.
     b) Ayı Senaryosu taban hedefi ${valuation.bear_price} TL olup, ağır nakit sıkıntısı ve kriz koşullarını yansıtmaktadır.
+
+MERKEZİ DOĞRULUK KAYNAĞI (UNIFIED METRICS JSON):
+${JSON.stringify(unifiedMetrics, null, 2)}
 
 Doğrulanmış ve Raporlardan Birebir Çıkarılmış Çok Yıllı Finansal Zaman Serisi & Rehberlik Veri Seti:
 ${typeof extractedData === 'string' ? extractedData : JSON.stringify(extractedData, null, 2)}

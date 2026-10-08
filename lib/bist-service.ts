@@ -8,6 +8,9 @@ import {
 import { getIsYatirimMultiplesForTicker } from './isyatirim-service.ts';
 import { OFFICIAL_ISYATIRIM_CACHE } from './isyatirim-official-cache.ts';
 import { getSupabase, isSupabaseConfigured } from './supabase.ts';
+import { IsYatirimApiAdapter } from './isyatirim-adapter.ts';
+import { FinancialDataValidator } from './financial-validator.ts';
+import { FinancialRatioEngine } from './ratio-engine.ts';
 
 if (typeof process !== 'undefined' && process.env) {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -872,344 +875,16 @@ export async function fetchAndAnalyzeBistCompany(
   }
 
   for (const [period, dict] of periodMap.entries()) {
-    const getValByCode = (...codes: string[]): number | null => {
-      let zeroFallback: number | null = null;
-      for (const c of codes) {
-        const v = dict[`code_${c}`];
-        if (v !== undefined) {
-          if (v !== 0) return v;
-          zeroFallback = 0;
-        }
-      }
-      return zeroFallback;
-    };
-
-    const getValByDesc = (...descSubstrings: string[]): number | null => {
-      let zeroFallback: number | null = null;
-      // 1. Tam eşleşme kontrolü (en yüksek doğruluk, önce sıfır olmayanlar)
-      for (const sub of descSubstrings) {
-        const target = sub.toLowerCase().trim();
-        const v = dict[`desc_${target}`];
-        if (v !== undefined) {
-          if (v !== 0) return v;
-          zeroFallback = 0;
-        }
-      }
-      // 2. Başlangıç eşleşmesi kontrolü
-      for (const sub of descSubstrings) {
-        const target = sub.toLowerCase().trim();
-        for (const [k, v] of Object.entries(dict)) {
-          if (!k.startsWith('desc_')) continue;
-          const descText = k.slice(5).trim();
-          if (descText.startsWith(target) && !descText.includes('yöntemiyle değerlenen')) {
-            if (v !== 0) return v;
-            zeroFallback = 0;
-          }
-        }
-      }
-      // 3. Alt metin eşleşmesi kontrolü
-      for (const sub of descSubstrings) {
-        const target = sub.toLowerCase().trim();
-        for (const [k, v] of Object.entries(dict)) {
-          if (!k.startsWith('desc_')) continue;
-          const descText = k.slice(5).trim();
-          if (descText.includes(target) && !descText.includes('yöntemiyle değerlenen')) {
-            if (v !== 0) return v;
-            zeroFallback = 0;
-          }
-        }
-      }
-      return zeroFallback;
-    };
-
-    let revenue: number | null = null;
-    let gross_profit: number | null = null;
-    let operating_profit: number | null = null;
-    let net_income: number | null = null;
-    let ebitda: number | null = null;
-    let current_assets: number | null = null;
-    let non_current_assets: number | null = null;
-    let total_assets: number | null = null;
-    let current_liabilities: number | null = null;
-    let long_term_liabilities: number | null = null;
-    let total_liabilities: number | null = null;
-    let equity: number | null = null;
-    let paid_in_capital: number | null = null;
-    let cash_and_equivalents: number | null = null;
-    let short_term_debt: number | null = null;
-    let long_term_debt: number | null = null;
-    let net_debt: number | null = null;
-    let operating_cash_flow: number | null = null;
-    let grossOcf: number | null = null;
-    let netOcf: number | null = null;
-    let capex: number | null = null;
-    let tangibleCapex: number | null = null;
-    let totalCapex: number | null = null;
-    let free_cash_flow: number | null = null;
-    let trade_receivables: number | null = null;
-    let inventories: number | null = null;
-
-    // Sektör Özel Alanları
-    let written_premiums: number | null = null;
-    let earned_premiums: number | null = null;
-    let technical_profit: number | null = null;
-    let investment_income: number | null = null;
-    let financial_assets_insured: number | null = null;
-    let pension_aum: number | null = null;
-    let loss_ratio: number | null = null;
-    let expense_ratio: number | null = null;
-    let ga_ratio: number | null = null;
-    let commission_ratio: number | null = null;
-    let combined_ratio: number | null = null;
-
-    if (meta.sector === 'INSURANCE') {
-      cash_and_equivalents = getValByCode('1A') ?? getValByDesc('nakit ve nakit benzer');
-      financial_assets_insured = getValByCode('1B') ?? getValByDesc('finansal varlıklar ile riski sigortalılara ait', 'riski sigortalılara ait finansal', 'finansal varlıklar');
-      trade_receivables = getValByCode('1C') ?? getValByDesc('esas faaliyetlerden alacaklar', 'sigortacılık faaliyetlerinden alacaklar');
-      pension_aum = getValByCode('1JH', '2KD') ?? getValByDesc('emeklilik faaliyetlerinden borçlar', 'emeklilik faaliyetlerinden alacaklar');
-      if (!pension_aum && OFFICIAL_PENSION_AUM_SERIES[ticker]?.[period]) {
-        pension_aum = OFFICIAL_PENSION_AUM_SERIES[ticker][period];
-      }
-      current_assets = getValByCode('1H') ?? getValByDesc('cari varlıklar toplamı', 'dönen varlıklar toplamı');
-      non_current_assets = getValByCode('1S') ?? getValByDesc('cari olmayan varlıklar toplamı', 'duran varlıklar toplamı');
-      total_assets = getValByCode('1T', '1Z') ?? getValByDesc('varlıklar toplamı', 'aktif toplamı', 'toplam varlık') ?? (((current_assets || 0) + (non_current_assets || 0)) || null);
-
-      current_liabilities = getValByCode('2I') ?? getValByDesc('kısa vadeli yükümlülükler toplamı', 'kısa vadeli yükümlülükler');
-      long_term_liabilities = getValByCode('2MDZ') ?? getValByDesc('uzun vadeli yükümlülükler toplamı', 'uzun vadeli yükümlülükler');
-      total_liabilities = (current_liabilities || 0) + (long_term_liabilities || 0);
-
-      paid_in_capital = getValByCode('2MEA') ?? getValByDesc('ödenmiş sermaye');
-      equity = getValByCode('2O') ?? getValByDesc('özsermaye toplamı', 'özkaynaklar toplamı', 'özkaynak');
-
-      // Prim Üretimi: 
-      // 3DAAB: Hayat Brüt Yazılan Primler (AGESA, ANHYT vb. Hayat & Emeklilik şirketleri)
-      // 3AAAA: Hayat Dışı Brüt Yazılan Primler (AKGRT, TURSG, ANSGR vb. Elementer sigorta şirketleri)
-      const lifeWritten = getValByCode('3DAAB') ?? getValByDesc('1.1.1- brüt yazılan primler');
-      const nonLifeWritten = getValByCode('3AAAA') ?? getValByDesc('brüt yazılan primler');
-      if (lifeWritten !== null && lifeWritten > 0) {
-        // Hayat ve Emeklilik Şirketleri (AGESA, ANHYT vb.): Resmi Brüt Yazılan Prim 3DAAB'dir.
-        written_premiums = lifeWritten;
-      } else {
-        // Hayat Dışı Sigorta Şirketleri (TURSG, ANSGR, AKGRT vb.): Resmi Brüt Yazılan Prim 3AAAA'dır.
-        written_premiums = nonLifeWritten ?? getValByDesc('brüt yazılan primler', 'yazılan primler');
-      }
-      revenue = written_premiums;
-
-      const lifeEarned = getValByCode('3DAA');
-      const nonLifeEarned = getValByCode('3AA');
-      if (lifeEarned !== null && lifeEarned > 0) {
-        earned_premiums = lifeEarned;
-      } else {
-        earned_premiums = nonLifeEarned ?? getValByDesc('kazanılmış primler');
-      }
-
-      // Genel Teknik Kâr / Bölüm Dengesi:
-      // 3K: J- Genel Teknik Bölüm Dengesi (Tüm branşların konsolide teknik kârı)
-      // 3F: F- Teknik Bölüm Dengesi- Hayat
-      // 3C/3H: C- Teknik Bölüm Dengesi- Hayat Dışı
-      technical_profit =
-        getValByCode('3K') ??
-        getValByCode('3F') ??
-        getValByDesc('genel teknik bölüm dengesi', 'j- genel teknik bölüm dengesi') ??
-        getValByDesc('hayat teknik bölüm dengesi', 'f- teknik bölüm dengesi- hayat') ??
-        getValByCode('3C', '3H') ??
-        getValByDesc('teknik bölüm dengesi');
-
-      investment_income = getValByCode('3L', '3DB', '3DAEA') ?? getValByDesc('yatırım gelirleri', 'teknik olmayan bölümden aktarılan yatırım gelirleri');
-      net_income = getValByCode('2MEZ', '3NJA', '3Z') ?? getValByDesc('dönem net karı veya zararı', 'dönem net karı', 'dönem net kar', 'ana ortaklık payları');
-
-      if (
-        written_premiums &&
-        written_premiums > 0 &&
-        net_income &&
-        net_income > written_premiums * 0.08 &&
-        (technical_profit === null || Math.abs(technical_profit) < written_premiums * 0.03)
-      ) {
-        technical_profit = Math.round(net_income * 0.82);
-      }
-      ebitda = technical_profit;
-      operating_profit = technical_profit;
-
-      const claimsIncurred = getValByCode('3DAB', '3DABA', '3AB') ?? getValByDesc('gerçekleşen hasarlar');
-      const opExpenses = getValByCode('3DAD', '3DADA', '3AD') ?? getValByDesc('faaliyet giderleri');
-      const basePremium = (earned_premiums && Math.abs(earned_premiums) > 0) ? Math.abs(earned_premiums) : (written_premiums && Math.abs(written_premiums) > 0 ? Math.abs(written_premiums) : null);
-
-      ga_ratio = null;
-      commission_ratio = null;
-
-      if (basePremium && basePremium > 0) {
-        if (claimsIncurred !== null) {
-          const lr = (Math.abs(claimsIncurred) / basePremium) * 100;
-          if (lr > 5 && lr < 140) loss_ratio = Number(lr.toFixed(1));
-        }
-        if (opExpenses !== null) {
-          const er = (Math.abs(opExpenses) / basePremium) * 100;
-          if (er > 2 && er < 80) ga_ratio = Number(er.toFixed(1));
-        }
-        if (technical_profit !== null) {
-          const impliedMargin = (technical_profit / basePremium) * 100;
-          const impliedComb = 100 - Math.max(-30, Math.min(35, impliedMargin));
-          combined_ratio = Number(impliedComb.toFixed(1));
-          if (loss_ratio === null || loss_ratio < 35) loss_ratio = Number((combined_ratio * 0.76).toFixed(1));
-          expense_ratio = Number((combined_ratio - loss_ratio).toFixed(1));
-        } else if (loss_ratio !== null && ga_ratio !== null) {
-          expense_ratio = Number((ga_ratio + 10.9).toFixed(1));
-          combined_ratio = Number((loss_ratio + expense_ratio).toFixed(1));
-        } else if (loss_ratio !== null && expense_ratio !== null && (loss_ratio + expense_ratio) >= 55) {
-          combined_ratio = Number((loss_ratio + expense_ratio).toFixed(1));
-        }
-
-        // Masraf Oranı alt kırılım kontrolü (G&A + Komisyon)
-        if (expense_ratio !== null) {
-          if (ga_ratio === null || ga_ratio >= expense_ratio) {
-            ga_ratio = Number((expense_ratio * 0.44).toFixed(1));
-          }
-          commission_ratio = Number(Math.max(0, expense_ratio - ga_ratio).toFixed(1));
-        }
-      }
-
-      net_debt = cash_and_equivalents !== null ? -cash_and_equivalents : null;
-      operating_cash_flow = (net_income || 0) + ((written_premiums || 0) * 0.12);
-      free_cash_flow = operating_cash_flow;
-
-    } else if (meta.sector === 'BANKING') {
-      cash_and_equivalents = getValByCode('1A', '1AA') ?? getValByDesc('nakit değerler ve merkez bankası', 'nakit ve nakit benzer');
-      financial_assets_insured = getValByCode('1B', '1C', '1D') ?? getValByDesc('gerçeğe uygun değer farkı kar/zarara yansıtılan finansal varlıklar', 'finansal varlıklar', 'menkul değerler');
-      trade_receivables = getValByCode('1E', '1F', '1DA') ?? getValByDesc('krediler', 'kredi ve alacaklar');
-      total_assets = getValByCode('1S', '1Z', '1') ?? getValByDesc('varlıklar toplamı', 'aktif toplamı', 'toplam varlıklar');
-      current_assets = (cash_and_equivalents || 0) + (financial_assets_insured || 0) + (trade_receivables || 0) || (total_assets ? Math.round(total_assets * 0.68) : null);
-      non_current_assets = (total_assets && current_assets) ? Math.max(0, total_assets - current_assets) : null;
-
-      current_liabilities = getValByCode('2A') ?? getValByDesc('mevduat', 'toplanan fonlar');
-      paid_in_capital = getValByCode('2OA', '2PA', '2MEA') ?? getValByDesc('ödenmiş sermaye');
-      equity = getValByCode('2O', '2P', '2N') ?? getValByDesc('özkaynaklar toplamı', 'özsermaye toplamı', 'özkaynaklar');
-      total_liabilities = (total_assets && equity) ? Math.max(0, total_assets - equity) : current_liabilities;
-      long_term_liabilities = (total_liabilities && current_liabilities) ? Math.max(0, total_liabilities - current_liabilities) : null;
-
-      revenue = getValByCode('3C', '3CA') ?? getValByDesc('net faiz geliri veya gideri', 'net faiz geliri');
-      gross_profit = getValByCode('3H', '3I') ?? getValByDesc('brüt faaliyet karı', 'faaliyet gelirleri toplamı');
-      operating_profit = getValByCode('3M', '3N', '3H') ?? getValByDesc('net faaliyet karı veya zararı', 'sürdürülen faaliyetler vergi öncesi');
-      ebitda = operating_profit ?? gross_profit;
-      net_income = getValByCode('3Z', '3U', '2OZ', '2MEZ') ?? getValByDesc('dönem net karı veya zararı', 'dönem net karı', 'net dönem karı');
-
-      operating_cash_flow = getValByCode('4A', '4CAE') ?? getValByDesc('işletme faaliyetlerinden nakit') ?? net_income;
-      free_cash_flow = operating_cash_flow;
-
-    } else {
-      // SANAYİ, TİCARET, HOLDİNG, GYO, HİZMET (XI_29 Formatı)
-      current_assets = getValByDesc('toplam dönen varlıklar') ?? getValByCode('1A') ?? getValByDesc('dönen varlıklar');
-      cash_and_equivalents = getValByCode('1AA') ?? getValByDesc('nakit ve nakit benzerleri');
-      financial_assets_insured = getValByCode('1AB') ?? getValByDesc('finansal yatırımlar');
-      trade_receivables = getValByCode('1AC') ?? getValByDesc('ticari alacaklar');
-      inventories = getValByCode('1AF') ?? getValByDesc('stoklar');
-      non_current_assets = getValByDesc('toplam duran varlıklar') ?? getValByCode('1BL', '1BZ', '1B', '1AK') ?? getValByDesc('duran varlıklar');
-      total_assets = getValByDesc('toplam varlıklar', 'aktif toplamı') ?? getValByCode('1Z', '1') ?? (((current_assets || 0) + (non_current_assets || 0)) || null);
-
-      current_liabilities = getValByDesc('toplam kısa vadeli yükümlülükler') ?? getValByCode('2A') ?? getValByDesc('kısa vadeli yükümlülükler');
-      short_term_debt = getValByCode('2AA') ?? getValByDesc('kısa vadeli borçlanmalar', 'finansal borçlar');
-      long_term_liabilities = getValByDesc('toplam uzun vadeli yükümlülükler') ?? getValByCode('2B') ?? getValByDesc('uzun vadeli yükümlülükler');
-      long_term_debt = getValByCode('2BA') ?? getValByDesc('uzun vadeli borçlanmalar', 'uzun vadeli finansal borç');
-      total_liabilities = (current_liabilities || 0) + (long_term_liabilities || 0);
-
-      if (short_term_debt !== null || long_term_debt !== null || cash_and_equivalents !== null) {
-        net_debt = (short_term_debt || 0) + (long_term_debt || 0) - (cash_and_equivalents || 0) - (financial_assets_insured || 0);
-      }
-
-      equity = getValByDesc('ana ortaklığa ait özkaynaklar', 'toplam özkaynaklar') ?? getValByCode('2N', '2O') ?? getValByDesc('özkaynaklar');
-      paid_in_capital = getValByCode('2NA', '2MEA') ?? getValByDesc('ödenmiş sermaye', 'çıkarılmış sermaye');
-
-      // Muhasebe Özdeşliği (Aktif = Pasif) Kontrolü: Duran Varlıklar 0 veya eksik kalmışsa Pasif toplamından tamamla
-      if (total_liabilities > 0 && equity && equity > 0) {
-        const impliedTotalAssets = total_liabilities + equity;
-        if (!total_assets || (current_assets && total_assets <= current_assets && impliedTotalAssets > current_assets)) {
-          total_assets = impliedTotalAssets;
-        }
-      }
-      if (total_assets && current_assets && (!non_current_assets || non_current_assets <= 0) && total_assets > current_assets) {
-        non_current_assets = total_assets - current_assets;
-      } else if (current_assets && non_current_assets && (!total_assets || total_assets < current_assets + non_current_assets)) {
-        total_assets = current_assets + non_current_assets;
-      }
-
-      revenue = getValByCode('3C', '3A') ?? getValByDesc('satış gelirleri', 'hasılat');
-      gross_profit = getValByCode('3D', '3') ?? getValByDesc('ticari faaliyetlerden brüt kar', 'brüt kar (zarar)', 'brüt kar');
-      operating_profit = getValByCode('3H', '3M', '3N', '3L', '3G', '3I') ?? 
-        getValByDesc('esas faaliyet karı (zararı)', 'esas faaliyet karı', 'esas faaliyet kar', 'faaliyet karı (zararı)', 'faaliyet karı', 'net faaliyet kar', 'faaliyet kar veya zararı', 'sürdürülen faaliyetler vergi öncesi karı');
-      
-      // Eğer doğrudan faaliyet karı ayrışmamışsa brüt kâr ve hasılat üzerinden sektör normlarıyla rasyonel operasyonel kâr
-      if (operating_profit === null && gross_profit !== null) {
-        operating_profit = Math.round(gross_profit * 0.45);
-      }
-
-      net_income = getValByCode('2OCF', '3Z', '3U', '2MEZ', '2OV') ?? getValByDesc('dönem net karı veya zararı', 'dönem karı (zararı)', 'dönem net kar', 'ana ortaklık payları');
-
-      const amort = getValByCode('4B', '4CAB') ?? getValByDesc('amortisman ve itfa gideri ile ilgili düzeltmeler', 'amortisman');
-      if (operating_profit !== null) {
-        ebitda = operating_profit + (amort !== null ? Math.abs(amort) : (revenue ? Math.abs(revenue) * 0.05 : 0));
-      }
-
-      const grossOcf = getValByCode('4A') ?? getValByDesc('işletme sermayesinde gerçekleşen değişimler öncesi', 'faaliyetlerden kaynaklanan nakit akışları');
-      const netOcf = getValByCode('4CAE', '4A_NET') ?? getValByDesc('işletme faaliyetlerinden kaynaklanan net nakit', 'işletme faaliyetlerinden net nakit');
-      operating_cash_flow = netOcf ?? grossOcf ?? getValByCode('4CAE', '4A') ?? getValByDesc('işletme faaliyetlerinden nakit akışları', 'işletme faaliyetlerinden nakit');
-
-      const tangibleCapex = getValByCode('4CBD', '4CBDA') ?? getValByDesc('maddi ve maddi olmayan duran varlıkların alımından kaynaklanan nakit çıkışları', 'maddi duran varlık alım');
-      const totalCapex = getValByCode('4CB') ?? getValByDesc('yatırım faaliyetlerinden kaynaklanan nakit');
-      capex = tangibleCapex ?? totalCapex ?? getValByCode('4CBD') ?? getValByDesc('maddi ve maddi olmayan duran varlıkların alımından kaynaklanan nakit çıkışları', 'maddi duran varlık alım');
-
-      if (operating_cash_flow !== null) {
-        free_cash_flow = operating_cash_flow - Math.abs(capex || (revenue ? Math.abs(revenue) * 0.04 : 0));
-      }
-    }
-
-    const financial_debt = (short_term_debt !== null || long_term_debt !== null)
-      ? (short_term_debt || 0) + (long_term_debt || 0)
-      : null;
-
-    historyItems.push({
-      period,
-      revenue,
-      gross_profit,
-      operating_profit,
-      operating_income: operating_profit,
-      ebitda,
-      net_income,
-      current_assets,
-      non_current_assets,
-      total_assets,
-      current_liabilities,
-      long_term_liabilities,
-      total_liabilities,
-      equity,
-      paid_in_capital,
-      cash_and_equivalents,
-      short_term_debt,
-      long_term_debt,
-      financial_debt,
-      net_debt,
-      operating_cash_flow,
-      gross_operating_cash_flow: grossOcf,
-      net_operating_cash_flow: netOcf ?? operating_cash_flow,
-      capex,
-      tangible_capex: tangibleCapex,
-      total_investing_outflow: totalCapex,
-      free_cash_flow,
-      gross_free_cash_flow: grossOcf !== null ? (grossOcf - Math.abs(totalCapex || capex || 0)) : null,
-      trade_receivables,
-      inventories,
-      written_premiums,
-      gross_written_premiums: written_premiums,
-      earned_premiums,
-      technical_profit,
-      technical_balance: technical_profit,
-      investment_income,
-      financial_assets_insured,
-      pension_aum,
-      loss_ratio,
-      expense_ratio,
-      ga_ratio,
-      commission_ratio,
-      combined_ratio
+    const rawMapped = IsYatirimApiAdapter.mapPeriodDictionary(period, dict, {
+      ticker,
+      sector: meta.sector,
+      financialGroup: meta.financialGroup
     });
+    if (!rawMapped.pension_aum && OFFICIAL_PENSION_AUM_SERIES[ticker]?.[period]) {
+      rawMapped.pension_aum = OFFICIAL_PENSION_AUM_SERIES[ticker][period];
+    }
+    const valRes = FinancialDataValidator.validateItem(rawMapped, meta.sector);
+    historyItems.push(valRes.reconciledItem);
   }
 
   // 4.1. Canlı İş Yatırım verisi geldiyse hem bellek önbelleğine hem de Supabase'e kaydet:
@@ -1352,6 +1027,22 @@ export async function fetchAndAnalyzeBistCompany(
     meta.sector
   );
 
+  // 8. Tek Doğruluk Kaynağı: Merkezi Rasyo ve Metrik Motorunu Çalıştır
+  const unifiedMetrics = FinancialRatioEngine.computeMetrics({
+    ticker,
+    history: sanitized.financial_history,
+    currentPrice,
+    shareCount: effectiveShareCount,
+    sector: meta.sector,
+    marketMultiples: isMultiples ? {
+      pe: isMultiples.pe,
+      pb: isMultiples.pb,
+      evEbitda: isMultiples.evEbitda,
+      evSales: isMultiples.evSales
+    } : null,
+    currency: 'TRY'
+  });
+
   return {
     success: true,
     source: 'BIST_OFFICIAL_FEED',
@@ -1368,6 +1059,7 @@ export async function fetchAndAnalyzeBistCompany(
     drivers: valuationEngineResult.drivers,
     scoreResult: valuationEngineResult.scoreResult,
     optimization: valuationEngineResult.optimization,
+    unified_metrics: unifiedMetrics,
     market_multiples: isMultiples ? {
       pe: isMultiples.pe,
       pb: isMultiples.pb,
@@ -1383,3 +1075,8 @@ export async function fetchAndAnalyzeBistCompany(
     generatedAt: new Date().toISOString()
   };
 }
+
+export { IsYatirimApiAdapter } from './isyatirim-adapter.ts';
+export { FinancialDataValidator } from './financial-validator.ts';
+export { FinancialRatioEngine } from './ratio-engine.ts';
+

@@ -849,7 +849,20 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     // Nakit Akış Kalemleri: Yalnızca deterministik bağıntı (FCF = OCF - CAPEX)
     if (item.free_cash_flow == null && item.operating_cash_flow != null && item.capex != null) {
       item.free_cash_flow = item.operating_cash_flow - item.capex;
+    } else if (item.capex == null && item.operating_cash_flow != null && item.free_cash_flow != null) {
+      item.capex = Math.abs(item.operating_cash_flow - item.free_cash_flow);
     }
+
+    // Bilanço Denkliği Kontrolü: Aktif = Dönen + Duran
+    if (item.current_assets != null && item.non_current_assets != null) {
+      const expectedAssets = item.current_assets + item.non_current_assets;
+      if (item.total_assets == null || Math.abs(item.total_assets - expectedAssets) > expectedAssets * 0.01) {
+        item.total_assets = expectedAssets;
+      }
+    } else if (item.total_assets != null && item.current_assets != null && (item.non_current_assets == null || item.non_current_assets <= 0) && item.total_assets > item.current_assets) {
+      item.non_current_assets = item.total_assets - item.current_assets;
+    }
+
     if (item.net_debt == null) {
       const cashVal = item.cash_and_equivalents ?? item.cash ?? 0;
       if (detectedSector === 'INSURANCE') {
@@ -3038,6 +3051,8 @@ export interface Dupont5StepResult {
   reportedRoe: number | null;
   driverSummary: string;
 }
+
+export type DuPont5StepResult = Dupont5StepResult;
 
 export function calculateDuPont5Step(item: any, sectorOrPrev?: any, sectorOverride?: SectorType): Dupont5StepResult {
   if (!item || typeof item !== 'object') {

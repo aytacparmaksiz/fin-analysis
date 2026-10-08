@@ -66,6 +66,7 @@ import {
   cleanAndParseJson,
   syncReportTextWithValuation
 } from '@/lib/valuation';
+import { FinancialRatioEngine, type UnifiedFinancialMetrics } from '@/lib/ratio-engine';
 import { extractSmartFinancialText, extractSmartDocumentText, splitScannedPdfIntoChunks, DocumentCategory } from '@/lib/pdf-filter';
 
 // Gateway Timeout, kurumsal proxy ve HTML hata sayfalarını yakalayan güvenli API yanıt ayrıştırıcısı
@@ -3139,13 +3140,33 @@ export default function ValuationTerminal({
   const latestPeriodItem = chartData.length > 0 ? chartData[chartData.length - 1] : null;
   const previousPeriodItem = chartData.length > 1 ? chartData[chartData.length - 2] : null;
 
+  const unifiedMetrics: UnifiedFinancialMetrics | null = useMemo(() => {
+    if (!chartData || chartData.length === 0) return null;
+    const sc = parseFinancialNumber(currentExtractedData?.shares_outstanding ?? currentExtractedData?.share_count) ?? 180000000;
+    return FinancialRatioEngine.computeMetrics({
+      ticker: currentTicker || 'BIST',
+      history: chartData,
+      currentPrice: valuationInfo.current_price || currentMarketPrice || 0,
+      shareCount: sc,
+      sector: currentSector,
+      marketMultiples: marketMultiples ? {
+        pe: marketMultiples.pe ?? null,
+        pb: marketMultiples.pb ?? null,
+        evEbitda: marketMultiples.ev_ebitda ?? marketMultiples.evEbitda ?? null,
+        evSales: marketMultiples.ev_sales ?? marketMultiples.evSales ?? null,
+      } : null,
+      currency: currentExtractedData?.currency || 'TRY',
+    });
+  }, [chartData, currentTicker, valuationInfo.current_price, currentMarketPrice, currentExtractedData?.shares_outstanding, currentExtractedData?.share_count, currentExtractedData?.currency, currentSector, marketMultiples]);
+
   const earningsQuality = useMemo(() => {
     return calculateEarningsQuality(chartData, currentSector);
   }, [chartData, currentSector]);
 
   const dupontResult = useMemo(() => {
+    if (unifiedMetrics?.dupont) return unifiedMetrics.dupont;
     return calculateDuPont5Step(latestPeriodItem, previousPeriodItem, currentSector);
-  }, [latestPeriodItem, previousPeriodItem, currentSector]);
+  }, [unifiedMetrics, latestPeriodItem, previousPeriodItem, currentSector]);
 
   const companyMultiplesData = useMemo(() => {
     const sc = parseFinancialNumber(currentExtractedData?.shares_outstanding ?? currentExtractedData?.share_count) ?? 180000000;
