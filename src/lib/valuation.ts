@@ -1957,12 +1957,39 @@ export function computeFairValueTrend(
     const pSharePrice = parseFinancialNumber(item?.share_price);
 
     const unitScale = (item?.is_thousands === true || (item?.total_assets && Math.abs(item.total_assets) < 500_000_000)) ? 1000 : 1;
-    const periodAnnualFactor = getAnnualizationFactor(item?.period);
+
+    // TTM (Son 12 Ay) Hesabı: Düz çarpma (3A*4, 6A*2) KESİNLİKLE yasaktır, mevsimselliği bozar!
+    const computePointTtm = (field: string): number => {
+      const pStr = String(item?.period || '');
+      const parts = pStr.split('/');
+      const yr = parts.length === 2 ? parseInt(parts[0], 10) : NaN;
+      const q = parts.length === 2 ? parts[1] : '';
+
+      const currentVal = parseFinancialNumber(item?.[field]) ?? 0;
+      if (q === '12' || q === '12A' || !['03', '06', '09', '3A', '6A', '9A'].includes(q)) {
+        return currentVal * unitScale;
+      }
+
+      // Standart TTM Formülü: TTM = (Cari Ara Dönem) + (Önceki Yıl Sonu) - (Önceki Yıl Eşleşen Dönem)
+      if (!isNaN(yr) && sorted.length > 2) {
+        const prevYearEndItem = sorted.find((d: any) => d.period === `${yr - 1}/12`);
+        const prevYearMatchItem = sorted.find((d: any) => d.period === `${yr - 1}/${q}`);
+        const vEnd = parseFinancialNumber(prevYearEndItem?.[field]);
+        const vMatch = parseFinancialNumber(prevYearMatchItem?.[field]);
+        if (vEnd !== null && vMatch !== null) {
+          const ttmVal = currentVal + vEnd - vMatch;
+          if (ttmVal > 0) return ttmVal * unitScale;
+        }
+      }
+
+      const factor = getAnnualizationFactor(item?.period);
+      return currentVal * unitScale * factor;
+    };
 
     const eq = (parseFinancialNumber(item?.equity) ?? 0) * unitScale;
     const netDebt = (parseFinancialNumber(item?.net_debt) ?? 0) * unitScale;
-    const ebitda = (parseFinancialNumber(item?.ebitda) ?? 0) * unitScale * periodAnnualFactor;
-    const netInc = (parseFinancialNumber(item?.net_income) ?? 0) * unitScale * periodAnnualFactor;
+    const ebitda = computePointTtm('ebitda');
+    const netInc = computePointTtm('net_income');
 
     let periodFv = 0;
 
@@ -1982,8 +2009,22 @@ export function computeFairValueTrend(
     } else if (sector === 'HOLDING') {
       const navPerShare = eq > 0 ? (eq / effectiveShareCount) : 1;
       periodFv = navPerShare * 0.70;
+    } else if (sector === 'AVIATION') {
+      // Havacılık & Ulaştırma (THYAO, PGSUS, TAVHL): Yüksek filo borçluluğu ve IFRS 16 leasing
+      const mult = 5.2;
+      const evEq = Math.max(0, ebitda * mult - netDebt);
+      const evPerShare = evEq > 0 ? (evEq / effectiveShareCount) : 0;
+      const pePerShare = netInc > 0 ? ((netInc * 6.5) / effectiveShareCount) : 0;
+      const pbPerShare = (eq / effectiveShareCount) * 0.82;
+
+      const parts: number[] = [];
+      if (evPerShare > 0) parts.push(evPerShare);
+      if (pePerShare > 0) parts.push(pePerShare);
+      if (pbPerShare > 0) parts.push(pbPerShare);
+
+      periodFv = parts.length > 0 ? (parts.reduce((a, b) => a + b, 0) / parts.length) : (pbPerShare || 1.0);
     } else {
-      // Reel Sektör / Sanayi / Havacılık / Teknoloji
+      // Reel Sektör / Sanayi / Teknoloji / Enerji / Perakende
       if (eq <= 0) {
         periodFv = 0.05;
       } else if (ebitda <= 0) {
@@ -1995,7 +2036,7 @@ export function computeFairValueTrend(
         const wacc = parseFinancialNumber(item?.benchmark_wacc ?? item?.real_wacc ?? item?.wacc ?? 28) ?? 28;
         const evaSpread = roic - wacc;
 
-        let mult = 7.0;
+        let mult = sector === 'TECH' ? 8.5 : (sector === 'RETAIL' ? 6.2 : 7.0);
         let justifiedPb = roe > 25 ? 1.8 : (roe > 12 ? 1.2 : 0.85);
         let evaDiscount = 0;
 
@@ -3192,10 +3233,36 @@ export function computeSectorValuationAndDrivers(
     const latestNet = parseFinancialNumber(latest?.net_income) ?? 0;
     const latestEq = parseFinancialNumber(latest?.equity) ?? 0;
 
-    // 3A / 6A / 9A dönemlerini yıllıklandır (TTM eşdeğeri)
-    const ebitdaFull = latestEbitda * unitScale * periodAnnualFactor;
-    const revFull = latestRev * unitScale * periodAnnualFactor;
-    const netFull = latestNet * unitScale * periodAnnualFactor;
+    // TTM (Son 12 Ay) Standartlaştırması:
+    // Düz çarpma (3A*4) mevsimselliği bozar. Geçmiş çeyrekler varsa standart TTM hesaplanır.
+    const historySeries = Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : [];
+    const getTtmOrAnnualized = (field: string, rawLatestVal: number): number => {
+      if (rawLatestVal <= 0 && field === 'ebitda') return rawLatestVal * unitScale;
+      const pStr = String(latest?.period || '');
+      const parts = pStr.split('/');
+      const yr = parts.length === 2 ? parseInt(parts[0], 10) : NaN;
+      const q = parts.length === 2 ? parts[1] : '';
+
+      if (q === '12' || q === '12A' || !['03', '06', '09', '3A', '6A', '9A'].includes(q)) {
+        return rawLatestVal * unitScale;
+      }
+
+      if (!isNaN(yr) && historySeries.length > 2) {
+        const prevYearEnd = historySeries.find((d: any) => d.period === `${yr - 1}/12`);
+        const prevYearMatch = historySeries.find((d: any) => d.period === `${yr - 1}/${q}`);
+        const vEnd = parseFinancialNumber(prevYearEnd?.[field]);
+        const vMatch = parseFinancialNumber(prevYearMatch?.[field]);
+        if (vEnd !== null && vMatch !== null) {
+          const ttmVal = rawLatestVal + vEnd - vMatch;
+          if (ttmVal > 0) return ttmVal * unitScale;
+        }
+      }
+      return rawLatestVal * unitScale * periodAnnualFactor;
+    };
+
+    const ebitdaFull = getTtmOrAnnualized('ebitda', latestEbitda);
+    const revFull = getTtmOrAnnualized('revenue', latestRev);
+    const netFull = getTtmOrAnnualized('net_income', latestNet);
     const totalEquityFull = latestEq * unitScale;
     const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
 
