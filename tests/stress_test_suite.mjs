@@ -177,8 +177,32 @@ describe('Comprehensive Financial Terminal Stress Test Suite', () => {
 
     it('falls back to Industrial for general tickers', () => {
       assert.equal(detectSector('EREGL'), 'INDUSTRIAL');
-      assert.equal(detectSector('THYAO'), 'INDUSTRIAL');
       assert.equal(detectSector('FROTO'), 'INDUSTRIAL');
+      assert.equal(detectSector('KRDMD'), 'INDUSTRIAL');
+    });
+
+    it('detects Aviation tickers and keywords', () => {
+      assert.equal(detectSector('THYAO'), 'AVIATION');
+      assert.equal(detectSector('PGSUS'), 'AVIATION');
+      assert.equal(detectSector('TAVHL'), 'AVIATION');
+      assert.equal(detectSector('XYZ', 'Havacılık yolcu trafiği ve filo'), 'AVIATION');
+    });
+
+    it('detects Retail tickers and keywords', () => {
+      assert.equal(detectSector('BIMAS'), 'RETAIL');
+      assert.equal(detectSector('MGROS'), 'RETAIL');
+      assert.equal(detectSector('CCOLA'), 'RETAIL');
+    });
+
+    it('detects Utilities & Telco tickers and keywords', () => {
+      assert.equal(detectSector('ENJSA'), 'UTILITIES_TELCO');
+      assert.equal(detectSector('TCELL'), 'UTILITIES_TELCO');
+      assert.equal(detectSector('TTKOM'), 'UTILITIES_TELCO');
+    });
+
+    it('detects Financial Services (Factoring/Leasing) tickers and keywords', () => {
+      assert.equal(detectSector('VAKFN'), 'FINANCIAL_SERVICES');
+      assert.equal(detectSector('GSDHO'), 'FINANCIAL_SERVICES');
     });
   });
 

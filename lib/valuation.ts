@@ -1,4 +1,4 @@
-import { SECTOR_SCORING_CONFIG, detectSector, type SectorType } from './sectors.ts';
+import { SECTOR_SCORING_CONFIG, detectSector, type SectorType, isMetricDisabled } from './sectors.ts';
 
 export interface DriverDetail {
   value: number;
@@ -406,9 +406,13 @@ export function getDamodaranUnleveredBeta(sector: SectorType, ticker?: string, c
 
   if (sector === 'INSURANCE') return 0.95;
   if (sector === 'BANKING') return 1.15;
+  if (sector === 'FINANCIAL_SERVICES') return 1.05;
   if (sector === 'HOLDING') return 0.92;
   if (sector === 'REIT') return 0.85;
   if (sector === 'TECH') return 1.25;
+  if (sector === 'AVIATION') return 0.95;
+  if (sector === 'RETAIL') return 0.68;
+  if (sector === 'UTILITIES_TELCO') return 0.72;
 
   // Sağlık & İlaç (Healthcare & Pharmaceuticals - Defansif / Düşük Beta)
   if (['MPARK', 'LKMNH', 'TNZTP', 'GENIL', 'SELEC', 'TRILC', 'MEDTR'].includes(t) || /sağlık|hastane|ilaç|tıbbi/i.test(secName)) {
@@ -877,13 +881,15 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     // =========================================================================
     // 1. Dönem Bazlı Makro Parametreler (10Y TR Tahvil Risksiz Faiz Rf, ERP ve Borçlanma Faizi Kd)
     // Kural 6: Çoklu Currency ve Döviz Ağırlıklı Borç Yapısı Standardı
+    const tickerStr = String(item.ticker || container?.ticker || '').toUpperCase();
+    const isAviationTicker = ['THYAO', 'PGSUS', 'TAVHL', 'CLEBI'].includes(tickerStr);
     const reportCurrency = String(item.currency || container?.currency || 'TRY').toUpperCase();
-    const isForeignCurrency = ['USD', 'EUR', 'GBP'].includes(reportCurrency);
+    const isForeignCurrency = ['USD', 'EUR', 'GBP'].includes(reportCurrency) || (detectedSector === 'AVIATION' && isAviationTicker);
 
     let rf = 30.0; // Risksiz faiz oranı
     let erp = 7.5; // Hisse Senedi Risk Primi
     let preTaxKd = 46.0; // Kurumsal Ticari Kredi Faizi (%)
-    const taxRate = (detectedSector === 'BANKING' || detectedSector === 'INSURANCE') ? 0.30 : (detectedSector === 'REIT' ? 0.0 : 0.25);
+    const taxRate = (detectedSector === 'BANKING' || detectedSector === 'INSURANCE' || detectedSector === 'FINANCIAL_SERVICES') ? 0.30 : (detectedSector === 'REIT' ? 0.0 : 0.25);
 
     if (isForeignCurrency) {
       rf = reportCurrency === 'EUR' ? 2.8 : 4.25; // 10Y US Treasury / German Bund
@@ -920,15 +926,15 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
 
     if (intExpense !== null && intExpense > 0 && avgFinDebt > 0) {
       const calculatedKd = (intExpense / avgFinDebt) * annualFactor * 100;
-      const isFxHeavyDebt = !isForeignCurrency && calculatedKd >= 4.0 && calculatedKd < 22.0;
+      const isFxHeavyDebt = (!isForeignCurrency && calculatedKd >= 4.0 && calculatedKd < 22.0) || detectedSector === 'AVIATION';
 
       if (calculatedKd >= 3.0 && calculatedKd <= 90.0) {
         companySpecificKd = Number(calculatedKd.toFixed(1));
         const blended = (calculatedKd * 0.70) + (preTaxKd * 0.30);
 
-        if (isForeignCurrency) {
+        if (isForeignCurrency || detectedSector === 'AVIATION') {
           preTaxKd = Math.max(3.0, Math.min(22.0, blended));
-          kdSource = `Şirket Finansal Giderlerinden Dinamik Türetildi (%${companySpecificKd} Efektif ${reportCurrency} / %${preTaxKd.toFixed(1)} Harmanlanmış)`;
+          kdSource = `Havacılık / Döviz Borç Portföyü Efektif Kd (%${companySpecificKd} Dinamik / %${preTaxKd.toFixed(1)} Harmanlanmış)`;
         } else if (isFxHeavyDebt) {
           preTaxKd = Math.max(6.0, Math.min(65.0, (calculatedKd * 0.80) + (preTaxKd * 0.20)));
           kdSource = `Döviz/Reeskont Ağırlıklı Kredi Portföyü (%${companySpecificKd} Efektif / %${preTaxKd.toFixed(1)} Harmanlanmış)`;
@@ -957,23 +963,22 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     const effectiveDebt = grossFinDebt > 0 ? grossFinDebt : netFinDebt;
 
     const totalCapital = eqVal + effectiveDebt;
-    const debtWeight = (detectedSector === 'INSURANCE' || detectedSector === 'BANKING' || totalCapital <= 0)
+    const debtWeight = (detectedSector === 'INSURANCE' || detectedSector === 'BANKING' || detectedSector === 'FINANCIAL_SERVICES' || totalCapital <= 0)
       ? 0.0
       : Math.min(0.75, Math.max(0.0, effectiveDebt / totalCapital));
     const equityWeight = Number((1.0 - debtWeight).toFixed(4));
 
     // 3. Hamade Formülü ile Kaldıraçlı Beta ve CAPM Özsermaye Maliyeti (Ke = Rf + Beta * ERP)
-    const tickerStr = String(item.ticker || container?.ticker || '').toUpperCase();
     const unleveredBeta = getDamodaranUnleveredBeta(detectedSector, tickerStr, item.sector);
     const debtToEquityRatio = eqVal > 0 ? Math.min(2.5, effectiveDebt / eqVal) : 0;
-    const leveredBeta = (detectedSector === 'INSURANCE' || detectedSector === 'BANKING')
+    const leveredBeta = (detectedSector === 'INSURANCE' || detectedSector === 'BANKING' || detectedSector === 'FINANCIAL_SERVICES')
       ? unleveredBeta
       : Number((unleveredBeta * (1 + (1 - taxRate) * debtToEquityRatio)).toFixed(2));
 
     const costOfEquity = Number((rf + leveredBeta * erp).toFixed(2)); // Ke (%)
     const afterTaxCostOfDebt = Number((preTaxKd * (1 - taxRate)).toFixed(2)); // Kd * (1 - T) (%)
 
-    let computedWacc = (detectedSector === 'INSURANCE' || detectedSector === 'BANKING')
+    let computedWacc = (detectedSector === 'INSURANCE' || detectedSector === 'BANKING' || detectedSector === 'FINANCIAL_SERVICES')
       ? Number(costOfEquity.toFixed(1))
       : Number(((equityWeight * costOfEquity) + (debtWeight * afterTaxCostOfDebt)).toFixed(1));
 
@@ -1019,7 +1024,7 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     }
 
     // ROIC & EVA Spread: İlgili dönem için her zaman YILLIKLANDIRILMIŞ kârlılık oranı olarak hesaplanır
-    if (detectedSector === 'INSURANCE' || detectedSector === 'BANKING') {
+    if (detectedSector === 'INSURANCE' || detectedSector === 'BANKING' || detectedSector === 'FINANCIAL_SERVICES') {
       item.roic = typeof item.roe === 'number' ? Number(item.roe.toFixed(1)) : null;
     } else {
       // 1. Standart Finansal Yatırılan Sermaye (Invested Capital):
@@ -1536,6 +1541,220 @@ export function calculateSectorScore(
     }
     breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
 
+  } else if (sector === 'AVIATION') {
+    // 1. Kapasite & Yolcu Büyümesi (Max 25)
+    let s1 = 20;
+    let r1 = 'Kapasite ve yolcu doluluk oranları dengeli.';
+    let st1: 'good' | 'warning' | 'danger' = 'good';
+    if (sortedHistory.length >= 2) {
+      const g = safeGrowthRate(latest?.revenue, sortedHistory[sortedHistory.length - 2]?.revenue);
+      if (g !== null) {
+        if (g >= 50) { s1 = 25; r1 = `Güçlü Yolcu & Hasılat Büyümesi (%${g}): Filo genişlemesi ve AKK/ASK doluluğu yüksek.`; st1 = 'good'; }
+        else if (g >= 30) { s1 = 20; r1 = `Yolcu ve ciro artışı (%${g}) sektör normlarında.`; st1 = 'good'; }
+        else { s1 = 12; r1 = `Havacılık gelir büyümesi (%${g}) yavaşlamış.`; st1 = 'warning'; }
+      }
+    }
+    breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
+
+    // 2. TTM FAVÖK & Faaliyet Marjı (Max 25)
+    const ebitdaM = parseFinancialNumber(latest?.ebitda_margin);
+    let s2 = 18;
+    let r2 = 'TTM operasyonel kârlılık takibi yapılıyor.';
+    let st2: 'good' | 'warning' | 'danger' = 'good';
+    if (ebitdaM !== null) {
+      if (ebitdaM >= 26.0) { s2 = 25; r2 = `Seçkin Operasyonel Verim: TTM FAVÖK marjı (%${ebitdaM.toFixed(1)}) küresel havacılık ortalamasının üzerinde.`; st2 = 'good'; }
+      else if (ebitdaM >= 18.0) { s2 = 20; r2 = `Sağlıklı Havacılık Kârlılığı: TTM FAVÖK marjı %${ebitdaM.toFixed(1)}.`; st2 = 'good'; }
+      else if (ebitdaM >= 10.0) { s2 = 12; r2 = `Daralan Faaliyet Marjı (%${ebitdaM.toFixed(1)}): Yakıt ve filo giderleri baskı yaratıyor.`; st2 = 'warning'; }
+      else { s2 = 4; r2 = `Kritik Kârlılık Baskısı: TTM FAVÖK marjı %${ebitdaM.toFixed(1)}!`; st2 = 'danger'; anomalies.push(`Zayıf Havacılık FAVÖK Marjı: %${ebitdaM.toFixed(1)}`); }
+    }
+    breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+
+    // 3. Döviz Borçluluğu & Filo Finansmanı (Max 25)
+    const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
+    const ebitda = parseFinancialNumber(latest?.ebitda) ?? 0;
+    const ndEbitda = ebitda > 0 ? (netDebt / ebitda) : null;
+    let s3 = 18;
+    let r3 = 'Döviz cinsi filo borçluluğu yönetilebilir seviyede.';
+    let st3: 'good' | 'warning' | 'danger' = 'good';
+    if (ndEbitda !== null) {
+      if (ndEbitda <= 2.5) { s3 = 25; r3 = `Güçlü Filo Bilanço Yapısı: Net Borç / TTM FAVÖK (${ndEbitda.toFixed(1)}x) havacılık için son derece güvenli.`; st3 = 'good'; }
+      else if (ndEbitda <= 3.8) { s3 = 19; r3 = `Sağlıklı Döviz Borçluluğu: Net Borç / TTM FAVÖK (${ndEbitda.toFixed(1)}x) filo leasing yapısıyla uyumlu.`; st3 = 'good'; }
+      else if (ndEbitda <= 5.0) { s3 = 11; r3 = `Yüksek Filo Kaldıracı: Net Borç / TTM FAVÖK (${ndEbitda.toFixed(1)}x) izlenmeli.`; st3 = 'warning'; }
+      else { s3 = 3; r3 = `Kritik Döviz Borçluluğu: Net Borç / TTM FAVÖK (${ndEbitda.toFixed(1)}x) filo borç çevrimini zorlaştırabilir!`; st3 = 'danger'; anomalies.push(`Aşırı Filo Borçluluğu: ${ndEbitda.toFixed(1)}x`); }
+    }
+    breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+
+    // 4. Serbest Nakit Akışı (FCF) & Filo CapEx (Max 25)
+    const fcf = parseFinancialNumber(latest?.free_cash_flow);
+    const ocf = parseFinancialNumber(latest?.operating_cash_flow);
+    let s4 = 18;
+    let r4 = 'Nakit akış üretimi filo yatırımlarını dengeliyor.';
+    let st4: 'good' | 'warning' | 'danger' = 'good';
+    if (fcf !== null && fcf > 0) {
+      s4 = 25; r4 = 'Pozitif Serbest Nakit Akışı: Şirket uçak/terminal yatırımlarına rağmen serbest nakit üretmektedir.'; st4 = 'good';
+    } else if (ocf !== null && ocf > 0) {
+      s4 = 17; r4 = 'Operasyonel Nakit Pozitif: Filo genişlemesi ve teslimat CapEx harcamaları serbest nakdi sınırlamaktadır.'; st4 = 'good';
+    } else {
+      s4 = 7; r4 = 'Operasyonel Nakit Açığı: Faaliyetlerden nakit üretimi zayıf.'; st4 = 'warning';
+    }
+    breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
+    conditionalWarnings.push('✈️ MEVSİMSELLİK UYARISI: Havacılık sektöründe kârlılık Q3 yaz döneminde zirve yapar. Yıllıklandırmada düz çarpma yapılmaz, TTM esastır.');
+
+  } else if (sector === 'RETAIL') {
+    // 1. Negatif Çalışma Sermayesi & Nakit Üretimi (Max 25)
+    // Perakendede tedarikçi finansmanı modeli sayesinde Cari Oran < 1.0 olması doğaldır ve risk oluşturmaz!
+    const cr = parseFinancialNumber(latest?.current_ratio);
+    let s1 = 25;
+    let r1 = 'Organize Perakende Modeli: Negatif işletme sermayesi tedarikçi vadeleriyle sıfır faizli fonlama sağlar.';
+    let st1: 'good' | 'warning' | 'danger' = 'good';
+    if (cr !== null && cr >= 0.55 && cr <= 1.15) {
+      s1 = 25;
+      r1 = `Mükemmel Çalışma Sermayesi Optimizasyonu: Cari oran (${cr.toFixed(2)}x) perakende standartlarında negatif işletme sermayesi ile nakit üretmektedir.`;
+      st1 = 'good';
+    } else if (cr !== null && cr > 1.15) {
+      s1 = 22;
+      r1 = `Yüksek Likidite Tamponu: Cari oran (${cr.toFixed(2)}x) perakende normlarının üzerinde nakit fazlası barındırıyor.`;
+      st1 = 'good';
+    } else if (cr !== null && cr < 0.40) {
+      s1 = 12;
+      r1 = `Aşırı Sıkışık Çalışma Sermayesi: Cari oran (${cr.toFixed(2)}x) tedarikçi ödeme dengesi için riskli seviyede.`;
+      st1 = 'warning';
+    }
+    breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
+
+    // 2. Aynı Mağaza Satış Büyümesi (SSS) (Max 25)
+    let s2 = 20;
+    let r2 = 'Mağaza ve sepet hacim büyümesi takip ediliyor.';
+    let st2: 'good' | 'warning' | 'danger' = 'good';
+    if (sortedHistory.length >= 2) {
+      const revG = safeGrowthRate(latest?.revenue, sortedHistory[sortedHistory.length - 2]?.revenue);
+      if (revG !== null) {
+        if (revG >= 55.0) { s2 = 25; r2 = `Güçlü SSS Genişlemesi: Ciro artışı (%${revG.toFixed(1)}) enflasyonun üzerinde reel sepet büyümesi sağlıyor.`; st2 = 'good'; }
+        else if (revG >= 35.0) { s2 = 19; r2 = `Sağlıklı Ciro Büyümesi (%${revG.toFixed(1)}) sektör ortalamasında.`; st2 = 'good'; }
+        else { s2 = 11; r2 = `Ciro Büyümesi (%${revG.toFixed(1)}) enflasyonun gerisinde kalmış.`; st2 = 'warning'; }
+      }
+    }
+    breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+
+    // 3. Stok Devir Hızı & Raf Verimi (Max 25)
+    const gm = parseFinancialNumber(latest?.gross_margin);
+    let s3 = 20;
+    let r3 = 'Stok devir hızı ve raf verimi dengeli.';
+    let st3: 'good' | 'warning' | 'danger' = 'good';
+    if (gm !== null) {
+      if (gm >= 22.0) { s3 = 25; r3 = `Yüksek Raf Kârlılığı: Brüt kâr marjı (%${gm.toFixed(1)}) güçlü ürün karması ve satın alma gücüne işaret ediyor.`; st3 = 'good'; }
+      else if (gm >= 16.0) { s3 = 20; r3 = `Brüt kâr marjı (%${gm.toFixed(1)}) gıda ve organize perakende normlarında.`; st3 = 'good'; }
+      else { s3 = 12; r3 = `Düşük brüt marj (%${gm.toFixed(1)}); tedarikçi maliyet artışları marjı daraltmış.`; st3 = 'warning'; }
+    }
+    breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+
+    // 4. IFRS 16 FAVÖK Marjı & ROE (Max 25)
+    const roe = parseFinancialNumber(latest?.roe);
+    let s4 = 20;
+    let r4 = 'Sermaye kârlılığı izleniyor.';
+    let st4: 'good' | 'warning' | 'danger' = 'good';
+    if (roe !== null) {
+      if (roe >= 50.0) { s4 = 25; r4 = `Mükemmel ROE (%${roe.toFixed(1)}): Negatif çalışma sermayesi kaldıraçsız yüksek özkaynak kârlılığı üretiyor.`; st4 = 'good'; }
+      else if (roe >= 30.0) { s4 = 19; r4 = `Sağlıklı Özkaynak Kârlılığı: %${roe.toFixed(1)}.`; st4 = 'good'; }
+      else { s4 = 11; r4 = `Ilımlı ROE: %${roe.toFixed(1)}.`; st4 = 'warning'; }
+    }
+    breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
+
+  } else if (sector === 'UTILITIES_TELCO') {
+    // 1. Serbest Nakit Akışı (FCF) (Max 25)
+    const fcf = parseFinancialNumber(latest?.free_cash_flow);
+    const ocf = parseFinancialNumber(latest?.operating_cash_flow);
+    let s1 = 18;
+    let r1 = 'Altyapı nakit üretimi dengeli.';
+    let st1: 'good' | 'warning' | 'danger' = 'good';
+    if (fcf !== null && fcf > 0) {
+      s1 = 25; r1 = 'Mükemmel FCF: Altyapı ve şebeke yatırımlarına rağmen şirket güçlü pozitif serbest nakit üretmektedir.'; st1 = 'good';
+    } else if (ocf !== null && ocf > 0) {
+      s1 = 18; r1 = 'Yüksek Operasyonel Nakit Akışı: Şebeke CapEx harcamaları serbest nakdi dengeliyor (Altyapı sektörü için doğal).'; st1 = 'good';
+    } else {
+      s1 = 8; r1 = 'Operasyonel nakit üretimi zayıf, altyapı finansmanı borç gerektirebilir.'; st1 = 'warning';
+    }
+    breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
+
+    // 2. CapEx / Satışlar & Şebeke Yatırımları (Max 25)
+    let s2 = 20;
+    let r2 = 'Kapasite artırıcı yatırımlar düzenli sürdürülüyor.';
+    let st2: 'good' | 'warning' | 'danger' = 'good';
+    breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+
+    // 3. ARPU & Fiyatlama Gücü (Max 25)
+    const ebitdaM = parseFinancialNumber(latest?.ebitda_margin);
+    let s3 = 18;
+    let r3 = 'Tarife ve operasyonel marjlar makul.';
+    let st3: 'good' | 'warning' | 'danger' = 'good';
+    if (ebitdaM !== null) {
+      if (ebitdaM >= 38.0) { s3 = 25; r3 = `Çok Güçlü Operasyonel Kârlılık: FAVÖK marjı (%${ebitdaM.toFixed(1)}) yüksek tarife gücü ve ölçek avantajını yansıtıyor.`; st3 = 'good'; }
+      else if (ebitdaM >= 25.0) { s3 = 20; r3 = `Sağlıklı FAVÖK Marjı: %${ebitdaM.toFixed(1)}.`; st3 = 'good'; }
+      else { s3 = 11; r3 = `Daralan Operasyonel Marj (%${ebitdaM.toFixed(1)}).`; st3 = 'warning'; }
+    }
+    breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+
+    // 4. Borç Karşılama Gücü (Net Borç / FAVÖK) (Max 25)
+    const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
+    const ebitda = parseFinancialNumber(latest?.ebitda) ?? 0;
+    const ndEbitda = ebitda > 0 ? (netDebt / ebitda) : null;
+    let s4 = 18;
+    let r4 = 'Uzun vadeli proje finansmanı borç seviyesi izleniyor.';
+    let st4: 'good' | 'warning' | 'danger' = 'good';
+    if (ndEbitda !== null) {
+      if (ndEbitda <= 2.2) { s4 = 25; r4 = `Düşük Altyapı Borçluluğu: Net Borç / FAVÖK (${ndEbitda.toFixed(1)}x) sermaye yoğun sektör için mükemmel.`; st4 = 'good'; }
+      else if (ndEbitda <= 3.8) { s4 = 19; r4 = `Yönetilebilir Proje Kaldıracı: Net Borç / FAVÖK (${ndEbitda.toFixed(1)}x) altyapı normlarında.`; st4 = 'good'; }
+      else if (ndEbitda <= 5.0) { s4 = 11; r4 = `Yüksek Borçluluk (%${ndEbitda.toFixed(1)}x): Faiz ortamı izlenmeli.`; st4 = 'warning'; }
+      else { s4 = 4; r4 = `Kritik Borçluluk: Net Borç / FAVÖK (${ndEbitda.toFixed(1)}x)!`; st4 = 'danger'; anomalies.push(`Aşırı Altyapı Borçluluğu: ${ndEbitda.toFixed(1)}x`); }
+    }
+    breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
+
+  } else if (sector === 'FINANCIAL_SERVICES') {
+    // 1. Alacak Kalitesi & NPL (Max 25)
+    const npl = parseFinancialNumber(latest?.npl_ratio ?? latest?.npl);
+    let s1 = 19;
+    let r1 = 'Alacak portföyü ve karşılık yapısı dengeli.';
+    let st1: 'good' | 'warning' | 'danger' = 'good';
+    if (npl !== null) {
+      if (npl <= 2.5) { s1 = 25; r1 = `Seçkin Alacak Kalitesi: Takipteki alacaklar (%${npl}) sektör ortalamasının altında.`; st1 = 'good'; }
+      else if (npl <= 4.0) { s1 = 20; r1 = `Alacak kalitesi sağlıklı (%${npl}).`; st1 = 'good'; }
+      else if (npl <= 6.0) { s1 = 12; r1 = `Takipteki alacaklar sınırda (%${npl}).`; st1 = 'warning'; }
+      else { s1 = 4; r1 = `Kritik Alacak Riski (%${npl})!`; st1 = 'danger'; anomalies.push(`Yüksek NPL: %${npl}`); }
+    }
+    breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
+
+    // 2. Finansman Geliri & Faiz Marjı (Max 25)
+    let s2 = 19;
+    let r2 = 'Net faiz ve faktoring komisyon marjı dengeli.';
+    let st2: 'good' | 'warning' | 'danger' = 'good';
+    breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+
+    // 3. Sermaye Yeterliliği & Kaldıraç (Max 25)
+    const assets = parseFinancialNumber(latest?.total_assets);
+    const eq = parseFinancialNumber(latest?.equity);
+    const lev = (assets && eq && eq > 0) ? (assets / eq) : null;
+    let s3 = 19;
+    let r3 = 'Özkaynak sermaye tamponu yeterli.';
+    let st3: 'good' | 'warning' | 'danger' = 'good';
+    if (lev !== null) {
+      if (lev <= 4.0) { s3 = 25; r3 = `Güçlü Sermaye Tamponu: Aktif / Özkaynak (${lev.toFixed(1)}x) çok güvenli.`; st3 = 'good'; }
+      else if (lev <= 6.5) { s3 = 19; r3 = `Kaldıraç (${lev.toFixed(1)}x) sektör normlarında.`; st3 = 'good'; }
+      else { s3 = 10; r3 = `Yüksek Kaldıraç (${lev.toFixed(1)}x): Fonlama maliyeti izlenmeli.`; st3 = 'warning'; }
+    }
+    breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+
+    // 4. İşlem Hacmi & ROE (Max 25)
+    const roe = parseFinancialNumber(latest?.roe);
+    let s4 = 18;
+    let r4 = 'Özkaynak kârlılığı takip ediliyor.';
+    let st4: 'good' | 'warning' | 'danger' = 'good';
+    if (roe !== null) {
+      if (roe >= 45.0) { s4 = 25; r4 = `Yüksek ROE (%${roe.toFixed(1)}): Güçlü sermaye getirisi.`; st4 = 'good'; }
+      else if (roe >= 28.0) { s4 = 19; r4 = `Sağlıklı ROE: %${roe.toFixed(1)}.`; st4 = 'good'; }
+      else { s4 = 10; r4 = `Ilımlı ROE: %${roe.toFixed(1)}.`; st4 = 'warning'; }
+    }
+    breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
+
   } else {
     // Sanayi / Reel Sektör:
     // 1. Finansal Sağlık & Likidite (Cari Oran & Net Borç / FAVÖK) (Max 25)
@@ -1885,6 +2104,41 @@ export function optimizeFinalDecision({
         overrideApplied = true;
         overrideReason = `Teknoloji Şirketinde Yüksek Borçluluk: Net Borç / FAVÖK çarpanı (${(netDebt / ebitda).toFixed(1)}x) hafif varlık (asset-light) teknoloji şirketleri için emniyet sınırını (3.0x) aştı.`;
         safetyFlags.push(`Yüksek Teknoloji Net Borç/FAVÖK: ${(netDebt / ebitda).toFixed(1)}x`);
+      }
+    }
+
+    // Havacılık Sektörü Filo ve Borç Filtresi
+    if (!overrideApplied && effectiveSector === 'AVIATION') {
+      const netDebt = parseFinancialNumber(effectiveLatestData?.net_debt) ?? 0;
+      const ebitda = parseFinancialNumber(effectiveLatestData?.ebitda) ?? 0;
+      if (ebitda > 0 && (netDebt / ebitda) > 4.8) {
+        finalDecision = 'ALMA';
+        overrideApplied = true;
+        overrideReason = `Aşırı Havacılık Borçluluğu: Net Borç / TTM FAVÖK çarpanı (${(netDebt / ebitda).toFixed(1)}x) filo leasing emniyet sınırını (4.8x) aştığı için AL kararı ALMA olarak revize edildi.`;
+        safetyFlags.push(`Aşırı Filo Borçluluğu: ${(netDebt / ebitda).toFixed(1)}x`);
+      }
+    }
+
+    // Enerji & Telekom Altyapı Borç Filtresi
+    if (!overrideApplied && effectiveSector === 'UTILITIES_TELCO') {
+      const netDebt = parseFinancialNumber(effectiveLatestData?.net_debt) ?? 0;
+      const ebitda = parseFinancialNumber(effectiveLatestData?.ebitda) ?? 0;
+      if (ebitda > 0 && (netDebt / ebitda) > 4.8) {
+        finalDecision = 'ALMA';
+        overrideApplied = true;
+        overrideReason = `Aşırı Altyapı Borçluluğu: Net Borç / FAVÖK çarpanı (${(netDebt / ebitda).toFixed(1)}x) proje finansmanı emniyet tavanını (4.8x) aştığı için AL kararı revize edildi.`;
+        safetyFlags.push(`Kritik Altyapı Borçluluğu: ${(netDebt / ebitda).toFixed(1)}x`);
+      }
+    }
+
+    // Finansal Hizmetler (Factoring / Leasing) Alacak Riski Filtresi
+    if (!overrideApplied && effectiveSector === 'FINANCIAL_SERVICES') {
+      const npl = parseFinancialNumber(effectiveLatestData?.npl_ratio ?? effectiveLatestData?.npl);
+      if (npl !== null && npl > 6.0) {
+        finalDecision = 'ALMA';
+        overrideApplied = true;
+        overrideReason = `Toksik Alacak Riski: Takipteki alacaklar oranı (NPL: %${npl}) %6.0 emniyet eşiğini aşmıştır. AL kararı engellendi.`;
+        safetyFlags.push(`Kritik NPL: %${npl}`);
       }
     }
 
@@ -3130,7 +3384,7 @@ export function calculateDuPont5Step(item: any, sectorOrPrev?: any, sectorOverri
   if (ebt === null && ebit !== null && interestExp !== null && resolvedSector !== 'INSURANCE') {
     ebt = ebit - interestExp;
   } else if (ebt === null && netIncome !== null) {
-    const taxRate = resolvedSector === 'REIT' ? 0.0 : ((resolvedSector === 'BANKING' || resolvedSector === 'INSURANCE') ? 0.30 : 0.25);
+    const taxRate = resolvedSector === 'REIT' ? 0.0 : ((resolvedSector === 'BANKING' || resolvedSector === 'INSURANCE' || resolvedSector === 'FINANCIAL_SERVICES') ? 0.30 : 0.25);
     ebt = taxRate < 1 ? (netIncome / (1 - taxRate)) : netIncome;
   }
 
@@ -3455,6 +3709,42 @@ export const SECTOR_MULTIPLE_BENCHMARKS: Record<SectorType, SectorMultipleBenchm
     evEbitdaMedian: 7.0,
     evSalesMedian: 1.1,
     description: 'BIST Holding Endeksi tarihsel medyan piyasa çarpanları'
+  },
+  AVIATION: {
+    sector: 'AVIATION',
+    sectorName: 'Havacılık & Ulaştırma',
+    peMedian: 7.2,
+    pbMedian: 1.2,
+    evEbitdaMedian: 5.5,
+    evSalesMedian: 1.1,
+    description: 'BIST Ulaştırma & Havacılık tarihsel medyan piyasa çarpanları'
+  },
+  RETAIL: {
+    sector: 'RETAIL',
+    sectorName: 'Perakende & Tüketim',
+    peMedian: 14.5,
+    pbMedian: 3.8,
+    evEbitdaMedian: 7.5,
+    evSalesMedian: 0.6,
+    description: 'BIST Ticaret & Perakende Endeksi tarihsel medyan piyasa çarpanları'
+  },
+  UTILITIES_TELCO: {
+    sector: 'UTILITIES_TELCO',
+    sectorName: 'Enerji & Telekomünikasyon',
+    peMedian: 9.8,
+    pbMedian: 1.8,
+    evEbitdaMedian: 6.2,
+    evSalesMedian: 1.4,
+    description: 'BIST Elektrik & Telekomünikasyon tarihsel medyan piyasa çarpanları'
+  },
+  FINANCIAL_SERVICES: {
+    sector: 'FINANCIAL_SERVICES',
+    sectorName: 'Factoring, Leasing & Girişim',
+    peMedian: 5.5,
+    pbMedian: 1.3,
+    evEbitdaMedian: null,
+    evSalesMedian: null,
+    description: 'BIST Finansal Kiralama ve Faktoring tarihsel medyan çarpanları'
   }
 };
 
@@ -3549,19 +3839,25 @@ export function calculateCompanyMultiples(
   }
 
   // 3. FD/FAVÖK (EV/EBITDA)
-  let evEbitdaVal: number | null = isYatirimMultiples?.ev_ebitda != null ? isYatirimMultiples.ev_ebitda : (isYatirimMultiples?.evEbitda != null ? isYatirimMultiples.evEbitda : null);
-  if (evEbitdaVal === null && benchmark.evEbitdaMedian !== null && scaledEbitda !== null && scaledEbitda > 0) {
-    const annualizedEbitda = scaledEbitda * annualFactor;
-    evEbitdaVal = Number((enterpriseValue / annualizedEbitda).toFixed(2));
-  } else if (evEbitdaVal === null && benchmark.evEbitdaMedian !== null && scaledEbitda !== null && scaledEbitda < 0) {
-    evEbitdaVal = Number((enterpriseValue / (scaledEbitda * annualFactor)).toFixed(2));
+  let evEbitdaVal: number | null = null;
+  if (!isMetricDisabled('ev_ebitda', sector)) {
+    evEbitdaVal = isYatirimMultiples?.ev_ebitda != null ? isYatirimMultiples.ev_ebitda : (isYatirimMultiples?.evEbitda != null ? isYatirimMultiples.evEbitda : null);
+    if (evEbitdaVal === null && benchmark.evEbitdaMedian !== null && scaledEbitda !== null && scaledEbitda > 0) {
+      const annualizedEbitda = scaledEbitda * annualFactor;
+      evEbitdaVal = Number((enterpriseValue / annualizedEbitda).toFixed(2));
+    } else if (evEbitdaVal === null && benchmark.evEbitdaMedian !== null && scaledEbitda !== null && scaledEbitda < 0) {
+      evEbitdaVal = Number((enterpriseValue / (scaledEbitda * annualFactor)).toFixed(2));
+    }
   }
 
   // 4. FD/Satışlar (EV/Sales)
-  let evSalesVal: number | null = isYatirimMultiples?.ev_sales != null ? isYatirimMultiples.ev_sales : (isYatirimMultiples?.evSales != null ? isYatirimMultiples.evSales : null);
-  if (evSalesVal === null && benchmark.evSalesMedian !== null && scaledRevenue !== null && scaledRevenue > 0) {
-    const annualizedRev = scaledRevenue * annualFactor;
-    evSalesVal = Number((enterpriseValue / annualizedRev).toFixed(2));
+  let evSalesVal: number | null = null;
+  if (!isMetricDisabled('ev_sales', sector)) {
+    evSalesVal = isYatirimMultiples?.ev_sales != null ? isYatirimMultiples.ev_sales : (isYatirimMultiples?.evSales != null ? isYatirimMultiples.evSales : null);
+    if (evSalesVal === null && benchmark.evSalesMedian !== null && scaledRevenue !== null && scaledRevenue > 0) {
+      const annualizedRev = scaledRevenue * annualFactor;
+      evSalesVal = Number((enterpriseValue / annualizedRev).toFixed(2));
+    }
   }
 
   const helper = (

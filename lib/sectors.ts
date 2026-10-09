@@ -1,4 +1,201 @@
-export type SectorType = 'INSURANCE' | 'BANKING' | 'HOLDING' | 'INDUSTRIAL' | 'REIT' | 'TECH';
+export type SectorType = 
+  | 'INDUSTRIAL'
+  | 'AVIATION'
+  | 'BANKING'
+  | 'INSURANCE'
+  | 'HOLDING'
+  | 'REIT'
+  | 'RETAIL'
+  | 'UTILITIES_TELCO'
+  | 'FINANCIAL_SERVICES'
+  | 'TECH';
+
+export type FinancialArchetype =
+  | 'INDUSTRIAL'          // A) REEL SEKTÖR & SANAYİ (Otomotiv, Kimya, Çimento, Demir-Çelik, Teknoloji)
+  | 'AVIATION'            // B) HAVACILIK & ULAŞTIRMA (TAVHL, THYAO, PGSUS)
+  | 'BANKING'             // C) BANKACILIK (GARAN, AKBNK, ISCTR, YKBNK)
+  | 'INSURANCE'           // D) SİGORTACILIK (TURSG, AGESA, ANSGR)
+  | 'HOLDING_REIT'        // E) GYO & HOLDİNGLER (EKGYO, SAHOL, KCHOL)
+  | 'RETAIL'              // F) PERAKENDE & TÜKETİM (BIMAS, MGROS, CCOLA)
+  | 'UTILITIES_TELCO'     // G) ENERJİ & TELEKOMÜNİKASYON (ENJSA, TCELL, TTKOM)
+  | 'FINANCIAL_SERVICES'; // H) FACTORING, LEASING & GİRİŞİM (VAKFN, GSDHO)
+
+export function getFinancialArchetype(sector: SectorType): FinancialArchetype {
+  switch (sector) {
+    case 'AVIATION':
+      return 'AVIATION';
+    case 'BANKING':
+      return 'BANKING';
+    case 'INSURANCE':
+      return 'INSURANCE';
+    case 'HOLDING':
+    case 'REIT':
+      return 'HOLDING_REIT';
+    case 'RETAIL':
+      return 'RETAIL';
+    case 'UTILITIES_TELCO':
+      return 'UTILITIES_TELCO';
+    case 'FINANCIAL_SERVICES':
+      return 'FINANCIAL_SERVICES';
+    case 'TECH':
+    case 'INDUSTRIAL':
+    default:
+      return 'INDUSTRIAL';
+  }
+}
+
+export interface FeaturedMetric {
+  key: string;
+  name: string;
+  unit?: string;
+  description: string;
+}
+
+export interface SectorArchetypeConfig {
+  archetype: FinancialArchetype;
+  name: string;
+  badge: string;
+  description: string;
+  disabledMetrics: string[];
+  featuredMetrics: FeaturedMetric[];
+  seasonalityWarning?: boolean;
+  workingCapitalExemption?: boolean;
+  fxDebtDominant?: boolean;
+  taxRate: number;
+}
+
+export const SECTOR_ARCHETYPE_CONFIGS: Record<FinancialArchetype, SectorArchetypeConfig> = {
+  INDUSTRIAL: {
+    archetype: 'INDUSTRIAL',
+    name: 'Reel Sektör & Sanayi',
+    badge: 'Sanayi / Reel Sektör Modu',
+    description: 'Standart Bilanço/Gelir Tablosu rasyoları geçerlidir: Brüt Kâr, FAVÖK, Net Borç, FD/FAVÖK, F/K, PD/DD, Stok Devir Hızı, Cari Oran.',
+    disabledMetrics: [],
+    featuredMetrics: [
+      { key: 'gross_margin', name: 'Brüt Kâr Marjı', unit: '%', description: 'Satış kârlılığı ve fiyatlama gücü' },
+      { key: 'ebitda_margin', name: 'FAVÖK Marjı', unit: '%', description: 'Operasyonel nakit kârlılığı' },
+      { key: 'net_debt_ebitda', name: 'Net Borç / FAVÖK', unit: 'x', description: 'Borç ödeme kapasitesi (<2.5x sağlıklı)' },
+      { key: 'roic', name: 'ROIC vs WACC Makası', unit: '%', description: 'Yatırılan sermayenin ekonomik katma değeri' },
+      { key: 'current_ratio', name: 'Cari Oran', unit: 'x', description: 'Kısa vadeli likidite gücü (>1.2x)' },
+    ],
+    taxRate: 0.25,
+  },
+  AVIATION: {
+    archetype: 'AVIATION',
+    name: 'Havacılık & Ulaştırma',
+    badge: 'Havacılık / TTM & Mevsimsellik Modu',
+    description: 'Mevsimsellik uyarısı aktiftir. Yıllıklandırmada KESİNLİKLE düz çarpma (6A*2) yasaktır, TTM zorunludur. Döviz cinsi borçlar ve yolcu trafiği esastır.',
+    disabledMetrics: [],
+    featuredMetrics: [
+      { key: 'passenger_traffic', name: 'Yolcu Trafiği & Doluluk Oranı', unit: 'Yolcu / %', description: 'AKK/ASK ve filo doluluk verimi' },
+      { key: 'ttm_ebitda', name: 'TTM FAVÖK', unit: 'TL', description: 'Son 12 ay kümülatif operasyonel nakit üretimi' },
+      { key: 'fx_net_debt', name: 'Döviz Cinsi Net Borç', unit: 'Döviz', description: 'EUR/USD cinsi filo ve finansal kiralama borçları' },
+      { key: 'ebitda_margin', name: 'FAVÖK Marjı', unit: '%', description: 'Yakıt ve personel sonrası faaliyet marjı' },
+      { key: 'free_cash_flow', name: 'Serbest Nakit Akışı (FCF)', unit: 'TL', description: 'Uçak alımları/CapEx sonrası kalan nakit' },
+    ],
+    seasonalityWarning: true,
+    fxDebtDominant: true,
+    taxRate: 0.25,
+  },
+  BANKING: {
+    archetype: 'BANKING',
+    name: 'Bankacılık & Finans',
+    badge: 'Banka / NII & NIM Modu',
+    description: 'Bankalarda faiz gelirleri, net faiz marjı (NIM), komisyon gelirleri, aktif kalitesi (NPL) ve sermaye yeterlilik rasyosu (SYR) esastır.',
+    disabledMetrics: ['ebitda', 'gross_profit', 'ev_ebitda', 'ev_sales', 'net_debt', 'current_ratio', 'quick_ratio', 'financial_debt', 'stock_turnover', 'gross_margin', 'ebitda_margin'],
+    featuredMetrics: [
+      { key: 'nim', name: 'Net Faiz Marjı (NIM)', unit: '%', description: 'Kredi-mevduat makası ve aktif getiri oranı' },
+      { key: 'net_interest_income', name: 'Net Faiz Geliri (NII)', unit: 'TL', description: 'Faiz gelirleri eksi mevduat faiz giderleri' },
+      { key: 'npl_ratio', name: 'Takipteki Krediler Oranı (NPL)', unit: '%', description: 'Aktif kalitesi ve tahsilat gücü (<%3.0 sağlıklı)' },
+      { key: 'car_syr', name: 'Sermaye Yeterliliği (SYR/CAR)', unit: '%', description: 'BDDK yasal sermaye tamponu (>%14 güçlü)' },
+      { key: 'roe', name: 'Özkaynak Kârlılığı (ROE)', unit: '%', description: 'Banka sermayesinin getiri oranı' },
+      { key: 'pb', name: 'PD/DD & F/K', unit: 'x', description: 'Bankacılık piyasa değerleme çarpanları' },
+    ],
+    taxRate: 0.30,
+  },
+  INSURANCE: {
+    archetype: 'INSURANCE',
+    name: 'Sigortacılık & Bireysel Emeklilik',
+    badge: 'Sigorta / Teknik Denge & Float Modu',
+    description: 'Sigorta şirketlerinde klasik hasılat ve FAVÖK bulunmaz. Prim üretimi, teknik denge, hasar/prim ve masraf oranı, kombine oran ve ROE esastır.',
+    disabledMetrics: ['ebitda', 'ev_ebitda', 'net_debt', 'stock_turnover', 'ebitda_margin'],
+    featuredMetrics: [
+      { key: 'gross_written_premiums', name: 'Yazılan Net / Brüt Prim', unit: 'TL', description: 'Poliçe üretimi ve pazar payı genişlemesi' },
+      { key: 'loss_ratio', name: 'Hasar / Prim Oranı', unit: '%', description: 'Ödenen/tahakkuk eden hasar maliyeti (<%75 olumlu)' },
+      { key: 'expense_ratio', name: 'Masraf Oranı', unit: '%', description: 'Faaliyet ve komisyon gider oranı' },
+      { key: 'combined_ratio', name: 'Bileşik Oran (Combined Ratio)', unit: '%', description: 'Hasar + Masraf toplamı (<%100 teknik kâr üretir)' },
+      { key: 'roe', name: 'Özkaynak Kârlılığı (ROE)', unit: '%', description: 'Float yatırım getirisi ve teknik kâr ile beslenen getiri' },
+    ],
+    taxRate: 0.30,
+  },
+  HOLDING_REIT: {
+    archetype: 'HOLDING_REIT',
+    name: 'GYO & Holdingler',
+    badge: 'Holding / GYO & NAD İskontosu Modu',
+    description: 'Holdinglerde tekil F/K kullanımı yanıltıcıdır. Net Aktif Değeri (NAD / NAV), PD/NAD İskontosu/Primi ve iştirak temettü/kâr katkısı esastır.',
+    disabledMetrics: [],
+    featuredMetrics: [
+      { key: 'nav_discount', name: 'Net Aktif Değeri (NAD / NAV) İskontosu', unit: '%', description: 'Piyasa değeri vs portföy net aktif değeri iskonto cazibesi (>%25-%35)' },
+      { key: 'pb_nav', name: 'PD/NAD Oranı', unit: 'x', description: 'Portföy değerleme çarpanı' },
+      { key: 'subsidiary_contribution', name: 'İştirak Kâr / Temettü Katkısı', unit: 'TL', description: 'Portföy şirketlerinden düzenli nakit ve temettü akışı' },
+      { key: 'solo_liquidity', name: 'Solo Nakit / Borç Dengesi', unit: 'TL', description: 'Merkez holding bilançosunun net nakit gücü ve borçsuzluk' },
+    ],
+    taxRate: 0.25, // REIT has 0% tax, handled dynamically per sector
+  },
+  RETAIL: {
+    archetype: 'RETAIL',
+    name: 'Perakende & Tüketim',
+    badge: 'Perakende / Negatif Çalışma Sermayesi Modu',
+    description: 'Negatif İşletme Sermayesi modeli nedeniyle Cari Oran < 1.0 olması risk olarak YORUMLANMAMALIDIR (tedarikçi vadeleri nakit üretir). SSS büyümesi ve mağaza sayısı esastır.',
+    disabledMetrics: [],
+    featuredMetrics: [
+      { key: 'sss_growth', name: 'Aynı Mağaza Satış Büyümesi (SSS)', unit: '%', description: 'Mevcut mağazaların enflasyon üzeri reel büyümesi' },
+      { key: 'store_count', name: 'Mağaza Sayısı & m² Büyümesi', unit: 'Adet', description: 'Organik şebeke genişlemesi' },
+      { key: 'ifrs16_ebitda', name: 'IFRS 16 Düzeltilmiş FAVÖK', unit: 'TL', description: 'Kira yükümlülükleri arındırılmış operasyonel kâr' },
+      { key: 'negative_nwc', name: 'Negatif İşletme Sermayesi Gücü', unit: 'TL', description: 'Tedarikçi finansmanı ile sağlanan faizsiz fon kaynağı' },
+      { key: 'stock_turnover', name: 'Stok Devir Hızı', unit: 'Gün', description: 'Raf devir ve stok nakde dönüşüm süresi' },
+    ],
+    workingCapitalExemption: true,
+    taxRate: 0.25,
+  },
+  UTILITIES_TELCO: {
+    archetype: 'UTILITIES_TELCO',
+    name: 'Enerji & Telekomünikasyon',
+    badge: 'Altyapı / FCF & CapEx Yoğun Mod',
+    description: 'Yüksek amortisman ve borçluluk doğaldır (altyapı yatırımları). Serbest Nakit Akışı (FCF), CapEx/Satışlar, ARPU ve MW kurulu güç esastır.',
+    disabledMetrics: [],
+    featuredMetrics: [
+      { key: 'free_cash_flow', name: 'Serbest Nakit Akışı (FCF)', unit: 'TL', description: 'Sermaye yatırımları sonrası üretilen serbest nakit' },
+      { key: 'capex_to_sales', name: 'CapEx / Satışlar', unit: '%', description: 'Altyapı yatırım yoğunluğu ve şebeke modernizasyonu' },
+      { key: 'arpu', name: 'ARPU / Fiyatlama Gücü', unit: 'TL', description: 'Abone başına aylık ortalama gelir / PTF fiyatlama esnekliği' },
+      { key: 'capacity_subscribers', name: 'Abone Sayısı / MW Kurulu Güç', unit: 'Birim', description: 'Operasyonel ölçek büyüklüğü' },
+      { key: 'net_debt_ebitda', name: 'Net Borç / FAVÖK', unit: 'x', description: 'Uzun vadeli proje finansmanı borç karşılama gücü' },
+    ],
+    taxRate: 0.25,
+  },
+  FINANCIAL_SERVICES: {
+    archetype: 'FINANCIAL_SERVICES',
+    name: 'Factoring, Leasing & Girişim',
+    badge: 'Finansal Hizmetler / Kredi & Faiz Modu',
+    description: 'Bankacılık arketipi mantığıyla çalışır; FAVÖK ve Net Borç gösterimi KAPALIDIR. Alacak kalitesi (NPL), finansman marjı ve özkaynak kârlılığı esastır.',
+    disabledMetrics: ['ebitda', 'gross_profit', 'ev_ebitda', 'ev_sales', 'net_debt', 'current_ratio', 'quick_ratio', 'financial_debt', 'stock_turnover', 'gross_margin', 'ebitda_margin'],
+    featuredMetrics: [
+      { key: 'factoring_income', name: 'Faktoring / Finansman Gelirleri', unit: 'TL', description: 'Faiz ve komisyon gelirleri toplamı' },
+      { key: 'npl_ratio', name: 'Takipteki Alacaklar Oranı (NPL)', unit: '%', description: 'Kredi ve alacak portföy kalitesi (<%4.0)' },
+      { key: 'leverage_ratio', name: 'Kaldıraç Oranı', unit: 'x', description: 'Toplam Varlıklar / Özkaynaklar' },
+      { key: 'roe', name: 'Özkaynak Kârlılığı (ROE)', unit: '%', description: 'Finansal aracılık kârlılığı' },
+      { key: 'pb', name: 'PD/DD & F/K', unit: 'x', description: 'Defter değeri ve kazanç çarpanları' },
+    ],
+    taxRate: 0.25,
+  },
+};
+
+export function isMetricDisabled(metricKey: string, sector: SectorType): boolean {
+  const archetype = getFinancialArchetype(sector);
+  const cfg = SECTOR_ARCHETYPE_CONFIGS[archetype];
+  if (!cfg) return false;
+  return cfg.disabledMetrics.includes(metricKey);
+}
 
 export interface SectorDefinition {
   id: SectorType;
@@ -23,12 +220,12 @@ export interface MetricScoreRule {
 }
 
 export interface SectorRiskThresholds {
-  criticalDebtRatio?: number; // e.g. Net Debt / EBITDA > 4.0
-  minLiquidityRatio?: number; // Current ratio < 1.0
-  combinedRatioDanger?: number; // > 102% for Insurance
-  nplDanger?: number; // > 5.0% for Banking
-  minMarginOfSafety: number; // %20 asgari güvenlik marjı
-  idealMarginOfSafety: number; // %30 güçlü emniyet marjı
+  criticalDebtRatio?: number;
+  minLiquidityRatio?: number;
+  combinedRatioDanger?: number;
+  nplDanger?: number;
+  minMarginOfSafety: number;
+  idealMarginOfSafety: number;
 }
 
 export interface SectorScoringDefinition {
@@ -94,6 +291,65 @@ export const SECTOR_SCORING_CONFIG: Record<SectorType, SectorScoringDefinition> 
       idealMarginOfSafety: 30.0,
     },
   },
+  AVIATION: {
+    sector: 'AVIATION',
+    categories: [
+      { key: 'passenger_capacity', name: 'Kapasite & Yolcu Büyümesi', maxScore: 25, description: 'Arz Edilen Koltuk Kilometre (AKK/ASK) ve yolcu doluluk oranları' },
+      { key: 'ttm_profitability', name: 'TTM FAVÖK & Faaliyet Marjı', maxScore: 25, description: 'Mevsimsellikten arındırılmış son 12 ay operasyonel nakit marjı' },
+      { key: 'fx_debt_leverage', name: 'Döviz Borçluluğu & Filo Finansmanı', maxScore: 25, description: 'Döviz borç yükü (EUR/USD) ve Net Borç / TTM FAVÖK (<3.5x)' },
+      { key: 'cash_fcf_quality', name: 'Serbest Nakit Akışı (FCF) & Filo CapEx', maxScore: 25, description: 'Uçak yatırımları sonrası serbest nakit üretim gücü' },
+    ],
+    riskThresholds: {
+      criticalDebtRatio: 4.5,
+      minLiquidityRatio: 0.8,
+      minMarginOfSafety: 20.0,
+      idealMarginOfSafety: 30.0,
+    },
+  },
+  RETAIL: {
+    sector: 'RETAIL',
+    categories: [
+      { key: 'negative_wc_cash', name: 'Negatif Çalışma Sermayesi & Nakit Üretimi', maxScore: 25, description: 'Tedarikçi finansmanı gücü ve kasadaki serbest nakit akışı' },
+      { key: 'sss_expansion', name: 'Aynı Mağaza Satış Büyümesi (SSS)', maxScore: 25, description: 'Enflasyon üzeri reel sepet ve işlem hacmi genişlemesi' },
+      { key: 'inventory_efficiency', name: 'Stok Devir Hızı & Raf Verimi', maxScore: 25, description: 'Hızlı stok dönüşümü ve minimum fire oranı' },
+      { key: 'ifrs16_margin', name: 'IFRS 16 FAVÖK Marjı & ROE', maxScore: 25, description: 'Kira sonrası operasyonel kârlılık ve sermaye getirisi' },
+    ],
+    riskThresholds: {
+      criticalDebtRatio: 3.5,
+      minLiquidityRatio: 0.5, // Negative working capital naturally has current ratio < 1.0
+      minMarginOfSafety: 20.0,
+      idealMarginOfSafety: 30.0,
+    },
+  },
+  UTILITIES_TELCO: {
+    sector: 'UTILITIES_TELCO',
+    categories: [
+      { key: 'fcf_generation', name: 'Serbest Nakit Akışı (FCF)', maxScore: 25, description: 'Altyapı yatırımları sonrası güçlü operasyonel nakit üretimi' },
+      { key: 'capex_intensity', name: 'CapEx / Satışlar & Şebeke Yatırımları', maxScore: 25, description: 'Yatırım verimliliği ve kapasite artış dengesi' },
+      { key: 'pricing_power_arpu', name: 'ARPU & Tarife Fiyatlama Gücü', maxScore: 25, description: 'Regülasyon ve enflasyon karşısında reel tarife koruması' },
+      { key: 'debt_service', name: 'Borç Karşılama Gücü (Net Borç / FAVÖK)', maxScore: 25, description: 'Uzun vadeli proje borçlarının sürdürülebilirliği (<3.8x)' },
+    ],
+    riskThresholds: {
+      criticalDebtRatio: 4.5,
+      minLiquidityRatio: 0.8,
+      minMarginOfSafety: 20.0,
+      idealMarginOfSafety: 30.0,
+    },
+  },
+  FINANCIAL_SERVICES: {
+    sector: 'FINANCIAL_SERVICES',
+    categories: [
+      { key: 'asset_quality', name: 'Alacak Kalitesi & Karşılık Oranı (NPL)', maxScore: 25, description: 'Takipteki faktoring/leasing alacakları rasyosu (<%4.0)' },
+      { key: 'financing_margin', name: 'Finansman Geliri & Faiz Marjı', maxScore: 25, description: 'Fonlama maliyeti ile plasman faiz makası' },
+      { key: 'capital_buffer', name: 'Sermaye Yeterliliği & Özkaynak Oranı', maxScore: 25, description: 'Kaldıraç yönetimi ve yasal özkaynak tamponu' },
+      { key: 'volume_growth', name: 'İşlem Hacmi & Portföy Büyümesi', maxScore: 25, description: 'Faktoring ciro/leasing portföy büyümesi ve ROE' },
+    ],
+    riskThresholds: {
+      nplDanger: 5.0,
+      minMarginOfSafety: 20.0,
+      idealMarginOfSafety: 30.0,
+    },
+  },
   TECH: {
     sector: 'TECH',
     categories: [
@@ -145,7 +401,7 @@ export const SECTOR_DEFINITIONS: Record<SectorType, SectorDefinition> = {
     id: 'BANKING',
     title: 'Bankacılık & Finans',
     badge: 'Banka / Finans Modu',
-    description: 'Bankalarda faiz gelirleri, net faiz marjı (NIM), komisyon gelirleri, kredi/mevduat kalitesi ve sermaye yeterlilik rasyosu (SYR) esastır.',
+    description: 'Bankalarda faiz gelirleri, net faiz marjı (NIM), komisyon gelirleri, kredi/mevduat kalitesi ve sermaye yeterlilik rasyosu (SYR) esastır. FAVÖK ve Net Borç devre dışıdır.',
     revenueLabel: 'Net Faiz Geliri (NII)',
     revenueSublabel: 'Kredilerden Alınan Faizler - Mevduat Faiz Giderleri',
     operatingProfitLabel: 'Faaliyet Kârı (Provizyon Öncesi)',
@@ -159,7 +415,7 @@ export const SECTOR_DEFINITIONS: Record<SectorType, SectorDefinition> = {
     id: 'HOLDING',
     title: 'Holdingler & Yatırım Şirketleri',
     badge: 'Holding / NAD Modu',
-    description: 'Holdinglerde klasik FAVÖK yerine Net Aktif Değeri (NAD / NAV), solo net nakit/borç pozisyonu ve iştirak temettü akışları esastır.',
+    description: 'Holdinglerde tekil F/K yerine Net Aktif Değeri (NAD / NAV), solo net nakit/borç pozisyonu ve iştirak temettü akışları esastır.',
     revenueLabel: 'Konsolide Hasılat / Portföy Geliri',
     revenueSublabel: 'İştirak Satışları ve Solo Temettü Girişleri',
     operatingProfitLabel: 'Kombine Faaliyet Kârı',
@@ -182,6 +438,62 @@ export const SECTOR_DEFINITIONS: Record<SectorType, SectorDefinition> = {
     marginSublabel: 'Piyasa Değeri vs Gayrimenkul Net Aktif Değeri',
     valuationMultiples: 'P/NAV (Piyasa/NAD), PD/DD & F/K',
     primaryEfficiencyMetric: 'Portföy Büyüklüğü & NAD Büyümesi',
+  },
+  AVIATION: {
+    id: 'AVIATION',
+    title: 'Havacılık, Ulaştırma & Havalimanı İşletmeciliği',
+    badge: 'Havacılık / TTM & Mevsimsellik Modu',
+    description: 'Havacılıkta üçüncü çeyrek yaz mevsimselliği sektör kârının büyük bölümünü oluşturur. Yıllıklandırmada düz çarpma (6A*2) yasaktır, TTM zorunludur. Döviz borçlanma maliyeti (EUR/USD) ve yolcu trafiği esastır.',
+    revenueLabel: 'Havacılık & Hizmet Satışları (Hasılat)',
+    revenueSublabel: 'Yolcu, Kargo ve Yer Hizmetleri Gelirleri',
+    operatingProfitLabel: 'FAVÖK (TTM)',
+    operatingProfitSublabel: 'Son 12 Ay Kümülatif Operasyonel Kâr',
+    marginLabel: 'FAVÖK Marjı (%)',
+    marginSublabel: 'FAVÖK / Toplam Hasılat',
+    valuationMultiples: 'FD/FAVÖK (EV/EBITDA), F/K & EV/Sales',
+    primaryEfficiencyMetric: 'Yolcu Trafiği & Döviz Net Borç',
+  },
+  RETAIL: {
+    id: 'RETAIL',
+    title: 'Organize Perakende & Hızlı Tüketim',
+    badge: 'Perakende / Negatif Çalışma Sermayesi Modu',
+    description: 'Perakendede tedarikçi finansmanı modeli sayesinde Cari Oran < 1.0 olması doğaldır ve likidite riski oluşturmaz. Aynı Mağaza Satışları (SSS), mağaza sayısı ve IFRS 16 FAVÖK esastır.',
+    revenueLabel: 'Net Satışlar (Perakende Cirosu)',
+    revenueSublabel: 'Mağaza Satışları ve Online Dağıtım Hasılatı',
+    operatingProfitLabel: 'FAVÖK (IFRS 16 Uyumlu)',
+    operatingProfitSublabel: 'Kira Yükümlülükleri Düzeltilmiş Operasyonel Kâr',
+    marginLabel: 'FAVÖK Marjı (%)',
+    marginSublabel: 'IFRS 16 FAVÖK / Satışlar',
+    valuationMultiples: 'FD/FAVÖK, F/K & FD/Satışlar',
+    primaryEfficiencyMetric: 'Aynı Mağaza Satış Büyümesi (SSS %)',
+  },
+  UTILITIES_TELCO: {
+    id: 'UTILITIES_TELCO',
+    title: 'Enerji Üretim/Dağıtım & Telekomünikasyon',
+    badge: 'Altyapı / FCF & CapEx Yoğun Mod',
+    description: 'Sermaye yoğun altyapı sektörlerinde yüksek amortisman ve borçluluk doğaldır. Serbest Nakit Akışı (FCF), CapEx/Satışlar, ARPU ve MW kurulu güç esastır.',
+    revenueLabel: 'Satış Gelirleri (Hasılat)',
+    revenueSublabel: 'Elektrik Dağıtım/Üretim ve Telekomünikasyon Gelirleri',
+    operatingProfitLabel: 'FAVÖK (EBITDA)',
+    operatingProfitSublabel: 'Faiz, Amortisman ve Vergi Öncesi Faaliyet Kârı',
+    marginLabel: 'FAVÖK & FCF Marjı (%)',
+    marginSublabel: 'Operasyonel Kârlılık ve Nakit Dönüşüm Marjı',
+    valuationMultiples: 'FD/FAVÖK, FCF Verimi & F/K',
+    primaryEfficiencyMetric: 'Serbest Nakit Akışı (FCF) & CapEx/Satışlar',
+  },
+  FINANCIAL_SERVICES: {
+    id: 'FINANCIAL_SERVICES',
+    title: 'Faktoring, Finansal Kiralama (Leasing) & Girişim',
+    badge: 'Finansal Hizmetler / Kredi & Faiz Modu',
+    description: 'Bankacılık arketipi mantığıyla çalışır; FAVÖK ve Net Borç gösterimi KAPALIDIR. Faktoring/leasing gelirleri, alacak kalitesi (NPL) ve özkaynak kârlılığı (ROE) esastır.',
+    revenueLabel: 'Faktoring / Finansman Gelirleri',
+    revenueSublabel: 'Alacak Faizleri ve Finansal Aracılık Gelirleri',
+    operatingProfitLabel: 'Esas Faaliyet Kârı',
+    operatingProfitSublabel: 'Karşılık Öncesi Net Finansman Kârı',
+    marginLabel: 'Faiz Marjı & Alacak Kârlılığı (%)',
+    marginSublabel: 'Finansman Geliri / Ortalama Alacak Portföyü',
+    valuationMultiples: 'PD/DD & F/K',
+    primaryEfficiencyMetric: 'Özkaynak Kârlılığı (ROE %)',
   },
   TECH: {
     id: 'TECH',
@@ -212,6 +524,15 @@ export const SECTOR_DEFINITIONS: Record<SectorType, SectorDefinition> = {
     primaryEfficiencyMetric: 'ROIC vs WACC Sermaye Makası',
   },
 };
+
+export const BIST_AVIATION_TICKERS = [
+  'THYAO',
+  'PGSUS',
+  'TAVHL',
+  'CLEBI',
+  'RYSAS',
+  'GSDDE',
+];
 
 export const BIST_INSURANCE_TICKERS = [
   'AGESA',
@@ -246,7 +567,6 @@ export const BIST_HOLDING_TICKERS = [
   'TKFEN',
   'SISE',
   'BERA',
-  'GSDHO',
   'GLYHO',
   'VERUS',
   'GOZDE',
@@ -274,6 +594,55 @@ export const BIST_REIT_TICKERS = [
   'MSGYO',
   'ZRGYO',
   'BASGZ',
+];
+
+export const BIST_RETAIL_TICKERS = [
+  'BIMAS',
+  'MGROS',
+  'SOKM',
+  'BIZIM',
+  'CCOLA',
+  'MAVI',
+  'VAKKO',
+  'SUWEN',
+  'DMSAS',
+  'ULKER',
+];
+
+export const BIST_UTILITIES_TELCO_TICKERS = [
+  'ENJSA',
+  'TCELL',
+  'TTKOM',
+  'AKSEN',
+  'GWIND',
+  'AYDEM',
+  'CANTE',
+  'ZOREN',
+  'CWENE',
+  'EUPWR',
+  'ASTOR',
+  'ALFAS',
+  'SMRTG',
+  'ODAS',
+  'CONSE',
+  'MAGEN',
+  'KAREL',
+];
+
+export const BIST_FINANCIAL_SERVICES_TICKERS = [
+  'VAKFN',
+  'GSDHO',
+  'ISFIN',
+  'GARFA',
+  'CRDFA',
+  'SEKFK',
+  'LIDFA',
+  'ULUFA',
+  'QNBFL',
+  'ISMEN',
+  'INFO',
+  'OSMEN',
+  'UNLU',
 ];
 
 export const BIST_TECH_TICKERS = [
@@ -307,11 +676,24 @@ export function detectSector(ticker: string, contextText = ''): SectorType {
   const normTicker = (ticker || '').toUpperCase().trim();
   const cleanTicker = normTicker.replace(/\.IS$/i, '').trim();
 
+  // 1. Ticker bazlı kesin eşleştirme
+  if (BIST_AVIATION_TICKERS.includes(cleanTicker)) {
+    return 'AVIATION';
+  }
   if (BIST_INSURANCE_TICKERS.includes(cleanTicker)) {
     return 'INSURANCE';
   }
   if (BIST_BANKING_TICKERS.includes(cleanTicker)) {
     return 'BANKING';
+  }
+  if (BIST_FINANCIAL_SERVICES_TICKERS.includes(cleanTicker)) {
+    return 'FINANCIAL_SERVICES';
+  }
+  if (BIST_RETAIL_TICKERS.includes(cleanTicker)) {
+    return 'RETAIL';
+  }
+  if (BIST_UTILITIES_TELCO_TICKERS.includes(cleanTicker)) {
+    return 'UTILITIES_TELCO';
   }
   if (BIST_HOLDING_TICKERS.includes(cleanTicker)) {
     return 'HOLDING';
@@ -323,11 +705,26 @@ export function detectSector(ticker: string, contextText = ''): SectorType {
     return 'TECH';
   }
 
-  // Türkçe I/İ normalizasyonu ve küçük harfe dönüştürme
+  // 2. Türkçe ve bağlam metni analizi
   const text = (cleanTicker + ' ' + contextText)
     .replace(/İ/g, 'i')
     .replace(/I/g, 'ı')
     .toLocaleLowerCase('tr-TR');
+
+  if (
+    text.includes('havacılık') ||
+    text.includes('havayolu') ||
+    text.includes('uçak') ||
+    text.includes('yolcu trafiği') ||
+    text.includes('hava meydan') ||
+    text.includes('yer hizmet') ||
+    text.includes('havalimanı') ||
+    text.includes('airport') ||
+    text.includes('airline') ||
+    text.includes('aviation')
+  ) {
+    return 'AVIATION';
+  }
 
   if (
     text.includes('sigorta') ||
@@ -351,6 +748,45 @@ export function detectSector(ticker: string, contextText = ''): SectorType {
     text.includes('kredi mevduat')
   ) {
     return 'BANKING';
+  }
+
+  if (
+    text.includes('faktoring') ||
+    text.includes('factoring') ||
+    text.includes('finansal kiralama') ||
+    text.includes('leasing') ||
+    text.includes('girişim sermayesi') ||
+    text.includes('menkul değer') ||
+    text.includes('aracı kurum')
+  ) {
+    return 'FINANCIAL_SERVICES';
+  }
+
+  if (
+    text.includes('perakende') ||
+    text.includes('süpermarket') ||
+    text.includes('mağaza') ||
+    text.includes('gıda perakende') ||
+    text.includes('aynı mağaza') ||
+    text.includes('sss büyüme')
+  ) {
+    return 'RETAIL';
+  }
+
+  if (
+    text.includes('elektrik') ||
+    text.includes('enerji') ||
+    text.includes('santral') ||
+    text.includes('telekom') ||
+    text.includes('telekomünikasyon') ||
+    text.includes('şebeke') ||
+    text.includes('arpu') ||
+    text.includes('kurulu güç') ||
+    text.includes('yenilenebilir enerji') ||
+    text.includes('rüzgar santrali') ||
+    text.includes('güneş santrali')
+  ) {
+    return 'UTILITIES_TELCO';
   }
 
   if (

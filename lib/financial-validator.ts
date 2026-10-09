@@ -80,7 +80,7 @@ export class FinancialDataValidator {
     const eq = copy.equity ?? 0;
     const totalP = (currentL + longTermL + eq);
 
-    if (copy.total_assets !== null && copy.total_assets > 0 && totalP > 0 && sector !== 'BANKING' && sector !== 'INSURANCE') {
+    if (copy.total_assets !== null && copy.total_assets > 0 && totalP > 0 && sector !== 'BANKING' && sector !== 'INSURANCE' && sector !== 'FINANCIAL_SERVICES') {
       const diffP = Math.abs(copy.total_assets - totalP);
       const relDiffP = (diffP / copy.total_assets) * 100;
 

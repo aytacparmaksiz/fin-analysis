@@ -15,6 +15,7 @@
  */
 
 import type { SectorType } from './sectors.ts';
+import { isMetricDisabled } from './sectors.ts';
 import type { FinancialHistoryItem } from './bist-service.ts';
 import { 
   parseFinancialNumber, 
@@ -185,7 +186,9 @@ export class FinancialRatioEngine {
     const finDebtTl = latest?.financial_debt != null ? latest.financial_debt * unitScale : (((stDebtTl || 0) + (ltDebtTl || 0)) || null);
 
     let netDebtTl: number | null = null;
-    if (finDebtTl !== null || cashTl !== null) {
+    if (isMetricDisabled('net_debt', sector)) {
+      netDebtTl = null;
+    } else if (finDebtTl !== null || cashTl !== null) {
       netDebtTl = (finDebtTl || 0) - (cashTl || 0) - (finInvestTl || 0);
     } else if (latest?.net_debt != null) {
       netDebtTl = latest.net_debt * unitScale;
@@ -205,10 +208,10 @@ export class FinancialRatioEngine {
       paidInCapital: paidCapTl,
       cashAndEquivalents: cashTl,
       financialInvestments: finInvestTl,
-      shortTermDebt: stDebtTl,
-      longTermDebt: ltDebtTl,
-      financialDebt: finDebtTl,
-      netDebt: netDebtTl,
+      shortTermDebt: isMetricDisabled('financial_debt', sector) ? null : stDebtTl,
+      longTermDebt: isMetricDisabled('financial_debt', sector) ? null : ltDebtTl,
+      financialDebt: isMetricDisabled('financial_debt', sector) ? null : finDebtTl,
+      netDebt: isMetricDisabled('net_debt', sector) ? null : netDebtTl,
       workingCapital,
       investedCapital
     };
@@ -219,8 +222,12 @@ export class FinancialRatioEngine {
 
     const pe = marketMultiples?.pe ?? (ttm.netIncome && ttm.netIncome > 0 ? Number((marketCap / ttm.netIncome).toFixed(2)) : null);
     const pb = marketMultiples?.pb ?? (equityTl && equityTl > 0 ? Number((marketCap / equityTl).toFixed(2)) : null);
-    const evEbitda = marketMultiples?.evEbitda ?? marketMultiples?.ev_ebitda ?? (ttm.ebitda && ttm.ebitda > 0 ? Number((enterpriseValue / ttm.ebitda).toFixed(2)) : null);
-    const evSales = marketMultiples?.evSales ?? marketMultiples?.ev_sales ?? (ttm.revenue && ttm.revenue > 0 ? Number((enterpriseValue / ttm.revenue).toFixed(2)) : null);
+    const evEbitda = (isMetricDisabled('ev_ebitda', sector) || isMetricDisabled('ebitda', sector))
+      ? null
+      : (marketMultiples?.evEbitda ?? marketMultiples?.ev_ebitda ?? (ttm.ebitda && ttm.ebitda > 0 ? Number((enterpriseValue / ttm.ebitda).toFixed(2)) : null));
+    const evSales = isMetricDisabled('ev_sales', sector)
+      ? null
+      : (marketMultiples?.evSales ?? marketMultiples?.ev_sales ?? (ttm.revenue && ttm.revenue > 0 ? Number((enterpriseValue / ttm.revenue).toFixed(2)) : null));
     const fcfYield = (ttm.freeCashFlow && marketCap > 0) ? Number(((ttm.freeCashFlow / marketCap) * 100).toFixed(1)) : null;
 
     const valuation: ValuationMultiples = {
@@ -234,17 +241,21 @@ export class FinancialRatioEngine {
     };
 
     // 4. Kârlılık & Marjlar
-    const grossMargin = (ttm.grossProfit !== null && ttm.revenue !== null && ttm.revenue > 0)
-      ? Number(((ttm.grossProfit / ttm.revenue) * 100).toFixed(1))
-      : parseFinancialNumber(latest?.gross_margin);
+    const grossMargin = (isMetricDisabled('gross_profit', sector) || isMetricDisabled('gross_margin', sector))
+      ? null
+      : ((ttm.grossProfit !== null && ttm.revenue !== null && ttm.revenue > 0)
+        ? Number(((ttm.grossProfit / ttm.revenue) * 100).toFixed(1))
+        : parseFinancialNumber(latest?.gross_margin));
 
     const operatingMargin = (ttm.operatingProfit !== null && ttm.revenue !== null && ttm.revenue > 0)
       ? Number(((ttm.operatingProfit / ttm.revenue) * 100).toFixed(1))
       : parseFinancialNumber(latest?.operating_margin);
 
-    const ebitdaMargin = (ttm.ebitda !== null && ttm.revenue !== null && ttm.revenue > 0)
-      ? Number(((ttm.ebitda / ttm.revenue) * 100).toFixed(1))
-      : parseFinancialNumber(latest?.ebitda_margin);
+    const ebitdaMargin = (isMetricDisabled('ebitda', sector) || isMetricDisabled('ebitda_margin', sector))
+      ? null
+      : ((ttm.ebitda !== null && ttm.revenue !== null && ttm.revenue > 0)
+        ? Number(((ttm.ebitda / ttm.revenue) * 100).toFixed(1))
+        : parseFinancialNumber(latest?.ebitda_margin));
 
     const netMargin = (ttm.netIncome !== null && ttm.revenue !== null && ttm.revenue > 0)
       ? Number(((ttm.netIncome / ttm.revenue) * 100).toFixed(1))
@@ -258,9 +269,9 @@ export class FinancialRatioEngine {
       ? Number(((ttm.netIncome / totAssets) * 100).toFixed(1))
       : parseFinancialNumber(latest?.roa);
 
-    const taxRate = sector === 'REIT' ? 0 : (sector === 'INSURANCE' || sector === 'BANKING' ? 0.30 : 0.25);
+    const taxRate = sector === 'REIT' ? 0 : (sector === 'INSURANCE' || sector === 'BANKING' || sector === 'FINANCIAL_SERVICES' ? 0.30 : 0.25);
     let roic: number | null = null;
-    if (ttm.operatingProfit !== null && investedCapital !== null && investedCapital > 0) {
+    if (ttm.operatingProfit !== null && investedCapital !== null && investedCapital > 0 && !isMetricDisabled('ebitda', sector)) {
       const nopat = ttm.operatingProfit * (1 - taxRate);
       roic = Number(((nopat / investedCapital) * 100).toFixed(1));
     } else {
@@ -283,14 +294,18 @@ export class FinancialRatioEngine {
     };
 
     // 5. Likidite ve Kaldıraç
-    const currentRatio = (curAssets !== null && curLiab !== null && curLiab > 0)
-      ? Number((curAssets / curLiab).toFixed(2))
-      : parseFinancialNumber(latest?.current_ratio);
+    const currentRatio = isMetricDisabled('current_ratio', sector)
+      ? null
+      : ((curAssets !== null && curLiab !== null && curLiab > 0)
+        ? Number((curAssets / curLiab).toFixed(2))
+        : parseFinancialNumber(latest?.current_ratio));
 
     const inventoriesTl = latest?.inventories != null ? latest.inventories * unitScale : 0;
-    const quickRatio = (curAssets !== null && curLiab !== null && curLiab > 0)
-      ? Number(((curAssets - inventoriesTl) / curLiab).toFixed(2))
-      : parseFinancialNumber(latest?.quick_ratio);
+    const quickRatio = isMetricDisabled('quick_ratio', sector)
+      ? null
+      : ((curAssets !== null && curLiab !== null && curLiab > 0)
+        ? Number(((curAssets - inventoriesTl) / curLiab).toFixed(2))
+        : parseFinancialNumber(latest?.quick_ratio));
 
     const cashRatio = (cashTl !== null && curLiab !== null && curLiab > 0)
       ? Number((cashTl / curLiab).toFixed(2))
@@ -300,9 +315,11 @@ export class FinancialRatioEngine {
       ? Number((finDebtTl / equityTl).toFixed(2))
       : parseFinancialNumber(latest?.leverage_ratio);
 
-    const netDebtToEbitda = (netDebtTl !== null && ttm.ebitda !== null && ttm.ebitda > 0)
-      ? Number((netDebtTl / ttm.ebitda).toFixed(1))
-      : null;
+    const netDebtToEbitda = (isMetricDisabled('net_debt', sector) || isMetricDisabled('ebitda', sector))
+      ? null
+      : ((netDebtTl !== null && ttm.ebitda !== null && ttm.ebitda > 0)
+        ? Number((netDebtTl / ttm.ebitda).toFixed(1))
+        : null);
 
     const financialLeverage = (totAssets !== null && equityTl !== null && equityTl > 0)
       ? Number((totAssets / equityTl).toFixed(2))
@@ -412,9 +429,9 @@ export class FinancialRatioEngine {
 
     return {
       revenue: computeTtmMetric(i => i.revenue ?? i.gross_written_premiums),
-      grossProfit: computeTtmMetric(i => i.gross_profit),
+      grossProfit: isMetricDisabled('gross_profit', sector) ? null : computeTtmMetric(i => i.gross_profit),
       operatingProfit: computeTtmMetric(i => i.operating_profit ?? i.technical_profit),
-      ebitda: computeTtmMetric(i => i.ebitda ?? i.technical_profit),
+      ebitda: isMetricDisabled('ebitda', sector) ? null : computeTtmMetric(i => i.ebitda ?? i.technical_profit),
       netIncome: computeTtmMetric(i => i.net_income),
       operatingCashFlow: computeTtmMetric(i => i.operating_cash_flow),
       freeCashFlow: computeTtmMetric(i => i.free_cash_flow),

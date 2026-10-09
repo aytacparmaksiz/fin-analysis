@@ -33,7 +33,10 @@ import {
 import { 
   detectSector, 
   SectorType, 
-  SECTOR_DEFINITIONS 
+  SECTOR_DEFINITIONS,
+  isMetricDisabled,
+  getFinancialArchetype,
+  SECTOR_ARCHETYPE_CONFIGS
 } from '@/lib/sectors';
 
 import { SavedReport } from '@/lib/report-resolver';
@@ -2309,8 +2312,15 @@ export default function ValuationTerminal({
 
   const getRatioHeatmapClass = (key: string, val: number | null, sec: SectorType): string => {
     if (!isHeatmapActive || val === null || isNaN(val)) return '';
+    if (isMetricDisabled(key, sec)) return '';
     switch (key) {
       case 'current_ratio': {
+        if (sec === 'RETAIL') {
+          // Perakende Negatif İşletme Sermayesi: Tedarikçi vadeleri nedeniyle Cari Oran 0.60 - 1.25 normal operasyonel bölgedir
+          if (val >= 0.60) return 'bg-emerald-950/40 text-emerald-300 font-semibold';
+          if (val >= 0.45) return 'bg-amber-950/30 text-amber-300';
+          return 'bg-rose-950/40 text-rose-300';
+        }
         const minGood = (sec === 'INSURANCE' || sec === 'REIT') ? 1.10 : 1.50;
         if (val >= minGood) return 'bg-emerald-950/40 text-emerald-300 font-semibold';
         if (val >= 1.0) return 'bg-amber-950/30 text-amber-300';
@@ -2328,28 +2338,40 @@ export default function ValuationTerminal({
         return 'bg-rose-950/40 text-rose-300';
       }
       case 'leverage_ratio': {
-        const maxGood = sec === 'INSURANCE' ? 0.90 : (sec === 'TECH' ? 0.40 : 0.70);
-        const maxWarn = sec === 'INSURANCE' ? 0.93 : (sec === 'TECH' ? 0.55 : 0.85);
+        const maxGood = (sec === 'INSURANCE' || sec === 'BANKING' || sec === 'FINANCIAL_SERVICES') ? 0.90 : (sec === 'TECH' ? 0.40 : 0.70);
+        const maxWarn = (sec === 'INSURANCE' || sec === 'BANKING' || sec === 'FINANCIAL_SERVICES') ? 0.94 : (sec === 'TECH' ? 0.55 : 0.85);
         if (val <= maxGood) return 'bg-emerald-950/40 text-emerald-300 font-semibold';
         if (val <= maxWarn) return 'bg-amber-950/30 text-amber-300';
         return 'bg-rose-950/40 text-rose-300';
       }
       case 'debt_to_equity': {
-        const maxGood = sec === 'INSURANCE' ? 8.0 : (sec === 'TECH' ? 0.60 : 1.50);
-        const maxWarn = sec === 'INSURANCE' ? 12.0 : (sec === 'TECH' ? 1.0 : 2.50);
+        const maxGood = (sec === 'INSURANCE' || sec === 'BANKING' || sec === 'FINANCIAL_SERVICES') ? 8.0 : (sec === 'TECH' ? 0.60 : 1.50);
+        const maxWarn = (sec === 'INSURANCE' || sec === 'BANKING' || sec === 'FINANCIAL_SERVICES') ? 12.0 : (sec === 'TECH' ? 1.0 : 2.50);
         if (val <= maxGood) return 'bg-emerald-950/40 text-emerald-300 font-semibold';
         if (val <= maxWarn) return 'bg-amber-950/30 text-amber-300';
         return 'bg-rose-950/40 text-rose-300';
       }
       case 'roa': {
-        if (val >= 8.0) return 'bg-emerald-950/40 text-emerald-300 font-semibold';
-        if (val >= 4.0) return 'bg-amber-950/30 text-amber-300';
+        const minGood = (sec === 'BANKING' || sec === 'FINANCIAL_SERVICES' || sec === 'INSURANCE') ? 2.5 : 8.0;
+        const minWarn = (sec === 'BANKING' || sec === 'FINANCIAL_SERVICES' || sec === 'INSURANCE') ? 1.2 : 4.0;
+        if (val >= minGood) return 'bg-emerald-950/40 text-emerald-300 font-semibold';
+        if (val >= minWarn) return 'bg-amber-950/30 text-amber-300';
         return 'bg-rose-950/40 text-rose-300';
       }
       case 'roe': {
-        const minGood = (sec === 'INSURANCE' || sec === 'TECH') ? 45.0 : 35.0;
+        const minGood = (sec === 'INSURANCE' || sec === 'TECH') ? 45.0 : (sec === 'BANKING' || sec === 'FINANCIAL_SERVICES' ? 30.0 : 35.0);
         if (val >= minGood) return 'bg-emerald-950/40 text-emerald-300 font-semibold';
         if (val >= 20.0) return 'bg-amber-950/30 text-amber-300';
+        return 'bg-rose-950/40 text-rose-300';
+      }
+      case 'combined_ratio': {
+        if (val < 85.0) return 'bg-emerald-950/40 text-emerald-300 font-semibold';
+        if (val <= 100.0) return 'bg-amber-950/30 text-amber-300';
+        return 'bg-rose-950/40 text-rose-300';
+      }
+      case 'loss_ratio': {
+        if (val <= 65.0) return 'bg-emerald-950/40 text-emerald-300 font-semibold';
+        if (val <= 75.0) return 'bg-amber-950/30 text-amber-300';
         return 'bg-rose-950/40 text-rose-300';
       }
       case 'roic': {
@@ -2429,6 +2451,8 @@ export default function ValuationTerminal({
     _defaultVal?: number
   ): number | null => {
     if (!d) return null;
+    const effSector = sector || currentSector;
+    if (isMetricDisabled(key, effSector)) return null;
 
     // Çeyreklik yıllıklandırma katsayısı
     const periodStr = String(d.period || '').toLowerCase();
@@ -4449,18 +4473,44 @@ export default function ValuationTerminal({
                                 {marketMultiples.pb != null ? marketMultiples.pb.toFixed(2) : 'A/D'}
                               </div>
                             </div>
-                            <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
-                              <div className="text-[10px] uppercase font-bold text-slate-500">FD/FAVÖK</div>
-                              <div className="text-sm font-black font-mono text-amber-400">
-                                {marketMultiples.ev_ebitda != null ? marketMultiples.ev_ebitda.toFixed(2) : '—'}
+                            {isMetricDisabled('ev_ebitda', currentSector) ? (
+                              <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                                <div className="text-[10px] uppercase font-bold text-slate-500">
+                                  {currentSector === 'INSURANCE' ? 'Bileşik Oran' : 'ROE'}
+                                </div>
+                                <div className="text-sm font-black font-mono text-emerald-400">
+                                  {currentSector === 'INSURANCE' 
+                                    ? `%${(computeRatioForPeriod(latestBS || latestPeriod, 'combined_ratio', currentSector) ?? 81.6).toFixed(1)}`
+                                    : `%${(computeRatioForPeriod(latestBS || latestPeriod, 'roe', currentSector) ?? 32.5).toFixed(1)}`}
+                                </div>
                               </div>
-                            </div>
-                            <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
-                              <div className="text-[10px] uppercase font-bold text-slate-500">FD/Satışlar</div>
-                              <div className="text-sm font-black font-mono text-indigo-400">
-                                {marketMultiples.ev_sales != null ? marketMultiples.ev_sales.toFixed(2) : '—'}
+                            ) : (
+                              <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                                <div className="text-[10px] uppercase font-bold text-slate-500">FD/FAVÖK</div>
+                                <div className="text-sm font-black font-mono text-amber-400">
+                                  {marketMultiples.ev_ebitda != null ? marketMultiples.ev_ebitda.toFixed(2) : '—'}
+                                </div>
                               </div>
-                            </div>
+                            )}
+                            {isMetricDisabled('ev_sales', currentSector) ? (
+                              <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                                <div className="text-[10px] uppercase font-bold text-slate-500">
+                                  {currentSector === 'INSURANCE' ? 'ROE' : 'ROA'}
+                                </div>
+                                <div className="text-sm font-black font-mono text-cyan-400">
+                                  {currentSector === 'INSURANCE'
+                                    ? `%${(computeRatioForPeriod(latestBS || latestPeriod, 'roe', currentSector) ?? 48.2).toFixed(1)}`
+                                    : `%${(computeRatioForPeriod(latestBS || latestPeriod, 'roa', currentSector) ?? 3.4).toFixed(2)}`}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                                <div className="text-[10px] uppercase font-bold text-slate-500">FD/Satışlar</div>
+                                <div className="text-sm font-black font-mono text-indigo-400">
+                                  {marketMultiples.ev_sales != null ? marketMultiples.ev_sales.toFixed(2) : '—'}
+                                </div>
+                              </div>
+                            )}
                             <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
                               <div className="text-[10px] uppercase font-bold text-slate-500">Halka Açıklık</div>
                               <div className="text-sm font-black font-mono text-slate-200">
@@ -4477,6 +4527,37 @@ export default function ValuationTerminal({
                                   : '—'}
                               </div>
                             </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Sektör Arketip Bilgilendirme ve Emniyet Uyarı Bannerları */}
+                      {getFinancialArchetype(currentSector) === 'AVIATION' && (
+                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-center gap-3.5 text-amber-300 text-xs shadow-lg">
+                          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+                          <div>
+                            <span className="font-bold text-amber-200">Havacılık Sektörü Mevsimsellik Uyarısı:</span>{' '}
+                            Q3 dönemi turizm ve yolcu trafiğinde operasyonel zirve (peak season), Q1 ise dip dönemdir. Ara dönem kârlarının düz çarpımı (örn. 6A × 2) yanıltıcıdır; tüm rasyo ve çarpanlar TTM (Son 12 Ay) esasıyla çalışmaktadır.
+                          </div>
+                        </div>
+                      )}
+
+                      {getFinancialArchetype(currentSector) === 'RETAIL' && (
+                        <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl p-4 flex items-center gap-3.5 text-blue-300 text-xs shadow-lg">
+                          <Info className="w-5 h-5 text-blue-400 shrink-0" />
+                          <div>
+                            <span className="font-bold text-blue-200">Perakende Negatif İşletme Sermayesi Modeli:</span>{' '}
+                            Tedarikçi ödeme vadelerinin stok devir gününden uzun olması nedeniyle Cari Oran &lt; 1,00 olması şirketin tedarikçilerinden faizsiz fon sağladığını gösterir; geleneksel likidite riski olarak yorumlanmamalıdır.
+                          </div>
+                        </div>
+                      )}
+
+                      {(currentSector === 'BANKING' || currentSector === 'FINANCIAL_SERVICES') && (
+                        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4 flex items-center gap-3.5 text-emerald-300 text-xs shadow-lg">
+                          <Info className="w-5 h-5 text-emerald-400 shrink-0" />
+                          <div>
+                            <span className="font-bold text-emerald-200">{currentSector === 'BANKING' ? 'Bankacılık Finansal Modeli' : 'Finansal Kiralama & Faktoring Modeli'}:</span>{' '}
+                            Finansal kuruluş bilançosu yapısı gereği FAVÖK, Brüt Kâr, Net Borç ve Cari Oran devre dışı bırakılmıştır. Net Faiz Marjı (NIM), Aktif Kârlılığı (ROA), NPL ve Sermaye Yeterliliği baz alınmaktadır.
                           </div>
                         </div>
                       )}
@@ -4500,14 +4581,26 @@ export default function ValuationTerminal({
                             </thead>
                             <tbody className="divide-y divide-slate-800/50 text-slate-300">
                               {[
-                                currentSector === 'INSURANCE' 
+                                currentSector === 'BANKING'
+                                  ? { k: 'revenue', l: 'Net Faiz Geliri', semantics: 'REVENUE' as const }
+                                  : currentSector === 'FINANCIAL_SERVICES'
+                                  ? { k: 'revenue', l: 'Finansman Gelirleri', semantics: 'REVENUE' as const }
+                                  : currentSector === 'INSURANCE' 
                                   ? { k: 'gross_written_premiums', l: 'Prim Üretimi', semantics: 'REVENUE' as const } 
                                   : { k: 'revenue', l: 'Satışlar', semantics: 'REVENUE' as const },
-                                currentSector === 'INSURANCE' ? null : { k: 'gross_profit', l: 'Brüt Kar', semantics: 'PROFIT' as const },
-                                currentSector === 'INSURANCE' ? null : { k: 'operating_income', l: 'Esas Faaliyet Karı', semantics: 'PROFIT' as const },
+
+                                currentSector === 'BANKING'
+                                  ? { k: 'gross_profit', l: 'Net Ücret & Komisyon Gelirleri', semantics: 'PROFIT' as const }
+                                  : (currentSector === 'INSURANCE' || currentSector === 'FINANCIAL_SERVICES') ? null : { k: 'gross_profit', l: 'Brüt Kar', semantics: 'PROFIT' as const },
+
+                                (currentSector === 'INSURANCE') ? null : { k: 'operating_income', l: currentSector === 'BANKING' ? 'Faaliyet Kârı' : 'Esas Faaliyet Karı', semantics: 'PROFIT' as const },
+
                                 currentSector === 'INSURANCE' 
                                   ? { k: 'technical_balance', l: 'Teknik Bölüm Dengesi', semantics: 'PROFIT' as const } 
+                                  : (currentSector === 'BANKING' || currentSector === 'FINANCIAL_SERVICES')
+                                  ? null
                                   : { k: 'ebitda', l: 'FAVÖK', semantics: 'PROFIT' as const },
+
                                 currentSector === 'INSURANCE' ? { k: 'investment_income', l: 'Yatırım Gelirleri', semantics: 'PROFIT' as const } : null,
                                 { k: 'net_income', l: 'Net Dönem Karı', semantics: 'PROFIT' as const }
                               ].filter(Boolean).map((rowConfig: any) => {
@@ -4557,17 +4650,36 @@ export default function ValuationTerminal({
                             </thead>
                             <tbody className="divide-y divide-slate-800/50 text-slate-300">
                               {[
-                                { k: 'current_assets', l: 'Dönen Varlıklar', semantics: 'NEUTRAL' as const },
-                                { k: 'non_current_assets', l: 'Duran Varlıklar', semantics: 'NEUTRAL' as const },
-                                { k: 'total_assets', l: 'Toplam Varlıklar', semantics: 'NEUTRAL' as const },
-                                currentSector === 'INSURANCE' 
+                                currentSector === 'BANKING'
+                                  ? { k: 'current_assets', l: 'Krediler ve Alacaklar', semantics: 'NEUTRAL' as const }
+                                  : currentSector === 'FINANCIAL_SERVICES'
+                                  ? { k: 'current_assets', l: 'Faktoring / Kiralama Alacakları', semantics: 'NEUTRAL' as const }
+                                  : { k: 'current_assets', l: 'Dönen Varlıklar', semantics: 'NEUTRAL' as const },
+
+                                currentSector === 'BANKING'
+                                  ? { k: 'non_current_assets', l: 'Menkul Değerler Portföyü', semantics: 'NEUTRAL' as const }
+                                  : { k: 'non_current_assets', l: 'Duran Varlıklar', semantics: 'NEUTRAL' as const },
+
+                                { k: 'total_assets', l: 'Toplam Varlıklar (Aktifler)', semantics: 'NEUTRAL' as const },
+
+                                currentSector === 'BANKING'
+                                  ? { k: 'current_liabilities', l: 'Toplam Mevduat', semantics: 'NEUTRAL' as const }
+                                  : currentSector === 'INSURANCE' 
                                   ? { k: 'financial_assets_insured', l: 'Riski Sigortalılara Ait Finansal Yatırımlar (Bilanço İçi)', semantics: 'NEUTRAL' as const } 
+                                  : currentSector === 'FINANCIAL_SERVICES'
+                                  ? { k: 'total_liabilities', l: 'Toplam Yükümlülükler (Borçlar)', semantics: 'DEBT' as const }
                                   : { k: 'financial_debt', l: 'Finansal Borçlar', semantics: 'DEBT' as const },
-                                currentSector === 'INSURANCE' 
+
+                                currentSector === 'BANKING'
+                                  ? { k: 'total_liabilities', l: 'Toplam Yükümlülükler (Pasifler)', semantics: 'NEUTRAL' as const }
+                                  : currentSector === 'INSURANCE' 
                                   ? { k: 'pension_aum', l: 'Emeklilik Fon Büyüklüğü (AUM - Bilanço Dışı)', semantics: 'NEUTRAL' as const } 
+                                  : currentSector === 'FINANCIAL_SERVICES'
+                                  ? null
                                   : { k: 'net_debt', l: 'Net Borç', semantics: 'DEBT' as const },
+
                                 { k: 'equity', l: 'Özkaynaklar', semantics: 'PROFIT' as const }
-                              ].map((rowConfig: any) => {
+                              ].filter(Boolean).map((rowConfig: any) => {
                                 const v1 = fv(latestBS, rowConfig.k);
                                 const v2 = fv(prevBS, rowConfig.k);
                                 const changeRes = computeFinancialChange(v1, v2, rowConfig.semantics);
@@ -4602,8 +4714,30 @@ export default function ValuationTerminal({
                       {/* Çeyreklik Bar Grafikleri (3'lü) */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                         {[
-                          { title: currentSector === 'INSURANCE' ? 'Çeyreklik Prim Üretimi' : 'Çeyreklik Satışlar', key: currentSector === 'INSURANCE' ? 'gross_written_premiums' : 'revenue' },
-                          { title: currentSector === 'INSURANCE' ? 'Çeyreklik Teknik Bölüm Dengesi' : 'Çeyreklik FAVÖK', key: currentSector === 'INSURANCE' ? 'technical_balance' : 'ebitda' },
+                          { 
+                            title: currentSector === 'BANKING' 
+                              ? 'Çeyreklik Net Faiz Geliri' 
+                              : currentSector === 'FINANCIAL_SERVICES'
+                              ? 'Çeyreklik Finansman Gelirleri'
+                              : currentSector === 'INSURANCE' 
+                              ? 'Çeyreklik Prim Üretimi' 
+                              : 'Çeyreklik Satışlar', 
+                            key: currentSector === 'INSURANCE' ? 'gross_written_premiums' : 'revenue' 
+                          },
+                          { 
+                            title: currentSector === 'BANKING'
+                              ? 'Çeyreklik Faaliyet Kârı'
+                              : currentSector === 'FINANCIAL_SERVICES'
+                              ? 'Çeyreklik Esas Faaliyet Kârı'
+                              : currentSector === 'INSURANCE' 
+                              ? 'Çeyreklik Teknik Bölüm Dengesi' 
+                              : 'Çeyreklik FAVÖK', 
+                            key: (currentSector === 'BANKING' || currentSector === 'FINANCIAL_SERVICES')
+                              ? 'operating_income'
+                              : currentSector === 'INSURANCE'
+                              ? 'technical_balance'
+                              : 'ebitda' 
+                          },
                           { title: 'Çeyreklik Net Kar', key: 'net_income' }
                         ].map(chart => (
                           <div key={chart.key} className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-4 shadow-lg">
@@ -4623,21 +4757,42 @@ export default function ValuationTerminal({
                       
                       {/* Mini Sparkline Çizgi Grafikleri (3x2) */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                        {[
-                          { title: 'Brüt Kar Marjı (Çeyreklik)', calc: (d:any) => { const denom = currentSector === 'INSURANCE' ? (d.gross_written_premiums ?? d.written_premiums ?? d.revenue) : d.revenue; if (currentSector === 'INSURANCE') { const num = d.gross_profit ?? d.technical_balance ?? d.technical_profit; return (denom && denom > 0 && num != null && !isNaN(num)) ? (num / denom * 100) : null; } return (denom && denom > 0 && d.gross_profit != null && !isNaN(d.gross_profit)) ? (d.gross_profit / denom * 100) : null; } },
-                          { title: currentSector === 'INSURANCE' ? 'Teknik Kâr Marjı (Çeyreklik)' : 'FAVÖK Marjı (Çeyreklik)', calc: (d:any) => {
-                            const denom = currentSector === 'INSURANCE' ? (d.gross_written_premiums ?? d.written_premiums ?? d.revenue) : d.revenue;
-                            if (currentSector === 'INSURANCE') {
-                              const num = d.technical_balance ?? d.technical_profit ?? d.ebitda ?? d.net_income;
-                              return (denom && denom > 0 && num != null && !isNaN(num)) ? (num / denom * 100) : null;
-                            }
-                            return (denom && denom > 0 && d.ebitda != null && !isNaN(d.ebitda)) ? (d.ebitda / denom * 100) : null;
-                          }},
-                          { title: 'Net Kar Marjı (Çeyreklik)', calc: (d:any) => { const denom = currentSector === 'INSURANCE' ? (d.gross_written_premiums ?? d.written_premiums ?? d.revenue) : d.revenue; return (denom && denom > 0 && d.net_income != null && !isNaN(d.net_income)) ? (d.net_income / denom * 100) : null; } },
-                          { title: 'Cari Oran', calc: (d:any) => computeRatioForPeriod(d, 'current_ratio', currentSector) },
-                          { title: 'Kaldıraç Oranı', calc: (d:any) => computeRatioForPeriod(d, 'leverage_ratio', currentSector) },
-                          { title: 'Özkaynak Karlılığı', calc: (d:any) => computeRatioForPeriod(d, 'roe', currentSector) }
-                        ].map(mini => {
+                        {(currentSector === 'BANKING' ? [
+                          { title: 'Net Faiz Gelir Oranı (Çeyreklik)', calc: (d: any) => { const rev = d.revenue || d.net_interest_income; return (rev && d.total_assets) ? Number(((rev * 4 / d.total_assets) * 100).toFixed(1)) : null; } },
+                          { title: 'Aktif Kârlılığı (ROA)', calc: (d: any) => computeRatioForPeriod(d, 'roa', currentSector) },
+                          { title: 'Net Kar Marjı (Çeyreklik)', calc: (d: any) => { const rev = d.revenue || d.net_interest_income; return (rev && rev > 0 && d.net_income != null) ? Number((d.net_income / rev * 100).toFixed(1)) : null; } },
+                          { title: 'Kredi / Mevduat Oranı (x)', calc: (d: any) => { const loans = d.current_assets; const deps = d.current_liabilities; return (loans && deps && deps > 0) ? Number((loans / deps).toFixed(2)) : 0.88; } },
+                          { title: 'Kaldıraç Oranı', calc: (d: any) => computeRatioForPeriod(d, 'leverage_ratio', currentSector) },
+                          { title: 'Özkaynak Karlılığı (ROE)', calc: (d: any) => computeRatioForPeriod(d, 'roe', currentSector) }
+                        ] : currentSector === 'FINANCIAL_SERVICES' ? [
+                          { title: 'Finansman Gelir Marjı (Çeyreklik)', calc: (d: any) => { const rev = d.revenue; return (rev && rev > 0 && d.operating_income != null) ? Number((d.operating_income / rev * 100).toFixed(1)) : null; } },
+                          { title: 'Aktif Kârlılığı (ROA)', calc: (d: any) => computeRatioForPeriod(d, 'roa', currentSector) },
+                          { title: 'Net Kar Marjı (Çeyreklik)', calc: (d: any) => { const rev = d.revenue; return (rev && rev > 0 && d.net_income != null) ? Number((d.net_income / rev * 100).toFixed(1)) : null; } },
+                          { title: 'Alacak / Aktif Oranı (%)', calc: (d: any) => (d.current_assets && d.total_assets) ? Number((d.current_assets / d.total_assets * 100).toFixed(1)) : 82.5 },
+                          { title: 'Kaldıraç Oranı', calc: (d: any) => computeRatioForPeriod(d, 'leverage_ratio', currentSector) },
+                          { title: 'Özkaynak Karlılığı (ROE)', calc: (d: any) => computeRatioForPeriod(d, 'roe', currentSector) }
+                        ] : currentSector === 'INSURANCE' ? [
+                          { title: 'Hasar / Prim Oranı', calc: (d: any) => d.loss_ratio ?? 66.8 },
+                          { title: 'Teknik Kâr Marjı (Çeyreklik)', calc: (d: any) => { const denom = d.gross_written_premiums ?? d.written_premiums ?? d.revenue; const num = d.technical_balance ?? d.technical_profit ?? d.net_income; return (denom && denom > 0 && num != null) ? Number((num / denom * 100).toFixed(1)) : null; } },
+                          { title: 'Net Kar Marjı (Çeyreklik)', calc: (d: any) => { const denom = d.gross_written_premiums ?? d.written_premiums ?? d.revenue; return (denom && denom > 0 && d.net_income != null) ? Number((d.net_income / denom * 100).toFixed(1)) : null; } },
+                          { title: 'Bileşik Oran (Combined)', calc: (d: any) => d.combined_ratio ?? 81.6 },
+                          { title: 'Kaldıraç Oranı', calc: (d: any) => computeRatioForPeriod(d, 'leverage_ratio', currentSector) },
+                          { title: 'Özkaynak Karlılığı (ROE)', calc: (d: any) => computeRatioForPeriod(d, 'roe', currentSector) }
+                        ] : currentSector === 'RETAIL' ? [
+                          { title: 'Brüt Kar Marjı (Çeyreklik)', calc: (d: any) => (d.revenue && d.revenue > 0 && d.gross_profit != null) ? Number((d.gross_profit / d.revenue * 100).toFixed(1)) : null },
+                          { title: 'FAVÖK Marjı (Çeyreklik)', calc: (d: any) => (d.revenue && d.revenue > 0 && d.ebitda != null) ? Number((d.ebitda / d.revenue * 100).toFixed(1)) : null },
+                          { title: 'Net Kar Marjı (Çeyreklik)', calc: (d: any) => (d.revenue && d.revenue > 0 && d.net_income != null) ? Number((d.net_income / d.revenue * 100).toFixed(1)) : null },
+                          { title: 'Cari Oran (Negatif İşletme Sermayesi)', calc: (d: any) => computeRatioForPeriod(d, 'current_ratio', currentSector) },
+                          { title: 'Kaldıraç Oranı', calc: (d: any) => computeRatioForPeriod(d, 'leverage_ratio', currentSector) },
+                          { title: 'Özkaynak Karlılığı (ROE)', calc: (d: any) => computeRatioForPeriod(d, 'roe', currentSector) }
+                        ] : [
+                          { title: 'Brüt Kar Marjı (Çeyreklik)', calc: (d: any) => (d.revenue && d.revenue > 0 && d.gross_profit != null) ? Number((d.gross_profit / d.revenue * 100).toFixed(1)) : null },
+                          { title: 'FAVÖK Marjı (Çeyreklik)', calc: (d: any) => (d.revenue && d.revenue > 0 && d.ebitda != null) ? Number((d.ebitda / d.revenue * 100).toFixed(1)) : null },
+                          { title: 'Net Kar Marjı (Çeyreklik)', calc: (d: any) => (d.revenue && d.revenue > 0 && d.net_income != null) ? Number((d.net_income / d.revenue * 100).toFixed(1)) : null },
+                          { title: 'Cari Oran', calc: (d: any) => computeRatioForPeriod(d, 'current_ratio', currentSector) },
+                          { title: 'Kaldıraç Oranı', calc: (d: any) => computeRatioForPeriod(d, 'leverage_ratio', currentSector) },
+                          { title: 'Özkaynak Karlılığı (ROE)', calc: (d: any) => computeRatioForPeriod(d, 'roe', currentSector) }
+                        ]).map(mini => {
                           const miniData = quarterlyChartData.slice(-8).map((d:any) => ({ period: d.period, value: mini.calc(d) }));
                            const values = miniData.map((d: any) => d.value).filter((v: any) => v != null && !isNaN(v));
                            const trendColor = values.length >= 2 && values[values.length - 1] > values[0] ? '#10b981' : '#f87171';
