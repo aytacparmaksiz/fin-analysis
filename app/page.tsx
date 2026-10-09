@@ -2249,6 +2249,10 @@ export default function ValuationTerminal({
         marginOfSafetyStatus: opt?.marginOfSafetyStatus,
         conditionalWarnings: opt?.conditionalWarnings,
         isGreyZone: opt?.isGreyZone,
+        isValueTrap: opt?.isValueTrap ?? data.valuation?.is_value_trap,
+        valueTrapSeverity: opt?.valueTrapSeverity ?? data.valuation?.value_trap_severity,
+        valueTrapReasons: opt?.valueTrapReasons ?? data.valuation?.value_trap_reasons,
+        fairValueTrend: data.valuation?.fair_value_trend,
         score,
         sector: activeSector,
         extractedData: finalExtracted
@@ -3137,6 +3141,10 @@ export default function ValuationTerminal({
     ...dynamicValuationResult.valuation,
     current_price: currentMarketPrice,
     gordon_formula_text: dynamicValuationResult.valuation.gordon_formula_text || currentExtractedData?.valuation?.gordon_formula_text,
+    is_value_trap: dynamicValuationResult.valuation.is_value_trap ?? activeReport?.isValueTrap,
+    value_trap_severity: dynamicValuationResult.valuation.value_trap_severity ?? activeReport?.valueTrapSeverity,
+    value_trap_reasons: dynamicValuationResult.valuation.value_trap_reasons ?? activeReport?.valueTrapReasons,
+    fair_value_trend: dynamicValuationResult.valuation.fair_value_trend ?? activeReport?.fairValueTrend,
   };
 
   if (!valuationInfo.fair_value || valuationInfo.fair_value <= 0) {
@@ -3156,7 +3164,13 @@ export default function ValuationTerminal({
   // İskonto oranını ve güvenlik marjını matematiksel olarak tutarlı güncelle
   if (valuationInfo.fair_value && valuationInfo.current_price) {
     valuationInfo.discount_pct = Number((((valuationInfo.fair_value - valuationInfo.current_price) / valuationInfo.current_price) * 100).toFixed(1));
-    valuationInfo.margin_of_safety = valuationInfo.discount_pct > 0 ? valuationInfo.discount_pct : 0;
+    // Eğer şirket Değer Tuzağı, ALMA veya UNSAFE ise güvenlik marjı 0'dır
+    if (valuationInfo.is_value_trap || dynamicValuationResult.optimization?.finalDecision === 'ALMA' || valuationInfo.margin_of_safety_status === 'UNSAFE' || valuationInfo.discount_pct <= 0) {
+      valuationInfo.margin_of_safety = 0;
+      valuationInfo.margin_of_safety_status = 'UNSAFE';
+    } else {
+      valuationInfo.margin_of_safety = valuationInfo.discount_pct;
+    }
   }
 
 
@@ -3780,95 +3794,33 @@ export default function ValuationTerminal({
                 </div>
               </div>
 
-              {/* Ek Dokümanlar (Faaliyet Raporu & Yatırımcı Sunumu - Opsiyonel & Sade) */}
+              {/* Ek Dokümanlar (KAP Entegrasyonu & Yatırımcı Sunumu Odaklı Yükleme) */}
               <div className="bg-[#0F1523] border border-slate-800/90 p-5 sm:p-6 rounded-2xl shadow-xl space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-slate-400" />
-                    <span className="font-semibold text-xs sm:text-sm text-slate-200">
-                      Ek Raporlar
-                    </span>
-                    <span className="text-[11px] text-slate-500">
-                      (Opsiyonel)
-                    </span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/60 pb-3">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-emerald-400" />
+                      <span className="font-semibold text-xs sm:text-sm text-slate-100">
+                        Doküman Entegrasyonu & Gelecek Projeksiyonu
+                      </span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800/60">
+                        KAP Otomatik
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      🏛️ <strong>Resmi Finansal Tablolar:</strong> Bilanço, Gelir Tablosu ve çeyreklik veriler sistem tarafından doğrudan KAP / BIST altyapısından otomatik çekilir. Manuel mali tablo yüklemenize gerek yoktur.
+                    </p>
                   </div>
                   {(activityFiles.length + presentationFiles.length) > 0 && (
-                    <span className="text-[11px] text-emerald-400 font-mono bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded">
-                      {activityFiles.length + presentationFiles.length} PDF eklendi
+                    <span className="text-[11px] text-emerald-400 font-mono bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-1 rounded-md self-start sm:self-auto flex items-center gap-1.5">
+                      <Sparkles className="w-3 h-3 text-emerald-400" />
+                      {activityFiles.length + presentationFiles.length} PDF Eklendi
                     </span>
                   )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Faaliyet Raporu */}
-                  <div
-                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (e.dataTransfer.files) handleAddActivityFiles(e.dataTransfer.files);
-                    }}
-                    className={`rounded-xl border p-4 transition flex flex-col justify-between ${
-                      activityFiles.length > 0
-                        ? 'bg-[#090D16] border-sky-500/50'
-                        : 'bg-[#090D16]/60 border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-sky-400" />
-                          <span className="font-semibold text-xs text-white">Faaliyet Raporu</span>
-                        </div>
-                        <span className="text-[10px] font-mono text-slate-400">
-                          {activityFiles.length > 0 ? `${activityFiles.length} dosya` : 'PDF'}
-                        </span>
-                      </div>
-
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => activityInputRef.current?.click()}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activityInputRef.current?.click(); } }}
-                        className="border border-dashed border-slate-700 hover:border-sky-500/60 rounded-lg py-3 px-3 text-center cursor-pointer transition bg-slate-900/40 hover:bg-slate-900/80 select-none"
-                      >
-                        <div className="flex items-center justify-center gap-1.5 text-xs font-medium text-slate-300">
-                          <UploadCloud className="w-4 h-4 text-sky-400" />
-                          <span>PDF Seç veya Sürükle</span>
-                        </div>
-                        <input
-                          ref={activityInputRef}
-                          type="file"
-                          multiple
-                          accept=".pdf,application/pdf"
-                          onChange={e => {
-                            if (e.target.files) handleAddActivityFiles(e.target.files);
-                            e.target.value = '';
-                          }}
-                          className="sr-only"
-                        />
-                      </div>
-                    </div>
-
-                    {activityFiles.length > 0 && (
-                      <div className="mt-3 pt-2.5 border-t border-slate-800/80 max-h-24 overflow-y-auto space-y-1">
-                        {activityFiles.map((f, i) => (
-                          <div key={i} className="flex items-center justify-between gap-1 text-[11px] bg-slate-900/90 px-2 py-1 rounded text-slate-300">
-                            <span className="truncate">{f.name}</span>
-                            <button
-                              type="button"
-                              onClick={() => removeActivityFile(i)}
-                              className="text-slate-500 hover:text-rose-400 p-0.5 cursor-pointer"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Yatırımcı Sunumu */}
+                  {/* 1. KART (ÖNERİLEN): Yatırımcı Sunumu */}
                   <div
                     onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
                     onDrop={(e) => {
@@ -3878,8 +3830,8 @@ export default function ValuationTerminal({
                     }}
                     className={`rounded-xl border p-4 transition flex flex-col justify-between ${
                       presentationFiles.length > 0
-                        ? 'bg-[#090D16] border-amber-500/50'
-                        : 'bg-[#090D16]/60 border-slate-800 hover:border-slate-700'
+                        ? 'bg-amber-950/20 border-amber-500/60 shadow-lg shadow-amber-950/30'
+                        : 'bg-[#090D16] border-amber-900/40 hover:border-amber-600/60 hover:bg-[#0c121f]'
                     }`}
                   >
                     <div className="space-y-3">
@@ -3887,22 +3839,28 @@ export default function ValuationTerminal({
                         <div className="flex items-center gap-2">
                           <Presentation className="w-4 h-4 text-amber-400" />
                           <span className="font-semibold text-xs text-white">Yatırımcı Sunumu</span>
+                          <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            Önerilen
+                          </span>
                         </div>
                         <span className="text-[10px] font-mono text-slate-400">
                           {presentationFiles.length > 0 ? `${presentationFiles.length} dosya` : 'PDF'}
                         </span>
                       </div>
+                      <p className="text-[11px] text-slate-400 leading-tight">
+                        Şirketin yönetim hedefleri, marj beklentileri ve yatırım projeksiyonlarını Adil Değer Modeline entegre eder.
+                      </p>
 
                       <div
                         role="button"
                         tabIndex={0}
                         onClick={() => presentationInputRef.current?.click()}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); presentationInputRef.current?.click(); } }}
-                        className="border border-dashed border-slate-700 hover:border-amber-500/60 rounded-lg py-3 px-3 text-center cursor-pointer transition bg-slate-900/40 hover:bg-slate-900/80 select-none"
+                        className="border border-dashed border-amber-800/60 hover:border-amber-400 rounded-lg py-3 px-3 text-center cursor-pointer transition bg-amber-950/10 hover:bg-amber-950/30 select-none"
                       >
-                        <div className="flex items-center justify-center gap-1.5 text-xs font-medium text-slate-300">
+                        <div className="flex items-center justify-center gap-1.5 text-xs font-medium text-amber-200">
                           <UploadCloud className="w-4 h-4 text-amber-400" />
-                          <span>PDF Seç veya Sürükle</span>
+                          <span>Yatırımcı Sunumu Seç veya Sürükle</span>
                         </div>
                         <input
                           ref={presentationInputRef}
@@ -3921,11 +3879,85 @@ export default function ValuationTerminal({
                     {presentationFiles.length > 0 && (
                       <div className="mt-3 pt-2.5 border-t border-slate-800/80 max-h-24 overflow-y-auto space-y-1">
                         {presentationFiles.map((f, i) => (
-                          <div key={i} className="flex items-center justify-between gap-1 text-[11px] bg-slate-900/90 px-2 py-1 rounded text-slate-300">
+                          <div key={i} className="flex items-center justify-between gap-1 text-[11px] bg-slate-900/90 px-2 py-1 rounded text-slate-300 border border-amber-900/40">
                             <span className="truncate">{f.name}</span>
                             <button
                               type="button"
                               onClick={() => removePresentationFile(i)}
+                              className="text-slate-500 hover:text-rose-400 p-0.5 cursor-pointer"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. KART (OPSİYONEL): Faaliyet Raporu */}
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (e.dataTransfer.files) handleAddActivityFiles(e.dataTransfer.files);
+                    }}
+                    className={`rounded-xl border p-4 transition flex flex-col justify-between ${
+                      activityFiles.length > 0
+                        ? 'bg-[#090D16] border-sky-500/50'
+                        : 'bg-[#090D16]/60 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-sky-400" />
+                          <span className="font-semibold text-xs text-white">Faaliyet Raporu</span>
+                          <span className="text-[9px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                            Opsiyonel
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400">
+                          {activityFiles.length > 0 ? `${activityFiles.length} dosya` : 'PDF'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 leading-tight">
+                        KAP verileriyle otomatik beslenir. Ek/detaylı faaliyet raporu PDF&apos;i yükleyerek yönetim rehberliğini derinleştirebilirsiniz.
+                      </p>
+
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => activityInputRef.current?.click()}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activityInputRef.current?.click(); } }}
+                        className="border border-dashed border-slate-700 hover:border-sky-500/60 rounded-lg py-3 px-3 text-center cursor-pointer transition bg-slate-900/40 hover:bg-slate-900/80 select-none"
+                      >
+                        <div className="flex items-center justify-center gap-1.5 text-xs font-medium text-slate-300">
+                          <UploadCloud className="w-4 h-4 text-sky-400" />
+                          <span>Faaliyet Raporu Seç veya Sürükle</span>
+                        </div>
+                        <input
+                          ref={activityInputRef}
+                          type="file"
+                          multiple
+                          accept=".pdf,application/pdf"
+                          onChange={e => {
+                            if (e.target.files) handleAddActivityFiles(e.target.files);
+                            e.target.value = '';
+                          }}
+                          className="sr-only"
+                        />
+                      </div>
+                    </div>
+
+                    {activityFiles.length > 0 && (
+                      <div className="mt-3 pt-2.5 border-t border-slate-800/80 max-h-24 overflow-y-auto space-y-1">
+                        {activityFiles.map((f, i) => (
+                          <div key={i} className="flex items-center justify-between gap-1 text-[11px] bg-slate-900/90 px-2 py-1 rounded text-slate-300 border border-slate-800">
+                            <span className="truncate">{f.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeActivityFile(i)}
                               className="text-slate-500 hover:text-rose-400 p-0.5 cursor-pointer"
                             >
                               <X className="w-3 h-3" />
@@ -4246,6 +4278,20 @@ export default function ValuationTerminal({
                             <span>{activeReport.decision}</span>
                           </div>
                         </div>
+
+                        {/* Değer Tuzağı Uyarısı Rozeti */}
+                        {(valuationInfo.is_value_trap || activeReport.isValueTrap) && (
+                          <>
+                            <div className="h-7 w-px bg-slate-800" />
+                            <div className="flex flex-col items-center">
+                              <span className="text-[9px] uppercase font-bold text-rose-500 tracking-wider">RİSK</span>
+                              <div className="flex items-center gap-1 px-2.5 py-0.5 mt-0.5 rounded-md border border-rose-500/50 bg-rose-500/20 text-rose-300 text-xs font-black tracking-wide font-mono animate-pulse">
+                                <ShieldAlert className="w-3 h-3 text-rose-400" />
+                                <span>DEĞER TUZAĞI</span>
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
                     );
                   })()}
@@ -4558,6 +4604,33 @@ export default function ValuationTerminal({
                           <div>
                             <span className="font-bold text-emerald-200">{currentSector === 'BANKING' ? 'Bankacılık Finansal Modeli' : 'Finansal Kiralama & Faktoring Modeli'}:</span>{' '}
                             Finansal kuruluş bilançosu yapısı gereği FAVÖK, Brüt Kâr, Net Borç ve Cari Oran devre dışı bırakılmıştır. Net Faiz Marjı (NIM), Aktif Kârlılığı (ROA), NPL ve Sermaye Yeterliliği baz alınmaktadır.
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Değer Tuzağı (Value Trap) Uyarı Bannerı */}
+                      {(valuationInfo.is_value_trap || activeReport?.isValueTrap) && (
+                        <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 sm:p-5 flex items-start gap-3.5 text-rose-300 text-xs shadow-xl">
+                          <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                          <div className="space-y-1.5 flex-1">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span className="font-bold text-rose-200 text-sm">
+                                🚨 Kritik Değer Tuzağı Riski (Value Trap Alert)
+                              </span>
+                              <span className="text-[10px] font-mono font-bold bg-rose-950/90 text-rose-400 border border-rose-800 px-2 py-0.5 rounded">
+                                {valuationInfo.value_trap_severity || activeReport?.valueTrapSeverity || 'YÜKSEK RİSK'}
+                              </span>
+                            </div>
+                            <p className="text-rose-200/90 leading-relaxed">
+                              Hisse senedi kağıt üzerinde %{valuationInfo.discount_pct} iskontolu görünmektedir; ancak eriyen operasyonel kâr marjları, negatif sermaye makası (ROIC &lt; WACC) veya yüksek borç yükü nedeniyle bu iskonto bir değer tuzağı riski barındırmaktadır. Emniyet marjı UNSAFE (Güvensiz) kategorisindedir.
+                            </p>
+                            {(valuationInfo.value_trap_reasons || activeReport?.valueTrapReasons) && (
+                              <ul className="mt-1 space-y-1 pl-4 list-disc text-rose-300/80 font-mono text-[11px]">
+                                {(valuationInfo.value_trap_reasons || activeReport?.valueTrapReasons || []).map((r, i) => (
+                                  <li key={i}>{r}</li>
+                                ))}
+                              </ul>
+                            )}
                           </div>
                         </div>
                       )}
@@ -5807,6 +5880,85 @@ export default function ValuationTerminal({
                       </div>
                     )}
                   </div>
+
+                  {/* Son 4 Çeyrek Adil Değer Trendi & Değer Tuzağı Erken Uyarı Kartı */}
+                  {valuationInfo.fair_value_trend && valuationInfo.fair_value_trend.length > 0 && (
+                    <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                            <TrendingUp className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                              Son 4 Çeyrek Adil Değer Trendi vs. Piyasa Fiyatı Seyri
+                              {valuationInfo.fair_value_trend.some(p => p.isEroding) && (
+                                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-950/80 text-rose-400 border border-rose-800 font-bold">
+                                  ⚠️ Temel Değer Erozyonu
+                                </span>
+                              )}
+                            </h3>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              Şirketin içsel değerinin (Fair Value) çeyreklik değişimi ve piyasa fiyatı ile kıyası
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs font-mono">
+                          <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                            <span>Adil Değer</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-cyan-400 font-semibold">
+                            <span className="w-2.5 h-2.5 rounded-full bg-cyan-400" />
+                            <span>Piyasa Fiyatı</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {valuationInfo.is_value_trap && (
+                        <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 flex items-start gap-3 text-rose-300 text-xs">
+                          <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                          <div className="space-y-1">
+                            <span className="font-bold text-rose-200">🚨 Değer Tuzağı Riski (Value Trap Alert):</span>{' '}
+                            Hisse senedi kağıt üzerinde %{valuationInfo.discount_pct} iskontolu görünmektedir; ancak eriyen kâr marjları, negatif sermaye makası (ROIC &lt; WACC) veya artan borç yükü nedeniyle içsel değer piyasa fiyatının altındadır veya erozyona uğramaktadır.
+                            {valuationInfo.value_trap_reasons && (
+                              <ul className="mt-1.5 space-y-0.5 pl-4 list-disc text-rose-300/90 font-mono text-[11px]">
+                                {valuationInfo.value_trap_reasons.map((r, i) => (
+                                  <li key={i}>{r}</li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="h-60 w-full pt-2">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={valuationInfo.fair_value_trend} margin={{ top: 10, right: 15, left: 0, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                            <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={(v: string) => v ? v.slice(2) : v} />
+                            <YAxis stroke="#64748b" tick={{ fontSize: 11, fill: '#94a3b8' }} domain={['auto', 'auto']} tickFormatter={(v) => `${v} TL`} />
+                            <Tooltip
+                              contentStyle={{ backgroundColor: '#090D16', borderColor: '#334155', borderRadius: '0.75rem', fontSize: '12px' }}
+                              formatter={(value: any, name: any) => [`${Number(value).toFixed(2)} TL`, name === 'fairValue' ? 'Adil Değer' : 'Piyasa Fiyatı']}
+                              labelFormatter={(label) => `Dönem: ${label}`}
+                            />
+                            <Line type="monotone" dataKey="fairValue" name="fairValue" stroke="#10b981" strokeWidth={2.5} dot={{ r: 4, fill: '#10b981' }} activeDot={{ r: 6 }} />
+                            <Line type="monotone" dataKey="sharePrice" name="sharePrice" stroke="#06b6d4" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 3, fill: '#06b6d4' }} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+
+                      {valuationInfo.fair_value_trend.some(p => p.isEroding) && (
+                        <div className="bg-amber-500/10 border border-amber-500/25 rounded-xl p-3 text-amber-300 text-xs flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span>
+                            <strong>Sistematik Değer Erozyonu:</strong> Şirketin adil değeri son çeyreklerde aralıksız düşmektedir. Piyasa fiyatı gerilese dahi hissenin ucuzlamadığı, şirketin temel değer üretemediği göz önünde bulundurulmalıdır.
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* 4 Değer Sürücüsü Kartı */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -26,6 +26,22 @@ export interface FairValueDrivers {
   target_multiple: TargetMultipleDriver;
 }
 
+export interface FairValueTrendPoint {
+  period: string;
+  fairValue: number;
+  sharePrice: number | null;
+  discountPct: number | null;
+  isEroding?: boolean;
+}
+
+export interface ValueTrapAnalysis {
+  isValueTrap: boolean;
+  severity: 'NONE' | 'MODERATE' | 'HIGH' | 'CRITICAL';
+  reasons: string[];
+  warningTitle: string;
+  description: string;
+}
+
 export interface ValuationMetrics {
   current_price: number;
   fair_value: number;
@@ -44,6 +60,13 @@ export interface ValuationMetrics {
   valuation_model_name: string;
   formula_display: string;
   gordon_formula_text?: string;
+  is_value_trap?: boolean;
+  value_trap_severity?: 'NONE' | 'MODERATE' | 'HIGH' | 'CRITICAL';
+  value_trap_reasons?: string[];
+  fair_value_trend?: FairValueTrendPoint[];
+  eva_haircut_applied?: boolean;
+  eva_discount_pct?: number;
+  debt_distress_discount_pct?: number;
 }
 
 export interface SectorScoreBreakdown {
@@ -76,6 +99,9 @@ export interface FinalDecisionOptimization {
   safetyFlags: string[];
   conditionalWarnings: string[];
   isGreyZone: boolean;
+  isValueTrap?: boolean;
+  valueTrapSeverity?: 'NONE' | 'MODERATE' | 'HIGH' | 'CRITICAL';
+  valueTrapReasons?: string[];
 }
 
 // ============================================================================
@@ -1906,6 +1932,239 @@ export function calculateSectorScore(
 }
 
 // ============================================================================
+// 3.5. DEĞER TUZAĞI (VALUE TRAP) & ADİL DEĞER TREND MOTORU
+// ============================================================================
+
+/**
+ * Şirketin tarihsel finansal tablolarında son 4 çeyreğin adil değer trendini
+ * noktasal (point-in-time) olarak hesaplar ve erozyon olup olmadığını belirler.
+ */
+export function computeFairValueTrend(
+  financialHistory: any[],
+  sector: SectorType = 'INDUSTRIAL',
+  effectiveShareCount: number = 180000000
+): FairValueTrendPoint[] {
+  const history = Array.isArray(financialHistory) ? financialHistory : [];
+  if (history.length === 0) return [];
+
+  const sorted = [...history].sort((a, b) => parsePeriodSortKey(a?.period) - parsePeriodSortKey(b?.period));
+  const targetPeriods = sorted.slice(-4);
+  const trendPoints: FairValueTrendPoint[] = [];
+
+  for (let i = 0; i < targetPeriods.length; i++) {
+    const item = targetPeriods[i];
+    const periodLabel = item?.period || `Ç${i + 1}`;
+    const pSharePrice = parseFinancialNumber(item?.share_price);
+
+    const unitScale = (item?.is_thousands === true || (item?.total_assets && Math.abs(item.total_assets) < 500_000_000)) ? 1000 : 1;
+    const periodAnnualFactor = getAnnualizationFactor(item?.period);
+
+    const eq = (parseFinancialNumber(item?.equity) ?? 0) * unitScale;
+    const netDebt = (parseFinancialNumber(item?.net_debt) ?? 0) * unitScale;
+    const ebitda = (parseFinancialNumber(item?.ebitda) ?? 0) * unitScale * periodAnnualFactor;
+    const netInc = (parseFinancialNumber(item?.net_income) ?? 0) * unitScale * periodAnnualFactor;
+
+    let periodFv = 0;
+
+    if (sector === 'INSURANCE') {
+      const roe = parseFinancialNumber(item?.roe) ?? (eq > 0 ? (netInc / eq) * 100 : 25);
+      const targetPb = roe > 45 ? 2.3 : (roe > 30 ? 1.8 : 1.35);
+      const bvps = eq > 0 ? (eq / effectiveShareCount) : 1;
+      periodFv = bvps * targetPb;
+    } else if (sector === 'BANKING') {
+      const roe = parseFinancialNumber(item?.roe) ?? (eq > 0 ? (netInc / eq) * 100 : 25);
+      const targetPb = roe > 35 ? 1.4 : (roe > 20 ? 1.05 : 0.85);
+      const bvps = eq > 0 ? (eq / effectiveShareCount) : 1;
+      periodFv = bvps * targetPb;
+    } else if (sector === 'REIT') {
+      const navPerShare = eq > 0 ? (eq / effectiveShareCount) : 1;
+      periodFv = navPerShare * 0.75;
+    } else if (sector === 'HOLDING') {
+      const navPerShare = eq > 0 ? (eq / effectiveShareCount) : 1;
+      periodFv = navPerShare * 0.70;
+    } else {
+      // Reel Sektör / Sanayi / Havacılık / Teknoloji
+      if (eq <= 0) {
+        periodFv = 0.05;
+      } else if (ebitda <= 0) {
+        const bvps = eq / effectiveShareCount;
+        periodFv = bvps * 0.35;
+      } else {
+        const roe = parseFinancialNumber(item?.roe) ?? (eq > 0 ? (netInc / eq) * 100 : 15);
+        const roic = parseFinancialNumber(item?.roic) ?? 15;
+        const wacc = parseFinancialNumber(item?.benchmark_wacc ?? item?.real_wacc ?? item?.wacc ?? 28) ?? 28;
+        const evaSpread = roic - wacc;
+
+        let mult = 7.0;
+        let justifiedPb = roe > 25 ? 1.8 : (roe > 12 ? 1.2 : 0.85);
+        let evaDiscount = 0;
+
+        if (evaSpread < 0 || roic <= 0) {
+          evaDiscount = Math.min(0.40, Math.max(0.10, (Math.abs(evaSpread) / 100) * 1.2));
+          justifiedPb = Math.max(0.32, Math.min(0.80, (Math.max(0, roe) / Math.max(15, wacc)) * 0.85));
+        }
+
+        const fwdEbitda = ebitda * (1 - evaDiscount);
+        const evEq = Math.max(0, fwdEbitda * mult - netDebt);
+        const evPerShare = evEq / effectiveShareCount;
+        const pbPerShare = (eq / effectiveShareCount) * justifiedPb;
+        const pePerShare = netInc > 0 ? ((netInc * 8.5) / effectiveShareCount) : 0;
+
+        const parts: number[] = [];
+        if (evPerShare > 0) parts.push(evPerShare);
+        if (pbPerShare > 0) parts.push(pbPerShare);
+        if (pePerShare > 0) parts.push(pePerShare);
+
+        periodFv = parts.length > 0 ? (parts.reduce((a, b) => a + b, 0) / parts.length) : (pbPerShare || 1.0);
+
+        const ndEbitda = netDebt > 0 && ebitda > 0 ? (netDebt / ebitda) : 0;
+        if (ndEbitda > 4.0) {
+          const debtDisc = Math.min(0.30, (ndEbitda - 4.0) * 0.07);
+          periodFv = periodFv * (1 - debtDisc);
+        }
+      }
+    }
+
+    periodFv = Number(Math.max(0.05, periodFv).toFixed(2));
+    const discPct = (pSharePrice && pSharePrice > 0)
+      ? Number((((periodFv - pSharePrice) / pSharePrice) * 100).toFixed(1))
+      : null;
+
+    trendPoints.push({
+      period: periodLabel,
+      fairValue: periodFv,
+      sharePrice: pSharePrice,
+      discountPct: discPct
+    });
+  }
+
+  // Sistematik erime kontrolü: son 3 çeyrek boyunca adil değer aralıksız düşmüş mü?
+  if (trendPoints.length >= 3) {
+    const fv0 = trendPoints[trendPoints.length - 3].fairValue;
+    const fv1 = trendPoints[trendPoints.length - 2].fairValue;
+    const fv2 = trendPoints[trendPoints.length - 1].fairValue;
+    if (fv2 < fv1 && fv1 < fv0) {
+      trendPoints.forEach(p => { p.isEroding = true; });
+    }
+  }
+
+  return trendPoints;
+}
+
+/**
+ * Otomatik "Değer Tuzağı (Value Trap)" Erken Uyarı Algoritması:
+ * Hisse fiyatı kağıt üzerinde iskontolu (%20+) görünmesine rağmen;
+ * 1) Aralıksız marj daralması (son 2 çeyrektir düşen FAVÖK/Faaliyet marjı),
+ * 2) Negatif EVA makası (ROIC < WACC veya ROIC < 0, sermaye değer yıkımı),
+ * 3) Kritik borçluluk (Net Borç / FAVÖK > 4.0x),
+ * 4) Nakit yakımı / negatif FCF veya OCF,
+ * kriterlerinden en az 2 tanesi gerçekleştiğinde DEĞER TUZAĞI tespit eder.
+ */
+export function detectValueTrap(
+  financialHistory: any[],
+  currentPrice: number,
+  fairValue: number,
+  sector: SectorType = 'INDUSTRIAL',
+  effectiveLatestData?: any
+): ValueTrapAnalysis {
+  const history = Array.isArray(financialHistory) ? financialHistory : [];
+  if (history.length === 0 || !currentPrice || currentPrice <= 0 || !fairValue || fairValue <= 0) {
+    return {
+      isValueTrap: false,
+      severity: 'NONE',
+      reasons: [],
+      warningTitle: '',
+      description: ''
+    };
+  }
+
+  const discountPct = Number((((fairValue - currentPrice) / currentPrice) * 100).toFixed(1));
+  // Sadece kağıt üzerinde iskonto (%20+) varken değer tuzağı analizi devreye girer
+  if (discountPct < 20.0) {
+    return {
+      isValueTrap: false,
+      severity: 'NONE',
+      reasons: [],
+      warningTitle: '',
+      description: ''
+    };
+  }
+
+  const sorted = [...history].sort((a, b) => parsePeriodSortKey(a?.period) - parsePeriodSortKey(b?.period));
+  const latest = sorted.length > 0 ? sorted[sorted.length - 1] : effectiveLatestData;
+  const prev1 = sorted.length > 1 ? sorted[sorted.length - 2] : null;
+  const prev2 = sorted.length > 2 ? sorted[sorted.length - 3] : null;
+
+  const reasons: string[] = [];
+
+  // 1. Kriter: Sermaye Değer Yıkımı (ROIC < WACC veya ROIC <= 0)
+  const roic = parseFinancialNumber(latest?.roic);
+  const wacc = parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc ?? 28.0);
+  if (roic !== null && wacc !== null && (roic < 0 || (roic - wacc) < -3.0)) {
+    reasons.push(`Sermaye Değer Yıkımı: Şirketin getirisi (ROIC %${roic.toFixed(1)}) sermaye maliyetinin (%${wacc.toFixed(1)}) gerisindedir.`);
+  }
+
+  // 2. Kriter: Marj Daralması (Margin Erosion - son 2 çeyrektir aralıksız düşüş)
+  const getMargin = (item: any) => {
+    if (!item) return null;
+    const ebitda = parseFinancialNumber(item.ebitda);
+    const rev = parseFinancialNumber(item.revenue ?? item.written_premiums);
+    if (ebitda !== null && rev !== null && rev > 0) return (ebitda / rev) * 100;
+    return parseFinancialNumber(item.ebitda_margin ?? item.operating_margin);
+  };
+  const mLatest = getMargin(latest);
+  const mPrev1 = getMargin(prev1);
+  const mPrev2 = getMargin(prev2);
+  if (mLatest !== null && mPrev1 !== null && mPrev2 !== null) {
+    if (mLatest < mPrev1 && mPrev1 < mPrev2) {
+      reasons.push(`Aralıksız Marj Daralması: Operasyonel marj son 2 çeyrektir (%${mPrev2.toFixed(1)} ➔ %${mPrev1.toFixed(1)} ➔ %${mLatest.toFixed(1)}) gerilemektedir.`);
+    }
+  } else if (mLatest !== null && mPrev1 !== null && (mPrev1 - mLatest) > 4.0) {
+    reasons.push(`Sert Marj Kaybı: Operasyonel marj önceki döneme göre %${(mPrev1 - mLatest).toFixed(1)} puan daralmıştır.`);
+  }
+
+  // 3. Kriter: Aşırı Borçluluk (Net Borç / FAVÖK > 4.0x)
+  const netDebt = parseFinancialNumber(latest?.net_debt);
+  const ebitda = parseFinancialNumber(latest?.ebitda);
+  if (sector === 'INDUSTRIAL' || sector === 'AVIATION' || sector === 'UTILITIES_TELCO') {
+    if (netDebt !== null && netDebt > 0) {
+      if (ebitda !== null && ebitda > 0) {
+        const ndEbitda = netDebt / ebitda;
+        if (ndEbitda > 4.0) {
+          reasons.push(`Kritik Borçluluk Baskısı: Net Borç / FAVÖK çarpanı (${ndEbitda.toFixed(1)}x) emniyet tavanını (4.0x) aşmıştır.`);
+        }
+      } else if (ebitda !== null && ebitda <= 0) {
+        reasons.push('Borçlu Şirkette Operasyonel Zarar: FAVÖK negatif olmasına rağmen şirketin net finansal borcu bulunmaktadır.');
+      }
+    }
+  }
+
+  // 4. Kriter: Zayıf Kâr Kalitesi / Nakit Akışı Eksikliği (OCF <= 0 veya FCF < 0 iken Net Kâr > 0)
+  const ocf = parseFinancialNumber(latest?.operating_cash_flow ?? latest?.ocf);
+  const netIncome = parseFinancialNumber(latest?.net_income);
+  const fcf = parseFinancialNumber(latest?.free_cash_flow);
+  if (netIncome !== null && netIncome > 0 && ocf !== null && ocf <= 0) {
+    reasons.push('Nakit Akışı Kopukluğu: Bilançoda kâr görünmesine rağmen operasyonel nakit akışı negatiftir.');
+  } else if (fcf !== null && fcf < 0 && netIncome !== null && netIncome > 0) {
+    reasons.push('Negatif Serbest Nakit Akışı (FCF): Kârlılığa rağmen nakit yaratımı negatiftir.');
+  }
+
+  const isValueTrap = reasons.length >= 2;
+  const severity: 'NONE' | 'MODERATE' | 'HIGH' | 'CRITICAL' =
+    reasons.length >= 3 ? 'CRITICAL' : (reasons.length >= 2 ? 'HIGH' : (reasons.length === 1 ? 'MODERATE' : 'NONE'));
+
+  return {
+    isValueTrap,
+    severity,
+    reasons,
+    warningTitle: isValueTrap ? '🚨 DEĞER TUZAĞI (VALUE TRAP) RİSKİ' : '',
+    description: isValueTrap
+      ? `Hisse kağıt üzerinde %${discountPct} iskontolu görünmektedir; ancak eriyen kâr marjları, negatif sermaye makası (ROIC < WACC) veya yüksek borçluluk nedeniyle bu iskonto bir "Değer Tuzağı" riski taşımaktadır.`
+      : ''
+  };
+}
+
+// ============================================================================
 // 4. NİHAİ KARAR OPTİMİZASYONU & MARGİN OF SAFETY FİLTRESİ
 // ============================================================================
 
@@ -2170,18 +2429,43 @@ export function optimizeFinalDecision({
       overrideApplied = true;
       overrideReason = `Skor Tabanı Filtresi: Temel analiz skoru (${effectiveScore}/100) AL eşiğinin (65) altındadır.`;
     }
+
+    // 12. Kural: Değer Tuzağı (Value Trap) Filtresi:
+    // Kağıt üzerinde cazip iskonto (%20+) görünmesine rağmen marj daralması, negatif ROIC/EVA veya yüksek borç varsa AL kararı ALMA'ya çekilir!
+    const isValueTrap = valuation?.is_value_trap ?? false;
+    const valueTrapReasons = valuation?.value_trap_reasons || [];
+    if (isValueTrap && !overrideApplied) {
+      finalDecision = 'ALMA';
+      overrideApplied = true;
+      overrideReason = `🚨 Değer Tuzağı Riski (Value Trap): Kağıt üzerinde cazip iskonto (%${discount}) bulunmasına rağmen şirket marj daralması, negatif EVA makası (ROIC < WACC) veya yüksek borç yükü nedeniyle değer tuzağı oluşturmaktadır. AL tavsiyesi ALMA olarak revize edildi.`;
+      safetyFlags.push(`🚨 Değer Tuzağı: ${valueTrapReasons.join('; ')}`);
+    }
   }
 
-  // 12. Kural: ALMA Tavsiyesi ve Risk Emniyet Marjı Koruması
+  // 13. Kural: ALMA Tavsiyesi ve Risk Emniyet Marjı Koruması
   // Şirket ALMA / Yüksek Risk kategorisinde ise (operasyonel zarar, sermaye erozyonu, borç baskısı veya düşük skor),
   // emniyet marjı tanınmaz (UNSAFE) ve risk uyarısı eklenir.
   // Temel Kural: Adil değer modelin hesapladığı saf matematiksel değerdir; asla cari piyasa fiyatına veya sabit bir katsayıya kilitlenemez.
   if (finalDecision === 'ALMA' && valuation) {
-    valuation.boundary_warning = (valuation.boundary_warning ? valuation.boundary_warning + ' | ' : '') +
-      'Sermaye Kaybı & Risk Uyarısı: Şirket ALMA / Yüksek Risk kategorisindedir; operasyonel zarar, sermaye erozyonu veya yüksek borç yükü nedeniyle emniyet marjı tanınmamaktadır (UNSAFE).';
-    valuation.margin_of_safety = 0;
-    valuation.margin_of_safety_status = 'UNSAFE';
-    marginOfSafetyStatus = 'UNSAFE';
+    if (valuation.is_value_trap) {
+      valuation.boundary_warning = (valuation.boundary_warning ? valuation.boundary_warning + ' | ' : '') +
+        `🚨 DEĞER TUZAĞI (VALUE TRAP): Şirket kağıt üzerinde %${discount} iskonto gösterse de eriyen marjlar ve sermaye değer yıkımı nedeniyle emniyet marjı geçersizdir (UNSAFE).`;
+      valuation.margin_of_safety = 0;
+      valuation.margin_of_safety_status = 'UNSAFE';
+      marginOfSafetyStatus = 'UNSAFE';
+    } else if (discount <= 0) {
+      valuation.boundary_warning = (valuation.boundary_warning ? valuation.boundary_warning + ' | ' : '') +
+        'Sermaye Kaybı & Risk Uyarısı (Primli Değerleme): Hisse adil değerinin üzerinde işlem görmektedir; emniyet marjı bulunmamaktadır (UNSAFE).';
+      valuation.margin_of_safety = 0;
+      valuation.margin_of_safety_status = 'UNSAFE';
+      marginOfSafetyStatus = 'UNSAFE';
+    } else {
+      valuation.boundary_warning = (valuation.boundary_warning ? valuation.boundary_warning + ' | ' : '') +
+        'Sermaye Kaybı & Risk Uyarısı: Şirket ALMA / Yüksek Risk kategorisindedir; operasyonel zarar, sermaye erozyonu veya yüksek borç yükü nedeniyle emniyet marjı tanınmamaktadır (UNSAFE).';
+      valuation.margin_of_safety = 0;
+      valuation.margin_of_safety_status = 'UNSAFE';
+      marginOfSafetyStatus = 'UNSAFE';
+    }
   }
 
   // Sınır Koşulları ve Gri Alan Entegrasyonu
@@ -2192,17 +2476,23 @@ export function optimizeFinalDecision({
     );
   }
 
+  const isValueTrap = valuation?.is_value_trap ?? false;
+  const valueTrapReasons = valuation?.value_trap_reasons || [];
+
   return {
     finalDecision,
     rawDecision,
     score: effectiveScore,
     overrideApplied,
     overrideReason,
-    marginOfSafety: discount > 0 ? discount : 0,
+    marginOfSafety: valuation?.margin_of_safety !== undefined ? valuation.margin_of_safety : (discount > 0 ? discount : 0),
     marginOfSafetyStatus,
     safetyFlags,
     conditionalWarnings,
     isGreyZone,
+    isValueTrap,
+    valueTrapSeverity: valuation?.value_trap_severity || (isValueTrap ? 'HIGH' : 'NONE'),
+    valueTrapReasons,
   };
 }
 
@@ -2758,6 +3048,9 @@ export function computeSectorValuationAndDrivers(
   let modelName = '';
   let isInsolvent = false;
   let boundaryWarning: string | undefined = undefined;
+  let evaDiscountPct = 0;
+  let debtDiscountPct = 0;
+  let evaHaircutApplied = false;
 
   const normCurr = String(extractedData?.currency || '').trim().toLowerCase();
   const eqScaleSample = Math.abs(parseFinancialNumber(latest?.equity) ?? 0);
@@ -2865,14 +3158,14 @@ export function computeSectorValuationAndDrivers(
       fairValue = 0.05;
       formulaStr = `Özkaynaklar Negatif (TTK 376) = ${totalEquityFull.toLocaleString('tr-TR')} TL (Risk Tabanı)`;
     } else {
-      const clampedRevGrowth = Math.min(0.85, Math.max(0.25, revGrowth / 100));
+      const clampedRevGrowth = Math.min(0.85, Math.max(-0.40, revGrowth / 100));
       const forwardRev = revFull > 0 ? revFull * (1 + clampedRevGrowth) : 0;
       const evSalesMult = Math.max(2.5, Math.min(6.5, targetMultipleNum));
       const firmValue = forwardRev * evSalesMult;
       const equityValue = firmValue - netDebt;
       const salesPerShare = equityValue > 0 ? (equityValue / effectiveShareCount) : 0;
 
-      const forwardNet = netFull > 0 ? netFull * (1 + Math.min(0.85, Math.max(0.25, netGrowth / 100))) : 0;
+      const forwardNet = netFull > 0 ? netFull * (1 + Math.min(0.85, Math.max(-0.50, netGrowth / 100))) : 0;
       const targetPe = Math.max(12.0, Math.min(25.0, evSalesMult * 3.5));
       const pePerShare = forwardNet > 0 ? ((forwardNet * targetPe) / effectiveShareCount) : 0;
 
@@ -2906,24 +3199,52 @@ export function computeSectorValuationAndDrivers(
     const totalEquityFull = latestEq * unitScale;
     const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
 
+    evaDiscountPct = 0;
+    debtDiscountPct = 0;
+    evaHaircutApplied = false;
+
     if (totalEquityFull <= 0) {
       isInsolvent = true;
       boundaryWarning = 'Şirket özkaynakları negatiftir (TTK 376 Borca Batıklık). Hisse başı adil değer tasfiye/risk tabanına çekilmiştir.';
       fairValue = 0.05;
       formulaStr = `Özkaynaklar Negatif (TTK 376) = ${totalEquityFull.toLocaleString('tr-TR')} TL (Tasfiye Değeri = 0,05 TL)`;
     } else {
-      const clampedRevGrowth = Math.min(0.85, Math.max(0.25, revGrowth / 100));
-      const clampedNetGrowth = Math.min(0.85, Math.max(0.25, netGrowth / 100));
+      // Dinamik Büyüme & Çeyreksel Tahmin Revizyonu:
+      // Şirket daralıyorsa veya marj kaybediyorsa pozitif büyüme dayatılmaz
+      const rawRevG = revGrowth / 100;
+      const rawNetG = netGrowth / 100;
+      const clampedRevGrowth = Math.min(0.75, Math.max(-0.40, rawRevG));
+      const clampedNetGrowth = Math.min(0.80, Math.max(-0.50, rawNetG));
+
+      // Sermaye Verimliliği ve Borçluluk Dinamikleri
+      const currentRoic = parseFinancialNumber(latest?.roic);
+      const currentWacc = parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc ?? 28.0);
+      const evaSpread = (currentRoic !== null && currentWacc !== null) ? (currentRoic - currentWacc) : null;
+      const netDebtToEbitda = (ebitdaFull > 0 && netDebt > 0) ? (netDebt / ebitdaFull) : 0;
+
+      // 1. Sermaye Verimliliği Cezası (EVA Destruction Haircut): ROIC < WACC veya ROIC <= 0
+      if (evaSpread !== null && (evaSpread < 0 || (currentRoic !== null && currentRoic <= 0))) {
+        evaHaircutApplied = true;
+        evaDiscountPct = Math.min(0.45, Math.max(0.12, (Math.abs(evaSpread) / 100) * 1.35));
+      }
+
+      // 2. Finansal Borç Sıkıntısı Cezası (Financial Distress Adjustment): Net Borç / FAVÖK > 4.0x
+      if (netDebtToEbitda > 4.0) {
+        debtDiscountPct = Math.min(0.35, Number(((netDebtToEbitda - 4.0) * 0.08).toFixed(3)));
+      }
 
       // 1. Sütun: 12A İleriye Dönük FD/FAVÖK Operasyonel Değeri
       // KRİTİK FİNANSAL KURAL: Negatif FAVÖK ortamında asla hayali FAVÖK marjı uydurulamaz!
-      const forwardEbitda = ebitdaFull > 0 ? ebitdaFull * (1 + clampedRevGrowth) : 0;
+      const baseForwardEbitda = ebitdaFull > 0 ? ebitdaFull * (1 + clampedRevGrowth) : 0;
+      const forwardEbitda = evaHaircutApplied ? baseForwardEbitda * (1 - evaDiscountPct) : baseForwardEbitda;
       const evEbitdaEquity = forwardEbitda > 0 ? (forwardEbitda * targetMultipleNum - netDebt) : 0;
       const evEbitdaPerShare = evEbitdaEquity > 0 ? (evEbitdaEquity / effectiveShareCount) : 0;
 
       // 2. Sütun: 12A İleriye Dönük F/K (Net Kâr) Değeri
-      const forwardNet = netFull > 0 ? netFull * (1 + clampedNetGrowth) : 0;
-      const targetPe = Math.max(7.5, targetMultipleNum * 1.35);
+      const baseForwardNet = netFull > 0 ? netFull * (1 + clampedNetGrowth) : 0;
+      const forwardNet = evaHaircutApplied ? baseForwardNet * (1 - evaDiscountPct * 0.8) : baseForwardNet;
+      const baseTargetPe = Math.max(7.5, targetMultipleNum * 1.35);
+      const targetPe = evaHaircutApplied ? Math.max(4.0, baseTargetPe * (1 - evaDiscountPct * 0.7)) : baseTargetPe;
       const pePerShare = forwardNet > 0 ? ((forwardNet * targetPe) / effectiveShareCount) : 0;
 
       // 3. Sütun: 12A İleriye Dönük Defter Değeri (PD/DD & Varlık Tabanı)
@@ -2953,10 +3274,9 @@ export function computeSectorValuationAndDrivers(
         const liquidityBuffer = Math.min(1.0, Math.max(0.35, computedCr / 1.5));
 
         // 4. Sanayi Varlık Tabanı Çevrim Çarpanı (Base Tangible Asset Turnaround Multiple):
-        // Kriz/dönüşüm döngüsündeki sanayi varlıkları için döngüsel dip çarpan tabanı (0.378x)
         const baseMultiple = 0.378;
 
-        // Hak Edilen Sıkıntılı PD/DD Çarpanı: Tamamen bilanço dinamiklerinin çarpımıdır (Piyasa fiyatı 0 etkilidir!)
+        // Hak Edilen Sıkıntılı PD/DD Çarpanı: Tamamen bilanço dinamiklerinin çarpımıdır
         const justifiedPb = Number((baseMultiple * capitalRetentionFactor * equityWeight * liquidityBuffer).toFixed(3));
 
         fairValue = Number((forwardBvps * justifiedPb).toFixed(2));
@@ -2975,7 +3295,10 @@ export function computeSectorValuationAndDrivers(
         const forwardEquityGrowth = roe > 0 ? Math.min(0.75, Math.max(0.10, (roe / 100) * 0.85)) : 0;
         const forwardBvps = Math.max(0, bvps * (1 + forwardEquityGrowth));
         let justifiedPb = 1.0;
-        if (roe > 25) {
+        if (evaHaircutApplied || (roe != null && roe < 8)) {
+          // Değer yıkan şirketlerde (ROIC < WACC) PD/DD çarpanı kesinlikle 1.0x altında kalmalıdır (Warren Buffett / Stern Stewart kuralı)
+          justifiedPb = Math.max(0.32, Math.min(0.85, (Math.max(0, roe) / Math.max(15, currentWacc || 25)) * 0.85));
+        } else if (roe > 25) {
           justifiedPb = Math.min(3.2, Math.max(1.3, roe / 22));
         } else if (roe > 12) {
           justifiedPb = Math.max(1.0, Math.min(1.4, roe / 18));
@@ -2994,13 +3317,21 @@ export function computeSectorValuationAndDrivers(
         if (validComponents.length > 0) {
           const totalW = validComponents.reduce((acc, c) => acc + c.weight, 0);
           hybridFair = validComponents.reduce((acc, c) => acc + (c.val * (c.weight / totalW)), 0);
-          if (pbPerShare > 0 && hybridFair < pbPerShare * 0.75) {
+          // Değer yıkan şirketlerde defter değeri tabanı zorlanmaz
+          if (!evaHaircutApplied && pbPerShare > 0 && hybridFair < pbPerShare * 0.75) {
             hybridFair = (hybridFair * 0.4) + (pbPerShare * 0.6);
           }
         }
 
+        // Finansal Borç Sıkıntısı İndirimi (Net Borç / FAVÖK > 4.0x)
+        if (debtDiscountPct > 0) {
+          hybridFair = hybridFair * (1 - debtDiscountPct);
+        }
+
         fairValue = Number(Math.max(0.5, hybridFair).toFixed(2));
-        formulaStr = `12A İleri FAVÖK Değeri: ${evEbitdaPerShare.toFixed(2).replace('.', ',')} TL | 12A İleri Defter Değeri: ${pbPerShare.toFixed(2).replace('.', ',')} TL ➔ Hibrit Adil Değer = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+        const haircutNote = evaHaircutApplied ? ` [EVA İndirimi: -%${(evaDiscountPct * 100).toFixed(0)}]` : '';
+        const debtNote = debtDiscountPct > 0 ? ` [Borç Sıkıntısı: -%${(debtDiscountPct * 100).toFixed(0)}]` : '';
+        formulaStr = `12A İleri FAVÖK Değeri: ${evEbitdaPerShare.toFixed(2).replace('.', ',')} TL | 12A İleri Defter Değeri: ${pbPerShare.toFixed(2).replace('.', ',')} TL ➔ Hibrit Adil Değer = ${fairValue.toFixed(2).replace('.', ',')} TL${haircutNote}${debtNote}`;
       }
     }
   }
@@ -3029,6 +3360,9 @@ export function computeSectorValuationAndDrivers(
   const impliedBvps = (fairValue > 0 && targetMultipleNum > 0) ? (fairValue / targetMultipleNum) : null;
   const currentPb = (sector === 'INSURANCE' || sector === 'BANKING') && impliedBvps ? Number((currentPrice / impliedBvps).toFixed(1)) : undefined;
 
+  const valueTrapResult = detectValueTrap(extractedData?.financial_history, currentPrice, fairValue, sector, latest);
+  const fairValueTrend = computeFairValueTrend(extractedData?.financial_history, sector, effectiveShareCount);
+
   const valuation: ValuationMetrics = {
     current_price: currentPrice,
     fair_value: fairValue,
@@ -3044,6 +3378,13 @@ export function computeSectorValuationAndDrivers(
     valuation_model_name: modelName || 'Sektörel Temel Değerleme Modeli',
     formula_display: formulaStr,
     gordon_formula_text: gordonFormulaText,
+    is_value_trap: valueTrapResult.isValueTrap,
+    value_trap_severity: valueTrapResult.severity,
+    value_trap_reasons: valueTrapResult.reasons,
+    fair_value_trend: fairValueTrend,
+    eva_haircut_applied: evaHaircutApplied,
+    eva_discount_pct: evaDiscountPct > 0 ? Number((evaDiscountPct * 100).toFixed(1)) : undefined,
+    debt_distress_discount_pct: debtDiscountPct > 0 ? Number((debtDiscountPct * 100).toFixed(1)) : undefined,
   };
 
   // Sektörel Puanlama ve Karar Optimizasyonu

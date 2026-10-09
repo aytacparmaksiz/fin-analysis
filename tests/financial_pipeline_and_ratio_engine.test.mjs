@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { IsYatirimApiAdapter } from '../lib/isyatirim-adapter.ts';
 import { FinancialDataValidator } from '../lib/financial-validator.ts';
 import { FinancialRatioEngine, computeFinancialChange } from '../lib/ratio-engine.ts';
-import { calculateDuPont5Step } from '../lib/valuation.ts';
+import { calculateDuPont5Step, detectValueTrap, computeFairValueTrend, computeSectorValuationAndDrivers } from '../lib/valuation.ts';
 
 test('Financial Pipeline & Ratio Engine Architecture Test Suite', async (t) => {
 
@@ -258,5 +258,98 @@ test('Financial Pipeline & Ratio Engine Architecture Test Suite', async (t) => {
     // Tax Burden * Interest Burden = 0.75 * 0.8 = 0.6 = Net Income / EBIT (9000 / 15000)
     const product = Number((dupont.taxBurden * dupont.interestBurden).toFixed(3));
     assert.equal(product, 0.6);
+  });
+
+  await t.test('9. detectValueTrap: Detects Value Trap when paper discount >= 20% with ROIC < WACC and margin erosion', () => {
+    const history = [
+      {
+        period: '2025/09',
+        revenue: 100_000,
+        ebitda: 20_000,
+        net_income: 12_000,
+        equity: 80_000,
+        net_debt: 60_000,
+        roic: 14.0,
+        benchmark_wacc: 28.0
+      },
+      {
+        period: '2025/12',
+        revenue: 105_000,
+        ebitda: 15_000,
+        net_income: 8_000,
+        equity: 85_000,
+        net_debt: 70_000,
+        roic: 8.0,
+        benchmark_wacc: 28.0
+      },
+      {
+        period: '2026/03',
+        revenue: 110_000,
+        ebitda: 11_000,
+        net_income: 3_000,
+        equity: 88_000,
+        net_debt: 85_000,
+        roic: -2.5,
+        benchmark_wacc: 28.0,
+        free_cash_flow: -5_000
+      }
+    ];
+
+    // Fiyat 100 TL, Adil Değer 140 TL (%40 kağıt üzerinde iskonto)
+    const result = detectValueTrap(history, 100, 140, 'INDUSTRIAL');
+    assert.equal(result.isValueTrap, true, 'Must flag isValueTrap = true');
+    assert.ok(result.severity === 'HIGH' || result.severity === 'CRITICAL');
+    assert.ok(result.reasons.length >= 2, 'Must have at least 2 red flag reasons');
+    assert.match(result.warningTitle, /DEĞER TUZAĞI/i);
+  });
+
+  await t.test('10. computeFairValueTrend: Calculates chronological quarterly fair values without NaN or null', () => {
+    const history = [
+      { period: '2025/06', revenue: 80_000, ebitda: 16_000, net_income: 9_000, equity: 60_000, net_debt: 20_000 },
+      { period: '2025/09', revenue: 88_000, ebitda: 17_000, net_income: 10_000, equity: 68_000, net_debt: 22_000 },
+      { period: '2025/12', revenue: 95_000, ebitda: 18_000, net_income: 11_000, equity: 75_000, net_debt: 24_000 },
+      { period: '2026/03', revenue: 100_000, ebitda: 19_000, net_income: 12_000, equity: 82_000, net_debt: 25_000 }
+    ];
+
+    const trend = computeFairValueTrend(history, 'INDUSTRIAL', 10_000);
+    assert.ok(trend.length >= 2, 'Should compute trend points');
+    for (const pt of trend) {
+      assert.ok(pt.fairValue > 0, `fairValue must be positive, got ${pt.fairValue}`);
+      assert.ok(!isNaN(pt.fairValue), 'fairValue must not be NaN');
+      assert.ok(pt.period.length > 0, 'period must be non-empty');
+    }
+  });
+
+  await t.test('11. computeSectorValuationAndDrivers: Applies EVA haircut and debt distress penalty on distressed value-destroying companies', () => {
+    const extractedData = {
+      ticker: 'DISTRESSED',
+      sector: 'INDUSTRIAL',
+      share_count: 10_000_000,
+      currency: 'TRY',
+      financial_history: [
+        {
+          period: '2026/06',
+          revenue: 100_000_000,
+          ebitda: 10_000_000,
+          net_income: 2_000_000,
+          equity: 30_000_000,
+          net_debt: 95_000_000, // Net Debt / EBITDA(annualized 20M) = 4.75x (> 4.0x threshold!)
+          roic: -5.0, // ROIC negative (< WACC)
+          wacc: 30.0,
+          operating_cash_flow: -3_000_000,
+          free_cash_flow: -8_000_000
+        }
+      ]
+    };
+
+    const res = computeSectorValuationAndDrivers({
+      extractedData,
+      sector: 'INDUSTRIAL',
+      marketPrice: 20.0
+    });
+
+    assert.equal(res.valuation.eva_haircut_applied, true, 'EVA haircut must be applied for ROIC < 0');
+    assert.ok(res.valuation.eva_discount_pct && res.valuation.eva_discount_pct > 0, 'EVA discount pct must be > 0');
+    assert.ok(res.valuation.debt_distress_discount_pct && res.valuation.debt_distress_discount_pct > 0, 'Debt distress discount pct must be > 0');
   });
 });

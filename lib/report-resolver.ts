@@ -18,6 +18,10 @@ export interface SavedReport {
   marginOfSafetyStatus?: 'SAFE' | 'BORDERLINE' | 'UNSAFE';
   conditionalWarnings?: string[];
   isGreyZone?: boolean;
+  isValueTrap?: boolean;
+  valueTrapSeverity?: 'NONE' | 'MODERATE' | 'HIGH' | 'CRITICAL';
+  valueTrapReasons?: string[];
+  fairValueTrend?: any[];
 }
 
 /**

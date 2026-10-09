@@ -86,9 +86,12 @@ MUHAFAZAKAR EMNİYET MARJI VE KARAR KORUMASI:
    - Asgari Güvenlik Marjı: Güncel fiyata göre Adil Değer İskontosu EN AZ %20 - %25 olmalıdır. İskonto %20'nin altındaysa KESİNLİKLE 'AL' verilemez ('NÖTR' veya 'ALMA').
    - Gerçek Katma Değer: Yıllıklandırılmış ROIC > WACC (veya Bankacılık/Sigortada ROE > Ke) olmalıdır.
    - Nakit Akış Kalitesi: Sanayi şirketlerinde İşletme Nakit Akışı (OCF) pozitif olmalıdır.
-2. KOŞULLU ANALİZ / GRİ ALAN:
+2. DEĞER TUZAĞI (VALUE TRAP) KORUMASI:
+   - Şirketin adil değer iskontosu kağıt üzerinde yüksek (%20+) görünse bile; eğer operasyonel marjlar daralıyor, ROIC < WACC (negatif EVA spread, sermaye erozyonu) veya Net Borç / FAVÖK > 4.0x ise bu durum bir "Değer Tuzağı"dır.
+   - Değer tuzağı tespit edilen şirketlere ASLA 'AL' kararı verilemez ('ALMA' veya 'NÖTR'). Raporda kağıt üzerindeki iskontonun yanıltıcı olduğu vurgulanmalıdır.
+3. KOŞULLU ANALİZ / GRİ ALAN:
    - Şirket puanı 55-70 arasındaysa veya değerleme ucuz olmasına rağmen nakit/borç profili sınır seviyedeyse, raporda '### İhtiyatlı İzleme Notu (Koşullu Analiz)' başlığı aç ve yatırımcının hangi teyitleri beklemesi gerektiğini listele.
-3. TMS 29 ENFLASYON HOMOJENİZASYONU:
+4. TMS 29 ENFLASYON HOMOJENİZASYONU:
    - Şirket verilerinde TMS 29 enflasyon muhasebesi düzeltmesi yapılmışsa, büyüme oranlarının reel büyüme mi yoksa muhasebesel enflasyon arındırması mı olduğunu açıkça belirt.
 ${universalAcademicReadabilityRules}
 `;
@@ -331,6 +334,10 @@ DİKKAT VE TUTARLILIK KURALI:
 Eğer Nihai Yatırım Kararı 'ALMA' ise:
     a) Eğer hisse fiyatı (${activePrice} TL) adil değerin (${valuation.fair_value} TL) üzerindeyse (${valuation.discount_pct < 0 ? `%${Math.abs(valuation.discount_pct)} primli` : ''}), hissenin piyasada adil değerinin üzerinde primli işlem gördüğü (İskonto Yok / Primli) ve operasyonel riskler nedeniyle sermaye kaybı riski taşıdığı net olarak vurgulanmalıdır. Emniyet marjı durumu 'UNSAFE' (Güvensiz / İskonto Yok) olarak belirtilmelidir.
     b) Ayı Senaryosu taban hedefi ${valuation.bear_price} TL olup, ağır nakit sıkıntısı ve kriz koşullarını yansıtmaktadır.
+    ${valuation.is_value_trap ? `c) 🚨 KRİTİK DEĞER TUZAĞI (VALUE TRAP) KORUMASI:
+       - Şirket algoritmik olarak "DEĞER TUZAĞI" olarak tespit edilmiştir!
+       - Kağıt üzerinde görünen %${valuation.discount_pct} iskonto, eriyen operasyonel marjlar, negatif EVA makası (ROIC < WACC) veya yüksek borç yükü nedeniyle bir TUZAK İSKONTO'dur.
+       - Raporunun I. Yönetici Özeti ve VI. Temel Riskler & Nihai Karar bölümlerinde: "Kağıt üzerinde %${valuation.discount_pct} iskonto görünmesine rağmen şirket değer tuzağı (Value Trap) riskindedir; ${valuation.value_trap_reasons?.join('; ')}." şeklinde açıkça vurgulanmalı ve emniyet marjı durumu 'UNSAFE (Güvensiz - Değer Tuzağı)' olarak yazılmalıdır.` : ''}
 
 MERKEZİ DOĞRULUK KAYNAĞI (UNIFIED METRICS JSON):
 ${JSON.stringify(unifiedMetrics, null, 2)}
