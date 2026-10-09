@@ -1942,7 +1942,10 @@ export function calculateSectorScore(
 export function computeFairValueTrend(
   financialHistory: any[],
   sector: SectorType = 'INDUSTRIAL',
-  effectiveShareCount: number = 180000000
+  effectiveShareCount: number = 180000000,
+  currentPrice?: number,
+  masterFairValue?: number,
+  targetMultiple?: number
 ): FairValueTrendPoint[] {
   const history = Array.isArray(financialHistory) ? financialHistory : [];
   if (history.length === 0) return [];
@@ -1953,8 +1956,11 @@ export function computeFairValueTrend(
 
   for (let i = 0; i < targetPeriods.length; i++) {
     const item = targetPeriods[i];
+    const isLatestPeriod = i === targetPeriods.length - 1;
     const periodLabel = item?.period || `Ç${i + 1}`;
-    const pSharePrice = parseFinancialNumber(item?.share_price);
+    let pSharePrice = (isLatestPeriod && currentPrice && currentPrice > 0)
+      ? currentPrice
+      : parseFinancialNumber(item?.share_price);
 
     const unitScale = (item?.is_thousands === true || (item?.total_assets && Math.abs(item.total_assets) < 500_000_000)) ? 1000 : 1;
 
@@ -1995,12 +2001,12 @@ export function computeFairValueTrend(
 
     if (sector === 'INSURANCE') {
       const roe = parseFinancialNumber(item?.roe) ?? (eq > 0 ? (netInc / eq) * 100 : 25);
-      const targetPb = roe > 45 ? 2.3 : (roe > 30 ? 1.8 : 1.35);
+      const targetPb = (targetMultiple && targetMultiple > 0) ? targetMultiple : (roe > 45 ? 2.3 : (roe > 30 ? 1.8 : 1.35));
       const bvps = eq > 0 ? (eq / effectiveShareCount) : 1;
       periodFv = bvps * targetPb;
     } else if (sector === 'BANKING') {
       const roe = parseFinancialNumber(item?.roe) ?? (eq > 0 ? (netInc / eq) * 100 : 25);
-      const targetPb = roe > 35 ? 1.4 : (roe > 20 ? 1.05 : 0.85);
+      const targetPb = (targetMultiple && targetMultiple > 0) ? targetMultiple : (roe > 35 ? 1.4 : (roe > 20 ? 1.05 : 0.85));
       const bvps = eq > 0 ? (eq / effectiveShareCount) : 1;
       periodFv = bvps * targetPb;
     } else if (sector === 'REIT') {
@@ -2011,20 +2017,25 @@ export function computeFairValueTrend(
       periodFv = navPerShare * 0.70;
     } else if (sector === 'AVIATION') {
       // Havacılık & Ulaştırma (THYAO, PGSUS, TAVHL): Yüksek filo borçluluğu ve IFRS 16 leasing
-      const mult = 5.2;
+      const mult = (targetMultiple && targetMultiple > 0) ? targetMultiple : 5.2;
       const evEq = Math.max(0, ebitda * mult - netDebt);
       const evPerShare = evEq > 0 ? (evEq / effectiveShareCount) : 0;
       const pePerShare = netInc > 0 ? ((netInc * 6.5) / effectiveShareCount) : 0;
       const pbPerShare = (eq / effectiveShareCount) * 0.82;
 
-      const parts: number[] = [];
-      if (evPerShare > 0) parts.push(evPerShare);
-      if (pePerShare > 0) parts.push(pePerShare);
-      if (pbPerShare > 0) parts.push(pbPerShare);
+      const validComponents: { val: number; weight: number }[] = [];
+      if (evPerShare > 0) validComponents.push({ val: evPerShare, weight: 0.45 });
+      if (pePerShare > 0) validComponents.push({ val: pePerShare, weight: 0.25 });
+      if (pbPerShare > 0) validComponents.push({ val: pbPerShare, weight: 0.30 });
 
-      periodFv = parts.length > 0 ? (parts.reduce((a, b) => a + b, 0) / parts.length) : (pbPerShare || 1.0);
+      if (validComponents.length > 0) {
+        const totalW = validComponents.reduce((acc, c) => acc + c.weight, 0);
+        periodFv = validComponents.reduce((acc, c) => acc + (c.val * (c.weight / totalW)), 0);
+      } else {
+        periodFv = pbPerShare || 1.0;
+      }
     } else {
-      // Reel Sektör / Sanayi / Teknoloji / Enerji / Perakende
+      // Reel Sektör / Sanayi / Teknoloji / Enerji / Perakende / Sağlık
       if (eq <= 0) {
         periodFv = 0.05;
       } else if (ebitda <= 0) {
@@ -2036,7 +2047,9 @@ export function computeFairValueTrend(
         const wacc = parseFinancialNumber(item?.benchmark_wacc ?? item?.real_wacc ?? item?.wacc ?? 28) ?? 28;
         const evaSpread = roic - wacc;
 
-        let mult = sector === 'TECH' ? 8.5 : (sector === 'RETAIL' ? 6.2 : 7.0);
+        let mult = (targetMultiple && targetMultiple > 0)
+          ? targetMultiple
+          : (sector === 'TECH' ? 8.5 : (sector === 'RETAIL' ? 6.2 : 7.0));
         let justifiedPb = roe > 25 ? 1.8 : (roe > 12 ? 1.2 : 0.85);
         let evaDiscount = 0;
 
@@ -2045,18 +2058,30 @@ export function computeFairValueTrend(
           justifiedPb = Math.max(0.32, Math.min(0.80, (Math.max(0, roe) / Math.max(15, wacc)) * 0.85));
         }
 
+        const forwardEquityGrowth = roe > 0 ? Math.min(0.75, Math.max(0.10, (roe / 100) * 0.85)) : 0;
+        const forwardBvps = Math.max(0, (eq / effectiveShareCount) * (1 + forwardEquityGrowth));
+        const pbPerShare = forwardBvps * justifiedPb;
+
         const fwdEbitda = ebitda * (1 - evaDiscount);
         const evEq = Math.max(0, fwdEbitda * mult - netDebt);
         const evPerShare = evEq / effectiveShareCount;
-        const pbPerShare = (eq / effectiveShareCount) * justifiedPb;
         const pePerShare = netInc > 0 ? ((netInc * 8.5) / effectiveShareCount) : 0;
 
-        const parts: number[] = [];
-        if (evPerShare > 0) parts.push(evPerShare);
-        if (pbPerShare > 0) parts.push(pbPerShare);
-        if (pePerShare > 0) parts.push(pePerShare);
+        // Hibrit Ağırlıklandırma: EV/EBITDA %45, P/E %25, P/B %30
+        const validComponents: { val: number; weight: number }[] = [];
+        if (evPerShare > 0) validComponents.push({ val: evPerShare, weight: 0.45 });
+        if (pePerShare > 0) validComponents.push({ val: pePerShare, weight: 0.25 });
+        if (pbPerShare > 0) validComponents.push({ val: pbPerShare, weight: 0.30 });
 
-        periodFv = parts.length > 0 ? (parts.reduce((a, b) => a + b, 0) / parts.length) : (pbPerShare || 1.0);
+        if (validComponents.length > 0) {
+          const totalW = validComponents.reduce((acc, c) => acc + c.weight, 0);
+          periodFv = validComponents.reduce((acc, c) => acc + (c.val * (c.weight / totalW)), 0);
+          if (!evaDiscount && pbPerShare > 0 && periodFv < pbPerShare * 0.75) {
+            periodFv = (periodFv * 0.4) + (pbPerShare * 0.6);
+          }
+        } else {
+          periodFv = pbPerShare || 1.0;
+        }
 
         const ndEbitda = netDebt > 0 && ebitda > 0 ? (netDebt / ebitda) : 0;
         if (ndEbitda > 4.0) {
@@ -2064,6 +2089,12 @@ export function computeFairValueTrend(
           periodFv = periodFv * (1 - debtDisc);
         }
       }
+    }
+
+    // SON DÖNEM BİREBİR KİLİTLENMESİ (Point-in-Time Parity):
+    // Son çeyrek noktası doğrudan güncel hesaplanan masterFairValue ile kilitlenir.
+    if (isLatestPeriod && masterFairValue && masterFairValue > 0) {
+      periodFv = masterFairValue;
     }
 
     periodFv = Number(Math.max(0.05, periodFv).toFixed(2));
@@ -3428,7 +3459,14 @@ export function computeSectorValuationAndDrivers(
   const currentPb = (sector === 'INSURANCE' || sector === 'BANKING') && impliedBvps ? Number((currentPrice / impliedBvps).toFixed(1)) : undefined;
 
   const valueTrapResult = detectValueTrap(extractedData?.financial_history, currentPrice, fairValue, sector, latest);
-  const fairValueTrend = computeFairValueTrend(extractedData?.financial_history, sector, effectiveShareCount);
+  const fairValueTrend = computeFairValueTrend(
+    extractedData?.financial_history,
+    sector,
+    effectiveShareCount,
+    currentPrice,
+    fairValue,
+    targetMultipleNum
+  );
 
   const valuation: ValuationMetrics = {
     current_price: currentPrice,
