@@ -1770,9 +1770,13 @@ export default function ValuationTerminal({
 
           const result2 = await parseApiResponse(res2, 'Faaliyet raporu zenginleştirmesi tamamlanamadı.');
           if (result2?.data) {
+            const mergedGuidance = (Array.isArray(result2.data.guidance_track_record) && result2.data.guidance_track_record.length > 0)
+              ? result2.data.guidance_track_record
+              : currentData.guidance_track_record;
             currentData = {
               ...currentData,
               ...result2.data,
+              guidance_track_record: mergedGuidance,
               currency: currentData.currency,
               financial_history: currentData.financial_history // Resmi BIST mali tablolarını koru
             };
@@ -1844,9 +1848,13 @@ export default function ValuationTerminal({
 
           const result3 = await parseApiResponse(res3, 'Yatırımcı sunumu zenginleştirmesi tamamlanamadı.');
           if (result3?.data) {
+            const mergedGuidance = (Array.isArray(result3.data.guidance_track_record) && result3.data.guidance_track_record.length > 0)
+              ? result3.data.guidance_track_record
+              : currentData.guidance_track_record;
             currentData = {
               ...currentData,
               ...result3.data,
+              guidance_track_record: mergedGuidance,
               currency: currentData.currency,
               financial_history: currentData.financial_history // Resmi BIST mali tablolarını koru
             };

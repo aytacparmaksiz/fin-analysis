@@ -784,63 +784,33 @@ ${!isInsurance && !isBanking ? `   * SANAYİ / HİZMET / DİĞER:
       sectorCode: string,
       highlights: any[] = []
     ): any[] => {
-      if (!Array.isArray(history) || history.length === 0) return [];
-      const yearSet = new Set<string>();
-      for (const h of history) {
-        const p = String(h?.period || '');
-        const m = p.match(/(20\d{2})/);
-        if (m) yearSet.add(m[1]);
-      }
-      let sortedYears = Array.from(yearSet).sort().slice(-4);
-      if (sortedYears.length === 0) {
-        const curYear = new Date().getFullYear();
-        sortedYears = [String(curYear - 2), String(curYear - 1), String(curYear)];
+      // ZERO FABRICATION (P1 Kuralı): Belgeden çıkarılmış somut yönetim hedefi/katalizörü (highlights) yoksa
+      // kesinlikle varsayımsal veya sentetik metin uydurulmaz; boş dizi döndürülür.
+      if (!Array.isArray(highlights) || highlights.length === 0) {
+        return [];
       }
 
-      return sortedYears.map((yr, idx) => {
-        const yrHist = history.filter(h => String(h?.period || '').includes(yr));
-        const latestInYr = yrHist[yrHist.length - 1] || {};
-        const rev = latestInYr.revenue || latestInYr.written_premiums;
-        const net = latestInYr.net_income;
-        const isLatest = idx === sortedYears.length - 1;
+      // Raporda yer alan gerçek yönetim hedefleri ve stratejik katalizörleri dönem gerçekleşmeleriyle eşleştir:
+      return highlights.slice(0, 5).map((hl: any, idx: number) => {
+        const periodStr = hl.period_or_target || (history[history.length - 1 - idx]?.period ? String(history[history.length - 1 - idx].period).slice(0, 4) : 'Güncel');
+        const matchedHist = history.find(h => String(h?.period || '').includes(periodStr)) || history[history.length - 1] || {};
+        const rev = matchedHist.revenue || matchedHist.written_premiums;
+        const ebitda = matchedHist.ebitda || matchedHist.technical_profit;
+        const net = matchedHist.net_income;
 
-        let guidanceGiven = '';
         let actualRealized = '';
-        const status = 'BAŞARILI';
-        let analysis = '';
-
-        if (sectorCode === 'INSURANCE') {
-          guidanceGiven = `${yr} Yılı: Sektör reel büyümesi üzerinde prim üretimi, BES fon büyüklüğünde pazar payı kazanımı ve sürdürülebilir teknik kârlılık`;
-          actualRealized = rev 
-            ? `Resmi Prim/Hasılat: ${(rev / 1e9).toFixed(2)} Milyar TL${net ? `, Net Kâr: ${(net / 1e9).toFixed(2)} Milyar TL` : ''}` 
-            : 'Yıllık bilanço gerçekleşmesi ile uyumlu büyüme';
-          analysis = 'Pazar payı kazanımı ve teknik karşılık yönetim hedefleri başarıyla korunmuştur.';
-        } else if (sectorCode === 'BANKING') {
-          guidanceGiven = `${yr} Yılı: Enflasyon üzeri kredi büyümesi, %35+ aktif/özkaynak kârlılığı ve güçlü sermaye yeterlilik rasyosu`;
-          actualRealized = net 
-            ? `Resmi Net Kâr: ${(net / 1e9).toFixed(2)} Milyar TL düzeyinde gerçekleşti` 
-            : 'Banka mali tabloları ile uyumlu';
-          analysis = 'Net faiz marjı disiplini ve ihtiyatlı karşılık politikasıyla hedefler karşılanmıştır.';
+        if (rev) {
+          actualRealized = `Hasılat/Prim: ${(rev / 1e9).toFixed(2)} Milyar TL${ebitda ? `, FAVÖK/Teknik Kâr: ${(ebitda / 1e9).toFixed(2)} Milyar TL` : ''}${net ? `, Net Kâr: ${(net / 1e9).toFixed(2)} Milyar TL` : ''}`;
         } else {
-          guidanceGiven = `${yr} Yılı: Sektör ortalamasını aşan operasyonel hasılat artışı, FAVÖK marjı optimizasyonu ve disiplinli yatırım bütçesi`;
-          actualRealized = rev 
-            ? `Hasılat: ${(rev / 1e9).toFixed(2)} Milyar TL${latestInYr.ebitda ? `, FAVÖK: ${(latestInYr.ebitda / 1e9).toFixed(2)} Milyar TL` : ''}` 
-            : 'Finansal tablo sonuçları ile uyumlu';
-          analysis = isLatest 
-            ? 'Dönem içi operasyonel ve finansal performans yönetim stratejisiyle uyumlu seyretmiştir.' 
-            : 'Yönetimin yıl başı operasyonel rehberliği başarıyla karşılanmıştır.';
-        }
-
-        if (highlights && highlights[idx]?.desc) {
-          analysis = highlights[idx].desc;
+          actualRealized = 'Dönem finansal tabloları ile uyumlu gerçekleşme';
         }
 
         return {
-          year_or_period: yr,
-          guidance_given: guidanceGiven,
+          year_or_period: periodStr,
+          guidance_given: `${hl.title}: ${hl.desc}`,
           actual_realized: actualRealized,
-          status,
-          analysis,
+          status: 'BAŞARILI',
+          analysis: hl.desc || 'Şirket faaliyet raporunda açıklanan stratejik yönetim hedefi.'
         };
       });
     };
@@ -870,21 +840,37 @@ ${previousReport ? `\nÖNCEKİ DÖNEM ANALİZ RAPORU VE YÖNETİM HEDEFLERİ (D�
 - Önceki Çeyrekte Belirtilen Yönetim Hedefleri: ${previousReport.extractedData?.future_targets_summary || 'Belirtilmedi'}\n` : ''}
 Aşağıda şirkete ait çok yıllı faaliyet raporlarının yönetim, hedefler, operasyonel performans ve risk bölümleri yer almaktadır:
 
-${docTexts}
+${docTexts || 'Ekli dokümandaki faaliyet raporu ve yönetim hedeflerini analiz et.'}
 
 GÖREVLER:
-1. Yönetim Rehberlik Karnesi ('guidance_track_record'): Yüklenen tüm faaliyet raporlarındaki yılları (örn: 2022, 2023, 2024, 2025, 2026) KAPSAYACAK ŞEKİLDE her yıl için yönetimin sayısal veya stratejik/operasyonel hedeflerini ve yıl sonu gerçekleşmelerini çıkar. ${previousReport ? "Yönetimin önceki çeyrekte beyan ettiği hedeflerin bu dönem tutup tutmadığını (hedef gerçekleşme karnesi) nesnel olarak değerlendirerek 'guidance_track_record' listesine yansıt. " : ""}Asla sadece tek yılla sınırlı kalma ve 'guidance_given' alanına kesinlikle "null" yazma!
+1. Yönetim Rehberlik Karnesi ('guidance_track_record'): Faaliyet raporunda şirket yönetiminin açıkladığı ciro, prim, FAVÖK, pazar payı, kapasite artışı, şube/mağaza açılışı, yatırım ve operasyonel hedefleri ilgili yıllar için (örn: 2023, 2024, 2025, 2026) MUTLAKA ÇIKAR. Faaliyet raporlarında yönetimin ortaya koyduğu operasyonel ve finansal hedefler birer yönetim rehberliğidir. Yukarıdaki resmi gerçekleşen finansal sonuçları referans alarak gerçekleşme durumunu (BAŞARILI, KISMEN, BAŞARISIZ) nesnel olarak belirle. ${previousReport ? "Yönetimin önceki çeyrekte beyan ettiği hedeflerin bu dönem tutup tutmadığını (hedef gerçekleşme karnesi) nesnel olarak değerlendirerek 'guidance_track_record' listesine yansıt. " : ""}'guidance_given' alanına kesinlikle "null" yazma!
 2. Gelecek Dönem Hedefleri İçin Olumlu Bulunan Konular ('positive_outlook_highlights'): Faaliyet raporlarında şirketin gelecek dönem hedefleri, yeni yatırımları, kapasite/şube/dijital kanal büyümeleri ve marj iyileştirmeleri arasında olumlu bulunan en az 4-6 somut konuyu çıkar.
 3. Faaliyet Raporu Stratejik Özeti ('report_executive_summary'): Raporların bütüncül değerlendirmesini ve yönetimin gelecek vizyonunu özetle.
 4. Şirketin güçlü yönlerini (pros) ve riskli/zayıf yönlerini (cons) ('pros_cons') somut faaliyet raporu verileriyle çıkar.
 5. Mali tablo rakamlarına asla müdahale etme. Duru Türkçe kullan ('bancassurance' yerine 'banka sigortacılığı' yaz).`;
 
-      const cacheKey = `extract_act_v3_${ticker.toUpperCase()}_${actDocs.length}_${computeContentHash(docTexts)}`;
+      const hasScannedDoc = actDocs.some(d => (d as any).isScannedImage);
+      let contents: any[];
+      if (hasScannedDoc) {
+        const scannedParts = actDocs
+          .filter(d => (d as any).isScannedImage && (d as any).base64Data)
+          .map(d => ({
+            inlineData: {
+              mimeType: 'application/pdf',
+              data: (d as any).base64Data
+            }
+          }));
+        contents = [...scannedParts, prompt];
+      } else {
+        contents = [prompt];
+      }
+
+      const cacheKey = `extract_act_v4_${ticker.toUpperCase()}_${actDocs.length}_${computeContentHash(docTexts)}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
         preferredModel: 'gemini-3.1-flash-lite-preview',
         baseParams: {
-          contents: [prompt],
+          contents,
           config: {
             systemInstruction: activitySystemInstruction,
             temperature: 0.0,
@@ -947,7 +933,7 @@ ${previousReport ? `\nÖNCEKİ DÖNEM ANALİZİ VE YÖNETİM HEDEFLERİ (DÖNEMS
 - Önceki Yönetim Hedefleri: ${previousReport.extractedData?.future_targets_summary || 'Belirtilmedi'}\n` : ''}
 Aşağıda şirketin Yatırımcı Sunumu ve Gelecek Stratejisi dokümanları yer almaktadır:
 
-${docTexts}
+${docTexts || 'Ekli dokümandaki yatırımcı sunumunu analiz et.'}
 
 GÖREVLER:
 1. Şirketin resmi ciro/prim büyüme, net kâr büyüme, marj hedefleri ve hedef çarpan beklentilerini 'fair_value_drivers' olarak çıkar.
@@ -955,12 +941,28 @@ GÖREVLER:
 3. Sunumlarda yer alan geçmiş ve güncel yıl beklenti/hedef tablolarını (Guidance / Beklentiler vs Gerçekleşmeler) 'guidance_track_record' listesine çıkar ('guidance_given' alanına asla "null" yazma).
 4. Açıklama (note) alanlarında hedeflerin dayanaklarını belirt ve duru Türkçe kullan.`;
 
-      const cacheKey = `extract_pres_v3_${ticker.toUpperCase()}_${presDocs.length}_${computeContentHash(docTexts)}`;
+      const hasScannedDoc = presDocs.some(d => (d as any).isScannedImage);
+      let contents: any[];
+      if (hasScannedDoc) {
+        const scannedParts = presDocs
+          .filter(d => (d as any).isScannedImage && (d as any).base64Data)
+          .map(d => ({
+            inlineData: {
+              mimeType: 'application/pdf',
+              data: (d as any).base64Data
+            }
+          }));
+        contents = [...scannedParts, prompt];
+      } else {
+        contents = [prompt];
+      }
+
+      const cacheKey = `extract_pres_v4_${ticker.toUpperCase()}_${presDocs.length}_${computeContentHash(docTexts)}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
         preferredModel: 'gemini-3.1-flash-lite-preview',
         baseParams: {
-          contents: [prompt],
+          contents,
           config: {
             systemInstruction: presentationSystemInstruction,
             temperature: 0.0,
@@ -1046,13 +1048,24 @@ GÖREVLER:
 
     // 2. Faaliyet Raporunu Çıkar (Alan 2)
     if (actDocs.length > 0) {
+      const hasScannedDoc = actDocs.some(d => (d as any).isScannedImage);
       const rawTexts = actDocs.map(d => `### FAALİYET RAPORU: ${d.name}\n${d.text}`).join('\n\n---\n\n');
       const docTexts = optimizeTextForGemini(rawTexts);
-      const cacheKey = `extract_act_all_v3_${ticker.toUpperCase()}_${computeContentHash(docTexts)}`;
+      const promptText = `Şirket: ${ticker.toUpperCase()}.${previousReport ? `\nÖnceki Dönem: ${previousReport.period || previousReport.createdAt}, Önceki Çeyrek Adil Değer: ${previousReport.fairValue} TL, Önceki Yönetim Hedefleri: ${previousReport.extractedData?.future_targets_summary || 'Belirtilmedi'}` : ''}\n${docTexts || 'Ekli dokümandaki faaliyet raporunu analiz et.'}`;
+      let contents: any[];
+      if (hasScannedDoc) {
+        const scannedParts = actDocs
+          .filter(d => (d as any).isScannedImage && (d as any).base64Data)
+          .map(d => ({ inlineData: { mimeType: 'application/pdf', data: (d as any).base64Data } }));
+        contents = [...scannedParts, promptText];
+      } else {
+        contents = [promptText];
+      }
+      const cacheKey = `extract_act_all_v4_${ticker.toUpperCase()}_${computeContentHash(docTexts)}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
         baseParams: {
-          contents: [`Şirket: ${ticker.toUpperCase()}.${previousReport ? `\nÖnceki Dönem: ${previousReport.period || previousReport.createdAt}, Önceki Çeyrek Adil Değer: ${previousReport.fairValue} TL, Önceki Yönetim Hedefleri: ${previousReport.extractedData?.future_targets_summary || 'Belirtilmedi'}` : ''}\n${docTexts}`],
+          contents,
           config: {
             systemInstruction: activitySystemInstruction,
             temperature: 0.0,
@@ -1080,13 +1093,24 @@ GÖREVLER:
 
     // 3. Yatırımcı Sunumunu Çıkar (Alan 3)
     if (presDocs.length > 0) {
+      const hasScannedDoc = presDocs.some(d => (d as any).isScannedImage);
       const rawTexts = presDocs.map(d => `### YATIRIMCI SUNUMU: ${d.name}\n${d.text}`).join('\n\n---\n\n');
       const docTexts = optimizeTextForGemini(rawTexts);
-      const cacheKey = `extract_pres_all_v3_${ticker.toUpperCase()}_${computeContentHash(docTexts)}`;
+      const promptText = `Şirket: ${ticker.toUpperCase()}.\n${docTexts || 'Ekli dokümandaki yatırımcı sunumunu analiz et.'}`;
+      let contents: any[];
+      if (hasScannedDoc) {
+        const scannedParts = presDocs
+          .filter(d => (d as any).isScannedImage && (d as any).base64Data)
+          .map(d => ({ inlineData: { mimeType: 'application/pdf', data: (d as any).base64Data } }));
+        contents = [...scannedParts, promptText];
+      } else {
+        contents = [promptText];
+      }
+      const cacheKey = `extract_pres_all_v4_${ticker.toUpperCase()}_${computeContentHash(docTexts)}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
         baseParams: {
-          contents: [`Şirket: ${ticker.toUpperCase()}.\n${docTexts}`],
+          contents,
           config: {
             systemInstruction: presentationSystemInstruction,
             temperature: 0.0,

@@ -570,6 +570,13 @@ export function filterActivityPages(pageTexts: string[], maxPages = 20): FilterR
   const scored = pageTexts.map((t, idx) => scoreActivityPage(t, idx));
   const selectedSet = new Set<number>();
 
+  // Yönetim kurulu başkanı / CEO mesajı ve özet sayfaları (ilk 4 sayfa) varsa ekle
+  for (let i = 0; i < Math.min(4, totalPages); i++) {
+    if (scored[i]?.score > 0 || scored[i]?.isGuidance) {
+      selectedSet.add(i);
+    }
+  }
+
   // Öncelikle rehberlik (guidance), hedefler ve yüksek puanlı kritik sayfaları seç
   const sorted = [...scored].sort((a, b) => b.score - a.score);
   for (const s of sorted) {
@@ -696,54 +703,50 @@ export async function extractSmartDocumentText(
   const pageTexts: string[] = new Array(totalPages).fill('');
 
   // HEDEF SAYFA SEÇİMİ:
-  // 1. Faaliyet Raporları (activity): İlk 40 sayfa (özet, CEO/başkan mesajı, hedefler, strateji, operasyonel inceleme) ve son 10 sayfa
-  // 2. Yatırımcı Sunumu (presentation): İlk 40 slayt ve son 10 slayt (sunumun tamamına yakınını kapsar)
-  // 3. Finansal Tablolar (financial): İlk 22 sayfa (Bilanço, Gelir, Nakit Akış & Temel Dipnotlar)
+  // 1. Faaliyet Raporları (activity): İlk 100 sayfa (özet, CEO/başkan mesajı, hedefler, strateji, operasyonel inceleme) ve son 15 sayfa
+  // 2. Yatırımcı Sunumu (presentation): İlk 80 slayt ve son 15 slayt (sunumun tamamına yakınını kapsar)
+  // 3. Finansal Tablolar (financial): İlk 25 sayfa (Bilanço, Gelir, Nakit Akış & Temel Dipnotlar)
   let targetPageNumbers: number[] = [];
   if (category === 'activity') {
     const pageSet = new Set<number>();
-    const frontLimit = Math.min(40, totalPages);
+    const frontLimit = Math.min(100, totalPages);
     for (let p = 1; p <= frontLimit; p++) pageSet.add(p);
-    for (let p = Math.max(1, totalPages - 10); p <= totalPages; p++) pageSet.add(p);
+    for (let p = Math.max(1, totalPages - 15); p <= totalPages; p++) pageSet.add(p);
     targetPageNumbers = Array.from(pageSet).sort((a, b) => a - b);
   } else if (category === 'presentation') {
     const pageSet = new Set<number>();
-    const frontLimit = Math.min(40, totalPages);
+    const frontLimit = Math.min(80, totalPages);
     for (let p = 1; p <= frontLimit; p++) pageSet.add(p);
-    for (let p = Math.max(1, totalPages - 10); p <= totalPages; p++) pageSet.add(p);
+    for (let p = Math.max(1, totalPages - 15); p <= totalPages; p++) pageSet.add(p);
     targetPageNumbers = Array.from(pageSet).sort((a, b) => a - b);
   } else {
-    const limit = Math.min(22, totalPages);
+    const limit = Math.min(25, totalPages);
     targetPageNumbers = Array.from({ length: limit }, (_, i) => i + 1);
   }
 
   let totalExtractedChars = 0;
-  await Promise.all(
-    targetPageNumbers.map(async (pageNum) => {
-      try {
-        const pagePromise = (async () => {
+  const BATCH_SIZE = 8;
+  for (let i = 0; i < targetPageNumbers.length; i += BATCH_SIZE) {
+    const batch = targetPageNumbers.slice(i, i + BATCH_SIZE);
+    await Promise.all(
+      batch.map(async (pageNum) => {
+        try {
           const page = await pdf.getPage(pageNum);
           const content = await page.getTextContent();
-          return (content.items || [])
+          const pageText = (content.items || [])
             .filter((item: any) => item.str != null)
             .map((item: any) => item.str + (item.hasEOL ? '\n' : ''))
             .join('');
-        })();
-
-        const timeoutPromise = new Promise<string>((resolve) =>
-          setTimeout(() => resolve(''), 1500)
-        );
-
-        const pageText = await Promise.race([pagePromise, timeoutPromise]);
-        if (pageText) {
-          pageTexts[pageNum - 1] = pageText;
-          totalExtractedChars += pageText.trim().length;
+          if (pageText) {
+            pageTexts[pageNum - 1] = pageText;
+            totalExtractedChars += pageText.trim().length;
+          }
+        } catch (pageErr) {
+          console.warn(`[PDFFilter] Sayfa ${pageNum} metni okunamadı:`, pageErr);
         }
-      } catch (pageErr) {
-        console.warn(`[PDFFilter] Sayfa ${pageNum} metni okunamadı:`, pageErr);
-      }
-    })
-  );
+      })
+    );
+  }
 
   const filterRes = filterDocumentPages(pageTexts, category, maxPages);
 
@@ -753,7 +756,7 @@ export async function extractSmartDocumentText(
     matchedPages: filterRes.matchedCount,
     summary: filterRes.summary,
     totalExtractedChars,
-    isScannedPdf: totalExtractedChars < 100
+    isScannedPdf: totalPages > 0 ? (totalExtractedChars / totalPages < 20 && totalExtractedChars < 80) : false
   };
 }
 
