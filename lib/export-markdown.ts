@@ -1,13 +1,13 @@
-import { SavedReport } from './report-resolver';
-import { calculateDuPont5Step, calculateCompanyMultiples } from './valuation';
+import type { SavedReport } from './report-resolver.ts';
+import { calculateDuPont5Step, calculateCompanyMultiples, parsePeriodSortKey, parseFinancialNumber } from './valuation.ts';
 
 export function generateFullAuditMarkdown(report: SavedReport): string {
   if (!report) return '';
 
   const ext = report.extractedData || {};
   const history: any[] = Array.isArray(ext.financial_history) ? [...ext.financial_history] : [];
-  // Sort newest to oldest or keep consistent
-  const sortedHistory = [...history].sort((a, b) => (b.period || '').localeCompare(a.period || ''));
+  // Sort newest to oldest using robust period key
+  const sortedHistory = [...history].sort((a, b) => parsePeriodSortKey(b?.period) - parsePeriodSortKey(a?.period));
   const periods = sortedHistory.map(h => h.period || '-');
 
   const fmt = (val: any, divisor = 1, isPct = false) => {
@@ -18,21 +18,28 @@ export function generateFullAuditMarkdown(report: SavedReport): string {
       : num.toLocaleString('tr-TR', { maximumFractionDigits: 1 });
   };
 
-  const currentPrice = report.price || String(ext.current_price || '—');
-  const fairValue = report.fairValue || '—';
-  const priceNum = parseFloat(String(currentPrice).replace(/[^0-9.]/g, ''));
-  const fvNum = parseFloat(String(fairValue).replace(/[^0-9.]/g, ''));
-  const potential = (!isNaN(priceNum) && !isNaN(fvNum) && priceNum > 0)
-    ? `${((fvNum - priceNum) / priceNum * 100).toFixed(1)}%`
+  const rawPriceStr = report.price || String(ext.current_price || '—');
+  const rawFvStr = report.fairValue || '—';
+  const priceNum = parseFinancialNumber(rawPriceStr);
+  const fvNum = parseFinancialNumber(rawFvStr);
+  const potential = (priceNum !== null && fvNum !== null && priceNum > 0)
+    ? `${(((fvNum - priceNum) / priceNum) * 100).toFixed(1)}%`
     : '—';
+
+  const cleanPriceDisplay = priceNum !== null ? `${priceNum.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL` : (rawPriceStr !== '—' ? `${rawPriceStr}` : '—');
+  const cleanFvDisplay = fvNum !== null ? `${fvNum.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL` : (rawFvStr !== '—' ? `${rawFvStr}` : '—');
 
   let md = `# ${report.ticker} — BIST KAPSAMLI FİNANSAL DEĞERLEME & BÜTÜNCÜL DENETİM DOSYASI\n\n`;
   md += `**Şirket Adı:** ${ext.company_name || report.ticker} | **Sektör:** ${report.sector || ext.sector || 'Sanayi'}\n`;
   md += `**Raporlama Dönemi:** ${report.period || ext.reporting_period || '2026/06'} | **Analiz Tarihi:** ${report.createdAt}\n`;
-  md += `**Cari Piyasa Fiyatı:** ${currentPrice} TL | **Model Hisse Başı Adil Değer:** ${fairValue} TL | **Potansiyel:** ${potential}\n`;
-  md += `**Analist Nihai Kararı:** ${report.decision} | **Sektörel Model Puanı:** ${report.score || '—'} / 100\n`;
-  if (ext.shares_outstanding) {
-    md += `**Ödenmiş Sermaye (Lot):** ${Number(ext.shares_outstanding).toLocaleString('tr-TR')} | **Piyasa Değeri:** ${((priceNum * ext.shares_outstanding) / 1e9).toFixed(2)} Milyar TL\n`;
+  md += `**Cari Piyasa Fiyatı:** ${cleanPriceDisplay} | **Model Hisse Başı Adil Değer:** ${cleanFvDisplay} | **Potansiyel:** ${potential}\n`;
+  md += `**Analist Nihai Kararı:** ${report.decision || 'NÖTR'} | **Sektörel Model Puanı:** ${report.score != null ? report.score : '—'} / 100\n`;
+  if (ext.shares_outstanding && priceNum !== null && priceNum > 0) {
+    const shares = Number(ext.shares_outstanding);
+    if (!isNaN(shares) && shares > 0) {
+      const mcapBn = (priceNum * shares) / 1e9;
+      md += `**Ödenmiş Sermaye (Lot):** ${shares.toLocaleString('tr-TR')} | **Piyasa Değeri:** ${mcapBn.toFixed(2)} Milyar TL\n`;
+    }
   }
   md += `\n---\n\n`;
 
@@ -139,7 +146,7 @@ export function generateFullAuditMarkdown(report: SavedReport): string {
   const shareCount = Number(ext.shares_outstanding) || 100000000;
   const multiples = calculateCompanyMultiples(
     latestItem,
-    !isNaN(priceNum) && priceNum > 0 ? priceNum : 100,
+    priceNum !== null && priceNum > 0 ? priceNum : 100,
     shareCount,
     report.sector || 'INDUSTRIAL'
   );
@@ -170,10 +177,13 @@ export function generateFullAuditMarkdown(report: SavedReport): string {
       md += `## BÖLÜM 7: DUPONT 5-AŞAMALI KÂRLILIK AYRIŞTIRMASI VE DENETİM\n\n`;
       md += `- **Vergi Yükü (Net Kâr / EBT):** ${dupont.taxBurden != null ? `%${(dupont.taxBurden * 100).toFixed(1)}` : '—'}\n`;
       md += `- **Faiz Yükü (EBT / EBIT):** ${dupont.interestBurden != null ? `%${(dupont.interestBurden * 100).toFixed(1)}` : '—'}\n`;
-      md += `- **Operasyonel Marj (EBIT / Ciro):** ${dupont.ebitMargin != null ? `%${(dupont.ebitMargin * 100).toFixed(1)}` : '—'}\n`;
+      md += `- **Operasyonel Marj (EBIT / Ciro):** ${dupont.ebitMargin != null ? `%${dupont.ebitMargin.toFixed(1)}` : '—'}\n`;
       md += `- **Varlık Devir Hızı (Ciro / Aktifler):** ${dupont.assetTurnover != null ? `${dupont.assetTurnover.toFixed(2)}x` : '—'}\n`;
       md += `- **Finansal Kaldıraç (Aktif / Özkaynak):** ${dupont.financialLeverage != null ? `${dupont.financialLeverage.toFixed(2)}x` : '—'}\n`;
-      md += `- **Ayrıştırılmış ROE (Özkaynak Kârlılığı):** ${dupont.calculatedRoe != null ? `%${(dupont.calculatedRoe * 100).toFixed(1)}` : '—'}\n\n`;
+      md += `- **Ayrıştırılmış ROE (Özkaynak Kârlılığı):** ${dupont.calculatedRoe != null ? `%${dupont.calculatedRoe.toFixed(1)}` : '—'}\n\n`;
+      if (dupont.driverSummary) {
+        md += `> **DuPont Teşhis Özeti:** ${dupont.driverSummary}\n\n`;
+      }
       md += `---\n\n`;
     }
   }

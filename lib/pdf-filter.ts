@@ -6,7 +6,7 @@
  * işlem süresini 5-10 saniye seviyesine çekmek ve Gateway Timeout (504) hatalarını önlemek.
  */
 
-import { getDocumentProxy, extractText } from 'unpdf';
+import { getDocumentProxy } from 'unpdf';
 import { PDFDocument } from 'pdf-lib';
 
 // 1. Birincil Finansal Tablo Başlıkları ve Kök Kelimeler (En Yüksek Öncelik: +12/+15 Puan)
@@ -350,6 +350,7 @@ export function scoreFinancialPage(pageText: string, pageIndex: number): PageSco
     pageNum: pageIndex + 1,
     score,
     isPrimary,
+    isGuidance,
     numberCount,
     matchedKeywords
   };

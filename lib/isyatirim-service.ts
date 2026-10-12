@@ -36,6 +36,46 @@ function parseTrFloat(valStr: string | null | undefined): number | null {
   return parseFinancialNumber(clean);
 }
 
+import https from 'node:https';
+
+const isYatirimHttpsAgent = new https.Agent({
+  rejectUnauthorized: false, // Yerel antivirüs veya kurumsal proxy SSL interception toleransı
+  keepAlive: true,
+  timeout: 7500
+});
+
+async function fetchHttpsText(urlStr: string, timeoutMs = 7500): Promise<string | null> {
+  return new Promise((resolve) => {
+    try {
+      const req = https.get(urlStr, {
+        agent: isYatirimHttpsAgent,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+        },
+        timeout: timeoutMs
+      }, (res) => {
+        if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+          res.resume();
+          return resolve(null);
+        }
+        let data = '';
+        res.setEncoding('utf8');
+        res.on('data', chunk => { data += chunk; });
+        res.on('end', () => resolve(data));
+      });
+      req.on('error', () => resolve(null));
+      req.on('timeout', () => {
+        req.destroy();
+        resolve(null);
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
 /**
  * İş Yatırım Temel Değerler ve Oranlar tablosunu çeker ve tüm hisseleri ayrıştırır
  */
@@ -45,31 +85,29 @@ export async function fetchAllIsYatirimMultiples(): Promise<Record<string, IsYat
     return cachedMultiples;
   }
 
-  // Node ortamında ilk sertifika zinciri hatasını önlemek için process.env ayarı
-  if (typeof process !== 'undefined' && process.env) {
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-  }
-
   const url = 'https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/Temel-Degerler-Ve-Oranlar.aspx';
   
   try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-      },
-      // Vercel serverless ortamında timeout koruması
-      signal: AbortSignal.timeout(6000),
-      next: { revalidate: 3600 }
-    });
-
-    if (!res.ok) {
-      console.warn(`[IsYatirim] HTTP hata: ${res.status}`);
-      return cachedMultiples || {};
+    let html = await fetchHttpsText(url, 7500);
+    if (!html) {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+        },
+        signal: AbortSignal.timeout(6000),
+        next: { revalidate: 3600 }
+      });
+      if (res.ok) {
+        html = await res.text();
+      }
     }
 
-    const html = await res.text();
+    if (!html) {
+      console.warn('[IsYatirim] Canlı çarpan tablosu çekilemedi, önbellek kullanılıyor.');
+      return cachedMultiples || {};
+    }
     const result: Record<string, IsYatirimStockMultiples> = {};
 
     // 1. temelozet tablosunu ayıkla (Piyasa Değeri, Halka Açıklık, Ödenmiş Sermaye)

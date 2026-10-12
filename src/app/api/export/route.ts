@@ -5,19 +5,21 @@ import { generateFullAuditMarkdown } from '@/lib/export-markdown';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
+const TICKER_REGEX = /^[A-Z0-9]{2,10}$/;
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const ticker = searchParams.get('ticker') || searchParams.get('symbol') || '';
+    const cleanTicker = ticker.toUpperCase().trim();
 
-    if (!ticker.trim()) {
+    if (!cleanTicker || !TICKER_REGEX.test(cleanTicker)) {
       return new NextResponse('Lütfen geçerli bir hisse kodu belirtin. Örn: /api/export?ticker=VESBE', {
         status: 400,
         headers: { 'Content-Type': 'text/plain; charset=utf-8' }
       });
     }
 
-    const cleanTicker = ticker.toUpperCase().trim();
     const report = await getReportForTicker(cleanTicker);
 
     if (!report) {
@@ -37,7 +39,8 @@ export async function GET(req: NextRequest) {
       }
     });
   } catch (error: any) {
-    return new NextResponse(`Hata oluştu: ${error.message || 'Bilinmeyen hata'}`, {
+    console.error('[API /api/export] Hata:', error);
+    return new NextResponse('Hata oluştu: Rapor dışa aktarılırken bir sorun oluştu.', {
       status: 500,
       headers: { 'Content-Type': 'text/plain; charset=utf-8' }
     });

@@ -13,6 +13,7 @@
 
 import type { SectorType } from './sectors.ts';
 import type { FinancialHistoryItem } from './bist-service.ts';
+import { parsePeriodSortKey } from './valuation.ts';
 
 export interface ItemValidationReport {
   period: string;
@@ -128,8 +129,8 @@ export class FinancialDataValidator {
     const allErrors: string[] = [];
     const reconciledList: FinancialHistoryItem[] = [];
 
-    // Dönem bazlı kronolojik sıralama (2022/09 -> 2026/06)
-    const sorted = [...series].sort((a, b) => (a.period || '').localeCompare(b.period || ''));
+    // Dönem bazlı kronolojik sıralama (parsePeriodSortKey ile robust sıralama)
+    const sorted = [...series].sort((a, b) => parsePeriodSortKey(a.period) - parsePeriodSortKey(b.period));
 
     let validCount = 0;
     for (const item of sorted) {

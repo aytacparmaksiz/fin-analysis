@@ -507,6 +507,55 @@ function calculateDriverPin(
   return 50;
 }
 
+// Component Error Boundary (P3 Fazı: Granüler Hata İzolasyonu)
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+  fallbackTitle?: string;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error?: Error;
+}
+
+export class ComponentErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('ComponentErrorBoundary yakaladı:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="bg-rose-950/30 border border-rose-900/60 rounded-xl p-6 text-center my-4 space-y-3">
+          <div className="flex items-center justify-center gap-2 text-rose-400 font-semibold text-sm">
+            <AlertTriangle className="w-5 h-5" />
+            <span>{this.props.fallbackTitle || 'Bileşen Yüklenirken Bir Hata Oluştu'}</span>
+          </div>
+          <p className="text-xs text-slate-400 max-w-md mx-auto">
+            Bu bölümdeki veri görselleştirmesi sırasında beklenmeyen bir durum oluştu ancak diğer analiz sekmeleri ve raporunuz sorunsuz çalışmaya devam etmektedir.
+          </p>
+          <button
+            onClick={() => this.setState({ hasError: false })}
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700 transition-colors"
+          >
+            Yeniden Dene
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // Görsel 5: Değer Sürücüleri Kartı (Driver Card)
 function DriverCard({
   title,
@@ -2215,7 +2264,7 @@ export default function ValuationTerminal({
       const numericScore = score ? parseInt(score, 10) : data.scoreResult?.totalScore;
 
       const opt = optimizeFinalDecision({
-        rawDecision,
+        rawDecision: (data.optimization?.finalDecision || data.optimization?.rawDecision || rawDecision) as any,
         score: numericScore,
         valuation: data.valuation,
         marketPrice: parsedPrice,
@@ -2225,14 +2274,19 @@ export default function ValuationTerminal({
         sector: activeSector
       });
 
-      const finalDecision = opt?.finalDecision || rawDecision;
+      const finalDecision = data.optimization?.finalDecision || opt?.finalDecision || rawDecision;
+      const finalReport = syncReportTextWithValuation(cleanReport, {
+        ...(data.valuation || {}),
+        final_decision: finalDecision,
+        decision: finalDecision,
+      });
 
       const finalExtracted = {
         ...enrichedExtractedData,
         valuation: data.valuation || enrichedExtractedData?.valuation,
         fair_value_drivers: data.drivers || enrichedExtractedData?.fair_value_drivers,
         score_result: data.scoreResult,
-        optimization: opt
+        optimization: opt || data.optimization
       };
 
       const newEntry: SavedReport = {
@@ -2242,7 +2296,7 @@ export default function ValuationTerminal({
         fairValue: String(targetVal ?? data.valuation?.fair_value ?? ''),
         period: extractedData?.reporting_period,
         createdAt: new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-        report: cleanReport,
+        report: finalReport,
         decision: finalDecision,
         rawDecision: rawDecision !== finalDecision ? rawDecision : undefined,
         overrideReason: opt?.overrideReason,
@@ -3164,12 +3218,14 @@ export default function ValuationTerminal({
   // İskonto oranını ve güvenlik marjını matematiksel olarak tutarlı güncelle
   if (valuationInfo.fair_value && valuationInfo.current_price) {
     valuationInfo.discount_pct = Number((((valuationInfo.fair_value - valuationInfo.current_price) / valuationInfo.current_price) * 100).toFixed(1));
-    // Eğer şirket Değer Tuzağı, ALMA veya UNSAFE ise güvenlik marjı 0'dır
-    if (valuationInfo.is_value_trap || dynamicValuationResult.optimization?.finalDecision === 'ALMA' || valuationInfo.margin_of_safety_status === 'UNSAFE' || valuationInfo.discount_pct <= 0) {
+    // Eğer şirket Değer Tuzağı, ALMA veya primli ise güvenlik marjı 0'dır
+    const optDecision = dynamicValuationResult.optimization?.finalDecision;
+    if (valuationInfo.is_value_trap || optDecision === 'ALMA' || valuationInfo.discount_pct <= 0) {
       valuationInfo.margin_of_safety = 0;
       valuationInfo.margin_of_safety_status = 'UNSAFE';
     } else {
       valuationInfo.margin_of_safety = valuationInfo.discount_pct;
+      valuationInfo.margin_of_safety_status = valuationInfo.discount_pct >= 25.0 ? 'SAFE' : (valuationInfo.discount_pct >= 15.0 ? 'BORDERLINE' : 'UNSAFE');
     }
   }
 
@@ -4433,6 +4489,7 @@ export default function ValuationTerminal({
               
               {/* SEKME 0: ÖZET RAPOR */}
               {activeTab === 'ozet' && (
+                <ComponentErrorBoundary fallbackTitle="Özet Panosu Hatası">
                 <div className="space-y-6">
                   {chartData.length === 0 ? (
                     <div className="p-8 text-center text-slate-500 bg-[#0F1523] rounded-xl border border-slate-800 text-sm">
@@ -4950,10 +5007,12 @@ export default function ValuationTerminal({
                     </>
                   )}
                 </div>
+                </ComponentErrorBoundary>
               )}
 
               {/* SEKME 1: GRAFİK TERMİNALİ (4'LÜ IZGARA) */}
               {activeTab === 'overview' && (
+                <ComponentErrorBoundary fallbackTitle="Grafik Terminali Hatası">
                 <div className="space-y-6">
                   {chartData.length === 0 ? (
                     <div className="p-8 text-center text-slate-500 bg-[#0F1523] rounded-xl border border-slate-800 text-sm">
@@ -5153,10 +5212,12 @@ export default function ValuationTerminal({
                     </>
                   )}
                 </div>
+                </ComponentErrorBoundary>
               )}
 
               {/* SEKME 2: FİNANSAL TABLOLAR */}
               {activeTab === 'tables' && (
+                <ComponentErrorBoundary fallbackTitle="Finansal Tablolar Hatası">
                 <div className="space-y-5">
 
                   {/* Üst Yönetici KPI Kartları */}
@@ -5805,10 +5866,12 @@ export default function ValuationTerminal({
                   </div>
 
                 </div>
+                </ComponentErrorBoundary>
               )}
 
               {/* SEKME 3: ADİL DEĞER & DEĞER SÜRÜCÜLERİ PANELİ */}
               {activeTab === 'fairvalue' && (
+                <ComponentErrorBoundary fallbackTitle="Adil Değer Panosu Hatası">
                 <div className="space-y-5">
                   {/* Fiyat & Değerleme Sonuç Kartları */}
                   <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
@@ -6158,10 +6221,12 @@ export default function ValuationTerminal({
                     </div>
                   </div>
                 </div>
+                </ComponentErrorBoundary>
               )}
 
               {/* SEKME: PİYASA ÇARPANLARI & SEKTÖR KIYASLAMA EKRANI (ITEM 6) */}
               {activeTab === 'multiples' && (
+                <ComponentErrorBoundary fallbackTitle="Çarpan Analizi Hatası">
                 <div className="space-y-6">
                   {/* Üst Başlık ve Sektörel Genel Değerleme Durumu */}
                   <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -6388,10 +6453,12 @@ export default function ValuationTerminal({
                     </div>
                   </div>
                 </div>
+                </ComponentErrorBoundary>
               )}
 
               {/* SEKME 4: GÜÇLÜ VE ZAYIF YÖNLER ANALİZİ */}
               {activeTab === 'proscons' && (
+                <ComponentErrorBoundary fallbackTitle="Güçlü/Zayıf Yönler Hatası">
                 <div className="space-y-6">
                   <div className="bg-[#111827]/80 border border-slate-800 p-5 rounded-xl shadow-lg">
                     <div className="flex items-center gap-2">
@@ -6449,6 +6516,7 @@ export default function ValuationTerminal({
                     </div>
                   </div>
                 </div>
+                </ComponentErrorBoundary>
               )}
 
               {/* SEKME 5: FAALİYET RAPORU, YATIRIMCI SUNUMU & YÖNETİM REHBERLİK ANALİZİ */}
@@ -6489,6 +6557,7 @@ export default function ValuationTerminal({
                 const execSummary = currentExtractedData?.report_executive_summary || currentExtractedData?.future_targets_summary;
 
                 return (
+                  <ComponentErrorBoundary fallbackTitle="Yönetim Hedefleri Hatası">
                   <div className="space-y-6">
                     {/* 1. Üst Başlık ve Faaliyet Raporu / Sunum Stratejik Özeti */}
                     <div className="bg-gradient-to-br from-[#111827] via-[#0F172A] to-emerald-950/20 border border-slate-800 rounded-xl p-6 space-y-4 shadow-xl">
@@ -6664,11 +6733,13 @@ export default function ValuationTerminal({
                       )}
                     </div>
                   </div>
+                  </ComponentErrorBoundary>
                 );
               })()}
 
               {/* SEKME 6: DEĞERLEME RAPORU (BİLİŞSEL & AKADEMİK OKUNABİLİRLİK TASARIMI) */}
               <div id="kurumsal-degerleme-raporu" className={activeTab === 'report' ? 'space-y-4' : 'hidden print:block'}>
+                <ComponentErrorBoundary fallbackTitle="Değerleme Raporu Hatası">
                   <div className="flex flex-wrap items-center justify-between gap-3 bg-[#111827] border border-slate-800 px-5 py-3.5 rounded-xl shadow-md print:hidden">
                     <div className="flex flex-wrap items-center gap-3">
                       <div className="flex items-center gap-2">
@@ -7122,10 +7193,12 @@ export default function ValuationTerminal({
                       </ReactMarkdown>
                     </div>
                   </div>
+                </ComponentErrorBoundary>
                 </div>
 
               {/* SEKME 7: ÇEYREKLİK SKOR TAKİBİ */}
               {activeTab === 'history' && (
+                <ComponentErrorBoundary fallbackTitle="Geçmiş Raporlar Hatası">
                 <div className="bg-[#111827] border border-slate-800 rounded-xl p-6 space-y-6 shadow-xl">
                   <div className="border-b border-slate-800 pb-3">
                     <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -7197,6 +7270,7 @@ export default function ValuationTerminal({
                     })}
                   </div>
                 </div>
+                </ComponentErrorBoundary>
               )}
 
 

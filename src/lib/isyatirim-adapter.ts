@@ -17,7 +17,6 @@
 
 import type { SectorType } from './sectors.ts';
 import type { FinancialHistoryItem } from './bist-service.ts';
-import { parseFinancialNumber, getAnnualizationFactor } from './valuation.ts';
 
 export interface IsYatirimRawRow {
   itemCode?: string;
@@ -185,15 +184,7 @@ export class IsYatirimApiAdapter {
       ebt = getValByCode('3G', '3I', '3M') ?? getValByDesc('vergi öncesi kar');
       net_income = getValByCode('2MEZ', '3NJA', '3Z') ?? getValByDesc('dönem net karı veya zararı', 'dönem net karı', 'dönem net kar', 'ana ortaklık payları');
 
-      if (
-        written_premiums &&
-        written_premiums > 0 &&
-        net_income &&
-        net_income > written_premiums * 0.08 &&
-        (technical_profit === null || Math.abs(technical_profit) < written_premiums * 0.03)
-      ) {
-        technical_profit = Math.round(net_income * 0.82);
-      }
+      // P1 (Zero-Synthetic Data): UFRS_K resmi teknik kâr kalemi okunur, sentetik 0.82 tahmini uygulanmaz.
       ebitda = technical_profit;
       operating_profit = technical_profit;
 
@@ -214,33 +205,32 @@ export class IsYatirimApiAdapter {
           const impliedMargin = (technical_profit / basePremium) * 100;
           const impliedComb = 100 - Math.max(-30, Math.min(35, impliedMargin));
           combined_ratio = Number(impliedComb.toFixed(1));
-          if (loss_ratio === null || loss_ratio < 35) loss_ratio = Number((combined_ratio * 0.76).toFixed(1));
-          expense_ratio = Number((combined_ratio - loss_ratio).toFixed(1));
+          if (loss_ratio !== null) {
+            expense_ratio = Number((combined_ratio - loss_ratio).toFixed(1));
+          }
         } else if (loss_ratio !== null && ga_ratio !== null) {
-          expense_ratio = Number((ga_ratio + 10.9).toFixed(1));
-          combined_ratio = Number((loss_ratio + expense_ratio).toFixed(1));
+          combined_ratio = Number((loss_ratio + ga_ratio).toFixed(1));
         } else if (loss_ratio !== null && expense_ratio !== null && (loss_ratio + expense_ratio) >= 55) {
           combined_ratio = Number((loss_ratio + expense_ratio).toFixed(1));
         }
 
-        if (expense_ratio !== null) {
-          if (ga_ratio === null || ga_ratio >= expense_ratio) {
-            ga_ratio = Number((expense_ratio * 0.44).toFixed(1));
-          }
+        if (expense_ratio !== null && ga_ratio !== null) {
           commission_ratio = Number(Math.max(0, expense_ratio - ga_ratio).toFixed(1));
         }
       }
 
       net_debt = cash_and_equivalents !== null ? -cash_and_equivalents : null;
-      operating_cash_flow = (net_income || 0) + ((written_premiums || 0) * 0.12);
-      free_cash_flow = operating_cash_flow;
+      operating_cash_flow = null; // P1: Resmi nakit akışı yoksa sentetik nakit akışı (%12 prim vb.) uydurulmaz
+      free_cash_flow = null;
 
     } else if (meta.sector === 'BANKING') {
       cash_and_equivalents = getValByCode('1A', '1AA') ?? getValByDesc('nakit değerler ve merkez bankası', 'nakit ve nakit benzer');
       financial_assets_insured = getValByCode('1B', '1C', '1D') ?? getValByDesc('gerçeğe uygun değer farkı kar/zarara yansıtılan finansal varlıklar', 'finansal varlıklar', 'menkul değerler');
       trade_receivables = getValByCode('1E', '1F', '1DA') ?? getValByDesc('krediler', 'kredi ve alacaklar');
       total_assets = getValByCode('1S', '1Z', '1') ?? getValByDesc('varlıklar toplamı', 'aktif toplamı', 'toplam varlıklar');
-      current_assets = (cash_and_equivalents || 0) + (financial_assets_insured || 0) + (trade_receivables || 0) || (total_assets ? Math.round(total_assets * 0.68) : null);
+      current_assets = (cash_and_equivalents !== null || financial_assets_insured !== null || trade_receivables !== null)
+        ? ((cash_and_equivalents || 0) + (financial_assets_insured || 0) + (trade_receivables || 0))
+        : null;
       non_current_assets = (total_assets && current_assets) ? Math.max(0, total_assets - current_assets) : null;
 
       current_liabilities = getValByCode('2A') ?? getValByDesc('mevduat', 'toplanan fonlar');
@@ -325,17 +315,12 @@ export class IsYatirimApiAdapter {
           getValByDesc('sürdürülen faaliyetler vergi öncesi karı', 'vergi öncesi kar');
       }
 
-      // Eğer doğrudan faaliyet karı ayrışmamışsa brüt kâr ve hasılat üzerinden sektör normlarıyla rasyonel operasyonel kâr
-      if (operating_profit === null && gross_profit !== null) {
-        operating_profit = Math.round(gross_profit * 0.45);
-      }
-
       net_income = getValByCode('2OCF', '3Z', '3U', '2MEZ', '2OV') ?? getValByDesc('dönem net karı veya zararı', 'dönem karı (zararı)', 'dönem net kar', 'ana ortaklık payları');
       ebt = getValByCode('3I', '3M', '3N') ?? getValByDesc('sürdürülen faaliyetler vergi öncesi karı', 'vergi öncesi karı', 'vergi öncesi kar');
 
       const amort = getValByCode('4B', '4CAB') ?? getValByDesc('amortisman ve itfa gideri ile ilgili düzeltmeler', 'amortisman');
       if (operating_profit !== null) {
-        ebitda = operating_profit + (amort !== null ? Math.abs(amort) : (revenue ? Math.abs(revenue) * 0.05 : 0));
+        ebitda = operating_profit + (amort !== null ? Math.abs(amort) : 0);
       }
 
       // STANDARDIZATION KURALI 4:
@@ -358,12 +343,14 @@ export class IsYatirimApiAdapter {
         if (operating_cash_flow !== null) {
           capex = Math.abs(operating_cash_flow - officialFcf);
         } else {
-          capex = tangibleCapex ?? totalCapex;
+          capex = tangibleCapex ?? totalCapex ?? null;
         }
       } else {
-        capex = tangibleCapex ?? totalCapex ?? (revenue ? Math.abs(revenue) * 0.04 : 0);
-        if (operating_cash_flow !== null) {
-          free_cash_flow = operating_cash_flow - Math.abs(capex || 0);
+        capex = tangibleCapex ?? totalCapex ?? null;
+        if (operating_cash_flow !== null && capex !== null) {
+          free_cash_flow = operating_cash_flow - Math.abs(capex);
+        } else {
+          free_cash_flow = operating_cash_flow;
         }
       }
     }

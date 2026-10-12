@@ -12,8 +12,54 @@ import { IsYatirimApiAdapter } from './isyatirim-adapter.ts';
 import { FinancialDataValidator } from './financial-validator.ts';
 import { FinancialRatioEngine } from './ratio-engine.ts';
 
-if (typeof process !== 'undefined' && process.env) {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+import https from 'node:https';
+
+// Güvenlik: Canlı ortamda (production) TLS doğrulaması kesin olarak açıktır.
+// Yerel Windows geliştirme ortamında antivirüs SSL müdahalesine karşı toleranslı çalışır.
+const isYatirimHttpsAgent = new https.Agent({
+  rejectUnauthorized: process.env.NODE_ENV === 'production',
+  keepAlive: true,
+  timeout: 7500
+});
+
+async function fetchResilientJson(urlStr: string, timeoutMs = 7500): Promise<any> {
+  return new Promise((resolve) => {
+    try {
+      const req = https.get(urlStr, {
+        agent: isYatirimHttpsAgent,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/javascript, */*; q=0.01',
+          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+          'X-Requested-With': 'XMLHttpRequest',
+          'Referer': 'https://www.isyatirim.com.tr/'
+        },
+        timeout: timeoutMs
+      }, (res) => {
+        if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+          res.resume();
+          return resolve(null);
+        }
+        let data = '';
+        res.setEncoding('utf8');
+        res.on('data', chunk => { data += chunk; });
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch {
+            resolve(null);
+          }
+        });
+      });
+      req.on('error', () => resolve(null));
+      req.on('timeout', () => {
+        req.destroy();
+        resolve(null);
+      });
+    } catch {
+      resolve(null);
+    }
+  });
 }
 
 export interface FinancialHistoryItem {
@@ -207,16 +253,21 @@ export async function fetchLiveBistPrice(ticker: string): Promise<{ price: numbe
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}.IS?interval=1mo&range=5y`;
   
   try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      },
-      signal: AbortSignal.timeout(3500),
-      next: { revalidate: 300 } // 5 dakika önbellek
-    });
+    let data = await fetchResilientJson(url, 5000);
+    if (!data) {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        signal: AbortSignal.timeout(3500),
+        next: { revalidate: 300 } // 5 dakika önbellek
+      });
+      if (res.ok) {
+        data = await res.json();
+      }
+    }
 
-    if (res.ok) {
-      const data = await res.json();
+    if (data) {
       const result = data?.chart?.result?.[0];
       const meta = result?.meta;
       const price = meta?.regularMarketPrice;
@@ -288,6 +339,10 @@ export const BATCH_SPECS: BatchSpec[] = [
   {
     params: { year1: 2023, period1: 6, year2: 2023, period2: 3, year3: 2022, period3: 12, year4: 2022, period4: 9 },
     periods: ['2023/06', '2023/03', '2022/12', '2022/09']
+  },
+  {
+    params: { year1: 2022, period1: 6, year2: 2022, period2: 3, year3: 2021, period3: 12, year4: 2021, period4: 9 },
+    periods: ['2022/06', '2022/03', '2021/12', '2021/09']
   }
 ];
 
@@ -313,11 +368,23 @@ async function getSupabaseMaliTablo(ticker: string): Promise<FinancialHistoryIte
     if (age > 24 * 60 * 60 * 1000) {
       return null; // 24 saatten eskiyse canlı kaynaktan tazelemeyi dene
     }
-    // Mükerrer prim toplamı anomalisi koruması (AGESA / ANHYT):
+    // Mükerrer prim toplamı veya eksik çeyrekli önbellek koruması:
     if (Array.isArray(data.financial_history)) {
       const p2606 = data.financial_history.find((x: any) => x.period === '2026/06');
       if (ticker.toUpperCase() === 'AGESA' && p2606 && p2606.written_premiums > 18_000_000_000) {
         return null; // Eski hatalı mükerrer toplam önbelleği geçersiz kıl
+      }
+
+      // Eski/eksik çeyrekli önbellek koruması (ISMEN vb. şirketler için):
+      // Önbellekteki veri 2024/12 veya 2023/12 içerip ara çeyrekleri (2024/06 veya 2023/06) içermiyorsa,
+      // yeni çok partili çeyrek motorunun tüm ara çeyrekleri çekebilmesi için önbelleği geçersiz kıl:
+      const periods = data.financial_history.map((x: any) => x.period);
+      const has202412 = periods.includes('2024/12');
+      const has202406 = periods.includes('2024/06');
+      const has202312 = periods.includes('2023/12');
+      const has202306 = periods.includes('2023/06');
+      if ((has202412 && !has202406) || (has202312 && !has202306)) {
+        return null; // Eski eksik çeyrekli önbelleği geçersiz kıl, canlı kaynaktan tam çeyreklik seriyi çek
       }
     }
     return data.financial_history as FinancialHistoryItem[];
@@ -364,6 +431,10 @@ async function fetchIsYatirimSingleBatch(
   const url = `https://www.isyatirim.com.tr/_layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo?${q}`;
 
   try {
+    const resilientData = await fetchResilientJson(url, 7000);
+    if (resilientData && Array.isArray(resilientData.value)) {
+      return resilientData.value;
+    }
     const res = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -372,7 +443,7 @@ async function fetchIsYatirimSingleBatch(
         'X-Requested-With': 'XMLHttpRequest',
         'Referer': `https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/sirket-karti.aspx?hisse=${ticker}`
       },
-      signal: AbortSignal.timeout(2200),
+      signal: AbortSignal.timeout(6000),
       cache: 'no-store'
     });
     if (!res.ok) return [];
@@ -406,7 +477,8 @@ export async function fetchIsYatirimMaliTabloBatches(
   let activeGroup: ('XI_29' | 'UFRS' | 'UFRS_K') | null = null;
   let batch1Rows: any[] = [];
 
-  // 1. Aşama: Batch 1 ile doğru muhasebe grubunu otomatik keşfet (Auto-Discovery - maks 2 deneme)
+  // 1. Aşama: Doğru muhasebe grubunu otomatik keşfet (Auto-Discovery)
+  // Şirket henüz en güncel dönemi açıklamamış olabilir; bu nedenle önce Batch 1, bulunamazsa Batch 2 adaylar üzerinden test edilir.
   for (const group of candidateGroups) {
     const rows = await fetchIsYatirimSingleBatch(ticker, group, BATCH_SPECS[0].params);
     if (rows.length >= 5) {
@@ -416,14 +488,15 @@ export async function fetchIsYatirimMaliTabloBatches(
     }
   }
 
-  // Eğer Batch 1'de bulunamadıysa (örneğin henüz 2026/06 açıklamamış şirketler), sadece ilk adayla Batch 2'yi dene
   let batch2Rows: any[] = [];
-  if (!activeGroup && candidateGroups.length > 0) {
-    const primaryGroup = candidateGroups[0];
-    const rows = await fetchIsYatirimSingleBatch(ticker, primaryGroup, BATCH_SPECS[1].params);
-    if (rows.length >= 5) {
-      activeGroup = primaryGroup;
-      batch2Rows = rows;
+  if (!activeGroup) {
+    for (const group of candidateGroups) {
+      const rows = await fetchIsYatirimSingleBatch(ticker, group, BATCH_SPECS[1].params);
+      if (rows.length >= 5) {
+        activeGroup = group;
+        batch2Rows = rows;
+        break;
+      }
     }
   }
 
@@ -431,20 +504,21 @@ export async function fetchIsYatirimMaliTabloBatches(
     return { rowsByBatch: [], activeGroup: null };
   }
 
-  // 2. Aşama: Keşfedilen aktif grup ile kalan partileri eşzamanlı (Promise.all) çekerek ~1sn içinde tamamla
+  // 2. Aşama: Keşfedilen aktif grup ile kalan tüm partileri eşzamanlı çek
   const rowsByBatch: { spec: BatchSpec; rows: any[] }[] = [];
   rowsByBatch.push({ spec: BATCH_SPECS[0], rows: batch1Rows });
 
-  const remainingPromises = [
-    batch2Rows.length > 0 ? Promise.resolve(batch2Rows) : fetchIsYatirimSingleBatch(ticker, activeGroup, BATCH_SPECS[1].params),
-    fetchIsYatirimSingleBatch(ticker, activeGroup, BATCH_SPECS[2].params),
-    fetchIsYatirimSingleBatch(ticker, activeGroup, BATCH_SPECS[3].params)
-  ];
+  const remainingPromises = BATCH_SPECS.slice(1).map((spec, sIdx) => {
+    if (sIdx === 0 && batch2Rows.length > 0) {
+      return Promise.resolve(batch2Rows);
+    }
+    return fetchIsYatirimSingleBatch(ticker, activeGroup!, spec.params);
+  });
 
-  const [r2, r3, r4] = await Promise.all(remainingPromises);
-  rowsByBatch.push({ spec: BATCH_SPECS[1], rows: r2 });
-  rowsByBatch.push({ spec: BATCH_SPECS[2], rows: r3 });
-  rowsByBatch.push({ spec: BATCH_SPECS[3], rows: r4 });
+  const remainingRows = await Promise.all(remainingPromises);
+  remainingRows.forEach((rows, sIdx) => {
+    rowsByBatch.push({ spec: BATCH_SPECS[sIdx + 1], rows });
+  });
 
   return { rowsByBatch, activeGroup };
 }
@@ -512,15 +586,19 @@ async function fetchYahooFundamentalsHistory(ticker: string, sector: SectorType)
   const url = `https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${symbol}.IS?type=${types}&period1=1640995200&period2=1893456000`;
 
   try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      },
-      signal: AbortSignal.timeout(4500),
-      cache: 'no-store'
-    });
-    if (!res.ok) return { items: [] };
-    const data = await res.json();
+    let data = await fetchResilientJson(url, 6000);
+    if (!data) {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        signal: AbortSignal.timeout(4500),
+        cache: 'no-store'
+      });
+      if (res.ok) {
+        data = await res.json();
+      }
+    }
     const results: any[] = data?.timeseries?.result || [];
     if (results.length === 0) return { items: [] };
 
@@ -670,7 +748,6 @@ async function fetchYahooFundamentalsHistory(ticker: string, sector: SectorType)
       const getSnap = (k: string): number | null => {
         if (qSnap[k] !== undefined) return qSnap[k];
         if (aSnap[k] !== undefined) return aSnap[k];
-        if (fallbackSnap[k] !== undefined) return Math.round(fallbackSnap[k] * 0.94);
         return null;
       };
 
@@ -715,22 +792,21 @@ async function fetchYahooFundamentalsHistory(ticker: string, sector: SectorType)
       }
       if (total_liabilities && current_liabilities && (!long_term_liabilities || long_term_liabilities <= 0) && total_liabilities > current_liabilities) {
         long_term_liabilities = total_liabilities - current_liabilities;
-      } else if (total_liabilities && !current_liabilities) {
-        current_liabilities = Math.round(total_liabilities * (sector === 'INSURANCE' ? 0.82 : 0.65));
-        long_term_liabilities = total_liabilities - current_liabilities;
+      } else if (total_liabilities && long_term_liabilities && (!current_liabilities || current_liabilities <= 0) && total_liabilities > long_term_liabilities) {
+        current_liabilities = total_liabilities - long_term_liabilities;
       }
 
       if (ebitda === null && operating_profit !== null) {
-        ebitda = Math.round(operating_profit + (revenue ? Math.abs(revenue) * 0.05 : 0));
+        ebitda = operating_profit;
       }
 
-      const operating_cash_flow = getFlow('OperatingCashFlow') ?? (net_income !== null ? Math.round(net_income * 1.15) : null);
+      const operating_cash_flow = getFlow('OperatingCashFlow');
       const rawCapex = getFlow('CapitalExpenditure');
       const capex = rawCapex !== null ? Math.abs(rawCapex) : null;
-      const free_cash_flow = getFlow('FreeCashFlow') ?? (operating_cash_flow !== null ? operating_cash_flow - (capex || 0) : null);
+      const free_cash_flow = getFlow('FreeCashFlow') ?? (operating_cash_flow !== null && capex !== null ? operating_cash_flow - capex : null);
 
       const written_premiums = sector === 'INSURANCE' ? (insPremiumFlow ?? revenue) : null;
-      const technical_profit = sector === 'INSURANCE' ? (operating_profit ?? ebitda ?? (net_income ? Math.round(net_income * 0.85) : null)) : null;
+      const technical_profit = sector === 'INSURANCE' ? (operating_profit ?? ebitda) : null;
 
       if (revenue === null && net_income === null && total_assets === null && equity === null) continue;
 
@@ -762,10 +838,10 @@ async function fetchYahooFundamentalsHistory(ticker: string, sector: SectorType)
         inventories: getSnap('Inventory'),
         written_premiums,
         gross_written_premiums: written_premiums,
-        earned_premiums: written_premiums ? Math.round(written_premiums * 0.92) : null,
+        earned_premiums: null,
         technical_profit,
         technical_balance: technical_profit,
-        investment_income: sector === 'INSURANCE' && net_income ? Math.round(net_income * 0.65) : null,
+        investment_income: null,
         financial_assets_insured: sector === 'INSURANCE' ? cash_and_equivalents : null
       });
     }
@@ -985,16 +1061,8 @@ export async function fetchAndAnalyzeBistCompany(
       item.share_price = histPrice;
     } else if (isLast) {
       item.share_price = Number(currentPrice.toFixed(2));
-    } else if (latestEquityRef && item.equity && item.equity > 0) {
-      const ratio = Math.max(0.08, Math.min(1.5, item.equity / latestEquityRef));
-      item.share_price = Number((currentPrice * ratio).toFixed(2));
-    } else if (latestRevRef && (item.revenue || item.written_premiums)) {
-      const revVal = (item.revenue || item.written_premiums)!;
-      const ratio = Math.max(0.08, Math.min(1.5, revVal / latestRevRef));
-      item.share_price = Number((currentPrice * ratio).toFixed(2));
     } else {
-      const stepFactor = Math.max(0.15, Math.pow(0.84, sortedHistory.length - 1 - idx));
-      item.share_price = Number((currentPrice * stepFactor).toFixed(2));
+      item.share_price = undefined;
     }
   });
 

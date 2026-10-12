@@ -84,11 +84,12 @@ AKADEMİK OKUNABİLİRLİK, BİLİŞSEL TASARIM VE DİL KURALLARI (ZORUNLU):
 MUHAFAZAKAR EMNİYET MARJI VE KARAR KORUMASI:
 1. 'AL' Kararı Vermek İçin ŞU KRİTERLERİN TAMAMI SAĞLANMALIDIR:
    - Asgari Güvenlik Marjı: Güncel fiyata göre Adil Değer İskontosu EN AZ %20 - %25 olmalıdır. İskonto %20'nin altındaysa KESİNLİKLE 'AL' verilemez ('NÖTR' veya 'ALMA').
-   - Gerçek Katma Değer: Yıllıklandırılmış ROIC > WACC (veya Bankacılık/Sigortada ROE > Ke) olmalıdır.
+   - Gerçek Katma Değer: Yıllıklandırılmış ROIC > WACC (Bankacılık ve Sigortada ROE > Ke; Holdinglerde ise NAD İskontosu >= %20 ve Portföy ROE verimi) olmalıdır.
    - Nakit Akış Kalitesi: Sanayi şirketlerinde İşletme Nakit Akışı (OCF) pozitif olmalıdır.
 2. DEĞER TUZAĞI (VALUE TRAP) KORUMASI:
-   - Şirketin adil değer iskontosu kağıt üzerinde yüksek (%20+) görünse bile; eğer operasyonel marjlar daralıyor, ROIC < WACC (negatif EVA spread, sermaye erozyonu) veya Net Borç / FAVÖK > 4.0x ise bu durum bir "Değer Tuzağı"dır.
-   - Değer tuzağı tespit edilen şirketlere ASLA 'AL' kararı verilemez ('ALMA' veya 'NÖTR'). Raporda kağıt üzerindeki iskontonun yanıltıcı olduğu vurgulanmalıdır.
+   - Şirketin adil değer iskontosu kağıt üzerinde yüksek (%20+) görünse bile; eğer sanayi şirketinde operasyonel marjlar daralıyor, ROIC < WACC (negatif EVA spread, sermaye erozyonu) veya Net Borç / FAVÖK > 4.0x ise bu durum bir "Değer Tuzağı"dır.
+   - HOLDİNG ve BANKACILIK sektörlerinde konsolide sanayi ROIC metriği yerine NAD İskontosu, temettü akışı ve solo borçluluk esastır; bu sektörlerde endüstriyel ROIC < WACC gerekçesiyle değer tuzağı uygulanamaz.
+   - Değer tuzağı veya risk filtresine takılan ancak borca batık olmayan (pozitif özkaynaklı) ve yüksek iskontolu (%20+) şirketlerde 'ALMA' kararı vermek adil değer ile mantıksal tezat oluşturur (+%77 potansiyel varken ALMA uyarısı). Bu şirketlerde karar en muhafazakar haliyle 'NÖTR' (Koşullu İzleme) olarak dengelenmelidir.
 3. KOŞULLU ANALİZ / GRİ ALAN:
    - Şirket puanı 55-70 arasındaysa veya değerleme ucuz olmasına rağmen nakit/borç profili sınır seviyedeyse, raporda '### İhtiyatlı İzleme Notu (Koşullu Analiz)' başlığı aç ve yatırımcının hangi teyitleri beklemesi gerektiğini listele.
 4. TMS 29 ENFLASYON HOMOJENİZASYONU:
@@ -331,13 +332,19 @@ DİKKAT VE TUTARLILIK KURALI:
 - Raporda yer alan tüm operasyonel metrikler, rasyolar, çarpanlar, marjlar, şube/hastane/mağaza adetleri ve büyüme oranları KESİNLİKLE ve KESİNLİKLE bu JSON içeriği ile birebir aynı olmalıdır.
 - Verilen JSON verisi dışındaki rakam, adet ve oranları yuvarlama, tahmin etme veya dışarıdan bilgi ekleme. JSON içindeki metrikler arasında ASLA çelişki üretme (örn. bir bölümde 37 hastane derken diğerinde 36 hastane yazma).
 - Tüm finansal oranlar ve büyüklükler için KESİNLİKLE aşağıdaki doğrulanmış merkezi JSON verilerini esas al.
-Eğer Nihai Yatırım Kararı 'ALMA' ise:
+- NİHAİ ANALİST KARARI (ZORUNLU): Raporun sonundaki 'Analist Kararı:' satırı KESİNLİKLE [${optimization.finalDecision}] olacaktır. Modelin hesapladığı deterministik optimize karar [${optimization.finalDecision}] olup (Ham Karar: ${optimization.rawDecision}${optimization.overrideApplied ? ` -> Kural Revizyonu: ${optimization.overrideReason}` : ''}), bu karar raporda birebir korunmalıdır.
+${optimization.finalDecision === 'NÖTR' ? `Eğer Nihai Yatırım Kararı 'NÖTR' ise:
+    - Şirketin adil değer iskontosu (+%${valuation.discount_pct}) bulunsa dahi, finansal risk dinamikleri, sınır skorlar veya sektör temkinliliği nedeniyle karar temkinli 'NÖTR' (Koşullu İzleme) olarak dengelenmiştir.
+    - Yatırımcıya nakit akışı ve operasyonel teyitler gelene kadar aceleci davranılmaması, kademeli veya koşullu izleme yapılması önerilmelidir.` : ''}
+${optimization.finalDecision === 'ALMA' ? `Eğer Nihai Yatırım Kararı 'ALMA' ise:
     a) Eğer hisse fiyatı (${activePrice} TL) adil değerin (${valuation.fair_value} TL) üzerindeyse (${valuation.discount_pct < 0 ? `%${Math.abs(valuation.discount_pct)} primli` : ''}), hissenin piyasada adil değerinin üzerinde primli işlem gördüğü (İskonto Yok / Primli) ve operasyonel riskler nedeniyle sermaye kaybı riski taşıdığı net olarak vurgulanmalıdır. Emniyet marjı durumu 'UNSAFE' (Güvensiz / İskonto Yok) olarak belirtilmelidir.
     b) Ayı Senaryosu taban hedefi ${valuation.bear_price} TL olup, ağır nakit sıkıntısı ve kriz koşullarını yansıtmaktadır.
     ${valuation.is_value_trap ? `c) 🚨 KRİTİK DEĞER TUZAĞI (VALUE TRAP) KORUMASI:
        - Şirket algoritmik olarak "DEĞER TUZAĞI" olarak tespit edilmiştir!
        - Kağıt üzerinde görünen %${valuation.discount_pct} iskonto, eriyen operasyonel marjlar, negatif EVA makası (ROIC < WACC) veya yüksek borç yükü nedeniyle bir TUZAK İSKONTO'dur.
-       - Raporunun I. Yönetici Özeti ve VI. Temel Riskler & Nihai Karar bölümlerinde: "Kağıt üzerinde %${valuation.discount_pct} iskonto görünmesine rağmen şirket değer tuzağı (Value Trap) riskindedir; ${valuation.value_trap_reasons?.join('; ')}." şeklinde açıkça vurgulanmalı ve emniyet marjı durumu 'UNSAFE (Güvensiz - Değer Tuzağı)' olarak yazılmalıdır.` : ''}
+       - Raporunun I. Yönetici Özeti ve VI. Temel Riskler & Nihai Karar bölümlerinde: "Kağıt üzerinde %${valuation.discount_pct} iskonto görünmesine rağmen şirket değer tuzağı (Value Trap) riskindedir; ${valuation.value_trap_reasons?.join('; ')}." şeklinde açıkça vurgulanmalı ve emniyet marjı durumu 'UNSAFE (Güvensiz - Değer Tuzağı)' olarak yazılmalıdır.` : ''}` : ''}
+${optimization.finalDecision === 'AL' ? `Eğer Nihai Yatırım Kararı 'AL' ise:
+    - Şirketin asgari %20 emniyet marjına (+%${valuation.discount_pct} iskonto), güçlü sermaye getirisine ve makul borçluluk yapısına sahip olduğu, adil değere ulaşmasını sağlayacak katalizörlerle desteklenerek vurgulanmalıdır.` : ''}
 
 MERKEZİ DOĞRULUK KAYNAĞI (UNIFIED METRICS JSON):
 ${JSON.stringify(unifiedMetrics, null, 2)}

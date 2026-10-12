@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
+import { isValidTicker, isValidReportId, validateDeleteReportParams } from '@/lib/security';
+
+export { isValidTicker, isValidReportId, validateDeleteReportParams };
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -9,13 +12,21 @@ export const maxDuration = 60;
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
-    const requestedTicker = url.searchParams.get('ticker')?.toUpperCase().trim();
+    const rawTicker = url.searchParams.get('ticker');
+    const requestedTicker = rawTicker ? rawTicker.toUpperCase().trim() : null;
 
     const supabase = getSupabase();
     const isConfigured = Boolean(supabase && isSupabaseConfigured());
 
-    if (requestedTicker) {
-      // 1. Önce Supabase'de ara
+    if (requestedTicker !== null) {
+      if (!isValidTicker(requestedTicker)) {
+        return NextResponse.json(
+          { success: false, message: 'Geçersiz veya zararlı karakter içeren hisse kodu formatı.' },
+          { status: 400 }
+        );
+      }
+
+      // 1. Önce Supabase'de ara (Kesin eşitlik ile)
       if (isConfigured && supabase) {
         const { data, error } = await supabase
           .from('valuation_reports')
@@ -65,7 +76,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ 
         reports: [], 
         isCloudConfigured: true, 
-        error: error.message 
+        error: 'Raporlar getirilirken veritabanı hatası oluştu.' 
       }, { status: 500 });
     }
 
@@ -87,7 +98,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ 
       reports: [], 
       isCloudConfigured: false, 
-      error: err?.message || 'Bilinmeyen hata' 
+      error: 'Raporlar yüklenirken sunucu hatası oluştu.' 
     }, { status: 500 });
   }
 }
@@ -100,7 +111,33 @@ export async function POST(req: NextRequest) {
     const report = body.report || body;
 
     if (!report || !report.id || !report.ticker) {
-      return NextResponse.json({ success: false, message: 'Geçersiz rapor verisi' }, { status: 400 });
+      return NextResponse.json({ success: false, message: 'Geçersiz rapor verisi.' }, { status: 400 });
+    }
+
+    const cleanId = String(report.id).trim();
+    const cleanTicker = String(report.ticker).trim().toUpperCase();
+
+    // Katı girdi doğrulaması: ID ve Ticker formatı güvenli olmalıdır
+    if (!isValidReportId(cleanId)) {
+      return NextResponse.json(
+        { success: false, message: 'Geçersiz rapor ID formatı.' },
+        { status: 400 }
+      );
+    }
+
+    if (!isValidTicker(cleanTicker)) {
+      return NextResponse.json(
+        { success: false, message: 'Geçersiz hisse kodu formatı.' },
+        { status: 400 }
+      );
+    }
+
+    // DoS & Payload bloat koruması (Maksimum 500KB metin içeriği)
+    if (typeof report.report === 'string' && report.report.length > 500000) {
+      return NextResponse.json(
+        { success: false, message: 'Rapor metni izin verilen maksimum boyutu aşıyor.' },
+        { status: 413 }
+      );
     }
 
     if (!supabase || !isSupabaseConfigured()) {
@@ -112,14 +149,14 @@ export async function POST(req: NextRequest) {
     }
 
     const payload = {
-      id: report.id,
-      ticker: report.ticker,
-      price: report.price || '',
+      id: cleanId,
+      ticker: cleanTicker,
+      price: report.price ? String(report.price).slice(0, 32) : '',
       created_at: report.createdAt || new Date().toLocaleString('tr-TR'),
-      period: report.period || '',
+      period: report.period ? String(report.period).slice(0, 32) : '',
       report: report.report || '',
       decision: report.decision || 'NÖTR',
-      score: report.score ? String(report.score) : '',
+      score: report.score ? String(report.score).slice(0, 16) : '',
       extracted_data: report.extractedData || null,
       updated_at: new Date().toISOString(),
     };
@@ -130,26 +167,33 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       console.error('Supabase upsert error:', error);
-      return NextResponse.json({ success: false, error: error.message, isCloudConfigured: true }, { status: 500 });
+      return NextResponse.json({ success: false, error: 'Rapor kaydedilirken veritabanı hatası oluştu.', isCloudConfigured: true }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, isCloudConfigured: true });
   } catch (err: any) {
     console.error('POST /api/reports handler error:', err);
-    return NextResponse.json({ success: false, error: err?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Rapor kaydedilirken sunucu hatası oluştu.' }, { status: 500 });
   }
 }
 
-// DELETE: Raporu buluttan sil
+// DELETE: Raporu buluttan güvenli ve kesin eşleşme ile sil
 export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
-    const ticker = searchParams.get('ticker')?.toUpperCase().trim();
+    const rawId = searchParams.get('id');
+    const rawTicker = searchParams.get('ticker');
 
-    if (!id && !ticker) {
-      return NextResponse.json({ success: false, message: 'Rapor ID veya Ticker belirtilmedi' }, { status: 400 });
+    // 1. Fail-Safe Parametre Doğrulaması (Wildcard, zararlı karakter ve boşluk engeli)
+    const validation = validateDeleteReportParams(rawId, rawTicker);
+    if (!validation.isValid) {
+      return NextResponse.json(
+        { success: false, message: validation.error || 'Geçersiz parametre.' },
+        { status: 400 }
+      );
     }
+
+    const { cleanId, cleanTicker } = validation;
 
     const supabase = getSupabase();
     if (!supabase || !isSupabaseConfigured()) {
@@ -160,39 +204,42 @@ export async function DELETE(req: NextRequest) {
       });
     }
 
+    // 2. Kesin Eşleşme (Exact Matching) ile Silme:
+    // Wildcard eşleştirme KESİNLİKLE KULLANILMAZ. Yalnızca .eq() ile kesin eşitlik uygulanır.
     let error = null;
-    if (ticker) {
-      // 1. Ticker ile case-insensitive ve standart arama ile tüm kayıtları sil
-      const resTicker = await supabase
-        .from('valuation_reports')
-        .delete()
-        .ilike('ticker', ticker);
-      if (resTicker.error) error = resTicker.error;
 
-      // 2. Ayrıca birebir eşitlik ile de sil
-      await supabase
+    if (cleanId && cleanTicker) {
+      // Hem ID hem Ticker eşleşiyorsa sadece o spesifik kaydı sil
+      const res = await supabase
         .from('valuation_reports')
         .delete()
-        .eq('ticker', ticker);
-    }
-
-    if (id) {
-      // 3. ID belirtilmişse o ID'ye ait kaydı da sil
-      const resId = await supabase
+        .eq('id', cleanId)
+        .eq('ticker', cleanTicker);
+      if (res.error) error = res.error;
+    } else if (cleanId) {
+      // Yalnızca doğrulanmış tekil ID ile sil
+      const res = await supabase
         .from('valuation_reports')
         .delete()
-        .eq('id', id);
-      if (resId.error && !error) error = resId.error;
+        .eq('id', cleanId);
+      if (res.error) error = res.error;
+    } else if (cleanTicker) {
+      // Yalnızca doğrulanmış tekil Ticker ile sil
+      const res = await supabase
+        .from('valuation_reports')
+        .delete()
+        .eq('ticker', cleanTicker);
+      if (res.error) error = res.error;
     }
 
     if (error) {
       console.error('Supabase delete error:', error);
-      return NextResponse.json({ success: false, error: error.message, isCloudConfigured: true }, { status: 500 });
+      return NextResponse.json({ success: false, error: 'Kayıt silinirken veritabanı hatası oluştu.', isCloudConfigured: true }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, isCloudConfigured: true });
   } catch (err: any) {
     console.error('DELETE /api/reports handler error:', err);
-    return NextResponse.json({ success: false, error: err?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Silme işlemi sırasında sunucu hatası oluştu.' }, { status: 500 });
   }
 }

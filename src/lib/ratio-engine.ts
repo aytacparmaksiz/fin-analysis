@@ -19,11 +19,10 @@ import { isMetricDisabled } from './sectors.ts';
 import type { FinancialHistoryItem } from './bist-service.ts';
 import { 
   parseFinancialNumber, 
+  parsePeriodSortKey,
   getAnnualizationFactor, 
   calculateDuPont5Step, 
-  type Dupont5StepResult,
-  type DuPont5StepResult,
-  SECTOR_MULTIPLE_BENCHMARKS
+  type DuPont5StepResult
 } from './valuation.ts';
 import { IsYatirimApiAdapter } from './isyatirim-adapter.ts';
 
@@ -141,7 +140,7 @@ export class FinancialRatioEngine {
     marketMultiples?: any;
     currency?: string;
   }): UnifiedFinancialMetrics {
-    const sorted = [...(history || [])].sort((a, b) => (a.period || '').localeCompare(b.period || ''));
+    const sorted = [...(history || [])].sort((a, b) => parsePeriodSortKey(a.period) - parsePeriodSortKey(b.period));
     const latest = sorted.length > 0 ? sorted[sorted.length - 1] : ({} as FinancialHistoryItem);
     const prevYearItem = sorted.length > 4 ? sorted[sorted.length - 5] : (sorted.length > 1 ? sorted[0] : null);
 
@@ -400,7 +399,7 @@ export class FinancialRatioEngine {
       prevMatchingItem = sortedSeries.find(i => i.period === prevMatchingPeriod);
     }
 
-    let isFallback = !isYearEnd && (!prevYearEndItem || !prevMatchingItem);
+    const isFallback = !isYearEnd && (!prevYearEndItem || !prevMatchingItem);
 
     const computeTtmMetric = (
       getter: (item: FinancialHistoryItem) => number | null | undefined

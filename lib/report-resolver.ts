@@ -1,5 +1,5 @@
-import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
-import { SectorType } from '@/lib/sectors';
+import { getSupabase, isSupabaseConfigured } from './supabase.ts';
+import type { SectorType } from './sectors.ts';
 
 export interface SavedReport {
   id: string;
@@ -27,7 +27,7 @@ export interface SavedReport {
 /**
  * Statik olarak hazır model döndürmez; kullanıcı veya veritabanı haricinde suni rapor üretilmesini engeller.
  */
-export function getStaticReport(ticker: string): SavedReport | null {
+export function getStaticReport(_ticker?: string): SavedReport | null {
   return null;
 }
 

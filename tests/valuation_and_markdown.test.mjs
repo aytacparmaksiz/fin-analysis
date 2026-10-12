@@ -19,6 +19,7 @@ import {
   calculateSectorScore,
   optimizeFinalDecision
 } from '../lib/valuation.ts';
+import { generateFullAuditMarkdown } from '../lib/export-markdown.ts';
 import { AGESA_SAMPLE_DATA } from '../lib/sample-data.ts';
 
 // Preprocess function extracted from app/page.tsx
@@ -205,11 +206,14 @@ $`;
 
     const preprocessed = preprocessReportMarkdown(brokenText);
     const html = renderToString(
-      React.createElement(ReactMarkdown, {
-        remarkPlugins: [remarkGfm, [remarkMath, { singleDollarTextMath: false }]],
-        rehypePlugins: [[rehypeKatex, { strict: false, throwOnError: false }]],
-        children: preprocessed,
-      })
+      React.createElement(
+        ReactMarkdown,
+        {
+          remarkPlugins: [remarkGfm, [remarkMath, { singleDollarTextMath: false }]],
+          rehypePlugins: [[rehypeKatex, { strict: false, throwOnError: false }]],
+        },
+        preprocessed
+      )
     );
 
     const katexCount = (html.match(/class="katex"/g) || []).length;
@@ -220,11 +224,14 @@ $`;
     const singleDollar = `$ \\text{Hedef PD/DD} = \\frac{\\text{ROE} - g}{\\text{Ke} - g} $`;
     const preprocessed = preprocessReportMarkdown(singleDollar);
     const html = renderToString(
-      React.createElement(ReactMarkdown, {
-        remarkPlugins: [remarkGfm, [remarkMath, { singleDollarTextMath: false }]],
-        rehypePlugins: [[rehypeKatex, { strict: false, throwOnError: false }]],
-        children: preprocessed,
-      })
+      React.createElement(
+        ReactMarkdown,
+        {
+          remarkPlugins: [remarkGfm, [remarkMath, { singleDollarTextMath: false }]],
+          rehypePlugins: [[rehypeKatex, { strict: false, throwOnError: false }]],
+        },
+        preprocessed
+      )
     );
 
     assert.ok(html.includes('class="katex"'), 'Single dollar LaTeX must be converted and rendered with KaTeX');
@@ -716,6 +723,128 @@ describe('Dikey 4: Nihai Karar Optimizasyonu & Yanıltıcı AL Filtresi', () => 
     assert.equal(opt.marginOfSafetyStatus, 'SAFE');
     assert.equal(opt.overrideReason, undefined);
   });
+
+  it('generateFullAuditMarkdown: formats DuPont ebitMargin and calculatedRoe without 100x overscaling and orders periods correctly', () => {
+    const report = {
+      id: 'test-123',
+      ticker: 'TESTCO',
+      price: '100',
+      fairValue: '140',
+      createdAt: '2026-10-12',
+      decision: 'AL',
+      score: '85',
+      sector: 'INDUSTRIAL',
+      report: '### Test Rapor Metni',
+      extractedData: {
+        shares_outstanding: 100000000,
+        financial_history: [
+          {
+            period: '2025/12',
+            revenue: 100000000,
+            operating_profit: 20000000,
+            ebt: 18000000,
+            net_income: 14000000,
+            total_assets: 120000000,
+            equity: 60000000
+          },
+          {
+            period: '2026/06',
+            revenue: 120000000,
+            operating_profit: 24000000,
+            ebt: 22000000,
+            net_income: 17000000,
+            total_assets: 140000000,
+            equity: 70000000
+          }
+        ]
+      }
+    };
+
+    const md = generateFullAuditMarkdown(report);
+    assert.ok(md.includes('TESTCO'), 'Must include ticker');
+    assert.ok(md.includes('BÖLÜM 7: DUPONT 5-AŞAMALI KÂRLILIK AYRIŞTIRMASI'), 'Must include DuPont section');
+
+    // EBIT margin must be around %20.0, NOT %2000.0
+    assert.match(md, /Operasyonel Marj \(EBIT \/ Ciro\):\*\* %20\.0/);
+    assert.doesNotMatch(md, /Operasyonel Marj \(EBIT \/ Ciro\):\*\* %2000/);
+
+    // Calculated ROE must be around %24.3, NOT %2428.6
+    assert.match(md, /Ayrıştırılmış ROE \(Özkaynak Kârlılığı\):\*\* %\d+\.\d/);
+    assert.doesNotMatch(md, /Ayrıştırılmış ROE \(Özkaynak Kârlılığı\):\*\* %[1-9]\d{3}/);
+  });
+
+  it('accurately parses Turkish comma & dot prices without 100x/1000x market cap distortion', () => {
+    const report1 = {
+      ticker: 'TURK1',
+      price: '164,20 TL',
+      fairValue: '210,50 TL',
+      decision: 'AL',
+      score: 0,
+      extractedData: {
+        shares_outstanding: 100000000,
+        financial_history: [{ period: '2026/06', revenue: 500000 }]
+      }
+    };
+
+    const md1 = generateFullAuditMarkdown(report1);
+    // 164.20 * 100M = 16.42 Mr TL, MUST NOT be 1642.00 Mr TL
+    assert.match(md1, /\*\*Piyasa Değeri:\*\* 16\.42 Milyar TL/);
+    assert.doesNotMatch(md1, /\*\*Piyasa Değeri:\*\* 1642\.00 Milyar TL/);
+    assert.match(md1, /\*\*Cari Piyasa Fiyatı:\*\* 164,20 TL/);
+    assert.doesNotMatch(md1, /\*\*Cari Piyasa Fiyatı:\*\* 164,20 TL TL/);
+    assert.match(md1, /\*\*Potansiyel:\*\* 28\.2%/);
+    // Score 0 must be preserved as 0, not converted to '—'
+    assert.match(md1, /\*\*Sektörel Model Puanı:\*\* 0 \/ 100/);
+
+    const report2 = {
+      ticker: 'TURK2',
+      price: '1.250,50 TL',
+      fairValue: '1.500,00 TL',
+      decision: 'AL',
+      score: 85,
+      extractedData: {
+        shares_outstanding: 100000000,
+        financial_history: [{ period: '2026/06', revenue: 500000 }]
+      }
+    };
+
+    const md2 = generateFullAuditMarkdown(report2);
+    // 1250.50 * 100M = 125.05 Mr TL, MUST NOT be 0.13 Mr TL
+    assert.match(md2, /\*\*Piyasa Değeri:\*\* 125\.05 Milyar TL/);
+    assert.doesNotMatch(md2, /\*\*Piyasa Değeri:\*\* 0\.13 Milyar TL/);
+    assert.match(md2, /\*\*Potansiyel:\*\* 20\.0%/);
+  });
+
+  it('preserves negative EBITDA margin in computeSectorValuationAndDrivers instead of fallback +24.5%', () => {
+    const distressedData = {
+      company_name: 'Distressed Co',
+      ticker: 'DSTRS',
+      currency: 'TRY',
+      shares_outstanding: 100000000,
+      financial_history: [
+        {
+          period: '2026/06',
+          revenue: 10000000,
+          ebitda: -500000,
+          ebitda_margin: -5.0,
+          net_income: -1000000,
+          equity: 20000000,
+          net_debt: 5000000
+        }
+      ]
+    };
+
+    const res = computeSectorValuationAndDrivers({
+      extractedData: distressedData,
+      sector: 'INDUSTRIAL',
+      marketPrice: 10.0
+    });
+
+    assert.equal(res.drivers.margin.value, -5.0);
+    assert.match(res.drivers.margin.sourceExplanation, /negatif FAVÖK marjı/i);
+    assert.doesNotMatch(res.drivers.margin.sourceExplanation, /operasyonel marj tabanı/i);
+  });
 });
+
 
 

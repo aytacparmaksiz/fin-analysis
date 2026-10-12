@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {
   computeSectorValuationAndDrivers,
   calculateSectorScore,
-  optimizeFinalDecision,
   calculateEarningsQuality
 } from '../lib/valuation.ts';
 
