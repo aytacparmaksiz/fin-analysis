@@ -1718,7 +1718,7 @@ export default function ValuationTerminal({
         setStatusMessage(`[2/3] Faaliyet Raporu taranıyor (${activityFiles.length} belge)...`);
 
         try {
-          const perActFileBudget = Math.max(7000, Math.floor(28000 / Math.max(1, activityFiles.length)));
+          const perActFileBudget = Math.max(35000, Math.floor(70000 / Math.max(1, activityFiles.length)));
           const activityDocs: { name: string; text: string; category: string }[] = [];
           for (let i = 0; i < activityFiles.length; i++) {
             const file = activityFiles[i];
@@ -1734,9 +1734,10 @@ export default function ValuationTerminal({
             }
           }
 
+          let res2: Response;
           if (activityDocs.length > 0) {
             setStatusMessage(`[2/3] ${activityDocs.length} yıllık faaliyet raporundan yönetim hedefleri ve Güçlü/Zayıf yönler ayıklanıyor...`);
-            const res2 = await fetchWithClientRetry(
+            res2 = await fetchWithClientRetry(
               () => fetch('/api/extract', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1751,15 +1752,30 @@ export default function ValuationTerminal({
               }),
               setStatusMessage
             );
-            const result2 = await parseApiResponse(res2, 'Faaliyet raporu zenginleştirmesi tamamlanamadı.');
-            if (result2?.data) {
-              currentData = {
-                ...currentData,
-                ...result2.data,
-                currency: currentData.currency,
-                financial_history: currentData.financial_history // Resmi BIST mali tablolarını koru
-              };
-            }
+          } else {
+            // İstemci tarafında metin çıkarılamadıysa (taranmış PDF / unpdf hatası), doğrudan sunucuya ilet
+            setStatusMessage(`[2/3] Faaliyet raporu sunucu motoruna aktarılıyor (${activityFiles.length} belge)...`);
+            const fd = new FormData();
+            fd.append('ticker', targetTicker);
+            fd.append('price', livePriceStr);
+            fd.append('category', 'activity');
+            fd.append('previousData', JSON.stringify(currentData));
+            if (prevSavedForTicker) fd.append('previousReport', JSON.stringify(prevSavedForTicker));
+            activityFiles.forEach(f => fd.append('files_activity', f));
+            res2 = await fetchWithClientRetry(
+              () => fetch('/api/extract', { method: 'POST', body: fd }),
+              setStatusMessage
+            );
+          }
+
+          const result2 = await parseApiResponse(res2, 'Faaliyet raporu zenginleştirmesi tamamlanamadı.');
+          if (result2?.data) {
+            currentData = {
+              ...currentData,
+              ...result2.data,
+              currency: currentData.currency,
+              financial_history: currentData.financial_history // Resmi BIST mali tablolarını koru
+            };
           }
         } catch (actErr: any) {
           console.warn('[Activity Enrichment Warning]:', actErr.message);
@@ -1776,7 +1792,7 @@ export default function ValuationTerminal({
         setStatusMessage(`[3/3] Yatırımcı Sunumu taranıyor (${presentationFiles.length} belge)...`);
 
         try {
-          const perPresFileBudget = Math.max(7000, Math.floor(28000 / Math.max(1, presentationFiles.length)));
+          const perPresFileBudget = Math.max(35000, Math.floor(70000 / Math.max(1, presentationFiles.length)));
           const presentationDocs: { name: string; text: string; category: string }[] = [];
           for (let i = 0; i < presentationFiles.length; i++) {
             const file = presentationFiles[i];
@@ -1792,9 +1808,10 @@ export default function ValuationTerminal({
             }
           }
 
+          let res3: Response;
           if (presentationDocs.length > 0) {
             setStatusMessage(`[3/3] ${presentationDocs.length} yatırımcı sunumundan ileriye dönük hedefler ve rehberlik karnesi entegre ediliyor...`);
-            const res3 = await fetchWithClientRetry(
+            res3 = await fetchWithClientRetry(
               () => fetch('/api/extract', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1809,15 +1826,30 @@ export default function ValuationTerminal({
               }),
               setStatusMessage
             );
-            const result3 = await parseApiResponse(res3, 'Yatırımcı sunumu zenginleştirmesi tamamlanamadı.');
-            if (result3?.data) {
-              currentData = {
-                ...currentData,
-                ...result3.data,
-                currency: currentData.currency,
-                financial_history: currentData.financial_history // Resmi BIST mali tablolarını koru
-              };
-            }
+          } else {
+            // İstemci tarafında metin çıkarılamadıysa doğrudan sunucuya ilet
+            setStatusMessage(`[3/3] Yatırımcı sunumu sunucu motoruna aktarılıyor (${presentationFiles.length} belge)...`);
+            const fd = new FormData();
+            fd.append('ticker', targetTicker);
+            fd.append('price', livePriceStr);
+            fd.append('category', 'presentation');
+            fd.append('previousData', JSON.stringify(currentData));
+            if (prevSavedForTicker) fd.append('previousReport', JSON.stringify(prevSavedForTicker));
+            presentationFiles.forEach(f => fd.append('files_presentation', f));
+            res3 = await fetchWithClientRetry(
+              () => fetch('/api/extract', { method: 'POST', body: fd }),
+              setStatusMessage
+            );
+          }
+
+          const result3 = await parseApiResponse(res3, 'Yatırımcı sunumu zenginleştirmesi tamamlanamadı.');
+          if (result3?.data) {
+            currentData = {
+              ...currentData,
+              ...result3.data,
+              currency: currentData.currency,
+              financial_history: currentData.financial_history // Resmi BIST mali tablolarını koru
+            };
           }
         } catch (presErr: any) {
           console.warn('[Presentation Enrichment Warning]:', presErr.message);
@@ -3535,7 +3567,13 @@ export default function ValuationTerminal({
       >
         {/* Logo ve Başlık */}
         <div className="p-2.5 sm:p-3 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2 overflow-hidden">
+          <div 
+            onClick={() => { setStep('input'); setActiveReportId(null); setError(null); }}
+            role="button"
+            tabIndex={0}
+            title="Yeni Analiz Ekranına Dön"
+            className="flex items-center gap-2 overflow-hidden cursor-pointer hover:opacity-85 transition select-none"
+          >
             <FairValueLogo className="w-7 h-7 flex-shrink-0" />
             {!isSidebarCollapsed && (
               <div className="min-w-0">
@@ -3608,7 +3646,7 @@ export default function ValuationTerminal({
               <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
                 <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-300">
                   <History className="w-3.5 h-3.5 text-slate-400" />
-                  Kayıtlı Analizler ({savedReports.length})
+                  Kayıtlı Analizler
                 </span>
                 <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded border border-slate-800">
                   <button
@@ -3618,7 +3656,7 @@ export default function ValuationTerminal({
                       sidebarSort === 'rank' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
                     }`}
                   >
-                    AL & Puan
+                    Puan
                   </button>
                   <button
                     type="button"
@@ -3724,7 +3762,13 @@ export default function ValuationTerminal({
       {/* Sağ Ana Bölüm */}
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto bg-[#090D16]">
         <header className="border-b border-slate-800/80 px-5 py-3 flex items-center justify-between bg-[#0B0F19]/90 backdrop-blur-md sticky top-0 z-30 print:hidden">
-          <div className="flex items-center gap-2.5">
+          <div 
+            onClick={() => { setStep('input'); setActiveReportId(null); setError(null); }}
+            role="button"
+            tabIndex={0}
+            title="Yeni Analiz Ekranına Dön"
+            className="flex items-center gap-2.5 cursor-pointer hover:opacity-85 transition select-none"
+          >
             <FairValueLogo className="w-7 h-7" />
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-white tracking-tight">
@@ -3863,9 +3907,6 @@ export default function ValuationTerminal({
                         KAP Otomatik
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-400">
-                      🏛️ <strong>Resmi Finansal Tablolar:</strong> Bilanço, Gelir Tablosu ve çeyreklik veriler sistem tarafından doğrudan KAP / BIST altyapısından otomatik çekilir. Manuel mali tablo yüklemenize gerek yoktur.
-                    </p>
                   </div>
                   {(activityFiles.length + presentationFiles.length) > 0 && (
                     <span className="text-[11px] text-emerald-400 font-mono bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-1 rounded-md self-start sm:self-auto flex items-center gap-1.5">
@@ -3876,81 +3917,7 @@ export default function ValuationTerminal({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* 1. KART (ÖNERİLEN): Yatırımcı Sunumu */}
-                  <div
-                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (e.dataTransfer.files) handleAddPresentationFiles(e.dataTransfer.files);
-                    }}
-                    className={`rounded-xl border p-4 transition flex flex-col justify-between ${
-                      presentationFiles.length > 0
-                        ? 'bg-amber-950/20 border-amber-500/60 shadow-lg shadow-amber-950/30'
-                        : 'bg-[#090D16] border-amber-900/40 hover:border-amber-600/60 hover:bg-[#0c121f]'
-                    }`}
-                  >
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Presentation className="w-4 h-4 text-amber-400" />
-                          <span className="font-semibold text-xs text-white">Yatırımcı Sunumu</span>
-                          <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                            Önerilen
-                          </span>
-                        </div>
-                        <span className="text-[10px] font-mono text-slate-400">
-                          {presentationFiles.length > 0 ? `${presentationFiles.length} dosya` : 'PDF'}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 leading-tight">
-                        Şirketin yönetim hedefleri, marj beklentileri ve yatırım projeksiyonlarını Adil Değer Modeline entegre eder.
-                      </p>
-
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => presentationInputRef.current?.click()}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); presentationInputRef.current?.click(); } }}
-                        className="border border-dashed border-amber-800/60 hover:border-amber-400 rounded-lg py-3 px-3 text-center cursor-pointer transition bg-amber-950/10 hover:bg-amber-950/30 select-none"
-                      >
-                        <div className="flex items-center justify-center gap-1.5 text-xs font-medium text-amber-200">
-                          <UploadCloud className="w-4 h-4 text-amber-400" />
-                          <span>Yatırımcı Sunumu Seç veya Sürükle</span>
-                        </div>
-                        <input
-                          ref={presentationInputRef}
-                          type="file"
-                          multiple
-                          accept=".pdf,application/pdf"
-                          onChange={e => {
-                            if (e.target.files) handleAddPresentationFiles(e.target.files);
-                            e.target.value = '';
-                          }}
-                          className="sr-only"
-                        />
-                      </div>
-                    </div>
-
-                    {presentationFiles.length > 0 && (
-                      <div className="mt-3 pt-2.5 border-t border-slate-800/80 max-h-24 overflow-y-auto space-y-1">
-                        {presentationFiles.map((f, i) => (
-                          <div key={i} className="flex items-center justify-between gap-1 text-[11px] bg-slate-900/90 px-2 py-1 rounded text-slate-300 border border-amber-900/40">
-                            <span className="truncate">{f.name}</span>
-                            <button
-                              type="button"
-                              onClick={() => removePresentationFile(i)}
-                              className="text-slate-500 hover:text-rose-400 p-0.5 cursor-pointer"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 2. KART (OPSİYONEL): Faaliyet Raporu */}
+                  {/* 1. KART: Faaliyet Raporu (Alan 2) */}
                   <div
                     onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
                     onDrop={(e) => {
@@ -3969,17 +3936,11 @@ export default function ValuationTerminal({
                         <div className="flex items-center gap-2">
                           <FileText className="w-4 h-4 text-sky-400" />
                           <span className="font-semibold text-xs text-white">Faaliyet Raporu</span>
-                          <span className="text-[9px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
-                            Opsiyonel
-                          </span>
                         </div>
                         <span className="text-[10px] font-mono text-slate-400">
                           {activityFiles.length > 0 ? `${activityFiles.length} dosya` : 'PDF'}
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-400 leading-tight">
-                        KAP verileriyle otomatik beslenir. Ek/detaylı faaliyet raporu PDF&apos;i yükleyerek yönetim rehberliğini derinleştirebilirsiniz.
-                      </p>
 
                       <div
                         role="button"
@@ -4014,6 +3975,74 @@ export default function ValuationTerminal({
                             <button
                               type="button"
                               onClick={() => removeActivityFile(i)}
+                              className="text-slate-500 hover:text-rose-400 p-0.5 cursor-pointer"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. KART: Yatırımcı Sunumu (Alan 3) */}
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (e.dataTransfer.files) handleAddPresentationFiles(e.dataTransfer.files);
+                    }}
+                    className={`rounded-xl border p-4 transition flex flex-col justify-between ${
+                      presentationFiles.length > 0
+                        ? 'bg-amber-950/20 border-amber-500/60 shadow-lg shadow-amber-950/30'
+                        : 'bg-[#090D16] border-amber-900/40 hover:border-amber-600/60 hover:bg-[#0c121f]'
+                    }`}
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Presentation className="w-4 h-4 text-amber-400" />
+                          <span className="font-semibold text-xs text-white">Yatırımcı Sunumu</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400">
+                          {presentationFiles.length > 0 ? `${presentationFiles.length} dosya` : 'PDF'}
+                        </span>
+                      </div>
+
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => presentationInputRef.current?.click()}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); presentationInputRef.current?.click(); } }}
+                        className="border border-dashed border-amber-800/60 hover:border-amber-400 rounded-lg py-3 px-3 text-center cursor-pointer transition bg-amber-950/10 hover:bg-amber-950/30 select-none"
+                      >
+                        <div className="flex items-center justify-center gap-1.5 text-xs font-medium text-amber-200">
+                          <UploadCloud className="w-4 h-4 text-amber-400" />
+                          <span>Yatırımcı Sunumu Seç veya Sürükle</span>
+                        </div>
+                        <input
+                          ref={presentationInputRef}
+                          type="file"
+                          multiple
+                          accept=".pdf,application/pdf"
+                          onChange={e => {
+                            if (e.target.files) handleAddPresentationFiles(e.target.files);
+                            e.target.value = '';
+                          }}
+                          className="sr-only"
+                        />
+                      </div>
+                    </div>
+
+                    {presentationFiles.length > 0 && (
+                      <div className="mt-3 pt-2.5 border-t border-slate-800/80 max-h-24 overflow-y-auto space-y-1">
+                        {presentationFiles.map((f, i) => (
+                          <div key={i} className="flex items-center justify-between gap-1 text-[11px] bg-slate-900/90 px-2 py-1 rounded text-slate-300 border border-amber-900/40">
+                            <span className="truncate">{f.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => removePresentationFile(i)}
                               className="text-slate-500 hover:text-rose-400 p-0.5 cursor-pointer"
                             >
                               <X className="w-3 h-3" />

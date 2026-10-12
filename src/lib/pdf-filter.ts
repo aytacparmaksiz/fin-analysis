@@ -557,7 +557,7 @@ export function scorePresentationPage(pageText: string, pageIndex: number): Page
   };
 }
 
-export function filterActivityPages(pageTexts: string[], maxPages = 16): FilterResult {
+export function filterActivityPages(pageTexts: string[], maxPages = 20): FilterResult {
   const totalPages = pageTexts.length;
   if (totalPages === 0) {
     return { selectedIndices: [], combinedText: '', totalPages: 0, matchedCount: 0, summary: 'Boş belge.' };
@@ -570,18 +570,20 @@ export function filterActivityPages(pageTexts: string[], maxPages = 16): FilterR
   const scored = pageTexts.map((t, idx) => scoreActivityPage(t, idx));
   const selectedSet = new Set<number>();
 
-  for (let i = 0; i < Math.min(3, totalPages); i++) selectedSet.add(i);
-
+  // Öncelikle rehberlik (guidance), hedefler ve yüksek puanlı kritik sayfaları seç
   const sorted = [...scored].sort((a, b) => b.score - a.score);
   for (const s of sorted) {
-    if (s.score >= 8 || s.isGuidance) {
+    if (s.score >= 6 || s.isGuidance) {
       selectedSet.add(s.pageIndex);
       if (selectedSet.size >= maxPages) break;
     }
   }
 
-  if (selectedSet.size < 4) {
-    for (let i = 0; i < Math.min(8, totalPages); i++) selectedSet.add(sorted[i].pageIndex);
+  if (selectedSet.size < 6) {
+    for (let i = 0; i < Math.min(10, sorted.length); i++) {
+      if (sorted[i]) selectedSet.add(sorted[i].pageIndex);
+      if (selectedSet.size >= maxPages) break;
+    }
   }
 
   const finalIndices = Array.from(selectedSet).slice(0, maxPages).sort((a, b) => a - b);
@@ -591,11 +593,11 @@ export function filterActivityPages(pageTexts: string[], maxPages = 16): FilterR
     combinedText,
     totalPages,
     matchedCount: finalIndices.length,
-    summary: `${totalPages} sayfalık faaliyet raporundan yönetim ve risk sayfaları (${finalIndices.length} sayfa) filtrelendi.`
+    summary: `${totalPages} sayfalık faaliyet raporundan yönetim ve rehberlik sayfaları (${finalIndices.length} sayfa) filtrelendi.`
   };
 }
 
-export function filterPresentationPages(pageTexts: string[], maxPages = 16): FilterResult {
+export function filterPresentationPages(pageTexts: string[], maxPages = 20): FilterResult {
   const totalPages = pageTexts.length;
   if (totalPages === 0) {
     return { selectedIndices: [], combinedText: '', totalPages: 0, matchedCount: 0, summary: 'Boş belge.' };
@@ -611,7 +613,7 @@ export function filterPresentationPages(pageTexts: string[], maxPages = 16): Fil
 
   const sorted = [...scored].sort((a, b) => b.score - a.score);
   for (const s of sorted) {
-    if (s.score >= 6) {
+    if (s.score >= 6 || s.isGuidance) {
       selectedSet.add(s.pageIndex);
       if (selectedSet.size >= maxPages) break;
     }
@@ -693,22 +695,22 @@ export async function extractSmartDocumentText(
 
   const pageTexts: string[] = new Array(totalPages).fill('');
 
-  // HEDEF SAYFA SEÇİMİ (Vercel Serverless 10sn Gateway Timeout koruması):
-  // 1. Faaliyet Raporları (activity): İlk 12 sayfa (özet/mesajlar) ve son 8 sayfa (beklentiler & riskler)
-  // 2. Yatırımcı Sunumu (presentation): İlk 10 slayt ve son 8 slayt (guidance & hedefler)
+  // HEDEF SAYFA SEÇİMİ:
+  // 1. Faaliyet Raporları (activity): İlk 40 sayfa (özet, CEO/başkan mesajı, hedefler, strateji, operasyonel inceleme) ve son 10 sayfa
+  // 2. Yatırımcı Sunumu (presentation): İlk 40 slayt ve son 10 slayt (sunumun tamamına yakınını kapsar)
   // 3. Finansal Tablolar (financial): İlk 22 sayfa (Bilanço, Gelir, Nakit Akış & Temel Dipnotlar)
   let targetPageNumbers: number[] = [];
   if (category === 'activity') {
     const pageSet = new Set<number>();
-    const frontLimit = Math.min(12, totalPages);
+    const frontLimit = Math.min(40, totalPages);
     for (let p = 1; p <= frontLimit; p++) pageSet.add(p);
-    for (let p = Math.max(1, totalPages - 8); p <= totalPages; p++) pageSet.add(p);
+    for (let p = Math.max(1, totalPages - 10); p <= totalPages; p++) pageSet.add(p);
     targetPageNumbers = Array.from(pageSet).sort((a, b) => a - b);
   } else if (category === 'presentation') {
     const pageSet = new Set<number>();
-    const frontLimit = Math.min(10, totalPages);
+    const frontLimit = Math.min(40, totalPages);
     for (let p = 1; p <= frontLimit; p++) pageSet.add(p);
-    for (let p = Math.max(1, totalPages - 8); p <= totalPages; p++) pageSet.add(p);
+    for (let p = Math.max(1, totalPages - 10); p <= totalPages; p++) pageSet.add(p);
     targetPageNumbers = Array.from(pageSet).sort((a, b) => a - b);
   } else {
     const limit = Math.min(22, totalPages);
