@@ -41,10 +41,10 @@ import https from 'node:https';
 const isYatirimHttpsAgent = new https.Agent({
   rejectUnauthorized: false, // Yerel antivirüs veya kurumsal proxy SSL interception toleransı
   keepAlive: true,
-  timeout: 7500
+  timeout: 4000
 });
 
-async function fetchHttpsText(urlStr: string, timeoutMs = 7500): Promise<string | null> {
+async function fetchHttpsText(urlStr: string, timeoutMs = 3500): Promise<string | null> {
   return new Promise((resolve) => {
     try {
       const req = https.get(urlStr, {
@@ -88,21 +88,7 @@ export async function fetchAllIsYatirimMultiples(): Promise<Record<string, IsYat
   const url = 'https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/Temel-Degerler-Ve-Oranlar.aspx';
   
   try {
-    let html = await fetchHttpsText(url, 7500);
-    if (!html) {
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-        },
-        signal: AbortSignal.timeout(6000),
-        next: { revalidate: 3600 }
-      });
-      if (res.ok) {
-        html = await res.text();
-      }
-    }
+    const html = await fetchHttpsText(url, 3500);
 
     if (!html) {
       console.warn('[IsYatirim] Canlı çarpan tablosu çekilemedi, önbellek kullanılıyor.');
