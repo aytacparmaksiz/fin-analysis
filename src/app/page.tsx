@@ -152,7 +152,7 @@ async function fetchWithClientRetry(
     let isRetryable = res.status === 429 || res.status === 503;
     let retrySeconds = 4;
 
-    if (!isRetryable && (res.status === 500 || res.status === 504)) {
+    if (!isRetryable && (res.status === 500 || res.status === 504 || res.status === 502)) {
       try {
         const clone = res.clone();
         const json = await clone.json();
@@ -162,7 +162,12 @@ async function fetchWithClientRetry(
             retrySeconds = Math.max(3, Math.min(8, json.retryAfter));
           }
         }
-      } catch {}
+      } catch {
+        if (res.status === 504 || res.status === 502) {
+          isRetryable = true;
+          retrySeconds = 2;
+        }
+      }
     } else if (res.status === 429) {
       try {
         const clone = res.clone();
@@ -176,7 +181,8 @@ async function fetchWithClientRetry(
     if (isRetryable && attempt < maxRetries) {
       for (let sec = retrySeconds; sec > 0; sec--) {
         if (onStatusUpdate) {
-          onStatusUpdate(`API hız sınırı koruması: ${sec} sn bekleniyor...`);
+          const reason = (res.status === 504 || res.status === 502) ? 'Sunucu bağlantısı yeniden deneniyor' : 'API hız sınırı koruması';
+          onStatusUpdate(`${reason}: ${sec} sn bekleniyor...`);
         }
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }

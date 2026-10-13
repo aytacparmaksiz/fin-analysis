@@ -46,8 +46,24 @@ const isYatirimHttpsAgent = new https.Agent({
 
 async function fetchHttpsText(urlStr: string, timeoutMs = 3500): Promise<string | null> {
   return new Promise((resolve) => {
+    let settled = false;
+    let req: any = null;
+
+    const done = (val: string | null) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve(val);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      try { req?.destroy(); } catch {}
+      done(null);
+    }, timeoutMs);
+
     try {
-      const req = https.get(urlStr, {
+      req = https.get(urlStr, {
         agent: isYatirimHttpsAgent,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -58,20 +74,20 @@ async function fetchHttpsText(urlStr: string, timeoutMs = 3500): Promise<string 
       }, (res) => {
         if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
           res.resume();
-          return resolve(null);
+          return done(null);
         }
         let data = '';
         res.setEncoding('utf8');
         res.on('data', chunk => { data += chunk; });
-        res.on('end', () => resolve(data));
+        res.on('end', () => done(data));
       });
-      req.on('error', () => resolve(null));
+      req.on('error', () => done(null));
       req.on('timeout', () => {
-        req.destroy();
-        resolve(null);
+        try { req?.destroy(); } catch {}
+        done(null);
       });
     } catch {
-      resolve(null);
+      done(null);
     }
   });
 }

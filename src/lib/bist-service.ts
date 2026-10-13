@@ -5,7 +5,7 @@ import {
   parseFinancialNumber,
   parsePeriodSortKey
 } from './valuation.ts';
-import { getIsYatirimMultiplesForTicker } from './isyatirim-service.ts';
+import { getIsYatirimMultiplesForTicker, type IsYatirimStockMultiples } from './isyatirim-service.ts';
 import { OFFICIAL_ISYATIRIM_CACHE } from './isyatirim-official-cache.ts';
 import { getSupabase, isSupabaseConfigured } from './supabase.ts';
 import { IsYatirimApiAdapter } from './isyatirim-adapter.ts';
@@ -24,8 +24,24 @@ const isYatirimHttpsAgent = new https.Agent({
 
 async function fetchResilientJson(urlStr: string, timeoutMs = 3500): Promise<any> {
   return new Promise((resolve) => {
+    let settled = false;
+    let req: any = null;
+
+    const done = (val: any) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve(val);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      try { req?.destroy(); } catch {}
+      done(null);
+    }, timeoutMs);
+
     try {
-      const req = https.get(urlStr, {
+      req = https.get(urlStr, {
         agent: isYatirimHttpsAgent,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -38,26 +54,26 @@ async function fetchResilientJson(urlStr: string, timeoutMs = 3500): Promise<any
       }, (res) => {
         if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
           res.resume();
-          return resolve(null);
+          return done(null);
         }
         let data = '';
         res.setEncoding('utf8');
         res.on('data', chunk => { data += chunk; });
         res.on('end', () => {
           try {
-            resolve(JSON.parse(data));
+            done(JSON.parse(data));
           } catch {
-            resolve(null);
+            done(null);
           }
         });
       });
-      req.on('error', () => resolve(null));
+      req.on('error', () => done(null));
       req.on('timeout', () => {
-        req.destroy();
-        resolve(null);
+        try { req?.destroy(); } catch {}
+        done(null);
       });
     } catch {
-      resolve(null);
+      done(null);
     }
   });
 }
@@ -343,11 +359,17 @@ async function getSupabaseMaliTablo(ticker: string): Promise<FinancialHistoryIte
     const supabase = getSupabase();
     if (!supabase) return null;
 
-    const { data, error } = await supabase
+    const queryPromise = supabase
       .from('bist_mali_tablolar')
       .select('financial_history, updated_at')
       .eq('ticker', ticker.toUpperCase())
       .maybeSingle();
+
+    const timeoutPromise = new Promise<{ data: null; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: 'TIMEOUT' }), 2000)
+    );
+
+    const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
 
     if (error || !data || !Array.isArray(data.financial_history) || data.financial_history.length === 0) {
       return null;
@@ -441,19 +463,37 @@ export async function fetchIsYatirimMaliTabloBatches(
   let batch2Rows: any[] = [];
 
   // 1. Aşama: Doğru muhasebe grubunu paralel test ederek otomatik keşfet (Auto-Discovery)
-  // Gecikmeli raporlayan şirketleri de kaçırmamak için aday grupları hem BATCH_SPECS[0] hem BATCH_SPECS[1] ile paralel sorgula
-  const probePromises = candidateGroups.map(async (group) => {
+  // Gecikmeli raporlayan şirketleri de kaçırmamak için aday grupları hem BATCH_SPECS[0] hem BATCH_SPECS[1] ile sorgula
+  const probeGroup = async (group: ('XI_29' | 'UFRS' | 'UFRS_K')) => {
     const [rows0, rows1] = await Promise.all([
       fetchIsYatirimSingleBatch(ticker, group, BATCH_SPECS[0].params),
       fetchIsYatirimSingleBatch(ticker, group, BATCH_SPECS[1].params)
     ]);
-    return { group, rows0, rows1 };
-  });
+    if ((rows0 && rows0.length >= 5) || (rows1 && rows1.length >= 5)) {
+      return { group, rows0: rows0 || [], rows1: rows1 || [] };
+    }
+    throw new Error(`Grup ${group} için veri bulunamadı`);
+  };
 
-  const probeResults = await Promise.all(probePromises);
+  let chosenProbe: { group: ('XI_29' | 'UFRS' | 'UFRS_K'); rows0: any[]; rows1: any[] } | null = null;
 
-  // Tercih sırasına göre ilk geçerli veri döndüren grubu seç
-  const chosenProbe = probeResults.find(r => r.rows0.length >= 5 || r.rows1.length >= 5);
+  try {
+    if (preferredGroup) {
+      try {
+        chosenProbe = await probeGroup(preferredGroup);
+      } catch {
+        const remainingCandidates = candidateGroups.filter(g => g !== preferredGroup);
+        if (remainingCandidates.length > 0) {
+          chosenProbe = await Promise.any(remainingCandidates.map(probeGroup));
+        }
+      }
+    } else {
+      chosenProbe = await Promise.any(candidateGroups.map(probeGroup));
+    }
+  } catch {
+    chosenProbe = null;
+  }
+
   if (!chosenProbe) {
     return { rowsByBatch: [], activeGroup: null };
   }
@@ -826,6 +866,7 @@ export async function fetchAndAnalyzeBistCompany(
 
   if (!options?.forceRefresh && memCached && (Date.now() - memCached.timestamp < CACHE_TTL_MS) && memCached.data.length > 0) {
     cachedItems = memCached.data;
+    fallbackCachedItems = memCached.data;
   } else {
     // Supabase kalıcı önbelleğini oku
     const supabaseData = await getSupabaseMaliTablo(ticker);
@@ -843,53 +884,51 @@ export async function fetchAndAnalyzeBistCompany(
     fallbackCachedItems = OFFICIAL_ISYATIRIM_CACHE[ticker];
   }
 
-  // 1. Canlı Hisse Fiyatı, Yahoo Fundamentals ve İş Yatırım Parti Verilerini Çek
+  // 1. Canlı Hisse Fiyatı, Yahoo Fundamentals, İş Yatırım Parti Verileri ve Piyasa Çarpanlarını Eşzamanlı Başlat
   let priceData: Awaited<ReturnType<typeof fetchLiveBistPrice>> = { price: 100.0, historicalPrices: {} };
   let yahooData: Awaited<ReturnType<typeof fetchYahooFundamentalsHistory>> = { items: [] };
   let batchResults: Awaited<ReturnType<typeof fetchIsYatirimMaliTabloBatches>> = { rowsByBatch: [], activeGroup: null };
+  let isMultiples: IsYatirimStockMultiples | null = null;
 
   if (cachedItems && cachedItems.length > 0) {
     try {
-      const priceTimeout = new Promise<{ price: number; historicalPrices?: Record<string, number> }>((resolve) =>
-        setTimeout(() => resolve({ price: 100.0, historicalPrices: {} }), 2500)
-      );
-      priceData = await Promise.race([fetchLiveBistPrice(ticker), priceTimeout]);
+      const pPromise = fetchLiveBistPrice(ticker).then(res => { if (res && res.price > 0) priceData = res; }).catch(() => {});
+      const mPromise = getIsYatirimMultiplesForTicker(ticker).then(res => { if (res) isMultiples = res; }).catch(() => {});
+
+      await Promise.race([
+        Promise.all([pPromise, mPromise]),
+        Promise.race([
+          pPromise,
+          new Promise(r => setTimeout(r, 1500))
+        ])
+      ]);
     } catch {
       priceData = { price: 100.0, historicalPrices: {} };
     }
   } else {
     // Vercel Serverless Gateway Timeout (504) Koruması:
-    // Canlı veri çekim hattının tamamına (fiyat, Yahoo ve İş Yatırım) 5000ms sıkı tavanı koyulur.
-    // Herhangi bir kaynak gecikirse, anında önbellek veya resmi paket devreye girer.
-    const liveTimeout = new Promise<[
-      { price: number; prevClose?: number; changePct?: number; historicalPrices?: Record<string, number> },
-      { items: FinancialHistoryItem[]; shareCount?: number },
-      { rowsByBatch: { spec: BatchSpec; rows: any[] }[]; activeGroup: string | null }
-    ]>((resolve) =>
-      setTimeout(() => resolve([
-        { price: 100.0, historicalPrices: {} },
-        { items: [] },
-        { rowsByBatch: [], activeGroup: null }
-      ]), 5000)
-    );
+    // Canlı veri çekim hattının tamamına (fiyat, Yahoo, İş Yatırım ve piyasa çarpanları) 5000ms sıkı tavanı koyulur.
+    // Her kaynak bağımsız yakalanır; bir kaynak gecikse dahi diğer başarılı kaynaklar (fiyat, Yahoo vb.) ASLA çöpe atılmaz.
+    const pricePromise = fetchLiveBistPrice(ticker)
+      .then(res => { if (res && res.price > 0) priceData = res; })
+      .catch(() => {});
 
-    const liveFetchPromise = Promise.all([
-      fetchLiveBistPrice(ticker),
-      options?.skipYahoo ? Promise.resolve({ items: [] as FinancialHistoryItem[] }) : fetchYahooFundamentalsHistory(ticker, meta.sector),
-      fetchIsYatirimMaliTabloBatches(ticker, meta.sector, meta.financialGroup)
+    const yahooPromise = (options?.skipYahoo ? Promise.resolve({ items: [] }) : fetchYahooFundamentalsHistory(ticker, meta.sector))
+      .then(res => { if (res?.items) yahooData = res; })
+      .catch(() => {});
+
+    const isYatirimPromise = fetchIsYatirimMaliTabloBatches(ticker, meta.sector, meta.financialGroup)
+      .then(res => { if (res?.rowsByBatch) batchResults = res; })
+      .catch(() => {});
+
+    const multiplesPromise = getIsYatirimMultiplesForTicker(ticker)
+      .then(res => { if (res) isMultiples = res; })
+      .catch(() => {});
+
+    await Promise.race([
+      Promise.all([pricePromise, yahooPromise, isYatirimPromise, multiplesPromise]),
+      new Promise(r => setTimeout(r, 5000))
     ]);
-
-    try {
-      const [pRes, yRes, bRes] = await Promise.race([liveFetchPromise, liveTimeout]);
-      priceData = pRes;
-      yahooData = yRes;
-      batchResults = bRes;
-    } catch (err) {
-      console.warn(`[BistService] Canlı veri hattında hata veya zaman aşımı (${ticker}):`, err);
-      priceData = { price: 100.0, historicalPrices: {} };
-      yahooData = { items: [] };
-      batchResults = { rowsByBatch: [], activeGroup: null };
-    }
   }
 
   let currentPrice = priceData.price;
@@ -1050,24 +1089,23 @@ export async function fetchAndAnalyzeBistCompany(
     }
   });
 
-  // 4.5. İş Yatırım Resmi Canlı Piyasa Çarpanlarını (F/K, PD/DD, FD/FAVÖK, Piyasa Değeri) Getir
-  let isMultiples: Awaited<ReturnType<typeof getIsYatirimMultiplesForTicker>> = null;
-  try {
-    const multiplesTimeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000));
-    isMultiples = await Promise.race([getIsYatirimMultiplesForTicker(ticker), multiplesTimeout]);
-  } catch {
-    isMultiples = null;
+  // 4.5. Güncel piyasa fiyatını İş Yatırım çarpanları veya önbellek ile teyit et
+  const finalMultiples = isMultiples as IsYatirimStockMultiples | null;
+  if ((!currentPrice || currentPrice === 100.0) && finalMultiples?.lastPrice && finalMultiples.lastPrice > 0) {
+    currentPrice = finalMultiples.lastPrice;
   }
-
-  if ((!currentPrice || currentPrice === 100.0) && isMultiples?.lastPrice && isMultiples.lastPrice > 0) {
-    currentPrice = isMultiples.lastPrice;
+  if ((!currentPrice || currentPrice === 100.0) && fallbackCachedItems && fallbackCachedItems.length > 0) {
+    const lastCached = fallbackCachedItems[fallbackCachedItems.length - 1];
+    if (lastCached?.share_price && lastCached.share_price > 0) {
+      currentPrice = lastCached.share_price;
+    }
   }
 
   // Borsa İstanbul'da 1 TL nominal Ödenmiş Sermaye = 1 Adet Pay (Lot).
   // Bilançodaki güncel Ödenmiş Sermaye (paid_in_capital) en doğru ve güncel hisse sayısıdır.
   const latestPaidCapital = latestItem?.paid_in_capital ? Math.abs(latestItem.paid_in_capital) : null;
-  const isYatirimShares = (isMultiples?.paidInCapitalMnTl && isMultiples.paidInCapitalMnTl > 0)
-    ? isMultiples.paidInCapitalMnTl * 1000000
+  const isYatirimShares = (finalMultiples?.paidInCapitalMnTl && finalMultiples.paidInCapitalMnTl > 0)
+    ? finalMultiples.paidInCapitalMnTl * 1000000
     : null;
   const effectiveShareCount = (latestPaidCapital && latestPaidCapital >= 1000000)
     ? latestPaidCapital
@@ -1105,11 +1143,11 @@ export async function fetchAndAnalyzeBistCompany(
     currentPrice,
     shareCount: effectiveShareCount,
     sector: meta.sector,
-    marketMultiples: isMultiples ? {
-      pe: isMultiples.pe,
-      pb: isMultiples.pb,
-      evEbitda: isMultiples.evEbitda,
-      evSales: isMultiples.evSales
+    marketMultiples: finalMultiples ? {
+      pe: finalMultiples.pe,
+      pb: finalMultiples.pb,
+      evEbitda: finalMultiples.evEbitda,
+      evSales: finalMultiples.evSales
     } : null,
     currency: 'TRY'
   });
@@ -1131,16 +1169,16 @@ export async function fetchAndAnalyzeBistCompany(
     scoreResult: valuationEngineResult.scoreResult,
     optimization: valuationEngineResult.optimization,
     unified_metrics: unifiedMetrics,
-    market_multiples: isMultiples ? {
-      pe: isMultiples.pe,
-      pb: isMultiples.pb,
-      ev_ebitda: isMultiples.evEbitda,
-      ev_sales: isMultiples.evSales,
-      market_cap_mn_tl: isMultiples.marketCapMnTl,
-      market_cap_mn_usd: isMultiples.marketCapMnUsd,
-      free_float_pct: isMultiples.freeFloatPct,
-      paid_in_capital_mn_tl: isMultiples.paidInCapitalMnTl,
-      last_period: isMultiples.lastPeriod,
+    market_multiples: finalMultiples ? {
+      pe: finalMultiples.pe,
+      pb: finalMultiples.pb,
+      ev_ebitda: finalMultiples.evEbitda,
+      ev_sales: finalMultiples.evSales,
+      market_cap_mn_tl: finalMultiples.marketCapMnTl,
+      market_cap_mn_usd: finalMultiples.marketCapMnUsd,
+      free_float_pct: finalMultiples.freeFloatPct,
+      paid_in_capital_mn_tl: finalMultiples.paidInCapitalMnTl,
+      last_period: finalMultiples.lastPeriod,
       source: 'İş Yatırım Resmi Çarpanları'
     } : null,
     generatedAt: new Date().toISOString()
