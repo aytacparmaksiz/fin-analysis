@@ -461,59 +461,20 @@ export function computeTtmEbitdaFromHistory(history: any[], targetItem: any): nu
   return rawEbitda * factor;
 }
 
+import {
+  getDamodaranUnleveredBeta as getDamodaranBetaFromData,
+  lookupDamodaranIndustry
+} from './damodaran-betas.ts';
+
 /**
- * Damodaran Gelişmekte Olan Piyasalar (Emerging Markets) ve BIST sektörel borçsuz beta (Unlevered Beta) haritası.
+ * NYU Stern - Prof. Aswath Damodaran Global Betas & Capital Structure tablosu üzerinden
+ * borçsuz beta (Unlevered Beta) dinamik olarak çekilir.
+ * Varsayılan olarak kurumsal finans standardı olan nakit düzeltmeli (cash-corrected) beta kullanılır.
  */
-export function getDamodaranUnleveredBeta(sector: SectorType, ticker?: string, companySectorName?: string): number {
-  const t = String(ticker || '').toUpperCase();
-  const secName = String(companySectorName || '').toLowerCase();
-
-  if (sector === 'INSURANCE') return 0.95;
-  if (sector === 'BANKING') return 1.15;
-  if (sector === 'FINANCIAL_SERVICES') return 1.05;
-  if (sector === 'HOLDING') return 0.92;
-  if (sector === 'REIT') return 0.85;
-  if (sector === 'TECH') return 1.25;
-  if (sector === 'AVIATION') return 0.95;
-  if (sector === 'RETAIL') return 0.68;
-  if (sector === 'UTILITIES_TELCO') return 0.72;
-
-  // Sağlık & İlaç (Healthcare & Pharmaceuticals - Defansif / Düşük Beta)
-  if (['MPARK', 'LKMNH', 'TNZTP', 'GENIL', 'SELEC', 'TRILC', 'MEDTR'].includes(t) || /sağlık|hastane|ilaç|tıbbi/i.test(secName)) {
-    return 0.72;
-  }
-  // Gıda Perakendesi & Temel Tüketim (Defensive Staples)
-  if (['BIMAS', 'MGROS', 'SOKM', 'BIZIM', 'CRFSA', 'ULKER', 'CCOLA'].includes(t) || /perakende|market|gıda|içecek/i.test(secName)) {
-    return 0.68;
-  }
-  // Elektrik Dağıtım & Altyapı / Enerji (Regulated Utilities)
-  if (['ENJSA', 'AKSEN', 'AYGAZ', 'GWIND'].includes(t) || /elektrik|enerji dağıtım|şebeke/i.test(secName)) {
-    return 0.70;
-  }
-  // Telekomünikasyon (Telecom)
-  if (['TCELL', 'TTKOM'].includes(t) || /telekom|iletişim/i.test(secName)) {
-    return 0.75;
-  }
-  // Otomotiv & İmalat (Automotive)
-  if (['FROTO', 'TOASO', 'TTRAK', 'DOAS', 'TMSN', 'OTKAR'].includes(t) || /otomotiv/i.test(secName)) {
-    return 0.88;
-  }
-  // Havacılık & Taşımacılık (Aviation & Logistics)
-  if (['THYAO', 'PGSUS', 'TAVHL', 'CLEBI'].includes(t) || /havacılık|ulaştırma|hava meydan/i.test(secName)) {
-    return 0.95;
-  }
-  // Demir Çelik & Madencilik (Metals & Mining)
-  if (['EREGL', 'KRDMD', 'KOZAL', 'KOZAA'].includes(t) || /demir|çelik|maden/i.test(secName)) {
-    return 0.95;
-  }
-  // Savunma Sanayi (Defense)
-  if (['ASELS', 'SDTTR'].includes(t) || /savunma/i.test(secName)) {
-    return 0.82;
-  }
-
-  // Genel Sanayi ve İmalat
-  return 0.90;
+export function getDamodaranUnleveredBeta(sector: SectorType | string, ticker?: string, companySectorName?: string): number {
+  return getDamodaranBetaFromData(sector, ticker, companySectorName, true);
 }
+export { lookupDamodaranIndustry } from './damodaran-betas.ts';
 
 /**
  * Finansal zaman serisi verilerini deterministik matematik ile temizler, zenginleştirir ve doğrular.
@@ -932,10 +893,10 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     const tickerStr = String(item.ticker || container?.ticker || '').toUpperCase();
     const isAviationTicker = ['THYAO', 'PGSUS', 'TAVHL', 'CLEBI'].includes(tickerStr);
     const reportCurrency = String(item.currency || container?.currency || 'TRY').toUpperCase();
-    const isForeignCurrency = ['USD', 'EUR', 'GBP'].includes(reportCurrency) || detectedSector === 'AVIATION';
+    const isForeignCurrency = ['USD', 'EUR', 'GBP'].includes(reportCurrency);
 
-    let rf = 30.0; // Risksiz faiz oranı
-    let erp = 7.5; // Hisse Senedi Risk Primi
+    let rf = 38.0; // Risksiz faiz oranı (TR 10Y/Gösterge Devlet Tahvili güncel piyasa bileşiği: %38.0)
+    let erp = 8.56; // Damodaran Güncel Türkiye Hisse Senedi Risk Primi (ABD Mature ERP %4.60 + CDS/Country Risk %3.96)
     let preTaxKd = 46.0; // Kurumsal Ticari Kredi Faizi (%)
     const taxRate = (detectedSector === 'BANKING' || detectedSector === 'INSURANCE' || detectedSector === 'FINANCIAL_SERVICES') ? 0.30 : (detectedSector === 'REIT' ? 0.0 : 0.25);
 
@@ -948,8 +909,8 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
       else if (yr === 2022) { rf = 19.0; erp = 7.0; preTaxKd = 25.0; }
       else if (yr === 2023) { rf = 26.5; erp = 7.0; preTaxKd = 36.0; }
       else if (yr === 2024) { rf = 31.0; erp = 7.5; preTaxKd = 50.0; }
-      else if (yr === 2025) { rf = 29.5; erp = 7.5; preTaxKd = 45.0; }
-      else { rf = 28.0; erp = 7.5; preTaxKd = 42.0; }
+      else if (yr === 2025) { rf = 34.0; erp = 8.56; preTaxKd = 45.0; }
+      else { rf = 38.0; erp = 8.56; preTaxKd = 42.0; }
 
       if (parsedTlRate) {
         preTaxKd = parsedTlRate;
@@ -1048,7 +1009,7 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     // para birimine uygun enflasyon (USD %2.5 / EUR %2.2) kullanılır.
     const expectedInflation = isForeignCurrency
       ? (reportCurrency === 'EUR' ? 2.2 : 2.5)
-      : (yr <= 2023 ? 0.0 : (yr === 2024 ? 36.0 : (yr === 2025 ? 25.0 : 18.0)));
+      : (yr <= 2023 ? 0.0 : (yr === 2024 ? 36.0 : (yr === 2025 ? 25.0 : 23.70))); // TCMB Eylül 2026 Piyasa Katılımcıları Anketi
     const nominalWacc = computedWacc;
     const realWacc = ((item.is_tms29 || isForeignCurrency) && expectedInflation > 0)
       ? Number((((1 + nominalWacc / 100) / (1 + expectedInflation / 100) - 1) * 100).toFixed(1))
@@ -3127,15 +3088,46 @@ export function computeSectorValuationAndDrivers(
     } else {
       marginLabel = 'FAVÖK Marjı (EBITDA Margin)';
       marginNote = 'Operasyonel kârlılık marjı, şirketin maliyet şoklarını absorbe etme kabiliyetini gösterir.';
-      const ebitdaM = parseFinancialNumber(latest?.ebitda_margin);
-      if (ebitdaM !== null) {
-        marginVal = Number(ebitdaM.toFixed(1));
-        marginExpl = ebitdaM <= 0
-          ? `Son dönem (${latest?.period || 'Son'}) gerçekleşen negatif FAVÖK marjı (operasyonel zarar): %${marginVal}`
-          : `Son dönem (${latest?.period || 'Son'}) gerçekleşen FAVÖK / Satış Gelirleri marjı: %${marginVal}`;
+
+      const historySeries = Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : [];
+      const computeTtmField = (field: string, rawVal: number): number => {
+        const pKey = parsePeriodSortKey(latest?.period);
+        const yr = Math.floor(pKey / 100);
+        const m = pKey % 100;
+        if (m === 12 || m === 0) return rawVal;
+        if (yr > 2000 && historySeries.length > 2) {
+          const prevYearEnd = historySeries.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + 12);
+          const prevYearMatch = historySeries.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + m);
+          const vEnd = parseFinancialNumber(prevYearEnd?.[field]);
+          const vMatch = parseFinancialNumber(prevYearMatch?.[field]);
+          if (vEnd !== null && vMatch !== null) {
+            const ttmVal = rawVal + vEnd - vMatch;
+            if (ttmVal > 0) return ttmVal;
+          }
+        }
+        return rawVal * periodAnnualFactor;
+      };
+
+      const rawLatestEbitda = parseFinancialNumber(latest?.ebitda) ?? 0;
+      const rawLatestRev = parseFinancialNumber(latest?.revenue) ?? 0;
+      const ttmEbitda = computeTtmField('ebitda', rawLatestEbitda);
+      const ttmRev = computeTtmField('revenue', rawLatestRev);
+
+      if (ttmEbitda > 0 && ttmRev > 0) {
+        marginVal = Number(((ttmEbitda / ttmRev) * 100).toFixed(1));
+        marginLabel = 'TTM FAVÖK Marjı (EBITDA Margin)';
+        marginExpl = `Son 12 Aylık (TTM) gerçekleşen FAVÖK / Satış Gelirleri marjı: %${marginVal}`;
       } else {
-        marginVal = 24.5;
-        marginExpl = 'Şirket faaliyet raporu operasyonel marj tabanı';
+        const ebitdaM = parseFinancialNumber(latest?.ebitda_margin);
+        if (ebitdaM !== null) {
+          marginVal = Number(ebitdaM.toFixed(1));
+          marginExpl = ebitdaM <= 0
+            ? `Son dönem (${latest?.period || 'Son'}) gerçekleşen negatif FAVÖK marjı (operasyonel zarar): %${marginVal}`
+            : `Son dönem (${latest?.period || 'Son'}) gerçekleşen FAVÖK / Satış Gelirleri marjı: %${marginVal}`;
+        } else {
+          marginVal = 24.5;
+          marginExpl = 'Şirket faaliyet raporu operasyonel marj tabanı';
+        }
       }
     }
   }
