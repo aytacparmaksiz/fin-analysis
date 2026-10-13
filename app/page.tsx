@@ -2310,6 +2310,7 @@ export default function ValuationTerminal({
         marketPrice: parsedPrice,
         fairValue: targetVal,
         latestData: enrichedExtractedData?.financial_history?.[enrichedExtractedData?.financial_history?.length - 1],
+        financialHistory: enrichedExtractedData?.financial_history,
         scoreResult: data.scoreResult,
         sector: activeSector
       });

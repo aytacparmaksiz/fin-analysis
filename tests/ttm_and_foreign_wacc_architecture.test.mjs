@@ -5,7 +5,8 @@ import {
   calculateSectorScore,
   detectValueTrap,
   computeFairValueTrend,
-  computeTtmEbitdaFromHistory
+  computeTtmEbitdaFromHistory,
+  optimizeFinalDecision
 } from '../lib/valuation.ts';
 
 test('TTM & Foreign WACC Architecture Comprehensive Test Suite', async (t) => {
@@ -156,5 +157,80 @@ test('TTM & Foreign WACC Architecture Comprehensive Test Suite', async (t) => {
     // 3) Reel WACC Türkiye TÜFE'si (%18-%36) çıkarılarak yapay eksiye düşmemelidir
     assert.ok(latestItem.real_wacc > 4.0 && latestItem.real_wacc < 12.0, `USD Reel WACC makul pozitif aralıkta olmalıdır, hesaplanan: ${latestItem.real_wacc}%`);
     assert.ok(latestItem.benchmark_wacc > 4.0, `Benchmark WACC sağlıklı olmalıdır, hesaplanan: ${latestItem.benchmark_wacc}%`);
+  });
+
+  await t.test('7. computeTtmEbitdaFromHistory annualizes single-period interim history (IPOs)', () => {
+    // 6 aylık tek çeyrek (yeni halka arz): 100 Mr * 2.0 = 200 Mr olmalıdır
+    const singleQ2 = [{ period: '2026/06', ebitda: 100_000_000_000 }];
+    const ttmQ2 = computeTtmEbitdaFromHistory(singleQ2, singleQ2[0]);
+    assert.equal(ttmQ2, 200_000_000_000, '6A ara dönem yıllıklandırma katsayısı 2.0x ile çarpılmalıdır');
+
+    // 3 aylık tek çeyrek: 50 Mr * 4.0 = 200 Mr olmalıdır
+    const singleQ1 = [{ period: '2026/03', ebitda: 50_000_000_000 }];
+    const ttmQ1 = computeTtmEbitdaFromHistory(singleQ1, singleQ1[0]);
+    assert.equal(ttmQ1, 200_000_000_000, '3A ara dönem yıllıklandırma katsayısı 4.0x ile çarpılmalıdır');
+
+    // Yıl sonu: düz çarpma yapılmaz, ham değer korunmalıdır
+    const singleQ4 = [{ period: '2025/12', ebitda: 300_000_000_000 }];
+    const ttmQ4 = computeTtmEbitdaFromHistory(singleQ4, singleQ4[0]);
+    assert.equal(ttmQ4, 300_000_000_000, 'Yıl sonu dönemi 1.0x olarak korunmalıdır');
+  });
+
+  await t.test('8. computeTtmEbitdaFromHistory preserves genuine negative TTM EBITDA and flags operational loss in detectValueTrap', () => {
+    // Şirket cari 2026/06'da 50 Mr kâr etti, ancak önceki 2025/12: 100 Mr, 2025/06: 160 Mr
+    // TTM = 50 + 100 - 160 = -10 Mr TL (Operasyonel Zarar!)
+    const lossHistory = [
+      { period: '2025/06', ebitda: 160, revenue: 500, net_debt: 200, roic: 15 },
+      { period: '2025/12', ebitda: 100, revenue: 1000, net_debt: 200, roic: 15 },
+      { period: '2026/06', ebitda: 50, revenue: 500, net_debt: 200, roic: 15 }
+    ];
+
+    const ttmLoss = computeTtmEbitdaFromHistory(lossHistory, lossHistory[2]);
+    assert.equal(ttmLoss, -10, 'Negatif TTM FAVÖK (-10) yapay pozitif yıllıklandırmaya çevrilmemeli, korunmalıdır');
+
+    const vtResult = detectValueTrap(lossHistory, 50, 100, 'INDUSTRIAL');
+    const hasOpLossReason = vtResult.reasons.some(r => r.includes('Borçlu Şirkette Operasyonel Zarar'));
+    assert.equal(hasOpLossReason, true, 'Negatif TTM FAVÖK ve borçluluk durumunda operasyonel zarar tuzağı tetiklenmelidir');
+  });
+
+  await t.test('9. detectValueTrap captures quarterly discrete margin collapse even with negative quarterly EBITDA', () => {
+    // 2025/12: 1000 ciro, 200 favök (%20 marj)
+    // 2026/03: 300 ciro, 60 favök (%20 marj)
+    // 2026/06: 600 kümülatif ciro, 40 kümülatif favök
+    // Discrete Q2: Ciro = 300, FAVÖK = -20 (Marj: -%6.67) -> Marj %20'den -%6.67'ye 26.7 puan çökmüştür!
+    const collapseHistory = [
+      { period: '2025/12', revenue: 1000, ebitda: 200, roic: 15 },
+      { period: '2026/03', revenue: 300, ebitda: 60, roic: 15 },
+      { period: '2026/06', revenue: 600, ebitda: 40, roic: 15 }
+    ];
+
+    const result = detectValueTrap(collapseHistory, 50, 100, 'INDUSTRIAL');
+    const hasMarginDrop = result.reasons.some(r => r.includes('Sert Marj Kaybı') || r.includes('Marj'));
+    assert.equal(hasMarginDrop, true, 'Çeyreklik operasyonel marj çöküşü (26.7 puan daralma) tespit edilmelidir');
+  });
+
+  await t.test('10. optimizeFinalDecision enforces TTM EBITDA and prevents false ALMA override for interim companies', () => {
+    // Havacılık şirketi (THYAO): Q2 6 aylık ham FAVÖK 100 Mr, TTM FAVÖK 200 Mr, Net Borç 620 Mr
+    // Ham FAVÖK kullanılırsa 620 / 100 = 6.2x (> 4.8x) -> False ALMA!
+    // TTM FAVÖK kullanılırsa 620 / 200 = 3.1x (<= 4.8x) -> AL kararı korunur!
+    const history = [
+      { period: '2025/06', ebitda: 80_000_000_000, revenue: 500_000_000_000 },
+      { period: '2025/12', ebitda: 180_000_000_000, revenue: 1_000_000_000_000 },
+      { period: '2026/06', ebitda: 100_000_000_000, revenue: 600_000_000_000, net_debt: 620_000_000_000 }
+    ];
+
+    const opt = optimizeFinalDecision({
+      rawDecision: 'AL',
+      score: 82,
+      latestData: history[2],
+      financialHistory: history,
+      sector: 'AVIATION',
+      fairValue: 150,
+      marketPrice: 100
+    });
+
+    assert.equal(opt.finalDecision, 'AL', 'TTM FAVÖK kaldıracı 3.1x olduğundan AL kararı ALMA olarak bozulmamalıdır');
+    const hasFalseDebtFlag = opt.safetyFlags.some(f => f.includes('Aşırı Filo Borçluluğu'));
+    assert.equal(hasFalseDebtFlag, false, 'Hatalı borç güvenlik bayrağı üretilmemelidir');
   });
 });

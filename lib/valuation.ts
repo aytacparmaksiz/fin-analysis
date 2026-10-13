@@ -88,6 +88,7 @@ export interface SectorScoreResult {
   isGreyZone: boolean;
   suggestedDecision: 'AL' | 'ALMA' | 'NÖTR';
   latestData?: any;
+  financialHistory?: any[];
 }
 
 export interface FinalDecisionOptimization {
@@ -439,12 +440,12 @@ export function computeTtmEbitdaFromHistory(history: any[], targetItem: any): nu
   const yr = Math.floor(pKey / 100);
   const m = pKey % 100;
 
-  if (m === 12 || m === 0 || !Array.isArray(history) || history.length <= 1) {
+  if (m === 12 || m === 0) {
     return rawEbitda;
   }
 
   // TTM = (Cari Ara Dönem) + (Önceki Yıl Sonu) - (Önceki Yıl Eşleşen Ara Dönem)
-  if (yr > 2000) {
+  if (yr > 2000 && Array.isArray(history) && history.length > 2) {
     const prevYearEnd = history.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + 12);
     const prevYearMatch = history.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + m);
 
@@ -452,8 +453,7 @@ export function computeTtmEbitdaFromHistory(history: any[], targetItem: any): nu
     const vMatch = parseFinancialNumber(prevYearMatch?.ebitda);
 
     if (vEnd !== null && vMatch !== null) {
-      const ttmVal = rawEbitda + vEnd - vMatch;
-      if (ttmVal > 0) return ttmVal;
+      return rawEbitda + vEnd - vMatch;
     }
   }
 
@@ -932,7 +932,7 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     const tickerStr = String(item.ticker || container?.ticker || '').toUpperCase();
     const isAviationTicker = ['THYAO', 'PGSUS', 'TAVHL', 'CLEBI'].includes(tickerStr);
     const reportCurrency = String(item.currency || container?.currency || 'TRY').toUpperCase();
-    const isForeignCurrency = ['USD', 'EUR', 'GBP'].includes(reportCurrency) || (detectedSector === 'AVIATION' && isAviationTicker);
+    const isForeignCurrency = ['USD', 'EUR', 'GBP'].includes(reportCurrency) || detectedSector === 'AVIATION';
 
     let rf = 30.0; // Risksiz faiz oranı
     let erp = 7.5; // Hisse Senedi Risk Primi
@@ -974,13 +974,13 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
 
     if (intExpense !== null && intExpense > 0 && avgFinDebt > 0) {
       const calculatedKd = (intExpense / avgFinDebt) * annualFactor * 100;
-      const isFxHeavyDebt = (!isForeignCurrency && calculatedKd >= 4.0 && calculatedKd < 22.0) || detectedSector === 'AVIATION';
+      const isFxHeavyDebt = !isForeignCurrency && calculatedKd >= 4.0 && calculatedKd < 22.0;
 
       if (calculatedKd >= 3.0 && calculatedKd <= 90.0) {
         companySpecificKd = Number(calculatedKd.toFixed(1));
         const blended = (calculatedKd * 0.70) + (preTaxKd * 0.30);
 
-        if (isForeignCurrency || detectedSector === 'AVIATION') {
+        if (isForeignCurrency) {
           preTaxKd = Math.max(3.0, Math.min(22.0, blended));
           kdSource = `Havacılık / Döviz Borç Portföyü Efektif Kd (%${companySpecificKd} Dinamik / %${preTaxKd.toFixed(1)} Harmanlanmış)`;
         } else if (isFxHeavyDebt) {
@@ -1163,7 +1163,10 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
           const getCleanNopat = (h: any): number | null => {
             let hOp = parseFinancialNumber(h.operating_profit ?? h.operating_income);
             const hGross = parseFinancialNumber(h.gross_profit);
-            const hOpex = parseFinancialNumber(h.operating_expenses);
+            const hGAndA = parseFinancialNumber(h.general_administrative_expenses);
+            const hMkt = parseFinancialNumber(h.marketing_sales_distribution_expenses);
+            const hRd = parseFinancialNumber(h.research_development_expenses);
+            const hOpex = parseFinancialNumber(h.operating_expenses) ?? ((hGAndA !== null || hMkt !== null || hRd !== null) ? ((hGAndA || 0) + (hMkt || 0) + (hRd || 0)) : null);
             const hCore = (hGross !== null && hOpex !== null) ? hGross - hOpex : null;
             const hNet = parseFinancialNumber(h.net_income);
             if ((hOp === null || hOp <= 0) && ((hNet !== null && hNet > 0) || (hCore !== null && hCore > 0))) {
@@ -2030,6 +2033,7 @@ export function calculateSectorScore(
     isGreyZone,
     suggestedDecision,
     latestData: latest,
+    financialHistory: sortedHistory,
   };
 }
 
@@ -2301,7 +2305,11 @@ export function detectValueTrap(
         const prevVal = parseFinancialNumber(prevItem?.[field]);
         if (prevVal !== null) {
           const discrete = targetVal - prevVal;
-          if (discrete > 0) return discrete;
+          if (field === 'revenue') {
+            if (discrete > 0) return discrete;
+          } else {
+            return discrete;
+          }
         }
       }
       return targetVal;
@@ -2336,7 +2344,9 @@ export function detectValueTrap(
         hasQuarterlyErosion = true;
         reasons.push(`Aralıksız Marj Daralması: Çeyreklik arındırılmış operasyonel marj son 2 çeyrektir (%${qPrev2.toFixed(1)} ➔ %${qPrev1.toFixed(1)} ➔ %${qLatest.toFixed(1)}) gerilemektedir.`);
       }
-    } else if (qLatest !== null && qPrev1 !== null && (qPrev1 - qLatest) > 5.0) {
+    }
+
+    if (!hasQuarterlyErosion && qLatest !== null && qPrev1 !== null && (qPrev1 - qLatest) > 5.0) {
       reasons.push(`Sert Marj Kaybı: Çeyreklik operasyonel marj önceki çeyreğe göre %${(qPrev1 - qLatest).toFixed(1)} puan daralmıştır.`);
     }
 
@@ -2412,6 +2422,7 @@ export function optimizeFinalDecision({
   marketPrice,
   fairValue,
   latestData,
+  financialHistory,
   sector = 'INDUSTRIAL',
   scoreResult,
 }: {
@@ -2421,6 +2432,7 @@ export function optimizeFinalDecision({
   marketPrice?: number | null;
   fairValue?: number | null;
   latestData?: any;
+  financialHistory?: any[];
   sector?: SectorType;
   scoreResult?: SectorScoreResult;
 }): FinalDecisionOptimization {
@@ -2434,8 +2446,22 @@ export function optimizeFinalDecision({
   }
 
   const effectiveLatestData = latestData || scoreResult?.latestData;
+  const historySeries = Array.isArray(financialHistory) ? financialHistory : (Array.isArray(scoreResult?.financialHistory) ? scoreResult.financialHistory : []);
   const effectiveSector = sector || scoreResult?.sector || 'INDUSTRIAL';
   const effectiveScore = score ?? scoreResult?.totalScore ?? 75;
+
+  const getEffectiveEbitda = (): number | null => {
+    if (historySeries.length > 0 && effectiveLatestData) {
+      const ttm = computeTtmEbitdaFromHistory(historySeries, effectiveLatestData);
+      if (ttm !== null) return ttm;
+    }
+    const rawEb = parseFinancialNumber(effectiveLatestData?.ebitda);
+    if (rawEb === null) return null;
+    const factor = getAnnualizationFactor(effectiveLatestData?.period);
+    return rawEb * factor;
+  };
+
+  const effectiveEbitda = getEffectiveEbitda();
 
   const safetyFlags: string[] = [];
   const conditionalWarnings: string[] = [...(scoreResult?.conditionalWarnings || [])];
@@ -2476,8 +2502,8 @@ export function optimizeFinalDecision({
   // Bu durumda karar en muhafazakar haliyle "NÖTR" (Koşullu İzleme) olarak dengelenir.
   const isFatalInsolvent = equity !== null && equity <= 0;
   const isIndustrialDistressed = effectiveSector === 'INDUSTRIAL' &&
-    parseFinancialNumber(effectiveLatestData?.ebitda) !== null &&
-    parseFinancialNumber(effectiveLatestData?.ebitda)! <= 0 &&
+    effectiveEbitda !== null &&
+    effectiveEbitda <= 0 &&
     parseFinancialNumber(effectiveLatestData?.net_debt) !== null &&
     parseFinancialNumber(effectiveLatestData?.net_debt)! > 0;
   const isBankingToxic = effectiveSector === 'BANKING' && (
@@ -2512,18 +2538,18 @@ export function optimizeFinalDecision({
 
     // 3. Kural: Sanayi Sektörü Borçluluk & Negatif FAVÖK Filtresi
     const netDebt = parseFinancialNumber(effectiveLatestData?.net_debt);
-    const ebitda = parseFinancialNumber(effectiveLatestData?.ebitda);
+    const ebitda = effectiveEbitda;
     if (!overrideApplied && effectiveSector === 'INDUSTRIAL' && netDebt !== null && netDebt > 0) {
       if (ebitda !== null && ebitda <= 0) {
         finalDecision = 'ALMA';
         overrideApplied = true;
-        overrideReason = 'Operasyonel Zarar ve Borçluluk Riski: FAVÖK negatif olmasına rağmen şirketin net finansal borcu bulunmaktadır. AL kararı engellendi.';
-        safetyFlags.push('Negatif FAVÖK ve Net Borç');
+        overrideReason = 'Operasyonel Zarar ve Borçluluk Riski: TTM FAVÖK negatif olmasına rağmen şirketin net finansal borcu bulunmaktadır. AL kararı engellendi.';
+        safetyFlags.push('Negatif TTM FAVÖK ve Net Borç');
       } else if (ebitda !== null && ebitda > 0 && (netDebt / ebitda) > 4.0) {
         finalDecision = 'ALMA';
         overrideApplied = true;
-        overrideReason = `Kritik Borçluluk Filtresi: Net Borç / FAVÖK çarpanı (${(netDebt / ebitda).toFixed(1)}x) emniyet sınırını (4.0x) aştığı için AL kararı ALMA olarak revize edildi.`;
-        safetyFlags.push(`Kritik Net Borç/FAVÖK: ${(netDebt / ebitda).toFixed(1)}x`);
+        overrideReason = `Kritik Borçluluk Filtresi: Net Borç / TTM FAVÖK çarpanı (${(netDebt / ebitda).toFixed(1)}x) emniyet sınırını (4.0x) aştığı için AL kararı ALMA olarak revize edildi.`;
+        safetyFlags.push(`Kritik Net Borç/TTM FAVÖK: ${(netDebt / ebitda).toFixed(1)}x`);
       }
     }
 
@@ -2612,7 +2638,7 @@ export function optimizeFinalDecision({
     if (!overrideApplied && effectiveSector === 'TECH') {
       const gm = parseFinancialNumber(effectiveLatestData?.gross_margin);
       const netDebt = parseFinancialNumber(effectiveLatestData?.net_debt) ?? 0;
-      const ebitda = parseFinancialNumber(effectiveLatestData?.ebitda) ?? 0;
+      const ebitda = effectiveEbitda ?? 0;
 
       if (gm !== null && gm < 20.0) {
         finalDecision = 'ALMA';
@@ -2622,15 +2648,15 @@ export function optimizeFinalDecision({
       } else if (ebitda > 0 && (netDebt / ebitda) > 3.0) {
         finalDecision = 'ALMA';
         overrideApplied = true;
-        overrideReason = `Teknoloji Şirketinde Yüksek Borçluluk: Net Borç / FAVÖK çarpanı (${(netDebt / ebitda).toFixed(1)}x) emniyet sınırını aştı. AL kararı ALMA olarak revize edildi.`;
-        safetyFlags.push(`Yüksek Teknoloji Net Borç/FAVÖK: ${(netDebt / ebitda).toFixed(1)}x`);
+        overrideReason = `Teknoloji Şirketinde Yüksek Borçluluk: Net Borç / TTM FAVÖK çarpanı (${(netDebt / ebitda).toFixed(1)}x) emniyet sınırını aştı. AL kararı ALMA olarak revize edildi.`;
+        safetyFlags.push(`Yüksek Teknoloji Net Borç/TTM FAVÖK: ${(netDebt / ebitda).toFixed(1)}x`);
       }
     }
 
     // Havacılık Sektörü Filo ve Borç Filtresi
     if (!overrideApplied && effectiveSector === 'AVIATION') {
       const netDebt = parseFinancialNumber(effectiveLatestData?.net_debt) ?? 0;
-      const ebitda = parseFinancialNumber(effectiveLatestData?.ebitda) ?? 0;
+      const ebitda = effectiveEbitda ?? 0;
       if (ebitda > 0 && (netDebt / ebitda) > 4.8) {
         finalDecision = 'ALMA';
         overrideApplied = true;
@@ -2642,11 +2668,11 @@ export function optimizeFinalDecision({
     // Enerji & Telekom Altyapı Borç Filtresi
     if (!overrideApplied && effectiveSector === 'UTILITIES_TELCO') {
       const netDebt = parseFinancialNumber(effectiveLatestData?.net_debt) ?? 0;
-      const ebitda = parseFinancialNumber(effectiveLatestData?.ebitda) ?? 0;
+      const ebitda = effectiveEbitda ?? 0;
       if (ebitda > 0 && (netDebt / ebitda) > 4.8) {
         finalDecision = 'ALMA';
         overrideApplied = true;
-        overrideReason = `Aşırı Altyapı Borçluluğu: Net Borç / FAVÖK çarpanı (${(netDebt / ebitda).toFixed(1)}x) proje finansmanı emniyet tavanını (4.8x) aştığı için AL kararı ALMA olarak revize edildi.`;
+        overrideReason = `Aşırı Altyapı Borçluluğu: Net Borç / TTM FAVÖK çarpanı (${(netDebt / ebitda).toFixed(1)}x) proje finansmanı emniyet tavanını (4.8x) aştığı için AL kararı ALMA olarak revize edildi.`;
         safetyFlags.push(`Kritik Altyapı Borçluluğu: ${(netDebt / ebitda).toFixed(1)}x`);
       }
     }
@@ -3693,6 +3719,7 @@ export function computeSectorValuationAndDrivers(
     score: scoreResult.totalScore,
     valuation,
     latestData: latest,
+    financialHistory: Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : scoreResult.financialHistory,
     sector,
     scoreResult,
   });
