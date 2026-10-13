@@ -426,6 +426,42 @@ export function normalizePeriodName(period: string | number): string {
 }
 
 /**
+ * Finansal seriden standart TTM FAVÖK (Trailing Twelve Months EBITDA) hesaplar.
+ * Formül: TTM = (Cari Ara Dönem) + (Önceki Yıl Sonu) - (Önceki Yılın Eşleşen Ara Dönemi)
+ * Eğer geçmiş dönem eksikse veya dönem yıl sonu ise yıllıklandırma çarpanı veya doğrudan değer kullanılır.
+ */
+export function computeTtmEbitdaFromHistory(history: any[], targetItem: any): number | null {
+  if (!targetItem) return null;
+  const rawEbitda = parseFinancialNumber(targetItem.ebitda);
+  if (rawEbitda === null) return null;
+
+  const pKey = parsePeriodSortKey(targetItem.period);
+  const yr = Math.floor(pKey / 100);
+  const m = pKey % 100;
+
+  if (m === 12 || m === 0 || !Array.isArray(history) || history.length <= 1) {
+    return rawEbitda;
+  }
+
+  // TTM = (Cari Ara Dönem) + (Önceki Yıl Sonu) - (Önceki Yıl Eşleşen Ara Dönem)
+  if (yr > 2000) {
+    const prevYearEnd = history.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + 12);
+    const prevYearMatch = history.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + m);
+
+    const vEnd = parseFinancialNumber(prevYearEnd?.ebitda);
+    const vMatch = parseFinancialNumber(prevYearMatch?.ebitda);
+
+    if (vEnd !== null && vMatch !== null) {
+      const ttmVal = rawEbitda + vEnd - vMatch;
+      if (ttmVal > 0) return ttmVal;
+    }
+  }
+
+  const factor = getAnnualizationFactor(targetItem.period);
+  return rawEbitda * factor;
+}
+
+/**
  * Damodaran Gelişmekte Olan Piyasalar (Emerging Markets) ve BIST sektörel borçsuz beta (Unlevered Beta) haritası.
  */
 export function getDamodaranUnleveredBeta(sector: SectorType, ticker?: string, companySectorName?: string): number {
@@ -1006,11 +1042,15 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
 
     // Fisher Denklemi ile Reel WACC ve Nominal WACC Ayrımı:
     // TMS 29 Enflasyon Muhasebesinde bilançolar endekslendiğinden hesaplanan ROIC REEL kârlılıktır.
-    // Nominal WACC (%29.6 - %35.3) içinde enflasyon beklentisi bulunduğundan, 
+    // Nominal WACC içinde enflasyon beklentisi bulunduğundan, 
     // karşılaştırma Fisher Denklemi: (1 + WACC_nominal) = (1 + WACC_real) * (1 + inflation) ile Reel WACC üzerinden yapılır.
-    const expectedInflation = yr <= 2023 ? 0.0 : (yr === 2024 ? 36.0 : (yr === 2025 ? 25.0 : 18.0));
+    // Döviz fonksiyonel para birimine sahip şirketlerde (AVIATION veya isForeignCurrency) Türkiye'nin %18-36 TÜFE'si değil,
+    // para birimine uygun enflasyon (USD %2.5 / EUR %2.2) kullanılır.
+    const expectedInflation = isForeignCurrency
+      ? (reportCurrency === 'EUR' ? 2.2 : 2.5)
+      : (yr <= 2023 ? 0.0 : (yr === 2024 ? 36.0 : (yr === 2025 ? 25.0 : 18.0)));
     const nominalWacc = computedWacc;
-    const realWacc = (item.is_tms29 && expectedInflation > 0)
+    const realWacc = ((item.is_tms29 || isForeignCurrency) && expectedInflation > 0)
       ? Number((((1 + nominalWacc / 100) / (1 + expectedInflation / 100) - 1) * 100).toFixed(1))
       : nominalWacc;
 
@@ -1075,16 +1115,74 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
         }
       }
 
-      const opNopat = (typeof opIncomeVal === 'number' && opIncomeVal !== 0)
-        ? opIncomeVal * (1 - taxRate)
+      // Çekirdek faaliyet kârı (Core Operating Profit = Brüt Kâr - Faaliyet Giderleri)
+      const grossProfit = typeof item.gross_profit === 'number' ? item.gross_profit : null;
+      const opex = typeof item.operating_expenses === 'number'
+        ? item.operating_expenses
+        : ((typeof item.general_administrative_expenses === 'number' || typeof item.marketing_sales_distribution_expenses === 'number' || typeof item.research_development_expenses === 'number')
+          ? (Number(item.general_administrative_expenses || 0) + Number(item.marketing_sales_distribution_expenses || 0) + Number(item.research_development_expenses || 0))
+          : null);
+      const coreOperatingProfit = (grossProfit !== null && opex !== null && (grossProfit - opex) > 0)
+        ? (grossProfit - opex)
+        : null;
+
+      const hasPositiveCoreOrNet = (typeof item.net_income === 'number' && item.net_income > 0) ||
+                                   (coreOperatingProfit !== null && coreOperatingProfit > 0);
+
+      // Kur farkı giderleri (3DF / Esas Faaliyetlerden Diğer Giderler) nedeniyle operating_profit negatifken,
+      // şirket pozitif çekirdek faaliyet kârı veya net kâr üretiyorsa rawNopat kilitlenmez:
+      let effectiveOperatingProfit = opIncomeVal;
+      if ((effectiveOperatingProfit === null || effectiveOperatingProfit <= 0) && hasPositiveCoreOrNet) {
+        if (coreOperatingProfit !== null && coreOperatingProfit > 0) {
+          effectiveOperatingProfit = coreOperatingProfit;
+        } else if (typeof item.net_income === 'number' && item.net_income > 0) {
+          effectiveOperatingProfit = item.net_income / (1 - taxRate);
+        }
+      }
+
+      const opNopat = (typeof effectiveOperatingProfit === 'number' && effectiveOperatingProfit !== 0)
+        ? effectiveOperatingProfit * (1 - taxRate)
         : 0;
 
-      const rawNopat = (opNopat !== 0)
+      const rawNopat = (opNopat > 0)
         ? opNopat
-        : ((typeof item.net_income === 'number' && item.net_income > 0) ? item.net_income : 0);
+        : ((typeof item.net_income === 'number' && item.net_income > 0)
+          ? item.net_income
+          : opNopat);
 
-      // İlgili dönem çarpanı (3A -> x4, 6A -> x2, 9A -> x1.33, 12A -> x1) ile yıllıklandırılmış NOPAT
-      const annualizedNopat = rawNopat * annualFactor;
+      // NOPAT Yıllıklandırmasında TTM (Trailing Twelve Months) Uygulaması:
+      // Düz çarpma (annualFactor) yerine geçmiş çeyrekler mevcutsa standart TTM kümülasyonu kullanılır
+      let annualizedNopat = rawNopat * annualFactor;
+      const pKey = parsePeriodSortKey(item.period);
+      const itemYr = Math.floor(pKey / 100);
+      const itemM = pKey % 100;
+      if (itemM !== 12 && itemYr > 2000 && history.length > 2) {
+        const prevYearEnd = history.find((h: any) => parsePeriodSortKey(h.period) === (itemYr - 1) * 100 + 12);
+        const prevYearMatch = history.find((h: any) => parsePeriodSortKey(h.period) === (itemYr - 1) * 100 + itemM);
+        if (prevYearEnd && prevYearMatch) {
+          const getCleanNopat = (h: any): number | null => {
+            let hOp = parseFinancialNumber(h.operating_profit ?? h.operating_income);
+            const hGross = parseFinancialNumber(h.gross_profit);
+            const hOpex = parseFinancialNumber(h.operating_expenses);
+            const hCore = (hGross !== null && hOpex !== null) ? hGross - hOpex : null;
+            const hNet = parseFinancialNumber(h.net_income);
+            if ((hOp === null || hOp <= 0) && ((hNet !== null && hNet > 0) || (hCore !== null && hCore > 0))) {
+              hOp = (hCore !== null && hCore > 0) ? hCore : (hNet !== null ? hNet / (1 - taxRate) : null);
+            }
+            if (hOp !== null) return hOp * (1 - taxRate);
+            if (hNet !== null && hNet > 0) return hNet;
+            return null;
+          };
+          const endNopat = getCleanNopat(prevYearEnd);
+          const matchNopat = getCleanNopat(prevYearMatch);
+          if (endNopat !== null && matchNopat !== null) {
+            const ttmNopat = rawNopat + endNopat - matchNopat;
+            if (ttmNopat > 0) {
+              annualizedNopat = ttmNopat;
+            }
+          }
+        }
+      }
 
       if (investedCapital > 0 && annualizedNopat !== 0) {
         const calculated = (annualizedNopat / investedCapital) * 100;
@@ -1113,7 +1211,8 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     // EVA Spread (ROIC vs WACC Makası):
     // TMS 29 Enflasyon Muhasebesi uygulanan dönemlerde ROIC reel satın alma gücü kârlılığı olduğundan,
     // Fisher denklemine göre Reel WACC ile karşılaştırılır (Elmalarla armutların kıyaslanması önlenir):
-    const benchmarkWacc = (item.is_tms29 && expectedInflation > 0) ? realWacc : (item.wacc || nominalWacc);
+    // Döviz fonksiyonel para birimine sahip şirketler TMS 29'a tabi olmadığından hard-currency nominal WACC veya Fisher reel WACC kullanılır
+    const benchmarkWacc = (item.is_tms29 && !isForeignCurrency && expectedInflation > 0) ? realWacc : (item.wacc || nominalWacc);
     item.benchmark_wacc = benchmarkWacc;
     item.eva_spread = (typeof item.roic === 'number' && typeof benchmarkWacc === 'number' && !isNaN(item.roic) && !isNaN(benchmarkWacc))
       ? Number((item.roic - benchmarkWacc).toFixed(1))
@@ -1600,7 +1699,7 @@ export function calculateSectorScore(
 
     // 3. Döviz Borçluluğu & Filo Finansmanı (Max 25)
     const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
-    const ebitda = parseFinancialNumber(latest?.ebitda) ?? 0;
+    const ebitda = computeTtmEbitdaFromHistory(sortedHistory, latest) ?? parseFinancialNumber(latest?.ebitda) ?? 0;
     const ndEbitda = ebitda > 0 ? (netDebt / ebitda) : null;
     let s3 = 18;
     let r3 = 'Döviz cinsi filo borçluluğu yönetilebilir seviyede.';
@@ -1725,7 +1824,7 @@ export function calculateSectorScore(
 
     // 4. Borç Karşılama Gücü (Net Borç / FAVÖK) (Max 25)
     const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
-    const ebitda = parseFinancialNumber(latest?.ebitda) ?? 0;
+    const ebitda = computeTtmEbitdaFromHistory(sortedHistory, latest) ?? parseFinancialNumber(latest?.ebitda) ?? 0;
     const ndEbitda = ebitda > 0 ? (netDebt / ebitda) : null;
     let s4 = 18;
     let r4 = 'Uzun vadeli proje finansmanı borç seviyesi izleniyor.';
@@ -1788,7 +1887,7 @@ export function calculateSectorScore(
     // Sanayi / Reel Sektör:
     // 1. Finansal Sağlık & Likidite (Cari Oran & Net Borç / FAVÖK) (Max 25)
     const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
-    const ebitda = parseFinancialNumber(latest?.ebitda) ?? 0;
+    const ebitda = computeTtmEbitdaFromHistory(sortedHistory, latest) ?? parseFinancialNumber(latest?.ebitda) ?? 0;
     const isEbitdaNegativeWithDebt = ebitda <= 0 && netDebt > 0;
     const debtRatio = ebitda > 0 ? (netDebt / ebitda) : null;
     const cr = parseFinancialNumber(latest?.current_ratio);
@@ -1799,21 +1898,21 @@ export function calculateSectorScore(
 
     if (isEbitdaNegativeWithDebt) {
       s1 = 2;
-      r1 = 'Kritik Borç & Operasyonel Zarar Riski: Şirket negatif FAVÖK ürettiği için operasyonel kâr ile borç ödeme kapasitesi bulunmamaktadır (Net Borç/FAVÖK: Negatif / Anlamsız).';
+      r1 = 'Kritik Borç & Operasyonel Zarar Riski: Şirket negatif TTM FAVÖK ürettiği için operasyonel kâr ile borç ödeme kapasitesi bulunmamaktadır (Net Borç/FAVÖK: Negatif / Anlamsız).';
       st1 = 'danger';
-      anomalies.push('Operasyonel Borç Riski: Negatif FAVÖK nedeniyle borç ödeme kapasitesi yok.');
+      anomalies.push('Operasyonel Borç Riski: Negatif TTM FAVÖK nedeniyle borç ödeme kapasitesi yok.');
     } else if (debtRatio !== null && debtRatio > 4.0) {
       s1 = 3;
-      r1 = `Kritik Borç Riski: Net Borç / FAVÖK (${debtRatio.toFixed(1)}x) 4.0x emniyet sınırını aştı!`;
+      r1 = `Kritik Borç Riski: Net Borç / TTM FAVÖK (${debtRatio.toFixed(1)}x) 4.0x emniyet sınırını aştı!`;
       st1 = 'danger';
       anomalies.push(`Aşırı Borçluluk: Net Borç/FAVÖK ${debtRatio.toFixed(1)}x`);
     } else if (debtRatio !== null && debtRatio > 2.8) {
       s1 = 11;
-      r1 = `Net Borç / FAVÖK (${debtRatio.toFixed(1)}x) yüksek faiz ortamında faiz yükü yaratabilir.`;
+      r1 = `Net Borç / TTM FAVÖK (${debtRatio.toFixed(1)}x) yüksek faiz ortamında faiz yükü yaratabilir.`;
       st1 = 'warning';
     } else if (latest !== null && debtRatio !== null && debtRatio <= 1.5 && (cr === null || cr >= 1.2)) {
       s1 = 25;
-      r1 = `Düşük borçluluk (Net Borç/FAVÖK: ${debtRatio.toFixed(1)}x) ve güçlü likidite tamponu.`;
+      r1 = `Düşük borçluluk (Net Borç/TTM FAVÖK: ${debtRatio.toFixed(1)}x) ve güçlü likidite tamponu.`;
       st1 = 'good';
     }
     breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
@@ -1969,20 +2068,19 @@ export function computeFairValueTrend(
 
     // TTM (Son 12 Ay) Hesabı: Düz çarpma (3A*4, 6A*2) KESİNLİKLE yasaktır, mevsimselliği bozar!
     const computePointTtm = (field: string): number => {
-      const pStr = String(item?.period || '');
-      const parts = pStr.split('/');
-      const yr = parts.length === 2 ? parseInt(parts[0], 10) : NaN;
-      const q = parts.length === 2 ? parts[1] : '';
+      const pKey = parsePeriodSortKey(item?.period);
+      const yr = Math.floor(pKey / 100);
+      const m = pKey % 100;
 
       const currentVal = parseFinancialNumber(item?.[field]) ?? 0;
-      if (q === '12' || q === '12A' || !['03', '06', '09', '3A', '6A', '9A'].includes(q)) {
+      if (m === 12 || m === 0) {
         return currentVal * unitScale;
       }
 
       // Standart TTM Formülü: TTM = (Cari Ara Dönem) + (Önceki Yıl Sonu) - (Önceki Yıl Eşleşen Dönem)
-      if (!isNaN(yr) && sorted.length > 2) {
-        const prevYearEndItem = sorted.find((d: any) => d.period === `${yr - 1}/12`);
-        const prevYearMatchItem = sorted.find((d: any) => d.period === `${yr - 1}/${q}`);
+      if (yr > 2000 && sorted.length > 2) {
+        const prevYearEndItem = sorted.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + 12);
+        const prevYearMatchItem = sorted.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + m);
         const vEnd = parseFinancialNumber(prevYearEndItem?.[field]);
         const vMatch = parseFinancialNumber(prevYearMatchItem?.[field]);
         if (vEnd !== null && vMatch !== null) {
@@ -2183,40 +2281,92 @@ export function detectValueTrap(
     }
   }
 
-  // 2. Kriter: Marj Daralması (Margin Erosion - son 2 çeyrektir aralıksız düşüş)
+  // 2. Kriter: Marj Daralması (Margin Erosion - çeyreklik arındırılmış veya YoY bazında düşüş)
   // HOLDİNG ve BANKACILIK sektörlerinde konsolide hasılat/FAVÖK marjı karması operasyonel gösterge değildir
   if (sector !== 'HOLDING' && sector !== 'BANKING') {
-    const getMargin = (item: any) => {
+    const getDiscreteQuarterly = (targetItem: any, field: string): number | null => {
+      if (!targetItem) return null;
+      const targetVal = parseFinancialNumber(targetItem[field]);
+      if (targetVal === null) return null;
+
+      const pKey = parsePeriodSortKey(targetItem.period);
+      const yr = Math.floor(pKey / 100);
+      const m = pKey % 100;
+
+      if (m === 3) {
+        return targetVal; // Q1 zaten discrete 3 aylıktır
+      } else if (m === 6 || m === 9 || m === 12) {
+        const prevM = m === 6 ? 3 : (m === 9 ? 6 : 9);
+        const prevItem = sorted.find((d: any) => parsePeriodSortKey(d?.period) === yr * 100 + prevM);
+        const prevVal = parseFinancialNumber(prevItem?.[field]);
+        if (prevVal !== null) {
+          const discrete = targetVal - prevVal;
+          if (discrete > 0) return discrete;
+        }
+      }
+      return targetVal;
+    };
+
+    const getQuarterlyMargin = (targetItem: any): number | null => {
+      if (!targetItem) return null;
+      const rev = getDiscreteQuarterly(targetItem, 'revenue') ?? parseFinancialNumber(targetItem.revenue ?? targetItem.written_premiums);
+      const ebitda = getDiscreteQuarterly(targetItem, 'ebitda') ?? parseFinancialNumber(targetItem.ebitda);
+      if (rev !== null && rev > 0 && ebitda !== null) {
+        return (ebitda / rev) * 100;
+      }
+      return parseFinancialNumber(targetItem.ebitda_margin ?? targetItem.operating_margin);
+    };
+
+    const getCumulativeMargin = (item: any): number | null => {
       if (!item) return null;
       const ebitda = parseFinancialNumber(item.ebitda);
       const rev = parseFinancialNumber(item.revenue ?? item.written_premiums);
       if (ebitda !== null && rev !== null && rev > 0) return (ebitda / rev) * 100;
       return parseFinancialNumber(item.ebitda_margin ?? item.operating_margin);
     };
-    const mLatest = getMargin(latest);
-    const mPrev1 = getMargin(prev1);
-    const mPrev2 = getMargin(prev2);
-    if (mLatest !== null && mPrev1 !== null && mPrev2 !== null) {
-      if (mLatest < mPrev1 && mPrev1 < mPrev2) {
-        reasons.push(`Aralıksız Marj Daralması: Operasyonel marj son 2 çeyrektir (%${mPrev2.toFixed(1)} ➔ %${mPrev1.toFixed(1)} ➔ %${mLatest.toFixed(1)}) gerilemektedir.`);
+
+    // 1) Çeyreklik Arındırılmış (Discrete Quarterly) Marj Trendi:
+    const qLatest = getQuarterlyMargin(latest);
+    const qPrev1 = getQuarterlyMargin(prev1);
+    const qPrev2 = getQuarterlyMargin(prev2);
+
+    let hasQuarterlyErosion = false;
+    if (qLatest !== null && qPrev1 !== null && qPrev2 !== null) {
+      if (qLatest < qPrev1 && qPrev1 < qPrev2) {
+        hasQuarterlyErosion = true;
+        reasons.push(`Aralıksız Marj Daralması: Çeyreklik arındırılmış operasyonel marj son 2 çeyrektir (%${qPrev2.toFixed(1)} ➔ %${qPrev1.toFixed(1)} ➔ %${qLatest.toFixed(1)}) gerilemektedir.`);
       }
-    } else if (mLatest !== null && mPrev1 !== null && (mPrev1 - mLatest) > 4.0) {
-      reasons.push(`Sert Marj Kaybı: Operasyonel marj önceki döneme göre %${(mPrev1 - mLatest).toFixed(1)} puan daralmıştır.`);
+    } else if (qLatest !== null && qPrev1 !== null && (qPrev1 - qLatest) > 5.0) {
+      reasons.push(`Sert Marj Kaybı: Çeyreklik operasyonel marj önceki çeyreğe göre %${(qPrev1 - qLatest).toFixed(1)} puan daralmıştır.`);
+    }
+
+    // 2) YoY (Geçen Yılın Aynı Çeyreği) Karşılaştırması:
+    // Mevsimsellikten tam arındırılmış kıyas (aynı süreli kümülatif dönemler: 6A vs 6A, 3A vs 3A)
+    if (!hasQuarterlyErosion && latest?.period) {
+      const latestKey = parsePeriodSortKey(latest.period);
+      const prevYearSamePeriod = sorted.find((d: any) => parsePeriodSortKey(d?.period) === latestKey - 100);
+      if (prevYearSamePeriod) {
+        const mLatest = getCumulativeMargin(latest);
+        const mPrevYear = getCumulativeMargin(prevYearSamePeriod);
+        if (mLatest !== null && mPrevYear !== null && (mPrevYear - mLatest) > 5.0) {
+          reasons.push(`Yıllıklandırılmış Marj Daralması (YoY): Operasyonel marj geçen yılın aynı dönemine göre %${(mPrevYear - mLatest).toFixed(1)} puan daralmıştır (%${mPrevYear.toFixed(1)} ➔ %${mLatest.toFixed(1)}).`);
+        }
+      }
     }
   }
 
-  // 3. Kriter: Aşırı Borçluluk (Net Borç / FAVÖK > 4.0x)
+  // 3. Kriter: Aşırı Borçluluk (Net Borç / TTM FAVÖK > 4.0x)
   const netDebt = parseFinancialNumber(latest?.net_debt);
-  const ebitda = parseFinancialNumber(latest?.ebitda);
+  const ttmEbitda = computeTtmEbitdaFromHistory(sorted, latest);
   if (sector === 'INDUSTRIAL' || sector === 'AVIATION' || sector === 'UTILITIES_TELCO') {
     if (netDebt !== null && netDebt > 0) {
-      if (ebitda !== null && ebitda > 0) {
-        const ndEbitda = netDebt / ebitda;
+      if (ttmEbitda !== null && ttmEbitda > 0) {
+        const ndEbitda = netDebt / ttmEbitda;
         if (ndEbitda > 4.0) {
-          reasons.push(`Kritik Borçluluk Baskısı: Net Borç / FAVÖK çarpanı (${ndEbitda.toFixed(1)}x) emniyet tavanını (4.0x) aşmıştır.`);
+          reasons.push(`Kritik Borçluluk Baskısı: Net Borç / TTM FAVÖK çarpanı (${ndEbitda.toFixed(1)}x) emniyet tavanını (4.0x) aşmıştır.`);
         }
-      } else if (ebitda !== null && ebitda <= 0) {
-        reasons.push('Borçlu Şirkette Operasyonel Zarar: FAVÖK negatif olmasına rağmen şirketin net finansal borcu bulunmaktadır.');
+      } else if (ttmEbitda !== null && ttmEbitda <= 0) {
+        reasons.push('Borçlu Şirkette Operasyonel Zarar: TTM FAVÖK negatif olmasına rağmen şirketin net finansal borcu bulunmaktadır.');
       }
     }
   }
@@ -3315,18 +3465,17 @@ export function computeSectorValuationAndDrivers(
     const historySeries = Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : [];
     const getTtmOrAnnualized = (field: string, rawLatestVal: number): number => {
       if (rawLatestVal <= 0 && field === 'ebitda') return rawLatestVal * unitScale;
-      const pStr = String(latest?.period || '');
-      const parts = pStr.split('/');
-      const yr = parts.length === 2 ? parseInt(parts[0], 10) : NaN;
-      const q = parts.length === 2 ? parts[1] : '';
+      const pKey = parsePeriodSortKey(latest?.period);
+      const yr = Math.floor(pKey / 100);
+      const m = pKey % 100;
 
-      if (q === '12' || q === '12A' || !['03', '06', '09', '3A', '6A', '9A'].includes(q)) {
+      if (m === 12 || m === 0) {
         return rawLatestVal * unitScale;
       }
 
-      if (!isNaN(yr) && historySeries.length > 2) {
-        const prevYearEnd = historySeries.find((d: any) => d.period === `${yr - 1}/12`);
-        const prevYearMatch = historySeries.find((d: any) => d.period === `${yr - 1}/${q}`);
+      if (yr > 2000 && historySeries.length > 2) {
+        const prevYearEnd = historySeries.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + 12);
+        const prevYearMatch = historySeries.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + m);
         const vEnd = parseFinancialNumber(prevYearEnd?.[field]);
         const vMatch = parseFinancialNumber(prevYearMatch?.[field]);
         if (vEnd !== null && vMatch !== null) {
