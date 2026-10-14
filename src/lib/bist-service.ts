@@ -895,20 +895,16 @@ export async function fetchAndAnalyzeBistCompany(
       const pPromise = fetchLiveBistPrice(ticker).then(res => { if (res && res.price > 0) priceData = res; }).catch(() => {});
       const mPromise = getIsYatirimMultiplesForTicker(ticker).then(res => { if (res) isMultiples = res; }).catch(() => {});
 
+      // Doğru kaynaktan resmi veriyi tam alabilmek için makul süre (20s) tanınır
       await Promise.race([
         Promise.all([pPromise, mPromise]),
-        Promise.race([
-          pPromise,
-          new Promise(r => setTimeout(r, 1500))
-        ])
+        new Promise(r => setTimeout(r, 20000))
       ]);
     } catch {
       priceData = { price: 100.0, historicalPrices: {} };
     }
   } else {
-    // Vercel Serverless Gateway Timeout (504) Koruması:
-    // Canlı veri çekim hattının tamamına (fiyat, Yahoo, İş Yatırım ve piyasa çarpanları) 5000ms sıkı tavanı koyulur.
-    // Her kaynak bağımsız yakalanır; bir kaynak gecikse dahi diğer başarılı kaynaklar (fiyat, Yahoo vb.) ASLA çöpe atılmaz.
+    // Canlı veri çekim hattının tamamına resmi İş Yatırım tablolarının (1.65MB) tamamlanabilmesi için 30s süre tanınır
     const pricePromise = fetchLiveBistPrice(ticker)
       .then(res => { if (res && res.price > 0) priceData = res; })
       .catch(() => {});
@@ -927,7 +923,7 @@ export async function fetchAndAnalyzeBistCompany(
 
     await Promise.race([
       Promise.all([pricePromise, yahooPromise, isYatirimPromise, multiplesPromise]),
-      new Promise(r => setTimeout(r, 5000))
+      new Promise(r => setTimeout(r, 30000))
     ]);
   }
 

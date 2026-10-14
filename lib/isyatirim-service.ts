@@ -22,7 +22,9 @@ export interface IsYatirimStockMultiples {
   updatedAt: string;
 }
 
-let cachedMultiples: Record<string, IsYatirimStockMultiples> | null = null;
+import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from './isyatirim-multiples-cache.ts';
+
+let cachedMultiples: Record<string, IsYatirimStockMultiples> = { ...OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE };
 let lastFetchTimestamp = 0;
 const CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 saat önbellek
 
@@ -41,10 +43,10 @@ import https from 'node:https';
 const isYatirimHttpsAgent = new https.Agent({
   rejectUnauthorized: false, // Yerel antivirüs veya kurumsal proxy SSL interception toleransı
   keepAlive: true,
-  timeout: 4000
+  timeout: 30000
 });
 
-async function fetchHttpsText(urlStr: string, timeoutMs = 3500): Promise<string | null> {
+async function fetchHttpsText(urlStr: string, timeoutMs = 30000): Promise<string | null> {
   return new Promise((resolve) => {
     let settled = false;
     let req: any = null;
@@ -104,7 +106,7 @@ export async function fetchAllIsYatirimMultiples(): Promise<Record<string, IsYat
   const url = 'https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/Temel-Degerler-Ve-Oranlar.aspx';
   
   try {
-    const html = await fetchHttpsText(url, 3500);
+    const html = await fetchHttpsText(url, 30000);
 
     if (!html) {
       console.warn('[IsYatirim] Canlı çarpan tablosu çekilemedi, önbellek kullanılıyor.');
