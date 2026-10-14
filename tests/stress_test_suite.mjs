@@ -248,10 +248,11 @@ describe('Comprehensive Financial Terminal Stress Test Suite', () => {
       };
       const enriched = enrichAndSanitizeFinancialHistory(data);
       const item = enriched.financial_history[0];
-      
+      // 30% corporate tax rate on pre-tax Kd (45.0 * 0.70 = 31.5)
+      assert.equal(item.after_tax_cost_of_debt, 31.5);
       // Insurance WACC is purely cost of equity (Ke = Rf + Beta * ERP)
-      // Rf (2025) = 29.5, Beta = 0.95, ERP = 7.5 -> Ke = 29.5 + 0.95 * 7.5 = 36.625 -> 36.6
-      assert.equal(item.wacc, 36.6);
+      // Rf (2025) = 34.0, Beta = 0.53, ERP = 8.56 -> Ke = 38.54 -> 38.5
+      assert.equal(item.wacc, 38.5);
     });
 
     it('applies 25% corporate tax rate for Industrial sector', () => {
@@ -804,7 +805,7 @@ describe('Comprehensive Financial Terminal Stress Test Suite', () => {
       assert.ok(result.valuation.formula_display.includes('0.75x') || result.valuation.formula_display.includes('0,75x'));
     });
 
-    it('Tech sector valuation enforces TTK 376 haircut when equity <= 0 even with positive revenue', () => {
+    it('Tech sector valuation handles negative equity without arbitrary 0.05 TL floor, producing operational fair value and UNSAFE ALMA', () => {
       const techData = {
         ticker: 'TECHBATIK',
         sector: 'TECH',
@@ -814,11 +815,13 @@ describe('Comprehensive Financial Terminal Stress Test Suite', () => {
         ]
       };
       const result = computeSectorValuationAndDrivers(techData, '50.0', 'TECH');
-      assert.equal(result.valuation.fair_value, 0.05); // True liquidation floor, not arbitrary fraction of market price
-      assert.ok(result.valuation.formula_display.includes('TTK 376'));
+      assert.ok(result.valuation.fair_value > 0);
+      assert.notEqual(result.valuation.fair_value, 0.05); // No arbitrary 0.05 TL floor
+      assert.equal(result.valuation.final_decision, 'ALMA');
+      assert.ok(result.valuation.boundary_warning.includes('özkaynak'));
     });
 
-    it('Industrial sector valuation enforces TTK 376 haircut when equity <= 0 even with positive EBITDA', () => {
+    it('Industrial sector valuation handles negative equity without arbitrary 0.05 TL floor, producing EV/EBITDA bridge and UNSAFE ALMA', () => {
       const indData = {
         ticker: 'INDBATIK',
         sector: 'INDUSTRIAL',
@@ -828,8 +831,10 @@ describe('Comprehensive Financial Terminal Stress Test Suite', () => {
         ]
       };
       const result = computeSectorValuationAndDrivers(indData, '50.0', 'INDUSTRIAL');
-      assert.equal(result.valuation.fair_value, 0.05); // True liquidation floor, not arbitrary fraction of market price
-      assert.ok(result.valuation.formula_display.includes('TTK 376'));
+      assert.ok(result.valuation.fair_value > 0);
+      assert.notEqual(result.valuation.fair_value, 0.05); // No arbitrary 0.05 TL floor
+      assert.equal(result.valuation.final_decision, 'ALMA');
+      assert.ok(result.valuation.boundary_warning.includes('özkaynak'));
     });
 
     it('parsePeriodSortKey handles cross-format periods and year offsets', () => {

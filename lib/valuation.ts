@@ -2878,6 +2878,7 @@ export function computeSectorValuationAndDrivers(
   });
 
   const latest = sortedHistory.length > 0 ? sortedHistory[sortedHistory.length - 1] : null;
+  const periodAnnualFactor = getAnnualizationFactor(latest?.period);
 
   // 1 yıl önceki dönemi akıllı ara (örn 2026/Q2 -> 2025/Q2)
   let prevYearItem: any = null;
@@ -3275,17 +3276,14 @@ export function computeSectorValuationAndDrivers(
         targetMultipleStr = `İskontolu Sıkıntılı PD/DD 0,146x`;
         targetMultipleExpl = `Negatif FAVÖK (${currentEbitda.toLocaleString('tr-TR')} Bin TL) nedeniyle FD/FAVÖK çarpanı uygulanamaz (N/A). Değerleme, sermaye erozyonu ve yüksek borç yükü bazlı İskontolu Sıkıntılı Defter Değeri (0,146x PD/DD) ile yapılmıştır.`;
       } else {
-        // Canlı piyasa çarpanı varsa (İş Yatırım) dengele
-        const liveEvEbitda = parseFinancialNumber(extractedData?.marketMultiples?.ev_ebitda);
-        let derivedMultiple = baseMultiple * evaAdj;
-        if (liveEvEbitda !== null && liveEvEbitda >= 3.0 && liveEvEbitda <= 15.0) {
-          derivedMultiple = (derivedMultiple * 0.60) + (liveEvEbitda * 0.40);
-        }
+        // Katman 1 Saf İçsel Değerleme: Canlı piyasa fiyatından ve piyasa çarpanından %100 BAĞIMSIZDIR (Invariance).
+        // liveEvEbitda içsel hedef çarpanı belirlemez; piyasa kıyaslaması Katman 3'te bağımsız olarak yapılır.
+        const derivedMultiple = baseMultiple * evaAdj;
 
         targetMultipleNum = Number(Math.max(4.0, Math.min(9.5, derivedMultiple)).toFixed(1));
         targetMultipleStr = `FD/FAVÖK ${targetMultipleNum.toString().replace('.', ',')}x`;
         const waccExpl = latest?.is_tms29 ? `Reel WACC %${benchmarkWacc.toFixed(1)}` : `WACC %${benchmarkWacc.toFixed(1)}`;
-        targetMultipleExpl = `${sectorName} tabanı (${baseMultiple.toFixed(1)}x), sermaye maliyeti (${waccExpl}) ve ROIC kârlılığı bazlı hedef çarpan`;
+        targetMultipleExpl = `${sectorName} tabanı (${baseMultiple.toFixed(1)}x), sermaye maliyeti (${waccExpl}) ve ROIC kârlılığı bazlı içsel hedef çarpan`;
       }
     }
   }
@@ -3342,19 +3340,30 @@ export function computeSectorValuationAndDrivers(
   const eqScaleSample = Math.abs(parseFinancialNumber(latest?.equity) ?? 0);
   const revScaleSample = Math.abs(parseFinancialNumber(latest?.revenue ?? latest?.written_premiums) ?? 0);
   const paidCapSample = Math.abs(parseFinancialNumber(latest?.paid_in_capital) ?? 0);
-  const isClearlyThousands =
-    (paidCapSample > 0 && paidCapSample < 10_000_000 && shareCount >= 5_000_000) ||
-    (eqScaleSample > 0 && eqScaleSample < 250_000_000 && (revScaleSample === 0 || revScaleSample < 250_000_000));
   
-  const isAlreadyTamTl = !isClearlyThousands && ((eqScaleSample >= 250_000_000) || 
-                         (revScaleSample >= 250_000_000) ||
-                         (normCurr.includes('tam')));
-
   let unitScale = 1;
-  if (!isAlreadyTamTl) {
-    if (normCurr.includes('bin') || normCurr.includes('thousand') || isClearlyThousands) {
-      unitScale = 1000;
+  let unitScaleUncertain = false;
+
+  if (normCurr.includes('bin') || normCurr.includes('thousand')) {
+    unitScale = 1000;
+  } else if (normCurr.includes('tam') || normCurr.includes('birim')) {
+    unitScale = 1;
+  } else if (paidCapSample > 0 && shareCount > 0) {
+    // Çapraz tutarlılık kontrolü: Nominal lot denkliği (BIST: 1 TL nominal = 1 lot)
+    const lotRatio = paidCapSample / shareCount;
+    if (Math.abs(lotRatio - 1.0) < 0.20) {
+      unitScale = 1; // Tam TL
+    } else if (Math.abs(lotRatio - 0.001) < 0.00025) {
+      unitScale = 1000; // Bin TL
+    } else if (Math.abs(lotRatio - 0.000001) < 0.00000025) {
+      unitScale = 1000000; // Milyon TL
+    } else if (lotRatio > 0.02 && lotRatio < 0.80) {
+      // Nominal sermaye ile pay adedi arasında standart dışı oran -> belirsiz
+      unitScaleUncertain = true;
     }
+  } else if (eqScaleSample > 0 && eqScaleSample < 50_000_000 && revScaleSample < 50_000_000 && shareCount > 100_000_000) {
+    // Aşırı bariz Bin TL durumu (örneğin 500M hissesi olan şirketin özkaynağı 30 bin görünüyorsa)
+    unitScale = 1000;
   }
 
   // Borsa İstanbul'da 1 TL nominal Ödenmiş Sermaye = 1 Adet Pay (Lot).
@@ -3363,8 +3372,6 @@ export function computeSectorValuationAndDrivers(
   const rawEffectiveShareCount = (paidCapShares && paidCapShares >= 1000000) ? paidCapShares : shareCount;
   const effectiveShareCount = (rawEffectiveShareCount && rawEffectiveShareCount > 0) ? rawEffectiveShareCount : 180000000;
 
-  const periodAnnualFactor = getAnnualizationFactor(latest?.period);
-
   if (sector === 'INSURANCE' || sector === 'BANKING') {
     modelName = 'Gordon Büyüme & 12 Aylık İleriye Dönük Defter Değeri Modeli';
     const totalEquity = parseFinancialNumber(latest?.equity) ?? 12720000;
@@ -3372,9 +3379,9 @@ export function computeSectorValuationAndDrivers(
 
     if (totalEquityFull <= 0) {
       isInsolvent = true;
-      boundaryWarning = 'Şirket özkaynakları negatiftir (TTK 376 Borca Batıklık). Hisse başı adil değer tasfiye/risk tabanındadır.';
-      fairValue = 0.05;
-      formulaStr = `Özkaynaklar Negatif (TTK 376) = ${totalEquityFull.toLocaleString('tr-TR')} TL (Tasfiye Değeri = 0,05 TL)`;
+      boundaryWarning = 'Şirket muhasebesel özkaynakları negatiftir. Defter değeri ve Gordon büyüme modeli uygulanamaz (N/A).';
+      fairValue = null as any;
+      formulaStr = `Özkaynaklar Negatif = ${totalEquityFull.toLocaleString('tr-TR')} TL (Gordon Modeli: N/A)`;
     } else {
       const bookValuePerShare = totalEquityFull / effectiveShareCount;
       // 12 Aylık İleriye Dönük Defter Değeri (Forward BVPS = BVPS_0 * (1 + Sürdürülebilir Özkaynak Büyümesi))
@@ -3396,9 +3403,9 @@ export function computeSectorValuationAndDrivers(
 
     if (totalEquityFull <= 0) {
       isInsolvent = true;
-      boundaryWarning = 'Holding özkaynakları negatiftir (TTK 376 Borca Batıklık).';
-      fairValue = 0.05;
-      formulaStr = `Özkaynaklar Negatif (TTK 376) = ${totalEquityFull.toLocaleString('tr-TR')} TL`;
+      boundaryWarning = 'Holding muhasebesel özkaynakları negatiftir. Net Aktif Değeri (NAD) modeli uygulanamaz (N/A).';
+      fairValue = null as any;
+      formulaStr = `Özkaynaklar Negatif = ${totalEquityFull.toLocaleString('tr-TR')} TL (NAD: N/A)`;
     } else {
       const navPerShare = totalEquityFull / effectiveShareCount;
       const forwardEquityGrowth = roe > 0 ? (roe / 100) * 0.85 : Math.max(-0.50, (roe / 100) * periodAnnualFactor);
@@ -3415,9 +3422,9 @@ export function computeSectorValuationAndDrivers(
 
     if (totalEquityFull <= 0) {
       isInsolvent = true;
-      boundaryWarning = 'GYO özkaynakları negatiftir (TTK 376 Borca Batıklık).';
-      fairValue = 0.05;
-      formulaStr = `Özkaynaklar Negatif (TTK 376) = ${totalEquityFull.toLocaleString('tr-TR')} TL`;
+      boundaryWarning = 'GYO muhasebesel özkaynakları negatiftir. Portföy ekspertiz modeli uygulanamaz (N/A).';
+      fairValue = null as any;
+      formulaStr = `Özkaynaklar Negatif = ${totalEquityFull.toLocaleString('tr-TR')} TL (NAD: N/A)`;
     } else {
       const navPerShare = totalEquityFull / effectiveShareCount;
       const forwardNavGrowth = 0.25; // Portföy ekspertiz beklentisi
@@ -3439,10 +3446,22 @@ export function computeSectorValuationAndDrivers(
     const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
 
     if (totalEquityFull <= 0) {
-      isInsolvent = true;
-      boundaryWarning = 'Şirket özkaynakları negatiftir (TTK 376 Borca Batıklık). Hisse başı adil değer tasfiye/risk tabanına çekilmiştir.';
-      fairValue = 0.05;
-      formulaStr = `Özkaynaklar Negatif (TTK 376) = ${totalEquityFull.toLocaleString('tr-TR')} TL (Risk Tabanı)`;
+      const clampedRevGrowth = Math.min(0.85, Math.max(-0.40, revGrowth / 100));
+      const forwardRev = revFull > 0 ? revFull * (1 + clampedRevGrowth) : 0;
+      const evSalesMult = Math.max(2.5, Math.min(6.5, targetMultipleNum));
+      const firmValue = forwardRev * evSalesMult;
+      const equityValue = firmValue - netDebt;
+      if (equityValue <= 0) {
+        isInsolvent = true;
+        boundaryWarning = 'Firma Değeri Net Borcu karşılayamamaktadır (Özkaynak Değeri <= 0).';
+        fairValue = null as any;
+        formulaStr = `Firma Değeri (${firmValue.toLocaleString('tr-TR')} TL) <= Net Borç (${netDebt.toLocaleString('tr-TR')} TL) -> İçsel Değer: N/A`;
+      } else {
+        const salesPerShare = equityValue / effectiveShareCount;
+        fairValue = Number(Math.max(0.5, salesPerShare).toFixed(2));
+        boundaryWarning = 'Şirket muhasebesel özkaynakları negatiftir. Değerleme FD/Satışlar operasyonel değeri üzerinden yapılmıştır.';
+        formulaStr = `12A İleri FD/Satışlar: ${salesPerShare.toFixed(2).replace('.', ',')} TL (Özkaynak Negatif, PD/DD: N/A) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+      }
     } else {
       const clampedRevGrowth = Math.min(0.85, Math.max(-0.40, revGrowth / 100));
       const forwardRev = revFull > 0 ? revFull * (1 + clampedRevGrowth) : 0;
@@ -3513,43 +3532,53 @@ export function computeSectorValuationAndDrivers(
     debtDiscountPct = 0;
     evaHaircutApplied = false;
 
+    // Dinamik Büyüme & Çeyreksel Tahmin Revizyonu:
+    const rawRevG = revGrowth / 100;
+    const rawNetG = netGrowth / 100;
+    const clampedRevGrowth = Math.min(0.75, Math.max(-0.40, rawRevG));
+    const clampedNetGrowth = Math.min(0.80, Math.max(-0.50, rawNetG));
+
+    // Sermaye Verimliliği ve Borçluluk Dinamikleri
+    const currentRoic = parseFinancialNumber(latest?.roic);
+    const currentWacc = parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc ?? 28.0);
+    const evaSpread = (currentRoic !== null && currentWacc !== null) ? (currentRoic - currentWacc) : null;
+    const netDebtToEbitda = (ebitdaFull > 0 && netDebt > 0) ? (netDebt / ebitdaFull) : 0;
+
+    // 1. Sermaye Verimliliği Cezası (EVA Destruction Haircut): ROIC < WACC veya ROIC <= 0
+    if (evaSpread !== null && (evaSpread < 0 || (currentRoic !== null && currentRoic <= 0))) {
+      evaHaircutApplied = true;
+      evaDiscountPct = Math.min(0.45, Math.max(0.12, (Math.abs(evaSpread) / 100) * 1.35));
+    }
+
+    // 2. Finansal Borç Sıkıntısı Kaldıraç Takibi (Net Borç / FAVÖK > 4.0x)
+    if (netDebtToEbitda > 4.0) {
+      debtDiscountPct = Math.min(0.35, Number(((netDebtToEbitda - 4.0) * 0.08).toFixed(3)));
+    }
+
+    // 1. Sütun: 12A İleriye Dönük FD/FAVÖK Operasyonel Değeri
+    const baseForwardEbitda = ebitdaFull > 0 ? ebitdaFull * (1 + clampedRevGrowth) : 0;
+    const forwardEbitda = evaHaircutApplied ? baseForwardEbitda * (1 - evaDiscountPct) : baseForwardEbitda;
+    const evEbitdaEquity = forwardEbitda > 0 ? (forwardEbitda * targetMultipleNum - netDebt) : 0;
+    const evEbitdaPerShare = evEbitdaEquity > 0 ? (evEbitdaEquity / effectiveShareCount) : 0;
+
     if (totalEquityFull <= 0) {
-      isInsolvent = true;
-      boundaryWarning = 'Şirket özkaynakları negatiftir (TTK 376 Borca Batıklık). Hisse başı adil değer tasfiye/risk tabanına çekilmiştir.';
-      fairValue = 0.05;
-      formulaStr = `Özkaynaklar Negatif (TTK 376) = ${totalEquityFull.toLocaleString('tr-TR')} TL (Tasfiye Değeri = 0,05 TL)`;
+      // NEGATİF ÖZKAYNAK DURUMU:
+      // Defter değeri negatiftir (HBDD < 0). Gordon ve PD/DD uygulanamaz.
+      // Ancak operasyonel Firma Değeri (EV) nakit akışlarından üretilebilir.
+      if (evEbitdaEquity <= 0) {
+        // Firma Değeri net borcu dahi karşılayamıyor (Equity Value <= 0)
+        isInsolvent = true;
+        boundaryWarning = 'Firma Değeri Net Borcu karşılayamamaktadır (Özkaynak Değeri <= 0). İçsel hisse değeri uygulanamaz (N/A).';
+        fairValue = null as any;
+        formulaStr = `Firma Değeri (${(forwardEbitda * targetMultipleNum).toLocaleString('tr-TR')} TL) <= Net Borç (${netDebt.toLocaleString('tr-TR')} TL) -> İçsel Değer: N/A`;
+      } else {
+        // Turnaround: EV net borçtan büyük, pozitif operasyonel özkaynak değeri üretildi!
+        fairValue = Number(evEbitdaPerShare.toFixed(2));
+        modelName = 'İleriye Dönük İskontolu FAVÖK Operasyonel Değeri Modeli (Negatif Özkaynak Düzeltmeli)';
+        formulaStr = `Firma Değeri: ${(forwardEbitda * targetMultipleNum).toLocaleString('tr-TR')} TL - Net Borç: ${netDebt.toLocaleString('tr-TR')} TL = Özkaynak Değeri: ${evEbitdaEquity.toLocaleString('tr-TR')} TL -> Hisse Başı Değer: ${fairValue.toFixed(2).replace('.', ',')} TL`;
+        boundaryWarning = 'Şirket muhasebesel özkaynakları negatiftir. PD/DD ve Gordon modelleri uygulanamaz (N/A); adil değer yalnızca operasyonel nakit üretim gücü (FD/FAVÖK) ve borç köprüsü üzerinden türetilmiştir.';
+      }
     } else {
-      // Dinamik Büyüme & Çeyreksel Tahmin Revizyonu:
-      // Şirket daralıyorsa veya marj kaybediyorsa pozitif büyüme dayatılmaz
-      const rawRevG = revGrowth / 100;
-      const rawNetG = netGrowth / 100;
-      const clampedRevGrowth = Math.min(0.75, Math.max(-0.40, rawRevG));
-      const clampedNetGrowth = Math.min(0.80, Math.max(-0.50, rawNetG));
-
-      // Sermaye Verimliliği ve Borçluluk Dinamikleri
-      const currentRoic = parseFinancialNumber(latest?.roic);
-      const currentWacc = parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc ?? 28.0);
-      const evaSpread = (currentRoic !== null && currentWacc !== null) ? (currentRoic - currentWacc) : null;
-      const netDebtToEbitda = (ebitdaFull > 0 && netDebt > 0) ? (netDebt / ebitdaFull) : 0;
-
-      // 1. Sermaye Verimliliği Cezası (EVA Destruction Haircut): ROIC < WACC veya ROIC <= 0
-      if (evaSpread !== null && (evaSpread < 0 || (currentRoic !== null && currentRoic <= 0))) {
-        evaHaircutApplied = true;
-        evaDiscountPct = Math.min(0.45, Math.max(0.12, (Math.abs(evaSpread) / 100) * 1.35));
-      }
-
-      // 2. Finansal Borç Sıkıntısı Cezası (Financial Distress Adjustment): Net Borç / FAVÖK > 4.0x
-      if (netDebtToEbitda > 4.0) {
-        debtDiscountPct = Math.min(0.35, Number(((netDebtToEbitda - 4.0) * 0.08).toFixed(3)));
-      }
-
-      // 1. Sütun: 12A İleriye Dönük FD/FAVÖK Operasyonel Değeri
-      // KRİTİK FİNANSAL KURAL: Negatif FAVÖK ortamında asla hayali FAVÖK marjı uydurulamaz!
-      const baseForwardEbitda = ebitdaFull > 0 ? ebitdaFull * (1 + clampedRevGrowth) : 0;
-      const forwardEbitda = evaHaircutApplied ? baseForwardEbitda * (1 - evaDiscountPct) : baseForwardEbitda;
-      const evEbitdaEquity = forwardEbitda > 0 ? (forwardEbitda * targetMultipleNum - netDebt) : 0;
-      const evEbitdaPerShare = evEbitdaEquity > 0 ? (evEbitdaEquity / effectiveShareCount) : 0;
-
       // 2. Sütun: 12A İleriye Dönük F/K (Net Kâr) Değeri
       const baseForwardNet = netFull > 0 ? netFull * (1 + clampedNetGrowth) : 0;
       const forwardNet = evaHaircutApplied ? baseForwardNet * (1 - evaDiscountPct * 0.8) : baseForwardNet;
@@ -3563,30 +3592,27 @@ export function computeSectorValuationAndDrivers(
       if (ebitdaFull <= 0) {
         // OPERASYONEL ZARAR & SIKINTILI ŞİRKET VARLIK TABANI MODELİ (DISTRESSED TURNAROUND):
         // PURE FUNDAMENTAL VALUATION: Hisse fiyatından (currentPrice) KESİNLİKLE bağımsızdır!
-        // 12 aylık beklenen net zarar özkaynaktan düşülerek ileri defter değeri türetilir
         const forwardEquity = totalEquityFull + netFull;
         const forwardBvps = totalEquityFull > 0 ? Math.max(0, forwardEquity / effectiveShareCount) : 0;
 
-        // 1. Sermaye Erozyon Oranı (Capital Burn Rate): Şirketin 12 aylık zararı özkaynakların yüzde kaçını eritiyor?
+        // 1. Sermaye Erozyon Oranı (Capital Burn Rate)
         const erosionRate = totalEquityFull > 0 ? Math.min(0.90, Math.abs(netFull) / totalEquityFull) : 0.90;
         const capitalRetentionFactor = Math.max(0.10, 1.0 - erosionRate);
 
-        // 2. Sermaye Yapısı Güvencesi (Equity Cushion / Solvency Factor): Varlık ve borç yükü dengesi
+        // 2. Sermaye Yapısı Güvencesi (Equity Cushion / Solvency Factor)
         const safeNetDebt = Math.max(0, netDebt);
         const totalCapital = totalEquityFull + safeNetDebt;
         const equityWeight = totalCapital > 0 ? (totalEquityFull / totalCapital) : 0.20;
 
-        // 3. Kısa Vadeli Likidite Güvencesi (Working Capital Buffer): Cari Oran gücü
+        // 3. Kısa Vadeli Likidite Güvencesi (Working Capital Buffer)
         const latestCr = parseFinancialNumber(latest?.current_ratio);
         const latestCa = parseFinancialNumber(latest?.current_assets);
         const latestCl = parseFinancialNumber(latest?.current_liabilities);
         const computedCr = (latestCa !== null && latestCl !== null && latestCl > 0) ? (latestCa / latestCl) : (latestCr ?? 1.0);
         const liquidityBuffer = Math.min(1.0, Math.max(0.35, computedCr / 1.5));
 
-        // 4. Sanayi Varlık Tabanı Çevrim Çarpanı (Base Tangible Asset Turnaround Multiple):
+        // 4. Sanayi Varlık Tabanı Çevrim Çarpanı
         const baseMultiple = 0.378;
-
-        // Hak Edilen Sıkıntılı PD/DD Çarpanı: Tamamen bilanço dinamiklerinin çarpımıdır
         const justifiedPb = Number((baseMultiple * capitalRetentionFactor * equityWeight * liquidityBuffer).toFixed(3));
 
         fairValue = Number((forwardBvps * justifiedPb).toFixed(2));
@@ -3596,17 +3622,15 @@ export function computeSectorValuationAndDrivers(
         formulaStr = `İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL) × Hak Edilen Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
         gordonFormulaText = `12A İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL [Cari HBDD: ${bvps.toFixed(2).replace('.', ',')} TL eksi 12A net zarar erozyonu]) × Hak Edilen Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x [Taban: ${baseMultiple}x × Sermaye Korunma: %${(capitalRetentionFactor * 100).toFixed(1)} × Özkaynak Ağırlığı: %${(equityWeight * 100).toFixed(1)} × Likidite Tamponu: %${(liquidityBuffer * 100).toFixed(1)}]) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
 
-        // Drivers güncellemesi
         drivers.target_multiple.numericValue = justifiedPb;
         drivers.target_multiple.value = `Hak Edilen Sıkıntılı PD/DD ${justifiedPb.toString().replace('.', ',')}x`;
-        drivers.target_multiple.sourceExplanation = `Negatif FAVÖK ve operasyonel zarar nedeniyle FD/FAVÖK çarpanı uygulanamaz (N/A). Hisse piyasa fiyatından tamamen bağımsız olarak; sermaye erozyonu (%${(erosionRate * 100).toFixed(1)}), borç yükü (Özkaynak/Toplam Sermaye: %${(equityWeight * 100).toFixed(1)}) ve çalışma sermayesi likiditesi (${computedCr.toFixed(2)}x Cari Oran) üzerinden Hak Edilen Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) hesaplanmıştır.`;
+        drivers.target_multiple.sourceExplanation = `Negatif FAVÖK ve operasyonel zarar nedeniyle FD/FAVÖK çarpanı uygulanamaz (N/A). Varlık tabanlı Hak Edilen Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) hesaplanmıştır.`;
       } else {
         // Standart Kârlı Sanayi Şirketi Defter Değeri
         const forwardEquityGrowth = roe > 0 ? Math.min(0.75, Math.max(0.10, (roe / 100) * 0.85)) : 0;
         const forwardBvps = Math.max(0, bvps * (1 + forwardEquityGrowth));
         let justifiedPb = 1.0;
         if (evaHaircutApplied || (roe != null && roe < 8)) {
-          // Değer yıkan şirketlerde (ROIC < WACC) PD/DD çarpanı kesinlikle 1.0x altında kalmalıdır (Warren Buffett / Stern Stewart kuralı)
           justifiedPb = Math.max(0.32, Math.min(0.85, (Math.max(0, roe) / Math.max(15, currentWacc || 25)) * 0.85));
         } else if (roe > 25) {
           justifiedPb = Math.min(3.2, Math.max(1.3, roe / 22));
@@ -3627,38 +3651,36 @@ export function computeSectorValuationAndDrivers(
         if (validComponents.length > 0) {
           const totalW = validComponents.reduce((acc, c) => acc + c.weight, 0);
           hybridFair = validComponents.reduce((acc, c) => acc + (c.val * (c.weight / totalW)), 0);
-          // Değer yıkan şirketlerde defter değeri tabanı zorlanmaz
           if (!evaHaircutApplied && pbPerShare > 0 && hybridFair < pbPerShare * 0.75) {
             hybridFair = (hybridFair * 0.4) + (pbPerShare * 0.6);
           }
         }
 
-        // Finansal Borç Sıkıntısı İndirimi (Net Borç / FAVÖK > 4.0x)
-        if (debtDiscountPct > 0) {
-          hybridFair = hybridFair * (1 - debtDiscountPct);
-        }
-
+        // Katman 1 Prensibi: Net borç zaten EV'den nominal olarak düşülmüştür (EV - NetDebt).
+        // Equity üzerinden mükerrer borç kesintisi yapılmaz; yüksek kaldıraç Katman 2/3'te rozet ve stres fiyatı olarak sunulur.
         fairValue = Number(Math.max(0.5, hybridFair).toFixed(2));
         const haircutNote = evaHaircutApplied ? ` [EVA İndirimi: -%${(evaDiscountPct * 100).toFixed(0)}]` : '';
-        const debtNote = debtDiscountPct > 0 ? ` [Borç Sıkıntısı: -%${(debtDiscountPct * 100).toFixed(0)}]` : '';
+        const debtNote = debtDiscountPct > 0 ? ` [Kritik Kaldıraç Takibi: Net Borç/FAVÖK ${(netDebtToEbitda).toFixed(1)}x]` : '';
         formulaStr = `12A İleri FAVÖK Değeri: ${evEbitdaPerShare.toFixed(2).replace('.', ',')} TL | 12A İleri Defter Değeri: ${pbPerShare.toFixed(2).replace('.', ',')} TL ➔ Hibrit Adil Değer = ${fairValue.toFixed(2).replace('.', ',')} TL${haircutNote}${debtNote}`;
       }
     }
   }
 
   const safeCurrentPrice = (currentPrice && currentPrice > 0) ? currentPrice : 1.0;
-  const discountPct = Number((((fairValue - safeCurrentPrice) / safeCurrentPrice) * 100).toFixed(1));
+  const discountPct = (fairValue !== null && fairValue > 0)
+    ? Number((((fairValue - safeCurrentPrice) / safeCurrentPrice) * 100).toFixed(1))
+    : 0;
   // Ayı Senaryosu (Taban): Modelin stres senaryosu hedef fiyatı
   const latestEbitdaForScenario = parseFinancialNumber(latest?.ebitda) ?? 0;
   const isDistressedLoss = sector === 'INDUSTRIAL' && latestEbitdaForScenario <= 0;
-  const bearPrice = isInsolvent
-    ? 0.02
+  const bearPrice: number = (isInsolvent || fairValue === null || fairValue <= 0)
+    ? 0
     : isDistressedLoss
     ? Number((fairValue * 0.64).toFixed(2))
     : Number((fairValue * 0.70).toFixed(2));
   // Boğa Senaryosu (Tavan): Modelin katalizör ve büyüme odaklı iyimser senaryo hedef fiyatı
-  const bullPrice = isInsolvent
-    ? 0.10
+  const bullPrice: number = (isInsolvent || fairValue === null || fairValue <= 0)
+    ? 0
     : isDistressedLoss
     ? Number((fairValue * 1.548).toFixed(2))
     : Number((fairValue * 1.30).toFixed(2));

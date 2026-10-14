@@ -279,7 +279,9 @@ export class IsYatirimApiAdapter {
       paid_in_capital = getValByCode('2NA', '2MEA') ?? getValByDesc('ödenmiş sermaye', 'çıkarılmış sermaye');
 
       if (short_term_debt !== null || long_term_debt !== null || cash_and_equivalents !== null) {
-        net_debt = (short_term_debt || 0) + (long_term_debt || 0) - (cash_and_equivalents || 0) - (financial_assets_insured || 0);
+        const safeCash = cash_and_equivalents || 0;
+        const safeFinAssets = (financial_assets_insured && financial_assets_insured !== safeCash) ? financial_assets_insured : 0;
+        net_debt = (short_term_debt || 0) + (long_term_debt || 0) - safeCash - safeFinAssets;
       }
 
       // 5. GELİR TABLOSU:

@@ -629,20 +629,43 @@ export const BIST_UTILITIES_TELCO_TICKERS = [
   'KAREL',
 ];
 
+export const BIST_LEASING_TICKERS = [
+  'VAKFN', // Vakıf Finansal Kiralama A.Ş. (Leasing)
+  'ISFIN', // İş Finansal Kiralama A.Ş. (Leasing)
+  'QNBFL', // QNB Finansleasing (Leasing)
+  'SEKFK', // Şeker Finansal Kiralama A.Ş. (Leasing)
+];
+
+export const BIST_FACTORING_TICKERS = [
+  'GARFA', // Garanti Faktoring A.Ş.
+  'CRDFA', // Creditwest Faktoring A.Ş.
+  'LIDFA', // Lider Faktoring A.Ş.
+  'ULUFA', // Ulusal Faktoring A.Ş.
+];
+
+export const BIST_BROKERAGE_TICKERS = [
+  'ISMEN', // İş Yatırım Menkul Değerler A.Ş.
+  'INFO',  // İnfo Yatırım Menkul Değerler A.Ş.
+  'OSMEN', // Osmanlı Yatırım Menkul Değerler A.Ş.
+  'UNLU',  // Ünlü & Co Menkul Değerler A.Ş.
+];
+
+export type FinancialServicesSubsector = 'LEASING' | 'FACTORING' | 'BROKERAGE_AUM' | 'INVESTMENT_HOLDING';
+
+export function getFinancialServicesSubsector(ticker: string): FinancialServicesSubsector | null {
+  const clean = String(ticker || '').trim().toUpperCase();
+  if (BIST_LEASING_TICKERS.includes(clean)) return 'LEASING';
+  if (BIST_FACTORING_TICKERS.includes(clean)) return 'FACTORING';
+  if (BIST_BROKERAGE_TICKERS.includes(clean)) return 'BROKERAGE_AUM';
+  if (clean === 'GSDHO') return 'INVESTMENT_HOLDING';
+  return null;
+}
+
 export const BIST_FINANCIAL_SERVICES_TICKERS = [
-  'VAKFN',
+  ...BIST_LEASING_TICKERS,
+  ...BIST_FACTORING_TICKERS,
+  ...BIST_BROKERAGE_TICKERS,
   'GSDHO',
-  'ISFIN',
-  'GARFA',
-  'CRDFA',
-  'SEKFK',
-  'LIDFA',
-  'ULUFA',
-  'QNBFL',
-  'ISMEN',
-  'INFO',
-  'OSMEN',
-  'UNLU',
 ];
 
 export const BIST_TECH_TICKERS = [
