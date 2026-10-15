@@ -24,10 +24,10 @@ import https from 'node:https';
 const isYatirimHttpsAgent = new https.Agent({
   rejectUnauthorized: process.env.NODE_ENV === 'production',
   keepAlive: true,
-  timeout: 4000
+  timeout: 30000
 });
 
-async function fetchResilientJson(urlStr: string, timeoutMs = 3500): Promise<any> {
+async function fetchResilientJson(urlStr: string, timeoutMs = 25000): Promise<any> {
   return new Promise((resolve) => {
     let settled = false;
     let req: any = null;
@@ -274,7 +274,7 @@ export async function fetchLiveBistPrice(ticker: string): Promise<{ price: numbe
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}.IS?interval=1mo&range=5y`;
   
   try {
-    const data = await fetchResilientJson(url, 3000);
+    const data = await fetchResilientJson(url, 8000);
 
     if (data) {
       const result = data?.chart?.result?.[0];
@@ -418,34 +418,34 @@ async function saveSupabaseMaliTablo(ticker: string, history: FinancialHistoryIt
 }
 
 /**
- * İş Yatırım tekil parti sorgusu (3500ms sıkı zaman aşımı, tekil hızlı istek, seri çift zaman aşımı gecikmesi yok)
+ * İş Yatırım tekil parti sorgusu (25s genişletilmiş zaman aşımı, otomatik yeniden deneme)
  */
 async function fetchIsYatirimSingleBatch(
   ticker: string,
   financialGroup: string,
   params: BatchSpec['params'],
-  delayMs = 0
+  retries = 1
 ): Promise<any[]> {
-  if (delayMs > 0) {
-    await new Promise(r => setTimeout(r, delayMs));
-  }
   const q = `companyCode=${ticker}&exchange=TRY&financialGroup=${financialGroup}&year1=${params.year1}&period1=${params.period1}&year2=${params.year2}&period2=${params.period2}&year3=${params.year3}&period3=${params.period3}&year4=${params.year4}&period4=${params.period4}`;
   const url = `https://www.isyatirim.com.tr/_layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo?${q}`;
 
-  try {
-    const resilientData = await fetchResilientJson(url, 3500);
-    if (resilientData && Array.isArray(resilientData.value)) {
-      return resilientData.value;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const resilientData = await fetchResilientJson(url, 25000);
+      if (resilientData && Array.isArray(resilientData.value) && resilientData.value.length > 0) {
+        return resilientData.value;
+      }
+    } catch {}
+    if (attempt < retries) {
+      await new Promise(r => setTimeout(r, 600));
     }
-    return [];
-  } catch {
-    return [];
   }
+  return [];
 }
 
 /**
  * İş Yatırım tüm ~600 BIST şirketleri için dinamik muhasebe grubu keşfi (Auto-Discovery)
- * ve çok yıllı kesintisiz çeyreklik parti çekim motoru (aday grupları eşzamanlı/paralel test eder)
+ * ve 20 çeyreklik tam eşzamanlı/paralel resmi mali tablo çekim motoru
  */
 export async function fetchIsYatirimMaliTabloBatches(
   ticker: string,
@@ -463,65 +463,50 @@ export async function fetchIsYatirimMaliTabloBatches(
     ? [preferredGroup, ...defaultCandidates.filter(g => g !== preferredGroup)].slice(0, 2)
     : defaultCandidates.slice(0, 2);
 
-  let activeGroup: ('XI_29' | 'UFRS' | 'UFRS_K') | null = null;
-  let batch1Rows: any[] = [];
-  let batch2Rows: any[] = [];
+  // 1. Aşama: Eğer preferredGroup biliniyorsa tüm 5 partiyi doğrudan tam paralel çek (10 saniyede 20 çeyrek)
+  if (preferredGroup) {
+    const batchRows = await Promise.all(
+      BATCH_SPECS.map(spec => fetchIsYatirimSingleBatch(ticker, preferredGroup, spec.params))
+    );
+    const hasAnyRows = batchRows.some(rows => rows && rows.length >= 5);
+    if (hasAnyRows) {
+      const rowsByBatch = BATCH_SPECS.map((spec, idx) => ({ spec, rows: batchRows[idx] || [] }));
+      return { rowsByBatch, activeGroup: preferredGroup };
+    }
+  }
 
-  // 1. Aşama: Doğru muhasebe grubunu paralel test ederek otomatik keşfet (Auto-Discovery)
-  // Gecikmeli raporlayan şirketleri de kaçırmamak için aday grupları hem BATCH_SPECS[0] hem BATCH_SPECS[1] ile sorgula
+  // 2. Aşama: Eğer preferredGroup yoksa veya ilk denemede boş geldiyse aday grupları probe et
   const probeGroup = async (group: ('XI_29' | 'UFRS' | 'UFRS_K')) => {
-    const [rows0, rows1] = await Promise.all([
-      fetchIsYatirimSingleBatch(ticker, group, BATCH_SPECS[0].params),
-      fetchIsYatirimSingleBatch(ticker, group, BATCH_SPECS[1].params)
-    ]);
-    if ((rows0 && rows0.length >= 5) || (rows1 && rows1.length >= 5)) {
-      return { group, rows0: rows0 || [], rows1: rows1 || [] };
+    const rows0 = await fetchIsYatirimSingleBatch(ticker, group, BATCH_SPECS[0].params);
+    if (rows0 && rows0.length >= 5) {
+      return { group, rows0 };
+    }
+    const rows1 = await fetchIsYatirimSingleBatch(ticker, group, BATCH_SPECS[1].params);
+    if (rows1 && rows1.length >= 5) {
+      return { group, rows1 };
     }
     throw new Error(`Grup ${group} için veri bulunamadı`);
   };
 
-  let chosenProbe: { group: ('XI_29' | 'UFRS' | 'UFRS_K'); rows0: any[]; rows1: any[] } | null = null;
-
+  let chosenGroup: ('XI_29' | 'UFRS' | 'UFRS_K') | null = null;
   try {
-    if (preferredGroup) {
-      try {
-        chosenProbe = await probeGroup(preferredGroup);
-      } catch {
-        const remainingCandidates = candidateGroups.filter(g => g !== preferredGroup);
-        if (remainingCandidates.length > 0) {
-          chosenProbe = await Promise.any(remainingCandidates.map(probeGroup));
-        }
-      }
-    } else {
-      chosenProbe = await Promise.any(candidateGroups.map(probeGroup));
-    }
+    const probeResult = await Promise.any(candidateGroups.map(probeGroup));
+    chosenGroup = probeResult.group;
   } catch {
-    chosenProbe = null;
+    chosenGroup = null;
   }
 
-  if (!chosenProbe) {
+  if (!chosenGroup) {
     return { rowsByBatch: [], activeGroup: null };
   }
 
-  activeGroup = chosenProbe.group;
-  batch1Rows = chosenProbe.rows0;
-  batch2Rows = chosenProbe.rows1;
-
-  // 2. Aşama: Keşfedilen aktif grup ile kalan partileri (BATCH_SPECS[2..4]) eşzamanlı çek
-  const rowsByBatch: { spec: BatchSpec; rows: any[] }[] = [];
-  rowsByBatch.push({ spec: BATCH_SPECS[0], rows: batch1Rows });
-  rowsByBatch.push({ spec: BATCH_SPECS[1], rows: batch2Rows });
-
-  const remainingPromises = BATCH_SPECS.slice(2).map((spec) =>
-    fetchIsYatirimSingleBatch(ticker, activeGroup!, spec.params)
+  // Seçilen grup ile tüm 5 partiyi tam paralel çek
+  const allRows = await Promise.all(
+    BATCH_SPECS.map(spec => fetchIsYatirimSingleBatch(ticker, chosenGroup!, spec.params))
   );
 
-  const remainingRows = await Promise.all(remainingPromises);
-  remainingRows.forEach((rows, idx) => {
-    rowsByBatch.push({ spec: BATCH_SPECS[idx + 2], rows });
-  });
-
-  return { rowsByBatch, activeGroup };
+  const rowsByBatch = BATCH_SPECS.map((spec, idx) => ({ spec, rows: allRows[idx] || [] }));
+  return { rowsByBatch, activeGroup: chosenGroup };
 }
 
 /**
@@ -900,16 +885,16 @@ export async function fetchAndAnalyzeBistCompany(
       const pPromise = fetchLiveBistPrice(ticker).then(res => { if (res && res.price > 0) priceData = res; }).catch(() => {});
       const mPromise = getIsYatirimMultiplesForTicker(ticker).then(res => { if (res) isMultiples = res; }).catch(() => {});
 
-      // Resmi çarpanlar anında (0ms) gelir; canlı hisse fiyatı için 6s tavan koyularak HTTP 504 engellenir
+      // Resmi çarpanlar anında (0ms) gelir; canlı hisse fiyatı için 8s tavan koyularak HTTP 504 engellenir
       await Promise.race([
         Promise.all([pPromise, mPromise]),
-        new Promise(r => setTimeout(r, 6000))
+        new Promise(r => setTimeout(r, 8000))
       ]);
     } catch {
       priceData = { price: 100.0, historicalPrices: {} };
     }
   } else {
-    // Önbellek yoksa canlı veri çekim hattının tamamına 8s sıkı tavanı koyularak HTTP 504 engellenir
+    // Önbellek yoksa resmi İş Yatırım ve piyasa verilerini tam olarak bekle (45s güvenlik kalkanı)
     const pricePromise = fetchLiveBistPrice(ticker)
       .then(res => { if (res && res.price > 0) priceData = res; })
       .catch(() => {});
@@ -928,7 +913,7 @@ export async function fetchAndAnalyzeBistCompany(
 
     await Promise.race([
       Promise.all([pricePromise, yahooPromise, isYatirimPromise, multiplesPromise]),
-      new Promise(r => setTimeout(r, 8000))
+      new Promise(r => setTimeout(r, 45000))
     ]);
   }
 
