@@ -895,16 +895,16 @@ export async function fetchAndAnalyzeBistCompany(
       const pPromise = fetchLiveBistPrice(ticker).then(res => { if (res && res.price > 0) priceData = res; }).catch(() => {});
       const mPromise = getIsYatirimMultiplesForTicker(ticker).then(res => { if (res) isMultiples = res; }).catch(() => {});
 
-      // Doğru kaynaktan resmi veriyi tam alabilmek için makul süre (20s) tanınır
+      // Resmi çarpanlar anında (0ms) gelir; canlı hisse fiyatı için 6s tavan koyularak HTTP 504 engellenir
       await Promise.race([
         Promise.all([pPromise, mPromise]),
-        new Promise(r => setTimeout(r, 20000))
+        new Promise(r => setTimeout(r, 6000))
       ]);
     } catch {
       priceData = { price: 100.0, historicalPrices: {} };
     }
   } else {
-    // Canlı veri çekim hattının tamamına resmi İş Yatırım tablolarının (1.65MB) tamamlanabilmesi için 30s süre tanınır
+    // Önbellek yoksa canlı veri çekim hattının tamamına 8s sıkı tavanı koyularak HTTP 504 engellenir
     const pricePromise = fetchLiveBistPrice(ticker)
       .then(res => { if (res && res.price > 0) priceData = res; })
       .catch(() => {});
@@ -923,7 +923,7 @@ export async function fetchAndAnalyzeBistCompany(
 
     await Promise.race([
       Promise.all([pricePromise, yahooPromise, isYatirimPromise, multiplesPromise]),
-      new Promise(r => setTimeout(r, 30000))
+      new Promise(r => setTimeout(r, 8000))
     ]);
   }
 

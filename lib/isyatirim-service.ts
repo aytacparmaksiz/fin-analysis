@@ -25,7 +25,8 @@ export interface IsYatirimStockMultiples {
 import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from './isyatirim-multiples-cache.ts';
 
 let cachedMultiples: Record<string, IsYatirimStockMultiples> = { ...OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE };
-let lastFetchTimestamp = 0;
+let lastFetchTimestamp = Date.now();
+let isFetchingInProgress = false;
 const CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 saat önbellek
 
 /**
@@ -95,18 +96,13 @@ async function fetchHttpsText(urlStr: string, timeoutMs = 30000): Promise<string
 }
 
 /**
- * İş Yatırım Temel Değerler ve Oranlar tablosunu çeker ve tüm hisseleri ayrıştırır
+ * İş Yatırım Temel Değerler ve Oranlar tablosunu arka planda çeker ve ayrıştırır
  */
-export async function fetchAllIsYatirimMultiples(): Promise<Record<string, IsYatirimStockMultiples>> {
-  const now = Date.now();
-  if (cachedMultiples && (now - lastFetchTimestamp < CACHE_TTL_MS)) {
-    return cachedMultiples;
-  }
-
+async function doFetchAllIsYatirimMultiples(): Promise<Record<string, IsYatirimStockMultiples>> {
   const url = 'https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/Temel-Degerler-Ve-Oranlar.aspx';
   
   try {
-    const html = await fetchHttpsText(url, 30000);
+    const html = await fetchHttpsText(url, 25000);
 
     if (!html) {
       console.warn('[IsYatirim] Canlı çarpan tablosu çekilemedi, önbellek kullanılıyor.');
@@ -184,7 +180,7 @@ export async function fetchAllIsYatirimMultiples(): Promise<Record<string, IsYat
 
     if (Object.keys(result).length > 50) {
       cachedMultiples = result;
-      lastFetchTimestamp = now;
+      lastFetchTimestamp = Date.now();
       console.log(`[IsYatirim] Başarıyla ${Object.keys(result).length} BIST şirketinin çarpanları yüklendi.`);
       return result;
     }
@@ -193,6 +189,28 @@ export async function fetchAllIsYatirimMultiples(): Promise<Record<string, IsYat
   }
 
   return cachedMultiples || {};
+}
+
+/**
+ * İş Yatırım Temel Değerler ve Oranlar tablosunu Stale-While-Revalidate ile anında getirir (0ms)
+ */
+export async function fetchAllIsYatirimMultiples(): Promise<Record<string, IsYatirimStockMultiples>> {
+  const now = Date.now();
+
+  // 1. Resmi çarpan önbelleğinde 630 hissenin verisi anında mevcuttur (0ms)
+  if (cachedMultiples && Object.keys(cachedMultiples).length > 0) {
+    // 2 saatlik TTL dolmuşsa arka planda sessizce güncelle (kullanıcıyı asla 22s bloklamaz)
+    if (now - lastFetchTimestamp >= CACHE_TTL_MS && !isFetchingInProgress) {
+      isFetchingInProgress = true;
+      doFetchAllIsYatirimMultiples().finally(() => {
+        isFetchingInProgress = false;
+      });
+    }
+    return cachedMultiples;
+  }
+
+  // 2. İstisnai durumda doğrudan çekimi bekle
+  return await doFetchAllIsYatirimMultiples();
 }
 
 /**

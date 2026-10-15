@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { fetchAndAnalyzeBistCompany } from '@/lib/bist-service';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const TICKER_REGEX = /^[A-Z0-9]{2,10}$/;
 
