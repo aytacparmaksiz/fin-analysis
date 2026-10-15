@@ -69,6 +69,7 @@ import {
   cleanAndParseJson,
   syncReportTextWithValuation
 } from '@/lib/valuation';
+import { OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE } from '@/lib/isyatirim-sector-averages-cache';
 import { 
   FinancialRatioEngine, 
   type UnifiedFinancialMetrics,
@@ -1160,6 +1161,7 @@ export default function ValuationTerminal({
   const [sidebarSort, setSidebarSort] = useState<'rank' | 'date'>('rank');
   const [leaderboardSearch, setLeaderboardSearch] = useState('');
   const [leaderboardFilter, setLeaderboardFilter] = useState<'ALL' | 'AL' | 'NÖTR' | 'ALMA'>('ALL');
+  const [sectorSearchTerm, setSectorSearchTerm] = useState<string>('');
 
   const [loading, setLoading] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
@@ -6541,59 +6543,105 @@ export default function ValuationTerminal({
                     {/* DUPONT 5 AŞAMALI KÂRLILIK AYRIŞTIRMASI (ROE MODELİ) */}
                     {renderDuPontCard()}
 
-                    {/* 2. Borsa İstanbul Sektörel Benchmark Karşılaştırma Tablosu */}
+                    {/* 2. Borsa İstanbul Sektörel Benchmark Karşılaştırma Tablosu (İş Yatırım 53 Alt Sektör Birebir Resmi Veri) */}
                     <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
-                      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                        <div className="flex items-center gap-2">
-                          <Layers className="w-4 h-4 text-emerald-400" />
-                          <h3 className="text-sm font-bold text-white">İş Yatırım Resmi Sektör Ortalamaları Tablosu</h3>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                            <Layers className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                              İş Yatırım Resmi Sektör Ortalamaları Tablosu
+                              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-semibold">
+                                53 Resmi Alt Sektör
+                              </span>
+                            </h3>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              İş Yatırım Temel Değerler ve Oranlar resmi web portalı çarpan ve rasyoları ile %100 birebir uyumlu
+                            </p>
+                          </div>
                         </div>
-                        <span className="text-[11px] text-slate-400 font-mono">İş Yatırım Resmi Kaynağı</span>
+
+                        {/* Hızlı Sektör Arama Kutusu */}
+                        <div className="flex items-center gap-2">
+                          <div className="relative">
+                            <input
+                              type="text"
+                              placeholder="Sektör Ara (örn: Teknoloji, GYO, İlaç)..."
+                              value={sectorSearchTerm}
+                              onChange={(e) => setSectorSearchTerm(e.target.value)}
+                              className="bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 w-52 sm:w-64 focus:outline-none focus:border-emerald-500 transition-colors"
+                            />
+                            {sectorSearchTerm && (
+                              <button
+                                onClick={() => setSectorSearchTerm('')}
+                                className="absolute right-2.5 top-2 text-xs text-slate-400 hover:text-white"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="overflow-x-auto">
+                      <div className="overflow-x-auto max-h-[520px] overflow-y-auto rounded-xl border border-slate-800/70">
                         <table className="w-full text-xs text-left">
-                          <thead>
-                            <tr className="border-b border-slate-800 text-slate-400 uppercase text-[10px]">
-                              <th className="py-2 px-3">Sektör</th>
-                              <th className="py-2 px-2 text-right">F/K</th>
-                              <th className="py-2 px-2 text-right">PD/DD</th>
-                              <th className="py-2 px-2 text-right">FD/FAVÖK</th>
-                              <th className="py-2 px-2 text-right">FD/Satış</th>
+                          <thead className="sticky top-0 bg-[#0B0F1A] z-10 border-b border-slate-800 shadow-sm">
+                            <tr className="text-slate-400 uppercase text-[10px] tracking-wider">
+                              <th className="py-2.5 px-3">Sektör</th>
+                              <th className="py-2.5 px-2 text-right">F/K</th>
+                              <th className="py-2.5 px-2 text-right">FD/FAVÖK</th>
+                              <th className="py-2.5 px-2 text-right">FD/Satışlar</th>
+                              <th className="py-2.5 px-2 text-right">PD/DD</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-800/60 font-mono">
                             {/* Aktif Şirketin Resmi İş Yatırım Alt Sektör Ortalaması (varsa en üstte vurgulanır) */}
                             {companyMultiplesData.benchmark && (
-                              <tr className="bg-emerald-950/60 text-emerald-300 font-bold border-l-2 border-emerald-400">
+                              <tr className="bg-emerald-950/70 text-emerald-300 font-bold border-l-4 border-emerald-400">
                                 <td className="py-2.5 px-3 font-sans">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                    <span>{companyMultiplesData.benchmark.sectorName} (Şirket Sektörü)</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                    <span>{companyMultiplesData.benchmark.sectorName}</span>
+                                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-900/60 text-emerald-200 border border-emerald-700/50">Şirket Sektörü</span>
                                   </div>
                                 </td>
-                                <td className="py-2.5 px-2 text-right">{companyMultiplesData.benchmark.peMedian != null ? `${companyMultiplesData.benchmark.peMedian.toFixed(2)}x` : '—'}</td>
-                                <td className="py-2.5 px-2 text-right">{companyMultiplesData.benchmark.pbMedian != null ? `${companyMultiplesData.benchmark.pbMedian.toFixed(2)}x` : '—'}</td>
-                                <td className="py-2.5 px-2 text-right">{companyMultiplesData.benchmark.evEbitdaMedian != null ? `${companyMultiplesData.benchmark.evEbitdaMedian.toFixed(2)}x` : '—'}</td>
-                                <td className="py-2.5 px-2 text-right">{companyMultiplesData.benchmark.evSalesMedian != null ? `${companyMultiplesData.benchmark.evSalesMedian.toFixed(2)}x` : '—'}</td>
+                                <td className="py-2.5 px-2 text-right">{companyMultiplesData.benchmark.peMedian != null && companyMultiplesData.benchmark.peMedian > 0 ? `${companyMultiplesData.benchmark.peMedian.toFixed(2)}x` : '—'}</td>
+                                <td className="py-2.5 px-2 text-right">{companyMultiplesData.benchmark.evEbitdaMedian != null && companyMultiplesData.benchmark.evEbitdaMedian > 0 ? `${companyMultiplesData.benchmark.evEbitdaMedian.toFixed(2)}x` : '—'}</td>
+                                <td className="py-2.5 px-2 text-right">{companyMultiplesData.benchmark.evSalesMedian != null && companyMultiplesData.benchmark.evSalesMedian > 0 ? `${companyMultiplesData.benchmark.evSalesMedian.toFixed(2)}x` : '—'}</td>
+                                <td className="py-2.5 px-2 text-right">{companyMultiplesData.benchmark.pbMedian != null && companyMultiplesData.benchmark.pbMedian > 0 ? `${companyMultiplesData.benchmark.pbMedian.toFixed(2)}x` : '—'}</td>
                               </tr>
                             )}
-                            {Object.entries(SECTOR_MULTIPLE_BENCHMARKS).map(([secKey, bench]) => {
-                              if (secKey === currentSector && companyMultiplesData.benchmark?.sectorName === bench.sectorName) return null;
-                              return (
-                                <tr key={secKey} className="text-slate-300 hover:bg-slate-800/30">
-                                  <td className="py-2.5 px-3 font-sans">
-                                    <div className="flex items-center gap-1.5">
-                                      <span>{bench.sectorName}</span>
-                                    </div>
-                                  </td>
-                                  <td className="py-2.5 px-2 text-right">{bench.peMedian.toFixed(1)}x</td>
-                                  <td className="py-2.5 px-2 text-right">{bench.pbMedian.toFixed(1)}x</td>
-                                  <td className="py-2.5 px-2 text-right">{bench.evEbitdaMedian != null ? `${bench.evEbitdaMedian.toFixed(1)}x` : '—'}</td>
-                                  <td className="py-2.5 px-2 text-right">{bench.evSalesMedian != null ? `${bench.evSalesMedian.toFixed(1)}x` : '—'}</td>
-                                </tr>
-                              );
-                            })}
+                            {Object.values(OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE)
+                              .sort((a, b) => a.sectorName.localeCompare(b.sectorName, 'tr'))
+                              .filter(s => {
+                                if (!sectorSearchTerm.trim()) return true;
+                                const q = sectorSearchTerm.toLowerCase().trim();
+                                return s.sectorName.toLowerCase().includes(q) || s.sectorCode.includes(q);
+                              })
+                              .map((s) => {
+                                const isCurrent = companyMultiplesData.benchmark?.sectorName === s.sectorName;
+                                return (
+                                  <tr 
+                                    key={s.sectorCode} 
+                                    className={`text-slate-300 hover:bg-slate-800/40 transition-colors ${
+                                      isCurrent ? 'bg-emerald-950/20' : ''
+                                    }`}
+                                  >
+                                    <td className="py-2.5 px-3 font-sans">
+                                      <div className="flex items-center justify-between pr-2">
+                                        <span className={isCurrent ? 'text-emerald-300 font-semibold' : ''}>{s.sectorName}</span>
+                                        <span className="text-[10px] text-slate-500 font-mono">{s.sectorCode}</span>
+                                      </div>
+                                    </td>
+                                    <td className="py-2.5 px-2 text-right">{s.pe != null && s.pe > 0 ? `${s.pe.toFixed(2)}x` : '—'}</td>
+                                    <td className="py-2.5 px-2 text-right">{s.evEbitda != null && s.evEbitda > 0 ? `${s.evEbitda.toFixed(2)}x` : '—'}</td>
+                                    <td className="py-2.5 px-2 text-right">{s.evSales != null && s.evSales > 0 ? `${s.evSales.toFixed(2)}x` : '—'}</td>
+                                    <td className="py-2.5 px-2 text-right">{s.pb != null && s.pb > 0 ? `${s.pb.toFixed(2)}x` : '—'}</td>
+                                  </tr>
+                                );
+                              })}
                           </tbody>
                         </table>
                       </div>

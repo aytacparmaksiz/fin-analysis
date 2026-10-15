@@ -4339,18 +4339,18 @@ export interface SectorMultipleBenchmark {
 export const SECTOR_MULTIPLE_BENCHMARKS: Record<SectorType, SectorMultipleBenchmark> = {
   INDUSTRIAL: {
     sector: 'INDUSTRIAL',
-    sectorName: 'Sanayi, Hizmet & Genel Ticaret',
-    peMedian: 11.8,
-    pbMedian: 2.1,
-    evEbitdaMedian: 7.9,
-    evSalesMedian: 1.2,
-    description: 'İş Yatırım Sınai & Hizmet Endeksi resmi piyasa çarpan ortalamaları'
+    sectorName: 'Sanayi, İmalat & Üretim',
+    peMedian: 10.82,
+    pbMedian: 1.24,
+    evEbitdaMedian: 7.68,
+    evSalesMedian: 1.32,
+    description: 'İş Yatırım Sınai & İmalat resmi piyasa çarpan ortalamaları'
   },
   BANKING: {
     sector: 'BANKING',
     sectorName: 'Bankacılık & Finans',
-    peMedian: 5.2,
-    pbMedian: 1.0,
+    peMedian: 5.17,
+    pbMedian: 1.03,
     evEbitdaMedian: null,
     evSalesMedian: null,
     description: 'İş Yatırım Bankacılık resmi piyasa çarpan ortalamaları'
@@ -4358,8 +4358,8 @@ export const SECTOR_MULTIPLE_BENCHMARKS: Record<SectorType, SectorMultipleBenchm
   INSURANCE: {
     sector: 'INSURANCE',
     sectorName: 'Sigortacılık & Bireysel Emeklilik',
-    peMedian: 5.0,
-    pbMedian: 1.9,
+    peMedian: 4.97,
+    pbMedian: 1.93,
     evEbitdaMedian: null,
     evSalesMedian: null,
     description: 'İş Yatırım Sigorta sektörü resmi piyasa çarpan ortalamaları'
@@ -4367,26 +4367,26 @@ export const SECTOR_MULTIPLE_BENCHMARKS: Record<SectorType, SectorMultipleBenchm
   REIT: {
     sector: 'REIT',
     sectorName: 'Gayrimenkul Yatırım Ortaklığı (GYO)',
-    peMedian: 6.9,
-    pbMedian: 1.0,
-    evEbitdaMedian: 9.2,
-    evSalesMedian: 4.5,
+    peMedian: 7.63,
+    pbMedian: 0.79,
+    evEbitdaMedian: null,
+    evSalesMedian: null,
     description: 'İş Yatırım GYO sektörü resmi piyasa çarpan ortalamaları'
   },
   TECH: {
     sector: 'TECH',
     sectorName: 'Teknoloji, Bilişim & Yazılım',
-    peMedian: 18.5,
-    pbMedian: 4.1,
-    evEbitdaMedian: 12.3,
-    evSalesMedian: 2.9,
+    peMedian: 14.88,
+    pbMedian: 2.79,
+    evEbitdaMedian: 8.55,
+    evSalesMedian: 3.48,
     description: 'İş Yatırım Teknoloji sektörü resmi piyasa çarpan ortalamaları'
   },
   HOLDING: {
     sector: 'HOLDING',
     sectorName: 'Holdingler & Yatırım Şirketleri',
-    peMedian: 11.3,
-    pbMedian: 1.1,
+    peMedian: 11.25,
+    pbMedian: 1.10,
     evEbitdaMedian: null,
     evSalesMedian: null,
     description: 'İş Yatırım Holdingler sektörü resmi piyasa çarpan ortalamaları'
@@ -4394,35 +4394,35 @@ export const SECTOR_MULTIPLE_BENCHMARKS: Record<SectorType, SectorMultipleBenchm
   AVIATION: {
     sector: 'AVIATION',
     sectorName: 'Havacılık & Ulaştırma',
-    peMedian: 5.8,
-    pbMedian: 0.6,
-    evEbitdaMedian: 5.2,
-    evSalesMedian: 0.9,
+    peMedian: 5.81,
+    pbMedian: 0.59,
+    evEbitdaMedian: 5.22,
+    evSalesMedian: 0.92,
     description: 'İş Yatırım Havayolları ve Hizm. sektörü resmi piyasa çarpan ortalamaları'
   },
   RETAIL: {
     sector: 'RETAIL',
     sectorName: 'Perakende & Tüketim',
-    peMedian: 16.1,
-    pbMedian: 2.2,
-    evEbitdaMedian: 8.9,
-    evSalesMedian: 0.6,
+    peMedian: 16.12,
+    pbMedian: 2.22,
+    evEbitdaMedian: 8.87,
+    evSalesMedian: 0.58,
     description: 'İş Yatırım Perakande - Ticaret resmi piyasa çarpan ortalamaları'
   },
   UTILITIES_TELCO: {
     sector: 'UTILITIES_TELCO',
     sectorName: 'Enerji & Telekomünikasyon',
-    peMedian: 9.0,
-    pbMedian: 1.7,
-    evEbitdaMedian: 6.4,
-    evSalesMedian: 1.3,
-    description: 'İş Yatırım Elektrik Üretim & İletişim resmi piyasa çarpan ortalamaları'
+    peMedian: 16.87,
+    pbMedian: 0.84,
+    evEbitdaMedian: 8.39,
+    evSalesMedian: 3.56,
+    description: 'İş Yatırım Elektrik Üretim resmi piyasa çarpan ortalamaları'
   },
   FINANCIAL_SERVICES: {
     sector: 'FINANCIAL_SERVICES',
-    sectorName: 'Factoring, Leasing & Girişim',
-    peMedian: 5.2,
-    pbMedian: 1.3,
+    sectorName: 'Factoring, Leasing & Finansal Kiralama',
+    peMedian: 12.18,
+    pbMedian: 4.42,
     evEbitdaMedian: null,
     evSalesMedian: null,
     description: 'İş Yatırım Fin.Kiralama ve Faktoring resmi piyasa çarpan ortalamaları'
@@ -4482,10 +4482,10 @@ export function calculateCompanyMultiples(
     benchmark = {
       sector,
       sectorName: sa.sector_name || isYatirimMultiples.sector_name || benchmark.sectorName,
-      peMedian: sa.pe ?? benchmark.peMedian,
-      pbMedian: sa.pb ?? benchmark.pbMedian,
-      evEbitdaMedian: sa.ev_ebitda ?? benchmark.evEbitdaMedian,
-      evSalesMedian: sa.ev_sales ?? benchmark.evSalesMedian,
+      peMedian: (sa.pe && sa.pe > 0) ? sa.pe : benchmark.peMedian,
+      pbMedian: (sa.pb && sa.pb > 0) ? sa.pb : benchmark.pbMedian,
+      evEbitdaMedian: (sa.ev_ebitda && sa.ev_ebitda > 0) ? sa.ev_ebitda : null,
+      evSalesMedian: (sa.ev_sales && sa.ev_sales > 0) ? sa.ev_sales : null,
       description: `İş Yatırım Resmi Sektör Ortalamaları (${sa.sector_name || benchmark.sectorName})`
     };
   }

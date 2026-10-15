@@ -1185,10 +1185,10 @@ export async function fetchAndAnalyzeBistCompany(
       sector_averages: sectorAverages ? {
         sector_code: sectorAverages.sectorCode,
         sector_name: sectorAverages.sectorName,
-        pe: sectorAverages.pe,
-        ev_ebitda: sectorAverages.evEbitda,
-        ev_sales: sectorAverages.evSales,
-        pb: sectorAverages.pb,
+        pe: (sectorAverages.pe && sectorAverages.pe > 0) ? sectorAverages.pe : null,
+        ev_ebitda: (sectorAverages.evEbitda && sectorAverages.evEbitda > 0) ? sectorAverages.evEbitda : null,
+        ev_sales: (sectorAverages.evSales && sectorAverages.evSales > 0) ? sectorAverages.evSales : null,
+        pb: (sectorAverages.pb && sectorAverages.pb > 0) ? sectorAverages.pb : null,
         updated_at: sectorAverages.updatedAt
       } : null,
       source: 'İş Yatırım Resmi Çarpanları'

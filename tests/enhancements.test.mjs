@@ -12,7 +12,8 @@ import {
 } from '../lib/valuation.ts';
 import {
   getIsYatirimMultiplesForTicker,
-  getIsYatirimSectorAverages
+  getIsYatirimSectorAverages,
+  getAllIsYatirimSectorAverages
 } from '../lib/isyatirim-service.ts';
 
 describe('Enhancements Test Suite (Items 1, 2, 3, 5, 6)', () => {
@@ -420,6 +421,33 @@ describe('Enhancements Test Suite (Items 1, 2, 3, 5, 6)', () => {
       assert.equal(result.benchmark.evEbitdaMedian, 5.22);
       assert.equal(result.benchmark.evSalesMedian, 0.92);
       assert.match(result.benchmark.description, /İş Yatırım Resmi Sektör Ortalamaları/);
+    });
+
+    it('verifies GYO has null EV/EBITDA and EV/Sales, Teknoloji and Sağlık ve İlaç match exact official averages', async () => {
+      const gyoAvg = await getIsYatirimSectorAverages('0015'); // GYO
+      assert.equal(gyoAvg.sectorName, 'GYO');
+      assert.equal(gyoAvg.pe, 7.63);
+      assert.equal(gyoAvg.pb, 0.79);
+      assert.equal(gyoAvg.evEbitda, null);
+      assert.equal(gyoAvg.evSales, null);
+
+      const techAvg = await getIsYatirimSectorAverages('0043'); // Teknoloji
+      assert.equal(techAvg.sectorName, 'Teknoloji');
+      assert.equal(techAvg.pe, 14.88);
+      assert.equal(techAvg.evEbitda, 8.55);
+      assert.equal(techAvg.evSales, 3.48);
+      assert.equal(techAvg.pb, 2.79);
+
+      const saglikAvg = await getIsYatirimSectorAverages('0037'); // Sağlık ve İlaç
+      assert.equal(saglikAvg.sectorName, 'Sağlık ve İlaç');
+      assert.equal(saglikAvg.pe, 14.88);
+      assert.equal(saglikAvg.evEbitda, 5.58);
+      assert.equal(saglikAvg.evSales, 1.67);
+      assert.equal(saglikAvg.pb, 1.67);
+
+      // Verify all 53 sectors are present
+      const all53 = getAllIsYatirimSectorAverages();
+      assert.equal(Object.keys(all53).length, 53);
     });
   });
 });

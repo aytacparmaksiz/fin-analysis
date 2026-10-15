@@ -19,8 +19,8 @@ export const OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE: Record<string, IsYatir
     "sectorCode": "0001",
     "sectorName": "Bankacılık",
     "pe": 5.17,
-    "evEbitda": 0,
-    "evSales": 0,
+    "evEbitda": null,
+    "evSales": null,
     "pb": 1.03,
     "updatedAt": "2026-10-15T13:01:48.236Z"
   },
@@ -163,8 +163,8 @@ export const OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE: Record<string, IsYatir
     "sectorCode": "0015",
     "sectorName": "GYO",
     "pe": 7.63,
-    "evEbitda": 0,
-    "evSales": 0,
+    "evEbitda": null,
+    "evSales": null,
     "pb": 0.79,
     "updatedAt": "2026-10-15T13:02:02.291Z"
   },
@@ -181,8 +181,8 @@ export const OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE: Record<string, IsYatir
     "sectorCode": "0014",
     "sectorName": "Fin.Kiralama ve Faktoring",
     "pe": 12.18,
-    "evEbitda": 0,
-    "evSales": 0,
+    "evEbitda": null,
+    "evSales": null,
     "pb": 4.42,
     "updatedAt": "2026-10-15T13:02:07.123Z"
   },
@@ -208,8 +208,8 @@ export const OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE: Record<string, IsYatir
     "sectorCode": "0019",
     "sectorName": "Holdingler",
     "pe": 11.25,
-    "evEbitda": 0,
-    "evSales": 0,
+    "evEbitda": null,
+    "evSales": null,
     "pb": 1.1,
     "updatedAt": "2026-10-15T13:02:09.827Z"
   },
@@ -225,7 +225,7 @@ export const OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE: Record<string, IsYatir
   "0020": {
     "sectorCode": "0020",
     "sectorName": "İletişim Cihazları",
-    "pe": 0,
+    "pe": null,
     "evEbitda": 7.63,
     "evSales": 0.87,
     "pb": 1.8,
@@ -270,7 +270,7 @@ export const OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE: Record<string, IsYatir
   "0026": {
     "sectorCode": "0026",
     "sectorName": "Kırtasiye",
-    "pe": 0,
+    "pe": null,
     "evEbitda": 4.66,
     "evSales": 1.84,
     "pb": 2.86,
@@ -360,7 +360,7 @@ export const OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE: Record<string, IsYatir
   "0032": {
     "sectorCode": "0032",
     "sectorName": "Otomotiv Lastiği",
-    "pe": 0,
+    "pe": null,
     "evEbitda": 5.32,
     "evSales": 0.44,
     "pb": 1.06,
@@ -379,8 +379,8 @@ export const OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE: Record<string, IsYatir
     "sectorCode": "0040",
     "sectorName": "Sigorta",
     "pe": 4.97,
-    "evEbitda": 0,
-    "evSales": 0,
+    "evEbitda": null,
+    "evSales": null,
     "pb": 1.93,
     "updatedAt": "2026-10-15T13:02:26.055Z"
   },
@@ -469,7 +469,7 @@ export const OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE: Record<string, IsYatir
     "sectorCode": "0055",
     "sectorName": "Varlık Yönetim",
     "pe": 5.8,
-    "evEbitda": 0,
+    "evEbitda": null,
     "evSales": 1.85,
     "pb": 1.47,
     "updatedAt": "2026-10-15T13:02:48.718Z"
