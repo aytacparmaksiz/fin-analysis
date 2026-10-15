@@ -4340,92 +4340,92 @@ export const SECTOR_MULTIPLE_BENCHMARKS: Record<SectorType, SectorMultipleBenchm
   INDUSTRIAL: {
     sector: 'INDUSTRIAL',
     sectorName: 'Sanayi, Hizmet & Genel Ticaret',
-    peMedian: 11.5,
-    pbMedian: 2.8,
-    evEbitdaMedian: 8.2,
-    evSalesMedian: 1.4,
-    description: 'BIST Sınai ve Hizmet Endeksi tarihsel medyan piyasa çarpanları'
+    peMedian: 11.8,
+    pbMedian: 2.1,
+    evEbitdaMedian: 7.9,
+    evSalesMedian: 1.2,
+    description: 'İş Yatırım Sınai & Hizmet Endeksi resmi piyasa çarpan ortalamaları'
   },
   BANKING: {
     sector: 'BANKING',
     sectorName: 'Bankacılık & Finans',
-    peMedian: 4.8,
-    pbMedian: 1.1,
+    peMedian: 5.2,
+    pbMedian: 1.0,
     evEbitdaMedian: null,
     evSalesMedian: null,
-    description: 'BIST Banka Endeksi tarihsel medyan piyasa çarpanları'
+    description: 'İş Yatırım Bankacılık resmi piyasa çarpan ortalamaları'
   },
   INSURANCE: {
     sector: 'INSURANCE',
     sectorName: 'Sigortacılık & Bireysel Emeklilik',
-    peMedian: 6.2,
-    pbMedian: 2.4,
+    peMedian: 5.0,
+    pbMedian: 1.9,
     evEbitdaMedian: null,
     evSalesMedian: null,
-    description: 'BIST Sigorta Endeksi tarihsel medyan piyasa çarpanları'
+    description: 'İş Yatırım Sigorta sektörü resmi piyasa çarpan ortalamaları'
   },
   REIT: {
     sector: 'REIT',
     sectorName: 'Gayrimenkul Yatırım Ortaklığı (GYO)',
-    peMedian: 7.5,
-    pbMedian: 1.2,
-    evEbitdaMedian: 9.0,
-    evSalesMedian: null,
-    description: 'BIST GYO Endeksi tarihsel medyan piyasa çarpanları'
+    peMedian: 6.9,
+    pbMedian: 1.0,
+    evEbitdaMedian: 9.2,
+    evSalesMedian: 4.5,
+    description: 'İş Yatırım GYO sektörü resmi piyasa çarpan ortalamaları'
   },
   TECH: {
     sector: 'TECH',
     sectorName: 'Teknoloji, Bilişim & Yazılım',
-    peMedian: 22.0,
-    pbMedian: 5.5,
-    evEbitdaMedian: 15.0,
-    evSalesMedian: 4.2,
-    description: 'BIST Bilişim ve Teknoloji Endeksi tarihsel medyan çarpanları'
+    peMedian: 18.5,
+    pbMedian: 4.1,
+    evEbitdaMedian: 12.3,
+    evSalesMedian: 2.9,
+    description: 'İş Yatırım Teknoloji sektörü resmi piyasa çarpan ortalamaları'
   },
   HOLDING: {
     sector: 'HOLDING',
     sectorName: 'Holdingler & Yatırım Şirketleri',
-    peMedian: 6.8,
-    pbMedian: 1.4,
-    evEbitdaMedian: 7.0,
-    evSalesMedian: 1.1,
-    description: 'BIST Holding Endeksi tarihsel medyan piyasa çarpanları'
+    peMedian: 11.3,
+    pbMedian: 1.1,
+    evEbitdaMedian: null,
+    evSalesMedian: null,
+    description: 'İş Yatırım Holdingler sektörü resmi piyasa çarpan ortalamaları'
   },
   AVIATION: {
     sector: 'AVIATION',
     sectorName: 'Havacılık & Ulaştırma',
-    peMedian: 7.2,
-    pbMedian: 1.2,
-    evEbitdaMedian: 5.5,
-    evSalesMedian: 1.1,
-    description: 'BIST Ulaştırma & Havacılık tarihsel medyan piyasa çarpanları'
+    peMedian: 5.8,
+    pbMedian: 0.6,
+    evEbitdaMedian: 5.2,
+    evSalesMedian: 0.9,
+    description: 'İş Yatırım Havayolları ve Hizm. sektörü resmi piyasa çarpan ortalamaları'
   },
   RETAIL: {
     sector: 'RETAIL',
     sectorName: 'Perakende & Tüketim',
-    peMedian: 14.5,
-    pbMedian: 3.8,
-    evEbitdaMedian: 7.5,
+    peMedian: 16.1,
+    pbMedian: 2.2,
+    evEbitdaMedian: 8.9,
     evSalesMedian: 0.6,
-    description: 'BIST Ticaret & Perakende Endeksi tarihsel medyan piyasa çarpanları'
+    description: 'İş Yatırım Perakande - Ticaret resmi piyasa çarpan ortalamaları'
   },
   UTILITIES_TELCO: {
     sector: 'UTILITIES_TELCO',
     sectorName: 'Enerji & Telekomünikasyon',
-    peMedian: 9.8,
-    pbMedian: 1.8,
-    evEbitdaMedian: 6.2,
-    evSalesMedian: 1.4,
-    description: 'BIST Elektrik & Telekomünikasyon tarihsel medyan piyasa çarpanları'
+    peMedian: 9.0,
+    pbMedian: 1.7,
+    evEbitdaMedian: 6.4,
+    evSalesMedian: 1.3,
+    description: 'İş Yatırım Elektrik Üretim & İletişim resmi piyasa çarpan ortalamaları'
   },
   FINANCIAL_SERVICES: {
     sector: 'FINANCIAL_SERVICES',
     sectorName: 'Factoring, Leasing & Girişim',
-    peMedian: 5.5,
+    peMedian: 5.2,
     pbMedian: 1.3,
     evEbitdaMedian: null,
     evSalesMedian: null,
-    description: 'BIST Finansal Kiralama ve Faktoring tarihsel medyan çarpanları'
+    description: 'İş Yatırım Fin.Kiralama ve Faktoring resmi piyasa çarpan ortalamaları'
   }
 };
 
@@ -4460,9 +4460,35 @@ export function calculateCompanyMultiples(
   shareCount: number,
   sector: SectorType = 'INDUSTRIAL',
   isYatirimMultiples?: any,
-  currency?: string
+  currency?: string,
+  customSectorBenchmark?: Partial<SectorMultipleBenchmark> | null
 ): CompanyMultiplesComparison {
-  const benchmark = SECTOR_MULTIPLE_BENCHMARKS[sector] || SECTOR_MULTIPLE_BENCHMARKS.INDUSTRIAL;
+  let benchmark: SectorMultipleBenchmark = { ...(SECTOR_MULTIPLE_BENCHMARKS[sector] || SECTOR_MULTIPLE_BENCHMARKS.INDUSTRIAL) };
+
+  // İş Yatırım resmi sektör ortalamaları verildiyse, dinamik olarak benchmark'ı güncelle
+  if (customSectorBenchmark) {
+    benchmark = {
+      ...benchmark,
+      ...customSectorBenchmark,
+      sectorName: customSectorBenchmark.sectorName || benchmark.sectorName,
+      peMedian: customSectorBenchmark.peMedian ?? benchmark.peMedian,
+      pbMedian: customSectorBenchmark.pbMedian ?? benchmark.pbMedian,
+      evEbitdaMedian: customSectorBenchmark.evEbitdaMedian !== undefined ? customSectorBenchmark.evEbitdaMedian : benchmark.evEbitdaMedian,
+      evSalesMedian: customSectorBenchmark.evSalesMedian !== undefined ? customSectorBenchmark.evSalesMedian : benchmark.evSalesMedian,
+      description: customSectorBenchmark.description || `İş Yatırım Resmi Sektör Ortalamaları (${customSectorBenchmark.sectorName || benchmark.sectorName})`
+    };
+  } else if (isYatirimMultiples?.sector_averages) {
+    const sa = isYatirimMultiples.sector_averages;
+    benchmark = {
+      sector,
+      sectorName: sa.sector_name || isYatirimMultiples.sector_name || benchmark.sectorName,
+      peMedian: sa.pe ?? benchmark.peMedian,
+      pbMedian: sa.pb ?? benchmark.pbMedian,
+      evEbitdaMedian: sa.ev_ebitda ?? benchmark.evEbitdaMedian,
+      evSalesMedian: sa.ev_sales ?? benchmark.evSalesMedian,
+      description: `İş Yatırım Resmi Sektör Ortalamaları (${sa.sector_name || benchmark.sectorName})`
+    };
+  }
   const safeShares = shareCount > 0 ? shareCount : 100000000;
   const annualFactor = getAnnualizationFactor(latest?.period);
 

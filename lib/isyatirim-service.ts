@@ -5,10 +5,20 @@
 
 import { parseFinancialNumber } from './valuation.ts';
 
+export interface IsYatirimHistoricalEstimates {
+  peEstimate: number | null; // F/K Tahmin
+  peDiscountPct: number | null; // Prim/İsk. (%)
+  evEbitdaEstimate: number | null; // FD/FAVÖK Tahmin
+  evEbitdaDiscountPct: number | null; // Prim/İsk. (%)
+  pbEstimate: number | null; // PD/DD Tahmin
+  pbDiscountPct: number | null; // Prim/İsk. (%)
+}
+
 export interface IsYatirimStockMultiples {
   ticker: string;
   name: string;
   sectorName: string;
+  sectorCode?: string;
   lastPrice: number | null;
   marketCapMnTl: number | null;
   marketCapMnUsd: number | null;
@@ -19,12 +29,24 @@ export interface IsYatirimStockMultiples {
   evSales: number | null; // FD/Satışlar
   pb: number | null; // PD/DD
   lastPeriod: string | null;
+  foreignSharePct?: number | null; // Güncel Yabancı Oranı (%)
+  foreignSharePrevPct?: number | null; // Önceki Gün Yabancı Oranı (%)
+  foreignShareChangeBps?: number | null; // Değişim (Baz Puan)
+  foreignShareIndexImpactPct?: number | null; // Etki* (%)
+  historicalEstimates?: IsYatirimHistoricalEstimates | null;
   updatedAt: string;
 }
 
 import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from './isyatirim-multiples-cache.ts';
+import {
+  OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE,
+  ISYATIRIM_SECTOR_NAME_TO_CODE,
+  type IsYatirimSectorAverage
+} from './isyatirim-sector-averages-cache.ts';
+export type { IsYatirimSectorAverage } from './isyatirim-sector-averages-cache.ts';
 
 let cachedMultiples: Record<string, IsYatirimStockMultiples> = { ...OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE };
+let cachedSectorAverages: Record<string, IsYatirimSectorAverage> = { ...OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE };
 let lastFetchTimestamp = Date.now();
 let isFetchingInProgress = false;
 const CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 saat önbellek
@@ -35,7 +57,7 @@ const CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 saat önbellek
 function parseTrFloat(valStr: string | null | undefined): number | null {
   if (!valStr) return null;
   const clean = String(valStr).trim();
-  if (clean === '-' || clean === '—' || clean === '–' || clean === 'A/D' || clean === 'N/A' || clean === 'n/a' || clean === 'null' || clean === '') return null;
+  if (clean === '-' || clean === '—' || clean === '–' || clean === 'A/D' || clean === 'N/A' || clean === 'n/a' || clean === 'null' || clean === '' || clean === '&nbsp;') return null;
   return parseFinancialNumber(clean);
 }
 
@@ -110,8 +132,7 @@ async function doFetchAllIsYatirimMultiples(): Promise<Record<string, IsYatirimS
     }
     const result: Record<string, IsYatirimStockMultiples> = {};
 
-    // 1. temelozet tablosunu ayıkla (Piyasa Değeri, Halka Açıklık, Ödenmiş Sermaye)
-    // <table ... data-csvname="temelozet" ...>
+    // 1. temelozet tablosunu ayıkla (Piyasa Değeri, Halka Açıklık, Ödenmiş Sermaye, Sektör)
     const ozetMatch = html.match(/<table[^>]*data-csvname="temelozet"[^>]*>([\s\S]*?)<\/table>/i);
     if (ozetMatch) {
       const rows = ozetMatch[1].match(/<tr[\s\S]*?<\/tr>/gi) || [];
@@ -119,10 +140,12 @@ async function doFetchAllIsYatirimMultiples(): Promise<Record<string, IsYatirimS
         const cells = (row.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || []).map(c => c.replace(/<[^>]+>/g, '').trim());
         if (cells.length >= 8) {
           const ticker = cells[0].toUpperCase();
+          const sectorName = cells[2] || '';
           result[ticker] = {
             ticker,
             name: cells[1],
-            sectorName: cells[2],
+            sectorName,
+            sectorCode: ISYATIRIM_SECTOR_NAME_TO_CODE[sectorName] || undefined,
             lastPrice: parseTrFloat(cells[3]),
             marketCapMnTl: parseTrFloat(cells[4]),
             marketCapMnUsd: parseTrFloat(cells[5]),
@@ -140,7 +163,6 @@ async function doFetchAllIsYatirimMultiples(): Promise<Record<string, IsYatirimS
     }
 
     // 2. temelfinansal tablosunu ayıkla (F/K, FD/FAVÖK, FD/Satışlar, PD/DD, Son Dönem)
-    // <table ... data-csvname="temelfinansal" ...>
     const finMatch = html.match(/<table[^>]*data-csvname="temelfinansal"[^>]*>([\s\S]*?)<\/table>/i);
     if (finMatch) {
       const rows = finMatch[1].match(/<tr[\s\S]*?<\/tr>/gi) || [];
@@ -178,10 +200,50 @@ async function doFetchAllIsYatirimMultiples(): Promise<Record<string, IsYatirimS
       }
     }
 
+    // 3. temelyabancioran tablosunu ayıkla (Güncel Yabancı Oranı, Değişim Baz Puan, Etki)
+    const yabanciMatch = html.match(/<table[^>]*data-csvname="temelyabancioran"[^>]*>([\s\S]*?)<\/table>/i);
+    if (yabanciMatch) {
+      const rows = yabanciMatch[1].match(/<tr[\s\S]*?<\/tr>/gi) || [];
+      for (const row of rows) {
+        const cells = (row.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || []).map(c => c.replace(/<[^>]+>/g, '').trim());
+        if (cells.length >= 6) {
+          const ticker = cells[0].toUpperCase();
+          if (result[ticker]) {
+            result[ticker].foreignSharePrevPct = parseTrFloat(cells[2]);
+            result[ticker].foreignSharePct = parseTrFloat(cells[3]);
+            result[ticker].foreignShareChangeBps = parseTrFloat(cells[4]);
+            result[ticker].foreignShareIndexImpactPct = parseTrFloat(cells[5]);
+          }
+        }
+      }
+    }
+
+    // 4. temeltarihsel tablosunu ayıkla (F/K Tahmin, FD/FAVÖK Tahmin, PD/DD Tahmin ve İskonto %)
+    const tarihMatch = html.match(/<table[^>]*data-csvname="temeltarihsel"[^>]*>([\s\S]*?)<\/table>/i);
+    if (tarihMatch) {
+      const rows = tarihMatch[1].match(/<tr[\s\S]*?<\/tr>/gi) || [];
+      for (const row of rows) {
+        const cells = (row.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || []).map(c => c.replace(/<[^>]+>/g, '').trim());
+        if (cells.length >= 8) {
+          const ticker = cells[0].toUpperCase();
+          if (result[ticker]) {
+            result[ticker].historicalEstimates = {
+              peEstimate: parseTrFloat(cells[2]),
+              peDiscountPct: parseTrFloat(cells[3]),
+              evEbitdaEstimate: parseTrFloat(cells[4]),
+              evEbitdaDiscountPct: parseTrFloat(cells[5]),
+              pbEstimate: parseTrFloat(cells[6]),
+              pbDiscountPct: parseTrFloat(cells[7])
+            };
+          }
+        }
+      }
+    }
+
     if (Object.keys(result).length > 50) {
       cachedMultiples = result;
       lastFetchTimestamp = Date.now();
-      console.log(`[IsYatirim] Başarıyla ${Object.keys(result).length} BIST şirketinin çarpanları yüklendi.`);
+      console.log(`[IsYatirim] Başarıyla ${Object.keys(result).length} BIST şirketinin çarpanları, yabancı oranları ve konsensüs tahminleri yüklendi.`);
       return result;
     }
   } catch (err: any) {
@@ -199,7 +261,7 @@ export async function fetchAllIsYatirimMultiples(): Promise<Record<string, IsYat
 
   // 1. Resmi çarpan önbelleğinde 630 hissenin verisi anında mevcuttur (0ms)
   if (cachedMultiples && Object.keys(cachedMultiples).length > 0) {
-    // 2 saatlik TTL dolmuşsa arka planda sessizce güncelle (kullanıcıyı asla 22s bloklamaz)
+    // 2 saatlik TTL dolmuşsa arka planda sessizce güncelle (kullanıcıyı asla bloklamaz)
     if (now - lastFetchTimestamp >= CACHE_TTL_MS && !isFetchingInProgress) {
       isFetchingInProgress = true;
       doFetchAllIsYatirimMultiples().finally(() => {
@@ -222,4 +284,99 @@ export async function getIsYatirimMultiplesForTicker(rawTicker: string): Promise
 
   const all = await fetchAllIsYatirimMultiples();
   return all[ticker] || null;
+}
+
+/**
+ * Belirli bir sektörün İş Yatırım resmi Sektör Ortalamalarını getirir.
+ * 1. Öncelik: İş Yatırım web sitesindeki resmi 'Sektör Ortalamaları' satırı (SWR ile).
+ * 2. Öncelik: Sektördeki 630 hissenin canlı medyanı / ağırlıklı ortalaması.
+ * Statik hardcoded veri kesinlikle kullanılmaz.
+ */
+export async function getIsYatirimSectorAverages(sectorNameOrCode: string): Promise<IsYatirimSectorAverage | null> {
+  if (!sectorNameOrCode) return null;
+
+  // Kod veya isim çözümle
+  let code = '';
+  let sectorName = '';
+
+  if (ISYATIRIM_SECTOR_NAME_TO_CODE[sectorNameOrCode]) {
+    sectorName = sectorNameOrCode;
+    code = ISYATIRIM_SECTOR_NAME_TO_CODE[sectorNameOrCode];
+  } else if (OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE[sectorNameOrCode]) {
+    code = sectorNameOrCode;
+    sectorName = OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE[sectorNameOrCode].sectorName;
+  } else {
+    // Kısmi eşleşme dene (örn 'Havayolları' -> 'Havayolları ve Hizm.')
+    for (const [name, c] of Object.entries(ISYATIRIM_SECTOR_NAME_TO_CODE)) {
+      if (name.toLowerCase().includes(sectorNameOrCode.toLowerCase()) || sectorNameOrCode.toLowerCase().includes(name.toLowerCase())) {
+        sectorName = name;
+        code = c;
+        break;
+      }
+    }
+  }
+
+  if (!code && !sectorName) return null;
+
+  // 1. Önbellekte mevcutsa hemen dön ve gerekirse arka planda tazele
+  if (code && cachedSectorAverages[code]) {
+    return cachedSectorAverages[code];
+  }
+
+  // 2. Canlı İş Yatırım sektör sayfasından çekmeyi dene
+  if (code) {
+    try {
+      const url = `https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/Temel-Degerler-Ve-Oranlar.aspx?sektor=${code}`;
+      const html = await fetchHttpsText(url, 15000);
+      if (html) {
+        const ortMatch = html.match(/Sektör Ortalamaları[\s\S]*?<div class="second-item[^>]*>([\s\S]*?)<\/div>[\s\S]*?<div class="third-item[^>]*>([\s\S]*?)<\/div>[\s\S]*?<div class="fourth-item[^>]*>([\s\S]*?)<\/div>[\s\S]*?<div class="fifth-item[^>]*>([\s\S]*?)<\/div>/i);
+        if (ortMatch) {
+          const parsed: IsYatirimSectorAverage = {
+            sectorCode: code,
+            sectorName: sectorName || OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE[code]?.sectorName || code,
+            pe: parseTrFloat(ortMatch[1]),
+            evEbitda: parseTrFloat(ortMatch[2]),
+            evSales: parseTrFloat(ortMatch[3]),
+            pb: parseTrFloat(ortMatch[4]),
+            updatedAt: new Date().toISOString()
+          };
+          cachedSectorAverages[code] = parsed;
+          return parsed;
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[IsYatirim] Canlı sektör ortalaması çekilemedi (${code}):`, err?.message || err);
+    }
+  }
+
+  // 3. Fallback: Canlı 630 hisse havuzundan bu sektörün medyanlarını dinamik hesapla
+  const allStocks = await fetchAllIsYatirimMultiples();
+  const sectorStocks = Object.values(allStocks).filter(s => s.sectorName === sectorName);
+  if (sectorStocks.length > 0) {
+    const peList = sectorStocks.map(s => s.pe).filter((v): v is number => v !== null && v > 0).sort((a, b) => a - b);
+    const pbList = sectorStocks.map(s => s.pb).filter((v): v is number => v !== null && v > 0).sort((a, b) => a - b);
+    const evEbitdaList = sectorStocks.map(s => s.evEbitda).filter((v): v is number => v !== null && v > 0).sort((a, b) => a - b);
+    const evSalesList = sectorStocks.map(s => s.evSales).filter((v): v is number => v !== null && v > 0).sort((a, b) => a - b);
+
+    const median = (arr: number[]) => arr.length === 0 ? null : (arr.length % 2 === 1 ? arr[Math.floor(arr.length / 2)] : (arr[arr.length / 2 - 1] + arr[arr.length / 2]) / 2);
+
+    return {
+      sectorCode: code || 'DYNAMIC',
+      sectorName: sectorName,
+      pe: median(peList),
+      evEbitda: median(evEbitdaList),
+      evSales: median(evSalesList),
+      pb: median(pbList),
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Tüm 53 alt sektörün resmi ortalamalarını döndürür
+ */
+export function getAllIsYatirimSectorAverages(): Record<string, IsYatirimSectorAverage> {
+  return cachedSectorAverages;
 }

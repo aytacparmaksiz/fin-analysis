@@ -10,6 +10,10 @@ import {
   SECTOR_MULTIPLE_BENCHMARKS,
   enrichAndSanitizeFinancialHistory
 } from '../lib/valuation.ts';
+import {
+  getIsYatirimMultiplesForTicker,
+  getIsYatirimSectorAverages
+} from '../lib/isyatirim-service.ts';
 
 describe('Enhancements Test Suite (Items 1, 2, 3, 5, 6)', () => {
 
@@ -367,6 +371,55 @@ describe('Enhancements Test Suite (Items 1, 2, 3, 5, 6)', () => {
       const dupont = calculateDuPont5Step(item);
       assert.equal(dupont.hasData, true);
       assert.match(dupont.driverSummary, /TTK 376 Borca Batıklık/);
+    });
+  });
+
+  describe('Is Yatirim Official Sector Averages & Indicators Integration', () => {
+    it('retrieves official Havayolları ve Hizm. sector averages directly from Is Yatirim baseline', async () => {
+      const secAvg = await getIsYatirimSectorAverages('Havayolları ve Hizm.');
+      assert.ok(secAvg, 'Sector averages should exist');
+      assert.equal(secAvg.sectorName, 'Havayolları ve Hizm.');
+      assert.equal(secAvg.pe, 5.81);
+      assert.equal(secAvg.evEbitda, 5.22);
+      assert.equal(secAvg.evSales, 0.92);
+      assert.equal(secAvg.pb, 0.59);
+    });
+
+    it('retrieves THYAO official foreign ownership ratio (24.01%) and consensus estimates', async () => {
+      const multiples = await getIsYatirimMultiplesForTicker('THYAO');
+      assert.ok(multiples, 'THYAO multiples should exist');
+      assert.equal(multiples.foreignSharePct, 24.01);
+      assert.equal(multiples.foreignShareChangeBps, -14.19);
+      assert.ok(multiples.historicalEstimates, 'Historical estimates should exist');
+      assert.equal(multiples.historicalEstimates.peEstimate, 4.2);
+      assert.equal(multiples.historicalEstimates.peDiscountPct, -24.1);
+      assert.equal(multiples.historicalEstimates.evEbitdaEstimate, 5.1);
+      assert.equal(multiples.historicalEstimates.evEbitdaDiscountPct, -27.6);
+      assert.equal(multiples.historicalEstimates.pbEstimate, 0.3);
+      assert.equal(multiples.historicalEstimates.pbDiscountPct, -68.9);
+    });
+
+    it('calculates company multiples dynamically against official Is Yatirim sector averages', async () => {
+      const item = { net_income: 100000000, equity: 500000000, ebitda: 80000000, revenue: 400000000 };
+      const secAvg = await getIsYatirimSectorAverages('0017'); // Havayolları
+      const isYatirimData = {
+        sector_name: 'Havayolları ve Hizm.',
+        sector_averages: {
+          sector_name: 'Havayolları ve Hizm.',
+          pe: secAvg.pe,
+          pb: secAvg.pb,
+          ev_ebitda: secAvg.evEbitda,
+          ev_sales: secAvg.evSales
+        }
+      };
+
+      const result = calculateCompanyMultiples(item, 280, 1380000000, 'AVIATION', isYatirimData);
+      assert.equal(result.benchmark.sectorName, 'Havayolları ve Hizm.');
+      assert.equal(result.benchmark.peMedian, 5.81);
+      assert.equal(result.benchmark.pbMedian, 0.59);
+      assert.equal(result.benchmark.evEbitdaMedian, 5.22);
+      assert.equal(result.benchmark.evSalesMedian, 0.92);
+      assert.match(result.benchmark.description, /İş Yatırım Resmi Sektör Ortalamaları/);
     });
   });
 });

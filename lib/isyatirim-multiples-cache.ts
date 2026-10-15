@@ -1,5 +1,8 @@
-// Auto-generated official İş Yatırım multiples baseline cache
-// Generated on: 2026-10-14T13:49:04.417Z
+/**
+ * İş Yatırım Resmi Web Portalı Canlı Çarpanlar ve Göstergeler Başlangıç Tabanı (Baseline)
+ * Kaynak: https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/Temel-Degerler-Ve-Oranlar.aspx
+ * Güncelleme: 15 Ekim 2026
+ */
 
 import type { IsYatirimStockMultiples } from './isyatirim-service.ts';
 
@@ -18,7 +21,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.404Z"
+    "updatedAt": "2026-10-14T13:49:04.404Z",
+    "foreignSharePrevPct": 7.19,
+    "foreignSharePct": 6.64,
+    "foreignShareChangeBps": -54.78,
+    "foreignShareIndexImpactPct": -0.71,
+    "sectorCode": "0051"
   },
   "A1YEN": {
     "ticker": "A1YEN",
@@ -34,7 +42,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.2,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 3.68,
+    "foreignSharePct": 3.64,
+    "foreignShareChangeBps": -4.16,
+    "foreignShareIndexImpactPct": -0.04,
+    "sectorCode": "0011"
   },
   "AAGYO": {
     "ticker": "AAGYO",
@@ -50,7 +63,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 4.26,
+    "foreignSharePct": 3.49,
+    "foreignShareChangeBps": -77.79,
+    "foreignShareIndexImpactPct": -0.81,
+    "sectorCode": "0015"
   },
   "ACSEL": {
     "ticker": "ACSEL",
@@ -66,7 +84,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.2,
     "pb": 1.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 3.08,
+    "foreignSharePct": 2.87,
+    "foreignShareChangeBps": -20.39,
+    "foreignShareIndexImpactPct": -0.34,
+    "sectorCode": "0025"
   },
   "ADEL": {
     "ticker": "ADEL",
@@ -82,7 +105,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.9,
     "pb": 4.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 0.22,
+    "foreignSharePct": 0.27,
+    "foreignShareChangeBps": 4.68,
+    "foreignShareIndexImpactPct": 0.07,
+    "sectorCode": "0026"
   },
   "ADESE": {
     "ticker": "ADESE",
@@ -98,7 +126,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 11.36,
+    "foreignSharePct": 10.89,
+    "foreignShareChangeBps": -47.47,
+    "foreignShareIndexImpactPct": -0.48,
+    "sectorCode": "0015"
   },
   "ADGYO": {
     "ticker": "ADGYO",
@@ -114,7 +147,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 0.62,
+    "foreignSharePct": 0.66,
+    "foreignShareChangeBps": 4.56,
+    "foreignShareIndexImpactPct": 0.44,
+    "sectorCode": "0015"
   },
   "AEFES": {
     "ticker": "AEFES",
@@ -130,7 +168,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 51.96,
+    "foreignSharePct": 52.05,
+    "foreignShareChangeBps": 8.88,
+    "foreignShareIndexImpactPct": 0.09,
+    "historicalEstimates": {
+      "peEstimate": 8.5,
+      "peDiscountPct": -14.2,
+      "evEbitdaEstimate": 3.1,
+      "evEbitdaDiscountPct": -30.4,
+      "pbEstimate": 0.9,
+      "pbDiscountPct": -29.8
+    },
+    "sectorCode": "0029"
   },
   "AFYON": {
     "ticker": "AFYON",
@@ -146,7 +197,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.9,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 2.55,
+    "foreignSharePct": 2.5,
+    "foreignShareChangeBps": -4.81,
+    "foreignShareIndexImpactPct": -0.1,
+    "sectorCode": "0005"
   },
   "AGESA": {
     "ticker": "AGESA",
@@ -162,7 +218,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 3.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 66,
+    "foreignSharePct": 65.98,
+    "foreignShareChangeBps": -1.46,
+    "foreignShareIndexImpactPct": -0.02,
+    "historicalEstimates": {
+      "peEstimate": 5.5,
+      "peDiscountPct": -52.3,
+      "evEbitdaEstimate": null,
+      "evEbitdaDiscountPct": null,
+      "pbEstimate": 2.6,
+      "pbDiscountPct": -49
+    },
+    "sectorCode": "0040"
   },
   "AGHOL": {
     "ticker": "AGHOL",
@@ -178,7 +247,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 30.29,
+    "foreignSharePct": 30.36,
+    "foreignShareChangeBps": 7.58,
+    "foreignShareIndexImpactPct": 0.11,
+    "historicalEstimates": {
+      "peEstimate": 12.3,
+      "peDiscountPct": 37.6,
+      "evEbitdaEstimate": 2,
+      "evEbitdaDiscountPct": -27.7,
+      "pbEstimate": 0.6,
+      "pbDiscountPct": -52
+    },
+    "sectorCode": "0019"
   },
   "AGROT": {
     "ticker": "AGROT",
@@ -194,7 +276,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.6,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 3.8,
+    "foreignSharePct": 3.44,
+    "foreignShareChangeBps": -36.22,
+    "foreignShareIndexImpactPct": -0.38,
+    "sectorCode": "0049"
   },
   "AGYO": {
     "ticker": "AGYO",
@@ -210,7 +297,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 0.01,
+    "foreignSharePct": 0.01,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0015"
   },
   "AHGAZ": {
     "ticker": "AHGAZ",
@@ -226,7 +318,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.6,
     "pb": 2.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 15.92,
+    "foreignSharePct": 15.99,
+    "foreignShareChangeBps": 6.73,
+    "foreignShareIndexImpactPct": 0.14,
+    "sectorCode": "0038"
   },
   "AHSGY": {
     "ticker": "AHSGY",
@@ -242,7 +339,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 9.84,
+    "foreignSharePct": 10.07,
+    "foreignShareChangeBps": 22.88,
+    "foreignShareIndexImpactPct": 0.36,
+    "sectorCode": "0015"
   },
   "AKBNK": {
     "ticker": "AKBNK",
@@ -258,7 +360,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 43.31,
+    "foreignSharePct": 43.71,
+    "foreignShareChangeBps": 40.49,
+    "foreignShareIndexImpactPct": 0.45,
+    "historicalEstimates": {
+      "peEstimate": 4.5,
+      "peDiscountPct": -10.2,
+      "evEbitdaEstimate": null,
+      "evEbitdaDiscountPct": null,
+      "pbEstimate": 0.9,
+      "pbDiscountPct": -21
+    },
+    "sectorCode": "0001"
   },
   "AKCNS": {
     "ticker": "AKCNS",
@@ -274,7 +389,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.4,
     "pb": 1.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 1.55,
+    "foreignSharePct": 1.52,
+    "foreignShareChangeBps": -3.02,
+    "foreignShareIndexImpactPct": -0.12,
+    "historicalEstimates": {
+      "peEstimate": 22.2,
+      "peDiscountPct": 59.8,
+      "evEbitdaEstimate": 8,
+      "evEbitdaDiscountPct": 7.4,
+      "pbEstimate": 1.1,
+      "pbDiscountPct": -39.6
+    },
+    "sectorCode": "0005"
   },
   "AKENR": {
     "ticker": "AKENR",
@@ -290,7 +418,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.4,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 0.6,
+    "foreignSharePct": 0.55,
+    "foreignShareChangeBps": -5.24,
+    "foreignShareIndexImpactPct": -0.11,
+    "sectorCode": "0011"
   },
   "AKFGY": {
     "ticker": "AKFGY",
@@ -306,7 +439,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 6.68,
+    "foreignSharePct": 6.67,
+    "foreignShareChangeBps": -0.72,
+    "foreignShareIndexImpactPct": -0.02,
+    "sectorCode": "0015"
   },
   "AKFIS": {
     "ticker": "AKFIS",
@@ -322,7 +460,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 6.7,
     "pb": 1.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 4.86,
+    "foreignSharePct": 4.69,
+    "foreignShareChangeBps": -17.9,
+    "foreignShareIndexImpactPct": -0.36,
+    "sectorCode": "0022"
   },
   "AKFYE": {
     "ticker": "AKFYE",
@@ -338,7 +481,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 5.8,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 21.62,
+    "foreignSharePct": 21.69,
+    "foreignShareChangeBps": 6.12,
+    "foreignShareIndexImpactPct": 0.15,
+    "historicalEstimates": {
+      "peEstimate": 6.3,
+      "peDiscountPct": -10.2,
+      "evEbitdaEstimate": 8.4,
+      "evEbitdaDiscountPct": 2.3,
+      "pbEstimate": 0.4,
+      "pbDiscountPct": -83.9
+    },
+    "sectorCode": "0011"
   },
   "AKGRT": {
     "ticker": "AKGRT",
@@ -354,7 +510,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 33.5,
+    "foreignSharePct": 33.29,
+    "foreignShareChangeBps": -20.33,
+    "foreignShareIndexImpactPct": -0.28,
+    "historicalEstimates": {
+      "peEstimate": 2.1,
+      "peDiscountPct": -68.4,
+      "evEbitdaEstimate": null,
+      "evEbitdaDiscountPct": null,
+      "pbEstimate": 0.7,
+      "pbDiscountPct": -65.8
+    },
+    "sectorCode": "0040"
   },
   "AKHAN": {
     "ticker": "AKHAN",
@@ -370,7 +539,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 1.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 17.11,
+    "foreignSharePct": 17.13,
+    "foreignShareChangeBps": 2.54,
+    "foreignShareIndexImpactPct": 0.03,
+    "sectorCode": "0016"
   },
   "AKMGY": {
     "ticker": "AKMGY",
@@ -386,7 +560,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 0.34,
+    "foreignSharePct": 0.33,
+    "foreignShareChangeBps": -0.42,
+    "foreignShareIndexImpactPct": -0.03,
+    "sectorCode": "0015"
   },
   "AKSA": {
     "ticker": "AKSA",
@@ -402,7 +581,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.5,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 18,
+    "foreignSharePct": 17.97,
+    "foreignShareChangeBps": -2.65,
+    "foreignShareIndexImpactPct": -0.03,
+    "sectorCode": "0013"
   },
   "AKSEN": {
     "ticker": "AKSEN",
@@ -418,7 +602,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.4,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 6.49,
+    "foreignSharePct": 6.47,
+    "foreignShareChangeBps": -2.49,
+    "foreignShareIndexImpactPct": -0.07,
+    "historicalEstimates": {
+      "peEstimate": 27.8,
+      "peDiscountPct": 146.8,
+      "evEbitdaEstimate": 7.3,
+      "evEbitdaDiscountPct": 6,
+      "pbEstimate": 1.2,
+      "pbDiscountPct": -47.6
+    },
+    "sectorCode": "0011"
   },
   "AKSGY": {
     "ticker": "AKSGY",
@@ -434,7 +631,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 8.27,
+    "foreignSharePct": 8.21,
+    "foreignShareChangeBps": -6.32,
+    "foreignShareIndexImpactPct": -0.08,
+    "historicalEstimates": {
+      "peEstimate": 3.3,
+      "peDiscountPct": -10.4,
+      "evEbitdaEstimate": 5.2,
+      "evEbitdaDiscountPct": -55.9,
+      "pbEstimate": 0.4,
+      "pbDiscountPct": null
+    },
+    "sectorCode": "0015"
   },
   "AKSUE": {
     "ticker": "AKSUE",
@@ -450,7 +660,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 13.2,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 3.84,
+    "foreignSharePct": 3.77,
+    "foreignShareChangeBps": -6.73,
+    "foreignShareIndexImpactPct": -0.07,
+    "sectorCode": "0011"
   },
   "AKYHO": {
     "ticker": "AKYHO",
@@ -466,7 +681,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 1.68,
+    "foreignSharePct": 1.66,
+    "foreignShareChangeBps": -2.32,
+    "foreignShareIndexImpactPct": -0.03,
+    "sectorCode": "0019"
   },
   "ALARK": {
     "ticker": "ALARK",
@@ -482,7 +702,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 22.38,
+    "foreignSharePct": 22.39,
+    "foreignShareChangeBps": 1.59,
+    "foreignShareIndexImpactPct": 0.02,
+    "sectorCode": "0019"
   },
   "ALBRK": {
     "ticker": "ALBRK",
@@ -498,7 +723,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 19.74,
+    "foreignSharePct": 19.97,
+    "foreignShareChangeBps": 23.1,
+    "foreignShareIndexImpactPct": 0.25,
+    "historicalEstimates": {
+      "peEstimate": 2.6,
+      "peDiscountPct": -64.2,
+      "evEbitdaEstimate": null,
+      "evEbitdaDiscountPct": null,
+      "pbEstimate": 0.7,
+      "pbDiscountPct": -38
+    },
+    "sectorCode": "0001"
   },
   "ALBTN": {
     "ticker": "ALBTN",
@@ -514,7 +752,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.4,
     "pb": 2.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 2.32,
+    "foreignSharePct": 2.43,
+    "foreignShareChangeBps": 10.42,
+    "foreignShareIndexImpactPct": 0.12,
+    "sectorCode": "0005"
   },
   "ALCAR": {
     "ticker": "ALCAR",
@@ -530,7 +773,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.9,
     "pb": 3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 0.16,
+    "foreignSharePct": 0.26,
+    "foreignShareChangeBps": 10.3,
+    "foreignShareIndexImpactPct": 0.1,
+    "sectorCode": "0006"
   },
   "ALCTL": {
     "ticker": "ALCTL",
@@ -546,7 +794,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.3,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 4.06,
+    "foreignSharePct": 3.77,
+    "foreignShareChangeBps": -28.16,
+    "foreignShareIndexImpactPct": -0.28,
+    "sectorCode": "0020"
   },
   "ALFAS": {
     "ticker": "ALFAS",
@@ -562,7 +815,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.5,
     "pb": 1.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 8.84,
+    "foreignSharePct": 9.01,
+    "foreignShareChangeBps": 16.59,
+    "foreignShareIndexImpactPct": 0.17,
+    "sectorCode": "0012"
   },
   "ALGYO": {
     "ticker": "ALGYO",
@@ -578,7 +836,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 5.63,
+    "foreignSharePct": 5.7,
+    "foreignShareChangeBps": 6.62,
+    "foreignShareIndexImpactPct": 0.07,
+    "sectorCode": "0015"
   },
   "ALKA": {
     "ticker": "ALKA",
@@ -594,7 +857,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.4,
     "pb": 1.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 1.59,
+    "foreignSharePct": 1.54,
+    "foreignShareChangeBps": -4.32,
+    "foreignShareIndexImpactPct": -0.1,
+    "sectorCode": "0024"
   },
   "ALKIM": {
     "ticker": "ALKIM",
@@ -610,7 +878,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.406Z"
+    "updatedAt": "2026-10-14T13:49:04.406Z",
+    "foreignSharePrevPct": 6.05,
+    "foreignSharePct": 5.98,
+    "foreignShareChangeBps": -7.07,
+    "foreignShareIndexImpactPct": -0.09,
+    "sectorCode": "0025"
   },
   "ALKLC": {
     "ticker": "ALKLC",
@@ -626,7 +899,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.6,
     "pb": 2.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 18.19,
+    "foreignSharePct": 16.81,
+    "foreignShareChangeBps": -138.29,
+    "foreignShareIndexImpactPct": -1.52,
+    "sectorCode": "0016"
   },
   "ALTNY": {
     "ticker": "ALTNY",
@@ -642,7 +920,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 4.3,
     "pb": 2.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 6.78,
+    "foreignSharePct": 6.64,
+    "foreignShareChangeBps": -13.83,
+    "foreignShareIndexImpactPct": -0.15,
+    "sectorCode": "0053"
   },
   "ALVES": {
     "ticker": "ALVES",
@@ -658,7 +941,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 9.5,
+    "foreignSharePct": 9.5,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0023"
   },
   "ANELE": {
     "ticker": "ANELE",
@@ -674,7 +962,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 6.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 2.51,
+    "foreignSharePct": 1.92,
+    "foreignShareChangeBps": -58.79,
+    "foreignShareIndexImpactPct": -1.69,
+    "sectorCode": "0021"
   },
   "ANGEN": {
     "ticker": "ANGEN",
@@ -690,7 +983,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.5,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 0.94,
+    "foreignSharePct": 0.62,
+    "foreignShareChangeBps": -32.18,
+    "foreignShareIndexImpactPct": -0.35,
+    "sectorCode": "0037"
   },
   "ANHYT": {
     "ticker": "ANHYT",
@@ -706,7 +1004,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 3.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 16.95,
+    "foreignSharePct": 16.89,
+    "foreignShareChangeBps": -6.04,
+    "foreignShareIndexImpactPct": -0.08,
+    "historicalEstimates": {
+      "peEstimate": 5.3,
+      "peDiscountPct": -37.9,
+      "evEbitdaEstimate": null,
+      "evEbitdaDiscountPct": null,
+      "pbEstimate": 2.5,
+      "pbDiscountPct": -18.9
+    },
+    "sectorCode": "0040"
   },
   "ANSGR": {
     "ticker": "ANSGR",
@@ -722,7 +1033,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 13.55,
+    "foreignSharePct": 13.59,
+    "foreignShareChangeBps": 3.93,
+    "foreignShareIndexImpactPct": 0.09,
+    "historicalEstimates": {
+      "peEstimate": 2.8,
+      "peDiscountPct": -53,
+      "evEbitdaEstimate": null,
+      "evEbitdaDiscountPct": null,
+      "pbEstimate": 1,
+      "pbDiscountPct": -29.5
+    },
+    "sectorCode": "0040"
   },
   "ARASE": {
     "ticker": "ARASE",
@@ -738,7 +1062,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 15.86,
+    "foreignSharePct": 15.87,
+    "foreignShareChangeBps": 0.66,
+    "foreignShareIndexImpactPct": 0.01,
+    "sectorCode": "0038"
   },
   "ARCLK": {
     "ticker": "ARCLK",
@@ -754,7 +1083,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 13.17,
+    "foreignSharePct": 13.08,
+    "foreignShareChangeBps": -8.22,
+    "foreignShareIndexImpactPct": -0.12,
+    "historicalEstimates": {
+      "peEstimate": null,
+      "peDiscountPct": null,
+      "evEbitdaEstimate": 7.1,
+      "evEbitdaDiscountPct": 0.5,
+      "pbEstimate": 0.6,
+      "pbDiscountPct": -62.5
+    },
+    "sectorCode": "0006"
   },
   "ARDYZ": {
     "ticker": "ARDYZ",
@@ -770,7 +1112,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.8,
     "pb": 3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 4.67,
+    "foreignSharePct": 4.61,
+    "foreignShareChangeBps": -5.96,
+    "foreignShareIndexImpactPct": -0.13,
+    "sectorCode": "0043"
   },
   "ARENA": {
     "ticker": "ARENA",
@@ -786,7 +1133,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.2,
     "pb": 0.8,
     "lastPeriod": "3/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 25.98,
+    "foreignSharePct": 25.91,
+    "foreignShareChangeBps": -7.32,
+    "foreignShareIndexImpactPct": -0.1,
+    "sectorCode": "0002"
   },
   "ARFYE": {
     "ticker": "ARFYE",
@@ -802,7 +1154,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.7,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 6.22,
+    "foreignSharePct": 5.4,
+    "foreignShareChangeBps": -81.85,
+    "foreignShareIndexImpactPct": -0.82,
+    "sectorCode": "0011"
   },
   "ARMGD": {
     "ticker": "ARMGD",
@@ -818,7 +1175,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.3,
     "pb": 3.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 5.39,
+    "foreignSharePct": 5.56,
+    "foreignShareChangeBps": 16.72,
+    "foreignShareIndexImpactPct": 0.31,
+    "sectorCode": "0016"
   },
   "ARSAN": {
     "ticker": "ARSAN",
@@ -834,7 +1196,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 9.9,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 2.69,
+    "foreignSharePct": 2.68,
+    "foreignShareChangeBps": -0.75,
+    "foreignShareIndexImpactPct": -0.01,
+    "sectorCode": "0045"
   },
   "ARTMS": {
     "ticker": "ARTMS",
@@ -850,7 +1217,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 6.1,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 7.19,
+    "foreignSharePct": 7.18,
+    "foreignShareChangeBps": -0.49,
+    "foreignShareIndexImpactPct": -0.01,
+    "sectorCode": "0045"
   },
   "ARZUM": {
     "ticker": "ARZUM",
@@ -866,7 +1238,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": null,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 1.81,
+    "foreignSharePct": 1.77,
+    "foreignShareChangeBps": -4.23,
+    "foreignShareIndexImpactPct": -0.04,
+    "sectorCode": "0006"
   },
   "ASELS": {
     "ticker": "ASELS",
@@ -882,7 +1259,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 7.1,
     "pb": 5.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 51.69,
+    "foreignSharePct": 51.42,
+    "foreignShareChangeBps": -26.74,
+    "foreignShareIndexImpactPct": -0.27,
+    "historicalEstimates": {
+      "peEstimate": 24,
+      "peDiscountPct": 59.9,
+      "evEbitdaEstimate": 22.6,
+      "evEbitdaDiscountPct": 63.1,
+      "pbEstimate": 4.4,
+      "pbDiscountPct": 46.6
+    },
+    "sectorCode": "0053"
   },
   "ASGYO": {
     "ticker": "ASGYO",
@@ -898,7 +1288,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 1.09,
+    "foreignSharePct": 1.04,
+    "foreignShareChangeBps": -5.29,
+    "foreignShareIndexImpactPct": -0.06,
+    "sectorCode": "0015"
   },
   "ASTOR": {
     "ticker": "ASTOR",
@@ -914,7 +1309,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 4.3,
     "pb": 4.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 65.18,
+    "foreignSharePct": 65.28,
+    "foreignShareChangeBps": 9.94,
+    "foreignShareIndexImpactPct": 0.1,
+    "historicalEstimates": {
+      "peEstimate": 19.2,
+      "peDiscountPct": 10.1,
+      "evEbitdaEstimate": 10.1,
+      "evEbitdaDiscountPct": -9.4,
+      "pbEstimate": 3.4,
+      "pbDiscountPct": -44.1
+    },
+    "sectorCode": "0012"
   },
   "ASUZU": {
     "ticker": "ASUZU",
@@ -930,7 +1338,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 5.59,
+    "foreignSharePct": 5.54,
+    "foreignShareChangeBps": -4.83,
+    "foreignShareIndexImpactPct": -0.05,
+    "sectorCode": "0031"
   },
   "ATAGY": {
     "ticker": "ATAGY",
@@ -946,7 +1359,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 0.01,
+    "foreignSharePct": 0.01,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0015"
   },
   "ATAKP": {
     "ticker": "ATAKP",
@@ -962,7 +1380,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 5.11,
+    "foreignSharePct": 4.97,
+    "foreignShareChangeBps": -13.59,
+    "foreignShareIndexImpactPct": -0.15,
+    "historicalEstimates": {
+      "peEstimate": 4.8,
+      "peDiscountPct": -77.4,
+      "evEbitdaEstimate": 7.1,
+      "evEbitdaDiscountPct": -27.9,
+      "pbEstimate": 0.5,
+      "pbDiscountPct": -66.9
+    },
+    "sectorCode": "0016"
   },
   "ATATP": {
     "ticker": "ATATP",
@@ -978,7 +1409,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.2,
     "pb": 3.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 15.65,
+    "foreignSharePct": 15.76,
+    "foreignShareChangeBps": 10.7,
+    "foreignShareIndexImpactPct": 0.11,
+    "sectorCode": "0043"
   },
   "ATATR": {
     "ticker": "ATATR",
@@ -994,7 +1430,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.8,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 3.57,
+    "foreignSharePct": 1.84,
+    "foreignShareChangeBps": -173.39,
+    "foreignShareIndexImpactPct": -1.76,
+    "sectorCode": "0046"
   },
   "ATEKS": {
     "ticker": "ATEKS",
@@ -1010,7 +1451,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.4,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 0.32,
+    "foreignSharePct": 0.32,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0045"
   },
   "ATLAS": {
     "ticker": "ATLAS",
@@ -1026,7 +1472,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 0.04,
+    "foreignSharePct": 0.04,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0047"
   },
   "ATSYH": {
     "ticker": "ATSYH",
@@ -1042,7 +1493,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 5.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "sectorCode": "0019"
   },
   "AVGYO": {
     "ticker": "AVGYO",
@@ -1058,7 +1510,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 0.88,
+    "foreignSharePct": 0.77,
+    "foreignShareChangeBps": -11.21,
+    "foreignShareIndexImpactPct": -0.18,
+    "sectorCode": "0015"
   },
   "AVHOL": {
     "ticker": "AVHOL",
@@ -1074,7 +1531,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 5.78,
+    "foreignSharePct": 4.89,
+    "foreignShareChangeBps": -89.28,
+    "foreignShareIndexImpactPct": -1.01,
+    "sectorCode": "0019"
   },
   "AVOD": {
     "ticker": "AVOD",
@@ -1090,7 +1552,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.9,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 3.61,
+    "foreignSharePct": 3.58,
+    "foreignShareChangeBps": -3.13,
+    "foreignShareIndexImpactPct": -0.03,
+    "sectorCode": "0016"
   },
   "AVPGY": {
     "ticker": "AVPGY",
@@ -1106,7 +1573,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 3.43,
+    "foreignSharePct": 3.45,
+    "foreignShareChangeBps": 2,
+    "foreignShareIndexImpactPct": 0.03,
+    "historicalEstimates": {
+      "peEstimate": 3.5,
+      "peDiscountPct": -55.3,
+      "evEbitdaEstimate": 5.9,
+      "evEbitdaDiscountPct": 13.1,
+      "pbEstimate": 0.4,
+      "pbDiscountPct": null
+    },
+    "sectorCode": "0015"
   },
   "AVTUR": {
     "ticker": "AVTUR",
@@ -1122,7 +1602,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 10.2,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 0.22,
+    "foreignSharePct": 0.2,
+    "foreignShareChangeBps": -2.19,
+    "foreignShareIndexImpactPct": -0.03,
+    "sectorCode": "0046"
   },
   "AYCES": {
     "ticker": "AYCES",
@@ -1138,7 +1623,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 20.8,
     "pb": 1.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 0.75,
+    "foreignSharePct": 0.53,
+    "foreignShareChangeBps": -22.22,
+    "foreignShareIndexImpactPct": -0.25,
+    "sectorCode": "0046"
   },
   "AYDEM": {
     "ticker": "AYDEM",
@@ -1154,7 +1644,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.7,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 23.6,
+    "foreignSharePct": 23.2,
+    "foreignShareChangeBps": -39.85,
+    "foreignShareIndexImpactPct": -0.42,
+    "historicalEstimates": {
+      "peEstimate": null,
+      "peDiscountPct": null,
+      "evEbitdaEstimate": 5.6,
+      "evEbitdaDiscountPct": -27.3,
+      "pbEstimate": 0.4,
+      "pbDiscountPct": -64.9
+    },
+    "sectorCode": "0011"
   },
   "AYEN": {
     "ticker": "AYEN",
@@ -1170,7 +1673,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.8,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 5.39,
+    "foreignSharePct": 5.37,
+    "foreignShareChangeBps": -1.65,
+    "foreignShareIndexImpactPct": -0.02,
+    "sectorCode": "0011"
   },
   "AYES": {
     "ticker": "AYES",
@@ -1186,7 +1694,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.3,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "sectorCode": "0021"
   },
   "AYGAZ": {
     "ticker": "AYGAZ",
@@ -1202,7 +1711,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 64.17,
+    "foreignSharePct": 64.14,
+    "foreignShareChangeBps": -3.15,
+    "foreignShareIndexImpactPct": -0.06,
+    "sectorCode": "0036"
   },
   "AZTEK": {
     "ticker": "AZTEK",
@@ -1218,7 +1732,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 1.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 0.88,
+    "foreignSharePct": 0.77,
+    "foreignShareChangeBps": -10.64,
+    "foreignShareIndexImpactPct": -0.12,
+    "sectorCode": "0043"
   },
   "BAGFS": {
     "ticker": "BAGFS",
@@ -1234,7 +1753,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.7,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 6.17,
+    "foreignSharePct": 6.09,
+    "foreignShareChangeBps": -7.15,
+    "foreignShareIndexImpactPct": -0.09,
+    "sectorCode": "0042"
   },
   "BAHKM": {
     "ticker": "BAHKM",
@@ -1250,7 +1774,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 8.2,
     "pb": 5.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 2.02,
+    "foreignSharePct": 2.49,
+    "foreignShareChangeBps": 47.11,
+    "foreignShareIndexImpactPct": 0.67,
+    "sectorCode": "0025"
   },
   "BAKAB": {
     "ticker": "BAKAB",
@@ -1266,7 +1795,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 5.73,
+    "foreignSharePct": 5.67,
+    "foreignShareChangeBps": -6.01,
+    "foreignShareIndexImpactPct": -0.18,
+    "sectorCode": "0024"
   },
   "BALAT": {
     "ticker": "BALAT",
@@ -1282,7 +1816,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 19.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "sectorCode": "0033"
   },
   "BALSU": {
     "ticker": "BALSU",
@@ -1298,7 +1833,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.1,
     "pb": 1.7,
     "lastPeriod": "12/2025",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 6.88,
+    "foreignSharePct": 7.01,
+    "foreignShareChangeBps": 13.13,
+    "foreignShareIndexImpactPct": 0.14,
+    "historicalEstimates": {
+      "peEstimate": 4.1,
+      "peDiscountPct": -87.8,
+      "evEbitdaEstimate": 7.6,
+      "evEbitdaDiscountPct": -39,
+      "pbEstimate": 1.1,
+      "pbDiscountPct": -71.6
+    },
+    "sectorCode": "0016"
   },
   "BANVT": {
     "ticker": "BANVT",
@@ -1314,7 +1862,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 77.61,
+    "foreignSharePct": 77.61,
+    "foreignShareChangeBps": 0.47,
+    "foreignShareIndexImpactPct": 0.02,
+    "sectorCode": "0018"
   },
   "BARMA": {
     "ticker": "BARMA",
@@ -1330,7 +1883,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.9,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 7.38,
+    "foreignSharePct": 7.35,
+    "foreignShareChangeBps": -3.15,
+    "foreignShareIndexImpactPct": -0.03,
+    "sectorCode": "0024"
   },
   "BASCM": {
     "ticker": "BASCM",
@@ -1346,7 +1904,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "sectorCode": "0005"
   },
   "BASGZ": {
     "ticker": "BASGZ",
@@ -1362,7 +1921,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 7.44,
+    "foreignSharePct": 7.45,
+    "foreignShareChangeBps": 0.86,
+    "foreignShareIndexImpactPct": 0.01,
+    "sectorCode": "0038"
   },
   "BAYRK": {
     "ticker": "BAYRK",
@@ -1378,7 +1942,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.9,
     "pb": 3.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 1.6,
+    "foreignSharePct": 1.5,
+    "foreignShareChangeBps": -10.57,
+    "foreignShareIndexImpactPct": -0.13,
+    "sectorCode": "0045"
   },
   "BEGYO": {
     "ticker": "BEGYO",
@@ -1394,7 +1963,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 7.19,
+    "foreignSharePct": 6.74,
+    "foreignShareChangeBps": -45.03,
+    "foreignShareIndexImpactPct": -0.48,
+    "sectorCode": "0015"
   },
   "BERA": {
     "ticker": "BERA",
@@ -1410,7 +1984,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 7.28,
+    "foreignSharePct": 7.15,
+    "foreignShareChangeBps": -12.99,
+    "foreignShareIndexImpactPct": -0.14,
+    "sectorCode": "0019"
   },
   "BESLR": {
     "ticker": "BESLR",
@@ -1426,7 +2005,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.3,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 2.25,
+    "foreignSharePct": 2.23,
+    "foreignShareChangeBps": -2.24,
+    "foreignShareIndexImpactPct": -0.09,
+    "sectorCode": "0016"
   },
   "BESTE": {
     "ticker": "BESTE",
@@ -1442,7 +2026,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 6.8,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 4.25,
+    "foreignSharePct": 4,
+    "foreignShareChangeBps": -24.74,
+    "foreignShareIndexImpactPct": -0.25,
+    "sectorCode": "0011"
   },
   "BETAE": {
     "ticker": "BETAE",
@@ -1458,7 +2047,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 5.1,
     "pb": 3.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 7.6,
+    "foreignSharePct": 7.48,
+    "foreignShareChangeBps": -11.71,
+    "foreignShareIndexImpactPct": -0.13,
+    "sectorCode": "0012"
   },
   "BEYAZ": {
     "ticker": "BEYAZ",
@@ -1474,7 +2068,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.1,
     "pb": 1.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 1.15,
+    "foreignSharePct": 1.1,
+    "foreignShareChangeBps": -5,
+    "foreignShareIndexImpactPct": -0.1,
+    "sectorCode": "0048"
   },
   "BFREN": {
     "ticker": "BFREN",
@@ -1490,7 +2089,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.7,
     "pb": 15.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 23.9,
+    "foreignSharePct": 23.83,
+    "foreignShareChangeBps": -6.97,
+    "foreignShareIndexImpactPct": -0.09,
+    "sectorCode": "0033"
   },
   "BIENY": {
     "ticker": "BIENY",
@@ -1506,7 +2110,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 0.99,
+    "foreignSharePct": 0.71,
+    "foreignShareChangeBps": -28.16,
+    "foreignShareIndexImpactPct": -0.29,
+    "sectorCode": "0039"
   },
   "BIGCH": {
     "ticker": "BIGCH",
@@ -1522,7 +2131,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 10.38,
+    "foreignSharePct": 10.31,
+    "foreignShareChangeBps": -6.93,
+    "foreignShareIndexImpactPct": -0.1,
+    "sectorCode": "0016"
   },
   "BIGEN": {
     "ticker": "BIGEN",
@@ -1538,7 +2152,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 9.7,
     "pb": 3.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 2.36,
+    "foreignSharePct": 2.36,
+    "foreignShareChangeBps": -0.42,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0011"
   },
   "BIGTK": {
     "ticker": "BIGTK",
@@ -1554,7 +2173,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.8,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 1.19,
+    "foreignSharePct": 0.51,
+    "foreignShareChangeBps": -67.95,
+    "foreignShareIndexImpactPct": -1.67,
+    "sectorCode": "0028"
   },
   "BIMAS": {
     "ticker": "BIMAS",
@@ -1570,7 +2194,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 2.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 48.74,
+    "foreignSharePct": 48.72,
+    "foreignShareChangeBps": -1.6,
+    "foreignShareIndexImpactPct": -0.02,
+    "historicalEstimates": {
+      "peEstimate": 24.8,
+      "peDiscountPct": 54.6,
+      "evEbitdaEstimate": 8.4,
+      "evEbitdaDiscountPct": -19.1,
+      "pbEstimate": 2.2,
+      "pbDiscountPct": -58.4
+    },
+    "sectorCode": "0035"
   },
   "BINBN": {
     "ticker": "BINBN",
@@ -1586,7 +2223,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 9,
     "pb": 2.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 51.96,
+    "foreignSharePct": 51.98,
+    "foreignShareChangeBps": 2.98,
+    "foreignShareIndexImpactPct": 0.03,
+    "sectorCode": "0048"
   },
   "BINHO": {
     "ticker": "BINHO",
@@ -1602,7 +2244,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.407Z"
+    "updatedAt": "2026-10-14T13:49:04.407Z",
+    "foreignSharePrevPct": 0.99,
+    "foreignSharePct": 0.36,
+    "foreignShareChangeBps": -63.51,
+    "foreignShareIndexImpactPct": -0.64,
+    "sectorCode": "0019"
   },
   "BIOEN": {
     "ticker": "BIOEN",
@@ -1618,7 +2265,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.5,
     "pb": 1.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 5.86,
+    "foreignSharePct": 5.93,
+    "foreignShareChangeBps": 6.69,
+    "foreignShareIndexImpactPct": 0.07,
+    "sectorCode": "0011"
   },
   "BIZIM": {
     "ticker": "BIZIM",
@@ -1634,7 +2286,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.1,
     "pb": null,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 2.17,
+    "foreignSharePct": 2.08,
+    "foreignShareChangeBps": -9.15,
+    "foreignShareIndexImpactPct": -0.1,
+    "sectorCode": "0035"
   },
   "BJKAS": {
     "ticker": "BJKAS",
@@ -1650,7 +2307,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.2,
     "pb": 1.6,
     "lastPeriod": "3/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 6.73,
+    "foreignSharePct": 5.93,
+    "foreignShareChangeBps": -80,
+    "foreignShareIndexImpactPct": -0.82,
+    "sectorCode": "0041"
   },
   "BKRGY": {
     "ticker": "BKRGY",
@@ -1666,7 +2328,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 8.24,
+    "foreignSharePct": 7.76,
+    "foreignShareChangeBps": -48.25,
+    "foreignShareIndexImpactPct": -0.57,
+    "sectorCode": "0015"
   },
   "BLCYT": {
     "ticker": "BLCYT",
@@ -1682,7 +2349,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.3,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 4.63,
+    "foreignSharePct": 3.99,
+    "foreignShareChangeBps": -64.21,
+    "foreignShareIndexImpactPct": -0.91,
+    "sectorCode": "0045"
   },
   "BLUME": {
     "ticker": "BLUME",
@@ -1698,7 +2370,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 13.3,
     "pb": 9.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 2.92,
+    "foreignSharePct": 2.92,
+    "foreignShareChangeBps": 0.08,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0046"
   },
   "BMSCH": {
     "ticker": "BMSCH",
@@ -1714,7 +2391,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.78,
+    "foreignSharePct": 0.85,
+    "foreignShareChangeBps": 6.61,
+    "foreignShareIndexImpactPct": 0.08,
+    "sectorCode": "0007"
   },
   "BMSTL": {
     "ticker": "BMSTL",
@@ -1730,7 +2412,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.7,
     "pb": 7.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 4.16,
+    "foreignSharePct": 4.19,
+    "foreignShareChangeBps": 3.35,
+    "foreignShareIndexImpactPct": 0.04,
+    "sectorCode": "0007"
   },
   "BNTAS": {
     "ticker": "BNTAS",
@@ -1746,7 +2433,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 1.29,
+    "foreignSharePct": 1.21,
+    "foreignShareChangeBps": -8.07,
+    "foreignShareIndexImpactPct": -0.1,
+    "sectorCode": "0025"
   },
   "BOBET": {
     "ticker": "BOBET",
@@ -1762,7 +2454,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.7,
+    "foreignSharePct": 0.52,
+    "foreignShareChangeBps": -18.16,
+    "foreignShareIndexImpactPct": -0.21,
+    "sectorCode": "0005"
   },
   "BORLS": {
     "ticker": "BORLS",
@@ -1778,7 +2475,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.7,
     "pb": null,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 6.56,
+    "foreignSharePct": 6.72,
+    "foreignShareChangeBps": 15.68,
+    "foreignShareIndexImpactPct": 0.16,
+    "sectorCode": "0048"
   },
   "BORSK": {
     "ticker": "BORSK",
@@ -1794,7 +2496,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 0.7,
     "lastPeriod": "3/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.42,
+    "foreignSharePct": 0.3,
+    "foreignShareChangeBps": -11.96,
+    "foreignShareIndexImpactPct": -0.12,
+    "sectorCode": "0016"
   },
   "BOSSA": {
     "ticker": "BOSSA",
@@ -1810,7 +2517,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.3,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.34,
+    "foreignSharePct": 0.32,
+    "foreignShareChangeBps": -1.36,
+    "foreignShareIndexImpactPct": -0.06,
+    "sectorCode": "0045"
   },
   "BRISA": {
     "ticker": "BRISA",
@@ -1826,7 +2538,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 10.17,
+    "foreignSharePct": 10.1,
+    "foreignShareChangeBps": -7.3,
+    "foreignShareIndexImpactPct": -0.07,
+    "sectorCode": "0032"
   },
   "BRKO": {
     "ticker": "BRKO",
@@ -1842,7 +2559,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 6.6,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "sectorCode": "0045"
   },
   "BRKSN": {
     "ticker": "BRKSN",
@@ -1858,7 +2576,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 1.19,
+    "foreignSharePct": 1.15,
+    "foreignShareChangeBps": -3.82,
+    "foreignShareIndexImpactPct": -0.04,
+    "sectorCode": "0021"
   },
   "BRKVY": {
     "ticker": "BRKVY",
@@ -1874,7 +2597,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.3,
     "pb": 1.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 4.97,
+    "foreignSharePct": 4.79,
+    "foreignShareChangeBps": -17.83,
+    "foreignShareIndexImpactPct": -0.18,
+    "sectorCode": "0055"
   },
   "BRLSM": {
     "ticker": "BRLSM",
@@ -1890,7 +2618,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 1.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 4.31,
+    "foreignSharePct": 4.3,
+    "foreignShareChangeBps": -0.84,
+    "foreignShareIndexImpactPct": -0.01,
+    "sectorCode": "0021"
   },
   "BRMEN": {
     "ticker": "BRMEN",
@@ -1906,7 +2639,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3,
     "pb": null,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "sectorCode": "0045"
   },
   "BRSAN": {
     "ticker": "BRSAN",
@@ -1922,7 +2656,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 2.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 17.59,
+    "foreignSharePct": 17.48,
+    "foreignShareChangeBps": -10.79,
+    "foreignShareIndexImpactPct": -0.13,
+    "sectorCode": "0008"
   },
   "BRYAT": {
     "ticker": "BRYAT",
@@ -1938,7 +2677,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 4.3,
+    "foreignSharePct": 4.26,
+    "foreignShareChangeBps": -3.63,
+    "foreignShareIndexImpactPct": -0.12,
+    "sectorCode": "0019"
   },
   "BSOKE": {
     "ticker": "BSOKE",
@@ -1954,7 +2698,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.9,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 13.69,
+    "foreignSharePct": 11.81,
+    "foreignShareChangeBps": -188.69,
+    "foreignShareIndexImpactPct": -2.61,
+    "sectorCode": "0005"
   },
   "BTCIM": {
     "ticker": "BTCIM",
@@ -1970,7 +2719,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 8.56,
+    "foreignSharePct": 7.81,
+    "foreignShareChangeBps": -75.81,
+    "foreignShareIndexImpactPct": -0.94,
+    "sectorCode": "0005"
   },
   "BUCIM": {
     "ticker": "BUCIM",
@@ -1986,7 +2740,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 3.79,
+    "foreignSharePct": 3.78,
+    "foreignShareChangeBps": -1.39,
+    "foreignShareIndexImpactPct": -0.02,
+    "sectorCode": "0005"
   },
   "BULGS": {
     "ticker": "BULGS",
@@ -2002,7 +2761,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 8.21,
+    "foreignSharePct": 5.47,
+    "foreignShareChangeBps": -273.92,
+    "foreignShareIndexImpactPct": -2.98,
+    "sectorCode": "0047"
   },
   "BURCE": {
     "ticker": "BURCE",
@@ -2018,7 +2782,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.6,
     "pb": 1.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 3.8,
+    "foreignSharePct": 3.82,
+    "foreignShareChangeBps": 2.37,
+    "foreignShareIndexImpactPct": 0.02,
+    "sectorCode": "0007"
   },
   "BURVA": {
     "ticker": "BURVA",
@@ -2034,7 +2803,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 10.9,
     "pb": 35.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.86,
+    "foreignSharePct": 0.88,
+    "foreignShareChangeBps": 2.05,
+    "foreignShareIndexImpactPct": 0.03,
+    "sectorCode": "0021"
   },
   "BVSAN": {
     "ticker": "BVSAN",
@@ -2050,7 +2824,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 5.22,
+    "foreignSharePct": 5.07,
+    "foreignShareChangeBps": -15.68,
+    "foreignShareIndexImpactPct": -0.17,
+    "sectorCode": "0021"
   },
   "BYDNR": {
     "ticker": "BYDNR",
@@ -2066,7 +2845,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 12.7,
+    "foreignSharePct": 12.4,
+    "foreignShareChangeBps": -30.08,
+    "foreignShareIndexImpactPct": -0.39,
+    "sectorCode": "0016"
   },
   "CANTE": {
     "ticker": "CANTE",
@@ -2082,7 +2866,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.1,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 5.05,
+    "foreignSharePct": 5.04,
+    "foreignShareChangeBps": -1.21,
+    "foreignShareIndexImpactPct": -0.01,
+    "sectorCode": "0011"
   },
   "CASA": {
     "ticker": "CASA",
@@ -2098,7 +2887,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.2,
     "pb": null,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "sectorCode": "0035"
   },
   "CATES": {
     "ticker": "CATES",
@@ -2114,7 +2904,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 11.15,
+    "foreignSharePct": 9.98,
+    "foreignShareChangeBps": -117.14,
+    "foreignShareIndexImpactPct": -1.19,
+    "sectorCode": "0011"
   },
   "CCOLA": {
     "ticker": "CCOLA",
@@ -2130,7 +2925,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.2,
     "pb": 2.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 87.12,
+    "foreignSharePct": 87.12,
+    "foreignShareChangeBps": -0.3,
+    "foreignShareIndexImpactPct": 0,
+    "historicalEstimates": {
+      "peEstimate": 9.8,
+      "peDiscountPct": -12.4,
+      "evEbitdaEstimate": 5.7,
+      "evEbitdaDiscountPct": -5.3,
+      "pbEstimate": 2.3,
+      "pbDiscountPct": 14.8
+    },
+    "sectorCode": "0029"
   },
   "CELHA": {
     "ticker": "CELHA",
@@ -2146,7 +2954,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 5.1,
     "pb": 2.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 5.12,
+    "foreignSharePct": 4.88,
+    "foreignShareChangeBps": -24.37,
+    "foreignShareIndexImpactPct": -0.56,
+    "sectorCode": "0008"
   },
   "CEMAS": {
     "ticker": "CEMAS",
@@ -2162,7 +2975,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.7,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.81,
+    "foreignSharePct": 0.7,
+    "foreignShareChangeBps": -10.52,
+    "foreignShareIndexImpactPct": -0.12,
+    "sectorCode": "0007"
   },
   "CEMTS": {
     "ticker": "CEMTS",
@@ -2178,7 +2996,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 5.68,
+    "foreignSharePct": 5.61,
+    "foreignShareChangeBps": -7.36,
+    "foreignShareIndexImpactPct": -0.09,
+    "sectorCode": "0008"
   },
   "CEMZY": {
     "ticker": "CEMZY",
@@ -2194,7 +3017,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 4.9,
     "pb": 3.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 10.91,
+    "foreignSharePct": 10.76,
+    "foreignShareChangeBps": -14.78,
+    "foreignShareIndexImpactPct": -0.42,
+    "sectorCode": "0016"
   },
   "CEOEM": {
     "ticker": "CEOEM",
@@ -2210,7 +3038,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 1.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 3.58,
+    "foreignSharePct": 2.76,
+    "foreignShareChangeBps": -82.45,
+    "foreignShareIndexImpactPct": -0.82,
+    "sectorCode": "0028"
   },
   "CGCAM": {
     "ticker": "CGCAM",
@@ -2226,7 +3059,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.1,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 5.45,
+    "foreignSharePct": 5.38,
+    "foreignShareChangeBps": -7.46,
+    "foreignShareIndexImpactPct": -0.11,
+    "sectorCode": "0004"
   },
   "CIMSA": {
     "ticker": "CIMSA",
@@ -2242,7 +3080,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.2,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 10.32,
+    "foreignSharePct": 10.24,
+    "foreignShareChangeBps": -8.53,
+    "foreignShareIndexImpactPct": -0.12,
+    "historicalEstimates": {
+      "peEstimate": 9,
+      "peDiscountPct": -0.8,
+      "evEbitdaEstimate": 6.5,
+      "evEbitdaDiscountPct": -13.6,
+      "pbEstimate": 1.1,
+      "pbDiscountPct": -30.9
+    },
+    "sectorCode": "0005"
   },
   "CITAS": {
     "ticker": "CITAS",
@@ -2258,7 +3109,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.8,
     "pb": 3.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.12,
+    "foreignSharePct": 0.04,
+    "foreignShareChangeBps": -7.52,
+    "foreignShareIndexImpactPct": -0.1,
+    "sectorCode": "0016"
   },
   "CLEBI": {
     "ticker": "CLEBI",
@@ -2274,7 +3130,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.6,
     "pb": 4.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 4.69,
+    "foreignSharePct": 4.71,
+    "foreignShareChangeBps": 1.79,
+    "foreignShareIndexImpactPct": 0.04,
+    "sectorCode": "0017"
   },
   "CMBTN": {
     "ticker": "CMBTN",
@@ -2290,7 +3151,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 8.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.19,
+    "foreignSharePct": 0.36,
+    "foreignShareChangeBps": 17.21,
+    "foreignShareIndexImpactPct": 0.2,
+    "sectorCode": "0005"
   },
   "CMENT": {
     "ticker": "CMENT",
@@ -2306,7 +3172,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.1,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.17,
+    "foreignSharePct": 0.17,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0005"
   },
   "CONSE": {
     "ticker": "CONSE",
@@ -2322,7 +3193,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.9,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 7.45,
+    "foreignSharePct": 7.31,
+    "foreignShareChangeBps": -13.9,
+    "foreignShareIndexImpactPct": -0.14,
+    "sectorCode": "0011"
   },
   "COSMO": {
     "ticker": "COSMO",
@@ -2338,7 +3214,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 4.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.68,
+    "foreignSharePct": 0.86,
+    "foreignShareChangeBps": 17.94,
+    "foreignShareIndexImpactPct": 0.26,
+    "sectorCode": "0019"
   },
   "CRDFA": {
     "ticker": "CRDFA",
@@ -2354,7 +3235,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 1.05,
+    "foreignSharePct": 1.17,
+    "foreignShareChangeBps": 12.1,
+    "foreignShareIndexImpactPct": 0.18,
+    "sectorCode": "0014"
   },
   "CRFSA": {
     "ticker": "CRFSA",
@@ -2370,7 +3256,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": null,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.04,
+    "foreignSharePct": 0.25,
+    "foreignShareChangeBps": 21.04,
+    "foreignShareIndexImpactPct": 0.28,
+    "sectorCode": "0035"
   },
   "CUSAN": {
     "ticker": "CUSAN",
@@ -2386,7 +3277,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.3,
     "pb": 1.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 5.62,
+    "foreignSharePct": 2.46,
+    "foreignShareChangeBps": -316.08,
+    "foreignShareIndexImpactPct": -3.29,
+    "sectorCode": "0007"
   },
   "CVKMD": {
     "ticker": "CVKMD",
@@ -2402,7 +3298,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 11.8,
     "pb": 3.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 9.08,
+    "foreignSharePct": 7.84,
+    "foreignShareChangeBps": -124.23,
+    "foreignShareIndexImpactPct": -1.36,
+    "sectorCode": "0052"
   },
   "CWENE": {
     "ticker": "CWENE",
@@ -2418,7 +3319,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.4,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 11.19,
+    "foreignSharePct": 11.01,
+    "foreignShareChangeBps": -17.99,
+    "foreignShareIndexImpactPct": -0.23,
+    "sectorCode": "0012"
   },
   "DAGI": {
     "ticker": "DAGI",
@@ -2434,7 +3340,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.1,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 9.4,
+    "foreignSharePct": 10.78,
+    "foreignShareChangeBps": 137.91,
+    "foreignShareIndexImpactPct": 1.67,
+    "sectorCode": "0045"
   },
   "DAPGM": {
     "ticker": "DAPGM",
@@ -2450,7 +3361,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 13.68,
+    "foreignSharePct": 12.85,
+    "foreignShareChangeBps": -83.24,
+    "foreignShareIndexImpactPct": -0.88,
+    "sectorCode": "0015"
   },
   "DARDL": {
     "ticker": "DARDL",
@@ -2466,7 +3382,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 3.86,
+    "foreignSharePct": 3.81,
+    "foreignShareChangeBps": -5.31,
+    "foreignShareIndexImpactPct": -0.13,
+    "sectorCode": "0016"
   },
   "DCTTR": {
     "ticker": "DCTTR",
@@ -2482,7 +3403,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.3,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 1.39,
+    "foreignSharePct": 0.81,
+    "foreignShareChangeBps": -57.47,
+    "foreignShareIndexImpactPct": -0.63,
+    "sectorCode": "0049"
   },
   "DENGE": {
     "ticker": "DENGE",
@@ -2498,7 +3424,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.89,
+    "foreignSharePct": 0.81,
+    "foreignShareChangeBps": -7.9,
+    "foreignShareIndexImpactPct": -0.08,
+    "sectorCode": "0019"
   },
   "DERHL": {
     "ticker": "DERHL",
@@ -2514,7 +3445,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 1,
+    "foreignSharePct": 1.05,
+    "foreignShareChangeBps": 4.41,
+    "foreignShareIndexImpactPct": 0.07,
+    "sectorCode": "0009"
   },
   "DERIM": {
     "ticker": "DERIM",
@@ -2530,7 +3466,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.2,
     "pb": 1.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 3.79,
+    "foreignSharePct": 3.77,
+    "foreignShareChangeBps": -1.88,
+    "foreignShareIndexImpactPct": -0.05,
+    "sectorCode": "0009"
   },
   "DESA": {
     "ticker": "DESA",
@@ -2546,7 +3487,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 4.44,
+    "foreignSharePct": 4.21,
+    "foreignShareChangeBps": -22.63,
+    "foreignShareIndexImpactPct": -0.49,
+    "sectorCode": "0009"
   },
   "DESPC": {
     "ticker": "DESPC",
@@ -2562,7 +3508,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.1,
     "pb": 1.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 3.38,
+    "foreignSharePct": 3.33,
+    "foreignShareChangeBps": -4.88,
+    "foreignShareIndexImpactPct": -0.07,
+    "sectorCode": "0002"
   },
   "DEVA": {
     "ticker": "DEVA",
@@ -2578,7 +3529,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 3.55,
+    "foreignSharePct": 3.52,
+    "foreignShareChangeBps": -3.82,
+    "foreignShareIndexImpactPct": -0.22,
+    "sectorCode": "0037"
   },
   "DGATE": {
     "ticker": "DGATE",
@@ -2594,7 +3550,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.1,
     "pb": 4.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 8.98,
+    "foreignSharePct": 8.97,
+    "foreignShareChangeBps": -0.21,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0002"
   },
   "DGGYO": {
     "ticker": "DGGYO",
@@ -2610,7 +3571,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.01,
+    "foreignSharePct": 0.02,
+    "foreignShareChangeBps": 0.12,
+    "foreignShareIndexImpactPct": 0.02,
+    "sectorCode": "0015"
   },
   "DGNMO": {
     "ticker": "DGNMO",
@@ -2626,7 +3592,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 2.82,
+    "foreignSharePct": 2.88,
+    "foreignShareChangeBps": 5.88,
+    "foreignShareIndexImpactPct": 0.13,
+    "sectorCode": "0030"
   },
   "DIRIT": {
     "ticker": "DIRIT",
@@ -2642,7 +3613,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": null,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "sectorCode": "0045"
   },
   "DITAS": {
     "ticker": "DITAS",
@@ -2658,7 +3630,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 5.23,
+    "foreignSharePct": 5.52,
+    "foreignShareChangeBps": 28.52,
+    "foreignShareIndexImpactPct": 0.53,
+    "sectorCode": "0033"
   },
   "DMRGD": {
     "ticker": "DMRGD",
@@ -2674,7 +3651,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 5.8,
     "pb": 4.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 1.48,
+    "foreignSharePct": 1.32,
+    "foreignShareChangeBps": -15.92,
+    "foreignShareIndexImpactPct": -0.23,
+    "sectorCode": "0016"
   },
   "DMSAS": {
     "ticker": "DMSAS",
@@ -2690,7 +3672,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 5.99,
+    "foreignSharePct": 6.01,
+    "foreignShareChangeBps": 2.06,
+    "foreignShareIndexImpactPct": 0.04,
+    "sectorCode": "0007"
   },
   "DNISI": {
     "ticker": "DNISI",
@@ -2706,7 +3693,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.1,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.16,
+    "foreignSharePct": 0.19,
+    "foreignShareChangeBps": 3.56,
+    "foreignShareIndexImpactPct": 0.04,
+    "sectorCode": "0021"
   },
   "DOAS": {
     "ticker": "DOAS",
@@ -2722,7 +3714,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.2,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 22.49,
+    "foreignSharePct": 22.47,
+    "foreignShareChangeBps": -1.87,
+    "foreignShareIndexImpactPct": -0.02,
+    "historicalEstimates": {
+      "peEstimate": 17.8,
+      "peDiscountPct": 160.9,
+      "evEbitdaEstimate": 4.6,
+      "evEbitdaDiscountPct": -3.1,
+      "pbEstimate": 0.4,
+      "pbDiscountPct": -79.2
+    },
+    "sectorCode": "0031"
   },
   "DOCO": {
     "ticker": "DOCO",
@@ -2738,7 +3743,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.9,
     "pb": 4.3,
     "lastPeriod": "3/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 40.68,
+    "foreignSharePct": 40.66,
+    "foreignShareChangeBps": -2.42,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0048"
   },
   "DOFER": {
     "ticker": "DOFER",
@@ -2754,7 +3764,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.2,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 4.03,
+    "foreignSharePct": 4.08,
+    "foreignShareChangeBps": 5.16,
+    "foreignShareIndexImpactPct": 0.06,
+    "sectorCode": "0008"
   },
   "DOFRB": {
     "ticker": "DOFRB",
@@ -2770,7 +3785,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 8,
     "pb": 4.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 12.83,
+    "foreignSharePct": 12.79,
+    "foreignShareChangeBps": -4.02,
+    "foreignShareIndexImpactPct": -0.04,
+    "sectorCode": "0043"
   },
   "DOGUB": {
     "ticker": "DOGUB",
@@ -2786,7 +3806,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 11.1,
     "pb": 11.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 1.32,
+    "foreignSharePct": 1.43,
+    "foreignShareChangeBps": 11.65,
+    "foreignShareIndexImpactPct": 0.14,
+    "sectorCode": "0021"
   },
   "DOHOL": {
     "ticker": "DOHOL",
@@ -2802,7 +3827,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 28.28,
+    "foreignSharePct": 28.28,
+    "foreignShareChangeBps": -0.19,
+    "foreignShareIndexImpactPct": 0,
+    "historicalEstimates": {
+      "peEstimate": 11.5,
+      "peDiscountPct": 28.7,
+      "evEbitdaEstimate": 0.3,
+      "evEbitdaDiscountPct": -92.1,
+      "pbEstimate": 0.6,
+      "pbDiscountPct": -51.7
+    },
+    "sectorCode": "0019"
   },
   "DOKTA": {
     "ticker": "DOKTA",
@@ -2818,7 +3856,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 1.29,
+    "foreignSharePct": 1.28,
+    "foreignShareChangeBps": -0.76,
+    "foreignShareIndexImpactPct": -0.04,
+    "sectorCode": "0033"
   },
   "DSTKF": {
     "ticker": "DSTKF",
@@ -2834,7 +3877,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 7.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 4.85,
+    "foreignSharePct": 4.85,
+    "foreignShareChangeBps": 0.24,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0014"
   },
   "DUNYH": {
     "ticker": "DUNYH",
@@ -2850,7 +3898,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 5.78,
+    "foreignSharePct": 3.13,
+    "foreignShareChangeBps": -265.03,
+    "foreignShareIndexImpactPct": -4.33,
+    "sectorCode": "0016"
   },
   "DURDO": {
     "ticker": "DURDO",
@@ -2866,7 +3919,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.4,
     "pb": 1.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 5.92,
+    "foreignSharePct": 5.85,
+    "foreignShareChangeBps": -6.77,
+    "foreignShareIndexImpactPct": -0.15,
+    "sectorCode": "0024"
   },
   "DURKN": {
     "ticker": "DURKN",
@@ -2882,7 +3940,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.2,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 8.35,
+    "foreignSharePct": 8.12,
+    "foreignShareChangeBps": -22.54,
+    "foreignShareIndexImpactPct": -0.28,
+    "sectorCode": "0016"
   },
   "DYOBY": {
     "ticker": "DYOBY",
@@ -2898,7 +3961,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 1.78,
+    "foreignSharePct": 1.76,
+    "foreignShareChangeBps": -2.47,
+    "foreignShareIndexImpactPct": -0.06,
+    "sectorCode": "0003"
   },
   "DZGYO": {
     "ticker": "DZGYO",
@@ -2914,7 +3982,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 2.17,
+    "foreignSharePct": 1.97,
+    "foreignShareChangeBps": -19.43,
+    "foreignShareIndexImpactPct": -0.69,
+    "sectorCode": "0015"
   },
   "EBEBK": {
     "ticker": "EBEBK",
@@ -2930,7 +4003,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 2.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 13.9,
+    "foreignSharePct": 13.89,
+    "foreignShareChangeBps": -1.49,
+    "foreignShareIndexImpactPct": -0.02,
+    "sectorCode": "0035"
   },
   "ECILC": {
     "ticker": "ECILC",
@@ -2946,7 +4024,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.8,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 4.36,
+    "foreignSharePct": 4.18,
+    "foreignShareChangeBps": -17.95,
+    "foreignShareIndexImpactPct": -0.28,
+    "sectorCode": "0037"
   },
   "ECOGR": {
     "ticker": "ECOGR",
@@ -2962,7 +4045,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.4,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 40.74,
+    "foreignSharePct": 40.93,
+    "foreignShareChangeBps": 19.24,
+    "foreignShareIndexImpactPct": 0.19,
+    "sectorCode": "0011"
   },
   "ECZYT": {
     "ticker": "ECZYT",
@@ -2978,7 +4066,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 3.21,
+    "foreignSharePct": 3.13,
+    "foreignShareChangeBps": -7.83,
+    "foreignShareIndexImpactPct": -0.19,
+    "sectorCode": "0019"
   },
   "EDATA": {
     "ticker": "EDATA",
@@ -2994,7 +4087,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 1.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 4.2,
+    "foreignSharePct": 3.22,
+    "foreignShareChangeBps": -98.39,
+    "foreignShareIndexImpactPct": -1.23,
+    "sectorCode": "0043"
   },
   "EDIP": {
     "ticker": "EDIP",
@@ -3010,7 +4108,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.76,
+    "foreignSharePct": 0.57,
+    "foreignShareChangeBps": -18.95,
+    "foreignShareIndexImpactPct": -0.22,
+    "sectorCode": "0015"
   },
   "EFOR": {
     "ticker": "EFOR",
@@ -3026,7 +4129,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.8,
     "pb": 7.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 25.65,
+    "foreignSharePct": 25.56,
+    "foreignShareChangeBps": -9.14,
+    "foreignShareIndexImpactPct": -0.12,
+    "sectorCode": "0016"
   },
   "EGEEN": {
     "ticker": "EGEEN",
@@ -3042,7 +4150,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.2,
     "pb": 1.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 6.82,
+    "foreignSharePct": 6.8,
+    "foreignShareChangeBps": -2.34,
+    "foreignShareIndexImpactPct": -0.02,
+    "sectorCode": "0033"
   },
   "EGEGY": {
     "ticker": "EGEGY",
@@ -3058,7 +4171,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 5.64,
+    "foreignSharePct": 5.23,
+    "foreignShareChangeBps": -41.57,
+    "foreignShareIndexImpactPct": -0.46,
+    "sectorCode": "0015"
   },
   "EGEPO": {
     "ticker": "EGEPO",
@@ -3074,7 +4192,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.5,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 7.66,
+    "foreignSharePct": 7.66,
+    "foreignShareChangeBps": 0.46,
+    "foreignShareIndexImpactPct": 0.01,
+    "sectorCode": "0037"
   },
   "EGGUB": {
     "ticker": "EGGUB",
@@ -3090,7 +4213,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.1,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 2,
+    "foreignSharePct": 1.87,
+    "foreignShareChangeBps": -12.69,
+    "foreignShareIndexImpactPct": -0.21,
+    "sectorCode": "0042"
   },
   "EGPRO": {
     "ticker": "EGPRO",
@@ -3106,7 +4234,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.1,
     "pb": 1.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.95,
+    "foreignSharePct": 0.92,
+    "foreignShareChangeBps": -3.19,
+    "foreignShareIndexImpactPct": -0.08,
+    "sectorCode": "0021"
   },
   "EGSER": {
     "ticker": "EGSER",
@@ -3122,7 +4255,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 2.38,
+    "foreignSharePct": 2.38,
+    "foreignShareChangeBps": 0.58,
+    "foreignShareIndexImpactPct": 0.01,
+    "sectorCode": "0039"
   },
   "EKDMR": {
     "ticker": "EKDMR",
@@ -3138,7 +4276,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 15.71,
+    "foreignSharePct": 13.22,
+    "foreignShareChangeBps": -249.68,
+    "foreignShareIndexImpactPct": -2.7,
+    "sectorCode": "0008"
   },
   "EKGYO": {
     "ticker": "EKGYO",
@@ -3154,7 +4297,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 20.47,
+    "foreignSharePct": 20.2,
+    "foreignShareChangeBps": -26.76,
+    "foreignShareIndexImpactPct": -0.28,
+    "historicalEstimates": {
+      "peEstimate": 5.7,
+      "peDiscountPct": -23.3,
+      "evEbitdaEstimate": 5.5,
+      "evEbitdaDiscountPct": -24.7,
+      "pbEstimate": 0.4,
+      "pbDiscountPct": -66.3
+    },
+    "sectorCode": "0015"
   },
   "EKIM": {
     "ticker": "EKIM",
@@ -3170,7 +4326,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.8,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 3.13,
+    "foreignSharePct": 2.44,
+    "foreignShareChangeBps": -69.09,
+    "foreignShareIndexImpactPct": -0.94,
+    "sectorCode": "0048"
   },
   "EKIZ": {
     "ticker": "EKIZ",
@@ -3186,7 +4347,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.5,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "sectorCode": "0016"
   },
   "EKOS": {
     "ticker": "EKOS",
@@ -3202,7 +4364,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.3,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 6.65,
+    "foreignSharePct": 6.74,
+    "foreignShareChangeBps": 8.5,
+    "foreignShareIndexImpactPct": 0.09,
+    "sectorCode": "0054"
   },
   "EKSUN": {
     "ticker": "EKSUN",
@@ -3218,7 +4385,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 7.65,
+    "foreignSharePct": 7.72,
+    "foreignShareChangeBps": 7.36,
+    "foreignShareIndexImpactPct": 0.08,
+    "sectorCode": "0016"
   },
   "ELITE": {
     "ticker": "ELITE",
@@ -3234,7 +4406,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.9,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 4.39,
+    "foreignSharePct": 4.27,
+    "foreignShareChangeBps": -11.94,
+    "foreignShareIndexImpactPct": -0.13,
+    "sectorCode": "0016"
   },
   "EMKEL": {
     "ticker": "EMKEL",
@@ -3250,7 +4427,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.3,
     "pb": 1.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 6.95,
+    "foreignSharePct": 7.18,
+    "foreignShareChangeBps": 23.6,
+    "foreignShareIndexImpactPct": 0.31,
+    "sectorCode": "0012"
   },
   "EMNIS": {
     "ticker": "EMNIS",
@@ -3266,7 +4448,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.5,
     "pb": 3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "sectorCode": "0003"
   },
   "EMPAE": {
     "ticker": "EMPAE",
@@ -3282,7 +4465,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.5,
     "pb": 4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 8.41,
+    "foreignSharePct": 8.88,
+    "foreignShareChangeBps": 47.23,
+    "foreignShareIndexImpactPct": 0.47,
+    "sectorCode": "0043"
   },
   "ENDAE": {
     "ticker": "ENDAE",
@@ -3298,7 +4486,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.8,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 1.74,
+    "foreignSharePct": 1.61,
+    "foreignShareChangeBps": -12.22,
+    "foreignShareIndexImpactPct": -0.17,
+    "sectorCode": "0011"
   },
   "ENERY": {
     "ticker": "ENERY",
@@ -3314,7 +4507,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.9,
     "pb": 2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 10.65,
+    "foreignSharePct": 10.96,
+    "foreignShareChangeBps": 30.76,
+    "foreignShareIndexImpactPct": 0.4,
+    "sectorCode": "0038"
   },
   "ENJSA": {
     "ticker": "ENJSA",
@@ -3330,7 +4528,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 1.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 34.57,
+    "foreignSharePct": 34.59,
+    "foreignShareChangeBps": 1.2,
+    "foreignShareIndexImpactPct": 0.01,
+    "historicalEstimates": {
+      "peEstimate": 18.8,
+      "peDiscountPct": 93.7,
+      "evEbitdaEstimate": 3.7,
+      "evEbitdaDiscountPct": -10,
+      "pbEstimate": 1.1,
+      "pbDiscountPct": -27.3
+    },
+    "sectorCode": "0038"
   },
   "ENKAI": {
     "ticker": "ENKAI",
@@ -3346,7 +4557,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.5,
     "pb": 1.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 25.89,
+    "foreignSharePct": 25.88,
+    "foreignShareChangeBps": -0.41,
+    "foreignShareIndexImpactPct": -0.01,
+    "historicalEstimates": {
+      "peEstimate": 10.7,
+      "peDiscountPct": -10.7,
+      "evEbitdaEstimate": 6.8,
+      "evEbitdaDiscountPct": -0.1,
+      "pbEstimate": 1,
+      "pbDiscountPct": -14.5
+    },
+    "sectorCode": "0022"
   },
   "ENPRA": {
     "ticker": "ENPRA",
@@ -3362,7 +4586,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 22.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.01,
+    "foreignSharePct": 0.01,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0001"
   },
   "ENSRI": {
     "ticker": "ENSRI",
@@ -3378,7 +4607,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.8,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 9.01,
+    "foreignSharePct": 9.07,
+    "foreignShareChangeBps": 5.49,
+    "foreignShareIndexImpactPct": 0.06,
+    "sectorCode": "0009"
   },
   "ENTRA": {
     "ticker": "ENTRA",
@@ -3394,7 +4628,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 7.8,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 2.28,
+    "foreignSharePct": 2.26,
+    "foreignShareChangeBps": -2.26,
+    "foreignShareIndexImpactPct": -0.02,
+    "historicalEstimates": {
+      "peEstimate": 34.9,
+      "peDiscountPct": 220.1,
+      "evEbitdaEstimate": 6.8,
+      "evEbitdaDiscountPct": -31.8,
+      "pbEstimate": 0.4,
+      "pbDiscountPct": -63.1
+    },
+    "sectorCode": "0011"
   },
   "EPLAS": {
     "ticker": "EPLAS",
@@ -3410,7 +4657,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 2.53,
+    "foreignSharePct": 2.4,
+    "foreignShareChangeBps": -12.88,
+    "foreignShareIndexImpactPct": -0.18,
+    "sectorCode": "0021"
   },
   "ERBOS": {
     "ticker": "ERBOS",
@@ -3426,7 +4678,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 3.17,
+    "foreignSharePct": 3.12,
+    "foreignShareChangeBps": -4.84,
+    "foreignShareIndexImpactPct": -0.05,
+    "sectorCode": "0007"
   },
   "ERCB": {
     "ticker": "ERCB",
@@ -3442,7 +4699,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.6,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.64,
+    "foreignSharePct": 0.07,
+    "foreignShareChangeBps": -57.14,
+    "foreignShareIndexImpactPct": -0.71,
+    "sectorCode": "0008"
   },
   "EREGL": {
     "ticker": "EREGL",
@@ -3458,7 +4720,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.1,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 34.48,
+    "foreignSharePct": 34.58,
+    "foreignShareChangeBps": 10.07,
+    "foreignShareIndexImpactPct": 0.11,
+    "historicalEstimates": {
+      "peEstimate": 24.8,
+      "peDiscountPct": 111.3,
+      "evEbitdaEstimate": 10.7,
+      "evEbitdaDiscountPct": 59.7,
+      "pbEstimate": 0.9,
+      "pbDiscountPct": -36
+    },
+    "sectorCode": "0008"
   },
   "ERSU": {
     "ticker": "ERSU",
@@ -3474,7 +4749,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 4.4,
     "pb": 1.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 1.77,
+    "foreignSharePct": 1.74,
+    "foreignShareChangeBps": -3.27,
+    "foreignShareIndexImpactPct": -0.05,
+    "sectorCode": "0029"
   },
   "ESCAR": {
     "ticker": "ESCAR",
@@ -3490,7 +4770,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.2,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 26.42,
+    "foreignSharePct": 25.62,
+    "foreignShareChangeBps": -80.65,
+    "foreignShareIndexImpactPct": -1.16,
+    "sectorCode": "0048"
   },
   "ESCOM": {
     "ticker": "ESCOM",
@@ -3506,7 +4791,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 1.26,
+    "foreignSharePct": 1.07,
+    "foreignShareChangeBps": -18.43,
+    "foreignShareIndexImpactPct": -0.18,
+    "sectorCode": "0043"
   },
   "ESEN": {
     "ticker": "ESEN",
@@ -3522,7 +4812,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 5.7,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 12.51,
+    "foreignSharePct": 12.45,
+    "foreignShareChangeBps": -5.47,
+    "foreignShareIndexImpactPct": -0.05,
+    "sectorCode": "0011"
   },
   "ETILR": {
     "ticker": "ETILR",
@@ -3538,7 +4833,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 3.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 1.38,
+    "foreignSharePct": 1.12,
+    "foreignShareChangeBps": -25.94,
+    "foreignShareIndexImpactPct": -0.3,
+    "sectorCode": "0016"
   },
   "ETYAT": {
     "ticker": "ETYAT",
@@ -3554,7 +4854,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 9.5,
     "pb": 10.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 2.64,
+    "foreignSharePct": 2.64,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0047"
   },
   "EUHOL": {
     "ticker": "EUHOL",
@@ -3570,7 +4875,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.24,
+    "foreignSharePct": 0.24,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0019"
   },
   "EUKYO": {
     "ticker": "EUKYO",
@@ -3586,7 +4896,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 6.2,
     "pb": 6.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 4.28,
+    "foreignSharePct": 4.38,
+    "foreignShareChangeBps": 9.71,
+    "foreignShareIndexImpactPct": 0.1,
+    "sectorCode": "0047"
   },
   "EUPWR": {
     "ticker": "EUPWR",
@@ -3602,7 +4917,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2,
     "pb": 2.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 30.26,
+    "foreignSharePct": 30.24,
+    "foreignShareChangeBps": -2.48,
+    "foreignShareIndexImpactPct": -0.03,
+    "sectorCode": "0012"
   },
   "EUREN": {
     "ticker": "EUREN",
@@ -3618,7 +4938,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 6.53,
+    "foreignSharePct": 6.38,
+    "foreignShareChangeBps": -14.67,
+    "foreignShareIndexImpactPct": -0.15,
+    "sectorCode": "0007"
   },
   "EUYO": {
     "ticker": "EUYO",
@@ -3634,7 +4959,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.1,
     "pb": 2.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 2.75,
+    "foreignSharePct": 2.95,
+    "foreignShareChangeBps": 20.28,
+    "foreignShareIndexImpactPct": 0.22,
+    "sectorCode": "0047"
   },
   "EYGYO": {
     "ticker": "EYGYO",
@@ -3650,7 +4980,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.92,
+    "foreignSharePct": 0.59,
+    "foreignShareChangeBps": -33.38,
+    "foreignShareIndexImpactPct": -0.49,
+    "sectorCode": "0015"
   },
   "FADE": {
     "ticker": "FADE",
@@ -3666,7 +5001,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.9,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 5.44,
+    "foreignSharePct": 4.94,
+    "foreignShareChangeBps": -50.73,
+    "foreignShareIndexImpactPct": -0.52,
+    "sectorCode": "0016"
   },
   "FENER": {
     "ticker": "FENER",
@@ -3682,7 +5022,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.2,
     "pb": 1.7,
     "lastPeriod": "3/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 4.63,
+    "foreignSharePct": 4.35,
+    "foreignShareChangeBps": -28.05,
+    "foreignShareIndexImpactPct": -0.33,
+    "sectorCode": "0041"
   },
   "FLAP": {
     "ticker": "FLAP",
@@ -3698,7 +5043,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.6,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.408Z"
+    "updatedAt": "2026-10-14T13:49:04.408Z",
+    "foreignSharePrevPct": 0.18,
+    "foreignSharePct": 0.12,
+    "foreignShareChangeBps": -5.93,
+    "foreignShareIndexImpactPct": -0.08,
+    "sectorCode": "0049"
   },
   "FMIZP": {
     "ticker": "FMIZP",
@@ -3714,7 +5064,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.6,
     "pb": 5.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 5.37,
+    "foreignSharePct": 5.28,
+    "foreignShareChangeBps": -8.17,
+    "foreignShareIndexImpactPct": -0.09,
+    "sectorCode": "0033"
   },
   "FONET": {
     "ticker": "FONET",
@@ -3730,7 +5085,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.4,
     "pb": 1.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 3.35,
+    "foreignSharePct": 3.47,
+    "foreignShareChangeBps": 11.71,
+    "foreignShareIndexImpactPct": 0.12,
+    "sectorCode": "0043"
   },
   "FORMT": {
     "ticker": "FORMT",
@@ -3746,7 +5106,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.1,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 10.19,
+    "foreignSharePct": 9.91,
+    "foreignShareChangeBps": -28.36,
+    "foreignShareIndexImpactPct": -0.29,
+    "sectorCode": "0021"
   },
   "FORTE": {
     "ticker": "FORTE",
@@ -3762,7 +5127,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.9,
     "pb": 2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 4.85,
+    "foreignSharePct": 4.91,
+    "foreignShareChangeBps": 5.58,
+    "foreignShareIndexImpactPct": 0.06,
+    "sectorCode": "0043"
   },
   "FRIGO": {
     "ticker": "FRIGO",
@@ -3778,7 +5148,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.7,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 8.99,
+    "foreignSharePct": 6.86,
+    "foreignShareChangeBps": -213.13,
+    "foreignShareIndexImpactPct": -2.29,
+    "sectorCode": "0016"
   },
   "FRMPL": {
     "ticker": "FRMPL",
@@ -3794,7 +5169,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.9,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 5.41,
+    "foreignSharePct": 5.1,
+    "foreignShareChangeBps": -30.77,
+    "foreignShareIndexImpactPct": -0.31,
+    "sectorCode": "0025"
   },
   "FROTO": {
     "ticker": "FROTO",
@@ -3810,7 +5190,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 1.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 20.33,
+    "foreignSharePct": 19.93,
+    "foreignShareChangeBps": -39.87,
+    "foreignShareIndexImpactPct": -0.4,
+    "historicalEstimates": {
+      "peEstimate": 8.2,
+      "peDiscountPct": -11.1,
+      "evEbitdaEstimate": 7.3,
+      "evEbitdaDiscountPct": -11,
+      "pbEstimate": 1.3,
+      "pbDiscountPct": -75.4
+    },
+    "sectorCode": "0031"
   },
   "FZLGY": {
     "ticker": "FZLGY",
@@ -3826,7 +5219,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 1.81,
+    "foreignSharePct": 1.42,
+    "foreignShareChangeBps": -39.42,
+    "foreignShareIndexImpactPct": -0.96,
+    "sectorCode": "0015"
   },
   "GARAN": {
     "ticker": "GARAN",
@@ -3842,7 +5240,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 6.28,
+    "foreignSharePct": 6.28,
+    "foreignShareChangeBps": 0.65,
+    "foreignShareIndexImpactPct": 0.03,
+    "historicalEstimates": {
+      "peEstimate": 3.8,
+      "peDiscountPct": -20.4,
+      "evEbitdaEstimate": null,
+      "evEbitdaDiscountPct": null,
+      "pbEstimate": 1,
+      "pbDiscountPct": -23.4
+    },
+    "sectorCode": "0001"
   },
   "GARFA": {
     "ticker": "GARFA",
@@ -3858,7 +5269,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 1.3,
+    "foreignSharePct": 1.22,
+    "foreignShareChangeBps": -8.27,
+    "foreignShareIndexImpactPct": -0.34,
+    "sectorCode": "0014"
   },
   "GATEG": {
     "ticker": "GATEG",
@@ -3874,7 +5290,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.9,
     "pb": 5.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "sectorCode": "0028"
   },
   "GEDIK": {
     "ticker": "GEDIK",
@@ -3890,7 +5307,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0,
     "pb": 1.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0.54,
+    "foreignSharePct": 0.53,
+    "foreignShareChangeBps": -0.71,
+    "foreignShareIndexImpactPct": -0.06,
+    "sectorCode": "0051"
   },
   "GEDZA": {
     "ticker": "GEDZA",
@@ -3906,7 +5328,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 1.53,
+    "foreignSharePct": 1.49,
+    "foreignShareChangeBps": -4.08,
+    "foreignShareIndexImpactPct": -0.07,
+    "sectorCode": "0025"
   },
   "GENIL": {
     "ticker": "GENIL",
@@ -3922,7 +5349,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.1,
     "pb": 1.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 16.98,
+    "foreignSharePct": 15.52,
+    "foreignShareChangeBps": -145.75,
+    "foreignShareIndexImpactPct": -2.04,
+    "sectorCode": "0037"
   },
   "GENKM": {
     "ticker": "GENKM",
@@ -3938,7 +5370,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 4.11,
+    "foreignSharePct": 4.31,
+    "foreignShareChangeBps": 20.13,
+    "foreignShareIndexImpactPct": 0.21,
+    "sectorCode": "0025"
   },
   "GENTS": {
     "ticker": "GENTS",
@@ -3954,7 +5391,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 4.21,
+    "foreignSharePct": 4.02,
+    "foreignShareChangeBps": -19.04,
+    "foreignShareIndexImpactPct": -0.26,
+    "sectorCode": "0030"
   },
   "GEREL": {
     "ticker": "GEREL",
@@ -3970,7 +5412,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.8,
     "pb": 2.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 1.21,
+    "foreignSharePct": 0.8,
+    "foreignShareChangeBps": -40.93,
+    "foreignShareIndexImpactPct": -0.76,
+    "sectorCode": "0023"
   },
   "GESAN": {
     "ticker": "GESAN",
@@ -3986,7 +5433,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 13.62,
+    "foreignSharePct": 12.89,
+    "foreignShareChangeBps": -72.7,
+    "foreignShareIndexImpactPct": -0.75,
+    "sectorCode": "0012"
   },
   "GIPTA": {
     "ticker": "GIPTA",
@@ -4002,7 +5454,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 2.43,
+    "foreignSharePct": 2.27,
+    "foreignShareChangeBps": -16.31,
+    "foreignShareIndexImpactPct": -0.16,
+    "sectorCode": "0026"
   },
   "GLBMD": {
     "ticker": "GLBMD",
@@ -4018,7 +5475,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0,
     "pb": 1.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0.65,
+    "foreignSharePct": 0.65,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0051"
   },
   "GLCVY": {
     "ticker": "GLCVY",
@@ -4034,7 +5496,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 8.88,
+    "foreignSharePct": 8.91,
+    "foreignShareChangeBps": 2.15,
+    "foreignShareIndexImpactPct": 0.02,
+    "sectorCode": "0055"
   },
   "GLRMK": {
     "ticker": "GLRMK",
@@ -4050,7 +5517,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 1.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 4.61,
+    "foreignSharePct": 4.64,
+    "foreignShareChangeBps": 3.14,
+    "foreignShareIndexImpactPct": 0.04,
+    "sectorCode": "0022"
   },
   "GLRYH": {
     "ticker": "GLRYH",
@@ -4066,7 +5538,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 3,
+    "foreignSharePct": 3.18,
+    "foreignShareChangeBps": 18.11,
+    "foreignShareIndexImpactPct": 0.23,
+    "sectorCode": "0019"
   },
   "GLYHO": {
     "ticker": "GLYHO",
@@ -4082,7 +5559,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 2.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 24.81,
+    "foreignSharePct": 24.82,
+    "foreignShareChangeBps": 1.26,
+    "foreignShareIndexImpactPct": 0.02,
+    "sectorCode": "0019"
   },
   "GMTAS": {
     "ticker": "GMTAS",
@@ -4098,7 +5580,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.2,
     "pb": 3.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 38.33,
+    "foreignSharePct": 38.11,
+    "foreignShareChangeBps": -22.03,
+    "foreignShareIndexImpactPct": -0.26,
+    "sectorCode": "0035"
   },
   "GOKNR": {
     "ticker": "GOKNR",
@@ -4114,7 +5601,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 3.72,
+    "foreignSharePct": 3.66,
+    "foreignShareChangeBps": -5.98,
+    "foreignShareIndexImpactPct": -0.07,
+    "historicalEstimates": {
+      "peEstimate": 3.1,
+      "peDiscountPct": -77.8,
+      "evEbitdaEstimate": 2.1,
+      "evEbitdaDiscountPct": -55.8,
+      "pbEstimate": 0.3,
+      "pbDiscountPct": -80.9
+    },
+    "sectorCode": "0016"
   },
   "GOLDA": {
     "ticker": "GOLDA",
@@ -4130,7 +5630,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 14.41,
+    "foreignSharePct": 15.03,
+    "foreignShareChangeBps": 62.34,
+    "foreignShareIndexImpactPct": 0.66,
+    "sectorCode": "0016"
   },
   "GOLTS": {
     "ticker": "GOLTS",
@@ -4146,7 +5651,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 6.99,
+    "foreignSharePct": 6.82,
+    "foreignShareChangeBps": -16.43,
+    "foreignShareIndexImpactPct": -0.17,
+    "sectorCode": "0005"
   },
   "GOODY": {
     "ticker": "GOODY",
@@ -4162,7 +5672,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.1,
     "pb": 2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 49.94,
+    "foreignSharePct": 50.04,
+    "foreignShareChangeBps": 10.36,
+    "foreignShareIndexImpactPct": 0.2,
+    "sectorCode": "0032"
   },
   "GOZDE": {
     "ticker": "GOZDE",
@@ -4178,7 +5693,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0.82,
+    "foreignSharePct": 0.79,
+    "foreignShareChangeBps": -2.75,
+    "foreignShareIndexImpactPct": -0.11,
+    "sectorCode": "0047"
   },
   "GRNYO": {
     "ticker": "GRNYO",
@@ -4194,7 +5714,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 3.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 1.78,
+    "foreignSharePct": 1.59,
+    "foreignShareChangeBps": -19.21,
+    "foreignShareIndexImpactPct": -0.22,
+    "sectorCode": "0047"
   },
   "GRSEL": {
     "ticker": "GRSEL",
@@ -4210,7 +5735,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2,
     "pb": 2.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 10.72,
+    "foreignSharePct": 10.79,
+    "foreignShareChangeBps": 6.43,
+    "foreignShareIndexImpactPct": 0.08,
+    "sectorCode": "0048"
   },
   "GRTHO": {
     "ticker": "GRTHO",
@@ -4226,7 +5756,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.5,
     "pb": 1.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 7.79,
+    "foreignSharePct": 9.44,
+    "foreignShareChangeBps": 164.18,
+    "foreignShareIndexImpactPct": 2.78,
+    "sectorCode": "0035"
   },
   "GSDDE": {
     "ticker": "GSDDE",
@@ -4242,7 +5777,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 2.01,
+    "foreignSharePct": 2.02,
+    "foreignShareChangeBps": 0.95,
+    "foreignShareIndexImpactPct": 0.02,
+    "sectorCode": "0048"
   },
   "GSDHO": {
     "ticker": "GSDHO",
@@ -4258,7 +5798,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 12.76,
+    "foreignSharePct": 12.6,
+    "foreignShareChangeBps": -15.29,
+    "foreignShareIndexImpactPct": -0.31,
+    "sectorCode": "0019"
   },
   "GSRAY": {
     "ticker": "GSRAY",
@@ -4274,7 +5819,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 0.6,
     "lastPeriod": "3/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 2.24,
+    "foreignSharePct": 2.17,
+    "foreignShareChangeBps": -7.3,
+    "foreignShareIndexImpactPct": -0.14,
+    "sectorCode": "0041"
   },
   "GUBRF": {
     "ticker": "GUBRF",
@@ -4290,7 +5840,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.9,
     "pb": 3.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 12.13,
+    "foreignSharePct": 11.98,
+    "foreignShareChangeBps": -14.78,
+    "foreignShareIndexImpactPct": -0.18,
+    "sectorCode": "0042"
   },
   "GUNDG": {
     "ticker": "GUNDG",
@@ -4306,7 +5861,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.9,
     "pb": 4.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0.85,
+    "foreignSharePct": 0.74,
+    "foreignShareChangeBps": -11.53,
+    "foreignShareIndexImpactPct": -0.35,
+    "sectorCode": "0016"
   },
   "GWIND": {
     "ticker": "GWIND",
@@ -4322,7 +5882,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 4.3,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 15.32,
+    "foreignSharePct": 15.23,
+    "foreignShareChangeBps": -9.1,
+    "foreignShareIndexImpactPct": -0.1,
+    "historicalEstimates": {
+      "peEstimate": 12.9,
+      "peDiscountPct": 12.4,
+      "evEbitdaEstimate": 5.5,
+      "evEbitdaDiscountPct": -19.5,
+      "pbEstimate": 0.6,
+      "pbDiscountPct": -78.4
+    },
+    "sectorCode": "0011"
   },
   "GZNMI": {
     "ticker": "GZNMI",
@@ -4338,7 +5911,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 5.85,
+    "foreignSharePct": 6.38,
+    "foreignShareChangeBps": 53.59,
+    "foreignShareIndexImpactPct": 0.82,
+    "sectorCode": "0046"
   },
   "HALKB": {
     "ticker": "HALKB",
@@ -4354,7 +5932,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0.66,
+    "foreignSharePct": 0.66,
+    "foreignShareChangeBps": -0.21,
+    "foreignShareIndexImpactPct": -0.03,
+    "historicalEstimates": {
+      "peEstimate": 6.3,
+      "peDiscountPct": 4.2,
+      "evEbitdaEstimate": null,
+      "evEbitdaDiscountPct": null,
+      "pbEstimate": 1.2,
+      "pbDiscountPct": -8.1
+    },
+    "sectorCode": "0001"
   },
   "HATEK": {
     "ticker": "HATEK",
@@ -4370,7 +5961,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.9,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 5.13,
+    "foreignSharePct": 4.84,
+    "foreignShareChangeBps": -28.85,
+    "foreignShareIndexImpactPct": -0.4,
+    "sectorCode": "0045"
   },
   "HATSN": {
     "ticker": "HATSN",
@@ -4386,7 +5982,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.4,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 9.48,
+    "foreignSharePct": 8.22,
+    "foreignShareChangeBps": -126.34,
+    "foreignShareIndexImpactPct": -1.46,
+    "sectorCode": "0048"
   },
   "HDFGS": {
     "ticker": "HDFGS",
@@ -4402,7 +6003,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.5,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 2.97,
+    "foreignSharePct": 2.39,
+    "foreignShareChangeBps": -57.95,
+    "foreignShareIndexImpactPct": -0.62,
+    "sectorCode": "0047"
   },
   "HEDEF": {
     "ticker": "HEDEF",
@@ -4418,7 +6024,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0.41,
+    "foreignSharePct": 0.41,
+    "foreignShareChangeBps": 0.53,
+    "foreignShareIndexImpactPct": 0.02,
+    "sectorCode": "0019"
   },
   "HEKTS": {
     "ticker": "HEKTS",
@@ -4434,7 +6045,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.8,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 9.1,
+    "foreignSharePct": 9.05,
+    "foreignShareChangeBps": -5.63,
+    "foreignShareIndexImpactPct": -0.06,
+    "sectorCode": "0042"
   },
   "HKTM": {
     "ticker": "HKTM",
@@ -4450,7 +6066,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.7,
     "pb": 1.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 1.5,
+    "foreignSharePct": 1.57,
+    "foreignShareChangeBps": 6.25,
+    "foreignShareIndexImpactPct": 0.06,
+    "sectorCode": "0054"
   },
   "HLGYO": {
     "ticker": "HLGYO",
@@ -4466,7 +6087,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 5.62,
+    "foreignSharePct": 5.82,
+    "foreignShareChangeBps": 19.95,
+    "foreignShareIndexImpactPct": 0.3,
+    "sectorCode": "0015"
   },
   "HOROZ": {
     "ticker": "HOROZ",
@@ -4482,7 +6108,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 4.23,
+    "foreignSharePct": 4.21,
+    "foreignShareChangeBps": -2.05,
+    "foreignShareIndexImpactPct": -0.03,
+    "sectorCode": "0048"
   },
   "HRKET": {
     "ticker": "HRKET",
@@ -4498,7 +6129,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3,
     "pb": 2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 18.45,
+    "foreignSharePct": 18.37,
+    "foreignShareChangeBps": -8.68,
+    "foreignShareIndexImpactPct": -0.09,
+    "sectorCode": "0054"
   },
   "HTTBT": {
     "ticker": "HTTBT",
@@ -4514,7 +6150,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 4.3,
     "pb": 2.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 25.82,
+    "foreignSharePct": 25.89,
+    "foreignShareChangeBps": 6.62,
+    "foreignShareIndexImpactPct": 0.07,
+    "historicalEstimates": {
+      "peEstimate": 16.6,
+      "peDiscountPct": -45.1,
+      "evEbitdaEstimate": 9.2,
+      "evEbitdaDiscountPct": -55.2,
+      "pbEstimate": 2.1,
+      "pbDiscountPct": -48
+    },
+    "sectorCode": "0043"
   },
   "HUBVC": {
     "ticker": "HUBVC",
@@ -4530,7 +6179,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 2.4,
+    "foreignSharePct": 2.38,
+    "foreignShareChangeBps": -2.06,
+    "foreignShareIndexImpactPct": -0.02,
+    "sectorCode": "0047"
   },
   "HUNER": {
     "ticker": "HUNER",
@@ -4546,7 +6200,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 5.8,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 1.39,
+    "foreignSharePct": 1.46,
+    "foreignShareChangeBps": 6.71,
+    "foreignShareIndexImpactPct": 0.07,
+    "sectorCode": "0011"
   },
   "HURGZ": {
     "ticker": "HURGZ",
@@ -4562,7 +6221,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.8,
     "pb": 1.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0.83,
+    "foreignSharePct": 0.67,
+    "foreignShareChangeBps": -15.12,
+    "foreignShareIndexImpactPct": -0.3,
+    "sectorCode": "0028"
   },
   "ICBCT": {
     "ticker": "ICBCT",
@@ -4578,7 +6242,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 2.87,
+    "foreignSharePct": 2.88,
+    "foreignShareChangeBps": 1.26,
+    "foreignShareIndexImpactPct": 0.04,
+    "sectorCode": "0001"
   },
   "ICUGS": {
     "ticker": "ICUGS",
@@ -4594,7 +6263,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 4.94,
+    "foreignSharePct": 2.35,
+    "foreignShareChangeBps": -259.21,
+    "foreignShareIndexImpactPct": -2.62,
+    "sectorCode": "0047"
   },
   "IDGYO": {
     "ticker": "IDGYO",
@@ -4610,7 +6284,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 1.13,
+    "foreignSharePct": 1.16,
+    "foreignShareChangeBps": 3.08,
+    "foreignShareIndexImpactPct": 0.03,
+    "sectorCode": "0015"
   },
   "IEYHO": {
     "ticker": "IEYHO",
@@ -4626,7 +6305,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 7.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 16.15,
+    "foreignSharePct": 16.15,
+    "foreignShareChangeBps": 0.46,
+    "foreignShareIndexImpactPct": 0.01,
+    "sectorCode": "0019"
   },
   "IHAAS": {
     "ticker": "IHAAS",
@@ -4642,7 +6326,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.5,
     "pb": 7.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 37.88,
+    "foreignSharePct": 36.58,
+    "foreignShareChangeBps": -130.36,
+    "foreignShareIndexImpactPct": -1.3,
+    "sectorCode": "0028"
   },
   "IHEVA": {
     "ticker": "IHEVA",
@@ -4658,7 +6347,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.2,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 1.68,
+    "foreignSharePct": 1.68,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0006"
   },
   "IHGZT": {
     "ticker": "IHGZT",
@@ -4674,7 +6368,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.3,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 2,
+    "foreignSharePct": 2.15,
+    "foreignShareChangeBps": 14.51,
+    "foreignShareIndexImpactPct": 0.17,
+    "sectorCode": "0028"
   },
   "IHLAS": {
     "ticker": "IHLAS",
@@ -4690,7 +6389,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 14.05,
+    "foreignSharePct": 13.96,
+    "foreignShareChangeBps": -8.79,
+    "foreignShareIndexImpactPct": -0.1,
+    "sectorCode": "0019"
   },
   "IHLGM": {
     "ticker": "IHLGM",
@@ -4706,7 +6410,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 17.92,
+    "foreignSharePct": 17.84,
+    "foreignShareChangeBps": -7.05,
+    "foreignShareIndexImpactPct": -0.09,
+    "sectorCode": "0015"
   },
   "IHYAY": {
     "ticker": "IHYAY",
@@ -4722,7 +6431,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.2,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0.24,
+    "foreignSharePct": 0.19,
+    "foreignShareChangeBps": -5.28,
+    "foreignShareIndexImpactPct": -0.06,
+    "sectorCode": "0028"
   },
   "IMASM": {
     "ticker": "IMASM",
@@ -4738,7 +6452,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 4.91,
+    "foreignSharePct": 4.64,
+    "foreignShareChangeBps": -27.1,
+    "foreignShareIndexImpactPct": -0.27,
+    "sectorCode": "0054"
   },
   "INDES": {
     "ticker": "INDES",
@@ -4754,7 +6473,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.1,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 16.82,
+    "foreignSharePct": 16.86,
+    "foreignShareChangeBps": 4.15,
+    "foreignShareIndexImpactPct": 0.04,
+    "sectorCode": "0002"
   },
   "INFO": {
     "ticker": "INFO",
@@ -4770,7 +6494,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0.91,
+    "foreignSharePct": 0.77,
+    "foreignShareChangeBps": -13.87,
+    "foreignShareIndexImpactPct": -0.28,
+    "sectorCode": "0051"
   },
   "INGRM": {
     "ticker": "INGRM",
@@ -4786,7 +6515,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.3,
     "pb": 3.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0.19,
+    "foreignSharePct": 0.18,
+    "foreignShareChangeBps": -1.51,
+    "foreignShareIndexImpactPct": -0.11,
+    "sectorCode": "0002"
   },
   "INTEK": {
     "ticker": "INTEK",
@@ -4802,7 +6536,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.9,
     "pb": 14.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "sectorCode": "0043"
   },
   "INTEM": {
     "ticker": "INTEM",
@@ -4818,7 +6553,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.6,
     "pb": 3.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 3.49,
+    "foreignSharePct": 3.53,
+    "foreignShareChangeBps": 3.84,
+    "foreignShareIndexImpactPct": 0.15,
+    "sectorCode": "0021"
   },
   "INTET": {
     "ticker": "INTET",
@@ -4834,7 +6574,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.4,
     "pb": 4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 4.3,
+    "foreignSharePct": 3.25,
+    "foreignShareChangeBps": -104.77,
+    "foreignShareIndexImpactPct": -1.25,
+    "sectorCode": "0043"
   },
   "INVEO": {
     "ticker": "INVEO",
@@ -4850,7 +6595,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0.16,
+    "foreignSharePct": 0.14,
+    "foreignShareChangeBps": -2.07,
+    "foreignShareIndexImpactPct": -0.13,
+    "sectorCode": "0019"
   },
   "INVES": {
     "ticker": "INVES",
@@ -4866,7 +6616,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 3.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 8.07,
+    "foreignSharePct": 8.06,
+    "foreignShareChangeBps": -0.62,
+    "foreignShareIndexImpactPct": -0.01,
+    "sectorCode": "0019"
   },
   "ISATR": {
     "ticker": "ISATR",
@@ -4882,7 +6637,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": null,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "sectorCode": "0001"
   },
   "ISBIR": {
     "ticker": "ISBIR",
@@ -4898,7 +6654,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0.03,
+    "foreignSharePct": 0.03,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0019"
   },
   "ISBTR": {
     "ticker": "ISBTR",
@@ -4914,7 +6675,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": null,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0.03,
+    "foreignSharePct": 0.03,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0001"
   },
   "ISCTR": {
     "ticker": "ISCTR",
@@ -4930,7 +6696,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 23.74,
+    "foreignSharePct": 24.21,
+    "foreignShareChangeBps": 46.55,
+    "foreignShareIndexImpactPct": 0.56,
+    "sectorCode": "0001"
   },
   "ISDMR": {
     "ticker": "ISDMR",
@@ -4946,7 +6717,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.2,
     "pb": 1.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 21.78,
+    "foreignSharePct": 21.69,
+    "foreignShareChangeBps": -8.91,
+    "foreignShareIndexImpactPct": -0.09,
+    "sectorCode": "0008"
   },
   "ISFIN": {
     "ticker": "ISFIN",
@@ -4962,7 +6738,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 10.62,
+    "foreignSharePct": 10.61,
+    "foreignShareChangeBps": -1.72,
+    "foreignShareIndexImpactPct": -0.03,
+    "sectorCode": "0014"
   },
   "ISGSY": {
     "ticker": "ISGSY",
@@ -4978,7 +6759,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.2,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 1.92,
+    "foreignSharePct": 1.19,
+    "foreignShareChangeBps": -72.92,
+    "foreignShareIndexImpactPct": -0.87,
+    "sectorCode": "0047"
   },
   "ISGYO": {
     "ticker": "ISGYO",
@@ -4994,7 +6780,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 7.86,
+    "foreignSharePct": 7.86,
+    "foreignShareChangeBps": 0.25,
+    "foreignShareIndexImpactPct": 0,
+    "historicalEstimates": {
+      "peEstimate": 33.7,
+      "peDiscountPct": 557.6,
+      "evEbitdaEstimate": 16.8,
+      "evEbitdaDiscountPct": 6.5,
+      "pbEstimate": 0.3,
+      "pbDiscountPct": -85.6
+    },
+    "sectorCode": "0015"
   },
   "ISKPL": {
     "ticker": "ISKPL",
@@ -5010,7 +6809,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.1,
     "pb": 1.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0.68,
+    "foreignSharePct": 0.73,
+    "foreignShareChangeBps": 4.47,
+    "foreignShareIndexImpactPct": 0.06,
+    "sectorCode": "0025"
   },
   "ISKUR": {
     "ticker": "ISKUR",
@@ -5026,7 +6830,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0.13,
+    "foreignSharePct": 0.13,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0001"
   },
   "ISMEN": {
     "ticker": "ISMEN",
@@ -5042,7 +6851,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0,
     "pb": 1.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 34.43,
+    "foreignSharePct": 34.31,
+    "foreignShareChangeBps": -11.48,
+    "foreignShareIndexImpactPct": -0.12,
+    "sectorCode": "0051"
   },
   "ISSEN": {
     "ticker": "ISSEN",
@@ -5058,7 +6872,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.2,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 2.89,
+    "foreignSharePct": 2.76,
+    "foreignShareChangeBps": -13.29,
+    "foreignShareIndexImpactPct": -0.17,
+    "sectorCode": "0045"
   },
   "ISVEA": {
     "ticker": "ISVEA",
@@ -5074,7 +6893,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.4,
     "pb": 3.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0.25,
+    "foreignSharePct": 1.54,
+    "foreignShareChangeBps": 129.22,
+    "foreignShareIndexImpactPct": 1.37,
+    "sectorCode": "0039"
   },
   "ISYAT": {
     "ticker": "ISYAT",
@@ -5090,7 +6914,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.3,
     "pb": 1.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0,
+    "foreignSharePct": 0,
+    "foreignShareChangeBps": -0.34,
+    "foreignShareIndexImpactPct": -0.01,
+    "sectorCode": "0047"
   },
   "IZENR": {
     "ticker": "IZENR",
@@ -5106,7 +6935,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.1,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 12.37,
+    "foreignSharePct": 13.01,
+    "foreignShareChangeBps": 64.43,
+    "foreignShareIndexImpactPct": 0.96,
+    "sectorCode": "0011"
   },
   "IZFAS": {
     "ticker": "IZFAS",
@@ -5122,7 +6956,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 5.4,
     "pb": 6.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 5.15,
+    "foreignSharePct": 5.15,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0003"
   },
   "IZINV": {
     "ticker": "IZINV",
@@ -5138,7 +6977,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 5.4,
     "pb": 1.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 3.74,
+    "foreignSharePct": 3.76,
+    "foreignShareChangeBps": 2.54,
+    "foreignShareIndexImpactPct": 0.03,
+    "sectorCode": "0016"
   },
   "IZMDC": {
     "ticker": "IZMDC",
@@ -5154,7 +6998,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 7.9,
+    "foreignSharePct": 7.85,
+    "foreignShareChangeBps": -4.82,
+    "foreignShareIndexImpactPct": -0.11,
+    "sectorCode": "0008"
   },
   "JANTS": {
     "ticker": "JANTS",
@@ -5170,7 +7019,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.3,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0.38,
+    "foreignSharePct": 0.32,
+    "foreignShareChangeBps": -6.2,
+    "foreignShareIndexImpactPct": -0.11,
+    "sectorCode": "0033"
   },
   "KAPLM": {
     "ticker": "KAPLM",
@@ -5186,7 +7040,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.2,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 8.53,
+    "foreignSharePct": 8.12,
+    "foreignShareChangeBps": -40.66,
+    "foreignShareIndexImpactPct": -0.45,
+    "sectorCode": "0024"
   },
   "KARCL": {
     "ticker": "KARCL",
@@ -5202,7 +7061,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.9,
     "pb": 3.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0.87,
+    "foreignSharePct": 0.39,
+    "foreignShareChangeBps": -47.33,
+    "foreignShareIndexImpactPct": -0.55,
+    "sectorCode": "0008"
   },
   "KAREL": {
     "ticker": "KAREL",
@@ -5218,7 +7082,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 4.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 9.59,
+    "foreignSharePct": 9.39,
+    "foreignShareChangeBps": -19.42,
+    "foreignShareIndexImpactPct": -0.22,
+    "sectorCode": "0020"
   },
   "KARSN": {
     "ticker": "KARSN",
@@ -5234,7 +7103,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 4.67,
+    "foreignSharePct": 4.41,
+    "foreignShareChangeBps": -25.4,
+    "foreignShareIndexImpactPct": -0.6,
+    "sectorCode": "0031"
   },
   "KARTN": {
     "ticker": "KARTN",
@@ -5250,7 +7124,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.1,
     "pb": 2.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 6.41,
+    "foreignSharePct": 6.02,
+    "foreignShareChangeBps": -39.07,
+    "foreignShareIndexImpactPct": -0.94,
+    "sectorCode": "0024"
   },
   "KATMR": {
     "ticker": "KATMR",
@@ -5266,7 +7145,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.9,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 6.75,
+    "foreignSharePct": 6.32,
+    "foreignShareChangeBps": -43.28,
+    "foreignShareIndexImpactPct": -0.5,
+    "sectorCode": "0033"
   },
   "KAYSE": {
     "ticker": "KAYSE",
@@ -5282,7 +7166,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 0.2,
     "lastPeriod": "3/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 11.4,
+    "foreignSharePct": 11.28,
+    "foreignShareChangeBps": -11.86,
+    "foreignShareIndexImpactPct": -0.14,
+    "sectorCode": "0016"
   },
   "KBORU": {
     "ticker": "KBORU",
@@ -5298,7 +7187,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.5,
     "pb": 1.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 4.78,
+    "foreignSharePct": 4.23,
+    "foreignShareChangeBps": -54.68,
+    "foreignShareIndexImpactPct": -0.77,
+    "sectorCode": "0021"
   },
   "KCAER": {
     "ticker": "KCAER",
@@ -5314,7 +7208,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.9,
     "pb": 1.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 18.47,
+    "foreignSharePct": 18.07,
+    "foreignShareChangeBps": -39.88,
+    "foreignShareIndexImpactPct": -0.4,
+    "historicalEstimates": {
+      "peEstimate": 19.5,
+      "peDiscountPct": 4.9,
+      "evEbitdaEstimate": 5.9,
+      "evEbitdaDiscountPct": -25.4,
+      "pbEstimate": 1.6,
+      "pbDiscountPct": -37
+    },
+    "sectorCode": "0008"
   },
   "KCHOL": {
     "ticker": "KCHOL",
@@ -5330,7 +7237,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 54.86,
+    "foreignSharePct": 54.75,
+    "foreignShareChangeBps": -10.65,
+    "foreignShareIndexImpactPct": -0.11,
+    "sectorCode": "0019"
   },
   "KENT": {
     "ticker": "KENT",
@@ -5346,7 +7258,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 4.9,
     "pb": 11.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0,
+    "foreignSharePct": 0,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0016"
   },
   "KERVN": {
     "ticker": "KERVN",
@@ -5362,7 +7279,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0,
+    "foreignSharePct": 0,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0019"
   },
   "KFEIN": {
     "ticker": "KFEIN",
@@ -5378,7 +7300,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.3,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 2.09,
+    "foreignSharePct": 2.01,
+    "foreignShareChangeBps": -7.29,
+    "foreignShareIndexImpactPct": -0.08,
+    "sectorCode": "0043"
   },
   "KGYO": {
     "ticker": "KGYO",
@@ -5394,7 +7321,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 5.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 0.49,
+    "foreignSharePct": 0.46,
+    "foreignShareChangeBps": -3.03,
+    "foreignShareIndexImpactPct": -0.08,
+    "sectorCode": "0015"
   },
   "KIMMR": {
     "ticker": "KIMMR",
@@ -5410,7 +7342,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.2,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 9.91,
+    "foreignSharePct": 9.77,
+    "foreignShareChangeBps": -14.07,
+    "foreignShareIndexImpactPct": -0.17,
+    "sectorCode": "0035"
   },
   "KLGYO": {
     "ticker": "KLGYO",
@@ -5426,7 +7363,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 1.56,
+    "foreignSharePct": 1.51,
+    "foreignShareChangeBps": -5.7,
+    "foreignShareIndexImpactPct": -0.07,
+    "sectorCode": "0015"
   },
   "KLKIM": {
     "ticker": "KLKIM",
@@ -5442,7 +7384,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 7.26,
+    "foreignSharePct": 7.19,
+    "foreignShareChangeBps": -7.04,
+    "foreignShareIndexImpactPct": -0.08,
+    "sectorCode": "0039"
   },
   "KLMSN": {
     "ticker": "KLMSN",
@@ -5458,7 +7405,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 2.78,
+    "foreignSharePct": 2.56,
+    "foreignShareChangeBps": -21.52,
+    "foreignShareIndexImpactPct": -0.26,
+    "sectorCode": "0006"
   },
   "KLNMA": {
     "ticker": "KLNMA",
@@ -5474,7 +7426,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 4.58,
+    "foreignSharePct": 4.58,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0001"
   },
   "KLRHO": {
     "ticker": "KLRHO",
@@ -5490,7 +7447,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 13,
+    "foreignSharePct": 12.18,
+    "foreignShareChangeBps": -81.74,
+    "foreignShareIndexImpactPct": -1.54,
+    "sectorCode": "0019"
   },
   "KLSER": {
     "ticker": "KLSER",
@@ -5506,7 +7468,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 1.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 5.15,
+    "foreignSharePct": 5.11,
+    "foreignShareChangeBps": -3.9,
+    "foreignShareIndexImpactPct": -0.04,
+    "sectorCode": "0039"
   },
   "KLSYN": {
     "ticker": "KLSYN",
@@ -5522,7 +7489,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.2,
     "pb": 1.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 16.88,
+    "foreignSharePct": 17.22,
+    "foreignShareChangeBps": 33.98,
+    "foreignShareIndexImpactPct": 0.36,
+    "sectorCode": "0030"
   },
   "KLYPV": {
     "ticker": "KLYPV",
@@ -5538,7 +7510,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 4.4,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 5.39,
+    "foreignSharePct": 5.3,
+    "foreignShareChangeBps": -9.05,
+    "foreignShareIndexImpactPct": -0.21,
+    "sectorCode": "0012"
   },
   "KMPUR": {
     "ticker": "KMPUR",
@@ -5554,7 +7531,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 1.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 13.56,
+    "foreignSharePct": 13.48,
+    "foreignShareChangeBps": -7.17,
+    "foreignShareIndexImpactPct": -0.07,
+    "sectorCode": "0025"
   },
   "KNFRT": {
     "ticker": "KNFRT",
@@ -5570,7 +7552,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.3,
     "pb": 1.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 2.51,
+    "foreignSharePct": 1.79,
+    "foreignShareChangeBps": -72.43,
+    "foreignShareIndexImpactPct": -1.63,
+    "sectorCode": "0029"
   },
   "KOCMT": {
     "ticker": "KOCMT",
@@ -5586,7 +7573,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 1.82,
+    "foreignSharePct": 1.94,
+    "foreignShareChangeBps": 12.76,
+    "foreignShareIndexImpactPct": 0.14,
+    "sectorCode": "0008"
   },
   "KONKA": {
     "ticker": "KONKA",
@@ -5602,7 +7594,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.9,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 2.02,
+    "foreignSharePct": 1.98,
+    "foreignShareChangeBps": -3.54,
+    "foreignShareIndexImpactPct": -0.05,
+    "sectorCode": "0024"
   },
   "KONTR": {
     "ticker": "KONTR",
@@ -5618,7 +7615,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 2.62,
+    "foreignSharePct": 2.53,
+    "foreignShareChangeBps": -8.73,
+    "foreignShareIndexImpactPct": -0.09,
+    "sectorCode": "0012"
   },
   "KONYA": {
     "ticker": "KONYA",
@@ -5634,7 +7636,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.2,
     "pb": 3.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 53.55,
+    "foreignSharePct": 53.52,
+    "foreignShareChangeBps": -2.95,
+    "foreignShareIndexImpactPct": -0.06,
+    "sectorCode": "0005"
   },
   "KOPOL": {
     "ticker": "KOPOL",
@@ -5650,7 +7657,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 5.1,
+    "foreignSharePct": 4.95,
+    "foreignShareChangeBps": -15.19,
+    "foreignShareIndexImpactPct": -0.27,
+    "sectorCode": "0013"
   },
   "KORDS": {
     "ticker": "KORDS",
@@ -5666,7 +7678,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 9.79,
+    "foreignSharePct": 9.38,
+    "foreignShareChangeBps": -40.56,
+    "foreignShareIndexImpactPct": -0.49,
+    "sectorCode": "0013"
   },
   "KOTON": {
     "ticker": "KOTON",
@@ -5682,7 +7699,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 1.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 1.36,
+    "foreignSharePct": 1.29,
+    "foreignShareChangeBps": -6.49,
+    "foreignShareIndexImpactPct": -0.08,
+    "historicalEstimates": {
+      "peEstimate": 66.8,
+      "peDiscountPct": 515,
+      "evEbitdaEstimate": 2,
+      "evEbitdaDiscountPct": -40.6,
+      "pbEstimate": 0.9,
+      "pbDiscountPct": -52.8
+    },
+    "sectorCode": "0045"
   },
   "KPEKS": {
     "ticker": "KPEKS",
@@ -5698,7 +7728,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.8,
     "pb": 2.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 1.54,
+    "foreignSharePct": 0.24,
+    "foreignShareChangeBps": -129.72,
+    "foreignShareIndexImpactPct": -1.5,
+    "sectorCode": "0025"
   },
   "KRDMA": {
     "ticker": "KRDMA",
@@ -5714,7 +7749,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 18.04,
+    "foreignSharePct": 18.29,
+    "foreignShareChangeBps": 24.65,
+    "foreignShareIndexImpactPct": 0.25,
+    "sectorCode": "0008"
   },
   "KRDMB": {
     "ticker": "KRDMB",
@@ -5730,7 +7770,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.9,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 4.71,
+    "foreignSharePct": 4.49,
+    "foreignShareChangeBps": -22.78,
+    "foreignShareIndexImpactPct": -0.26,
+    "sectorCode": "0008"
   },
   "KRDMD": {
     "ticker": "KRDMD",
@@ -5746,7 +7791,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 25.6,
+    "foreignSharePct": 25.87,
+    "foreignShareChangeBps": 27.11,
+    "foreignShareIndexImpactPct": 0.3,
+    "historicalEstimates": {
+      "peEstimate": 101.9,
+      "peDiscountPct": 959.9,
+      "evEbitdaEstimate": 5.7,
+      "evEbitdaDiscountPct": 13.6,
+      "pbEstimate": 0.5,
+      "pbDiscountPct": -68.6
+    },
+    "sectorCode": "0008"
   },
   "KRGYO": {
     "ticker": "KRGYO",
@@ -5762,7 +7820,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 3.34,
+    "foreignSharePct": 2.68,
+    "foreignShareChangeBps": -65.37,
+    "foreignShareIndexImpactPct": -0.71,
+    "sectorCode": "0015"
   },
   "KRONT": {
     "ticker": "KRONT",
@@ -5778,7 +7841,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 4.9,
     "pb": 3.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 6.1,
+    "foreignSharePct": 6.13,
+    "foreignShareChangeBps": 2.56,
+    "foreignShareIndexImpactPct": 0.03,
+    "sectorCode": "0043"
   },
   "KRPLS": {
     "ticker": "KRPLS",
@@ -5794,7 +7862,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.9,
     "pb": 1.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.409Z"
+    "updatedAt": "2026-10-14T13:49:04.409Z",
+    "foreignSharePrevPct": 17.19,
+    "foreignSharePct": 16.91,
+    "foreignShareChangeBps": -27.93,
+    "foreignShareIndexImpactPct": -0.28,
+    "sectorCode": "0024"
   },
   "KRSTL": {
     "ticker": "KRSTL",
@@ -5810,7 +7883,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 9.64,
+    "foreignSharePct": 9.76,
+    "foreignShareChangeBps": 11.23,
+    "foreignShareIndexImpactPct": 0.12,
+    "sectorCode": "0029"
   },
   "KRTEK": {
     "ticker": "KRTEK",
@@ -5826,7 +7904,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 0.75,
+    "foreignSharePct": 0.83,
+    "foreignShareChangeBps": 7.73,
+    "foreignShareIndexImpactPct": 0.08,
+    "sectorCode": "0045"
   },
   "KRVGD": {
     "ticker": "KRVGD",
@@ -5842,7 +7925,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 21.3,
+    "foreignSharePct": 21.32,
+    "foreignShareChangeBps": 1.98,
+    "foreignShareIndexImpactPct": 0.02,
+    "sectorCode": "0016"
   },
   "KSTUR": {
     "ticker": "KSTUR",
@@ -5858,7 +7946,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 14.7,
     "pb": 9.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 0.06,
+    "foreignSharePct": 0.06,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0046"
   },
   "KTLEV": {
     "ticker": "KTLEV",
@@ -5874,7 +7967,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0,
     "pb": 1.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 7.7,
+    "foreignSharePct": 7.66,
+    "foreignShareChangeBps": -3.74,
+    "foreignShareIndexImpactPct": -0.09,
+    "sectorCode": "0049"
   },
   "KTSKR": {
     "ticker": "KTSKR",
@@ -5890,7 +7988,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.5,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 5.59,
+    "foreignSharePct": 5.51,
+    "foreignShareChangeBps": -8.04,
+    "foreignShareIndexImpactPct": -0.08,
+    "sectorCode": "0016"
   },
   "KUTPO": {
     "ticker": "KUTPO",
@@ -5906,7 +8009,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 2.93,
+    "foreignSharePct": 2.73,
+    "foreignShareChangeBps": -20.33,
+    "foreignShareIndexImpactPct": -0.21,
+    "sectorCode": "0039"
   },
   "KUVVA": {
     "ticker": "KUVVA",
@@ -5922,7 +8030,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 4.2,
     "pb": 6.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 0.64,
+    "foreignSharePct": 0.49,
+    "foreignShareChangeBps": -14.61,
+    "foreignShareIndexImpactPct": -0.16,
+    "sectorCode": "0016"
   },
   "KUYAS": {
     "ticker": "KUYAS",
@@ -5938,7 +8051,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.9,
     "pb": 2.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 7.74,
+    "foreignSharePct": 7.88,
+    "foreignShareChangeBps": 14.38,
+    "foreignShareIndexImpactPct": 0.18,
+    "sectorCode": "0022"
   },
   "KZBGY": {
     "ticker": "KZBGY",
@@ -5954,7 +8072,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 9.89,
+    "foreignSharePct": 9.8,
+    "foreignShareChangeBps": -8.88,
+    "foreignShareIndexImpactPct": -0.13,
+    "sectorCode": "0015"
   },
   "KZGYO": {
     "ticker": "KZGYO",
@@ -5970,7 +8093,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 2.45,
+    "foreignSharePct": 2.21,
+    "foreignShareChangeBps": -23.96,
+    "foreignShareIndexImpactPct": -0.28,
+    "sectorCode": "0015"
   },
   "LIDER": {
     "ticker": "LIDER",
@@ -5986,7 +8114,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 11.03,
+    "foreignSharePct": 9.88,
+    "foreignShareChangeBps": -115.4,
+    "foreignShareIndexImpactPct": -2.47,
+    "sectorCode": "0048"
   },
   "LIDFA": {
     "ticker": "LIDFA",
@@ -6002,7 +8135,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 10.3,
+    "foreignSharePct": 9.86,
+    "foreignShareChangeBps": -43.8,
+    "foreignShareIndexImpactPct": -0.45,
+    "sectorCode": "0014"
   },
   "LILAK": {
     "ticker": "LILAK",
@@ -6018,7 +8156,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 8.68,
+    "foreignSharePct": 8.53,
+    "foreignShareChangeBps": -14.96,
+    "foreignShareIndexImpactPct": -0.39,
+    "historicalEstimates": {
+      "peEstimate": 7.3,
+      "peDiscountPct": -37.8,
+      "evEbitdaEstimate": 2.7,
+      "evEbitdaDiscountPct": -34.9,
+      "pbEstimate": 0.7,
+      "pbDiscountPct": -42.5
+    },
+    "sectorCode": "0024"
   },
   "LINK": {
     "ticker": "LINK",
@@ -6034,7 +8185,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.5,
     "pb": 1.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 9.42,
+    "foreignSharePct": 9.31,
+    "foreignShareChangeBps": -11.15,
+    "foreignShareIndexImpactPct": -0.15,
+    "sectorCode": "0043"
   },
   "LKMNH": {
     "ticker": "LKMNH",
@@ -6050,7 +8206,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 6.51,
+    "foreignSharePct": 6.41,
+    "foreignShareChangeBps": -9.55,
+    "foreignShareIndexImpactPct": -0.11,
+    "sectorCode": "0037"
   },
   "LMKDC": {
     "ticker": "LMKDC",
@@ -6066,7 +8227,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.2,
     "pb": 1.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 2.23,
+    "foreignSharePct": 2.14,
+    "foreignShareChangeBps": -8.77,
+    "foreignShareIndexImpactPct": -0.1,
+    "sectorCode": "0005"
   },
   "LOGO": {
     "ticker": "LOGO",
@@ -6082,7 +8248,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.7,
     "pb": 2.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 30.57,
+    "foreignSharePct": 30.65,
+    "foreignShareChangeBps": 8.7,
+    "foreignShareIndexImpactPct": 0.11,
+    "historicalEstimates": {
+      "peEstimate": 15.9,
+      "peDiscountPct": -16.5,
+      "evEbitdaEstimate": 4.6,
+      "evEbitdaDiscountPct": -53.2,
+      "pbEstimate": 2.6,
+      "pbDiscountPct": -42.2
+    },
+    "sectorCode": "0043"
   },
   "LRSHO": {
     "ticker": "LRSHO",
@@ -6098,7 +8277,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 1.75,
+    "foreignSharePct": 1.78,
+    "foreignShareChangeBps": 3.77,
+    "foreignShareIndexImpactPct": 0.04,
+    "sectorCode": "0019"
   },
   "LUKSK": {
     "ticker": "LUKSK",
@@ -6114,7 +8298,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.2,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 1.49,
+    "foreignSharePct": 1.48,
+    "foreignShareChangeBps": -0.69,
+    "foreignShareIndexImpactPct": -0.04,
+    "sectorCode": "0045"
   },
   "LXGYO": {
     "ticker": "LXGYO",
@@ -6130,7 +8319,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 5.44,
+    "foreignSharePct": 4.94,
+    "foreignShareChangeBps": -49.86,
+    "foreignShareIndexImpactPct": -0.56,
+    "sectorCode": "0015"
   },
   "LYDHO": {
     "ticker": "LYDHO",
@@ -6146,7 +8340,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 2.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 7.83,
+    "foreignSharePct": 7.72,
+    "foreignShareChangeBps": -10.85,
+    "foreignShareIndexImpactPct": -0.49,
+    "sectorCode": "0019"
   },
   "LYDYE": {
     "ticker": "LYDYE",
@@ -6162,7 +8361,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 3.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 14.63,
+    "foreignSharePct": 14.63,
+    "foreignShareChangeBps": 0.17,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0016"
   },
   "MAALT": {
     "ticker": "MAALT",
@@ -6178,7 +8382,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 0.3,
+    "foreignSharePct": 0.2,
+    "foreignShareChangeBps": -9.45,
+    "foreignShareIndexImpactPct": -0.28,
+    "sectorCode": "0046"
   },
   "MACKO": {
     "ticker": "MACKO",
@@ -6194,7 +8403,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.1,
     "pb": 4.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 8.14,
+    "foreignSharePct": 8.03,
+    "foreignShareChangeBps": -10.87,
+    "foreignShareIndexImpactPct": -0.15,
+    "sectorCode": "0010"
   },
   "MAGEN": {
     "ticker": "MAGEN",
@@ -6210,7 +8424,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 18,
     "pb": 1.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 18.81,
+    "foreignSharePct": 18.16,
+    "foreignShareChangeBps": -65.18,
+    "foreignShareIndexImpactPct": -1.68,
+    "sectorCode": "0012"
   },
   "MAKIM": {
     "ticker": "MAKIM",
@@ -6226,7 +8445,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 0.81,
+    "foreignSharePct": 0.8,
+    "foreignShareChangeBps": -0.37,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0054"
   },
   "MAKTK": {
     "ticker": "MAKTK",
@@ -6242,7 +8466,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.3,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 2.88,
+    "foreignSharePct": 2.92,
+    "foreignShareChangeBps": 3.97,
+    "foreignShareIndexImpactPct": 0.07,
+    "sectorCode": "0021"
   },
   "MANAS": {
     "ticker": "MANAS",
@@ -6258,7 +8487,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 4.1,
     "pb": 2.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 5.8,
+    "foreignSharePct": 3.32,
+    "foreignShareChangeBps": -248.53,
+    "foreignShareIndexImpactPct": -3.58,
+    "sectorCode": "0043"
   },
   "MARBL": {
     "ticker": "MARBL",
@@ -6274,7 +8508,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 1.44,
+    "foreignSharePct": 1.43,
+    "foreignShareChangeBps": -1.61,
+    "foreignShareIndexImpactPct": -0.02,
+    "sectorCode": "0052"
   },
   "MARMR": {
     "ticker": "MARMR",
@@ -6290,7 +8529,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 8.35,
+    "foreignSharePct": 8.66,
+    "foreignShareChangeBps": 30.88,
+    "foreignShareIndexImpactPct": 0.31,
+    "sectorCode": "0025"
   },
   "MARTI": {
     "ticker": "MARTI",
@@ -6306,7 +8550,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 4.4,
     "pb": 0.4,
     "lastPeriod": "3/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 1.49,
+    "foreignSharePct": 2.36,
+    "foreignShareChangeBps": 87.2,
+    "foreignShareIndexImpactPct": 1.19,
+    "sectorCode": "0046"
   },
   "MASFN": {
     "ticker": "MASFN",
@@ -6322,7 +8571,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3,
     "pb": 1.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 2.99,
+    "foreignSharePct": 2.3,
+    "foreignShareChangeBps": -68.18,
+    "foreignShareIndexImpactPct": -0.83,
+    "sectorCode": "0012"
   },
   "MAVI": {
     "ticker": "MAVI",
@@ -6338,7 +8592,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 52.35,
+    "foreignSharePct": 52.24,
+    "foreignShareChangeBps": -10.58,
+    "foreignShareIndexImpactPct": -0.11,
+    "historicalEstimates": {
+      "peEstimate": 10.2,
+      "peDiscountPct": -30.8,
+      "evEbitdaEstimate": 2.4,
+      "evEbitdaDiscountPct": -46.7,
+      "pbEstimate": 1.8,
+      "pbDiscountPct": -57.3
+    },
+    "sectorCode": "0045"
   },
   "MCARD": {
     "ticker": "MCARD",
@@ -6354,7 +8621,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.9,
     "pb": 3.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 0.13,
+    "foreignSharePct": 0.02,
+    "foreignShareChangeBps": -10.83,
+    "foreignShareIndexImpactPct": -0.11,
+    "sectorCode": "0043"
   },
   "MEDTR": {
     "ticker": "MEDTR",
@@ -6370,7 +8642,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 3.52,
+    "foreignSharePct": 3.51,
+    "foreignShareChangeBps": -0.68,
+    "foreignShareIndexImpactPct": -0.01,
+    "sectorCode": "0037"
   },
   "MEGAP": {
     "ticker": "MEGAP",
@@ -6386,7 +8663,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.2,
     "pb": 0.1,
     "lastPeriod": "3/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 0.26,
+    "foreignSharePct": 0.26,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0045"
   },
   "MEGMT": {
     "ticker": "MEGMT",
@@ -6402,7 +8684,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 1.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 8.98,
+    "foreignSharePct": 8.74,
+    "foreignShareChangeBps": -23.47,
+    "foreignShareIndexImpactPct": -0.24,
+    "sectorCode": "0021"
   },
   "MEKAG": {
     "ticker": "MEKAG",
@@ -6418,7 +8705,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 7.03,
+    "foreignSharePct": 6.88,
+    "foreignShareChangeBps": -14.9,
+    "foreignShareIndexImpactPct": -0.16,
+    "sectorCode": "0021"
   },
   "MEPET": {
     "ticker": "MEPET",
@@ -6434,7 +8726,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.3,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 0.48,
+    "foreignSharePct": 0.48,
+    "foreignShareChangeBps": -0.06,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0036"
   },
   "MERCN": {
     "ticker": "MERCN",
@@ -6450,7 +8747,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 6.98,
+    "foreignSharePct": 6.77,
+    "foreignShareChangeBps": -21.46,
+    "foreignShareIndexImpactPct": -0.23,
+    "sectorCode": "0025"
   },
   "MERIT": {
     "ticker": "MERIT",
@@ -6466,7 +8768,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 11.1,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.410Z"
+    "updatedAt": "2026-10-14T13:49:04.410Z",
+    "foreignSharePrevPct": 0.72,
+    "foreignSharePct": 0.79,
+    "foreignShareChangeBps": 6.74,
+    "foreignShareIndexImpactPct": 0.25,
+    "sectorCode": "0046"
   },
   "MERKO": {
     "ticker": "MERKO",
@@ -6482,7 +8789,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.7,
     "pb": 0.4,
     "lastPeriod": "12/2025",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 1.71,
+    "foreignSharePct": 1.31,
+    "foreignShareChangeBps": -39.91,
+    "foreignShareIndexImpactPct": -0.46,
+    "sectorCode": "0016"
   },
   "METEN": {
     "ticker": "METEN",
@@ -6498,7 +8810,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 11,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 12.48,
+    "foreignSharePct": 13.43,
+    "foreignShareChangeBps": 94.68,
+    "foreignShareIndexImpactPct": 1.34,
+    "sectorCode": "0011"
   },
   "METRO": {
     "ticker": "METRO",
@@ -6514,7 +8831,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 2.78,
+    "foreignSharePct": 2.65,
+    "foreignShareChangeBps": -12.56,
+    "foreignShareIndexImpactPct": -0.22,
+    "sectorCode": "0019"
   },
   "MEYSU": {
     "ticker": "MEYSU",
@@ -6530,7 +8852,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.6,
     "pb": 1.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 2.81,
+    "foreignSharePct": 2.06,
+    "foreignShareChangeBps": -75.85,
+    "foreignShareIndexImpactPct": -0.78,
+    "sectorCode": "0016"
   },
   "MGROS": {
     "ticker": "MGROS",
@@ -6546,7 +8873,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.2,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 40.13,
+    "foreignSharePct": 40.37,
+    "foreignShareChangeBps": 23.91,
+    "foreignShareIndexImpactPct": 0.26,
+    "historicalEstimates": {
+      "peEstimate": 11.6,
+      "peDiscountPct": 4,
+      "evEbitdaEstimate": 2.6,
+      "evEbitdaDiscountPct": -57.5,
+      "pbEstimate": 0.8,
+      "pbDiscountPct": -87.6
+    },
+    "sectorCode": "0035"
   },
   "MHRGY": {
     "ticker": "MHRGY",
@@ -6562,7 +8902,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 6.74,
+    "foreignSharePct": 6.36,
+    "foreignShareChangeBps": -37.93,
+    "foreignShareIndexImpactPct": -0.56,
+    "sectorCode": "0015"
   },
   "MIATK": {
     "ticker": "MIATK",
@@ -6578,7 +8923,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 5.3,
     "pb": 2.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 4.97,
+    "foreignSharePct": 5.17,
+    "foreignShareChangeBps": 20.04,
+    "foreignShareIndexImpactPct": 0.21,
+    "sectorCode": "0043"
   },
   "MMCAS": {
     "ticker": "MMCAS",
@@ -6594,7 +8944,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 14.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "sectorCode": "0019"
   },
   "MNDRS": {
     "ticker": "MNDRS",
@@ -6610,7 +8961,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 0.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 1.79,
+    "foreignSharePct": 1.72,
+    "foreignShareChangeBps": -7.04,
+    "foreignShareIndexImpactPct": -0.12,
+    "sectorCode": "0045"
   },
   "MNDTR": {
     "ticker": "MNDTR",
@@ -6626,7 +8982,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.3,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 82.81,
+    "foreignSharePct": 82.8,
+    "foreignShareChangeBps": -1.42,
+    "foreignShareIndexImpactPct": -0.08,
+    "sectorCode": "0024"
   },
   "MOBTL": {
     "ticker": "MOBTL",
@@ -6642,7 +9003,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 7.98,
+    "foreignSharePct": 7.87,
+    "foreignShareChangeBps": -11.08,
+    "foreignShareIndexImpactPct": -0.11,
+    "sectorCode": "0050"
   },
   "MOGAN": {
     "ticker": "MOGAN",
@@ -6658,7 +9024,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 4,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 9.6,
+    "foreignSharePct": 9.71,
+    "foreignShareChangeBps": 11.15,
+    "foreignShareIndexImpactPct": 0.11,
+    "historicalEstimates": {
+      "peEstimate": 5.5,
+      "peDiscountPct": -4.1,
+      "evEbitdaEstimate": 6,
+      "evEbitdaDiscountPct": -15.3,
+      "pbEstimate": 0.2,
+      "pbDiscountPct": -83.9
+    },
+    "sectorCode": "0012"
   },
   "MOPAS": {
     "ticker": "MOPAS",
@@ -6674,7 +9053,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.2,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 14.23,
+    "foreignSharePct": 13.47,
+    "foreignShareChangeBps": -76.66,
+    "foreignShareIndexImpactPct": -0.81,
+    "sectorCode": "0035"
   },
   "MPARK": {
     "ticker": "MPARK",
@@ -6690,7 +9074,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.4,
     "pb": 1.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 50.3,
+    "foreignSharePct": 50.24,
+    "foreignShareChangeBps": -5.8,
+    "foreignShareIndexImpactPct": -0.06,
+    "historicalEstimates": {
+      "peEstimate": 10.7,
+      "peDiscountPct": -14.9,
+      "evEbitdaEstimate": 4.5,
+      "evEbitdaDiscountPct": -25,
+      "pbEstimate": 1.6,
+      "pbDiscountPct": -77.9
+    },
+    "sectorCode": "0037"
   },
   "MRGYO": {
     "ticker": "MRGYO",
@@ -6706,7 +9103,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "3/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 1.63,
+    "foreignSharePct": 1.08,
+    "foreignShareChangeBps": -54.46,
+    "foreignShareIndexImpactPct": -0.77,
+    "sectorCode": "0015"
   },
   "MRSHL": {
     "ticker": "MRSHL",
@@ -6722,7 +9124,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.9,
     "pb": 11.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 79.46,
+    "foreignSharePct": 79.46,
+    "foreignShareChangeBps": -0.9,
+    "foreignShareIndexImpactPct": -0.05,
+    "sectorCode": "0003"
   },
   "MSGYO": {
     "ticker": "MSGYO",
@@ -6738,7 +9145,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 0.28,
+    "foreignSharePct": 0.23,
+    "foreignShareChangeBps": -4.48,
+    "foreignShareIndexImpactPct": -0.06,
+    "sectorCode": "0015"
   },
   "MTRKS": {
     "ticker": "MTRKS",
@@ -6754,7 +9166,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.2,
     "pb": 1.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 4.8,
+    "foreignSharePct": 4.68,
+    "foreignShareChangeBps": -11.76,
+    "foreignShareIndexImpactPct": -0.13,
+    "sectorCode": "0043"
   },
   "MTRYO": {
     "ticker": "MTRYO",
@@ -6770,7 +9187,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "sectorCode": "0047"
   },
   "MZHLD": {
     "ticker": "MZHLD",
@@ -6786,7 +9204,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.2,
     "pb": 7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 0.01,
+    "foreignSharePct": 0.01,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0021"
   },
   "NATEN": {
     "ticker": "NATEN",
@@ -6802,7 +9225,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 4.7,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 4.71,
+    "foreignSharePct": 4.61,
+    "foreignShareChangeBps": -9.88,
+    "foreignShareIndexImpactPct": -0.1,
+    "sectorCode": "0012"
   },
   "NETAS": {
     "ticker": "NETAS",
@@ -6818,7 +9246,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": null,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 7.93,
+    "foreignSharePct": 7.92,
+    "foreignShareChangeBps": -1.5,
+    "foreignShareIndexImpactPct": -0.02,
+    "sectorCode": "0020"
   },
   "NETCD": {
     "ticker": "NETCD",
@@ -6834,7 +9267,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 6.1,
     "pb": 3.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 5.31,
+    "foreignSharePct": 5.26,
+    "foreignShareChangeBps": -4.58,
+    "foreignShareIndexImpactPct": -0.05,
+    "sectorCode": "0043"
   },
   "NETGL": {
     "ticker": "NETGL",
@@ -6850,7 +9288,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.1,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 1.33,
+    "foreignSharePct": 0.23,
+    "foreignShareChangeBps": -110.15,
+    "foreignShareIndexImpactPct": -1.3,
+    "sectorCode": "0025"
   },
   "NIBAS": {
     "ticker": "NIBAS",
@@ -6866,7 +9309,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 6.5,
     "pb": 3.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 1.05,
+    "foreignSharePct": 1.06,
+    "foreignShareChangeBps": 1.02,
+    "foreignShareIndexImpactPct": 0.01,
+    "sectorCode": "0005"
   },
   "NTGAZ": {
     "ticker": "NTGAZ",
@@ -6882,7 +9330,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 1.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 8.32,
+    "foreignSharePct": 8.33,
+    "foreignShareChangeBps": 0.44,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0036"
   },
   "NTHOL": {
     "ticker": "NTHOL",
@@ -6898,7 +9351,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 2.99,
+    "foreignSharePct": 2.99,
+    "foreignShareChangeBps": 0.11,
+    "foreignShareIndexImpactPct": 0.01,
+    "sectorCode": "0019"
   },
   "NUGYO": {
     "ticker": "NUGYO",
@@ -6914,7 +9372,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 3.87,
+    "foreignSharePct": 3.79,
+    "foreignShareChangeBps": -7.12,
+    "foreignShareIndexImpactPct": -0.14,
+    "sectorCode": "0015"
   },
   "NUHCM": {
     "ticker": "NUHCM",
@@ -6930,7 +9393,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.3,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 21.15,
+    "foreignSharePct": 21.14,
+    "foreignShareChangeBps": -0.93,
+    "foreignShareIndexImpactPct": -0.01,
+    "sectorCode": "0005"
   },
   "OBAMS": {
     "ticker": "OBAMS",
@@ -6946,7 +9414,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.3,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 4.27,
+    "foreignSharePct": 4.2,
+    "foreignShareChangeBps": -6.68,
+    "foreignShareIndexImpactPct": -0.07,
+    "sectorCode": "0016"
   },
   "OBASE": {
     "ticker": "OBASE",
@@ -6962,7 +9435,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.2,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 4.03,
+    "foreignSharePct": 4.09,
+    "foreignShareChangeBps": 5.98,
+    "foreignShareIndexImpactPct": 0.07,
+    "sectorCode": "0043"
   },
   "ODAS": {
     "ticker": "ODAS",
@@ -6978,7 +9456,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 8.35,
+    "foreignSharePct": 8.17,
+    "foreignShareChangeBps": -17.84,
+    "foreignShareIndexImpactPct": -0.19,
+    "sectorCode": "0011"
   },
   "ODINE": {
     "ticker": "ODINE",
@@ -6994,7 +9477,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.1,
     "pb": 4.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 5.67,
+    "foreignSharePct": 4.71,
+    "foreignShareChangeBps": -95.76,
+    "foreignShareIndexImpactPct": -2.31,
+    "sectorCode": "0043"
   },
   "OFSYM": {
     "ticker": "OFSYM",
@@ -7010,7 +9498,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 1.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 4.39,
+    "foreignSharePct": 4.47,
+    "foreignShareChangeBps": 8.18,
+    "foreignShareIndexImpactPct": 0.09,
+    "sectorCode": "0016"
   },
   "ONCSM": {
     "ticker": "ONCSM",
@@ -7026,7 +9519,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.7,
     "pb": 4.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 2.37,
+    "foreignSharePct": 0.64,
+    "foreignShareChangeBps": -173.4,
+    "foreignShareIndexImpactPct": -1.86,
+    "sectorCode": "0037"
   },
   "ONRYT": {
     "ticker": "ONRYT",
@@ -7042,7 +9540,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.4,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 4,
+    "foreignSharePct": 3.81,
+    "foreignShareChangeBps": -18.34,
+    "foreignShareIndexImpactPct": -0.19,
+    "sectorCode": "0053"
   },
   "ORCAY": {
     "ticker": "ORCAY",
@@ -7058,7 +9561,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.9,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 3.8,
+    "foreignSharePct": 3.71,
+    "foreignShareChangeBps": -9.04,
+    "foreignShareIndexImpactPct": -0.09,
+    "sectorCode": "0029"
   },
   "ORGE": {
     "ticker": "ORGE",
@@ -7074,7 +9582,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.9,
     "pb": 1.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 30.79,
+    "foreignSharePct": 30.62,
+    "foreignShareChangeBps": -17.44,
+    "foreignShareIndexImpactPct": -0.18,
+    "sectorCode": "0012"
   },
   "ORMA": {
     "ticker": "ORMA",
@@ -7090,7 +9603,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.3,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "sectorCode": "0024"
   },
   "ORZAX": {
     "ticker": "ORZAX",
@@ -7106,7 +9620,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.2,
     "pb": 6.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 11.72,
+    "foreignSharePct": 11.15,
+    "foreignShareChangeBps": -56.76,
+    "foreignShareIndexImpactPct": -0.61,
+    "sectorCode": "0037"
   },
   "OSMEN": {
     "ticker": "OSMEN",
@@ -7122,7 +9641,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 4.09,
+    "foreignSharePct": 3.84,
+    "foreignShareChangeBps": -24.63,
+    "foreignShareIndexImpactPct": -0.3,
+    "sectorCode": "0051"
   },
   "OSTIM": {
     "ticker": "OSTIM",
@@ -7138,7 +9662,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 2.83,
+    "foreignSharePct": 2.72,
+    "foreignShareChangeBps": -10.76,
+    "foreignShareIndexImpactPct": -0.13,
+    "sectorCode": "0049"
   },
   "OTKAR": {
     "ticker": "OTKAR",
@@ -7154,7 +9683,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.5,
     "pb": 7.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 10.66,
+    "foreignSharePct": 10.51,
+    "foreignShareChangeBps": -14.35,
+    "foreignShareIndexImpactPct": -0.15,
+    "historicalEstimates": {
+      "peEstimate": 8.4,
+      "peDiscountPct": -45.9,
+      "evEbitdaEstimate": 9.4,
+      "evEbitdaDiscountPct": -44.5,
+      "pbEstimate": 1.5,
+      "pbDiscountPct": -82.2
+    },
+    "sectorCode": "0031"
   },
   "OTTO": {
     "ticker": "OTTO",
@@ -7170,7 +9712,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.6,
     "pb": 1.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 0.62,
+    "foreignSharePct": 2.4,
+    "foreignShareChangeBps": 178.16,
+    "foreignShareIndexImpactPct": 1.83,
+    "sectorCode": "0016"
   },
   "OYAKC": {
     "ticker": "OYAKC",
@@ -7186,7 +9733,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.4,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 6.12,
+    "foreignSharePct": 6.12,
+    "foreignShareChangeBps": 0.14,
+    "foreignShareIndexImpactPct": 0.01,
+    "historicalEstimates": {
+      "peEstimate": 16.3,
+      "peDiscountPct": 52.8,
+      "evEbitdaEstimate": 5.6,
+      "evEbitdaDiscountPct": -33.1,
+      "pbEstimate": 1.4,
+      "pbDiscountPct": -44.7
+    },
+    "sectorCode": "0005"
   },
   "OYAYO": {
     "ticker": "OYAYO",
@@ -7202,7 +9762,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.1,
     "pb": 3.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 0.5,
+    "foreignSharePct": 0.53,
+    "foreignShareChangeBps": 2.86,
+    "foreignShareIndexImpactPct": 0.05,
+    "sectorCode": "0047"
   },
   "OYLUM": {
     "ticker": "OYLUM",
@@ -7218,7 +9783,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 1.34,
+    "foreignSharePct": 1.29,
+    "foreignShareChangeBps": -5.22,
+    "foreignShareIndexImpactPct": -0.07,
+    "sectorCode": "0016"
   },
   "OYYAT": {
     "ticker": "OYYAT",
@@ -7234,7 +9804,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 8,
+    "foreignSharePct": 7.93,
+    "foreignShareChangeBps": -6.67,
+    "foreignShareIndexImpactPct": -0.32,
+    "sectorCode": "0051"
   },
   "OZATD": {
     "ticker": "OZATD",
@@ -7250,7 +9825,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 15.5,
     "pb": 9.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 2.77,
+    "foreignSharePct": 2.77,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0054"
   },
   "OZGYO": {
     "ticker": "OZGYO",
@@ -7266,7 +9846,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 3.81,
+    "foreignSharePct": 2.93,
+    "foreignShareChangeBps": -88.1,
+    "foreignShareIndexImpactPct": -1.28,
+    "sectorCode": "0015"
   },
   "OZKGY": {
     "ticker": "OZKGY",
@@ -7282,7 +9867,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 7.77,
+    "foreignSharePct": 7.73,
+    "foreignShareChangeBps": -4.72,
+    "foreignShareIndexImpactPct": -0.06,
+    "historicalEstimates": {
+      "peEstimate": 0.5,
+      "peDiscountPct": -90.9,
+      "evEbitdaEstimate": null,
+      "evEbitdaDiscountPct": null,
+      "pbEstimate": null,
+      "pbDiscountPct": null
+    },
+    "sectorCode": "0015"
   },
   "OZRDN": {
     "ticker": "OZRDN",
@@ -7298,7 +9896,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.3,
     "pb": 2.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 1.11,
+    "foreignSharePct": 1.1,
+    "foreignShareChangeBps": -1.2,
+    "foreignShareIndexImpactPct": -0.02,
+    "sectorCode": "0025"
   },
   "OZSUB": {
     "ticker": "OZSUB",
@@ -7314,7 +9917,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.8,
     "pb": 3.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 13.35,
+    "foreignSharePct": 12.96,
+    "foreignShareChangeBps": -39.38,
+    "foreignShareIndexImpactPct": -0.32,
+    "sectorCode": "0018"
   },
   "OZYSR": {
     "ticker": "OZYSR",
@@ -7330,7 +9938,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 1.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 9.04,
+    "foreignSharePct": 9.02,
+    "foreignShareChangeBps": -2.05,
+    "foreignShareIndexImpactPct": -0.04,
+    "sectorCode": "0008"
   },
   "PAGYO": {
     "ticker": "PAGYO",
@@ -7346,7 +9959,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 5.94,
+    "foreignSharePct": 5.94,
+    "foreignShareChangeBps": -0.51,
+    "foreignShareIndexImpactPct": -0.01,
+    "sectorCode": "0015"
   },
   "PAHOL": {
     "ticker": "PAHOL",
@@ -7362,7 +9980,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 4.43,
+    "foreignSharePct": 4.15,
+    "foreignShareChangeBps": -27.72,
+    "foreignShareIndexImpactPct": -0.28,
+    "sectorCode": "0019"
   },
   "PAMEL": {
     "ticker": "PAMEL",
@@ -7378,7 +10001,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 22.9,
     "pb": 2.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 0.25,
+    "foreignSharePct": 0.15,
+    "foreignShareChangeBps": -10.27,
+    "foreignShareIndexImpactPct": -0.3,
+    "sectorCode": "0011"
   },
   "PAPIL": {
     "ticker": "PAPIL",
@@ -7394,7 +10022,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 20.1,
     "pb": 4.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 2.75,
+    "foreignSharePct": 3.04,
+    "foreignShareChangeBps": 29.14,
+    "foreignShareIndexImpactPct": 0.29,
+    "sectorCode": "0043"
   },
   "PARSN": {
     "ticker": "PARSN",
@@ -7410,7 +10043,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.7,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 0.65,
+    "foreignSharePct": 0.58,
+    "foreignShareChangeBps": -7.05,
+    "foreignShareIndexImpactPct": -0.1,
+    "sectorCode": "0033"
   },
   "PASEU": {
     "ticker": "PASEU",
@@ -7426,7 +10064,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 10.7,
     "pb": 6.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 9.1,
+    "foreignSharePct": 8.95,
+    "foreignShareChangeBps": -15.08,
+    "foreignShareIndexImpactPct": -0.65,
+    "sectorCode": "0048"
   },
   "PATEK": {
     "ticker": "PATEK",
@@ -7442,7 +10085,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.4,
     "pb": 2.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 5.53,
+    "foreignSharePct": 5.46,
+    "foreignShareChangeBps": -6.54,
+    "foreignShareIndexImpactPct": -0.07,
+    "sectorCode": "0043"
   },
   "PCILT": {
     "ticker": "PCILT",
@@ -7458,7 +10106,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.2,
     "pb": 1.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 4.33,
+    "foreignSharePct": 4.46,
+    "foreignShareChangeBps": 12.1,
+    "foreignShareIndexImpactPct": 0.14,
+    "sectorCode": "0028"
   },
   "PEKGY": {
     "ticker": "PEKGY",
@@ -7474,7 +10127,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 11.03,
+    "foreignSharePct": 10.65,
+    "foreignShareChangeBps": -38.28,
+    "foreignShareIndexImpactPct": -0.7,
+    "sectorCode": "0015"
   },
   "PENGD": {
     "ticker": "PENGD",
@@ -7490,7 +10148,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 9.74,
+    "foreignSharePct": 9.54,
+    "foreignShareChangeBps": -20.26,
+    "foreignShareIndexImpactPct": -0.26,
+    "sectorCode": "0016"
   },
   "PENTA": {
     "ticker": "PENTA",
@@ -7506,7 +10169,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.1,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 8.93,
+    "foreignSharePct": 8.85,
+    "foreignShareChangeBps": -8.51,
+    "foreignShareIndexImpactPct": -0.1,
+    "sectorCode": "0002"
   },
   "PETKM": {
     "ticker": "PETKM",
@@ -7522,7 +10190,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.9,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 18.58,
+    "foreignSharePct": 18.83,
+    "foreignShareChangeBps": 25.49,
+    "foreignShareIndexImpactPct": 0.26,
+    "historicalEstimates": {
+      "peEstimate": 81,
+      "peDiscountPct": 1055.2,
+      "evEbitdaEstimate": 34.4,
+      "evEbitdaDiscountPct": 363.4,
+      "pbEstimate": 0.8,
+      "pbDiscountPct": -55.2
+    },
+    "sectorCode": "0036"
   },
   "PETUN": {
     "ticker": "PETUN",
@@ -7538,7 +10219,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 4.29,
+    "foreignSharePct": 4.11,
+    "foreignShareChangeBps": -17.78,
+    "foreignShareIndexImpactPct": -0.24,
+    "sectorCode": "0016"
   },
   "PGSUS": {
     "ticker": "PGSUS",
@@ -7554,7 +10240,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.3,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 11.3,
+    "foreignSharePct": 11.14,
+    "foreignShareChangeBps": -15.75,
+    "foreignShareIndexImpactPct": -0.2,
+    "historicalEstimates": {
+      "peEstimate": null,
+      "peDiscountPct": null,
+      "evEbitdaEstimate": 7.8,
+      "evEbitdaDiscountPct": -6.6,
+      "pbEstimate": 0.5,
+      "pbDiscountPct": -68
+    },
+    "sectorCode": "0017"
   },
   "PINSU": {
     "ticker": "PINSU",
@@ -7570,7 +10269,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 3.69,
+    "foreignSharePct": 3.72,
+    "foreignShareChangeBps": 2.92,
+    "foreignShareIndexImpactPct": 0.03,
+    "sectorCode": "0029"
   },
   "PKART": {
     "ticker": "PKART",
@@ -7586,7 +10290,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 3.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 33.21,
+    "foreignSharePct": 32.9,
+    "foreignShareChangeBps": -30.55,
+    "foreignShareIndexImpactPct": -0.44,
+    "sectorCode": "0043"
   },
   "PKENT": {
     "ticker": "PKENT",
@@ -7602,7 +10311,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.4,
     "pb": 1.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 2.01,
+    "foreignSharePct": 1.98,
+    "foreignShareChangeBps": -3.01,
+    "foreignShareIndexImpactPct": -0.09,
+    "sectorCode": "0046"
   },
   "PLTUR": {
     "ticker": "PLTUR",
@@ -7618,7 +10332,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 1.82,
+    "foreignSharePct": 1.99,
+    "foreignShareChangeBps": 17.58,
+    "foreignShareIndexImpactPct": 0.18,
+    "sectorCode": "0048"
   },
   "PNLSN": {
     "ticker": "PNLSN",
@@ -7634,7 +10353,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 4.76,
+    "foreignSharePct": 4.74,
+    "foreignShareChangeBps": -2.55,
+    "foreignShareIndexImpactPct": -0.05,
+    "sectorCode": "0021"
   },
   "PNSUT": {
     "ticker": "PNSUT",
@@ -7650,7 +10374,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 0.22,
+    "foreignSharePct": 0.16,
+    "foreignShareChangeBps": -6.14,
+    "foreignShareIndexImpactPct": -0.07,
+    "sectorCode": "0029"
   },
   "POLHO": {
     "ticker": "POLHO",
@@ -7666,7 +10395,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 9.21,
+    "foreignSharePct": 9.2,
+    "foreignShareChangeBps": -0.85,
+    "foreignShareIndexImpactPct": -0.01,
+    "sectorCode": "0019"
   },
   "POLTK": {
     "ticker": "POLTK",
@@ -7682,7 +10416,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 12.3,
     "pb": null,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 28.32,
+    "foreignSharePct": 28.32,
+    "foreignShareChangeBps": 0.52,
+    "foreignShareIndexImpactPct": 0.01,
+    "sectorCode": "0025"
   },
   "PRDGS": {
     "ticker": "PRDGS",
@@ -7698,7 +10437,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.7,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 3.77,
+    "foreignSharePct": 3.42,
+    "foreignShareChangeBps": -35.46,
+    "foreignShareIndexImpactPct": -0.36,
+    "sectorCode": "0047"
   },
   "PRKAB": {
     "ticker": "PRKAB",
@@ -7714,7 +10458,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.2,
     "pb": 7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 1.97,
+    "foreignSharePct": 1.83,
+    "foreignShareChangeBps": -14.21,
+    "foreignShareIndexImpactPct": -0.15,
+    "sectorCode": "0023"
   },
   "PRKME": {
     "ticker": "PRKME",
@@ -7730,7 +10479,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.9,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 0.31,
+    "foreignSharePct": 0.29,
+    "foreignShareChangeBps": -2.58,
+    "foreignShareIndexImpactPct": -0.03,
+    "sectorCode": "0052"
   },
   "PRZMA": {
     "ticker": "PRZMA",
@@ -7746,7 +10500,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 5.6,
     "pb": 2.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 0.37,
+    "foreignSharePct": 4,
+    "foreignShareChangeBps": 362.93,
+    "foreignShareIndexImpactPct": 4.57,
+    "sectorCode": "0024"
   },
   "PSDTC": {
     "ticker": "PSDTC",
@@ -7762,7 +10521,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.6,
     "pb": 2.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 1.14,
+    "foreignSharePct": 0.8,
+    "foreignShareChangeBps": -33.58,
+    "foreignShareIndexImpactPct": -0.4,
+    "sectorCode": "0035"
   },
   "PSGYO": {
     "ticker": "PSGYO",
@@ -7778,7 +10542,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 7.52,
+    "foreignSharePct": 7.47,
+    "foreignShareChangeBps": -5.67,
+    "foreignShareIndexImpactPct": -0.07,
+    "sectorCode": "0015"
   },
   "QNBFK": {
     "ticker": "QNBFK",
@@ -7794,7 +10563,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 12.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 0,
+    "foreignSharePct": 0,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0014"
   },
   "QNBTR": {
     "ticker": "QNBTR",
@@ -7810,7 +10584,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 4.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 0,
+    "foreignSharePct": 0,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0001"
   },
   "QUAGR": {
     "ticker": "QUAGR",
@@ -7826,7 +10605,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 8.12,
+    "foreignSharePct": 9.08,
+    "foreignShareChangeBps": 95.49,
+    "foreignShareIndexImpactPct": 1.37,
+    "sectorCode": "0021"
   },
   "QUICK": {
     "ticker": "QUICK",
@@ -7842,7 +10626,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 1.69,
+    "foreignSharePct": 1.56,
+    "foreignShareChangeBps": -12.4,
+    "foreignShareIndexImpactPct": -0.16,
+    "sectorCode": "0040"
   },
   "RALYH": {
     "ticker": "RALYH",
@@ -7858,7 +10647,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.6,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.411Z"
+    "updatedAt": "2026-10-14T13:49:04.411Z",
+    "foreignSharePrevPct": 10.47,
+    "foreignSharePct": 10.48,
+    "foreignShareChangeBps": 0.82,
+    "foreignShareIndexImpactPct": 0.01,
+    "sectorCode": "0045"
   },
   "RAYSG": {
     "ticker": "RAYSG",
@@ -7874,7 +10668,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 86.2,
+    "foreignSharePct": 86.2,
+    "foreignShareChangeBps": 0.05,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0040"
   },
   "REEDR": {
     "ticker": "REEDR",
@@ -7890,7 +10689,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 6.39,
+    "foreignSharePct": 6.29,
+    "foreignShareChangeBps": -10.13,
+    "foreignShareIndexImpactPct": -0.11,
+    "sectorCode": "0020"
   },
   "RGYAS": {
     "ticker": "RGYAS",
@@ -7906,7 +10710,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 40.72,
+    "foreignSharePct": 40.68,
+    "foreignShareChangeBps": -3.89,
+    "foreignShareIndexImpactPct": -0.05,
+    "historicalEstimates": {
+      "peEstimate": 3.8,
+      "peDiscountPct": -33.2,
+      "evEbitdaEstimate": 6.8,
+      "evEbitdaDiscountPct": -15.4,
+      "pbEstimate": 0.3,
+      "pbDiscountPct": null
+    },
+    "sectorCode": "0015"
   },
   "RNPOL": {
     "ticker": "RNPOL",
@@ -7922,7 +10739,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 0.08,
+    "foreignSharePct": 0.08,
+    "foreignShareChangeBps": 0.26,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0025"
   },
   "RODRG": {
     "ticker": "RODRG",
@@ -7938,7 +10760,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 4.8,
     "pb": 5.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 2.84,
+    "foreignSharePct": 2.73,
+    "foreignShareChangeBps": -10.69,
+    "foreignShareIndexImpactPct": -0.12,
+    "sectorCode": "0045"
   },
   "RTALB": {
     "ticker": "RTALB",
@@ -7954,7 +10781,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.7,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 2.44,
+    "foreignSharePct": 1.71,
+    "foreignShareChangeBps": -73.35,
+    "foreignShareIndexImpactPct": -0.75,
+    "sectorCode": "0037"
   },
   "RUBNS": {
     "ticker": "RUBNS",
@@ -7970,7 +10802,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 5.99,
+    "foreignSharePct": 5.84,
+    "foreignShareChangeBps": -14.57,
+    "foreignShareIndexImpactPct": -0.17,
+    "sectorCode": "0045"
   },
   "RUZYE": {
     "ticker": "RUZYE",
@@ -7986,7 +10823,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.97,
+    "foreignSharePct": 2.95,
+    "foreignShareChangeBps": 97.19,
+    "foreignShareIndexImpactPct": 1.34,
+    "sectorCode": "0052"
   },
   "RYGYO": {
     "ticker": "RYGYO",
@@ -8002,7 +10844,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 47.56,
+    "foreignSharePct": 47.58,
+    "foreignShareChangeBps": 1.58,
+    "foreignShareIndexImpactPct": 0.02,
+    "sectorCode": "0015"
   },
   "RYSAS": {
     "ticker": "RYSAS",
@@ -8018,7 +10865,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.8,
     "pb": 1.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 59.54,
+    "foreignSharePct": 59.53,
+    "foreignShareChangeBps": -0.47,
+    "foreignShareIndexImpactPct": -0.01,
+    "sectorCode": "0048"
   },
   "SAFKR": {
     "ticker": "SAFKR",
@@ -8034,7 +10886,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 1.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 2.97,
+    "foreignSharePct": 2.84,
+    "foreignShareChangeBps": -12.64,
+    "foreignShareIndexImpactPct": -0.13,
+    "sectorCode": "0006"
   },
   "SAHOL": {
     "ticker": "SAHOL",
@@ -8050,7 +10907,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 31.88,
+    "foreignSharePct": 33.01,
+    "foreignShareChangeBps": 113.33,
+    "foreignShareIndexImpactPct": 1.22,
+    "sectorCode": "0019"
   },
   "SAMAT": {
     "ticker": "SAMAT",
@@ -8066,7 +10928,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 9.6,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 0.77,
+    "foreignSharePct": 0.69,
+    "foreignShareChangeBps": -7.93,
+    "foreignShareIndexImpactPct": -0.09,
+    "sectorCode": "0024"
   },
   "SANEL": {
     "ticker": "SANEL",
@@ -8082,7 +10949,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.2,
     "pb": 2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 2.35,
+    "foreignSharePct": 2.02,
+    "foreignShareChangeBps": -33.08,
+    "foreignShareIndexImpactPct": -0.4,
+    "sectorCode": "0054"
   },
   "SANFM": {
     "ticker": "SANFM",
@@ -8098,7 +10970,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.6,
     "pb": 2.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 8.08,
+    "foreignSharePct": 7.92,
+    "foreignShareChangeBps": -15.94,
+    "foreignShareIndexImpactPct": -0.19,
+    "sectorCode": "0025"
   },
   "SANKO": {
     "ticker": "SANKO",
@@ -8114,7 +10991,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.97,
+    "foreignSharePct": 2.01,
+    "foreignShareChangeBps": 3.88,
+    "foreignShareIndexImpactPct": 0.07,
+    "sectorCode": "0034"
   },
   "SARAE": {
     "ticker": "SARAE",
@@ -8130,7 +11012,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.6,
     "pb": 2.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 6.43,
+    "foreignSharePct": 5.46,
+    "foreignShareChangeBps": -97.32,
+    "foreignShareIndexImpactPct": -0.98,
+    "sectorCode": "0012"
   },
   "SARKY": {
     "ticker": "SARKY",
@@ -8146,7 +11033,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.3,
     "pb": 1.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 6.17,
+    "foreignSharePct": 6.01,
+    "foreignShareChangeBps": -15.66,
+    "foreignShareIndexImpactPct": -0.19,
+    "sectorCode": "0021"
   },
   "SASA": {
     "ticker": "SASA",
@@ -8162,7 +11054,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.3,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 11.5,
+    "foreignSharePct": 14.98,
+    "foreignShareChangeBps": 347.96,
+    "foreignShareIndexImpactPct": 4.94,
+    "sectorCode": "0013"
   },
   "SAYAS": {
     "ticker": "SAYAS",
@@ -8178,7 +11075,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 1.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.52,
+    "foreignSharePct": 1.24,
+    "foreignShareChangeBps": -27.36,
+    "foreignShareIndexImpactPct": -0.28,
+    "sectorCode": "0012"
   },
   "SDTTR": {
     "ticker": "SDTTR",
@@ -8194,7 +11096,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.7,
     "pb": 3.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 6.45,
+    "foreignSharePct": 6.4,
+    "foreignShareChangeBps": -5.33,
+    "foreignShareIndexImpactPct": -0.06,
+    "sectorCode": "0053"
   },
   "SEGMN": {
     "ticker": "SEGMN",
@@ -8210,7 +11117,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 6.63,
+    "foreignSharePct": 5.51,
+    "foreignShareChangeBps": -111.52,
+    "foreignShareIndexImpactPct": -2.39,
+    "sectorCode": "0016"
   },
   "SEGYO": {
     "ticker": "SEGYO",
@@ -8226,7 +11138,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 2.48,
+    "foreignSharePct": 2.5,
+    "foreignShareChangeBps": 2.52,
+    "foreignShareIndexImpactPct": 0.03,
+    "sectorCode": "0015"
   },
   "SEKFK": {
     "ticker": "SEKFK",
@@ -8242,7 +11159,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 0.68,
+    "foreignSharePct": 0.68,
+    "foreignShareChangeBps": 0.6,
+    "foreignShareIndexImpactPct": 0.01,
+    "sectorCode": "0014"
   },
   "SEKUR": {
     "ticker": "SEKUR",
@@ -8258,7 +11180,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 1.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 2.4,
+    "foreignSharePct": 2.9,
+    "foreignShareChangeBps": 50.5,
+    "foreignShareIndexImpactPct": 0.52,
+    "sectorCode": "0025"
   },
   "SELEC": {
     "ticker": "SELEC",
@@ -8274,7 +11201,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.2,
     "pb": 1.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 12.96,
+    "foreignSharePct": 12.43,
+    "foreignShareChangeBps": -53.14,
+    "foreignShareIndexImpactPct": -0.85,
+    "historicalEstimates": {
+      "peEstimate": 9.6,
+      "peDiscountPct": -13.5,
+      "evEbitdaEstimate": 2.9,
+      "evEbitdaDiscountPct": -48.1,
+      "pbEstimate": 1,
+      "pbDiscountPct": -39.8
+    },
+    "sectorCode": "0037"
   },
   "SELVA": {
     "ticker": "SELVA",
@@ -8290,7 +11230,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.9,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 2.54,
+    "foreignSharePct": 2.46,
+    "foreignShareChangeBps": -8.05,
+    "foreignShareIndexImpactPct": -0.08,
+    "sectorCode": "0016"
   },
   "SERNT": {
     "ticker": "SERNT",
@@ -8306,7 +11251,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.3,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 2.92,
+    "foreignSharePct": 2.41,
+    "foreignShareChangeBps": -51.11,
+    "foreignShareIndexImpactPct": -0.51,
+    "sectorCode": "0021"
   },
   "SEYKM": {
     "ticker": "SEYKM",
@@ -8322,7 +11272,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.1,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.86,
+    "foreignSharePct": 1.83,
+    "foreignShareChangeBps": -3.01,
+    "foreignShareIndexImpactPct": -0.03,
+    "sectorCode": "0025"
   },
   "SILVR": {
     "ticker": "SILVR",
@@ -8338,7 +11293,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.66,
+    "foreignSharePct": 1.75,
+    "foreignShareChangeBps": 9.05,
+    "foreignShareIndexImpactPct": 0.1,
+    "sectorCode": "0054"
   },
   "SISE": {
     "ticker": "SISE",
@@ -8354,7 +11314,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 10.43,
+    "foreignSharePct": 10.38,
+    "foreignShareChangeBps": -4.87,
+    "foreignShareIndexImpactPct": -0.06,
+    "sectorCode": "0004"
   },
   "SKBNK": {
     "ticker": "SKBNK",
@@ -8370,7 +11335,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 8.57,
+    "foreignSharePct": 8.59,
+    "foreignShareChangeBps": 1.11,
+    "foreignShareIndexImpactPct": 0.02,
+    "sectorCode": "0001"
   },
   "SKTAS": {
     "ticker": "SKTAS",
@@ -8386,7 +11356,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 3.89,
+    "foreignSharePct": 3.7,
+    "foreignShareChangeBps": -18.22,
+    "foreignShareIndexImpactPct": -0.2,
+    "sectorCode": "0045"
   },
   "SKYLP": {
     "ticker": "SKYLP",
@@ -8402,7 +11377,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3,
     "pb": 3.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 0.86,
+    "foreignSharePct": 0.49,
+    "foreignShareChangeBps": -36.65,
+    "foreignShareIndexImpactPct": -0.55,
+    "sectorCode": "0049"
   },
   "SKYMD": {
     "ticker": "SKYMD",
@@ -8418,7 +11398,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0,
     "pb": 1.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.34,
+    "foreignSharePct": 1.92,
+    "foreignShareChangeBps": 58.1,
+    "foreignShareIndexImpactPct": 0.58,
+    "sectorCode": "0051"
   },
   "SMART": {
     "ticker": "SMART",
@@ -8434,7 +11419,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.4,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 5.81,
+    "foreignSharePct": 5.72,
+    "foreignShareChangeBps": -8.5,
+    "foreignShareIndexImpactPct": -0.09,
+    "sectorCode": "0043"
   },
   "SMRTG": {
     "ticker": "SMRTG",
@@ -8450,7 +11440,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.5,
     "pb": 1.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 11.32,
+    "foreignSharePct": 10.63,
+    "foreignShareChangeBps": -69.78,
+    "foreignShareIndexImpactPct": -0.71,
+    "sectorCode": "0012"
   },
   "SMRVA": {
     "ticker": "SMRVA",
@@ -8466,7 +11461,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.7,
     "pb": 1.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 14.94,
+    "foreignSharePct": 13.31,
+    "foreignShareChangeBps": -162.18,
+    "foreignShareIndexImpactPct": -1.63,
+    "sectorCode": "0055"
   },
   "SNGYO": {
     "ticker": "SNGYO",
@@ -8482,7 +11482,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 9.99,
+    "foreignSharePct": 9.99,
+    "foreignShareChangeBps": 0.17,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0015"
   },
   "SNICA": {
     "ticker": "SNICA",
@@ -8498,7 +11503,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.52,
+    "foreignSharePct": 1.54,
+    "foreignShareChangeBps": 1.47,
+    "foreignShareIndexImpactPct": 0.02,
+    "sectorCode": "0006"
   },
   "SNPAM": {
     "ticker": "SNPAM",
@@ -8514,7 +11524,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 8.4,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 0,
+    "foreignSharePct": 0,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0045"
   },
   "SODSN": {
     "ticker": "SODSN",
@@ -8530,7 +11545,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.1,
     "pb": 3.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "sectorCode": "0025"
   },
   "SOHOE": {
     "ticker": "SOHOE",
@@ -8546,7 +11562,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.5,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 5.17,
+    "foreignSharePct": 4.88,
+    "foreignShareChangeBps": -29.12,
+    "foreignShareIndexImpactPct": -0.31,
+    "sectorCode": "0045"
   },
   "SOKE": {
     "ticker": "SOKE",
@@ -8562,7 +11583,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.2,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 2.71,
+    "foreignSharePct": 2.23,
+    "foreignShareChangeBps": -47.82,
+    "foreignShareIndexImpactPct": -0.68,
+    "sectorCode": "0016"
   },
   "SOKM": {
     "ticker": "SOKM",
@@ -8578,7 +11604,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.1,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 38.66,
+    "foreignSharePct": 38.68,
+    "foreignShareChangeBps": 2,
+    "foreignShareIndexImpactPct": 0.03,
+    "historicalEstimates": {
+      "peEstimate": 10.7,
+      "peDiscountPct": -6,
+      "evEbitdaEstimate": 1.6,
+      "evEbitdaDiscountPct": -76.9,
+      "pbEstimate": 0.7,
+      "pbDiscountPct": -94.6
+    },
+    "sectorCode": "0035"
   },
   "SONME": {
     "ticker": "SONME",
@@ -8594,7 +11633,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 0.53,
+    "foreignSharePct": 0.42,
+    "foreignShareChangeBps": -11.14,
+    "foreignShareIndexImpactPct": -0.12,
+    "sectorCode": "0045"
   },
   "SRVGY": {
     "ticker": "SRVGY",
@@ -8610,7 +11654,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 18.81,
+    "foreignSharePct": 18.64,
+    "foreignShareChangeBps": -17.05,
+    "foreignShareIndexImpactPct": -0.17,
+    "sectorCode": "0015"
   },
   "SSAAT": {
     "ticker": "SSAAT",
@@ -8626,7 +11675,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.4,
     "pb": 4.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.84,
+    "foreignSharePct": 1.95,
+    "foreignShareChangeBps": 10.62,
+    "foreignShareIndexImpactPct": 0.15,
+    "sectorCode": "0035"
   },
   "SUMAS": {
     "ticker": "SUMAS",
@@ -8642,7 +11696,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.9,
     "pb": 2.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "sectorCode": "0030"
   },
   "SUNTK": {
     "ticker": "SUNTK",
@@ -8658,7 +11713,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 1.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 7.46,
+    "foreignSharePct": 7.45,
+    "foreignShareChangeBps": -1.15,
+    "foreignShareIndexImpactPct": -0.01,
+    "sectorCode": "0045"
   },
   "SURGY": {
     "ticker": "SURGY",
@@ -8674,7 +11734,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 5.8,
+    "foreignSharePct": 5.74,
+    "foreignShareChangeBps": -5.49,
+    "foreignShareIndexImpactPct": -0.06,
+    "sectorCode": "0015"
   },
   "SUWEN": {
     "ticker": "SUWEN",
@@ -8690,7 +11755,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 1.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 14.19,
+    "foreignSharePct": 14.16,
+    "foreignShareChangeBps": -3.72,
+    "foreignShareIndexImpactPct": -0.04,
+    "sectorCode": "0045"
   },
   "SVGYO": {
     "ticker": "SVGYO",
@@ -8706,7 +11776,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 0.3,
+    "foreignSharePct": 0.19,
+    "foreignShareChangeBps": -10.24,
+    "foreignShareIndexImpactPct": -0.11,
+    "sectorCode": "0015"
   },
   "TABGD": {
     "ticker": "TABGD",
@@ -8722,7 +11797,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 2.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 59.1,
+    "foreignSharePct": 59.04,
+    "foreignShareChangeBps": -5.62,
+    "foreignShareIndexImpactPct": -0.06,
+    "historicalEstimates": {
+      "peEstimate": 13.7,
+      "peDiscountPct": -22.2,
+      "evEbitdaEstimate": 4.1,
+      "evEbitdaDiscountPct": -19,
+      "pbEstimate": 1.7,
+      "pbDiscountPct": -34.2
+    },
+    "sectorCode": "0016"
   },
   "TARKM": {
     "ticker": "TARKM",
@@ -8738,7 +11826,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.3,
     "pb": 2.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 4.18,
+    "foreignSharePct": 4.12,
+    "foreignShareChangeBps": -5.4,
+    "foreignShareIndexImpactPct": -0.05,
+    "sectorCode": "0042"
   },
   "TATEN": {
     "ticker": "TATEN",
@@ -8754,7 +11847,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.6,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 7.95,
+    "foreignSharePct": 7.32,
+    "foreignShareChangeBps": -62.42,
+    "foreignShareIndexImpactPct": -0.64,
+    "sectorCode": "0011"
   },
   "TATGD": {
     "ticker": "TATGD",
@@ -8770,7 +11868,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 11.13,
+    "foreignSharePct": 11.17,
+    "foreignShareChangeBps": 4.75,
+    "foreignShareIndexImpactPct": 0.05,
+    "sectorCode": "0016"
   },
   "TAVHL": {
     "ticker": "TAVHL",
@@ -8786,7 +11889,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.7,
     "pb": 1.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 63.96,
+    "foreignSharePct": 63.87,
+    "foreignShareChangeBps": -8.57,
+    "foreignShareIndexImpactPct": -0.1,
+    "historicalEstimates": {
+      "peEstimate": 21.7,
+      "peDiscountPct": 71.9,
+      "evEbitdaEstimate": 6,
+      "evEbitdaDiscountPct": -26.5,
+      "pbEstimate": 1,
+      "pbDiscountPct": -30.5
+    },
+    "sectorCode": "0017"
   },
   "TBORG": {
     "ticker": "TBORG",
@@ -8802,7 +11918,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 0.98,
+    "foreignSharePct": 0.96,
+    "foreignShareChangeBps": -2.15,
+    "foreignShareIndexImpactPct": -0.09,
+    "sectorCode": "0029"
   },
   "TCELL": {
     "ticker": "TCELL",
@@ -8818,7 +11939,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.1,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 76.99,
+    "foreignSharePct": 76.89,
+    "foreignShareChangeBps": -10,
+    "foreignShareIndexImpactPct": -0.19,
+    "historicalEstimates": {
+      "peEstimate": 8.4,
+      "peDiscountPct": -21.2,
+      "evEbitdaEstimate": 2.4,
+      "evEbitdaDiscountPct": -34.2,
+      "pbEstimate": 0.8,
+      "pbDiscountPct": -53.7
+    },
+    "sectorCode": "0050"
   },
   "TCKRC": {
     "ticker": "TCKRC",
@@ -8834,7 +11968,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.8,
     "pb": 2.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 10.72,
+    "foreignSharePct": 10.85,
+    "foreignShareChangeBps": 12.76,
+    "foreignShareIndexImpactPct": 0.16,
+    "sectorCode": "0049"
   },
   "TDGYO": {
     "ticker": "TDGYO",
@@ -8850,7 +11989,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 0.64,
+    "foreignSharePct": 0.64,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0015"
   },
   "TEHOL": {
     "ticker": "TEHOL",
@@ -8866,7 +12010,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 12.46,
+    "foreignSharePct": 12.46,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0019"
   },
   "TEKTU": {
     "ticker": "TEKTU",
@@ -8882,7 +12031,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 8.7,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 7.45,
+    "foreignSharePct": 7.45,
+    "foreignShareChangeBps": 0.76,
+    "foreignShareIndexImpactPct": 0.01,
+    "sectorCode": "0046"
   },
   "TERA": {
     "ticker": "TERA",
@@ -8898,7 +12052,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 11.54,
+    "foreignSharePct": 11.54,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0051"
   },
   "TEZOL": {
     "ticker": "TEZOL",
@@ -8914,7 +12073,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 5.49,
+    "foreignSharePct": 5.51,
+    "foreignShareChangeBps": 2.08,
+    "foreignShareIndexImpactPct": 0.02,
+    "sectorCode": "0024"
   },
   "TGSAS": {
     "ticker": "TGSAS",
@@ -8930,7 +12094,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 4.7,
     "pb": 3.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.36,
+    "foreignSharePct": 1.58,
+    "foreignShareChangeBps": 21.48,
+    "foreignShareIndexImpactPct": 0.24,
+    "sectorCode": "0034"
   },
   "THYAO": {
     "ticker": "THYAO",
@@ -8946,7 +12115,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 24.15,
+    "foreignSharePct": 24.01,
+    "foreignShareChangeBps": -14.19,
+    "foreignShareIndexImpactPct": -0.15,
+    "historicalEstimates": {
+      "peEstimate": 4.2,
+      "peDiscountPct": -24.1,
+      "evEbitdaEstimate": 5.1,
+      "evEbitdaDiscountPct": -27.6,
+      "pbEstimate": 0.3,
+      "pbDiscountPct": -68.9
+    },
+    "sectorCode": "0017"
   },
   "TKFEN": {
     "ticker": "TKFEN",
@@ -8962,7 +12144,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.6,
     "pb": 2.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 7.24,
+    "foreignSharePct": 7.16,
+    "foreignShareChangeBps": -7.38,
+    "foreignShareIndexImpactPct": -0.23,
+    "sectorCode": "0022"
   },
   "TKNKA": {
     "ticker": "TKNKA",
@@ -8978,7 +12165,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.7,
     "pb": 1.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.12,
+    "foreignSharePct": 0.58,
+    "foreignShareChangeBps": -54.49,
+    "foreignShareIndexImpactPct": -0.68,
+    "sectorCode": "0036"
   },
   "TKNSA": {
     "ticker": "TKNSA",
@@ -8994,7 +12186,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.1,
     "pb": null,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 3.1,
+    "foreignSharePct": 3.04,
+    "foreignShareChangeBps": -6.13,
+    "foreignShareIndexImpactPct": -0.06,
+    "historicalEstimates": {
+      "peEstimate": 10.4,
+      "peDiscountPct": -10.3,
+      "evEbitdaEstimate": 1.2,
+      "evEbitdaDiscountPct": -70.5,
+      "pbEstimate": null,
+      "pbDiscountPct": null
+    },
+    "sectorCode": "0035"
   },
   "TLMAN": {
     "ticker": "TLMAN",
@@ -9010,7 +12215,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 2.78,
+    "foreignSharePct": 2.74,
+    "foreignShareChangeBps": -3.56,
+    "foreignShareIndexImpactPct": -0.04,
+    "sectorCode": "0048"
   },
   "TMPOL": {
     "ticker": "TMPOL",
@@ -9026,7 +12236,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.3,
     "pb": 1.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 0.18,
+    "foreignSharePct": 0.07,
+    "foreignShareChangeBps": -11.36,
+    "foreignShareIndexImpactPct": -0.17,
+    "sectorCode": "0025"
   },
   "TMSN": {
     "ticker": "TMSN",
@@ -9042,7 +12257,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 3.9,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 3.72,
+    "foreignSharePct": 3.6,
+    "foreignShareChangeBps": -11.91,
+    "foreignShareIndexImpactPct": -0.16,
+    "sectorCode": "0031"
   },
   "TNZTP": {
     "ticker": "TNZTP",
@@ -9058,7 +12278,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.3,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 11.28,
+    "foreignSharePct": 11.15,
+    "foreignShareChangeBps": -13.2,
+    "foreignShareIndexImpactPct": -0.14,
+    "sectorCode": "0037"
   },
   "TOASO": {
     "ticker": "TOASO",
@@ -9074,7 +12299,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 24.9,
+    "foreignSharePct": 24.87,
+    "foreignShareChangeBps": -2.6,
+    "foreignShareIndexImpactPct": -0.03,
+    "historicalEstimates": {
+      "peEstimate": 8.8,
+      "peDiscountPct": -17.5,
+      "evEbitdaEstimate": 10.3,
+      "evEbitdaDiscountPct": 28.4,
+      "pbEstimate": 1.6,
+      "pbDiscountPct": -58.4
+    },
+    "sectorCode": "0031"
   },
   "TRALT": {
     "ticker": "TRALT",
@@ -9090,7 +12328,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 5,
     "pb": 2.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 31.02,
+    "foreignSharePct": 31.25,
+    "foreignShareChangeBps": 22.51,
+    "foreignShareIndexImpactPct": 0.27,
+    "historicalEstimates": {
+      "peEstimate": 11.6,
+      "peDiscountPct": 4.7,
+      "evEbitdaEstimate": 8,
+      "evEbitdaDiscountPct": -10.8,
+      "pbEstimate": 2.2,
+      "pbDiscountPct": -2.6
+    },
+    "sectorCode": "0052"
   },
   "TRCAS": {
     "ticker": "TRCAS",
@@ -9106,7 +12357,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 3.04,
+    "foreignSharePct": 2.95,
+    "foreignShareChangeBps": -9.19,
+    "foreignShareIndexImpactPct": -0.32,
+    "sectorCode": "0036"
   },
   "TRENJ": {
     "ticker": "TRENJ",
@@ -9122,7 +12378,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.2,
     "pb": 1.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 22.89,
+    "foreignSharePct": 23.02,
+    "foreignShareChangeBps": 13.6,
+    "foreignShareIndexImpactPct": 0.15,
+    "sectorCode": "0011"
   },
   "TRGYO": {
     "ticker": "TRGYO",
@@ -9138,7 +12399,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 16.77,
+    "foreignSharePct": 16.77,
+    "foreignShareChangeBps": -0.47,
+    "foreignShareIndexImpactPct": -0.01,
+    "historicalEstimates": {
+      "peEstimate": 7.3,
+      "peDiscountPct": 45.4,
+      "evEbitdaEstimate": 6.7,
+      "evEbitdaDiscountPct": -24.5,
+      "pbEstimate": 0.5,
+      "pbDiscountPct": null
+    },
+    "sectorCode": "0015"
   },
   "TRHOL": {
     "ticker": "TRHOL",
@@ -9154,7 +12428,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 3.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.8,
+    "foreignSharePct": 1.8,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0019"
   },
   "TRILC": {
     "ticker": "TRILC",
@@ -9170,7 +12449,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 0.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.19,
+    "foreignSharePct": 1.19,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0037"
   },
   "TRMET": {
     "ticker": "TRMET",
@@ -9186,7 +12470,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.2,
     "pb": 1.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 38.43,
+    "foreignSharePct": 38.53,
+    "foreignShareChangeBps": 10.38,
+    "foreignShareIndexImpactPct": 0.11,
+    "sectorCode": "0052"
   },
   "TSGYO": {
     "ticker": "TSGYO",
@@ -9202,7 +12491,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.46,
+    "foreignSharePct": 1.44,
+    "foreignShareChangeBps": -1.95,
+    "foreignShareIndexImpactPct": -0.07,
+    "sectorCode": "0015"
   },
   "TSKB": {
     "ticker": "TSKB",
@@ -9218,7 +12512,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 27.14,
+    "foreignSharePct": 27.21,
+    "foreignShareChangeBps": 7.39,
+    "foreignShareIndexImpactPct": 0.1,
+    "historicalEstimates": {
+      "peEstimate": 2,
+      "peDiscountPct": -48.5,
+      "evEbitdaEstimate": null,
+      "evEbitdaDiscountPct": null,
+      "pbEstimate": 0.5,
+      "pbDiscountPct": -56.2
+    },
+    "sectorCode": "0001"
   },
   "TSPOR": {
     "ticker": "TSPOR",
@@ -9234,7 +12541,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.4,
     "pb": 0.5,
     "lastPeriod": "3/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 4.89,
+    "foreignSharePct": 4.66,
+    "foreignShareChangeBps": -23.36,
+    "foreignShareIndexImpactPct": -0.23,
+    "sectorCode": "0041"
   },
   "TTKOM": {
     "ticker": "TTKOM",
@@ -9250,7 +12562,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 37.62,
+    "foreignSharePct": 37.78,
+    "foreignShareChangeBps": 16.74,
+    "foreignShareIndexImpactPct": 0.19,
+    "historicalEstimates": {
+      "peEstimate": 3.6,
+      "peDiscountPct": -60.5,
+      "evEbitdaEstimate": 2.2,
+      "evEbitdaDiscountPct": -37.1,
+      "pbEstimate": 0.7,
+      "pbDiscountPct": -75
+    },
+    "sectorCode": "0050"
   },
   "TTRAK": {
     "ticker": "TTRAK",
@@ -9266,7 +12591,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.9,
     "pb": 2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 29.22,
+    "foreignSharePct": 29.37,
+    "foreignShareChangeBps": 14.79,
+    "foreignShareIndexImpactPct": 0.15,
+    "historicalEstimates": {
+      "peEstimate": null,
+      "peDiscountPct": null,
+      "evEbitdaEstimate": 12.9,
+      "evEbitdaDiscountPct": 68.5,
+      "pbEstimate": 2,
+      "pbDiscountPct": -62.4
+    },
+    "sectorCode": "0031"
   },
   "TUCLK": {
     "ticker": "TUCLK",
@@ -9282,7 +12620,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.9,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 0.13,
+    "foreignSharePct": 0.13,
+    "foreignShareChangeBps": -0.13,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0033"
   },
   "TUKAS": {
     "ticker": "TUKAS",
@@ -9298,7 +12641,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.4,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 3.84,
+    "foreignSharePct": 3.87,
+    "foreignShareChangeBps": 3.2,
+    "foreignShareIndexImpactPct": 0.06,
+    "sectorCode": "0016"
   },
   "TUPRS": {
     "ticker": "TUPRS",
@@ -9314,7 +12662,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 1.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 51.21,
+    "foreignSharePct": 51.22,
+    "foreignShareChangeBps": 1.15,
+    "foreignShareIndexImpactPct": 0.01,
+    "historicalEstimates": {
+      "peEstimate": 5.5,
+      "peDiscountPct": -34.3,
+      "evEbitdaEstimate": 3.1,
+      "evEbitdaDiscountPct": -53.1,
+      "pbEstimate": 1.4,
+      "pbDiscountPct": -39.8
+    },
+    "sectorCode": "0036"
   },
   "TUREX": {
     "ticker": "TUREX",
@@ -9330,7 +12691,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 2.12,
+    "foreignSharePct": 2.34,
+    "foreignShareChangeBps": 21.3,
+    "foreignShareIndexImpactPct": 0.23,
+    "sectorCode": "0048"
   },
   "TURGG": {
     "ticker": "TURGG",
@@ -9346,7 +12712,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.26,
+    "foreignSharePct": 1.28,
+    "foreignShareChangeBps": 1.72,
+    "foreignShareIndexImpactPct": 0.02,
+    "sectorCode": "0015"
   },
   "TURSG": {
     "ticker": "TURSG",
@@ -9362,7 +12733,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 11.63,
+    "foreignSharePct": 11.64,
+    "foreignShareChangeBps": 1.11,
+    "foreignShareIndexImpactPct": 0.04,
+    "historicalEstimates": {
+      "peEstimate": 4.2,
+      "peDiscountPct": -46.5,
+      "evEbitdaEstimate": null,
+      "evEbitdaDiscountPct": null,
+      "pbEstimate": 1.7,
+      "pbDiscountPct": -18.1
+    },
+    "sectorCode": "0040"
   },
   "UCAYM": {
     "ticker": "UCAYM",
@@ -9378,7 +12762,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.8,
     "pb": 1.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 4.64,
+    "foreignSharePct": 4.48,
+    "foreignShareChangeBps": -16.21,
+    "foreignShareIndexImpactPct": -0.16,
+    "sectorCode": "0049"
   },
   "UFUK": {
     "ticker": "UFUK",
@@ -9394,7 +12783,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 6.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 3.12,
+    "foreignSharePct": 3.17,
+    "foreignShareChangeBps": 4.14,
+    "foreignShareIndexImpactPct": 0.19,
+    "sectorCode": "0014"
   },
   "ULAS": {
     "ticker": "ULAS",
@@ -9410,7 +12804,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.09,
+    "foreignSharePct": 1.1,
+    "foreignShareChangeBps": 0.81,
+    "foreignShareIndexImpactPct": 0.01,
+    "sectorCode": "0046"
   },
   "ULKER": {
     "ticker": "ULKER",
@@ -9426,7 +12825,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.6,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 75.55,
+    "foreignSharePct": 75.59,
+    "foreignShareChangeBps": 3.51,
+    "foreignShareIndexImpactPct": 0.07,
+    "historicalEstimates": {
+      "peEstimate": 3.7,
+      "peDiscountPct": -60.2,
+      "evEbitdaEstimate": 3.1,
+      "evEbitdaDiscountPct": -49.7,
+      "pbEstimate": 0.6,
+      "pbDiscountPct": -71.2
+    },
+    "sectorCode": "0016"
   },
   "ULUFA": {
     "ticker": "ULUFA",
@@ -9442,7 +12854,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 7.38,
+    "foreignSharePct": 7.13,
+    "foreignShareChangeBps": -25.81,
+    "foreignShareIndexImpactPct": -0.3,
+    "sectorCode": "0014"
   },
   "ULUSE": {
     "ticker": "ULUSE",
@@ -9458,7 +12875,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.1,
     "pb": 11.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 81.08,
+    "foreignSharePct": 81.26,
+    "foreignShareChangeBps": 17.54,
+    "foreignShareIndexImpactPct": 0.92,
+    "sectorCode": "0012"
   },
   "ULUUN": {
     "ticker": "ULUUN",
@@ -9474,7 +12896,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.68,
+    "foreignSharePct": 1.71,
+    "foreignShareChangeBps": 2.83,
+    "foreignShareIndexImpactPct": 0.04,
+    "sectorCode": "0016"
   },
   "UNLU": {
     "ticker": "UNLU",
@@ -9490,7 +12917,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.8,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.8,
+    "foreignSharePct": 1.45,
+    "foreignShareChangeBps": -35.42,
+    "foreignShareIndexImpactPct": -0.62,
+    "sectorCode": "0051"
   },
   "USAK": {
     "ticker": "USAK",
@@ -9506,7 +12938,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 3.24,
+    "foreignSharePct": 3.24,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0039"
   },
   "USHOL": {
     "ticker": "USHOL",
@@ -9522,7 +12959,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 4.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 2.97,
+    "foreignSharePct": 3.02,
+    "foreignShareChangeBps": 5.03,
+    "foreignShareIndexImpactPct": 0.05,
+    "sectorCode": "0019"
   },
   "VAKBN": {
     "ticker": "VAKBN",
@@ -9538,7 +12980,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1,
+    "foreignSharePct": 0.99,
+    "foreignShareChangeBps": -1.16,
+    "foreignShareIndexImpactPct": -0.17,
+    "historicalEstimates": {
+      "peEstimate": 3.8,
+      "peDiscountPct": -5.6,
+      "evEbitdaEstimate": null,
+      "evEbitdaDiscountPct": null,
+      "pbEstimate": 0.8,
+      "pbDiscountPct": -23.5
+    },
+    "sectorCode": "0001"
   },
   "VAKFA": {
     "ticker": "VAKFA",
@@ -9554,7 +13009,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 0.92,
+    "foreignSharePct": 0.92,
+    "foreignShareChangeBps": -0.14,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0014"
   },
   "VAKFN": {
     "ticker": "VAKFN",
@@ -9570,7 +13030,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 6.21,
+    "foreignSharePct": 5.94,
+    "foreignShareChangeBps": -27.87,
+    "foreignShareIndexImpactPct": -0.32,
+    "sectorCode": "0014"
   },
   "VAKKO": {
     "ticker": "VAKKO",
@@ -9586,7 +13051,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 0.9,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 14.51,
+    "foreignSharePct": 14.52,
+    "foreignShareChangeBps": 0.83,
+    "foreignShareIndexImpactPct": 0.01,
+    "sectorCode": "0035"
   },
   "VANGD": {
     "ticker": "VANGD",
@@ -9602,7 +13072,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 9.1,
     "pb": 3.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.08,
+    "foreignSharePct": 1.26,
+    "foreignShareChangeBps": 17.57,
+    "foreignShareIndexImpactPct": 0.18,
+    "sectorCode": "0016"
   },
   "VBTYZ": {
     "ticker": "VBTYZ",
@@ -9618,7 +13093,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 2.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 12.17,
+    "foreignSharePct": 12.27,
+    "foreignShareChangeBps": 9.77,
+    "foreignShareIndexImpactPct": 0.1,
+    "sectorCode": "0043"
   },
   "VERTU": {
     "ticker": "VERTU",
@@ -9634,7 +13114,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 3.14,
+    "foreignSharePct": 3,
+    "foreignShareChangeBps": -14.3,
+    "foreignShareIndexImpactPct": -0.17,
+    "sectorCode": "0047"
   },
   "VERUS": {
     "ticker": "VERUS",
@@ -9650,7 +13135,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 6.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 37.53,
+    "foreignSharePct": 37.53,
+    "foreignShareChangeBps": 0.19,
+    "foreignShareIndexImpactPct": 0.01,
+    "sectorCode": "0019"
   },
   "VESBE": {
     "ticker": "VESBE",
@@ -9666,7 +13156,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.5,
     "pb": 0.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 4.59,
+    "foreignSharePct": 4.48,
+    "foreignShareChangeBps": -10.07,
+    "foreignShareIndexImpactPct": -0.14,
+    "sectorCode": "0006"
   },
   "VESTL": {
     "ticker": "VESTL",
@@ -9682,7 +13177,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.9,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 2.21,
+    "foreignSharePct": 2.14,
+    "foreignShareChangeBps": -6.73,
+    "foreignShareIndexImpactPct": -0.13,
+    "historicalEstimates": {
+      "peEstimate": null,
+      "peDiscountPct": null,
+      "evEbitdaEstimate": 7,
+      "evEbitdaDiscountPct": 34.1,
+      "pbEstimate": 0.1,
+      "pbDiscountPct": -89.4
+    },
+    "sectorCode": "0006"
   },
   "VEYAS": {
     "ticker": "VEYAS",
@@ -9698,7 +13206,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.7,
     "pb": 2.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 5.67,
+    "foreignSharePct": 5.33,
+    "foreignShareChangeBps": -33.9,
+    "foreignShareIndexImpactPct": -1.03,
+    "sectorCode": "0038"
   },
   "VKFYO": {
     "ticker": "VKFYO",
@@ -9714,7 +13227,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 12.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.98,
+    "foreignSharePct": 1.4,
+    "foreignShareChangeBps": -58.28,
+    "foreignShareIndexImpactPct": -1.07,
+    "sectorCode": "0047"
   },
   "VKGYO": {
     "ticker": "VKGYO",
@@ -9730,7 +13248,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 8.33,
+    "foreignSharePct": 8.41,
+    "foreignShareChangeBps": 8.64,
+    "foreignShareIndexImpactPct": 0.16,
+    "sectorCode": "0015"
   },
   "VKING": {
     "ticker": "VKING",
@@ -9746,7 +13269,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 4.9,
     "pb": null,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 0.21,
+    "foreignSharePct": 0.34,
+    "foreignShareChangeBps": 13.72,
+    "foreignShareIndexImpactPct": 0.25,
+    "sectorCode": "0024"
   },
   "VRGYO": {
     "ticker": "VRGYO",
@@ -9762,7 +13290,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 1.04,
+    "foreignSharePct": 0.93,
+    "foreignShareChangeBps": -11.25,
+    "foreignShareIndexImpactPct": -0.11,
+    "sectorCode": "0015"
   },
   "VSNMD": {
     "ticker": "VSNMD",
@@ -9778,7 +13311,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.9,
     "pb": 1.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 8.16,
+    "foreignSharePct": 8.18,
+    "foreignShareChangeBps": 2.17,
+    "foreignShareIndexImpactPct": 0.02,
+    "sectorCode": "0052"
   },
   "YAPRK": {
     "ticker": "YAPRK",
@@ -9794,7 +13332,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 7.7,
     "pb": 3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 0.49,
+    "foreignSharePct": 0.67,
+    "foreignShareChangeBps": 17.88,
+    "foreignShareIndexImpactPct": 0.19,
+    "sectorCode": "0016"
   },
   "YATAS": {
     "ticker": "YATAS",
@@ -9810,7 +13353,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.4,
     "pb": 0.3,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 14.25,
+    "foreignSharePct": 14.13,
+    "foreignShareChangeBps": -11.83,
+    "foreignShareIndexImpactPct": -0.15,
+    "historicalEstimates": {
+      "peEstimate": 10.7,
+      "peDiscountPct": -2.7,
+      "evEbitdaEstimate": 7.3,
+      "evEbitdaDiscountPct": 34.5,
+      "pbEstimate": 0.3,
+      "pbDiscountPct": -91.2
+    },
+    "sectorCode": "0030"
   },
   "YAYLA": {
     "ticker": "YAYLA",
@@ -9826,7 +13382,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 8.7,
     "pb": 0.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 3.66,
+    "foreignSharePct": 3.7,
+    "foreignShareChangeBps": 3.85,
+    "foreignShareIndexImpactPct": 0.04,
+    "sectorCode": "0011"
   },
   "YBTAS": {
     "ticker": "YBTAS",
@@ -9842,7 +13403,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.6,
     "pb": 1.7,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "sectorCode": "0021"
   },
   "YEOTK": {
     "ticker": "YEOTK",
@@ -9858,7 +13420,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.3,
     "pb": 4.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 11.05,
+    "foreignSharePct": 11.1,
+    "foreignShareChangeBps": 4.78,
+    "foreignShareIndexImpactPct": 0.06,
+    "sectorCode": "0022"
   },
   "YESIL": {
     "ticker": "YESIL",
@@ -9874,7 +13441,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.412Z"
+    "updatedAt": "2026-10-14T13:49:04.412Z",
+    "foreignSharePrevPct": 3.6,
+    "foreignSharePct": 2.7,
+    "foreignShareChangeBps": -90.04,
+    "foreignShareIndexImpactPct": -0.97,
+    "sectorCode": "0019"
   },
   "YGGYO": {
     "ticker": "YGGYO",
@@ -9890,7 +13462,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.413Z"
+    "updatedAt": "2026-10-14T13:49:04.413Z",
+    "foreignSharePrevPct": 6.58,
+    "foreignSharePct": 6.6,
+    "foreignShareChangeBps": 1.3,
+    "foreignShareIndexImpactPct": 0.02,
+    "sectorCode": "0015"
   },
   "YIGIT": {
     "ticker": "YIGIT",
@@ -9906,7 +13483,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.3,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.413Z"
+    "updatedAt": "2026-10-14T13:49:04.413Z",
+    "foreignSharePrevPct": 1.18,
+    "foreignSharePct": 1.09,
+    "foreignShareChangeBps": -8.49,
+    "foreignShareIndexImpactPct": -0.08,
+    "sectorCode": "0033"
   },
   "YKBNK": {
     "ticker": "YKBNK",
@@ -9922,7 +13504,20 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.413Z"
+    "updatedAt": "2026-10-14T13:49:04.413Z",
+    "foreignSharePrevPct": 23.43,
+    "foreignSharePct": 23.67,
+    "foreignShareChangeBps": 23.54,
+    "foreignShareIndexImpactPct": 0.34,
+    "historicalEstimates": {
+      "peEstimate": 4.7,
+      "peDiscountPct": 8.5,
+      "evEbitdaEstimate": null,
+      "evEbitdaDiscountPct": null,
+      "pbEstimate": 1,
+      "pbDiscountPct": -19.8
+    },
+    "sectorCode": "0001"
   },
   "YKSLN": {
     "ticker": "YKSLN",
@@ -9938,7 +13533,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1,
     "pb": 1.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.413Z"
+    "updatedAt": "2026-10-14T13:49:04.413Z",
+    "foreignSharePrevPct": 8.25,
+    "foreignSharePct": 7.27,
+    "foreignShareChangeBps": -97.7,
+    "foreignShareIndexImpactPct": -1.03,
+    "sectorCode": "0008"
   },
   "YONGA": {
     "ticker": "YONGA",
@@ -9954,7 +13554,8 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 2.1,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.413Z"
+    "updatedAt": "2026-10-14T13:49:04.413Z",
+    "sectorCode": "0030"
   },
   "YUNSA": {
     "ticker": "YUNSA",
@@ -9970,7 +13571,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 0.6,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.413Z"
+    "updatedAt": "2026-10-14T13:49:04.413Z",
+    "foreignSharePrevPct": 6.97,
+    "foreignSharePct": 6.9,
+    "foreignShareChangeBps": -6.77,
+    "foreignShareIndexImpactPct": -0.07,
+    "sectorCode": "0045"
   },
   "YYAPI": {
     "ticker": "YYAPI",
@@ -9986,7 +13592,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.2,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.413Z"
+    "updatedAt": "2026-10-14T13:49:04.413Z",
+    "foreignSharePrevPct": 0.55,
+    "foreignSharePct": 0.55,
+    "foreignShareChangeBps": 0,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0022"
   },
   "YYLGD": {
     "ticker": "YYLGD",
@@ -10002,7 +13613,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 0.7,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.413Z"
+    "updatedAt": "2026-10-14T13:49:04.413Z",
+    "foreignSharePrevPct": 9.67,
+    "foreignSharePct": 9.56,
+    "foreignShareChangeBps": -11.57,
+    "foreignShareIndexImpactPct": -0.17,
+    "sectorCode": "0016"
   },
   "ZEDUR": {
     "ticker": "ZEDUR",
@@ -10018,7 +13634,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 10.4,
     "pb": 0.4,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.413Z"
+    "updatedAt": "2026-10-14T13:49:04.413Z",
+    "foreignSharePrevPct": 2.81,
+    "foreignSharePct": 2.84,
+    "foreignShareChangeBps": 2.31,
+    "foreignShareIndexImpactPct": 0.02,
+    "sectorCode": "0011"
   },
   "ZERGY": {
     "ticker": "ZERGY",
@@ -10034,7 +13655,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1.5,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.413Z"
+    "updatedAt": "2026-10-14T13:49:04.413Z",
+    "foreignSharePrevPct": 0.24,
+    "foreignSharePct": 0.25,
+    "foreignShareChangeBps": 1.58,
+    "foreignShareIndexImpactPct": 0.02,
+    "sectorCode": "0015"
   },
   "ZGYO": {
     "ticker": "ZGYO",
@@ -10050,7 +13676,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 0.8,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.413Z"
+    "updatedAt": "2026-10-14T13:49:04.413Z",
+    "foreignSharePrevPct": 41.89,
+    "foreignSharePct": 42.47,
+    "foreignShareChangeBps": 58.36,
+    "foreignShareIndexImpactPct": 0.99,
+    "sectorCode": "0015"
   },
   "ZOREN": {
     "ticker": "ZOREN",
@@ -10066,7 +13697,12 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": 1.8,
     "pb": 0.1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.413Z"
+    "updatedAt": "2026-10-14T13:49:04.413Z",
+    "foreignSharePrevPct": 32.89,
+    "foreignSharePct": 32.81,
+    "foreignShareChangeBps": -8.32,
+    "foreignShareIndexImpactPct": -0.12,
+    "sectorCode": "0011"
   },
   "ZRGYO": {
     "ticker": "ZRGYO",
@@ -10082,6 +13718,11 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "evSales": null,
     "pb": 1,
     "lastPeriod": "6/2026",
-    "updatedAt": "2026-10-14T13:49:04.413Z"
+    "updatedAt": "2026-10-14T13:49:04.413Z",
+    "foreignSharePrevPct": 4.62,
+    "foreignSharePct": 4.62,
+    "foreignShareChangeBps": -0.06,
+    "foreignShareIndexImpactPct": 0,
+    "sectorCode": "0015"
   }
 };

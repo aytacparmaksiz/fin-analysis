@@ -4607,7 +4607,7 @@ export default function ValuationTerminal({
                               </p>
                             </div>
                           </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
                             <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
                               <div className="text-[10px] uppercase font-bold text-slate-500">F/K</div>
                               <div className="text-sm font-black font-mono text-emerald-400">
@@ -4658,6 +4658,17 @@ export default function ValuationTerminal({
                                 </div>
                               </div>
                             )}
+                            <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                              <div className="text-[10px] uppercase font-bold text-slate-500">Yabancı Takas</div>
+                              <div className="text-sm font-black font-mono text-emerald-400">
+                                {marketMultiples.foreign_share_pct != null ? `%${marketMultiples.foreign_share_pct.toFixed(2)}` : '—'}
+                              </div>
+                              {marketMultiples.foreign_share_change_bps != null && (
+                                <div className={`text-[9px] font-mono font-semibold ${marketMultiples.foreign_share_change_bps >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                  {marketMultiples.foreign_share_change_bps >= 0 ? '+' : ''}{marketMultiples.foreign_share_change_bps.toFixed(1)} bp
+                                </div>
+                              )}
+                            </div>
                             <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
                               <div className="text-[10px] uppercase font-bold text-slate-500">Halka Açıklık</div>
                               <div className="text-sm font-black font-mono text-slate-200">
@@ -6393,6 +6404,92 @@ export default function ValuationTerminal({
                     })}
                   </div>
 
+                  {/* İş Yatırım Araştırma Konsensüs & Hedef Çarpan Tahminleri Kartı */}
+                  {marketMultiples?.historical_estimates && (
+                    <div className="bg-[#0F1523] border border-blue-900/60 rounded-2xl p-5 shadow-xl space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
+                            <Target className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                              İş Yatırım Araştırma Konsensüs & Hedef Çarpan Tahminleri
+                              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800 font-semibold">
+                                İş Yatırım Resmi
+                              </span>
+                            </h3>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              Analist konsensüs tahminlerine göre beklenen ileriye dönük çarpanlar ve tarihsel iskonto/prim oranları
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {/* F/K Tahmin */}
+                        <div className="bg-[#090D16] border border-slate-800/80 p-4 rounded-xl space-y-2">
+                          <div className="text-[11px] font-semibold text-slate-400 uppercase">F/K Tahmin & İskonto</div>
+                          <div className="flex items-baseline justify-between">
+                            <div className="text-2xl font-black font-mono text-cyan-400">
+                              {marketMultiples.historical_estimates.pe_estimate != null ? `${marketMultiples.historical_estimates.pe_estimate.toFixed(1)}x` : '—'}
+                            </div>
+                            {marketMultiples.historical_estimates.pe_discount_pct != null && (
+                              <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded border ${
+                                marketMultiples.historical_estimates.pe_discount_pct < 0
+                                  ? 'bg-emerald-950/70 text-emerald-300 border-emerald-800/60'
+                                  : 'bg-rose-950/70 text-rose-300 border-rose-800/60'
+                              }`}>
+                                %{Math.abs(marketMultiples.historical_estimates.pe_discount_pct)} {marketMultiples.historical_estimates.pe_discount_pct < 0 ? 'İskontolu' : 'Primli'}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-500">Konsensüs F/K Projeksiyonu</div>
+                        </div>
+
+                        {/* FD/FAVÖK Tahmin */}
+                        <div className="bg-[#090D16] border border-slate-800/80 p-4 rounded-xl space-y-2">
+                          <div className="text-[11px] font-semibold text-slate-400 uppercase">FD/FAVÖK Tahmin & İskonto</div>
+                          <div className="flex items-baseline justify-between">
+                            <div className="text-2xl font-black font-mono text-amber-400">
+                              {marketMultiples.historical_estimates.ev_ebitda_estimate != null ? `${marketMultiples.historical_estimates.ev_ebitda_estimate.toFixed(1)}x` : '—'}
+                            </div>
+                            {marketMultiples.historical_estimates.ev_ebitda_discount_pct != null && (
+                              <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded border ${
+                                marketMultiples.historical_estimates.ev_ebitda_discount_pct < 0
+                                  ? 'bg-emerald-950/70 text-emerald-300 border-emerald-800/60'
+                                  : 'bg-rose-950/70 text-rose-300 border-rose-800/60'
+                              }`}>
+                                %{Math.abs(marketMultiples.historical_estimates.ev_ebitda_discount_pct)} {marketMultiples.historical_estimates.ev_ebitda_discount_pct < 0 ? 'İskontolu' : 'Primli'}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-500">Konsensüs FD/FAVÖK Projeksiyonu</div>
+                        </div>
+
+                        {/* PD/DD Tahmin */}
+                        <div className="bg-[#090D16] border border-slate-800/80 p-4 rounded-xl space-y-2">
+                          <div className="text-[11px] font-semibold text-slate-400 uppercase">PD/DD Tahmin & İskonto</div>
+                          <div className="flex items-baseline justify-between">
+                            <div className="text-2xl font-black font-mono text-emerald-400">
+                              {marketMultiples.historical_estimates.pb_estimate != null ? `${marketMultiples.historical_estimates.pb_estimate.toFixed(1)}x` : '—'}
+                            </div>
+                            {marketMultiples.historical_estimates.pb_discount_pct != null && (
+                              <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded border ${
+                                marketMultiples.historical_estimates.pb_discount_pct < 0
+                                  ? 'bg-emerald-950/70 text-emerald-300 border-emerald-800/60'
+                                  : 'bg-rose-950/70 text-rose-300 border-rose-800/60'
+                              }`}>
+                                %{Math.abs(marketMultiples.historical_estimates.pb_discount_pct)} {marketMultiples.historical_estimates.pb_discount_pct < 0 ? 'İskontolu' : 'Primli'}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-500">Konsensüs PD/DD Projeksiyonu</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Tarihsel Çeyreklik Çarpan Evrimi Grafiği & Sektör Benchmark Tablosu */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* 1. Tarihsel Çeyreklik Çarpan Trendi */}
@@ -6449,9 +6546,9 @@ export default function ValuationTerminal({
                       <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                         <div className="flex items-center gap-2">
                           <Layers className="w-4 h-4 text-emerald-400" />
-                          <h3 className="text-sm font-bold text-white">BIST Sektör Medyanları Benchmark Tablosu</h3>
+                          <h3 className="text-sm font-bold text-white">İş Yatırım Resmi Sektör Ortalamaları Tablosu</h3>
                         </div>
-                        <span className="text-[11px] text-slate-400 font-mono">BIST Resmi Aralıkları</span>
+                        <span className="text-[11px] text-slate-400 font-mono">İş Yatırım Resmi Kaynağı</span>
                       </div>
 
                       <div className="overflow-x-auto">
@@ -6466,13 +6563,27 @@ export default function ValuationTerminal({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-800/60 font-mono">
+                            {/* Aktif Şirketin Resmi İş Yatırım Alt Sektör Ortalaması (varsa en üstte vurgulanır) */}
+                            {companyMultiplesData.benchmark && (
+                              <tr className="bg-emerald-950/60 text-emerald-300 font-bold border-l-2 border-emerald-400">
+                                <td className="py-2.5 px-3 font-sans">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                    <span>{companyMultiplesData.benchmark.sectorName} (Şirket Sektörü)</span>
+                                  </div>
+                                </td>
+                                <td className="py-2.5 px-2 text-right">{companyMultiplesData.benchmark.peMedian != null ? `${companyMultiplesData.benchmark.peMedian.toFixed(2)}x` : '—'}</td>
+                                <td className="py-2.5 px-2 text-right">{companyMultiplesData.benchmark.pbMedian != null ? `${companyMultiplesData.benchmark.pbMedian.toFixed(2)}x` : '—'}</td>
+                                <td className="py-2.5 px-2 text-right">{companyMultiplesData.benchmark.evEbitdaMedian != null ? `${companyMultiplesData.benchmark.evEbitdaMedian.toFixed(2)}x` : '—'}</td>
+                                <td className="py-2.5 px-2 text-right">{companyMultiplesData.benchmark.evSalesMedian != null ? `${companyMultiplesData.benchmark.evSalesMedian.toFixed(2)}x` : '—'}</td>
+                              </tr>
+                            )}
                             {Object.entries(SECTOR_MULTIPLE_BENCHMARKS).map(([secKey, bench]) => {
-                              const isCurrent = secKey === currentSector;
+                              if (secKey === currentSector && companyMultiplesData.benchmark?.sectorName === bench.sectorName) return null;
                               return (
-                                <tr key={secKey} className={`${isCurrent ? 'bg-emerald-950/40 text-emerald-300 font-bold border-l-2 border-emerald-400' : 'text-slate-300 hover:bg-slate-800/30'}`}>
+                                <tr key={secKey} className="text-slate-300 hover:bg-slate-800/30">
                                   <td className="py-2.5 px-3 font-sans">
                                     <div className="flex items-center gap-1.5">
-                                      {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
                                       <span>{bench.sectorName}</span>
                                     </div>
                                   </td>

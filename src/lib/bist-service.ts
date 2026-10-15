@@ -5,7 +5,12 @@ import {
   parseFinancialNumber,
   parsePeriodSortKey
 } from './valuation.ts';
-import { getIsYatirimMultiplesForTicker, type IsYatirimStockMultiples } from './isyatirim-service.ts';
+import {
+  getIsYatirimMultiplesForTicker,
+  getIsYatirimSectorAverages,
+  type IsYatirimStockMultiples,
+  type IsYatirimSectorAverage
+} from './isyatirim-service.ts';
 import { OFFICIAL_ISYATIRIM_CACHE } from './isyatirim-official-cache.ts';
 import { getSupabase, isSupabaseConfigured } from './supabase.ts';
 import { IsYatirimApiAdapter } from './isyatirim-adapter.ts';
@@ -1132,7 +1137,10 @@ export async function fetchAndAnalyzeBistCompany(
     meta.sector
   );
 
-  // 8. Tek Doğruluk Kaynağı: Merkezi Rasyo ve Metrik Motorunu Çalıştır
+  // 8. İş Yatırım Resmi Sektör Ortalamalarını Çözümle
+  const sectorAverages = await getIsYatirimSectorAverages(finalMultiples?.sectorName || meta.sector);
+
+  // 9. Tek Doğruluk Kaynağı: Merkezi Rasyo ve Metrik Motorunu Çalıştır
   const unifiedMetrics = FinancialRatioEngine.computeMetrics({
     ticker,
     history: sanitized.financial_history,
@@ -1175,6 +1183,29 @@ export async function fetchAndAnalyzeBistCompany(
       free_float_pct: finalMultiples.freeFloatPct,
       paid_in_capital_mn_tl: finalMultiples.paidInCapitalMnTl,
       last_period: finalMultiples.lastPeriod,
+      sector_name: finalMultiples.sectorName,
+      sector_code: finalMultiples.sectorCode,
+      foreign_share_pct: finalMultiples.foreignSharePct ?? null,
+      foreign_share_prev_pct: finalMultiples.foreignSharePrevPct ?? null,
+      foreign_share_change_bps: finalMultiples.foreignShareChangeBps ?? null,
+      foreign_share_index_impact_pct: finalMultiples.foreignShareIndexImpactPct ?? null,
+      historical_estimates: finalMultiples.historicalEstimates ? {
+        pe_estimate: finalMultiples.historicalEstimates.peEstimate,
+        pe_discount_pct: finalMultiples.historicalEstimates.peDiscountPct,
+        ev_ebitda_estimate: finalMultiples.historicalEstimates.evEbitdaEstimate,
+        ev_ebitda_discount_pct: finalMultiples.historicalEstimates.evEbitdaDiscountPct,
+        pb_estimate: finalMultiples.historicalEstimates.pbEstimate,
+        pb_discount_pct: finalMultiples.historicalEstimates.pbDiscountPct
+      } : null,
+      sector_averages: sectorAverages ? {
+        sector_code: sectorAverages.sectorCode,
+        sector_name: sectorAverages.sectorName,
+        pe: sectorAverages.pe,
+        ev_ebitda: sectorAverages.evEbitda,
+        ev_sales: sectorAverages.evSales,
+        pb: sectorAverages.pb,
+        updated_at: sectorAverages.updatedAt
+      } : null,
       source: 'İş Yatırım Resmi Çarpanları'
     } : null,
     generatedAt: new Date().toISOString()
