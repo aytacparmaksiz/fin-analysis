@@ -1047,6 +1047,13 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
       item.usd_try_12m = macroSnapshot.usdTry12m;
       item.gdp_growth = macroSnapshot.gdpGrowth;
       item.commercial_loan_rate = macroSnapshot.commercialLoanRate;
+      item.deposit_rate_3m = macroSnapshot.depositRate3m;
+      item.credit_deposit_spread = macroSnapshot.creditDepositSpread;
+      item.capacity_utilization_rate = macroSnapshot.capacityUtilizationRate;
+      item.capacity_utilization_date = macroSnapshot.capacityUtilizationDate;
+      item.housing_price_index = macroSnapshot.housingPriceIndex;
+      item.housing_price_annual_change = macroSnapshot.housingPriceAnnualChange;
+      item.housing_price_date = macroSnapshot.housingPriceDate;
       item.macro_source = macroSnapshot.source;
     }
 
@@ -1415,6 +1422,7 @@ export function calculateSectorScore(
 
     // 2. Net Faiz Marjı (NIM) & Fonlama (Max 25)
     const nim = parseFinancialNumber(latest?.nim ?? latest?.net_margin);
+    const creditDepositSpread = parseFinancialNumber(latest?.credit_deposit_spread);
     let s2 = 18;
     let r2 = 'Net faiz marjı ve fonlama yapısı dengeli';
     let st2: 'good' | 'warning' | 'danger' = 'good';
@@ -1423,6 +1431,9 @@ export function calculateSectorScore(
       else if (nim >= 4.0) { s2 = 19; r2 = `Net Faiz Marjı (%${nim}) sektör ortalamasında.`; st2 = 'good'; }
       else if (nim >= 2.0) { s2 = 12; r2 = `Daralan Net Faiz Marjı (%${nim}), yüksek mevduat fonlama maliyeti baskısı.`; st2 = 'warning'; }
       else { s2 = 4; r2 = `Kritik Marj Erozyonu: NIM (%${nim}) fonlama maliyetini karşılamakta yetersiz!`; st2 = 'danger'; anomalies.push(`Düşük NIM: %${nim}`); }
+    }
+    if (creditDepositSpread !== null && creditDepositSpread > 0) {
+      r2 += ` TCMB canlı kredi-mevduat makası (%${creditDepositSpread.toFixed(1)}) bankanın faiz gelirlerini destekliyor.`;
     }
     breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
 
@@ -1582,6 +1593,7 @@ export function calculateSectorScore(
     let s4 = 20;
     let r4 = 'Portföy ekspertiz değerleri ve özkaynak büyümesi stabil.';
     let st4: 'good' | 'warning' | 'danger' = 'good';
+    const kfeAnnual = parseFinancialNumber(latest?.housing_price_annual_change);
     if (sortedHistory.length >= 2) {
       const prev = sortedHistory[sortedHistory.length - 2];
       const eqGrowth = safeGrowthRate(latest?.equity, prev?.equity);
@@ -1590,6 +1602,9 @@ export function calculateSectorScore(
         else if (eqGrowth >= 20.0) { s4 = 18; r4 = `Portföy genişlemesi (%${eqGrowth}) sektör ortalamasında.`; st4 = 'good'; }
         else { s4 = 10; r4 = `Portföy büyümesi (%${eqGrowth}) zayıf kalmış.`; st4 = 'warning'; }
       }
+    }
+    if (kfeAnnual !== null && kfeAnnual > 0) {
+      r4 += ` TCMB Konut Fiyat Endeksi yıllık artışı (%${kfeAnnual.toFixed(1)}) portföy değerleme trendini destekliyor.`;
     }
     breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
 
@@ -1961,6 +1976,7 @@ export function calculateSectorScore(
 
     // 4. Büyüme & Rekabet Kalkanı (Moat) (Max 25)
     const margin = parseFinancialNumber(latest?.ebitda_margin);
+    const kko = parseFinancialNumber(latest?.capacity_utilization_rate);
     let s4 = 18;
     let r4 = 'Operasyonel marjlar makul';
     let st4: 'good' | 'warning' | 'danger' = 'good';
@@ -1969,6 +1985,9 @@ export function calculateSectorScore(
       else if (margin >= 15.0) { s4 = 19; r4 = `Sağlıklı operasyonel kârlılık (FAVÖK marjı: %${margin}).`; st4 = 'good'; }
       else if (margin >= 8.0) { s4 = 11; r4 = `Düşük FAVÖK marjı (%${margin}), maliyet şoklarına duyarlı.`; st4 = 'warning'; }
       else { s4 = 4; r4 = `Kritik marj erozyonu (FAVÖK marjı: %${margin}).`; st4 = 'danger'; anomalies.push(`Düşük FAVÖK Marjı: %${margin}`); }
+    }
+    if (kko !== null && kko > 0) {
+      r4 += ` (TCMB İmalat KKO: %${kko.toFixed(1)} ${kko < 78 ? '- Organik üretim kapasitesi elverişli' : '- Yüksek kapasite baskısı'}).`;
     }
     breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
   }
@@ -2092,11 +2111,15 @@ export function computeFairValueTrend(
       periodFv = bvps * targetPb;
     } else if (sector === 'BANKING') {
       const roe = parseFinancialNumber(item?.roe) ?? (eq > 0 ? (netInc / eq) * 100 : 25);
-      const targetPb = (targetMultiple && targetMultiple > 0) ? targetMultiple : (roe > 35 ? 1.4 : (roe > 20 ? 1.05 : 0.85));
+      const spreadBonus = (typeof item?.credit_deposit_spread === 'number' && item.credit_deposit_spread > 15) ? 0.10 : 0;
+      const targetPb = (targetMultiple && targetMultiple > 0) ? targetMultiple : (roe > 35 ? (1.4 + spreadBonus) : (roe > 20 ? (1.05 + spreadBonus) : 0.85));
       const bvps = eq > 0 ? (eq / effectiveShareCount) : 1;
       periodFv = bvps * targetPb;
     } else if (sector === 'REIT') {
-      const navPerShare = eq > 0 ? (eq / effectiveShareCount) : 1;
+      const housingFactor = (typeof item?.housing_price_annual_change === 'number' && item.housing_price_annual_change > 0)
+        ? (1 + (item.housing_price_annual_change / 200))
+        : 1.0;
+      const navPerShare = (eq > 0 ? (eq / effectiveShareCount) : 1) * housingFactor;
       periodFv = navPerShare * 0.75;
     } else if (sector === 'HOLDING') {
       const navPerShare = eq > 0 ? (eq / effectiveShareCount) : 1;

@@ -31,6 +31,20 @@ export interface MacroDataSnapshot {
   commercialLoanRate: number; // Güncel Kurumsal Kredi Faizi (TP.KTF10, %)
   commercialLoanDate: string; // Örn: "09-10-2026"
 
+  // Mevduat Faizi & Kredi-Mevduat Makası (TCMB EVDS3)
+  depositRate3m: number; // 3 Aya Kadar Vadeli TL Mevduat Faizi (TP.TRY.MT06, %)
+  depositRateDate: string; // Örn: "09-10-2026"
+  creditDepositSpread: number; // Kredi - Mevduat Makası (commercialLoanRate - depositRate3m, %)
+
+  // İmalat Sanayi Kapasite Kullanım Oranı (TCMB EVDS3)
+  capacityUtilizationRate: number; // İmalat Sanayi Kapasite Kullanım Oranı (TP.KKO.MA, %)
+  capacityUtilizationDate: string; // Örn: "2026-09"
+
+  // Konut Fiyat Endeksi & Gayrimenkul Artış Trendi (TCMB EVDS3)
+  housingPriceIndex: number; // Konut Fiyat Endeksi (TP.KFE.TR, 2023=100)
+  housingPriceAnnualChange: number; // Yıllık Konut Fiyat Artışı (%)
+  housingPriceDate: string; // Örn: "2026-08"
+
   // Politika Faizi Beklentileri (TCMB EVDS3 PKA)
   policyRate12m: number; // 12 Ay Sonrası Politika Faizi Beklentisi (TP.PKAUO.S04.D.U, %)
   policyRateYearEnd: number; // Yıl Sonu Politika Faizi Beklentisi (TP.PKAUO.S04.H.U, %)
@@ -187,6 +201,14 @@ export async function fetchLiveTcmbMacroData(options?: {
       expectationsMap: { ...OFFICIAL_TCMB_INFLATION_BASELINE },
       commercialLoanRate: 62.21,
       commercialLoanDate: 'Referans',
+      depositRate3m: 42.94,
+      depositRateDate: '09-10-2026',
+      creditDepositSpread: 19.27,
+      capacityUtilizationRate: 74.10,
+      capacityUtilizationDate: '2026-09',
+      housingPriceIndex: 236.76,
+      housingPriceAnnualChange: 23.03,
+      housingPriceDate: '2026-08',
       policyRate12m: 29.22,
       policyRateYearEnd: 35.07,
       usdTry12m: 58.60,
@@ -213,12 +235,16 @@ export async function fetchLiveTcmbMacroData(options?: {
 
     const surveyUrl = `https://evds3.tcmb.gov.tr/igmevdsms-dis/series=${surveySeries}&startDate=01-01-2024&endDate=31-12-2026&type=json`;
     
-    // 2. Ticari Kredi Faiz Oranı (TP.KTF10)
-    const loanUrl = `https://evds3.tcmb.gov.tr/igmevdsms-dis/series=TP.KTF10&startDate=01-08-2026&endDate=31-12-2026&type=json`;
+    // 2. Ticari Kredi Faizi (TP.KTF10) & 3 Aylık Vadeli TL Mevduat Faizi (TP.TRY.MT06)
+    const bankingUrl = `https://evds3.tcmb.gov.tr/igmevdsms-dis/series=TP.KTF10-TP.TRY.MT06&startDate=01-08-2026&endDate=31-12-2026&type=json`;
 
-    const [surveyRes, loanRes] = await Promise.all([
+    // 3. İmalat Sanayi Kapasite Kullanım Oranı (TP.KKO.MA) & Konut Fiyat Endeksi (TP.KFE.TR)
+    const monthlyUrl = `https://evds3.tcmb.gov.tr/igmevdsms-dis/series=TP.KKO.MA-TP.KFE.TR&startDate=01-08-2025&endDate=31-12-2026&type=json`;
+
+    const [surveyRes, bankingRes, monthlyRes] = await Promise.all([
       fetchEvdsJson(surveyUrl, effectiveKey),
-      fetchEvdsJson(loanUrl, effectiveKey)
+      fetchEvdsJson(bankingUrl, effectiveKey),
+      fetchEvdsJson(monthlyUrl, effectiveKey)
     ]);
 
     const expectationsMap: Record<string, number> = { ...OFFICIAL_TCMB_INFLATION_BASELINE };
@@ -272,28 +298,96 @@ export async function fetchLiveTcmbMacroData(options?: {
       }
     }
 
-    // Ticari Kredi Faizi Çözümleme
-    let commercialRate: number | null = null;
-    let commercialDate: string | null = null;
+    // Bankacılık Kredi ve Mevduat Faizleri Çözümleme
+    let commercialRate = 62.21;
+    let commercialDate = '09-10-2026';
+    let depositRate = 42.94;
+    let depositDate = '09-10-2026';
 
-    if (loanRes?.items && Array.isArray(loanRes.items)) {
-      const validLoanItems = loanRes.items.filter((it: any) => it.TP_KTF10 != null && it.TP_KTF10 !== '');
-      if (validLoanItems.length > 0) {
-        const lastItem = validLoanItems[validLoanItems.length - 1];
-        const val = parseFloat(String(lastItem.TP_KTF10));
-        if (!isNaN(val) && val > 0) {
-          commercialRate = Number(val.toFixed(2));
-          commercialDate = String(lastItem.Tarih || lastItem.YEARWEEK || '');
+    if (bankingRes?.items && Array.isArray(bankingRes.items)) {
+      for (let i = bankingRes.items.length - 1; i >= 0; i--) {
+        const it = bankingRes.items[i];
+        if (it.TP_KTF10 != null && it.TP_KTF10 !== '') {
+          const crVal = parseFloat(String(it.TP_KTF10));
+          if (!isNaN(crVal) && crVal > 0) {
+            commercialRate = Number(crVal.toFixed(2));
+            commercialDate = String(it.Tarih || it.YEARWEEK || commercialDate);
+          }
+        }
+        if (it.TP_TRY_MT06 != null && it.TP_TRY_MT06 !== '') {
+          const depVal = parseFloat(String(it.TP_TRY_MT06));
+          if (!isNaN(depVal) && depVal > 0) {
+            depositRate = Number(depVal.toFixed(2));
+            depositDate = String(it.Tarih || it.YEARWEEK || depositDate);
+          }
+        }
+        if (commercialRate !== 62.21 && depositRate !== 42.94) break;
+      }
+    }
+    const creditDepositSpread = Number((commercialRate - depositRate).toFixed(2));
+
+    // Aylık Makro Göstergeler (KKO & KFE) Çözümleme
+    let capacityUtilizationRate = 74.10;
+    let capacityUtilizationDate = '2026-09';
+    let housingPriceIndex = 236.76;
+    let housingPriceDate = '2026-08';
+    let foundKko = false;
+    let foundKfe = false;
+
+    const mItems = (monthlyRes?.items && Array.isArray(monthlyRes.items)) ? monthlyRes.items : [];
+    for (let i = mItems.length - 1; i >= 0; i--) {
+      const it = mItems[i];
+      if (!foundKko && it.TP_KKO_MA != null && it.TP_KKO_MA !== '') {
+        const v = parseFloat(String(it.TP_KKO_MA));
+        if (!isNaN(v) && v > 0) {
+          capacityUtilizationRate = Number(v.toFixed(2));
+          capacityUtilizationDate = String(it.Tarih || capacityUtilizationDate);
+          foundKko = true;
+        }
+      }
+      if (!foundKfe && it.TP_KFE_TR != null && it.TP_KFE_TR !== '') {
+        const v = parseFloat(String(it.TP_KFE_TR));
+        if (!isNaN(v) && v > 0) {
+          housingPriceIndex = Number(v.toFixed(2));
+          housingPriceDate = String(it.Tarih || housingPriceDate);
+          foundKfe = true;
+        }
+      }
+      if (foundKko && foundKfe) break;
+    }
+
+    let kfe12mEarlier = 192.44;
+    if (housingPriceDate) {
+      const parts = housingPriceDate.split('-');
+      if (parts.length === 2) {
+        const yr = parseInt(parts[0], 10);
+        const mo = parts[1];
+        const prevTargetDate = `${yr - 1}-${mo}`;
+        const prevItem = mItems.find((it: any) => String(it.Tarih || '').trim() === prevTargetDate);
+        if (prevItem && prevItem.TP_KFE_TR != null) {
+          const pv = parseFloat(String(prevItem.TP_KFE_TR));
+          if (!isNaN(pv) && pv > 0) {
+            kfe12mEarlier = pv;
+          }
         }
       }
     }
+    const housingPriceAnnualChange = Number((((housingPriceIndex / kfe12mEarlier) - 1) * 100).toFixed(2));
 
     const snapshot: MacroDataSnapshot = {
       latestExpectedInflation: latest12m,
       latestSurveyDate,
       expectationsMap,
-      commercialLoanRate: commercialRate ?? 62.21,
-      commercialLoanDate: commercialDate ?? '09-10-2026',
+      commercialLoanRate: commercialRate,
+      commercialLoanDate: commercialDate,
+      depositRate3m: depositRate,
+      depositRateDate: depositDate,
+      creditDepositSpread,
+      capacityUtilizationRate,
+      capacityUtilizationDate,
+      housingPriceIndex,
+      housingPriceAnnualChange,
+      housingPriceDate,
       policyRate12m,
       policyRateYearEnd,
       usdTry12m,
@@ -314,6 +408,14 @@ export async function fetchLiveTcmbMacroData(options?: {
       expectationsMap: { ...OFFICIAL_TCMB_INFLATION_BASELINE },
       commercialLoanRate: 62.21,
       commercialLoanDate: 'Referans',
+      depositRate3m: 42.94,
+      depositRateDate: '09-10-2026',
+      creditDepositSpread: 19.27,
+      capacityUtilizationRate: 74.10,
+      capacityUtilizationDate: '2026-09',
+      housingPriceIndex: 236.76,
+      housingPriceAnnualChange: 23.03,
+      housingPriceDate: '2026-08',
       policyRate12m: 29.22,
       policyRateYearEnd: 35.07,
       usdTry12m: 58.60,

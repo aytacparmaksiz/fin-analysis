@@ -20,6 +20,11 @@ test('TCMB EVDS3 Macroeconomic Service & Dynamic WACC Suite', async (t) => {
     assert.ok(snapshot.expectationsMap, 'Must contain expectations map');
     assert.ok(Object.keys(snapshot.expectationsMap).length >= 10, 'Must have monthly expectations');
     assert.ok(snapshot.commercialLoanRate > 30, 'Commercial loan rate must be populated');
+    assert.ok(snapshot.depositRate3m > 30, '3M deposit rate must be populated');
+    assert.ok(snapshot.creditDepositSpread > 10, 'Credit-deposit spread must be populated');
+    assert.ok(snapshot.capacityUtilizationRate > 60, 'Capacity utilization rate (KKO) must be populated');
+    assert.ok(snapshot.housingPriceIndex > 150, 'Housing price index (KFE) must be populated');
+    assert.ok(snapshot.housingPriceAnnualChange > 10, 'Housing price annual change must be populated');
     assert.ok(snapshot.policyRate12m > 15, '12M policy rate expectation must be populated');
     assert.ok(snapshot.usdTry12m > 40, '12M USD/TRY expectation must be populated');
     assert.ok(snapshot.gdpGrowth > 0, 'GDP growth expectation must be populated');
@@ -66,17 +71,19 @@ test('TCMB EVDS3 Macroeconomic Service & Dynamic WACC Suite', async (t) => {
     assert.ok(item.nominal_wacc > 30, 'Nominal WACC must be populated');
     assert.ok(item.real_wacc < item.nominal_wacc, 'Real WACC must be lower than nominal WACC via Fisher equation');
     assert.equal(typeof item.eva_spread, 'number', 'EVA spread must be computed');
+    assert.ok(item.deposit_rate_3m > 30, 'Deposit rate must be attached to history item');
+    assert.ok(item.credit_deposit_spread > 10, 'Credit deposit spread must be attached to history item');
+    assert.ok(item.capacity_utilization_rate > 60, 'Capacity utilization rate must be attached to history item');
+    assert.ok(item.housing_price_annual_change > 10, 'Housing price annual change must be attached to history item');
   });
 
-  await t.test('4. Dual-directory parity check for macro-service.ts', () => {
-    const rootPath = path.resolve(process.cwd(), 'lib', 'macro-service.ts');
-    const srcPath = path.resolve(process.cwd(), 'src', 'lib', 'macro-service.ts');
-    
-    assert.ok(fs.existsSync(rootPath), 'lib/macro-service.ts must exist');
-    assert.ok(fs.existsSync(srcPath), 'src/lib/macro-service.ts must exist');
+  await t.test('4. Dual-directory parity check for macro-service.ts and valuation.ts', () => {
+    const rootMacro = path.resolve(process.cwd(), 'lib', 'macro-service.ts');
+    const srcMacro = path.resolve(process.cwd(), 'src', 'lib', 'macro-service.ts');
+    assert.equal(fs.readFileSync(rootMacro, 'utf8'), fs.readFileSync(srcMacro, 'utf8'), 'macro-service parity');
 
-    const rootContent = fs.readFileSync(rootPath, 'utf8');
-    const srcContent = fs.readFileSync(srcPath, 'utf8');
-    assert.equal(rootContent, srcContent, 'lib/macro-service.ts and src/lib/macro-service.ts must be 100% byte identical');
+    const rootVal = path.resolve(process.cwd(), 'lib', 'valuation.ts');
+    const srcVal = path.resolve(process.cwd(), 'src', 'lib', 'valuation.ts');
+    assert.equal(fs.readFileSync(rootVal, 'utf8'), fs.readFileSync(srcVal, 'utf8'), 'valuation parity');
   });
 });
