@@ -13,7 +13,7 @@ import {
   DollarSign, ShieldCheck, ShieldAlert, Activity, Layers, Sparkles, Download, Upload,
   Trophy, Award, Trash2, ArrowUpDown, Filter, Copy, Percent, PieChart, Info,
   PanelLeftClose, PanelLeftOpen, Pin, PinOff, Zap, Bookmark,
-  Check
+  Check, Rocket, Gem, Shield
 } from 'lucide-react';
 
 import {
@@ -43,6 +43,13 @@ import {
 import { SavedReport } from '@/lib/report-resolver';
 export type { SavedReport };
 import { generateFullAuditMarkdown } from '@/lib/export-markdown';
+import {
+  categorizeCompany,
+  getThemeSummary,
+  INVESTMENT_THEMES,
+  type InvestmentThemeId,
+  type CompanyThemeMatch
+} from '@/lib/company-categorizer';
 
 import {
   computeSectorValuationAndDrivers,
@@ -79,6 +86,19 @@ import {
   type FinancialChangeResult
 } from '@/lib/ratio-engine';
 import { extractSmartFinancialText, extractSmartDocumentText, splitScannedPdfIntoChunks, DocumentCategory } from '@/lib/pdf-filter';
+
+// Yatırım Teması İkonu Render Yardımcısı
+function renderThemeIcon(iconTag: string, className: string = "w-3.5 h-3.5") {
+  switch (iconTag) {
+    case 'Rocket': return <Rocket className={className} />;
+    case 'Gem': return <Gem className={className} />;
+    case 'Shield': return <Shield className={className} />;
+    case 'RefreshCw': return <RefreshCw className={className} />;
+    case 'Zap': return <Zap className={className} />;
+    case 'DollarSign': return <DollarSign className={className} />;
+    default: return <Sparkles className={className} />;
+  }
+}
 
 // Gateway Timeout, kurumsal proxy ve HTML hata sayfalarını yakalayan güvenli API yanıt ayrıştırıcısı
 async function parseApiResponse(res: Response, defaultError: string, context?: 'bist' | 'extract' | 'analyze'): Promise<any> {
@@ -1181,6 +1201,10 @@ export default function ValuationTerminal({
   const [fontSizeMode, setFontSizeMode] = useState<'normal' | 'large' | 'compact'>('normal');
 
   const [sidebarSort, setSidebarSort] = useState<'rank' | 'date'>('rank');
+  const [collapsedDecisions, setCollapsedDecisions] = useState<Record<string, boolean>>({});
+  const [isThemesModalOpen, setIsThemesModalOpen] = useState<boolean>(false);
+  const [selectedThemeFilter, setSelectedThemeFilter] = useState<InvestmentThemeId | 'ALL'>('ALL');
+  const [themeSearchTerm, setThemeSearchTerm] = useState<string>('');
   const [leaderboardSearch, setLeaderboardSearch] = useState('');
   const [leaderboardFilter, setLeaderboardFilter] = useState<'ALL' | 'AL' | 'NÖTR' | 'ALMA'>('ALL');
   const [sectorSearchTerm, setSectorSearchTerm] = useState<string>('');
@@ -1229,6 +1253,22 @@ export default function ValuationTerminal({
       newState[s] = !allCollapsed;
     });
     setCollapsedSections(newState);
+  };
+
+  const toggleDecisionCollapse = (decisionKey: string) => {
+    setCollapsedDecisions(prev => ({
+      ...prev,
+      [decisionKey]: !prev[decisionKey]
+    }));
+  };
+
+  const sortReportsByScoreDesc = (reports: SavedReport[]) => {
+    return [...reports].sort((a, b) => {
+      const scoreA = parseFloat(String(a.score || '0').replace(/[^0-9.]/g, '')) || 0;
+      const scoreB = parseFloat(String(b.score || '0').replace(/[^0-9.]/g, '')) || 0;
+      if (scoreB !== scoreA) return scoreB - scoreA;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
   };
 
   const sortReportsByRank = (reports: SavedReport[]) => {
@@ -3723,63 +3763,138 @@ export default function ValuationTerminal({
               </div>
             </div>
 
-            {/* Kayıtlı Raporlar Listesi */}
-            <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5">
+            {/* Kayıtlı Raporlar Listesi (AL, NÖTR, ALMA Açılır/Kapanır Gruplar) */}
+            <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5">
               {savedReports.length === 0 ? (
                 <div className="text-center py-10 text-slate-500 text-xs">
                   <History className="w-8 h-8 mx-auto mb-2 opacity-40" />
                   Henüz kayıtlı rapor yok.
                 </div>
               ) : (
-                (sidebarSort === 'rank' ? sortReportsByRank(savedReports) : sortReportsByDate(savedReports)).map((item, sIndex) => (
-                  <div
-                    key={item.id}
-                    onClick={() => { setActiveReportId(item.id); setStep('report'); }}
-                    className={`p-2.5 rounded-lg border cursor-pointer transition flex items-center justify-between group ${
-                      activeReportId === item.id && step === 'report'
-                        ? item.decision === 'AL'
-                          ? 'bg-slate-800/90 border-emerald-500/60 shadow-md shadow-emerald-950/30 ring-1 ring-emerald-500/30'
-                          : item.decision === 'ALMA'
-                          ? 'bg-slate-800/90 border-rose-500/60 shadow-md shadow-rose-950/30 ring-1 ring-rose-500/30'
-                          : 'bg-slate-800/90 border-amber-500/60 shadow-md shadow-amber-950/30 ring-1 ring-amber-500/30'
-                        : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800/60'
-                    }`}
-                  >
-                    <div className="flex-1 min-w-0 pr-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {sidebarSort === 'rank' && (
-                          <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-950 px-1 rounded border border-slate-800">
-                            #{sIndex + 1}
-                          </span>
-                        )}
-                        <span className="font-bold text-sm text-white truncate">{item.ticker}</span>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                          item.decision === 'AL' ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/80' :
-                          item.decision === 'ALMA' ? 'bg-rose-950/80 text-rose-400 border border-rose-800/80' :
-                          'bg-amber-950/80 text-amber-400 border border-amber-800/80'
-                        }`}>
-                          {item.decision}
-                        </span>
-                        {item.score && <span className="text-[10px] text-slate-400 font-mono font-semibold">{item.score}/100</span>}
-                      </div>
-                      <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
-                        {item.period && <span className="text-emerald-400 font-mono font-semibold">{item.period}</span>}
-                        <span>• {item.createdAt}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
+                ([
+                  {
+                    key: 'AL',
+                    title: 'AL Kararlı Hisseler',
+                    border: 'border-emerald-500/40',
+                    badge: 'bg-emerald-950/90 text-emerald-300 border-emerald-700/80',
+                    dot: 'bg-emerald-400',
+                    headerBg: 'bg-emerald-950/30 hover:bg-emerald-950/50 text-emerald-300',
+                    reports: savedReports.filter(r => (r.decision || '').trim().toUpperCase() === 'AL')
+                  },
+                  {
+                    key: 'NÖTR',
+                    title: 'NÖTR Kararlı Hisseler',
+                    border: 'border-amber-500/40',
+                    badge: 'bg-amber-950/90 text-amber-300 border-amber-700/80',
+                    dot: 'bg-amber-400',
+                    headerBg: 'bg-amber-950/30 hover:bg-amber-950/50 text-amber-300',
+                    reports: savedReports.filter(r => {
+                      const d = (r.decision || '').trim().toUpperCase();
+                      return d === 'NÖTR' || d === 'NOTR';
+                    })
+                  },
+                  {
+                    key: 'ALMA',
+                    title: 'ALMA Kararlı Hisseler',
+                    border: 'border-rose-500/40',
+                    badge: 'bg-rose-950/90 text-rose-300 border-rose-700/80',
+                    dot: 'bg-rose-400',
+                    headerBg: 'bg-rose-950/30 hover:bg-rose-950/50 text-rose-300',
+                    reports: savedReports.filter(r => (r.decision || '').trim().toUpperCase() === 'ALMA')
+                  }
+                ] as const).map(group => {
+                  const sortedGroup = sidebarSort === 'rank' 
+                    ? sortReportsByScoreDesc(group.reports) 
+                    : sortReportsByDate(group.reports);
+                  const isCollapsed = !!collapsedDecisions[group.key];
+
+                  return (
+                    <div key={group.key} className="space-y-1 rounded-xl bg-slate-950/30 p-1 border border-slate-800/60">
+                      {/* Accordion Sekme Başlığı */}
                       <button
                         type="button"
-                        onClick={(e) => deleteReport(item.id, e)}
-                        title="Raporu Sil"
-                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded transition cursor-pointer"
+                        onClick={() => toggleDecisionCollapse(group.key)}
+                        className={`w-full flex items-center justify-between p-2 rounded-lg border text-xs font-bold transition cursor-pointer ${group.border} ${group.headerBg}`}
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <div className="flex items-center gap-2">
+                          {isCollapsed ? (
+                            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                          )}
+                          <span className={`w-2 h-2 rounded-full ${group.dot}`} />
+                          <span>{group.title}</span>
+                        </div>
+                        <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded border ${group.badge}`}>
+                          {group.reports.length}
+                        </span>
                       </button>
-                      <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-colors" />
+
+                      {/* Sekme Altındaki Hisseler */}
+                      {!isCollapsed && (
+                        <div className="space-y-1.5 pt-1">
+                          {sortedGroup.length === 0 ? (
+                            <div className="text-[11px] text-slate-500 italic py-2 px-3 text-center bg-slate-950/40 rounded border border-dashed border-slate-800/60">
+                              Bu grupta kayıtlı hisse yok.
+                            </div>
+                          ) : (
+                            sortedGroup.map((item, sIndex) => (
+                              <div
+                                key={item.id}
+                                onClick={() => { setActiveReportId(item.id); setStep('report'); }}
+                                className={`p-2.5 rounded-lg border cursor-pointer transition flex items-center justify-between group ${
+                                  activeReportId === item.id && step === 'report'
+                                    ? item.decision === 'AL'
+                                      ? 'bg-slate-800/90 border-emerald-500/60 shadow-md shadow-emerald-950/30 ring-1 ring-emerald-500/30'
+                                      : item.decision === 'ALMA'
+                                      ? 'bg-slate-800/90 border-rose-500/60 shadow-md shadow-rose-950/30 ring-1 ring-rose-500/30'
+                                      : 'bg-slate-800/90 border-amber-500/60 shadow-md shadow-amber-950/30 ring-1 ring-amber-500/30'
+                                    : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800/60'
+                                }`}
+                              >
+                                <div className="flex-1 min-w-0 pr-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-950 px-1 rounded border border-slate-800">
+                                      #{sIndex + 1}
+                                    </span>
+                                    <span className="font-bold text-sm text-white truncate">{item.ticker}</span>
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                      item.decision === 'AL' ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/80' :
+                                      item.decision === 'ALMA' ? 'bg-rose-950/80 text-rose-400 border border-rose-800/80' :
+                                      'bg-amber-950/80 text-amber-400 border border-amber-800/80'
+                                    }`}>
+                                      {item.decision}
+                                    </span>
+                                    {item.score && (
+                                      <span className="text-[10px] text-slate-300 font-mono font-bold">
+                                        {item.score}/100
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
+                                    {item.period && <span className="text-emerald-400 font-mono font-semibold">{item.period}</span>}
+                                    <span>• {item.createdAt}</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => deleteReport(item.id, e)}
+                                    title="Raporu Sil"
+                                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded transition cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-colors" />
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
 
@@ -3837,6 +3952,24 @@ export default function ValuationTerminal({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsThemesModalOpen(true)}
+              className={`flex items-center gap-1.5 text-xs py-1.5 px-3 rounded-lg border font-medium transition cursor-pointer ${
+                isThemesModalOpen
+                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm shadow-cyan-950/40'
+                  : 'bg-slate-900 hover:bg-slate-800 text-cyan-300 border-cyan-900/50 hover:border-cyan-700/60'
+              }`}
+              title="Şirketleri 6 temel yatırım temasına göre filtreleyin ve inceleyin"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Yatırım Temaları</span>
+              {savedReports.length > 0 && (
+                <span className="ml-0.5 px-1.5 py-0.2 bg-cyan-950 text-cyan-300 text-[10px] rounded-full font-mono border border-cyan-800/80 font-bold">
+                  {savedReports.length}
+                </span>
+              )}
+            </button>
+
             <button
               onClick={() => setStep('leaderboard')}
               className={`flex items-center gap-1.5 text-xs py-1.5 px-3 rounded-lg border font-medium transition cursor-pointer ${
@@ -4461,6 +4594,173 @@ export default function ValuationTerminal({
                   </button>
                 </div>
               </div>
+
+              {/* İÇSEL DEĞER & BENJAMIN GRAHAM GÜVENLİK MARJI (MARGIN OF SAFETY) PANORAMASI */}
+              {(() => {
+                const fairValue = valuationInfo.fair_value || 0;
+                const currentPrice = valuationInfo.current_price || 0;
+                const discountPct = valuationInfo.discount_pct ?? 
+                  (fairValue > 0 && currentPrice > 0 ? Number((((fairValue - currentPrice) / currentPrice) * 100).toFixed(1)) : 0);
+                const isDiscount = discountPct >= 0;
+                const marginOfSafety = valuationInfo.margin_of_safety ?? (isDiscount ? discountPct : 0);
+                const isSafe = marginOfSafety >= 25;
+                const isBorderline = marginOfSafety >= 10 && marginOfSafety < 25;
+                const isUnsafe = marginOfSafety < 10;
+
+                const reportForThemes: SavedReport = {
+                  ...activeReport,
+                  extractedData: activeReport.extractedData || currentExtractedData
+                };
+                const companyThemes = categorizeCompany(reportForThemes);
+
+                const methodologyText = (valuationInfo as any).methodology || 
+                  (dynamicValuationResult.valuation.gordon_formula_text ? 'Gordon İndirgenmiş Büyüme Modeli' : '3DF İndirgenmiş Nakit & Sektörel Çarpanlar');
+
+                return (
+                  <div className="bg-gradient-to-br from-[#0F1523] via-[#0B0F19] to-[#0A0D14] border border-cyan-800/40 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+                    {/* Üst Başlık & Model Metodolojisi */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-1.5 rounded-lg bg-cyan-950/80 border border-cyan-700/60 text-cyan-400 shadow-sm shadow-cyan-950/40">
+                          <Target className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                            İçsel Değer & Güvenlik Marjı (Margin of Safety)
+                          </h3>
+                          <p className="text-[11px] text-slate-400">
+                            Benjamin Graham & Dodd prensipleri ve enflasyon düzeltmeli (TMS 29) finansal değerleme.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-400 bg-slate-950/80 px-2.5 py-1 rounded-lg border border-slate-800 self-start sm:self-auto">
+                        <span className="text-slate-500">Model:</span>
+                        <span className="text-cyan-300 font-semibold truncate max-w-[260px] sm:max-w-none">{methodologyText}</span>
+                      </div>
+                    </div>
+
+                    {/* 4 Temel Metrik Kartı Grid */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      {/* Kart 1: Model İçsel Değeri */}
+                      <div className="bg-slate-950/70 border border-slate-800/80 p-3 rounded-xl flex flex-col justify-between">
+                        <div className="flex items-center justify-between text-slate-400 text-[10px] font-semibold uppercase">
+                          <span>Model İçsel Değeri</span>
+                          <Target className="w-3.5 h-3.5 text-emerald-400" />
+                        </div>
+                        <div className="mt-2">
+                          <span className="text-xl sm:text-2xl font-black font-mono text-emerald-400">
+                            {fairValue > 0 ? `${fairValue.toFixed(2)} TL` : '—'}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-1 font-mono">
+                          {valuationInfo.bear_price && valuationInfo.bull_price ? (
+                            <span>Ayı: {valuationInfo.bear_price.toFixed(0)} TL • Boğa: {valuationInfo.bull_price.toFixed(0)} TL</span>
+                          ) : (
+                            <span>Nihai hedef adil değer</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Kart 2: Cari Piyasa Fiyatı */}
+                      <div className="bg-slate-950/70 border border-slate-800/80 p-3 rounded-xl flex flex-col justify-between">
+                        <div className="flex items-center justify-between text-slate-400 text-[10px] font-semibold uppercase">
+                          <span>Cari Piyasa Fiyatı</span>
+                          <DollarSign className="w-3.5 h-3.5 text-cyan-400" />
+                        </div>
+                        <div className="mt-2">
+                          <span className="text-xl sm:text-2xl font-black font-mono text-white">
+                            {currentPrice > 0 ? `${currentPrice.toFixed(2)} TL` : '—'}
+                          </span>
+                        </div>
+                        <div className="text-[10px] font-mono mt-1">
+                          {fairValue > 0 && currentPrice > 0 ? (
+                            <span className={fairValue >= currentPrice ? 'text-emerald-400 font-semibold' : 'text-rose-400 font-semibold'}>
+                              Fark: {fairValue >= currentPrice ? `+${(fairValue - currentPrice).toFixed(2)} TL` : `${(fairValue - currentPrice).toFixed(2)} TL`}
+                            </span>
+                          ) : (
+                            <span className="text-slate-500">Kapanış Fiyatı</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Kart 3: İskonto / Prim Potansiyeli */}
+                      <div className="bg-slate-950/70 border border-slate-800/80 p-3 rounded-xl flex flex-col justify-between">
+                        <div className="flex items-center justify-between text-slate-400 text-[10px] font-semibold uppercase">
+                          <span>İskonto / Prim</span>
+                          {isDiscount ? (
+                            <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : (
+                            <ArrowDownRight className="w-3.5 h-3.5 text-rose-400" />
+                          )}
+                        </div>
+                        <div className="mt-2">
+                          <span className={`text-xl sm:text-2xl font-black font-mono ${isDiscount ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {isDiscount ? `+%${Math.abs(discountPct).toFixed(1)}` : `-%${Math.abs(discountPct).toFixed(1)}`}
+                          </span>
+                        </div>
+                        <div className="text-[10px] font-semibold mt-1">
+                          <span className={isDiscount ? 'text-emerald-400' : 'text-rose-400'}>
+                            {isDiscount ? 'İskontolu (Yükseliş Potansiyeli)' : 'Primli (Aşırı Fiyatlama)'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Kart 4: Benjamin Graham Güvenlik Marjı */}
+                      <div className={`p-3 rounded-xl border flex flex-col justify-between ${
+                        isSafe
+                          ? 'bg-emerald-950/40 border-emerald-500/50 shadow-md shadow-emerald-950/40'
+                          : isBorderline
+                          ? 'bg-amber-950/40 border-amber-500/50 shadow-md shadow-amber-950/40'
+                          : 'bg-rose-950/30 border-rose-500/40'
+                      }`}>
+                        <div className="flex items-center justify-between text-[10px] font-semibold uppercase">
+                          <span className="text-slate-300">Güvenlik Marjı (MoS)</span>
+                          {isSafe ? (
+                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : isBorderline ? (
+                            <Shield className="w-3.5 h-3.5 text-amber-400" />
+                          ) : (
+                            <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
+                          )}
+                        </div>
+                        <div className="mt-2">
+                          <span className={`text-lg sm:text-xl font-black font-mono ${
+                            isSafe ? 'text-emerald-300' : isBorderline ? 'text-amber-300' : 'text-rose-300'
+                          }`}>
+                            {isSafe ? 'GÜÇLÜ KORUMA' : isBorderline ? 'SINIRDA KORUMA' : 'YETERSİZ'}
+                          </span>
+                        </div>
+                        <div className="text-[10px] font-mono text-slate-300 mt-1 flex items-center justify-between">
+                          <span>Marj: %{Math.max(0, marginOfSafety).toFixed(1)}</span>
+                          <span className="text-slate-400">(Hedef ≥ %25)</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Şirketin Eşleştiği Yatırım Temaları ve Karakteristik Rozetleri */}
+                    {companyThemes.length > 0 && (
+                      <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center gap-2">
+                        <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5 mr-1">
+                          <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                          Aktif Yatırım Temaları:
+                        </span>
+                        {companyThemes.map(theme => (
+                          <div
+                            key={theme.themeId}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border ${theme.badgeClass}`}
+                            title={theme.reason}
+                          >
+                            {renderThemeIcon(theme.iconTag, "w-3 h-3")}
+                            <span>{theme.shortLabel}:</span>
+                            <span className="font-mono text-[11px] opacity-90">{theme.metricValue}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* ANA SEKME NAVİGASYONU (Sade, tek bakışta okunabilir sekme yapısı) */}
               <div className="flex flex-wrap items-center gap-1 bg-[#0F1523] p-1.5 rounded-xl border border-slate-800/90 print:hidden">
@@ -7675,6 +7975,284 @@ export default function ValuationTerminal({
 
         </div>
       </main>
+
+      {/* YATIRIM TEMALARI & ŞİRKET SINIFLANDIRMA RADAR MODALI */}
+      {isThemesModalOpen && (() => {
+        const themeSummary = getThemeSummary(savedReports);
+        const allThemesList = Object.values(INVESTMENT_THEMES);
+        
+        let displayedItems: Array<{ report: SavedReport; match: CompanyThemeMatch }> = [];
+        if (selectedThemeFilter === 'ALL') {
+          savedReports.forEach(r => {
+            const matches = categorizeCompany(r);
+            matches.forEach(m => {
+              displayedItems.push({ report: r, match: m });
+            });
+          });
+        } else {
+          displayedItems = themeSummary[selectedThemeFilter] || [];
+        }
+
+        if (themeSearchTerm.trim()) {
+          const q = themeSearchTerm.trim().toUpperCase();
+          displayedItems = displayedItems.filter(item => 
+            item.report.ticker.toUpperCase().includes(q) ||
+            (item.report.sector || '').toUpperCase().includes(q) ||
+            item.match.themeName.toUpperCase().includes(q) ||
+            item.match.reason.toUpperCase().includes(q)
+          );
+        }
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+            <div className="bg-[#0B0F19] border border-cyan-800/40 rounded-2xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+              {/* Modal Header */}
+              <div className="p-4 sm:p-6 border-b border-slate-800 flex items-center justify-between bg-slate-950/80">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-cyan-950/80 border border-cyan-700/60 text-cyan-400 shadow-md shadow-cyan-950/50">
+                    <Sparkles className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+                        Yatırım Temaları & Şirket Radar Paneli
+                      </h2>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800 font-semibold">
+                        {savedReports.length} Analiz Edilmiş Şirket
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Mali tablolara ve rasyolara dayalı 6 objektif yatırım teması filtresi.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsThemesModalOpen(false)}
+                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Tema Seçici Butonları */}
+              <div className="p-3 sm:p-4 border-b border-slate-800/80 bg-[#090D16] flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
+                <button
+                  type="button"
+                  onClick={() => setSelectedThemeFilter('ALL')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer border ${
+                    selectedThemeFilter === 'ALL'
+                      ? 'bg-cyan-600 text-white border-cyan-500 shadow-sm'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  Tüm Eşleşmeler
+                </button>
+
+                {allThemesList.map(theme => {
+                  const count = themeSummary[theme.id]?.length || 0;
+                  const isSelected = selectedThemeFilter === theme.id;
+                  return (
+                    <button
+                      key={theme.id}
+                      type="button"
+                      onClick={() => setSelectedThemeFilter(theme.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer border ${
+                        isSelected
+                          ? `${theme.badgeClass} ring-1 ring-cyan-400/50 shadow-sm`
+                          : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800'
+                      }`}
+                    >
+                      {renderThemeIcon(theme.iconTag, "w-3.5 h-3.5")}
+                      <span>{theme.shortLabel}</span>
+                      <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold ${
+                        count > 0 ? 'bg-slate-950 text-white border border-slate-700' : 'bg-slate-950/50 text-slate-600'
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Seçili Tema Açıklama ve Kriter Başlığı */}
+              {selectedThemeFilter !== 'ALL' && (
+                <div className="px-4 py-3 bg-slate-950/50 border-b border-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <span className={`p-1.5 rounded-lg bg-slate-900 border border-slate-800 ${INVESTMENT_THEMES[selectedThemeFilter].colorClass}`}>
+                      {renderThemeIcon(INVESTMENT_THEMES[selectedThemeFilter].iconTag, "w-4 h-4")}
+                    </span>
+                    <div>
+                      <h3 className="text-sm font-bold text-white">
+                        {INVESTMENT_THEMES[selectedThemeFilter].name}
+                      </h3>
+                      <p className="text-[11px] text-slate-400">
+                        {INVESTMENT_THEMES[selectedThemeFilter].description}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-[11px] font-mono font-medium px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800 text-slate-300">
+                    <span className="text-slate-500 mr-1.5">Kriterler:</span>
+                    {INVESTMENT_THEMES[selectedThemeFilter].criteriaSummary}
+                  </div>
+                </div>
+              )}
+
+              {/* Arama Kutusu */}
+              <div className="p-3 bg-slate-950/30 border-b border-slate-800/50 flex items-center justify-between gap-3">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    value={themeSearchTerm}
+                    onChange={(e) => setThemeSearchTerm(e.target.value)}
+                    placeholder="Şirket kodu, sektör veya gerekçe ara..."
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <span className="text-xs text-slate-400 font-mono">
+                  {displayedItems.length} Şirket Kartı
+                </span>
+              </div>
+
+              {/* Kartlar Grid */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
+                {displayedItems.length === 0 ? (
+                  <div className="text-center py-16 text-slate-500 space-y-2">
+                    <Sparkles className="w-10 h-10 mx-auto text-slate-600 opacity-60" />
+                    <p className="text-sm font-semibold text-slate-400">
+                      Bu kriterlere uyan kayıtlı şirket bulunamadı.
+                    </p>
+                    <p className="text-xs text-slate-600 max-w-md mx-auto">
+                      BIST hisselerini analiz ettikçe şirketler finansal göstergelerine ve rasyolarına göre otomatik olarak bu temalara dahil edilir.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    {displayedItems.map(({ report, match }, idx) => {
+                      const repVal = (report as any).valuation || report.extractedData?.valuation;
+                      const fairVal = repVal?.fair_value || 0;
+                      const priceNum = parseFloat(report.price || '0') || 0;
+                      const discount = (fairVal > 0 && priceNum > 0)
+                        ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))
+                        : null;
+                      const isAl = report.decision === 'AL';
+                      const isAlma = report.decision === 'ALMA';
+
+                      const allMatches = categorizeCompany(report);
+
+                      return (
+                        <div
+                          key={`${report.id}-${match.themeId}-${idx}`}
+                          className="p-4 rounded-xl bg-slate-900/70 border border-slate-800 hover:border-cyan-700/60 transition group flex flex-col justify-between space-y-3 shadow-md"
+                        >
+                          <div>
+                            {/* Üst Satır: Ticker, Karar ve Skor */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-base font-black text-white font-mono tracking-tight">
+                                  {report.ticker}
+                                </span>
+                                <span className="text-[10px] text-slate-400 px-2 py-0.5 rounded bg-slate-950 border border-slate-800">
+                                  {report.sector || 'BIST'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded font-mono ${
+                                  isAl ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
+                                  isAlma ? 'bg-rose-950 text-rose-400 border border-rose-800' :
+                                  'bg-amber-950 text-amber-400 border border-amber-800'
+                                }`}>
+                                  {report.decision}
+                                </span>
+                                {report.score && (
+                                  <span className="text-[11px] font-mono font-bold text-slate-300 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                                    {report.score}/100
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Fiyat & Adil Değer & İskonto Satırı */}
+                            <div className="flex items-center gap-3 mt-2.5 text-xs font-mono py-1.5 px-2.5 bg-slate-950/70 rounded-lg border border-slate-800/60">
+                              <div>
+                                <span className="text-slate-500 text-[10px] block">FİYAT</span>
+                                <span className="text-white font-bold">{priceNum > 0 ? `${priceNum.toFixed(2)} TL` : '—'}</span>
+                              </div>
+                              <div className="h-5 w-px bg-slate-800" />
+                              <div>
+                                <span className="text-slate-500 text-[10px] block">ADİL DEĞER</span>
+                                <span className="text-emerald-400 font-bold">{fairVal > 0 ? `${fairVal.toFixed(2)} TL` : '—'}</span>
+                              </div>
+                              <div className="h-5 w-px bg-slate-800" />
+                              <div>
+                                <span className="text-slate-500 text-[10px] block">POTANSİYEL</span>
+                                {discount !== null ? (
+                                  <span className={`font-bold ${discount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    {discount >= 0 ? `+%${discount} İskonto` : `%${Math.abs(discount)} Prim`}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-500">—</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Somut Tematik Gerekçe ve Rasyo */}
+                            <div className="mt-3 p-2.5 rounded-lg bg-cyan-950/20 border border-cyan-800/40 text-xs">
+                              <div className="flex items-center justify-between gap-1 mb-1">
+                                <span className="font-bold text-cyan-300 flex items-center gap-1.5">
+                                  {renderThemeIcon(match.iconTag, "w-3.5 h-3.5")}
+                                  {match.themeName}
+                                </span>
+                                <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-200 border border-cyan-700">
+                                  {match.metricValue}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-300 leading-relaxed">
+                                {match.reason}
+                              </p>
+                            </div>
+
+                            {/* Diğer Temalar (Varsa) */}
+                            {allMatches.length > 1 && (
+                              <div className="flex items-center gap-1.5 flex-wrap mt-2.5">
+                                <span className="text-[10px] text-slate-500">Diğer Nitelikler:</span>
+                                {allMatches.filter(m => m.themeId !== match.themeId).map(other => (
+                                  <span
+                                    key={other.themeId}
+                                    className={`text-[10px] px-1.5 py-0.5 rounded border font-semibold ${other.badgeClass}`}
+                                  >
+                                    {other.shortLabel}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* İncele Butonu */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveReportId(report.id);
+                              setStep('report');
+                              setIsThemesModalOpen(false);
+                            }}
+                            className="w-full py-2 bg-slate-800 hover:bg-cyan-600 hover:text-white text-slate-300 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 border border-slate-700 hover:border-cyan-500 cursor-pointer"
+                          >
+                            <span>Raporu ve Modeli İncele</span>
+                            <ArrowUpRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );
