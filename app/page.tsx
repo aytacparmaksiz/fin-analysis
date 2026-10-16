@@ -20,6 +20,7 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  Cell,
   LineChart,
   Line,
   XAxis,
@@ -581,8 +582,14 @@ function DriverCard({
   description: string;
   sourceExplanation?: string;
 }) {
+  const hasDistinctSource = Boolean(
+    sourceExplanation &&
+    sourceExplanation.trim() &&
+    (!description || sourceExplanation.trim().toLowerCase() !== description.trim().toLowerCase())
+  );
+
   return (
-    <div className="bg-[#111827]/90 border border-slate-800 rounded-xl p-4 sm:p-5 flex flex-col justify-between shadow-lg space-y-3.5">
+    <div className="bg-[#111827]/90 border border-slate-800 rounded-xl p-4 sm:p-5 flex flex-col justify-between shadow-lg space-y-3">
       <div>
         <div className="text-xs font-semibold text-slate-300 tracking-tight">
           {title}
@@ -606,21 +613,23 @@ function DriverCard({
         </div>
 
         <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5 leading-tight">
-          <span className="max-w-[48%] text-left">{bearText}</span>
-          <span className="max-w-[48%] text-right text-slate-300">{bullText}</span>
+          <span className="max-w-[48%] text-left truncate" title={bearText}>{bearText}</span>
+          <span className="max-w-[48%] text-right text-slate-300 truncate" title={bullText}>{bullText}</span>
         </div>
       </div>
 
-      {sourceExplanation && (
+      {hasDistinctSource && (
         <div className="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-900/60 rounded px-2.5 py-1.5 flex items-start gap-1.5">
           <Info className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0 mt-0.5" />
-          <span className="break-words leading-snug flex-1" title={sourceExplanation}>{sourceExplanation}</span>
+          <span className="break-words leading-snug flex-1 line-clamp-2" title={sourceExplanation}>{sourceExplanation}</span>
         </div>
       )}
 
-      <p className="text-[11px] text-slate-400 leading-relaxed pt-2 border-t border-slate-800/80">
-        {description}
-      </p>
+      {description && (
+        <p className="text-[11px] text-slate-400 leading-relaxed pt-2 border-t border-slate-800/80 line-clamp-2 hover:line-clamp-none transition-all cursor-default" title={description}>
+          {description}
+        </p>
+      )}
     </div>
   );
 }
@@ -652,6 +661,17 @@ const CustomChartTooltip = ({ active, payload, label, currency = 'Bin TRY' }: an
             entry.dataKey === 'eva_spread' ||
             entry.unit === '%';
           const isSharePrice = entry.dataKey === 'share_price';
+          const isMultiple =
+            currency === 'x' ||
+            entry.unit === 'x' ||
+            entry.dataKey === 'pe' ||
+            entry.dataKey === 'pb' ||
+            entry.dataKey === 'ev_ebitda' ||
+            entry.dataKey === 'ev_sales' ||
+            entry.name?.includes('F/K') ||
+            entry.name?.includes('PD/DD') ||
+            entry.name?.includes('FD/FAVÖK') ||
+            entry.name?.includes('Çarpan');
 
           return (
             <div key={`tooltip-${index}`} className="flex items-center justify-between gap-4 py-0.5">
@@ -668,7 +688,9 @@ const CustomChartTooltip = ({ active, payload, label, currency = 'Bin TRY' }: an
                     ? `${entry.value.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL`
                     : isPct
                       ? `%${entry.value.toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}`
-                      : formatChartMetric(entry.value, false, currency)
+                      : isMultiple
+                        ? `${entry.value.toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}x`
+                        : formatChartMetric(entry.value, false, currency)
                   : (entry.value !== null && entry.value !== undefined && !Number.isNaN(entry.value) ? entry.value : '—')}
               </span>
             </div>
@@ -2933,6 +2955,8 @@ export default function ValuationTerminal({
       title: currentSector === 'BANKING' ? 'Duran Varlıklar & İştirakler' : 'Cari Olmayan Varlıklar (Duran Varlıklar)',
       categoryKey: 'bs_non_current',
       rows: [
+        { label: 'Maddi Duran Varlıklar', sublabel: 'Arsa, Bina, Tesis, Makine ve Cihazlar', key: 'tangible_assets', isHeader: false },
+        { label: 'Maddi Olmayan Duran Varlıklar', sublabel: 'Haklar, Şerefiye ve Lisanslar', key: 'intangible_assets', isHeader: false },
         { 
           label: 'Cari Olmayan Varlıklar Toplamı', 
           sublabel: 'Maddi, Gayrimaddi Duran Varlıklar ve Uzun Vadeli Yatırımlar', 
@@ -2947,8 +2971,9 @@ export default function ValuationTerminal({
       title: 'Yükümlülükler, Toplam Aktifler & Özkaynaklar',
       categoryKey: 'bs_totals',
       rows: [
-        { label: 'Kısa Vadeli Yükümlülükler (Cari Yükümlülükler)', sublabel: '1 Yıldan Kısa Vadeli Borçlar ve Teknik Karşılıklar', key: 'current_liabilities', isHeader: false, invert: true },
-        { label: 'Uzun Vadeli Yükümlülükler', sublabel: 'Uzun Vadeli Borçlar ve Emeklilik Yatırım Fonları', key: 'long_term_liabilities', isHeader: false, invert: true },
+        { label: 'Kısa Vadeli Yükümlülükler (Cari Yükümlülükler)', sublabel: '1 Yıldan Kısa Vadeli Borçlar ve Karşılıklar', key: 'current_liabilities', isHeader: false, invert: true },
+        { label: 'Ticari Borçlar', sublabel: 'Tedarikçilere Olan Kısa Vadeli Ticari Borçlar', key: 'trade_payables', isHeader: false, invert: true },
+        { label: 'Uzun Vadeli Yükümlülükler', sublabel: 'Uzun Vadeli Borçlar ve Karşılıklar', key: 'long_term_liabilities', isHeader: false, invert: true },
         { label: 'Toplam Varlıklar (Aktifler)', sublabel: 'Bilanço Büyüklüğü (Aktif Toplamı)', key: 'total_assets', fallbackKey: 'assets', isHeader: true, highlight: true },
         { label: 'Toplam Özkaynaklar', sublabel: 'Ana Ortaklığa Ait Net Özsermaye (Defter Değeri)', key: 'equity', fallbackKey: 'total_equity', isHeader: true, highlight: true },
       ],
@@ -3012,17 +3037,24 @@ export default function ValuationTerminal({
     },
   ] : [
     {
-      title: 'Satış Gelirleri & Hasılat',
+      title: 'Satış Gelirleri, Maliyet & Brüt Kâr',
       categoryKey: 'is_revenue',
       rows: [
         { label: 'Satış Gelirleri (Hasılat)', sublabel: 'Net Satışlar / Toplam Gelir', key: 'revenue', isHeader: true },
+        { label: 'Satışların Maliyeti (-)', sublabel: 'Üretim ve Satılan Mal Maliyeti', key: 'cost_of_sales', isHeader: false, invert: true },
+        { label: 'Brüt Kâr (Zarar)', sublabel: 'Hasılat - Satışların Maliyeti', key: 'gross_profit', isHeader: true, highlight: true },
+        { label: 'Faaliyet Giderleri (-)', sublabel: 'Pazarlama, Satış, Dağıtım ve Genel Yönetim Giderleri', key: 'operating_expenses', isHeader: false, invert: true },
+        { label: 'Esas Faaliyet Kârı (EBIT)', sublabel: 'Brüt Kâr - Faaliyet Giderleri', key: 'operating_profit', fallbackKey: 'operating_income', isHeader: true },
       ],
     },
     {
-      title: 'Operasyonel Kârlılık (FAVÖK)',
+      title: 'Operasyonel Kârlılık (FAVÖK) & Finansman',
       categoryKey: 'is_ebitda',
       rows: [
         { label: 'FAVÖK (EBITDA)', sublabel: 'Faiz, Amortisman ve Vergi Öncesi Kâr', key: 'ebitda', isHeader: true, highlight: true },
+        { label: 'Finansman Gelirleri', sublabel: 'Faiz, Kambiyo ve Finansal Varlık Gelirleri', key: 'financing_income', isHeader: false },
+        { label: 'Finansman Giderleri (-)', sublabel: 'Kredi Faizi ve Kur Farkı Giderleri', key: 'financing_expenses', isHeader: false, invert: true },
+        { label: 'Vergi Gideri / Geliri (-)', sublabel: 'Dönem Vergi ve Ertelenmiş Vergi Karşılığı', key: 'tax_expense', isHeader: false, invert: true },
       ],
     },
     {
@@ -3047,16 +3079,19 @@ export default function ValuationTerminal({
       ],
     },
     {
-      title: 'Yatırım Harcamaları & CAPEX',
+      title: 'Yatırım Faaliyetleri & CAPEX',
       categoryKey: 'cf_capex',
       rows: [
         { label: 'Yatırım Harcamaları (CAPEX)', sublabel: 'Maddi & Gayrimaddi Varlık Alımları', key: 'capex', fallbackKey: 'capital_expenditures', isHeader: false, invert: true },
+        { label: 'Yatırım Faaliyetlerinden Nakit Akışı', sublabel: 'Tüm Yatırım Giriş ve Çıkışları Toplamı', key: 'investing_cash_flow', isHeader: false },
       ],
     },
     {
-      title: 'Serbest Nakit Akışı & Borçluluk',
+      title: 'Serbest Nakit Akışı, Finansman & Net Değişim',
       categoryKey: 'cf_free_cash',
       rows: [
+        { label: 'Finansman Faaliyetlerinden Nakit Akışı', sublabel: 'Kredi Kullanımları, Temettü Ödemeleri ve Sermaye Hareketleri', key: 'financing_cash_flow', isHeader: false },
+        { label: 'Nakit ve Nakit Benzerlerinde Net Değişim', sublabel: 'Dönem İçi Toplam Net Nakit Değişimi', key: 'net_change_in_cash', isHeader: false },
         { label: 'Serbest Nakit Akışı (FCF)', sublabel: 'OCF - CAPEX (Hissedara Kalan Net Nakit)', key: 'free_cash_flow', fallbackKey: 'fcf', isHeader: true, highlight: true },
         { label: 'Net Finansal Borç / (Nakit Fazlası)', sublabel: 'Finansal Borçlar - Nakit ve Nakit Benzerleri', key: 'net_debt', isHeader: false, invert: true },
       ],
@@ -3211,19 +3246,19 @@ export default function ValuationTerminal({
         ...baseDrivers.revenue_growth,
         ...(customDrivers?.revenue_growth || {}),
         value: typeof customDrivers?.revenue_growth?.value === 'number' ? customDrivers.revenue_growth.value : baseDrivers.revenue_growth.value,
-        sourceExplanation: customDrivers?.revenue_growth?.sourceExplanation || customDrivers?.revenue_growth?.note || baseDrivers.revenue_growth.sourceExplanation,
+        sourceExplanation: customDrivers?.revenue_growth?.sourceExplanation || baseDrivers.revenue_growth.sourceExplanation,
       },
       net_income_growth: {
         ...baseDrivers.net_income_growth,
         ...(customDrivers?.net_income_growth || {}),
         value: typeof customDrivers?.net_income_growth?.value === 'number' ? customDrivers.net_income_growth.value : baseDrivers.net_income_growth.value,
-        sourceExplanation: customDrivers?.net_income_growth?.sourceExplanation || customDrivers?.net_income_growth?.note || baseDrivers.net_income_growth.sourceExplanation,
+        sourceExplanation: customDrivers?.net_income_growth?.sourceExplanation || baseDrivers.net_income_growth.sourceExplanation,
       },
       margin: {
         ...baseDrivers.margin,
         ...(customDrivers?.margin || {}),
         value: typeof customDrivers?.margin?.value === 'number' ? customDrivers.margin.value : baseDrivers.margin.value,
-        sourceExplanation: customDrivers?.margin?.sourceExplanation || customDrivers?.margin?.note || baseDrivers.margin.sourceExplanation,
+        sourceExplanation: customDrivers?.margin?.sourceExplanation || baseDrivers.margin.sourceExplanation,
       },
       target_multiple: {
         ...baseDrivers.target_multiple,
@@ -4599,13 +4634,13 @@ export default function ValuationTerminal({
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
-                                <span className="text-sm font-bold text-white">İş Yatırım Resmi Canlı Piyasa Çarpanları</span>
+                                <span className="text-sm font-bold text-white">Canlı Piyasa Çarpanları</span>
                                 <span className="text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded">
                                   {marketMultiples.last_period || 'Son Bilanço'}
                                 </span>
                               </div>
                               <p className="text-xs text-slate-400 mt-0.5">
-                                Borsa İstanbul resmi piyasa verileri ve güncel değerleme rasyoları
+                                Borsa İstanbul piyasa verileri ve güncel değerleme rasyoları
                               </p>
                             </div>
                           </div>
@@ -4797,8 +4832,8 @@ export default function ValuationTerminal({
                                 return (
                                   <tr key={rowConfig.k} className="hover:bg-slate-800/30">
                                     <td className="py-2">{rowConfig.l}</td>
-                                    <td className="py-2 text-right font-mono">{formatAmount(v1, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
-                                    <td className="py-2 text-right font-mono">{formatAmount(v2, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
+                                    <td className={`py-2 text-right font-mono ${v1 != null && v1 < 0 ? 'text-rose-400 font-semibold' : ''}`}>{formatAmount(v1, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
+                                    <td className={`py-2 text-right font-mono ${v2 != null && v2 < 0 ? 'text-rose-400 font-semibold' : ''}`}>{formatAmount(v2, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
                                     <td className="py-2 text-right font-mono">
                                       {changeRes.formattedLabel === '—' ? (
                                         <span className="text-slate-500">—</span>
@@ -4873,8 +4908,8 @@ export default function ValuationTerminal({
                                 return (
                                   <tr key={rowConfig.k} className="hover:bg-slate-800/30">
                                     <td className="py-2">{rowConfig.l}</td>
-                                    <td className="py-2 text-right font-mono">{formatAmount(v1, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
-                                    <td className="py-2 text-right font-mono">{formatAmount(v2, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
+                                    <td className={`py-2 text-right font-mono ${v1 != null && v1 < 0 ? 'text-rose-400 font-semibold' : ''}`}>{formatAmount(v1, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
+                                    <td className={`py-2 text-right font-mono ${v2 != null && v2 < 0 ? 'text-rose-400 font-semibold' : ''}`}>{formatAmount(v2, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
                                     <td className="py-2 text-right font-mono">
                                       {changeRes.formattedLabel === '—' ? (
                                         <span className="text-slate-500">—</span>
@@ -4934,7 +4969,14 @@ export default function ValuationTerminal({
                                 <BarChart data={quarterlyChartData.slice(-5)} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
                                   <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10 }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                   <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
-                                  <Bar dataKey={chart.key} name={chart.title} fill="#3b82f6" radius={[2, 2, 0, 0]} />
+                                  <Bar dataKey={chart.key} name={chart.title} radius={[2, 2, 0, 0]}>
+                                    {quarterlyChartData.slice(-5).map((entry: any, index: number) => (
+                                      <Cell 
+                                        key={`cell-${index}`} 
+                                        fill={(entry[chart.key] != null && entry[chart.key] < 0) ? '#f43f5e' : '#3b82f6'} 
+                                      />
+                                    ))}
+                                  </Bar>
                                 </BarChart>
                               </ResponsiveContainer>
                             </div>
@@ -5312,7 +5354,7 @@ export default function ValuationTerminal({
                             <span>{currentSector === 'INSURANCE' ? 'Teknik Kâr' : 'FAVÖK'}</span>
                             <span className="text-[10px] font-mono text-slate-500">{latestData?.period || '—'}</span>
                           </div>
-                          <div className="text-xl font-black font-mono text-white mt-1">
+                          <div className={`text-xl font-black font-mono mt-1 ${latestData?.ebitda != null && latestData.ebitda < 0 ? 'text-rose-400' : 'text-white'}`}>
                             {formatAmount(latestData?.ebitda, unitMode, false, '', '', currentExtractedData?.currency)}
                           </div>
                         </div>
@@ -5325,7 +5367,7 @@ export default function ValuationTerminal({
                           </div>
                           {ttmEbitda && (
                             <div className="text-[10px] text-slate-400 font-mono">
-                              TTM (Son 12 Ay): <strong className="text-slate-200">{formatAmount(ttmEbitda, unitMode, false, '', '', currentExtractedData?.currency)}</strong>
+                              TTM (Son 12 Ay): <strong className={ttmEbitda < 0 ? 'text-rose-400' : 'text-slate-200'}>{formatAmount(ttmEbitda, unitMode, false, '', '', currentExtractedData?.currency)}</strong>
                             </div>
                           )}
                         </div>
@@ -5338,7 +5380,7 @@ export default function ValuationTerminal({
                             <span>Net Dönem Kârı</span>
                             <span className="text-[10px] font-mono text-slate-500">{latestData?.period || '—'}</span>
                           </div>
-                          <div className="text-xl font-black font-mono text-emerald-400 mt-1">
+                          <div className={`text-xl font-black font-mono mt-1 ${latestData?.net_income != null && latestData.net_income < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
                             {formatAmount(latestData?.net_income, unitMode, false, '', '', currentExtractedData?.currency)}
                           </div>
                         </div>
@@ -5351,7 +5393,7 @@ export default function ValuationTerminal({
                           </div>
                           {ttmNet && (
                             <div className="text-[10px] text-slate-400 font-mono">
-                              TTM (Son 12 Ay): <strong className="text-emerald-300">{formatAmount(ttmNet, unitMode, false, '', '', currentExtractedData?.currency)}</strong>
+                              TTM (Son 12 Ay): <strong className={ttmNet < 0 ? 'text-rose-400' : 'text-emerald-300'}>{formatAmount(ttmNet, unitMode, false, '', '', currentExtractedData?.currency)}</strong>
                             </div>
                           )}
                         </div>
@@ -5364,7 +5406,11 @@ export default function ValuationTerminal({
                             <span>{currentSector === 'INSURANCE' ? 'ROE (Yıllık)' : 'ROIC - WACC'}</span>
                             <span className="text-[10px] font-mono text-slate-500">{latestData?.period || '—'}</span>
                           </div>
-                          <div className="text-xl font-black font-mono text-cyan-400 mt-1">
+                          <div className={`text-xl font-black font-mono mt-1 ${
+                            currentSector === 'INSURANCE' 
+                              ? (latestData?.roe != null && latestData.roe < 0 ? 'text-rose-400' : 'text-cyan-400')
+                              : (latestSpread != null && latestSpread < 0 ? 'text-rose-400' : 'text-cyan-400')
+                          }`}>
                             {currentSector === 'INSURANCE' 
                               ? (latestData?.roe != null ? `%${latestData.roe}` : '—') 
                               : spreadInfo.label}
@@ -5444,7 +5490,7 @@ export default function ValuationTerminal({
                         <button
                           type="button"
                           onClick={() => setUnitMode('bin')}
-                          className={`px-2 py-1 rounded transition cursor-pointer ${
+                          className={`px-2.5 py-1 rounded transition cursor-pointer ${
                             unitMode === 'bin' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'
                           }`}
                         >
@@ -5452,17 +5498,8 @@ export default function ValuationTerminal({
                         </button>
                         <button
                           type="button"
-                          onClick={() => setUnitMode('milyon')}
-                          className={`px-2 py-1 rounded transition cursor-pointer ${
-                            unitMode === 'milyon' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          Milyon TRY
-                        </button>
-                        <button
-                          type="button"
                           onClick={() => setUnitMode('tam')}
-                          className={`px-2 py-1 rounded transition cursor-pointer ${
+                          className={`px-2.5 py-1 rounded transition cursor-pointer ${
                             unitMode === 'tam' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'
                           }`}
                         >
@@ -5620,12 +5657,17 @@ export default function ValuationTerminal({
                                     } ${row.highlight ? 'bg-emerald-950/20' : ''}`}>
                                       <td className={`p-3 font-sans ${row.isHeader ? 'pl-6' : 'pl-11 md:pl-12'}`}>
                                         <div className="flex items-center justify-between gap-3">
-                                          <div>
-                                            <div className={`text-xs md:text-sm tracking-tight ${row.isHeader ? 'font-bold text-white' : 'font-medium text-slate-200'}`}>
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <span className={`text-xs md:text-sm tracking-tight ${row.isHeader ? 'font-bold text-white' : 'font-medium text-slate-200'}`}>
                                               {row.label}
-                                            </div>
+                                            </span>
                                             {row.sublabel && (
-                                              <div className="text-[11px] text-slate-500 font-normal mt-0.5">{row.sublabel}</div>
+                                              <span className="relative group/tip flex-shrink-0 inline-flex items-center cursor-help" title={row.sublabel}>
+                                                <Info className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 transition-colors" />
+                                                <span className="absolute left-5 top-1/2 -translate-y-1/2 hidden group-hover/tip:inline-block z-50 bg-slate-900 text-slate-200 text-[11px] font-normal px-2.5 py-1 rounded shadow-xl border border-slate-700 whitespace-nowrap pointer-events-none">
+                                                  {row.sublabel}
+                                                </span>
+                                              </span>
                                             )}
                                           </div>
                                           <SparklineBars data={[...values].reverse()} color={row.highlight ? 'emerald' : 'cyan'} />
@@ -5696,12 +5738,17 @@ export default function ValuationTerminal({
                                     } ${row.highlight ? 'bg-emerald-950/20' : ''}`}>
                                       <td className={`p-3 font-sans ${row.isHeader ? 'pl-6' : 'pl-11 md:pl-12'}`}>
                                         <div className="flex items-center justify-between gap-3">
-                                          <div>
-                                            <div className={`text-xs md:text-sm tracking-tight ${row.isHeader ? 'font-bold text-white' : 'font-medium text-slate-200'}`}>
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <span className={`text-xs md:text-sm tracking-tight ${row.isHeader ? 'font-bold text-white' : 'font-medium text-slate-200'}`}>
                                               {row.label}
-                                            </div>
+                                            </span>
                                             {row.sublabel && (
-                                              <div className="text-[11px] text-slate-500 font-normal mt-0.5">{row.sublabel}</div>
+                                              <span className="relative group/tip flex-shrink-0 inline-flex items-center cursor-help" title={row.sublabel}>
+                                                <Info className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 transition-colors" />
+                                                <span className="absolute left-5 top-1/2 -translate-y-1/2 hidden group-hover/tip:inline-block z-50 bg-slate-900 text-slate-200 text-[11px] font-normal px-2.5 py-1 rounded shadow-xl border border-slate-700 whitespace-nowrap pointer-events-none">
+                                                  {row.sublabel}
+                                                </span>
+                                              </span>
                                             )}
                                           </div>
                                           <SparklineBars data={[...values].reverse()} color="cyan" />
@@ -5769,12 +5816,17 @@ export default function ValuationTerminal({
                                     } ${row.highlight ? 'bg-emerald-950/20' : ''}`}>
                                       <td className={`p-3 font-sans ${row.isHeader ? 'pl-6' : 'pl-11 md:pl-12'}`}>
                                         <div className="flex items-center justify-between gap-3">
-                                          <div>
-                                            <div className={`text-xs md:text-sm tracking-tight ${row.isHeader ? 'font-bold text-white' : 'font-medium text-slate-200'}`}>
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <span className={`text-xs md:text-sm tracking-tight ${row.isHeader ? 'font-bold text-white' : 'font-medium text-slate-200'}`}>
                                               {row.label}
-                                            </div>
+                                            </span>
                                             {row.sublabel && (
-                                              <div className="text-[11px] text-slate-500 font-normal mt-0.5">{row.sublabel}</div>
+                                              <span className="relative group/tip flex-shrink-0 inline-flex items-center cursor-help" title={row.sublabel}>
+                                                <Info className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 transition-colors" />
+                                                <span className="absolute left-5 top-1/2 -translate-y-1/2 hidden group-hover/tip:inline-block z-50 bg-slate-900 text-slate-200 text-[11px] font-normal px-2.5 py-1 rounded shadow-xl border border-slate-700 whitespace-nowrap pointer-events-none">
+                                                  {row.sublabel}
+                                                </span>
+                                              </span>
                                             )}
                                           </div>
                                           <SparklineBars data={[...values].reverse()} color="emerald" />
@@ -6416,13 +6468,13 @@ export default function ValuationTerminal({
                           </div>
                           <div>
                             <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
-                              İş Yatırım Araştırma Konsensüs & Hedef Çarpan Tahminleri
+                              Piyasa Konsensüs & Hedef Çarpan Tahminleri
                               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800 font-semibold">
-                                İş Yatırım Resmi
+                                Piyasa Konsensüs
                               </span>
                             </h3>
                             <p className="text-xs text-slate-400 mt-0.5">
-                              Analist konsensüs tahminlerine göre beklenen ileriye dönük çarpanlar ve tarihsel iskonto/prim oranları
+                              Analist konsensüs tahminlerine göre beklenen ileriye dönük çarpanlar ve iskonto/prim oranları
                             </p>
                           </div>
                         </div>
@@ -6552,13 +6604,13 @@ export default function ValuationTerminal({
                           </div>
                           <div>
                             <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                              İş Yatırım Resmi Sektör Ortalamaları Tablosu
+                              BIST Sektör Ortalamaları Karşılaştırma Tablosu
                               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-semibold">
-                                53 Resmi Alt Sektör
+                                53 Alt Sektör
                               </span>
                             </h3>
                             <p className="text-xs text-slate-400 mt-0.5">
-                              İş Yatırım Temel Değerler ve Oranlar resmi web portalı çarpan ve rasyoları ile %100 birebir uyumlu
+                              BIST sektör medyanları ve resmi finansal rasyolar ile karşılaştırmalı analiz
                             </p>
                           </div>
                         </div>

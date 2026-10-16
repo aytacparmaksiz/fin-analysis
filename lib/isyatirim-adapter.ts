@@ -141,6 +141,17 @@ export class IsYatirimApiAdapter {
     let ga_ratio: number | null = null;
     let commission_ratio: number | null = null;
     let combined_ratio: number | null = null;
+    let cost_of_sales: number | null = null;
+    let operating_expenses: number | null = null;
+    let financing_expenses: number | null = null;
+    let financing_income: number | null = null;
+    let tax_expense: number | null = null;
+    let tangible_assets: number | null = null;
+    let intangible_assets: number | null = null;
+    let trade_payables: number | null = null;
+    let investing_cash_flow: number | null = null;
+    let financing_cash_flow: number | null = null;
+    let net_change_in_cash: number | null = null;
 
     if (meta.sector === 'INSURANCE') {
       cash_and_equivalents = getValByCode('1A') ?? getValByDesc('nakit ve nakit benzer');
@@ -271,9 +282,13 @@ export class IsYatirimApiAdapter {
       // 4. YÜKÜMLÜLÜKLER VE ÖZKAYNAKLAR
       current_liabilities = getValByCode('2A') ?? getValByDesc('toplam kısa vadeli yükümlülükler', 'kısa vadeli yükümlülükler');
       short_term_debt = getValByCode('2AA') ?? getValByDesc('kısa vadeli borçlanmalar', 'finansal borçlar');
+      trade_payables = getValByCode('2AC', '2AB') ?? getValByDesc('ticari borçlar');
       long_term_liabilities = getValByCode('2B') ?? getValByDesc('toplam uzun vadeli yükümlülükler', 'uzun vadeli yükümlülükler');
       long_term_debt = getValByCode('2BA') ?? getValByDesc('uzun vadeli borçlanmalar', 'uzun vadeli finansal borç');
       total_liabilities = (current_liabilities || 0) + (long_term_liabilities || 0);
+
+      tangible_assets = getValByCode('1BA', '1BB') ?? getValByDesc('maddi duran varlıklar');
+      intangible_assets = getValByCode('1BC', '1BD') ?? getValByDesc('maddi olmayan duran varlıklar');
 
       equity = getValByDesc('ana ortaklığa ait özkaynaklar', 'toplam özkaynaklar') ?? getValByCode('2N', '2O') ?? getValByDesc('özkaynaklar');
       paid_in_capital = getValByCode('2NA', '2MEA') ?? getValByDesc('ödenmiş sermaye', 'çıkarılmış sermaye');
@@ -287,6 +302,14 @@ export class IsYatirimApiAdapter {
       // 5. GELİR TABLOSU:
       revenue = getValByCode('3C', '3A') ?? getValByDesc('satış gelirleri', 'hasılat');
       gross_profit = getValByCode('3CAB', '3D', '3') ?? getValByDesc('ticari faaliyetlerden brüt kar', 'brüt kar (zarar)', 'brüt kar');
+      cost_of_sales = getValByCode('3CB', '3B') ?? getValByDesc('satışların maliyeti', 'satışların maliyeti (-)');
+      if (cost_of_sales === null && revenue !== null && gross_profit !== null) {
+        cost_of_sales = -(revenue - gross_profit);
+      }
+      operating_expenses = getValByCode('3DA', '3E') ?? getValByDesc('faaliyet giderleri', 'genel yönetim giderleri');
+      financing_expenses = getValByCode('3FB', '3G', '3F') ?? getValByDesc('finansman giderleri', 'finansman gideri (-)');
+      financing_income = getValByCode('3FA', '3EA') ?? getValByDesc('finansman gelirleri');
+      tax_expense = getValByCode('3J', '3K', '3N') ?? getValByDesc('dönem vergi gideri', 'vergi gideri');
 
       // STANDARDIZATION KURALI 1:
       // Esas Faaliyet Kârı KESİNLİKLE 'FAALİYET KARI (ZARARI)' / 'Finansman Gideri Öncesi Faaliyet Karı'
@@ -339,6 +362,10 @@ export class IsYatirimApiAdapter {
       tangibleCapex = getValByCode('4CBD', '4CBDA') ?? getValByDesc('maddi ve maddi olmayan duran varlıkların alımından kaynaklanan nakit çıkışları', 'maddi duran varlık alım');
       totalCapex = getValByCode('4CAK') ?? getValByDesc('yatırım faaliyetlerinden kaynaklanan nakit');
 
+      investing_cash_flow = totalCapex ?? getValByCode('4B', '4CAK') ?? getValByDesc('yatırım faaliyetlerinden kaynaklanan nakit');
+      financing_cash_flow = getValByCode('4C', '4CBK') ?? getValByDesc('finansman faaliyetlerinden kaynaklanan nakit');
+      net_change_in_cash = getValByCode('4D', '4CC') ?? getValByDesc('nakit ve nakit benzerlerindeki net artış');
+
       if (officialFcf !== null) {
         free_cash_flow = officialFcf;
         // CapEx = OCF - FCF (veya tangible capex)
@@ -364,15 +391,23 @@ export class IsYatirimApiAdapter {
     return {
       period,
       revenue,
+      cost_of_sales,
       gross_profit,
+      operating_expenses,
       operating_profit,
       operating_income: operating_profit,
+      financing_expenses,
+      financing_income,
+      tax_expense,
       ebitda,
       net_income,
       ebt,
       current_assets,
       non_current_assets,
       total_assets,
+      tangible_assets,
+      intangible_assets,
+      trade_payables,
       current_liabilities,
       long_term_liabilities,
       total_liabilities,
@@ -389,6 +424,9 @@ export class IsYatirimApiAdapter {
       capex,
       tangible_capex: tangibleCapex,
       total_investing_outflow: totalCapex,
+      investing_cash_flow,
+      financing_cash_flow,
+      net_change_in_cash,
       free_cash_flow,
       trade_receivables,
       inventories,
