@@ -16,6 +16,7 @@ import { getSupabase, isSupabaseConfigured } from './supabase.ts';
 import { IsYatirimApiAdapter } from './isyatirim-adapter.ts';
 import { FinancialDataValidator } from './financial-validator.ts';
 import { FinancialRatioEngine } from './ratio-engine.ts';
+import { fetchLiveTcmbMacroData, type MacroDataSnapshot } from './macro-service.ts';
 
 import https from 'node:https';
 
@@ -1112,8 +1113,11 @@ export async function fetchAndAnalyzeBistCompany(
     }
   };
 
+  // 5.5. TCMB EVDS3 Canlı Makro Verilerini Çek (PKA Enflasyon Beklentisi ve Ticari Kredi Faizi)
+  const macroSnapshot = await fetchLiveTcmbMacroData();
+
   // 6. Sıfır Halüsinasyonlu Zenginleştirme ve Rasyo Motorunu Çalıştır
-  const sanitized = enrichAndSanitizeFinancialHistory(rawDataPayload);
+  const sanitized = enrichAndSanitizeFinancialHistory(rawDataPayload, undefined, macroSnapshot);
 
   // 7. Adil Değer, Değer Sürücüleri ve Sektörel Puanlamayı Hesapla
   const valuationEngineResult = computeSectorValuationAndDrivers(
@@ -1193,6 +1197,7 @@ export async function fetchAndAnalyzeBistCompany(
       } : null,
       source: 'İş Yatırım Resmi Çarpanları'
     } : null,
+    macro: macroSnapshot,
     generatedAt: new Date().toISOString()
   };
 }
@@ -1200,4 +1205,5 @@ export async function fetchAndAnalyzeBistCompany(
 export { IsYatirimApiAdapter } from './isyatirim-adapter.ts';
 export { FinancialDataValidator } from './financial-validator.ts';
 export { FinancialRatioEngine } from './ratio-engine.ts';
+export { fetchLiveTcmbMacroData } from './macro-service.ts';
 

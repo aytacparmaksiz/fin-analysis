@@ -1,4 +1,5 @@
 import { SECTOR_SCORING_CONFIG, detectSector, type SectorType, isMetricDisabled } from './sectors.ts';
+import { getExpectedInflationForPeriod, type MacroDataSnapshot } from './macro-service.ts';
 
 export interface DriverDetail {
   value: number;
@@ -483,7 +484,7 @@ export { lookupDamodaranIndustry } from './damodaran-betas.ts';
  * saf TypeScript fonksiyonları ile resmi denetlenmiş verilerden türetilir.
  * Eğer gerekli girdi verisi raporda bulunmuyorsa kesinlikle uydurulmaz, null bırakılır.
  */
-export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: SectorType): any {
+export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: SectorType, macroSnapshot?: MacroDataSnapshot | null): any {
   if (!data) return data;
   const isDirectArray = Array.isArray(data);
   const container = isDirectArray ? { financial_history: data } : data;
@@ -1007,9 +1008,10 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     // karşılaştırma Fisher Denklemi: (1 + WACC_nominal) = (1 + WACC_real) * (1 + inflation) ile Reel WACC üzerinden yapılır.
     // Döviz fonksiyonel para birimine sahip şirketlerde (AVIATION veya isForeignCurrency) Türkiye'nin %18-36 TÜFE'si değil,
     // para birimine uygun enflasyon (USD %2.5 / EUR %2.2) kullanılır.
+    const tcmbPeriodInflation = getExpectedInflationForPeriod(item.period, macroSnapshot);
     const expectedInflation = isForeignCurrency
       ? (reportCurrency === 'EUR' ? 2.2 : 2.5)
-      : (yr <= 2023 ? 0.0 : (yr === 2024 ? 36.0 : (yr === 2025 ? 25.0 : 23.70))); // TCMB Eylül 2026 Piyasa Katılımcıları Anketi
+      : (yr <= 2023 ? 0.0 : tcmbPeriodInflation);
     const nominalWacc = computedWacc;
     const realWacc = ((item.is_tms29 || isForeignCurrency) && expectedInflation > 0)
       ? Number((((1 + nominalWacc / 100) / (1 + expectedInflation / 100) - 1) * 100).toFixed(1))
