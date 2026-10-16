@@ -958,6 +958,42 @@ function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorT
   });
 }
 
+interface ParsedVerdictNarrative {
+  thesis: string;
+  catalysts: string;
+  risks: string;
+  isStructured: boolean;
+}
+
+function parseVerdictNarrative(rawBody: string): ParsedVerdictNarrative {
+  if (!rawBody) {
+    return { thesis: '', catalysts: '', risks: '', isStructured: false };
+  }
+
+  // 1. Markdown kalınlıklarını ve etiket temizliği (**Yatırım Tezi:** -> Yatırım Tezi:)
+  let cleaned = rawBody.replace(/\*\*(Yatırım\s+Tezi|Temel\s+Yatırım\s+Tezi|Gerekçe|Kilit\s+Katalizörler|Katalizörler|Riskler\s*(?:&|ve)\s*Emniyet\s*Marjı|Riskler\s*ve\s*Belirsizlikler|Temel\s*Riskler)\s*:\*\*/gi, '$1:');
+
+  // 2. Köşeli parantezleri temizle: [metin] -> metin
+  cleaned = cleaned.replace(/\[\s*([^\]]+?)\s*\]/g, '$1').trim();
+
+  // 3. Bölümleri ayıkla
+  const thesisMatch = cleaned.match(/(?:Yatırım\s+Tezi|Temel\s+Yatırım\s+Tezi|Gerekçe)\s*:\s*([\s\S]*?)(?=(?:Kilit\s+Katalizörler|Katalizörler|Riskler\s*(?:&|ve)\s*Emniyet\s*Marjı|Riskler\s*ve\s*Belirsizlikler|Temel\s*Riskler|$))/i);
+  const catalystMatch = cleaned.match(/(?:Kilit\s+Katalizörler|Katalizörler)\s*:\s*([\s\S]*?)(?=(?:Riskler\s*(?:&|ve)\s*Emniyet\s*Marjı|Riskler\s*ve\s*Belirsizlikler|Temel\s*Riskler|$))/i);
+  const riskMatch = cleaned.match(/(?:Riskler\s*(?:&|ve)\s*Emniyet\s*Marjı|Riskler\s*ve\s*Belirsizlikler|Temel\s*Riskler)\s*:\s*([\s\S]*?)$/i);
+
+  let thesis = (thesisMatch ? thesisMatch[1] : (!catalystMatch && !riskMatch ? cleaned : '')).trim();
+  let catalysts = (catalystMatch ? catalystMatch[1] : '').trim();
+  let risks = (riskMatch ? riskMatch[1] : '').trim();
+
+  thesis = thesis.replace(/^(?:Yatırım\s+Tezi|Gerekçe)\s*:\s*/i, '').trim();
+  catalysts = catalysts.replace(/^(?:Kilit\s+Katalizörler|Katalizörler)\s*:\s*/i, '').trim();
+  risks = risks.replace(/^(?:Riskler\s*(?:&|ve)\s*Emniyet\s*Marjı|Temel\s*Riskler)\s*:\s*/i, '').trim();
+
+  const isStructured = Boolean((thesisMatch && catalystMatch) || (thesisMatch && riskMatch) || (catalystMatch && riskMatch));
+
+  return { thesis, catalysts, risks, isStructured };
+}
+
 function preprocessReportMarkdown(text: string, valuation?: any): string {
   if (!text) return '';
 
@@ -1040,6 +1076,20 @@ function preprocessReportMarkdown(text: string, valuation?: any): string {
       return match;
     });
   }
+
+  // 4b. Section VI sonundaki Analist Kararı ve devamındaki Yatırım Tezi / Katalizör / Riskler satırlarını tek blokta birleştir
+  cleaned = cleaned.replace(
+    /((?:^|\n)\s*(?:#{1,4}\s*)?(?:\*{1,2})?Analist\s+Karar[ıi](?:\*{1,2})?\s*[:=-][^\n]*)\n{2,}((?:\*{1,2})?Yatırım\s+Tezi)/gi,
+    '$1\n$2'
+  );
+  cleaned = cleaned.replace(
+    /((?:\*{1,2})?Yatırım\s+Tezi[^\n]*)\n{2,}((?:\*{1,2})?Kilit\s+Katalizörler)/gi,
+    '$1\n$2'
+  );
+  cleaned = cleaned.replace(
+    /((?:\*{1,2})?Kilit\s+Katalizörler[^\n]*)\n{2,}((?:\*{1,2})?Riskler\s*(?:&|ve)\s*Emniyet\s*Marjı)/gi,
+    '$1\n$2'
+  );
 
   // 5. Fazla boş satırları normalize et
   cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
@@ -7030,20 +7080,66 @@ export default function ValuationTerminal({
                                     </div>
                                   </div>
 
-                                  <div className="mt-5 space-y-3">
-                                    {cleanBody ? (
-                                      <div className="text-sm md:text-base text-slate-100 leading-relaxed font-normal bg-slate-950/60 p-4 rounded-xl border border-slate-800/80">
-                                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
-                                          Yatırım Tezi & Gerekçe:
-                                        </span>
-                                        <p className="text-slate-100 leading-relaxed">{cleanBody}</p>
+                                  {(() => {
+                                    const narrative = parseVerdictNarrative(cleanBody);
+                                    if (!cleanBody && !narrative.thesis) {
+                                      return (
+                                        <div className="mt-5 text-sm text-slate-100 leading-relaxed font-normal">
+                                          {children}
+                                        </div>
+                                      );
+                                    }
+
+                                    return (
+                                      <div className="mt-6 space-y-4">
+                                        {/* 1. Yatırım Tezi & Stratejik Değerlendirme (Ana Metin) */}
+                                        <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-5 shadow-xs">
+                                          <div className="flex items-center gap-2 mb-2.5 pb-2 border-b border-slate-800/60">
+                                            <Compass className="w-4 h-4 text-emerald-400 shrink-0" />
+                                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                                              Yatırım Tezi & Stratejik Değerlendirme
+                                            </span>
+                                          </div>
+                                          <p className="text-slate-100 text-sm sm:text-[15px] leading-relaxed font-normal">
+                                            {narrative.thesis || cleanBody}
+                                          </p>
+                                        </div>
+
+                                        {/* 2. Katalizörler ve Riskler (Yan Yana Dengeli Grid) */}
+                                        {(narrative.catalysts || narrative.risks) && (
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {narrative.catalysts && (
+                                              <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-4.5 shadow-xs flex flex-col justify-start">
+                                                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-800/60">
+                                                  <TrendingUp className="w-4 h-4 text-emerald-400 shrink-0" />
+                                                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
+                                                    Kilit Değer Katalizörleri
+                                                  </span>
+                                                </div>
+                                                <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-normal">
+                                                  {narrative.catalysts}
+                                                </p>
+                                              </div>
+                                            )}
+
+                                            {narrative.risks && (
+                                              <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-4.5 shadow-xs flex flex-col justify-start">
+                                                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-800/60">
+                                                  <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+                                                  <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400">
+                                                    Aşağı Yönlü Riskler & Emniyet Marjı
+                                                  </span>
+                                                </div>
+                                                <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-normal">
+                                                  {narrative.risks}
+                                                </p>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
                                       </div>
-                                    ) : (
-                                      <div className="text-sm text-slate-100 leading-relaxed font-normal">
-                                        {children}
-                                      </div>
-                                    )}
-                                  </div>
+                                    );
+                                  })()}
                                 </div>
                               );
                             }
