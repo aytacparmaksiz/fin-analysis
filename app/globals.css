@@ -2,30 +2,32 @@
 
 :root,
 [data-theme="dark"] {
-  --background: #111317;
+  --background: #0E1015;
   --foreground: #E5E7EB;
-  --surface-canvas: #111317;
-  --surface-card: #171A20;
-  --surface-subtle: #1E222A;
-  --surface-inset: #13161B;
-  --border-hairline: #262B35;
-  --border-strong: #323946;
+  --surface-canvas: #0E1015;
+  --surface-card: #151821;
+  --surface-subtle: #1C202B;
+  --surface-inset: #11131A;
+  --border-hairline: #232834;
+  --border-strong: #2F3646;
   --text-primary: #F3F4F6;
   --text-secondary: #9CA3AF;
   --text-muted: #6B7280;
-  --chart-grid: #222630;
+  --chart-grid: #1F2430;
   --chart-axis: #9CA3AF;
-  --tooltip-bg: #171A20;
+  --tooltip-bg: #151821;
   --tooltip-border: #2E3440;
+  --bg-card: #151821;
+  --border-subtle: #2E3440;
 }
 
 [data-theme="light"] {
-  --background: #F3F4F6;
+  --background: #F8FAFC;
   --foreground: #0F172A;
-  --surface-canvas: #F3F4F6;
+  --surface-canvas: #F8FAFC;
   --surface-card: #FFFFFF;
   --surface-subtle: #F1F5F9;
-  --surface-inset: #F8FAFC;
+  --surface-inset: #F1F5F9;
   --border-hairline: #E2E8F0;
   --border-strong: #CBD5E1;
   --text-primary: #0F172A;
@@ -35,6 +37,8 @@
   --chart-axis: #475569;
   --tooltip-bg: #FFFFFF;
   --tooltip-border: #CBD5E1;
+  --bg-card: #FFFFFF;
+  --border-subtle: #CBD5E1;
 }
 
 @theme inline {
@@ -64,68 +68,81 @@ input[type="number"],
   font-variant-numeric: tabular-nums;
 }
 
-/* Kurumsal Kart Köşe Mimarisi (Soft Bubble yerine Keskin Kurumsal Çizgi) */
+/* Kurumsal Keskin Köşe Mimarisi (Koyfin / Linear / FinChat) */
 .rounded-2xl {
-  border-radius: 0.625rem;
+  border-radius: 0.5rem;
 }
 
 .rounded-xl {
-  border-radius: 0.5rem;
+  border-radius: 0.375rem;
+}
+
+/* Gölge Gürültüsünü Azaltma */
+.shadow-2xl,
+.shadow-xl,
+.shadow-lg {
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.12) !important;
 }
 
 /* ==========================================================================
    MATTE INSTITUTIONAL DARK THEME ([data-theme="dark"])
-   Koyfin / Linear / FactSet Matte Charcoal & Zinc Palette
+   Koyfin / Linear / FinChat Matte Obsidian & Zinc Palette
    ========================================================================== */
 [data-theme="dark"] .theme-canvas {
-  background-color: #111317 !important;
+  background-color: #0E1015 !important;
   color: #E5E7EB;
 }
 
 [data-theme="dark"] [class*="bg-slate-950"] {
-  background-color: #12151A;
+  background-color: #10131A;
 }
 
 [data-theme="dark"] [class*="bg-slate-900"] {
-  background-color: #171A20;
+  background-color: #151821;
 }
 
 [data-theme="dark"] [class*="bg-slate-800"] {
-  background-color: #1E222A;
+  background-color: #1D212D;
 }
 
 [data-theme="dark"] [class*="border-slate-800"] {
-  border-color: #262B35;
+  border-color: #232834;
 }
 
 [data-theme="dark"] [class*="border-slate-700"] {
-  border-color: #303744;
+  border-color: #2E3545;
 }
 
 [data-theme="dark"] [class*="divide-slate-800"] > :not([hidden]) ~ :not([hidden]) {
-  border-color: #232832;
+  border-color: #212632;
 }
 
 /* ==========================================================================
    EDITORIAL PAPER LIGHT THEME ([data-theme="light"])
-   Financial Times / Stripe / Linear Warm Paper & Crisp Slate Ink Palette
+   Stripe / Linear / FinChat Crisp Alabaster & Slate Ink Palette
    ========================================================================== */
 [data-theme="light"] .theme-canvas {
-  background-color: #F3F4F6 !important;
+  background-color: #F8FAFC !important;
   color: #0F172A !important;
 }
 
-/* Kart ve Yüzey Dönüşümleri */
+/* Ana Kartlar ve İç Yüzeyler */
 [data-theme="light"] [class*="bg-slate-900"] {
   background-color: #FFFFFF !important;
-  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.03);
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.04) !important;
 }
 
 [data-theme="light"] [class*="bg-slate-950"] {
   background-color: #F8FAFC !important;
 }
 
-[data-theme="light"] [class*="bg-slate-800"] {
+/* Kart İçindeki Alt Kutuların (bg-slate-900 > bg-slate-950) Kontrastı */
+[data-theme="light"] [class*="bg-slate-900"] [class*="bg-slate-950"] {
+  background-color: #F1F5F9 !important;
+}
+
+[data-theme="light"] [class*="bg-slate-800"],
+[data-theme="light"] [class*="bg-[#0F172A]"] {
   background-color: #F1F5F9 !important;
 }
 
@@ -134,7 +151,8 @@ input[type="number"],
 }
 
 [data-theme="light"] [class*="hover:bg-slate-800"]:hover,
-[data-theme="light"] [class*="hover:bg-slate-900"]:hover {
+[data-theme="light"] [class*="hover:bg-slate-900"]:hover,
+[data-theme="light"] [class*="hover:bg-slate-700"]:hover {
   background-color: #E2E8F0 !important;
 }
 
@@ -154,15 +172,19 @@ input[type="number"],
   border-color: #E2E8F0 !important;
 }
 
-/* Tipografi & Kontrast Dönüşümleri */
+/* Tipografi & Kontrast Dönüşümleri (Hover Durumları Dahil) */
 [data-theme="light"] .text-white,
 [data-theme="light"] .text-slate-50,
 [data-theme="light"] .text-slate-100,
-[data-theme="light"] .text-slate-200 {
+[data-theme="light"] .text-slate-200,
+[data-theme="light"] [class*="hover:text-white"]:hover,
+[data-theme="light"] [class*="hover:text-slate-100"]:hover,
+[data-theme="light"] [class*="hover:text-slate-200"]:hover {
   color: #0F172A !important;
 }
 
-[data-theme="light"] .text-slate-300 {
+[data-theme="light"] .text-slate-300,
+[data-theme="light"] [class*="hover:text-slate-300"]:hover {
   color: #1E293B !important;
 }
 
@@ -171,27 +193,35 @@ input[type="number"],
 }
 
 [data-theme="light"] .text-slate-500,
-[data-theme="light"] .text-slate-600 {
+[data-theme="light"] .text-slate-600,
+[data-theme="light"] .text-slate-700 {
   color: #64748B !important;
 }
 
-/* Dolu Butonlarda (Solid Accent Buttons) Beyaz Metin Korunumu */
+/* Dolu Vurgu Butonlarında (Solid Accent Buttons) Beyaz Metin Korunumu */
 [data-theme="light"] .bg-emerald-600,
 [data-theme="light"] .bg-emerald-500,
 [data-theme="light"] .bg-blue-600,
 [data-theme="light"] .bg-blue-500,
+[data-theme="light"] .bg-cyan-600,
+[data-theme="light"] .bg-cyan-500,
 [data-theme="light"] .bg-rose-600,
 [data-theme="light"] .bg-rose-500,
 [data-theme="light"] .bg-indigo-600,
-[data-theme="light"] .bg-amber-600 {
+[data-theme="light"] .bg-amber-600,
+[data-theme="light"] [class*="hover:bg-cyan-600"]:hover,
+[data-theme="light"] [class*="hover:bg-emerald-500"]:hover,
+[data-theme="light"] [class*="hover:bg-emerald-600"]:hover {
   color: #FFFFFF !important;
 }
 
 [data-theme="light"] .bg-emerald-600 *,
 [data-theme="light"] .bg-emerald-500 *,
 [data-theme="light"] .bg-blue-600 *,
+[data-theme="light"] .bg-cyan-600 *,
 [data-theme="light"] .bg-rose-600 *,
-[data-theme="light"] .bg-indigo-600 * {
+[data-theme="light"] .bg-indigo-600 *,
+[data-theme="light"] [class*="hover:bg-cyan-600"]:hover * {
   color: #FFFFFF !important;
 }
 
@@ -199,7 +229,12 @@ input[type="number"],
 [data-theme="light"] .text-emerald-400,
 [data-theme="light"] .text-emerald-300,
 [data-theme="light"] .text-emerald-200,
-[data-theme="light"] .text-emerald-100 {
+[data-theme="light"] .text-emerald-100,
+[data-theme="light"] .text-teal-400,
+[data-theme="light"] .text-teal-300,
+[data-theme="light"] .text-teal-200,
+[data-theme="light"] [class*="hover:text-emerald-300"]:hover,
+[data-theme="light"] [class*="hover:text-emerald-400"]:hover {
   color: #047857 !important;
 }
 
@@ -208,7 +243,9 @@ input[type="number"],
 [data-theme="light"] .text-rose-200,
 [data-theme="light"] .text-rose-100,
 [data-theme="light"] .text-red-400,
-[data-theme="light"] .text-red-300 {
+[data-theme="light"] .text-red-300,
+[data-theme="light"] [class*="hover:text-rose-400"]:hover,
+[data-theme="light"] [class*="hover:text-rose-300"]:hover {
   color: #BE123C !important;
 }
 
@@ -229,7 +266,10 @@ input[type="number"],
 [data-theme="light"] .text-sky-300,
 [data-theme="light"] .text-blue-400,
 [data-theme="light"] .text-blue-300,
-[data-theme="light"] .text-blue-200 {
+[data-theme="light"] .text-blue-200,
+[data-theme="light"] [class*="hover:text-cyan-300"]:hover,
+[data-theme="light"] [class*="hover:text-cyan-400"]:hover,
+[data-theme="light"] [class*="group-hover:text-cyan-300"]:hover {
   color: #0369A1 !important;
 }
 
@@ -246,43 +286,70 @@ input[type="number"],
 
 /* Semantik Koyu Arka Planların Açık Temada Yumuşak Kurumsal Tonlara Dönüşümü */
 [data-theme="light"] [class*="bg-emerald-950"],
-[data-theme="light"] [class*="bg-emerald-900"] {
+[data-theme="light"] [class*="bg-emerald-900"],
+[data-theme="light"] [class*="bg-emerald-500/1"],
+[data-theme="light"] [class*="bg-emerald-500/2"],
+[data-theme="light"] [class*="bg-emerald-600/2"],
+[data-theme="light"] [class*="bg-teal-950"],
+[data-theme="light"] [class*="bg-teal-900"] {
   background-color: #ECFDF5 !important;
 }
 
 [data-theme="light"] [class*="bg-rose-950"],
 [data-theme="light"] [class*="bg-rose-900"],
-[data-theme="light"] [class*="bg-red-950"] {
+[data-theme="light"] [class*="bg-red-950"],
+[data-theme="light"] [class*="bg-red-900"],
+[data-theme="light"] [class*="bg-rose-500/1"],
+[data-theme="light"] [class*="bg-rose-500/2"] {
   background-color: #FFF1F2 !important;
 }
 
 [data-theme="light"] [class*="bg-amber-950"],
 [data-theme="light"] [class*="bg-amber-900"],
-[data-theme="light"] [class*="bg-orange-950"] {
+[data-theme="light"] [class*="bg-orange-950"],
+[data-theme="light"] [class*="bg-orange-900"],
+[data-theme="light"] [class*="bg-amber-500/1"],
+[data-theme="light"] [class*="bg-amber-500/2"] {
   background-color: #FFFBEB !important;
 }
 
 [data-theme="light"] [class*="bg-cyan-950"],
+[data-theme="light"] [class*="bg-cyan-900"],
 [data-theme="light"] [class*="bg-blue-950"],
-[data-theme="light"] [class*="bg-sky-950"] {
+[data-theme="light"] [class*="bg-blue-900"],
+[data-theme="light"] [class*="bg-sky-950"],
+[data-theme="light"] [class*="bg-sky-900"],
+[data-theme="light"] [class*="bg-cyan-500/1"],
+[data-theme="light"] [class*="bg-cyan-500/2"],
+[data-theme="light"] [class*="bg-blue-500/1"],
+[data-theme="light"] [class*="bg-sky-500/1"] {
   background-color: #F0F9FF !important;
 }
 
 [data-theme="light"] [class*="bg-indigo-950"],
+[data-theme="light"] [class*="bg-indigo-900"],
 [data-theme="light"] [class*="bg-violet-950"],
-[data-theme="light"] [class*="bg-purple-950"] {
+[data-theme="light"] [class*="bg-violet-900"],
+[data-theme="light"] [class*="bg-purple-950"],
+[data-theme="light"] [class*="bg-purple-900"],
+[data-theme="light"] [class*="bg-indigo-500/1"],
+[data-theme="light"] [class*="bg-purple-500/1"] {
   background-color: #EEF2FF !important;
 }
 
 /* Semantik Kenarlıkların Açık Temada Yumuşatılması */
 [data-theme="light"] [class*="border-emerald-500"],
+[data-theme="light"] [class*="border-emerald-600"],
 [data-theme="light"] [class*="border-emerald-700"],
 [data-theme="light"] [class*="border-emerald-800"],
-[data-theme="light"] [class*="border-emerald-900"] {
+[data-theme="light"] [class*="border-emerald-900"],
+[data-theme="light"] [class*="border-teal-700"],
+[data-theme="light"] [class*="border-teal-800"] {
   border-color: #A7F3D0 !important;
 }
 
 [data-theme="light"] [class*="border-rose-500"],
+[data-theme="light"] [class*="border-rose-600"],
 [data-theme="light"] [class*="border-rose-700"],
 [data-theme="light"] [class*="border-rose-800"],
 [data-theme="light"] [class*="border-rose-900"] {
@@ -290,6 +357,7 @@ input[type="number"],
 }
 
 [data-theme="light"] [class*="border-amber-500"],
+[data-theme="light"] [class*="border-amber-600"],
 [data-theme="light"] [class*="border-amber-700"],
 [data-theme="light"] [class*="border-amber-800"],
 [data-theme="light"] [class*="border-amber-900"] {
@@ -297,9 +365,17 @@ input[type="number"],
 }
 
 [data-theme="light"] [class*="border-cyan-500"],
+[data-theme="light"] [class*="border-cyan-700"],
+[data-theme="light"] [class*="border-cyan-800"],
+[data-theme="light"] [class*="border-cyan-900"],
 [data-theme="light"] [class*="border-blue-500"],
+[data-theme="light"] [class*="border-blue-800"],
+[data-theme="light"] [class*="border-blue-900"],
+[data-theme="light"] [class*="border-sky-500"],
 [data-theme="light"] [class*="border-indigo-500"],
-[data-theme="light"] [class*="border-purple-500"] {
+[data-theme="light"] [class*="border-indigo-800"],
+[data-theme="light"] [class*="border-purple-500"],
+[data-theme="light"] [class*="border-purple-700"] {
   border-color: #BAE6FD !important;
 }
 
@@ -312,20 +388,29 @@ input[type="number"],
   background-image: none !important;
 }
 
+/* Recharts Açık Tema Eksen ve Izgara Okunabilirliği */
+[data-theme="light"] .recharts-cartesian-axis-tick-value {
+  fill: #475569 !important;
+}
+
+[data-theme="light"] .recharts-legend-item-text {
+  color: #334155 !important;
+}
+
 /* KaTeX Formül Stilleri */
 .katex-display {
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 0.85rem 1.25rem;
-  margin: 1.25rem 0;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
   background: var(--surface-inset);
   border: 1px solid var(--border-hairline);
-  border-radius: 0.5rem;
+  border-radius: 0.375rem;
   text-align: center;
 }
 
 .katex {
-  font-size: 1.05em;
+  font-size: 1.02em;
   color: var(--text-primary);
 }
 

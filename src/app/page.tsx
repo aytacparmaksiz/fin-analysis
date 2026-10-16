@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -220,9 +220,9 @@ async function fetchWithClientRetry(
 }
 
 // Fair Value Kurumsal Vektör Logosu
-function FairValueLogo({ className = "w-8 h-8" }: { className?: string }) {
+function FairValueLogo({ className = "w-7 h-7" }: { className?: string }) {
   return (
-    <div className={`relative flex items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/20 via-slate-900 to-cyan-500/20 border border-emerald-500/30 shadow-md shadow-emerald-950/40 flex-shrink-0 p-1.5 ${className}`}>
+    <div className={`relative flex items-center justify-center rounded-lg bg-slate-950 border border-slate-800 flex-shrink-0 p-1.5 ${className}`}>
       <svg viewBox="0 0 32 32" fill="none" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
         <path d="M5 6H16C17.6569 6 19 7.34315 19 9C19 10.6569 17.6569 12 16 12H10V15H15C16.6569 15 18 16.3431 18 18C18 19.6569 16.6569 21 15 21H10V26H5V6Z" fill="#10B981" />
         <path d="M18 12L22.5 25L27 12" stroke="#38BDF8" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -584,7 +584,7 @@ export class ComponentErrorBoundary extends React.Component<ErrorBoundaryProps, 
   }
 }
 
-// Görsel 5: Değer Sürücüleri Kartı (Driver Card)
+// Değer Sürücüleri Kartı (Driver Card)
 function DriverCard({
   title,
   valueText,
@@ -602,52 +602,43 @@ function DriverCard({
   description: string;
   sourceExplanation?: string;
 }) {
-  const hasDistinctSource = Boolean(
-    sourceExplanation &&
-    sourceExplanation.trim() &&
-    (!description || sourceExplanation.trim().toLowerCase() !== description.trim().toLowerCase())
-  );
+  const noteText = (description && description.trim()) || (sourceExplanation && sourceExplanation.trim()) || '';
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-5 flex flex-col justify-between shadow-sm space-y-3">
+    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-between space-y-3">
       <div>
-        <div className="text-xs font-semibold text-slate-300 tracking-tight">
+        <div className="text-xs font-medium text-slate-400">
           {title}
         </div>
-        <div className="flex items-baseline gap-2 mt-2">
-          <span className="text-2xl font-black font-mono text-white tracking-tight">
+        <div className="flex items-baseline gap-1.5 mt-1">
+          <span className="text-xl font-bold font-mono text-white tracking-tight">
             {valueText}
           </span>
-          <span className="text-xs text-slate-400 font-normal">baz varsayım</span>
+          <span className="text-[11px] text-slate-500">baz</span>
         </div>
       </div>
 
-      <div className="space-y-1.5 pt-1">
-        <div className="relative h-2 w-full rounded-full overflow-hidden flex bg-slate-950 border border-slate-800">
-          <div className="w-1/2 h-full bg-gradient-to-r from-orange-600 to-amber-500" />
-          <div className="w-1/2 h-full bg-gradient-to-r from-cyan-500 to-emerald-400" />
+      <div className="space-y-1.5">
+        <div className="relative h-1.5 w-full rounded-full bg-slate-950 border border-slate-800 overflow-hidden">
+          <div
+            className="h-full bg-emerald-500/40 rounded-full"
+            style={{ width: `${Math.max(8, Math.min(100, pinPercent))}%` }}
+          />
           <div 
-            className="absolute top-0 bottom-0 w-1 bg-white shadow-md shadow-white/60 rounded-full"
-            style={{ left: `calc(${pinPercent}% - 2px)` }}
+            className="absolute top-0 bottom-0 w-1.5 bg-emerald-400 rounded-full"
+            style={{ left: `calc(${pinPercent}% - 3px)` }}
           />
         </div>
 
-        <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5 leading-tight">
+        <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 leading-tight">
           <span className="max-w-[48%] text-left truncate" title={bearText}>{bearText}</span>
           <span className="max-w-[48%] text-right text-slate-300 truncate" title={bullText}>{bullText}</span>
         </div>
       </div>
 
-      {hasDistinctSource && (
-        <div className="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-900/60 rounded px-2.5 py-1.5 flex items-start gap-1.5">
-          <Info className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0 mt-0.5" />
-          <span className="break-words leading-snug flex-1 line-clamp-2" title={sourceExplanation}>{sourceExplanation}</span>
-        </div>
-      )}
-
-      {description && (
-        <p className="text-[11px] text-slate-400 leading-relaxed pt-2 border-t border-slate-800/80 line-clamp-2 hover:line-clamp-none transition-all cursor-default" title={description}>
-          {description}
+      {noteText && (
+        <p className="text-[11px] text-slate-400 leading-relaxed pt-2 border-t border-slate-800/80 line-clamp-2" title={noteText}>
+          {noteText}
         </p>
       )}
     </div>
@@ -3456,97 +3447,49 @@ export default function ValuationTerminal({
   }, [savedReports, currentTicker, activeReport?.id, valuationInfo.fair_value, dynamicValuationResult]);
 
   const renderEarningsQualityCard = (options?: { id?: string }) => (
-    <div id={options?.id} className={`bg-slate-900 border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-sm space-y-5 ${options?.id ? 'scroll-mt-24' : ''}`}>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
-        <div className="flex items-center gap-3">
-          <div className={`p-2.5 rounded-xl border ${
+    <div id={options?.id} className={`bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 ${options?.id ? 'scroll-mt-24' : ''}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-bold text-white tracking-tight">
+            Kâr Kalitesi ve Nakit Dönüşümü
+          </h3>
+          <span className={`text-[11px] font-mono font-semibold px-2 py-0.5 rounded border ${
             earningsQuality.badgeColor === 'emerald'
-              ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
+              ? 'bg-emerald-950/60 border-emerald-800/60 text-emerald-400'
               : earningsQuality.badgeColor === 'amber'
-              ? 'bg-amber-500/10 border-amber-500/25 text-amber-400'
-              : earningsQuality.badgeColor === 'rose'
-              ? 'bg-rose-500/10 border-rose-500/25 text-rose-400'
-              : 'bg-indigo-500/10 border-indigo-500/25 text-indigo-400'
+              ? 'bg-amber-950/60 border-amber-800/60 text-amber-400'
+              : 'bg-rose-950/60 border-rose-800/60 text-rose-400'
           }`}>
-            <Activity className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
-                Kâr Kalitesi & Nakit Dönüşüm Teşhisi (Earnings Quality Audit)
-              </h3>
-              <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
-                Otomatik Denetim
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Operasyonel Nakit Akışı (OCF) vs. Net Kâr ve Sloan Tahakkuk Oranı Analizi
-            </p>
-          </div>
+            {earningsQuality.statusTitle}
+          </span>
         </div>
 
         <button
           type="button"
           onClick={() => setShowCashQualityExplainer(prev => !prev)}
-          className="flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 bg-cyan-950/40 hover:bg-cyan-950/70 border border-cyan-800/50 px-3 py-1.5 rounded-lg transition cursor-pointer self-start sm:self-auto"
+          className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white px-2 py-1 rounded border border-slate-800 hover:bg-slate-800 transition cursor-pointer"
         >
-          <Info className="w-3.5 h-3.5" />
-          <span>{showCashQualityExplainer ? 'Rehberi Gizle' : 'Yatırımcı Rehberi (Nedir?)'}</span>
+          <Info className="w-3 h-3" />
+          <span>{showCashQualityExplainer ? 'Detayı Gizle' : 'Metodoloji'}</span>
         </button>
       </div>
 
-      {/* Durum Yönlendirme Şeridi */}
-      <div className={`p-4 rounded-xl border leading-relaxed text-xs sm:text-sm font-medium flex items-start gap-3 ${
-        earningsQuality.badgeColor === 'emerald'
-          ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-200'
-          : earningsQuality.badgeColor === 'amber'
-          ? 'bg-amber-950/40 border-amber-800/60 text-amber-200'
-          : earningsQuality.badgeColor === 'rose'
-          ? 'bg-rose-950/40 border-rose-800/60 text-rose-200'
-          : 'bg-indigo-950/40 border-indigo-800/60 text-indigo-200'
-      }`}>
-        <div className="flex-1">
-          <div className="font-bold text-sm mb-1">{earningsQuality.statusTitle}</div>
-          <div>{earningsQuality.guidanceText}</div>
-        </div>
-      </div>
-
-      {/* Tecrübesiz Yatırımcı Açıklama Kutusu */}
-      {showCashQualityExplainer && (
-        <div className="bg-slate-950/80 border border-cyan-900/40 p-4 rounded-xl text-xs text-slate-300 space-y-2">
-          <div className="font-bold text-cyan-300 flex items-center gap-1.5">
-            <Info className="w-4 h-4" /> Tecrübesiz Yatırımcı İçin Temel Kural:
-          </div>
-          <p className="leading-relaxed">
-            {earningsQuality.beginnerExplanation}
-          </p>
-          <div className="pt-2 border-t border-slate-800 flex items-center gap-2 text-[11px] text-slate-400">
-            <span className="font-bold text-slate-300">Sloan Tahakkuk Oranı =</span>
-            <span className="font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-800">(Net Kâr − OCF) / Toplam Varlıklar</span>
-            <span>(Oranın sıfıra yakın veya eksi olması kârın kasaya fiilen girdiğini gösterir).</span>
-          </div>
-        </div>
-      )}
-
-      {/* 4 Temel Metrik Kartı */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/90">
-          <span className="text-[10px] text-slate-400 uppercase font-semibold block">Nakit Dönüşüm Oranı</span>
-          <div className={`text-xl font-black font-mono mt-1 ${
+      {/* 4 Temel Metrik Şeridi (İç İçe Kartlar Yerine İnce Çizgi Bölünmüş Yüzey) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-800 bg-slate-950 border border-slate-800 rounded-lg overflow-hidden">
+        <div className="p-3.5">
+          <span className="text-[11px] text-slate-400 font-medium block">Nakit Dönüşümü (OCF / Net Kâr)</span>
+          <div className={`text-lg font-bold font-mono mt-1 ${
             earningsQuality.status === 'DOUBLE_NEGATIVE' ? 'text-rose-400' : 'text-white'
           }`}>
             {earningsQuality.status === 'DOUBLE_NEGATIVE'
-              ? 'A.D. (Çift Zarar)'
+              ? 'A/D'
               : (earningsQuality.cashConversionRatio != null ? `%${earningsQuality.cashConversionRatio}` : '—')}
           </div>
-          <span className="text-[10px] text-slate-500 block mt-0.5">
-            {earningsQuality.status === 'DOUBLE_NEGATIVE' ? 'Zarar & Nakit Yakımı (Uygulanamaz)' : 'OCF / Net Kâr (Hedef: >%100)'}
-          </span>
         </div>
 
-        <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/90">
-          <span className="text-[10px] text-slate-400 uppercase font-semibold block">Sloan Tahakkuk Oranı</span>
-          <div className={`text-xl font-black font-mono mt-1 ${
+        <div className="p-3.5">
+          <span className="text-[11px] text-slate-400 font-medium block">Sloan Tahakkuk Oranı</span>
+          <div className={`text-lg font-bold font-mono mt-1 ${
             earningsQuality.status === 'DOUBLE_NEGATIVE'
               ? 'text-rose-400'
               : (earningsQuality.sloanAccrualRatio != null && earningsQuality.sloanAccrualRatio < 0.05
@@ -3555,168 +3498,162 @@ export default function ValuationTerminal({
           }`}>
             {earningsQuality.sloanAccrualRatio != null ? `%${(earningsQuality.sloanAccrualRatio * 100).toFixed(1)}` : '—'}
           </div>
-          <span className="text-[10px] text-slate-500 block mt-0.5">Tahakkuk / Aktif Oranı</span>
         </div>
 
-        <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/90">
-          <span className="text-[10px] text-slate-400 uppercase font-semibold block">İşletme Nakit Akışı (OCF)</span>
-          <div className={`text-lg font-black font-mono mt-1 truncate ${
+        <div className="p-3.5">
+          <span className="text-[11px] text-slate-400 font-medium block">İşletme Nakit Akışı (OCF)</span>
+          <div className={`text-lg font-bold font-mono mt-1 truncate ${
             (earningsQuality.ocf != null && earningsQuality.ocf < 0) ? 'text-rose-400' : 'text-emerald-400'
           }`}>
             {formatAmount(earningsQuality.ocf, unitMode, false, '', '', currentExtractedData?.currency)}
           </div>
-          <span className="text-[10px] text-slate-500 block mt-0.5">Operasyonel Sıcak Para</span>
         </div>
 
-        <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/90">
-          <span className="text-[10px] text-slate-400 uppercase font-semibold block">Raporlanan Net Kâr</span>
-          <div className={`text-lg font-black font-mono mt-1 truncate ${
-            (earningsQuality.netIncome != null && earningsQuality.netIncome < 0) ? 'text-rose-400' : 'text-cyan-400'
+        <div className="p-3.5">
+          <span className="text-[11px] text-slate-400 font-medium block">Net Dönem Kârı</span>
+          <div className={`text-lg font-bold font-mono mt-1 truncate ${
+            (earningsQuality.netIncome != null && earningsQuality.netIncome < 0) ? 'text-rose-400' : 'text-white'
           }`}>
             {formatAmount(earningsQuality.netIncome, unitMode, false, '', '', currentExtractedData?.currency)}
           </div>
-          <span className="text-[10px] text-slate-500 block mt-0.5">Muhasebesel Kâr / Zarar</span>
         </div>
       </div>
 
-      {/* Sloan Tahakkuk Değerlendirmesi */}
-      <div className="bg-slate-950/60 border border-slate-800/70 p-3 rounded-xl text-xs text-slate-300 flex items-center justify-between flex-wrap gap-2">
-        <span className="font-semibold text-slate-200">Tahakkuk Anomalisi Denetimi:</span>
-        <span className="font-mono text-xs">{earningsQuality.sloanAssessment}</span>
+      <div className="text-xs text-slate-300 leading-relaxed flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+        <span>{earningsQuality.guidanceText}</span>
+        <span className="font-mono text-[11px] text-slate-400 shrink-0">{earningsQuality.sloanAssessment}</span>
       </div>
+
+      {showCashQualityExplainer && (
+        <div className="bg-slate-950 border border-slate-800 p-3.5 rounded-lg text-xs text-slate-300 space-y-1.5">
+          <p className="leading-relaxed">{earningsQuality.beginnerExplanation}</p>
+          <div className="text-[11px] text-slate-400 font-mono">
+            Formül: Sloan Tahakkuk Oranı = (Net Kâr − OCF) / Toplam Varlıklar
+          </div>
+        </div>
+      )}
     </div>
   );
 
   const renderDuPontCard = () => (
-    <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-sm space-y-4">
-      <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-        <div className="flex items-center gap-2">
-          <Activity className="w-4 h-4 text-emerald-400" />
-          <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
-            DuPont 5 Aşamalı Kârlılık Ayrıştırması (DuPont ROE Modeli)
+    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 flex flex-col justify-between">
+      <div>
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <h3 className="text-sm font-bold text-white tracking-tight">
+            DuPont 5 Aşamalı ROE Analizi
           </h3>
+          <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-0.5 rounded">
+            ROE: %{dupontResult.calculatedRoe != null ? dupontResult.calculatedRoe : (latestPeriodItem?.roe || '—')}
+          </span>
         </div>
-        <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-0.5 rounded">
-          ROE = %{dupontResult.calculatedRoe != null ? dupontResult.calculatedRoe : (latestPeriodItem?.roe || '—')}
-        </span>
+
+        {/* 5 Aşamalı Metrik Şeridi */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-slate-800 bg-slate-950 border border-slate-800 rounded-lg overflow-hidden mt-4">
+          <div className="p-3 text-center">
+            <div className="text-[10px] text-slate-400 font-medium">Vergi Yükü</div>
+            <div className="text-base font-bold font-mono text-white mt-1">
+              {dupontResult.taxBurden != null ? `${dupontResult.taxBurden}x` : '—'}
+            </div>
+            <div className="text-[10px] text-slate-500 mt-0.5 font-mono">Net/EBT</div>
+          </div>
+
+          <div className="p-3 text-center">
+            <div className="text-[10px] text-slate-400 font-medium">
+              {currentSector === 'INSURANCE' ? 'Yatırım Katkısı' : 'Faiz Yükü'}
+            </div>
+            <div className="text-base font-bold font-mono text-white mt-1">
+              {dupontResult.interestBurden != null ? `${dupontResult.interestBurden}x` : '—'}
+            </div>
+            <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
+              {currentSector === 'INSURANCE' ? 'EBT/Teknik' : 'EBT/EBIT'}
+            </div>
+          </div>
+
+          <div className="p-3 text-center">
+            <div className="text-[10px] text-slate-400 font-medium">
+              {currentSector === 'INSURANCE' ? 'Teknik Marj' : 'Faaliyet Marjı'}
+            </div>
+            <div className="text-base font-bold font-mono text-cyan-400 mt-1">
+              {dupontResult.ebitMargin != null ? `%${dupontResult.ebitMargin}` : '—'}
+            </div>
+            <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
+              {currentSector === 'INSURANCE' ? 'Teknik/Prim' : 'EBIT/Satış'}
+            </div>
+          </div>
+
+          <div className="p-3 text-center">
+            <div className="text-[10px] text-slate-400 font-medium">Aktif Devri</div>
+            <div className="text-base font-bold font-mono text-amber-400 mt-1">
+              {dupontResult.assetTurnover != null ? `${dupontResult.assetTurnover}x` : '—'}
+            </div>
+            <div className="text-[10px] text-slate-500 mt-0.5 font-mono">Satış/Aktif</div>
+          </div>
+
+          <div className="p-3 text-center col-span-2 sm:col-span-1">
+            <div className="text-[10px] text-slate-400 font-medium">Kaldıraç</div>
+            <div className="text-base font-bold font-mono text-slate-200 mt-1">
+              {dupontResult.financialLeverage != null ? `${dupontResult.financialLeverage}x` : '—'}
+            </div>
+            <div className="text-[10px] text-slate-500 mt-0.5 font-mono">Aktif/Özkaynak</div>
+          </div>
+        </div>
       </div>
 
-      <p className="text-xs text-slate-400">
-        {currentSector === 'INSURANCE'
-          ? 'Özkaynak kârlılığını (ROE) oluşturan 5 temel motor: Vergi Yükü × Yatırım Katkısı × Teknik Kâr Marjı × Aktif Devri × Fon & Rezerv Çarpanı'
-          : 'Özkaynak kârlılığını (ROE) oluşturan 5 temel motor: Vergi Yükü × Faiz Yükü × Faaliyet Marjı × Aktif Devir Hızı × Finansal Kaldıraç'}
+      <p className="text-xs text-slate-400 leading-relaxed pt-2 border-t border-slate-800/80">
+        {dupontResult.driverSummary}
       </p>
-
-      {/* 5 Aşamalı Boru Hattı Gösterimi */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-2">
-        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
-          <div className="text-[10px] text-slate-400 font-semibold uppercase">1. Vergi Yükü</div>
-          <div className="text-base font-black font-mono text-white mt-1">
-            {dupontResult.taxBurden != null ? `${dupontResult.taxBurden}x` : '—'}
-          </div>
-          <div className="text-[9px] text-slate-500 mt-0.5">Net Kâr / EBT</div>
-        </div>
-
-        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
-          <div className="text-[10px] text-slate-400 font-semibold uppercase">
-            {currentSector === 'INSURANCE' ? '2. Yatırım Katkısı' : '2. Faiz Yükü'}
-          </div>
-          <div className="text-base font-black font-mono text-white mt-1">
-            {dupontResult.interestBurden != null ? `${dupontResult.interestBurden}x` : '—'}
-          </div>
-          <div className="text-[9px] text-slate-500 mt-0.5">
-            {currentSector === 'INSURANCE' ? 'EBT / Teknik Kâr' : 'EBT / EBIT'}
-          </div>
-        </div>
-
-        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
-          <div className="text-[10px] text-slate-400 font-semibold uppercase">
-            {currentSector === 'INSURANCE' ? '3. Teknik Kâr Marjı' : '3. Faaliyet Marjı'}
-          </div>
-          <div className="text-base font-black font-mono text-cyan-300 mt-1">
-            {dupontResult.ebitMargin != null ? `%${dupontResult.ebitMargin}` : '—'}
-          </div>
-          <div className="text-[9px] text-slate-500 mt-0.5">
-            {currentSector === 'INSURANCE' ? 'Teknik Kâr / Prim' : 'EBIT / Hasılat'}
-          </div>
-        </div>
-
-        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
-          <div className="text-[10px] text-slate-400 font-semibold uppercase">4. Aktif Devri</div>
-          <div className="text-base font-black font-mono text-amber-300 mt-1">
-            {dupontResult.assetTurnover != null ? `${dupontResult.assetTurnover}x` : '—'}
-          </div>
-          <div className="text-[9px] text-slate-500 mt-0.5">
-            {currentSector === 'INSURANCE' ? 'Prim / Aktif (AUM Dahil)' : 'Hasılat / Aktif'}
-          </div>
-        </div>
-
-        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center col-span-2 sm:col-span-1">
-          <div className="text-[10px] text-slate-400 font-semibold uppercase">
-            {currentSector === 'INSURANCE' ? '5. Fon & Rezerv Çarpanı' : '5. Kaldıraç'}
-          </div>
-          <div className="text-base font-black font-mono text-rose-300 mt-1">
-            {dupontResult.financialLeverage != null ? `${dupontResult.financialLeverage}x` : '—'}
-          </div>
-          <div className="text-[9px] text-slate-500 mt-0.5">
-            {currentSector === 'INSURANCE' ? 'Aktif (AUM Dahil) / Özkaynak' : 'Aktif / Özkaynak'}
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-slate-950/70 border border-slate-800 p-3 rounded-xl text-xs text-slate-300 leading-relaxed">
-        <span className="font-bold text-white">Kârlılık Teşhisi: </span>
-        <span>{dupontResult.driverSummary}</span>
-      </div>
     </div>
   );
 
   return (
     <div data-theme={themeMode} className="theme-canvas min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row font-sans transition-colors duration-200">
       
-      {/* Sol Kenar Çubuğu: Arşiv & Skor Takibi */}
+      {/* Sol Kenar Çubuğu: Kurumsal Arşiv & Skor Listesi */}
       <aside 
-        className={`border-r border-slate-800 bg-slate-900 flex flex-col flex-shrink-0 transition-all duration-300 print:hidden ${
-          isSidebarCollapsed ? 'w-full md:w-14' : 'w-full md:w-64'
+        className={`border-r border-slate-800 bg-slate-900 flex flex-col flex-shrink-0 transition-all duration-200 print:hidden ${
+          isSidebarCollapsed ? 'w-full md:w-14' : 'w-full md:w-60'
         } max-h-56 md:max-h-none overflow-y-auto`}
       >
-        {/* Logo ve Başlık */}
-        <div className="p-2.5 sm:p-3 border-b border-slate-800 flex items-center justify-between">
-          <div 
-            onClick={() => { setStep('input'); setActiveReportId(null); setError(null); }}
-            role="button"
-            tabIndex={0}
-            title="Yeni Analiz Ekranına Dön"
-            className="flex items-center gap-2 overflow-hidden cursor-pointer hover:opacity-85 transition select-none"
-          >
-            <FairValueLogo className="w-7 h-7 flex-shrink-0" />
+        {/* Kenar Çubuğu Üst Başlık & Sıralama */}
+        <div className="h-12 px-3 border-b border-slate-800 flex items-center justify-between gap-1">
+          {!isSidebarCollapsed && (
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate">
+                Analiz Arşivi
+              </span>
+              <span className="text-[10px] font-mono text-slate-500">
+                ({savedReports.length})
+              </span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-1 ml-auto">
             {!isSidebarCollapsed && (
-              <div className="min-w-0">
-                <div className="font-extrabold text-xs sm:text-sm tracking-tight text-white flex items-center gap-1">
-                  FAIR <span className="text-emerald-400">VALUE</span>
-                </div>
-                <div className="text-[9px] text-slate-400 font-mono truncate">Terminal & Arşiv</div>
+              <div className="flex items-center bg-slate-950 p-0.5 rounded-md border border-slate-800 mr-1">
+                <button
+                  type="button"
+                  onClick={() => setSidebarSort('rank')}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
+                    sidebarSort === 'rank' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Puan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSidebarSort('date')}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
+                    sidebarSort === 'date' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Tarih
+                </button>
               </div>
-            )}
-          </div>
-          
-          <div className="flex items-center gap-1">
-            {!isSidebarCollapsed && (
-              <button
-                type="button"
-                onClick={() => setIsSidebarPinned(p => !p)}
-                className={`p-1 rounded transition cursor-pointer ${
-                  isSidebarPinned ? 'text-emerald-400 bg-emerald-950/60' : 'text-slate-400 hover:text-white bg-slate-800/60'
-                }`}
-                title={isSidebarPinned ? 'Kenar Çubuğu Sabitlendi' : 'Kenar Çubuğu Sabitliğini Kaldır'}
-              >
-                {isSidebarPinned ? <Pin className="w-3 h-3" /> : <PinOff className="w-3 h-3" />}
-              </button>
             )}
             <button
               type="button"
               onClick={() => setIsSidebarCollapsed(c => !c)}
-              className="p-1 text-slate-400 hover:text-white bg-slate-800/60 hover:bg-slate-700 rounded transition cursor-pointer"
+              className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition cursor-pointer"
               title={isSidebarCollapsed ? 'Kenar Çubuğunu Genişlet' : 'Kenar Çubuğunu Daralt'}
             >
               {isSidebarCollapsed ? <PanelLeftOpen className="w-3.5 h-3.5 text-emerald-400" /> : <PanelLeftClose className="w-3.5 h-3.5" />}
@@ -3726,91 +3663,48 @@ export default function ValuationTerminal({
 
         {/* Daraltılmış Modda İkon Çubuğu */}
         {isSidebarCollapsed ? (
-          <div className="flex-1 flex flex-col items-center py-4 space-y-2">
-            <div className="flex-1 overflow-y-auto space-y-2 w-full px-1.5 [scrollbar-width:none]">
-              {savedReports.map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => { setActiveReportId(item.id); setStep('report'); }}
-                  className={`w-full py-1.5 rounded flex flex-col items-center justify-center font-bold text-[9px] transition cursor-pointer border ${
-                    activeReportId === item.id && step === 'report'
-                      ? item.decision === 'AL'
-                        ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300'
-                        : item.decision === 'ALMA'
-                        ? 'bg-rose-950/80 border-rose-500 text-rose-300'
-                        : 'bg-amber-950/80 border-amber-500 text-amber-300'
-                      : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
-                  }`}
-                  title={`${item.ticker} - ${item.decision} (${item.score || 'N/A'}/100)`}
-                >
-                  <span className="truncate max-w-[36px]">{item.ticker.slice(0, 4)}</span>
-                  <span className={`text-[8px] mt-0.5 px-1 rounded font-bold ${
-                    item.decision === 'AL' ? 'text-emerald-400' :
-                    item.decision === 'ALMA' ? 'text-rose-400' : 'text-amber-400'
-                  }`}>
-                    {item.decision}
-                  </span>
-                </button>
-              ))}
-            </div>
+          <div className="flex-1 flex flex-col items-center py-3 space-y-1.5 overflow-y-auto px-1.5 [scrollbar-width:none]">
+            {savedReports.map(item => (
+              <button
+                key={item.id}
+                onClick={() => { setActiveReportId(item.id); setStep('report'); }}
+                className={`w-full py-1.5 rounded-md flex flex-col items-center justify-center font-mono font-bold text-[10px] transition cursor-pointer border ${
+                  activeReportId === item.id && step === 'report'
+                    ? 'bg-slate-800 border-emerald-500/60 text-white'
+                    : 'bg-transparent border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-white'
+                }`}
+                title={`${item.ticker} • ${item.decision} (${item.score || '—'}/100)`}
+              >
+                <span className="truncate max-w-[38px]">{item.ticker.slice(0, 4)}</span>
+                <span className={`w-1.5 h-1.5 rounded-full mt-1 ${
+                  item.decision === 'AL' ? 'bg-emerald-400' :
+                  item.decision === 'ALMA' ? 'bg-rose-400' : 'bg-amber-400'
+                }`} />
+              </button>
+            ))}
           </div>
         ) : (
           <>
-            {/* Sıralama Filtresi & Kayıtlı Analiz Sayacı */}
-            <div className="p-2.5 border-b border-slate-800/80 bg-slate-950/40">
-              <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
-                <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-300">
-                  <History className="w-3.5 h-3.5 text-slate-400" />
-                  Kayıtlı Analizler
-                </span>
-                <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded border border-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => setSidebarSort('rank')}
-                    className={`px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
-                      sidebarSort === 'rank' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Puan
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSidebarSort('date')}
-                    className={`px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
-                      sidebarSort === 'date' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Tarih
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Kayıtlı Raporlar Listesi (AL, NÖTR, ALMA Açılır/Kapanır Gruplar) */}
-            <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5">
+            {/* Kayıtlı Raporlar Listesi (Düzleştirilmiş Kurumsal Liste) */}
+            <div className="flex-1 overflow-y-auto px-2 py-2.5 space-y-3">
               {savedReports.length === 0 ? (
                 <div className="text-center py-10 text-slate-500 text-xs">
-                  <History className="w-8 h-8 mx-auto mb-2 opacity-40" />
                   Henüz kayıtlı rapor yok.
                 </div>
               ) : (
                 ([
                   {
                     key: 'AL',
-                    title: 'AL Kararlı Hisseler',
-                    border: 'border-emerald-500/40',
-                    badge: 'bg-emerald-950/90 text-emerald-300 border-emerald-700/80',
+                    title: 'AL',
                     dot: 'bg-emerald-400',
-                    headerBg: 'bg-emerald-950/30 hover:bg-emerald-950/50 text-emerald-300',
+                    textColor: 'text-emerald-400',
                     reports: savedReports.filter(r => (r.decision || '').trim().toUpperCase() === 'AL')
                   },
                   {
                     key: 'NÖTR',
-                    title: 'NÖTR Kararlı Hisseler',
-                    border: 'border-amber-500/40',
-                    badge: 'bg-amber-950/90 text-amber-300 border-amber-700/80',
+                    title: 'NÖTR',
                     dot: 'bg-amber-400',
-                    headerBg: 'bg-amber-950/30 hover:bg-amber-950/50 text-amber-300',
+                    textColor: 'text-amber-400',
                     reports: savedReports.filter(r => {
                       const d = (r.decision || '').trim().toUpperCase();
                       return d === 'NÖTR' || d === 'NOTR';
@@ -3818,11 +3712,9 @@ export default function ValuationTerminal({
                   },
                   {
                     key: 'ALMA',
-                    title: 'ALMA Kararlı Hisseler',
-                    border: 'border-rose-500/40',
-                    badge: 'bg-rose-950/90 text-rose-300 border-rose-700/80',
+                    title: 'ALMA',
                     dot: 'bg-rose-400',
-                    headerBg: 'bg-rose-950/30 hover:bg-rose-950/50 text-rose-300',
+                    textColor: 'text-rose-400',
                     reports: savedReports.filter(r => (r.decision || '').trim().toUpperCase() === 'ALMA')
                   }
                 ] as const).map(group => {
@@ -3832,87 +3724,68 @@ export default function ValuationTerminal({
                   const isCollapsed = !!collapsedDecisions[group.key];
 
                   return (
-                    <div key={group.key} className="space-y-1 rounded-xl bg-slate-950/30 p-1 border border-slate-800/60">
-                      {/* Accordion Sekme Başlığı */}
+                    <div key={group.key} className="space-y-0.5">
                       <button
                         type="button"
                         onClick={() => toggleDecisionCollapse(group.key)}
-                        className={`w-full flex items-center justify-between p-2 rounded-lg border text-xs font-bold transition cursor-pointer ${group.border} ${group.headerBg}`}
+                        className="w-full flex items-center justify-between px-2 py-1 rounded text-[11px] font-bold uppercase tracking-wider text-slate-400 hover:text-white hover:bg-slate-800/50 transition cursor-pointer"
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           {isCollapsed ? (
-                            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                            <ChevronRight className="w-3 h-3 text-slate-500" />
                           ) : (
-                            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                            <ChevronDown className="w-3 h-3 text-slate-500" />
                           )}
-                          <span className={`w-2 h-2 rounded-full ${group.dot}`} />
+                          <span className={`w-1.5 h-1.5 rounded-full ${group.dot}`} />
                           <span>{group.title}</span>
                         </div>
-                        <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded border ${group.badge}`}>
+                        <span className="text-[10px] font-mono text-slate-500">
                           {group.reports.length}
                         </span>
                       </button>
 
-                      {/* Sekme Altındaki Hisseler */}
-                      {!isCollapsed && (
-                        <div className="space-y-1.5 pt-1">
-                          {sortedGroup.length === 0 ? (
-                            <div className="text-[11px] text-slate-500 italic py-2 px-3 text-center bg-slate-950/40 rounded border border-dashed border-slate-800/60">
-                              Bu grupta kayıtlı hisse yok.
-                            </div>
-                          ) : (
-                            sortedGroup.map((item, sIndex) => (
+                      {!isCollapsed && sortedGroup.length > 0 && (
+                        <div className="space-y-0.5 pt-0.5">
+                          {sortedGroup.map((item) => {
+                            const isActive = activeReportId === item.id && step === 'report';
+                            return (
                               <div
                                 key={item.id}
                                 onClick={() => { setActiveReportId(item.id); setStep('report'); }}
-                                className={`p-2.5 rounded-lg border cursor-pointer transition flex items-center justify-between group ${
-                                  activeReportId === item.id && step === 'report'
-                                    ? item.decision === 'AL'
-                                      ? 'bg-slate-800/90 border-emerald-500/60 shadow-sm ring-1 ring-emerald-500/30'
-                                      : item.decision === 'ALMA'
-                                      ? 'bg-slate-800/90 border-rose-500/60 shadow-sm ring-1 ring-rose-500/30'
-                                      : 'bg-slate-800/90 border-amber-500/60 shadow-sm ring-1 ring-amber-500/30'
-                                    : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800/60'
+                                className={`px-2.5 py-1.5 rounded-md cursor-pointer transition flex items-center justify-between group ${
+                                  isActive
+                                    ? 'bg-slate-800 text-white font-semibold border-l-2 border-emerald-500'
+                                    : 'text-slate-300 hover:bg-slate-800/50'
                                 }`}
                               >
-                                <div className="flex-1 min-w-0 pr-1">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-950 px-1 rounded border border-slate-800">
-                                      #{sIndex + 1}
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="font-mono font-bold text-xs text-white truncate">
+                                    {item.ticker}
+                                  </span>
+                                  {item.period && (
+                                    <span className="text-[10px] font-mono text-slate-500 truncate">
+                                      {item.period}
                                     </span>
-                                    <span className="font-bold text-sm text-white truncate">{item.ticker}</span>
-                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                                      item.decision === 'AL' ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/80' :
-                                      item.decision === 'ALMA' ? 'bg-rose-950/80 text-rose-400 border border-rose-800/80' :
-                                      'bg-amber-950/80 text-amber-400 border border-amber-800/80'
-                                    }`}>
-                                      {item.decision}
-                                    </span>
-                                    {item.score && (
-                                      <span className="text-[10px] text-slate-300 font-mono font-bold">
-                                        {item.score}/100
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
-                                    {item.period && <span className="text-emerald-400 font-mono font-semibold">{item.period}</span>}
-                                    <span>• {item.createdAt}</span>
-                                  </div>
+                                  )}
                                 </div>
-                                <div className="flex items-center gap-1 flex-shrink-0">
+                                <div className="flex items-center gap-1.5 flex-shrink-0">
+                                  {item.score && (
+                                    <span className={`text-[11px] font-mono font-bold ${group.textColor}`}>
+                                      {item.score}
+                                    </span>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={(e) => deleteReport(item.id, e)}
                                     title="Raporu Sil"
-                                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded transition cursor-pointer"
+                                    className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-500 hover:text-rose-400 rounded transition cursor-pointer"
                                   >
-                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <Trash2 className="w-3 h-3" />
                                   </button>
-                                  <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-colors" />
                                 </div>
                               </div>
-                            ))
-                          )}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -3922,21 +3795,21 @@ export default function ValuationTerminal({
             </div>
 
             {/* Yedek Al / İçe Aktar */}
-            <div className="p-3 border-t border-slate-800 bg-slate-950/70 flex items-center justify-between gap-2">
+            <div className="p-2.5 border-t border-slate-800 flex items-center justify-between gap-1.5">
               <button
                 type="button"
                 onClick={exportBackup}
                 disabled={savedReports.length === 0}
-                className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 disabled:opacity-40 py-2 px-2.5 rounded border border-slate-700 transition cursor-pointer"
+                className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-slate-400 hover:text-white bg-slate-950 hover:bg-slate-800 disabled:opacity-40 py-1.5 px-2 rounded border border-slate-800 transition cursor-pointer"
               >
-                <Download className="w-3.5 h-3.5 text-emerald-400" />
-                Yedek Al
+                <Download className="w-3 h-3 text-emerald-400" />
+                Yedekle
               </button>
               <label
-                className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 py-2 px-2.5 rounded border border-slate-700 transition cursor-pointer"
+                className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-slate-400 hover:text-white bg-slate-950 hover:bg-slate-800 py-1.5 px-2 rounded border border-slate-800 transition cursor-pointer"
               >
-                <Upload className="w-3.5 h-3.5 text-cyan-400" />
-                İçe Aktar
+                <Upload className="w-3 h-3 text-cyan-400" />
+                Yükle
                 <input
                   type="file"
                   accept="application/json"
@@ -3951,7 +3824,7 @@ export default function ValuationTerminal({
 
       {/* Sağ Ana Bölüm */}
       <main className="theme-canvas flex-1 flex flex-col min-w-0 overflow-y-auto bg-slate-950">
-        <header className="border-b border-slate-800/80 px-5 py-3 flex items-center justify-between bg-slate-900/95 backdrop-blur-md sticky top-0 z-30 print:hidden">
+        <header className="h-12 border-b border-slate-800 px-5 flex items-center justify-between bg-slate-900/95 backdrop-blur-md sticky top-0 z-30 print:hidden">
           <div 
             onClick={() => { setStep('input'); setActiveReportId(null); setError(null); }}
             role="button"
@@ -3959,110 +3832,97 @@ export default function ValuationTerminal({
             title="Yeni Analiz Ekranına Dön"
             className="flex items-center gap-2.5 cursor-pointer hover:opacity-85 transition select-none"
           >
-            <FairValueLogo className="w-7 h-7" />
+            <FairValueLogo className="w-6 h-6" />
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-white tracking-tight">
                 FAIR <span className="text-emerald-400">VALUE</span>
               </span>
-              <span className="text-slate-700">|</span>
-              <span className="text-slate-400 font-medium text-xs hidden sm:inline">Değerleme Terminali</span>
+              <span className="text-slate-700 hidden sm:inline">/</span>
+              <span className="text-slate-400 font-medium text-xs hidden sm:inline">BIST Araştırma Terminali</span>
               {isCloudConfigured && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-full">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Senkron
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Bulut
                 </span>
               )}
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Açık / Koyu Tema Seçici */}
-            <button
-              type="button"
-              onClick={toggleThemeMode}
-              className="flex items-center gap-1.5 text-xs py-1.5 px-2.5 rounded-lg border font-medium transition cursor-pointer bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800"
-              title={themeMode === 'dark' ? 'Açık Temaya (Editorial Paper) Geç' : 'Koyu Temaya (Matte Dark) Geç'}
-            >
-              {themeMode === 'dark' ? (
-                <>
-                  <Sun className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden md:inline">Açık Tema</span>
-                </>
-              ) : (
-                <>
-                  <Moon className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="hidden md:inline">Koyu Tema</span>
-                </>
-              )}
-            </button>
-
             <button
               onClick={() => setIsThemesModalOpen(true)}
-              className={`flex items-center gap-1.5 text-xs py-1.5 px-3 rounded-lg border font-medium transition cursor-pointer ${
+              className={`flex items-center gap-1.5 text-xs py-1.5 px-2.5 rounded-lg border font-medium transition cursor-pointer ${
                 isThemesModalOpen
-                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
-                  : 'bg-slate-900 hover:bg-slate-800 text-cyan-300 border-cyan-900/50 hover:border-cyan-700/60'
+                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800'
               }`}
-              title="Şirketleri 6 temel yatırım temasına göre filtreleyin ve inceleyin"
             >
               <Compass className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Yatırım Temaları</span>
-              {savedReports.length > 0 && (
-                <span className="ml-0.5 px-1.5 py-0.2 bg-cyan-950 text-cyan-300 text-[10px] rounded-full font-mono border border-cyan-800/80 font-bold">
-                  {savedReports.length}
-                </span>
-              )}
+              <span className="hidden sm:inline">Temalar</span>
             </button>
 
             <button
               onClick={() => setStep('leaderboard')}
-              className={`flex items-center gap-1.5 text-xs py-1.5 px-3 rounded-lg border font-medium transition cursor-pointer ${
+              className={`flex items-center gap-1.5 text-xs py-1.5 px-2.5 rounded-lg border font-medium transition cursor-pointer ${
                 step === 'leaderboard'
                   ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
                   : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800'
               }`}
             >
               <Trophy className="w-3.5 h-3.5 text-amber-400" />
-              Sıralama
+              <span className="hidden sm:inline">Sıralama</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={toggleThemeMode}
+              className="flex items-center gap-1.5 text-xs py-1.5 px-2.5 rounded-lg border font-medium transition cursor-pointer bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800"
+              title={themeMode === 'dark' ? 'Açık Temaya Geç' : 'Koyu Temaya Geç'}
+            >
+              {themeMode === 'dark' ? (
+                <Sun className="w-3.5 h-3.5 text-amber-400" />
+              ) : (
+                <Moon className="w-3.5 h-3.5 text-slate-400" />
+              )}
+              <span className="hidden lg:inline">{themeMode === 'dark' ? 'Açık' : 'Koyu'}</span>
             </button>
 
             <button
               onClick={() => { setStep('input'); setActiveReportId(null); }}
-              className={`flex items-center gap-1.5 text-xs py-1.5 px-3 rounded-lg border font-medium transition cursor-pointer ${
+              className={`flex items-center gap-1.5 text-xs py-1.5 px-3 rounded-lg border font-semibold transition cursor-pointer ${
                 step === 'input'
-                  ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
-                  : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800'
+                  ? 'bg-emerald-600 text-white border-emerald-500'
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800'
               }`}
             >
               <PlusCircle className="w-3.5 h-3.5" />
-              Yeni Analiz
+              <span>Yeni Analiz</span>
             </button>
           </div>
         </header>
 
-        <div className="p-4 sm:p-6 md:p-8 w-full max-w-[1680px] mx-auto space-y-6">
+        <div className="p-4 sm:p-6 w-full max-w-[1600px] mx-auto space-y-5">
           
-          {/* ADIM 1: YENİ ANALİZ EKRANI (MİNİMALİST & KURUMSAL COMMAND CENTER) */}
+          {/* ADIM 1: YENİ ANALİZ EKRANI (TEKİL KURUMSAL KOMUT MERKEZİ) */}
           {step === 'input' && (
-            <div className="max-w-3xl mx-auto py-4 sm:py-10 space-y-5">
-              {/* Ana Arama ve Analiz Başlatma Kartı */}
-              <div className="bg-slate-900 border border-slate-800/90 p-6 sm:p-8 rounded-2xl shadow-sm space-y-5">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
-                      Yeni Şirket Analizi
-                    </h2>
-                    <p className="text-slate-400 text-xs mt-0.5">
-                      BIST hisse kodunu girerek finansal tabloları ve adil değer modelini oluşturun.
-                    </p>
+            <div className="max-w-2xl mx-auto py-6 sm:py-12">
+              <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-sm overflow-hidden divide-y divide-slate-800">
+                {/* Üst Bölüm: Hisse Kodu Arama & Hızlı Seçim */}
+                <div className="p-6 sm:p-7 space-y-5">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-lg font-bold text-white tracking-tight">
+                        Şirket Değerleme & Bilanço Analizi
+                      </h2>
+                      <p className="text-slate-400 text-xs mt-0.5">
+                        BIST hisse kodunu girerek resmi finansal tabloları ve adil değer modelini oluşturun.
+                      </p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-950 text-emerald-400 border border-slate-800 shrink-0">
+                      BIST • KAP
+                    </span>
                   </div>
-                  <span className="px-2.5 py-1 rounded-md text-[11px] font-mono font-semibold bg-slate-950 text-emerald-400 border border-slate-800">
-                    BIST • KAP
-                  </span>
-                </div>
 
-                {/* Komut Arama Çubuğu */}
-                <div className="flex flex-col sm:flex-row gap-2.5">
-                  <div className="relative flex-1">
+                  <div className="flex flex-col sm:flex-row gap-2.5">
                     <input
                       type="text"
                       value={ticker}
@@ -4074,113 +3934,91 @@ export default function ValuationTerminal({
                         }
                       }}
                       placeholder="Hisse kodu (Örn: AGESA, THYAO, TUPRS, GARAN)"
-                      className="w-full bg-slate-950 border border-slate-700/80 focus:border-emerald-500 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 font-mono font-bold tracking-wider focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+                      className="flex-1 bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-500 font-mono font-bold tracking-wider focus:outline-none transition"
                     />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleBistDirectAnalysis()}
-                    disabled={loading || !ticker.trim()}
-                    className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm rounded-xl shadow-sm flex items-center justify-center gap-2 transition disabled:opacity-40 cursor-pointer flex-shrink-0"
-                  >
-                    {loading ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>Analiz Ediliyor...</span>
-                      </>
-                    ) : (
-                      <>
-                        <ArrowRight className="w-4 h-4" />
-                        <span>Analiz Et</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {/* Hızlı Seçim Etiketleri */}
-                <div className="pt-2 flex items-center gap-1.5 flex-wrap">
-                  <span className="text-slate-500 text-[11px] font-medium mr-1">
-                    Hızlı Seçim:
-                  </span>
-                  {['VESBE', 'AGESA', 'THYAO', 'EREGL', 'TUPRS', 'GARAN', 'ASELS', 'KCHOL', 'BIMAS', 'FROTO', 'SISE'].map((sym) => (
                     <button
-                      key={sym}
                       type="button"
-                      onClick={() => {
-                        setTicker(sym);
-                        handleBistDirectAnalysis(sym);
-                      }}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-mono font-semibold border transition cursor-pointer ${
-                        ticker === sym
-                          ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50'
-                          : 'bg-slate-950 hover:bg-slate-800 text-slate-300 border-slate-800 hover:border-slate-700'
-                      }`}
+                      onClick={() => handleBistDirectAnalysis()}
+                      disabled={loading || !ticker.trim()}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm rounded-lg flex items-center justify-center gap-2 transition disabled:opacity-40 cursor-pointer flex-shrink-0"
                     >
-                      {sym}
+                      {loading ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Analiz Ediliyor...</span>
+                        </>
+                      ) : (
+                        <>
+                          <ArrowRight className="w-4 h-4" />
+                          <span>Analiz Et</span>
+                        </>
+                      )}
                     </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Ek Dokümanlar (KAP Entegrasyonu & Yatırımcı Sunumu Odaklı Yükleme) */}
-              <div className="bg-slate-900 border border-slate-800/90 p-5 sm:p-6 rounded-2xl shadow-sm space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/60 pb-3">
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <Layers className="w-4 h-4 text-emerald-400" />
-                      <span className="font-semibold text-xs sm:text-sm text-slate-100">
-                        Doküman Entegrasyonu & Gelecek Projeksiyonu
-                      </span>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800/60">
-                        KAP Otomatik
-                      </span>
-                    </div>
                   </div>
-                  {(activityFiles.length + presentationFiles.length) > 0 && (
-                    <span className="text-[11px] text-emerald-400 font-mono bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-1 rounded-md self-start sm:self-auto flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                      {activityFiles.length + presentationFiles.length} PDF Eklendi
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-slate-500 text-[11px] font-medium mr-1">
+                      Örnekler:
                     </span>
-                  )}
+                    {['VESBE', 'AGESA', 'THYAO', 'EREGL', 'TUPRS', 'GARAN', 'ASELS', 'KCHOL', 'BIMAS', 'FROTO', 'SISE'].map((sym) => (
+                      <button
+                        key={sym}
+                        type="button"
+                        onClick={() => {
+                          setTicker(sym);
+                          handleBistDirectAnalysis(sym);
+                        }}
+                        className={`px-2 py-0.5 rounded text-[11px] font-mono font-semibold border transition cursor-pointer ${
+                          ticker === sym
+                            ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40'
+                            : 'bg-slate-950 hover:bg-slate-800 text-slate-300 border-slate-800'
+                        }`}
+                      >
+                        {sym}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* 1. KART: Faaliyet Raporu (Alan 2) */}
-                  <div
-                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (e.dataTransfer.files) handleAddActivityFiles(e.dataTransfer.files);
-                    }}
-                    className={`rounded-xl border p-4 transition flex flex-col justify-between ${
-                      activityFiles.length > 0
-                        ? 'bg-slate-950 border-sky-500/50'
-                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-sky-400" />
-                          <span className="font-semibold text-xs text-white">Faaliyet Raporu</span>
-                        </div>
-                        <span className="text-[10px] font-mono text-slate-400">
-                          {activityFiles.length > 0 ? `${activityFiles.length} dosya` : 'PDF'}
-                        </span>
-                      </div>
+                {/* Alt Bölüm: Opsiyonel PDF Doküman Entegrasyonu */}
+                <div className="p-5 sm:p-6 bg-slate-950/40 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-slate-400" />
+                      Ek Dokümanlar (İsteğe Bağlı PDF)
+                    </span>
+                    {(activityFiles.length + presentationFiles.length) > 0 && (
+                      <span className="text-[11px] text-emerald-400 font-mono">
+                        {activityFiles.length + presentationFiles.length} PDF seçildi
+                      </span>
+                    )}
+                  </div>
 
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Faaliyet Raporu */}
+                    <div
+                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (e.dataTransfer.files) handleAddActivityFiles(e.dataTransfer.files);
+                      }}
+                      className="rounded-lg border border-slate-800 bg-slate-950 p-3 space-y-2"
+                    >
                       <div
                         role="button"
                         tabIndex={0}
                         onClick={() => activityInputRef.current?.click()}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activityInputRef.current?.click(); } }}
-                        className="border border-dashed border-slate-700 hover:border-sky-500/60 rounded-lg py-3 px-3 text-center cursor-pointer transition bg-slate-900/40 hover:bg-slate-900/80 select-none"
+                        className="flex items-center justify-between cursor-pointer select-none text-xs text-slate-300 hover:text-white"
                       >
-                        <div className="flex items-center justify-center gap-1.5 text-xs font-medium text-slate-300">
+                        <span className="flex items-center gap-2 font-medium">
                           <UploadCloud className="w-4 h-4 text-sky-400" />
-                          <span>Faaliyet Raporu Seç veya Sürükle</span>
-                        </div>
+                          Faaliyet Raporu Ekle
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-500">
+                          {activityFiles.length > 0 ? `${activityFiles.length} PDF` : 'Seç'}
+                        </span>
                         <input
                           ref={activityInputRef}
                           type="file"
@@ -4193,62 +4031,48 @@ export default function ValuationTerminal({
                           className="sr-only"
                         />
                       </div>
+                      {activityFiles.length > 0 && (
+                        <div className="pt-2 border-t border-slate-800 max-h-20 overflow-y-auto space-y-1">
+                          {activityFiles.map((f, i) => (
+                            <div key={i} className="flex items-center justify-between gap-1 text-[11px] text-slate-400">
+                              <span className="truncate">{f.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => removeActivityFile(i)}
+                                className="text-slate-500 hover:text-rose-400 p-0.5 cursor-pointer"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
-                    {activityFiles.length > 0 && (
-                      <div className="mt-3 pt-2.5 border-t border-slate-800/80 max-h-24 overflow-y-auto space-y-1">
-                        {activityFiles.map((f, i) => (
-                          <div key={i} className="flex items-center justify-between gap-1 text-[11px] bg-slate-900/90 px-2 py-1 rounded text-slate-300 border border-slate-800">
-                            <span className="truncate">{f.name}</span>
-                            <button
-                              type="button"
-                              onClick={() => removeActivityFile(i)}
-                              className="text-slate-500 hover:text-rose-400 p-0.5 cursor-pointer"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 2. KART: Yatırımcı Sunumu (Alan 3) */}
-                  <div
-                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (e.dataTransfer.files) handleAddPresentationFiles(e.dataTransfer.files);
-                    }}
-                    className={`rounded-xl border p-4 transition flex flex-col justify-between ${
-                      presentationFiles.length > 0
-                        ? 'bg-amber-950/20 border-amber-500/60 shadow-sm'
-                        : 'bg-slate-950 border-slate-800 hover:border-amber-600/60'
-                    }`}
-                  >
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Presentation className="w-4 h-4 text-amber-400" />
-                          <span className="font-semibold text-xs text-white">Yatırımcı Sunumu</span>
-                        </div>
-                        <span className="text-[10px] font-mono text-slate-400">
-                          {presentationFiles.length > 0 ? `${presentationFiles.length} dosya` : 'PDF'}
-                        </span>
-                      </div>
-
+                    {/* Yatırımcı Sunumu */}
+                    <div
+                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (e.dataTransfer.files) handleAddPresentationFiles(e.dataTransfer.files);
+                      }}
+                      className="rounded-lg border border-slate-800 bg-slate-950 p-3 space-y-2"
+                    >
                       <div
                         role="button"
                         tabIndex={0}
                         onClick={() => presentationInputRef.current?.click()}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); presentationInputRef.current?.click(); } }}
-                        className="border border-dashed border-slate-700 hover:border-amber-500/60 rounded-lg py-3 px-3 text-center cursor-pointer transition bg-slate-900/40 hover:bg-slate-900/80 select-none"
+                        className="flex items-center justify-between cursor-pointer select-none text-xs text-slate-300 hover:text-white"
                       >
-                        <div className="flex items-center justify-center gap-1.5 text-xs font-medium text-slate-300">
-                          <UploadCloud className="w-4 h-4 text-amber-400" />
-                          <span>Yatırımcı Sunumu Seç veya Sürükle</span>
-                        </div>
+                        <span className="flex items-center gap-2 font-medium">
+                          <Presentation className="w-4 h-4 text-amber-400" />
+                          Yatırımcı Sunumu Ekle
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-500">
+                          {presentationFiles.length > 0 ? `${presentationFiles.length} PDF` : 'Seç'}
+                        </span>
                         <input
                           ref={presentationInputRef}
                           type="file"
@@ -4261,52 +4085,50 @@ export default function ValuationTerminal({
                           className="sr-only"
                         />
                       </div>
+                      {presentationFiles.length > 0 && (
+                        <div className="pt-2 border-t border-slate-800 max-h-20 overflow-y-auto space-y-1">
+                          {presentationFiles.map((f, i) => (
+                            <div key={i} className="flex items-center justify-between gap-1 text-[11px] text-slate-400">
+                              <span className="truncate">{f.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => removePresentationFile(i)}
+                                className="text-slate-500 hover:text-rose-400 p-0.5 cursor-pointer"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
+                  </div>
 
-                    {presentationFiles.length > 0 && (
-                      <div className="mt-3 pt-2.5 border-t border-slate-800/80 max-h-24 overflow-y-auto space-y-1">
-                        {presentationFiles.map((f, i) => (
-                          <div key={i} className="flex items-center justify-between gap-1 text-[11px] bg-slate-900/90 px-2 py-1 rounded text-slate-300 border border-amber-900/40">
-                            <span className="truncate">{f.name}</span>
-                            <button
-                              type="button"
-                              onClick={() => removePresentationFile(i)}
-                              className="text-slate-500 hover:text-rose-400 p-0.5 cursor-pointer"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))}
+                  {loading && (
+                    <div className="pt-2 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-300 font-medium flex items-center gap-2">
+                          <RefreshCw className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
+                          {statusMessage || 'Veriler işleniyor...'}
+                        </span>
+                        <span className="font-mono text-emerald-400 font-bold">{pipelineProgress}%</span>
                       </div>
-                    )}
-                  </div>
+                      <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-500 transition-all duration-300 rounded-full"
+                          style={{ width: `${pipelineProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                {/* İlerleme Çubuğu (Yükleme Sırasında) */}
-                {loading && (
-                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-300 font-medium flex items-center gap-2">
-                        <RefreshCw className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
-                        {statusMessage || 'Veriler işleniyor...'}
-                      </span>
-                      <span className="font-mono text-emerald-400 font-bold">{pipelineProgress}%</span>
-                    </div>
-                    <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className="h-full bg-emerald-500 transition-all duration-300 rounded-full"
-                        style={{ width: `${pipelineProgress}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           )}
 
           {/* ADIM 2: ÇIKARILAN VERİLERİ İNCELEME & ONAYLAMA */}
           {step === 'review' && extractedData && (
-            <div className="space-y-6 bg-slate-900 border border-slate-800 p-6 md:p-8 rounded-2xl shadow-sm">
+            <div className="space-y-5 bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-sm">
               <div className="border-b border-slate-800 pb-3 flex items-center justify-between flex-wrap gap-2">
                 <span className="font-bold text-sm text-white flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Finansal Veri Özeti
@@ -4315,32 +4137,31 @@ export default function ValuationTerminal({
                   <span className="text-xs font-mono px-2.5 py-1 rounded bg-slate-950 text-emerald-400 border border-slate-800 font-bold">
                     {extractedData.ticker || ticker} • {currentSector}
                   </span>
-                  <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-700 px-2.5 py-1 rounded">
-                    <span className="text-[11px] text-slate-400 font-medium">Hisse Fiyatı:</span>
+                  <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 px-2.5 py-1 rounded">
+                    <span className="text-[11px] text-slate-400 font-medium">Fiyat:</span>
                     <input
                       type="number"
                       step="0.01"
                       value={price}
                       onChange={(e) => setPrice(e.target.value)}
-                      placeholder="Örn: 100.00"
-                      className="w-20 bg-transparent text-xs font-mono font-bold text-white text-right focus:outline-none focus:text-emerald-300"
+                      placeholder="100.00"
+                      className="w-20 bg-transparent text-xs font-mono font-bold text-white text-right focus:outline-none"
                     />
                     <span className="text-[11px] text-slate-400 font-mono">TL</span>
                   </div>
                 </div>
               </div>
 
-              {/* Özet Çıkarım Tablosu */}
               <div className="overflow-x-auto border border-slate-800 rounded-lg">
                 <table className="w-full text-xs text-left border-collapse font-mono">
-                  <thead className="bg-slate-800 text-slate-200">
+                  <thead className="bg-slate-950 text-slate-300 border-b border-slate-800">
                     <tr>
                       <th className="p-3">Dönem</th>
                       <th className="p-3 text-right">{currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Hasılat'}</th>
                       <th className="p-3 text-right">{currentSector === 'INSURANCE' ? 'Teknik Kâr' : 'FAVÖK'}</th>
                       <th className="p-3 text-right">Net Kâr</th>
                       <th className="p-3 text-right">{currentSector === 'INSURANCE' ? 'Kombine Oran' : 'FAVÖK Marjı'}</th>
-                      <th className="p-3 text-right">{currentSector === 'INSURANCE' ? 'ROE (Yıllık %)' : 'ROIC (Yıllık %)'}</th>
+                      <th className="p-3 text-right">{currentSector === 'INSURANCE' ? 'ROE (%)' : 'ROIC (%)'}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
@@ -4361,7 +4182,7 @@ export default function ValuationTerminal({
                           <td className="p-3 font-bold text-white flex items-center gap-1.5">
                             <span>{row.period}</span>
                             {row.is_tms29 && (
-                              <span className="text-[9px] font-sans font-bold px-1.5 py-0.2 rounded bg-amber-950/80 text-amber-300 border border-amber-800">
+                              <span className="text-[9px] font-sans font-bold px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">
                                 TMS 29
                               </span>
                             )}
@@ -4379,7 +4200,7 @@ export default function ValuationTerminal({
               </div>
 
               {error && (
-                <div className="p-4 bg-rose-950/80 border border-rose-800 rounded-xl flex items-start gap-3 text-rose-300 text-xs shadow-sm animate-in fade-in">
+                <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-start gap-3 text-rose-300 text-xs">
                   <AlertTriangle className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
                   <div className="space-y-1">
                     <div className="font-bold text-white text-xs">Değerleme Raporu Üretilemedi</div>
@@ -4388,7 +4209,7 @@ export default function ValuationTerminal({
                 </div>
               )}
 
-              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <div className="flex flex-col sm:flex-row gap-3 pt-1">
                 <button
                   type="button"
                   onClick={() => setStep('input')}
@@ -4414,7 +4235,7 @@ export default function ValuationTerminal({
                   type="button"
                   disabled={loading}
                   onClick={() => appendFinancialInputRef.current?.click()}
-                  className="sm:w-1/3 py-2.5 bg-slate-950 hover:bg-slate-800 text-cyan-300 border border-slate-700 text-xs font-semibold rounded-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="sm:w-1/3 py-2.5 bg-slate-950 hover:bg-slate-800 text-cyan-400 border border-slate-800 text-xs font-semibold rounded-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <Plus className="w-4 h-4 text-cyan-400" /> Dönem PDF Ekle
                 </button>
@@ -4439,34 +4260,34 @@ export default function ValuationTerminal({
             </div>
           )}
 
-          {/* YÜKLENİYOR EKRANI: Ticker var ama henüz rapor oluşmadıysa arama formunu atla ve bu kartı göster */}
+          {/* YÜKLENİYOR EKRANI */}
           {loading && !activeReport && (
-            <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-12 text-center space-y-4 shadow-sm">
-              <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400">
-                <RefreshCw className="w-8 h-8 animate-spin" />
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-10 text-center space-y-4 shadow-sm">
+              <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400">
+                <RefreshCw className="w-6 h-6 animate-spin" />
               </div>
               <div className="space-y-1">
-                <h3 className="text-lg font-bold text-white tracking-tight">
+                <h3 className="text-base font-bold text-white tracking-tight">
                   {ticker || initialTicker} Değerleme Raporu Yükleniyor...
                 </h3>
-                <p className="text-xs text-slate-400 font-mono max-w-md mx-auto">
+                <p className="text-xs text-slate-400 font-mono">
                   {statusMessage || 'Borsa İstanbul resmi finansal tabloları taranıyor ve değerleme modeli çalıştırılıyor...'}
                 </p>
               </div>
             </div>
           )}
 
-          {/* EKSİK RAPOR DURUMU: Step report ama activeReport yok ve loading bitti ise boş ekran yerine yönlendirici kart */}
+          {/* EKSİK RAPOR DURUMU */}
           {step === 'report' && !activeReport && !loading && (
-            <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-10 text-center space-y-4 shadow-sm">
-              <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
-                <FileText className="w-7 h-7" />
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-10 text-center space-y-4 shadow-sm">
+              <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+                <FileText className="w-6 h-6" />
               </div>
               <div className="space-y-1">
-                <h3 className="text-lg font-bold text-white tracking-tight">
+                <h3 className="text-base font-bold text-white tracking-tight">
                   {ticker || initialTicker || 'Seçili'} İçin Kayıtlı Rapor Bulunamadı
                 </h3>
-                <p className="text-xs text-slate-400 font-mono max-w-md mx-auto">
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
                   {error || 'Bu hisse için yerel hafızada henüz hazır bir rapor bulunmuyor. Resmi BIST verilerini çekerek analizi başlatabilirsiniz.'}
                 </p>
               </div>
@@ -4477,287 +4298,226 @@ export default function ValuationTerminal({
                     const target = (ticker || initialTicker || '').trim();
                     if (target) handleBistDirectAnalysis(target);
                   }}
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl shadow-sm flex items-center gap-2 cursor-pointer transition"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-lg flex items-center gap-2 cursor-pointer transition"
                 >
                   <ArrowRight className="w-4 h-4" />
-                  <span>{(ticker || initialTicker || 'Hisse')} Canlı Analizini Başlat</span>
+                  <span>{(ticker || initialTicker || 'Hisse')} Analizini Başlat</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setStep('input')}
-                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl border border-slate-700 cursor-pointer transition"
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-lg border border-slate-700 cursor-pointer transition"
                 >
-                  <span>Arama Ekranına Dön</span>
+                  <span>Arama Ekranı</span>
                 </button>
               </div>
             </div>
           )}
 
-          {/* ADIM 3: RAPOR, GRAFİK TERMİNALİ, FİNANSAL TABLOLAR, ADİL DEĞER VE PROS/CONS */}
+          {/* ADIM 3: KURUMSAL HİSSE ANALİZ TERMİNALİ */}
           {step === 'report' && activeReport && (
-            <div className="space-y-5">
+            <div className="space-y-4">
 
-              {/* Üst Hisse Özet Bilgi Kartı */}
-              <div className="bg-slate-900 border border-slate-800/90 p-4 sm:p-5 rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-11 h-11 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center font-black text-base text-white font-mono">
-                    {activeReport.ticker.slice(0, 4)}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h2 className="text-lg font-black text-white tracking-tight">{activeReport.ticker}</h2>
-                      <span className="text-sm font-mono font-bold text-emerald-400 bg-slate-950 px-3 py-0.5 rounded-md border border-slate-800">
-                        {activeReport.price} TL
-                      </span>
-                      <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-slate-950 text-slate-400 border border-slate-800">
-                        {sectorMeta.badge}
-                      </span>
+              {/* Birleşik Kurumsal Hisse Başlığı + Temel Çarpanlar Şeridi */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-sm overflow-hidden">
+                {/* Üst Satır: Ticker, Sektör, Skor & Karar, Aksiyonlar */}
+                <div className="p-4 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-center font-black text-sm text-white font-mono">
+                      {activeReport.ticker.slice(0, 4)}
                     </div>
-                    <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-2 font-mono">
-                      <span>{activeReport.period || '2025/12'}</span>
-                      <span>•</span>
-                      <span>{activeReport.createdAt}</span>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h2 className="text-lg font-black text-white tracking-tight">{activeReport.ticker}</h2>
+                        <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">
+                          {sectorMeta.badge}
+                        </span>
+                        {(valuationInfo.is_value_trap || activeReport.isValueTrap) && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-rose-500/40 bg-rose-500/10 text-rose-400 text-[10px] font-bold font-mono">
+                            <ShieldAlert className="w-3 h-3" /> DEĞER TUZAĞI RİSKİ
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2 font-mono">
+                        <span>Dönem: {activeReport.period || '2025/12'}</span>
+                        <span>•</span>
+                        <span>{activeReport.createdAt}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-3">
-                  {activeReport.score && (() => {
-                    const numScore = parseFloat(String(activeReport.score || '0').replace(/[^0-9.]/g, '')) || 0;
-                    const isAl = activeReport.decision === 'AL';
-                    const isAlma = activeReport.decision === 'ALMA';
-                    
-                    const theme = isAl
-                      ? {
-                          border: 'border-emerald-500/40 hover:border-emerald-500/60',
-                          bg: 'bg-emerald-950/30',
-                          glow: '',
-                          scoreColor: 'text-emerald-400',
-                          badgeBg: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
-                          barBg: 'bg-emerald-500',
-                          icon: TrendingUp
-                        }
-                      : isAlma
-                      ? {
-                          border: 'border-rose-500/40 hover:border-rose-500/60',
-                          bg: 'bg-rose-950/30',
-                          glow: '',
-                          scoreColor: 'text-rose-400',
-                          badgeBg: 'bg-rose-500/15 text-rose-300 border-rose-500/40',
-                          barBg: 'bg-rose-500',
-                          icon: ShieldAlert
-                        }
-                      : {
-                          border: 'border-amber-500/40 hover:border-amber-500/60',
-                          bg: 'bg-amber-950/30',
-                          glow: '',
-                          scoreColor: 'text-amber-400',
-                          badgeBg: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
-                          barBg: 'bg-amber-500',
-                          icon: AlertTriangle
-                        };
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    {activeReport.score && (() => {
+                      const isAl = activeReport.decision === 'AL';
+                      const isAlma = activeReport.decision === 'ALMA';
+                      const badgeCls = isAl
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                        : isAlma
+                        ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                        : 'bg-amber-500/10 border-amber-500/30 text-amber-400';
 
-                    const IconComponent = theme.icon;
-
-                    return (
-                      <div className={`flex items-center gap-3 px-3.5 py-1.5 rounded-xl border ${theme.border} ${theme.bg} ${theme.glow} transition-all`}>
-                        {/* Skor Bölümü */}
-                        <div className="flex flex-col">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">SKOR</span>
-                            <div className="w-10 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full ${theme.barBg} transition-all duration-500 rounded-full`}
-                                style={{ width: `${Math.min(100, Math.max(5, numScore))}%` }}
-                              />
-                            </div>
-                          </div>
-                          <div className="flex items-baseline gap-0.5 mt-0.5">
-                            <span className={`text-lg font-black font-mono tracking-tight leading-none ${theme.scoreColor}`}>
+                      return (
+                        <div className={`flex items-center gap-3 px-3 py-1.5 rounded-lg border ${badgeCls}`}>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 mr-1">Skor</span>
+                            <span className="text-base font-black font-mono leading-none">
                               {activeReport.score}
                             </span>
                             <span className="text-[10px] text-slate-500 font-mono">/100</span>
                           </div>
+                          <div className="h-4 w-px bg-slate-800" />
+                          <span className="text-xs font-black font-mono tracking-wide">
+                            {activeReport.decision}
+                          </span>
                         </div>
+                      );
+                    })()}
 
-                        {/* Dikey Ayırıcı */}
-                        <div className="h-7 w-px bg-slate-800" />
+                    <button
+                      type="button"
+                      onClick={handleCopyNotebookLM}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg border border-slate-800 transition cursor-pointer text-xs font-medium"
+                      title="Tüm Finansal Tabloları ve Raporu Markdown Olarak Kopyala"
+                    >
+                      {copiedNotebookLM ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-emerald-400 font-semibold">Kopyalandı</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5 text-cyan-400" />
+                          <span className="hidden sm:inline">Verileri Kopyala</span>
+                        </>
+                      )}
+                    </button>
 
-                        {/* Karar Rozeti */}
-                        <div className="flex flex-col items-center">
-                          <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">KARAR</span>
-                          <div className={`flex items-center gap-1 px-2.5 py-0.5 mt-0.5 rounded-md border text-xs font-black tracking-wide font-mono ${theme.badgeBg}`}>
-                            <IconComponent className="w-3 h-3" />
-                            <span>{activeReport.decision}</span>
-                          </div>
-                        </div>
+                    <button
+                      onClick={() => deleteReport(activeReport.id)}
+                      className="p-2 bg-slate-950 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-800 transition cursor-pointer"
+                      title="Raporu Sil"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
 
-                        {/* Değer Tuzağı Uyarısı Rozeti */}
-                        {(valuationInfo.is_value_trap || activeReport.isValueTrap) && (
-                          <>
-                            <div className="h-7 w-px bg-slate-800" />
-                            <div className="flex flex-col items-center">
-                              <span className="text-[9px] uppercase font-bold text-rose-500 tracking-wider">RİSK</span>
-                              <div className="flex items-center gap-1 px-2.5 py-0.5 mt-0.5 rounded-md border border-rose-500/50 bg-rose-500/20 text-rose-300 text-xs font-black tracking-wide font-mono">
-                                <ShieldAlert className="w-3 h-3 text-rose-400" />
-                                <span>DEĞER TUZAĞI</span>
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    );
-                  })()}
-
-                  <button
-                    type="button"
-                    onClick={handleCopyNotebookLM}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl border border-slate-800 transition cursor-pointer text-xs font-semibold"
-                    title="Tüm Finansal Tabloları ve Raporu Markdown Olarak Kopyala"
-                  >
-                    {copiedNotebookLM ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-400" />
-                        <span className="text-emerald-400 font-bold">Kopyalandı</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5 text-cyan-400" />
-                        <span className="hidden sm:inline">Raporu Kopyala</span>
-                      </>
-                    )}
-                  </button>
-
-                  <button
-                    onClick={() => deleteReport(activeReport.id)}
-                    className="p-2.5 bg-slate-950 hover:bg-rose-950 text-slate-400 hover:text-rose-400 rounded-xl border border-slate-800 transition cursor-pointer"
-                    title="Raporu Sil"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                {/* Alt Şerit: 8'li Kurumsal Fiyat, Adil Değer ve Çarpanlar Barı */}
+                <div className="border-t border-slate-800 bg-slate-950/40 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 divide-y sm:divide-y-0 sm:divide-x divide-slate-800 text-xs">
+                  <div className="px-3.5 py-2.5">
+                    <div className="text-[10px] uppercase font-semibold text-slate-400">Piyasa Fiyatı</div>
+                    <div className="text-sm font-black font-mono text-white mt-0.5">{activeReport.price} TL</div>
+                  </div>
+                  <div className="px-3.5 py-2.5">
+                    <div className="text-[10px] uppercase font-semibold text-slate-400">Adil Değer</div>
+                    <div className="flex items-baseline gap-1.5 mt-0.5">
+                      <span className="text-sm font-black font-mono text-emerald-400">{valuationInfo.fair_value} TL</span>
+                      <span className={`text-[10px] font-mono font-bold ${Number(valuationInfo.discount_pct) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        ({Number(valuationInfo.discount_pct) >= 0 ? '+' : ''}%{valuationInfo.discount_pct})
+                      </span>
+                    </div>
+                  </div>
+                  <div className="px-3.5 py-2.5">
+                    <div className="text-[10px] uppercase font-semibold text-slate-400">F/K</div>
+                    <div className="text-sm font-bold font-mono text-white mt-0.5">
+                      {marketMultiples?.pe != null ? `${marketMultiples.pe.toFixed(2)}x` : (companyMultiplesData.multiples.pe.companyValue != null ? `${companyMultiplesData.multiples.pe.companyValue.toFixed(1)}x` : 'A/D')}
+                    </div>
+                  </div>
+                  <div className="px-3.5 py-2.5">
+                    <div className="text-[10px] uppercase font-semibold text-slate-400">PD/DD</div>
+                    <div className="text-sm font-bold font-mono text-white mt-0.5">
+                      {marketMultiples?.pb != null ? `${marketMultiples.pb.toFixed(2)}x` : (companyMultiplesData.multiples.pb.companyValue != null ? `${companyMultiplesData.multiples.pb.companyValue.toFixed(1)}x` : 'A/D')}
+                    </div>
+                  </div>
+                  <div className="px-3.5 py-2.5">
+                    <div className="text-[10px] uppercase font-semibold text-slate-400">
+                      {isMetricDisabled('ev_ebitda', currentSector) ? (currentSector === 'INSURANCE' ? 'Bileşik Oran' : 'ROE') : 'FD/FAVÖK'}
+                    </div>
+                    <div className="text-sm font-bold font-mono text-white mt-0.5">
+                      {isMetricDisabled('ev_ebitda', currentSector)
+                        ? (currentSector === 'INSURANCE'
+                            ? `%${(computeRatioForPeriod(latestData, 'combined_ratio', currentSector) ?? 81.6).toFixed(1)}`
+                            : `%${(computeRatioForPeriod(latestData, 'roe', currentSector) ?? 32.5).toFixed(1)}`)
+                        : (marketMultiples?.ev_ebitda != null ? `${marketMultiples.ev_ebitda.toFixed(2)}x` : (companyMultiplesData.multiples.evEbitda.companyValue != null ? `${companyMultiplesData.multiples.evEbitda.companyValue.toFixed(1)}x` : '—'))}
+                    </div>
+                  </div>
+                  <div className="px-3.5 py-2.5">
+                    <div className="text-[10px] uppercase font-semibold text-slate-400">
+                      {isMetricDisabled('ev_sales', currentSector) ? (currentSector === 'INSURANCE' ? 'ROE' : 'ROA') : 'FD/Satışlar'}
+                    </div>
+                    <div className="text-sm font-bold font-mono text-white mt-0.5">
+                      {isMetricDisabled('ev_sales', currentSector)
+                        ? (currentSector === 'INSURANCE'
+                            ? `%${(computeRatioForPeriod(latestData, 'roe', currentSector) ?? 48.2).toFixed(1)}`
+                            : `%${(computeRatioForPeriod(latestData, 'roa', currentSector) ?? 3.4).toFixed(2)}`)
+                        : (marketMultiples?.ev_sales != null ? `${marketMultiples.ev_sales.toFixed(2)}x` : (companyMultiplesData.multiples.evSales.companyValue != null ? `${companyMultiplesData.multiples.evSales.companyValue.toFixed(1)}x` : '—'))}
+                    </div>
+                  </div>
+                  <div className="px-3.5 py-2.5">
+                    <div className="text-[10px] uppercase font-semibold text-slate-400">Yabancı Payı</div>
+                    <div className="text-sm font-bold font-mono text-white mt-0.5">
+                      {marketMultiples?.foreign_share_pct != null ? `%${marketMultiples.foreign_share_pct.toFixed(1)}` : '—'}
+                    </div>
+                  </div>
+                  <div className="px-3.5 py-2.5">
+                    <div className="text-[10px] uppercase font-semibold text-slate-400">Piyasa Değeri</div>
+                    <div className="text-sm font-bold font-mono text-white mt-0.5">
+                      {marketMultiples?.market_cap_mn_tl != null
+                        ? (marketMultiples.market_cap_mn_tl >= 1000
+                            ? `${(marketMultiples.market_cap_mn_tl / 1000).toFixed(1)} Mr TL`
+                            : `${marketMultiples.market_cap_mn_tl.toFixed(0)} Mn TL`)
+                        : '—'}
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* ANA SEKME NAVİGASYONU (Kurumsal Underline Sekme Mimarisi) */}
-              <div className="flex items-center gap-1 overflow-x-auto border-b border-slate-800 bg-slate-900 px-2 pt-1 rounded-t-lg print:hidden">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('ozet')}
-                  className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer whitespace-nowrap ${
-                    activeTab === 'ozet'
-                      ? 'border-emerald-500 text-emerald-400 font-bold bg-slate-800/40'
-                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                  }`}
-                >
-                  <PieChart className="w-3.5 h-3.5" /> Özet Rapor
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('overview')}
-                  className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer whitespace-nowrap ${
-                    activeTab === 'overview'
-                      ? 'border-emerald-500 text-emerald-400 font-bold bg-slate-800/40'
-                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                  }`}
-                >
-                  <BarChart3 className="w-3.5 h-3.5" /> Grafik Terminali
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('tables')}
-                  className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer whitespace-nowrap ${
-                    activeTab === 'tables'
-                      ? 'border-emerald-500 text-emerald-400 font-bold bg-slate-800/40'
-                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                  }`}
-                >
-                  <Layers className="w-3.5 h-3.5" /> Finansal Tablolar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('fairvalue')}
-                  className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer whitespace-nowrap ${
-                    activeTab === 'fairvalue'
-                      ? 'border-emerald-500 text-emerald-400 font-bold bg-slate-800/40'
-                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                  }`}
-                >
-                  <Target className="w-3.5 h-3.5" /> Adil Değer & Sürücüler
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('multiples')}
-                  className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer whitespace-nowrap ${
-                    activeTab === 'multiples'
-                      ? 'border-emerald-500 text-emerald-400 font-bold bg-slate-800/40'
-                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                  }`}
-                >
-                  <Percent className="w-3.5 h-3.5" /> Çarpanlar & Sektör Kıyası
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('proscons')}
-                  className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer whitespace-nowrap ${
-                    activeTab === 'proscons'
-                      ? 'border-emerald-500 text-emerald-400 font-bold bg-slate-800/40'
-                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                  }`}
-                >
-                  <Scale className="w-3.5 h-3.5" /> Güçlü & Zayıf Yönler
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('guidance')}
-                  className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer whitespace-nowrap ${
-                    activeTab === 'guidance'
-                      ? 'border-emerald-500 text-emerald-400 font-bold bg-slate-800/40'
-                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                  }`}
-                >
-                  <Activity className="w-3.5 h-3.5" /> Faaliyet & Sunum Analizi
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('report')}
-                  className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer whitespace-nowrap ${
-                    activeTab === 'report'
-                      ? 'border-emerald-500 text-emerald-400 font-bold bg-slate-800/40'
-                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                  }`}
-                >
-                  <FileText className="w-3.5 h-3.5" /> Değerleme Raporu
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('history')}
-                  className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer whitespace-nowrap ${
-                    activeTab === 'history'
-                      ? 'border-emerald-500 text-emerald-400 font-bold bg-slate-800/40'
-                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                  }`}
-                >
-                  <History className="w-3.5 h-3.5" /> Geçmiş ({tickerHistory.length})
-                </button>
+              {/* ANA SEKME NAVİGASYONU */}
+              <div className="flex items-center gap-1 overflow-x-auto border-b border-slate-800 bg-slate-900 px-2 rounded-lg print:hidden [scrollbar-width:none]">
+                {[
+                  { id: 'ozet', label: 'Özet', icon: PieChart },
+                  { id: 'overview', label: 'Grafikler', icon: BarChart3 },
+                  { id: 'tables', label: 'Finansal Tablolar', icon: Layers },
+                  { id: 'fairvalue', label: 'Adil Değer', icon: Target },
+                  { id: 'multiples', label: 'Çarpanlar', icon: Percent },
+                  { id: 'proscons', label: 'Güçlü & Zayıf', icon: Scale },
+                  { id: 'guidance', label: 'Rehberlik & Sunum', icon: Activity },
+                  { id: 'report', label: 'Analist Raporu', icon: FileText },
+                  { id: 'history', label: `Geçmiş (${tickerHistory.length})`, icon: History },
+                ].map(tab => {
+                  const TabIcon = tab.icon;
+                  const isAct = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setActiveTab(tab.id as any)}
+                      className={`flex items-center gap-1.5 px-3 py-2.5 text-xs border-b-2 transition cursor-pointer whitespace-nowrap ${
+                        isAct
+                          ? 'border-emerald-500 text-emerald-400 font-bold'
+                          : 'border-transparent text-slate-400 font-medium hover:text-white'
+                      }`}
+                    >
+                      <TabIcon className="w-3.5 h-3.5" />
+                      <span>{tab.label}</span>
+                    </button>
+                  );
+                })}
               </div>
 
 
               {/* SEKME 0: ÖZET RAPOR */}
               {activeTab === 'ozet' && (
                 <ComponentErrorBoundary fallbackTitle="Özet Panosu Hatası">
-                <div className="space-y-6">
+                <div className="space-y-4">
                   {chartData.length === 0 ? (
                     <div className="p-8 text-center text-slate-500 bg-slate-900 rounded-xl border border-slate-800 text-sm">
                       Grafik verisi bulunamadı.
                     </div>
                   ) : (
                     <>
-                      
-                      
-                      
                       {/* Özet Finansallar */}
                       {(() => {
-                        // YTD kümülatif (KAP ham) değerler: 2026/06 = H1 toplamı, 2025/06 = geçen yıl H1 toplamı
                         const latestPeriod = chartData[chartData.length - 1];
                         const latestPeriodLabel = latestPeriod?.period || '';
                         const yoyPeriodLabel = latestPeriodLabel ? `${String(Number(latestPeriodLabel.slice(0,4)) - 1)}/${latestPeriodLabel.slice(5)}` : '';
@@ -4775,7 +4535,6 @@ export default function ValuationTerminal({
                             if (d.short_term_debt == null && d.long_term_debt == null) return null;
                             return (d.short_term_debt || 0) + (d.long_term_debt || 0);
                           }
-                          // Bilanço Denkliği ve Duran Varlık Koruması (Mükerrer Toplama Kalkanı)
                           if (k === 'non_current_assets') {
                             const liabSum = (d.current_liabilities || 0) + (d.long_term_liabilities || 0);
                             const implied = liabSum > 0 && d.equity ? liabSum + d.equity : (d.total_assets || null);
@@ -4799,316 +4558,198 @@ export default function ValuationTerminal({
                         };
                         return (
                           <>
-                            {/* İş Yatırım Canlı Piyasa Çarpanları Şeridi */}
-                            {marketMultiples && (
-                        <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
-                              <SlidersHorizontal className="w-5 h-5" />
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-bold text-white">Canlı Piyasa Çarpanları</span>
-                                <span className="text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded">
-                                  {marketMultiples.last_period || 'Son Bilanço'}
+                            {/* Sektör Arketip & Değer Tuzağı Kompakt Bildirimleri */}
+                            {getFinancialArchetype(currentSector) === 'AVIATION' && (
+                              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-2.5 flex items-center gap-2.5 text-amber-300 text-xs">
+                                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                                <span>
+                                  <strong>Havacılık Mevsimsellik Notu:</strong> Q3 operasyonel zirve, Q1 dip dönemdir; tüm rasyo ve çarpanlar TTM (Son 12 Ay) esasıyla hesaplanır.
                                 </span>
                               </div>
-                              <p className="text-xs text-slate-400 mt-0.5">
-                                Borsa İstanbul piyasa verileri ve güncel değerleme rasyoları
-                              </p>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
-                            <div className="bg-slate-950 border border-slate-800/80 px-3 py-2 rounded-xl text-center">
-                              <div className="text-[10px] uppercase font-bold text-slate-500">F/K</div>
-                              <div className="text-sm font-black font-mono text-emerald-400">
-                                {marketMultiples.pe != null ? marketMultiples.pe.toFixed(2) : 'A/D'}
+                            )}
+
+                            {getFinancialArchetype(currentSector) === 'RETAIL' && (
+                              <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl px-4 py-2.5 flex items-center gap-2.5 text-blue-300 text-xs">
+                                <Info className="w-4 h-4 text-blue-400 shrink-0" />
+                                <span>
+                                  <strong>Perakende İşletme Sermayesi Modeli:</strong> Tedarikçi vadeleri stok gününden uzun olduğundan Cari Oran &lt; 1,00 olması faizsiz fonlamayı gösterir.
+                                </span>
                               </div>
-                            </div>
-                            <div className="bg-slate-950 border border-slate-800/80 px-3 py-2 rounded-xl text-center">
-                              <div className="text-[10px] uppercase font-bold text-slate-500">PD/DD</div>
-                              <div className="text-sm font-black font-mono text-cyan-400">
-                                {marketMultiples.pb != null ? marketMultiples.pb.toFixed(2) : 'A/D'}
+                            )}
+
+                            {(currentSector === 'BANKING' || currentSector === 'FINANCIAL_SERVICES') && (
+                              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-2.5 flex items-center gap-2.5 text-emerald-300 text-xs">
+                                <Info className="w-4 h-4 text-emerald-400 shrink-0" />
+                                <span>
+                                  <strong>{currentSector === 'BANKING' ? 'Bankacılık Modeli' : 'Finansal Kiralama & Faktoring Modeli'}:</strong> FAVÖK, Net Borç ve Cari Oran yerine Net Faiz Marjı (NIM), ROA ve ROE baz alınmaktadır.
+                                </span>
                               </div>
-                            </div>
-                            {isMetricDisabled('ev_ebitda', currentSector) ? (
-                              <div className="bg-slate-950 border border-slate-800/80 px-3 py-2 rounded-xl text-center">
-                                <div className="text-[10px] uppercase font-bold text-slate-500">
-                                  {currentSector === 'INSURANCE' ? 'Bileşik Oran' : 'ROE'}
-                                </div>
-                                <div className="text-sm font-black font-mono text-emerald-400">
-                                  {currentSector === 'INSURANCE' 
-                                    ? `%${(computeRatioForPeriod(latestBS || latestPeriod, 'combined_ratio', currentSector) ?? 81.6).toFixed(1)}`
-                                    : `%${(computeRatioForPeriod(latestBS || latestPeriod, 'roe', currentSector) ?? 32.5).toFixed(1)}`}
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="bg-slate-950 border border-slate-800/80 px-3 py-2 rounded-xl text-center">
-                                <div className="text-[10px] uppercase font-bold text-slate-500">FD/FAVÖK</div>
-                                <div className="text-sm font-black font-mono text-amber-400">
-                                  {marketMultiples.ev_ebitda != null ? marketMultiples.ev_ebitda.toFixed(2) : '—'}
+                            )}
+
+                            {(valuationInfo.is_value_trap || activeReport?.isValueTrap) && (
+                              <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 flex items-start gap-3 text-rose-300 text-xs">
+                                <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                                <div className="space-y-1 flex-1">
+                                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                                    <span className="font-bold text-rose-200">
+                                      Değer Tuzağı Uyarısı ({valuationInfo.value_trap_severity || activeReport?.valueTrapSeverity || 'YÜKSEK RİSK'})
+                                    </span>
+                                  </div>
+                                  <p className="text-rose-200/90 leading-relaxed">
+                                    Hisse %{valuationInfo.discount_pct} iskontolu görünse de eriyen marjlar veya negatif sermaye makası (ROIC &lt; WACC) nedeniyle değer tuzağı riski taşımaktadır.
+                                  </p>
                                 </div>
                               </div>
                             )}
-                            {isMetricDisabled('ev_sales', currentSector) ? (
-                              <div className="bg-slate-950 border border-slate-800/80 px-3 py-2 rounded-xl text-center">
-                                <div className="text-[10px] uppercase font-bold text-slate-500">
-                                  {currentSector === 'INSURANCE' ? 'ROE' : 'ROA'}
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                              <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
+                                <div className="flex justify-between items-center mb-3 pb-2.5 border-b border-slate-800">
+                                  <h3 className="text-xs font-bold uppercase tracking-wider text-white">Özet Gelir Tablosu</h3>
+                                  <span className="text-[10px] font-mono text-slate-400">Bin TRY</span>
                                 </div>
-                                <div className="text-sm font-black font-mono text-cyan-400">
-                                  {currentSector === 'INSURANCE'
-                                    ? `%${(computeRatioForPeriod(latestBS || latestPeriod, 'roe', currentSector) ?? 48.2).toFixed(1)}`
-                                    : `%${(computeRatioForPeriod(latestBS || latestPeriod, 'roa', currentSector) ?? 3.4).toFixed(2)}`}
+                                <table className="w-full text-xs text-left">
+                                  <thead>
+                                    <tr className="text-slate-400 border-b border-slate-800">
+                                      <th className="pb-2 font-semibold">Kalem</th>
+                                      <th className="pb-2 font-semibold text-right font-mono">{latestPeriodLabel}</th>
+                                      <th className="pb-2 font-semibold text-right font-mono">{yoyPeriodLabel}</th>
+                                      <th className="pb-2 font-semibold text-right font-mono">Değişim</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                                    {[
+                                      currentSector === 'BANKING'
+                                        ? { k: 'revenue', l: 'Net Faiz Geliri', semantics: 'REVENUE' as const }
+                                        : currentSector === 'FINANCIAL_SERVICES'
+                                        ? { k: 'revenue', l: 'Finansman Gelirleri', semantics: 'REVENUE' as const }
+                                        : currentSector === 'INSURANCE' 
+                                        ? { k: 'gross_written_premiums', l: 'Prim Üretimi', semantics: 'REVENUE' as const } 
+                                        : { k: 'revenue', l: 'Satışlar', semantics: 'REVENUE' as const },
+
+                                      currentSector === 'BANKING'
+                                        ? { k: 'gross_profit', l: 'Net Ücret & Komisyon Gelirleri', semantics: 'PROFIT' as const }
+                                        : (currentSector === 'INSURANCE' || currentSector === 'FINANCIAL_SERVICES') ? null : { k: 'gross_profit', l: 'Brüt Kâr', semantics: 'PROFIT' as const },
+
+                                      (currentSector === 'INSURANCE') ? null : { k: 'operating_income', l: currentSector === 'BANKING' ? 'Faaliyet Kârı' : 'Esas Faaliyet Kârı', semantics: 'PROFIT' as const },
+
+                                      currentSector === 'INSURANCE' 
+                                        ? { k: 'technical_balance', l: 'Teknik Bölüm Dengesi', semantics: 'PROFIT' as const } 
+                                        : (currentSector === 'BANKING' || currentSector === 'FINANCIAL_SERVICES')
+                                        ? null
+                                        : { k: 'ebitda', l: 'FAVÖK', semantics: 'PROFIT' as const },
+
+                                      currentSector === 'INSURANCE' ? { k: 'investment_income', l: 'Yatırım Gelirleri', semantics: 'PROFIT' as const } : null,
+                                      { k: 'net_income', l: 'Net Dönem Kârı', semantics: 'PROFIT' as const }
+                                    ].filter(Boolean).map((rowConfig: any) => {
+                                      const v1 = fv(latestPeriod, rowConfig.k);
+                                      const v2 = fv(yoyPeriod, rowConfig.k);
+                                      const changeRes = computeFinancialChange(v1, v2, rowConfig.semantics);
+                                      return (
+                                        <tr key={rowConfig.k} className="hover:bg-slate-800/30">
+                                          <td className="py-2.5 font-medium text-slate-200">{rowConfig.l}</td>
+                                          <td className={`py-2.5 text-right font-mono ${v1 != null && v1 < 0 ? 'text-rose-400 font-semibold' : 'text-white font-semibold'}`}>{formatAmount(v1, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
+                                          <td className={`py-2.5 text-right font-mono ${v2 != null && v2 < 0 ? 'text-rose-400 font-semibold' : 'text-slate-400'}`}>{formatAmount(v2, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
+                                          <td className="py-2.5 text-right font-mono">
+                                            {changeRes.formattedLabel === '—' ? (
+                                              <span className="text-slate-500">—</span>
+                                            ) : changeRes.isTextStatus ? (
+                                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold border ${changeRes.badgeClass}`}>
+                                                {changeRes.formattedLabel}
+                                              </span>
+                                            ) : (
+                                              <span className={`font-semibold ${changeRes.badgeColor === 'green' ? 'text-emerald-400' : changeRes.badgeColor === 'red' ? 'text-rose-400' : 'text-slate-400'}`}>
+                                                {changeRes.formattedLabel}
+                                              </span>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                              
+                              <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
+                                <div className="flex justify-between items-center mb-3 pb-2.5 border-b border-slate-800">
+                                  <h3 className="text-xs font-bold uppercase tracking-wider text-white">Özet Bilanço</h3>
+                                  <span className="text-[10px] font-mono text-slate-400">Bin TRY</span>
                                 </div>
+                                <table className="w-full text-xs text-left">
+                                  <thead>
+                                    <tr className="text-slate-400 border-b border-slate-800">
+                                      <th className="pb-2 font-semibold">Kalem</th>
+                                      <th className="pb-2 font-semibold text-right font-mono">{latestBS?.period}</th>
+                                      <th className="pb-2 font-semibold text-right font-mono">{prevBSLabel}</th>
+                                      <th className="pb-2 font-semibold text-right font-mono">Değişim</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                                    {[
+                                      currentSector === 'BANKING'
+                                        ? { k: 'current_assets', l: 'Krediler ve Alacaklar', semantics: 'NEUTRAL' as const }
+                                        : currentSector === 'FINANCIAL_SERVICES'
+                                        ? { k: 'current_assets', l: 'Faktoring / Kiralama Alacakları', semantics: 'NEUTRAL' as const }
+                                        : { k: 'current_assets', l: 'Dönen Varlıklar', semantics: 'NEUTRAL' as const },
+
+                                      currentSector === 'BANKING'
+                                        ? { k: 'non_current_assets', l: 'Menkul Değerler Portföyü', semantics: 'NEUTRAL' as const }
+                                        : { k: 'non_current_assets', l: 'Duran Varlıklar', semantics: 'NEUTRAL' as const },
+
+                                      { k: 'total_assets', l: 'Toplam Varlıklar', semantics: 'NEUTRAL' as const },
+
+                                      currentSector === 'BANKING'
+                                        ? { k: 'current_liabilities', l: 'Toplam Mevduat', semantics: 'NEUTRAL' as const }
+                                        : currentSector === 'INSURANCE' 
+                                        ? { k: 'financial_assets_insured', l: 'Sigortalı Finansal Yatırımları', semantics: 'NEUTRAL' as const } 
+                                        : currentSector === 'FINANCIAL_SERVICES'
+                                        ? { k: 'total_liabilities', l: 'Toplam Yükümlülükler', semantics: 'DEBT' as const }
+                                        : { k: 'financial_debt', l: 'Finansal Borçlar', semantics: 'DEBT' as const },
+
+                                      currentSector === 'BANKING'
+                                        ? { k: 'total_liabilities', l: 'Toplam Yükümlülükler', semantics: 'NEUTRAL' as const }
+                                        : currentSector === 'INSURANCE' 
+                                        ? { k: 'pension_aum', l: 'Emeklilik Fon Büyüklüğü (AUM)', semantics: 'NEUTRAL' as const } 
+                                        : currentSector === 'FINANCIAL_SERVICES'
+                                        ? null
+                                        : { k: 'net_debt', l: 'Net Borç', semantics: 'DEBT' as const },
+
+                                      { k: 'equity', l: 'Özkaynaklar', semantics: 'PROFIT' as const }
+                                    ].filter(Boolean).map((rowConfig: any) => {
+                                      const v1 = fv(latestBS, rowConfig.k);
+                                      const v2 = fv(prevBS, rowConfig.k);
+                                      const changeRes = computeFinancialChange(v1, v2, rowConfig.semantics);
+                                      return (
+                                        <tr key={rowConfig.k} className="hover:bg-slate-800/30">
+                                          <td className="py-2.5 font-medium text-slate-200">{rowConfig.l}</td>
+                                          <td className={`py-2.5 text-right font-mono ${v1 != null && v1 < 0 ? 'text-rose-400 font-semibold' : 'text-white font-semibold'}`}>{formatAmount(v1, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
+                                          <td className={`py-2.5 text-right font-mono ${v2 != null && v2 < 0 ? 'text-rose-400 font-semibold' : 'text-slate-400'}`}>{formatAmount(v2, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
+                                          <td className="py-2.5 text-right font-mono">
+                                            {changeRes.formattedLabel === '—' ? (
+                                              <span className="text-slate-500">—</span>
+                                            ) : changeRes.isTextStatus ? (
+                                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold border ${changeRes.badgeClass}`}>
+                                                {changeRes.formattedLabel}
+                                              </span>
+                                            ) : (
+                                              <span className={`font-semibold ${changeRes.badgeColor === 'green' ? 'text-emerald-400' : changeRes.badgeColor === 'red' ? 'text-rose-400' : 'text-slate-400'}`}>
+                                                {changeRes.formattedLabel}
+                                              </span>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
                               </div>
-                            ) : (
-                              <div className="bg-slate-950 border border-slate-800/80 px-3 py-2 rounded-xl text-center">
-                                <div className="text-[10px] uppercase font-bold text-slate-500">FD/Satışlar</div>
-                                <div className="text-sm font-black font-mono text-indigo-400">
-                                  {marketMultiples.ev_sales != null ? marketMultiples.ev_sales.toFixed(2) : '—'}
-                                </div>
-                              </div>
-                            )}
-                            <div className="bg-slate-950 border border-slate-800/80 px-3 py-2 rounded-xl text-center">
-                              <div className="text-[10px] uppercase font-bold text-slate-500">Yabancı Takas</div>
-                              <div className="text-sm font-black font-mono text-emerald-400">
-                                {marketMultiples.foreign_share_pct != null ? `%${marketMultiples.foreign_share_pct.toFixed(2)}` : '—'}
-                              </div>
-                              {marketMultiples.foreign_share_change_bps != null && (
-                                <div className={`text-[9px] font-mono font-semibold ${marketMultiples.foreign_share_change_bps >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                  {marketMultiples.foreign_share_change_bps >= 0 ? '+' : ''}{marketMultiples.foreign_share_change_bps.toFixed(1)} bp
-                                </div>
-                              )}
                             </div>
-                            <div className="bg-slate-950 border border-slate-800/80 px-3 py-2 rounded-xl text-center">
-                              <div className="text-[10px] uppercase font-bold text-slate-500">Halka Açıklık</div>
-                              <div className="text-sm font-black font-mono text-slate-200">
-                                %{marketMultiples.free_float_pct != null ? marketMultiples.free_float_pct.toFixed(1) : '—'}
-                              </div>
-                            </div>
-                            <div className="bg-slate-950 border border-slate-800/80 px-3 py-2 rounded-xl text-center">
-                              <div className="text-[10px] uppercase font-bold text-slate-500">Piyasa Değeri</div>
-                              <div className="text-sm font-black font-mono text-purple-400">
-                                {marketMultiples.market_cap_mn_tl != null
-                                  ? (marketMultiples.market_cap_mn_tl >= 1000
-                                      ? `${(marketMultiples.market_cap_mn_tl / 1000).toFixed(1)} Mr TL`
-                                      : `${marketMultiples.market_cap_mn_tl.toFixed(0)} Mn TL`)
-                                  : '—'}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Sektör Arketip Bilgilendirme ve Emniyet Uyarı Bannerları */}
-                      {getFinancialArchetype(currentSector) === 'AVIATION' && (
-                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-center gap-3.5 text-amber-300 text-xs shadow-sm">
-                          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
-                          <div>
-                            <span className="font-bold text-amber-200">Havacılık Sektörü Mevsimsellik Uyarısı:</span>{' '}
-                            Q3 dönemi turizm ve yolcu trafiğinde operasyonel zirve (peak season), Q1 ise dip dönemdir. Ara dönem kârlarının düz çarpımı (örn. 6A × 2) yanıltıcıdır; tüm rasyo ve çarpanlar TTM (Son 12 Ay) esasıyla çalışmaktadır.
-                          </div>
-                        </div>
-                      )}
-
-                      {getFinancialArchetype(currentSector) === 'RETAIL' && (
-                        <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl p-4 flex items-center gap-3.5 text-blue-300 text-xs shadow-sm">
-                          <Info className="w-5 h-5 text-blue-400 shrink-0" />
-                          <div>
-                            <span className="font-bold text-blue-200">Perakende Negatif İşletme Sermayesi Modeli:</span>{' '}
-                            Tedarikçi ödeme vadelerinin stok devir gününden uzun olması nedeniyle Cari Oran &lt; 1,00 olması şirketin tedarikçilerinden faizsiz fon sağladığını gösterir; geleneksel likidite riski olarak yorumlanmamalıdır.
-                          </div>
-                        </div>
-                      )}
-
-                      {(currentSector === 'BANKING' || currentSector === 'FINANCIAL_SERVICES') && (
-                        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4 flex items-center gap-3.5 text-emerald-300 text-xs shadow-sm">
-                          <Info className="w-5 h-5 text-emerald-400 shrink-0" />
-                          <div>
-                            <span className="font-bold text-emerald-200">{currentSector === 'BANKING' ? 'Bankacılık Finansal Modeli' : 'Finansal Kiralama & Faktoring Modeli'}:</span>{' '}
-                            Finansal kuruluş bilançosu yapısı gereği FAVÖK, Brüt Kâr, Net Borç ve Cari Oran devre dışı bırakılmıştır. Net Faiz Marjı (NIM), Aktif Kârlılığı (ROA), NPL ve Sermaye Yeterliliği baz alınmaktadır.
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Değer Tuzağı (Value Trap) Uyarı Bannerı */}
-                      {(valuationInfo.is_value_trap || activeReport?.isValueTrap) && (
-                        <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 sm:p-5 flex items-start gap-3.5 text-rose-300 text-xs shadow-sm">
-                          <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-                          <div className="space-y-1.5 flex-1">
-                            <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <span className="font-bold text-rose-200 text-sm">
-                                Kritik Değer Tuzağı Riski (Value Trap Alert)
-                              </span>
-                              <span className="text-[10px] font-mono font-bold bg-rose-950/90 text-rose-400 border border-rose-800 px-2 py-0.5 rounded">
-                                {valuationInfo.value_trap_severity || activeReport?.valueTrapSeverity || 'YÜKSEK RİSK'}
-                              </span>
-                            </div>
-                            <p className="text-rose-200/90 leading-relaxed">
-                              Hisse senedi kağıt üzerinde %{valuationInfo.discount_pct} iskontolu görünmektedir; ancak eriyen operasyonel kâr marjları, negatif sermaye makası (ROIC &lt; WACC) veya yüksek borç yükü nedeniyle bu iskonto bir değer tuzağı riski barındırmaktadır. Emniyet marjı UNSAFE (Güvensiz) kategorisindedir.
-                            </p>
-                            {(valuationInfo.value_trap_reasons || activeReport?.valueTrapReasons) && (
-                              <ul className="mt-1 space-y-1 pl-4 list-disc text-rose-300/80 font-mono text-[11px]">
-                                {(valuationInfo.value_trap_reasons || activeReport?.valueTrapReasons || []).map((r, i) => (
-                                  <li key={i}>{r}</li>
-                                ))}
-                              </ul>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                        <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-5 shadow-lg">
-                          <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-sm font-bold text-white">Özet Gelir Tablosu (Bin TRY)</h3>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">TRY</span>
-                            </div>
-                          </div>
-                          <table className="w-full text-sm text-left">
-                            <thead>
-                              <tr className="text-slate-400 border-b border-slate-800">
-                                <th className="pb-2 font-medium">Kalem</th>
-                                <th className="pb-2 font-medium text-right">{latestPeriodLabel}</th>
-                                <th className="pb-2 font-medium text-right">{yoyPeriodLabel}</th>
-                                <th className="pb-2 font-medium text-right">%</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-800/50 text-slate-300">
-                              {[
-                                currentSector === 'BANKING'
-                                  ? { k: 'revenue', l: 'Net Faiz Geliri', semantics: 'REVENUE' as const }
-                                  : currentSector === 'FINANCIAL_SERVICES'
-                                  ? { k: 'revenue', l: 'Finansman Gelirleri', semantics: 'REVENUE' as const }
-                                  : currentSector === 'INSURANCE' 
-                                  ? { k: 'gross_written_premiums', l: 'Prim Üretimi', semantics: 'REVENUE' as const } 
-                                  : { k: 'revenue', l: 'Satışlar', semantics: 'REVENUE' as const },
-
-                                currentSector === 'BANKING'
-                                  ? { k: 'gross_profit', l: 'Net Ücret & Komisyon Gelirleri', semantics: 'PROFIT' as const }
-                                  : (currentSector === 'INSURANCE' || currentSector === 'FINANCIAL_SERVICES') ? null : { k: 'gross_profit', l: 'Brüt Kar', semantics: 'PROFIT' as const },
-
-                                (currentSector === 'INSURANCE') ? null : { k: 'operating_income', l: currentSector === 'BANKING' ? 'Faaliyet Kârı' : 'Esas Faaliyet Karı', semantics: 'PROFIT' as const },
-
-                                currentSector === 'INSURANCE' 
-                                  ? { k: 'technical_balance', l: 'Teknik Bölüm Dengesi', semantics: 'PROFIT' as const } 
-                                  : (currentSector === 'BANKING' || currentSector === 'FINANCIAL_SERVICES')
-                                  ? null
-                                  : { k: 'ebitda', l: 'FAVÖK', semantics: 'PROFIT' as const },
-
-                                currentSector === 'INSURANCE' ? { k: 'investment_income', l: 'Yatırım Gelirleri', semantics: 'PROFIT' as const } : null,
-                                { k: 'net_income', l: 'Net Dönem Karı', semantics: 'PROFIT' as const }
-                              ].filter(Boolean).map((rowConfig: any) => {
-                                const v1 = fv(latestPeriod, rowConfig.k);
-                                const v2 = fv(yoyPeriod, rowConfig.k);
-                                const changeRes = computeFinancialChange(v1, v2, rowConfig.semantics);
-                                return (
-                                  <tr key={rowConfig.k} className="hover:bg-slate-800/30">
-                                    <td className="py-2">{rowConfig.l}</td>
-                                    <td className={`py-2 text-right font-mono ${v1 != null && v1 < 0 ? 'text-rose-400 font-semibold' : ''}`}>{formatAmount(v1, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
-                                    <td className={`py-2 text-right font-mono ${v2 != null && v2 < 0 ? 'text-rose-400 font-semibold' : ''}`}>{formatAmount(v2, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
-                                    <td className="py-2 text-right font-mono">
-                                      {changeRes.formattedLabel === '—' ? (
-                                        <span className="text-slate-500">—</span>
-                                      ) : changeRes.isTextStatus ? (
-                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold border ${changeRes.badgeClass}`}>
-                                          {changeRes.formattedLabel}
-                                        </span>
-                                      ) : (
-                                        <span className={`font-semibold ${changeRes.badgeColor === 'green' ? 'text-emerald-400' : changeRes.badgeColor === 'red' ? 'text-rose-400' : 'text-slate-400'}`}>
-                                          {changeRes.formattedLabel}
-                                        </span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                        
-                        <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-5 shadow-lg">
-                          <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-sm font-bold text-white">Özet Bilanço (Bin TRY)</h3>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">TRY</span>
-                            </div>
-                          </div>
-                          <table className="w-full text-sm text-left">
-                            <thead>
-                              <tr className="text-slate-400 border-b border-slate-800">
-                                <th className="pb-2 font-medium">Kalem</th>
-                                <th className="pb-2 font-medium text-right">{latestBS?.period}</th>
-                                <th className="pb-2 font-medium text-right">{prevBSLabel}</th>
-                                <th className="pb-2 font-medium text-right">%</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-800/50 text-slate-300">
-                              {[
-                                currentSector === 'BANKING'
-                                  ? { k: 'current_assets', l: 'Krediler ve Alacaklar', semantics: 'NEUTRAL' as const }
-                                  : currentSector === 'FINANCIAL_SERVICES'
-                                  ? { k: 'current_assets', l: 'Faktoring / Kiralama Alacakları', semantics: 'NEUTRAL' as const }
-                                  : { k: 'current_assets', l: 'Dönen Varlıklar', semantics: 'NEUTRAL' as const },
-
-                                currentSector === 'BANKING'
-                                  ? { k: 'non_current_assets', l: 'Menkul Değerler Portföyü', semantics: 'NEUTRAL' as const }
-                                  : { k: 'non_current_assets', l: 'Duran Varlıklar', semantics: 'NEUTRAL' as const },
-
-                                { k: 'total_assets', l: 'Toplam Varlıklar (Aktifler)', semantics: 'NEUTRAL' as const },
-
-                                currentSector === 'BANKING'
-                                  ? { k: 'current_liabilities', l: 'Toplam Mevduat', semantics: 'NEUTRAL' as const }
-                                  : currentSector === 'INSURANCE' 
-                                  ? { k: 'financial_assets_insured', l: 'Riski Sigortalılara Ait Finansal Yatırımlar (Bilanço İçi)', semantics: 'NEUTRAL' as const } 
-                                  : currentSector === 'FINANCIAL_SERVICES'
-                                  ? { k: 'total_liabilities', l: 'Toplam Yükümlülükler (Borçlar)', semantics: 'DEBT' as const }
-                                  : { k: 'financial_debt', l: 'Finansal Borçlar', semantics: 'DEBT' as const },
-
-                                currentSector === 'BANKING'
-                                  ? { k: 'total_liabilities', l: 'Toplam Yükümlülükler (Pasifler)', semantics: 'NEUTRAL' as const }
-                                  : currentSector === 'INSURANCE' 
-                                  ? { k: 'pension_aum', l: 'Emeklilik Fon Büyüklüğü (AUM - Bilanço Dışı)', semantics: 'NEUTRAL' as const } 
-                                  : currentSector === 'FINANCIAL_SERVICES'
-                                  ? null
-                                  : { k: 'net_debt', l: 'Net Borç', semantics: 'DEBT' as const },
-
-                                { k: 'equity', l: 'Özkaynaklar', semantics: 'PROFIT' as const }
-                              ].filter(Boolean).map((rowConfig: any) => {
-                                const v1 = fv(latestBS, rowConfig.k);
-                                const v2 = fv(prevBS, rowConfig.k);
-                                const changeRes = computeFinancialChange(v1, v2, rowConfig.semantics);
-                                return (
-                                  <tr key={rowConfig.k} className="hover:bg-slate-800/30">
-                                    <td className="py-2">{rowConfig.l}</td>
-                                    <td className={`py-2 text-right font-mono ${v1 != null && v1 < 0 ? 'text-rose-400 font-semibold' : ''}`}>{formatAmount(v1, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
-                                    <td className={`py-2 text-right font-mono ${v2 != null && v2 < 0 ? 'text-rose-400 font-semibold' : ''}`}>{formatAmount(v2, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}</td>
-                                    <td className="py-2 text-right font-mono">
-                                      {changeRes.formattedLabel === '—' ? (
-                                        <span className="text-slate-500">—</span>
-                                      ) : changeRes.isTextStatus ? (
-                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold border ${changeRes.badgeClass}`}>
-                                          {changeRes.formattedLabel}
-                                        </span>
-                                      ) : (
-                                        <span className={`font-semibold ${changeRes.badgeColor === 'green' ? 'text-emerald-400' : changeRes.badgeColor === 'red' ? 'text-rose-400' : 'text-slate-400'}`}>
-                                          {changeRes.formattedLabel}
-                                        </span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                      </>
-                      );
+                          </>
+                        );
                       })()}
+
                       {/* Çeyreklik Bar Grafikleri (3'lü) */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {[
                           { 
                             title: currentSector === 'BANKING' 
@@ -5134,94 +4775,105 @@ export default function ValuationTerminal({
                               ? 'technical_balance'
                               : 'ebitda' 
                           },
-                          { title: 'Çeyreklik Net Kar', key: 'net_income' }
-                        ].map(chart => (
-                          <div key={chart.key} className="bg-slate-900 border border-slate-800/90 rounded-2xl p-4 shadow-lg">
-                            <div className="text-xs font-bold text-white mb-2">{chart.title}</div>
-                            <div className="h-40 w-full">
-                              <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={quarterlyChartData.slice(-5)} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
-                                  <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10 }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
-                                  <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
-                                  <Bar dataKey={chart.key} name={chart.title} radius={[2, 2, 0, 0]}>
-                                    {quarterlyChartData.slice(-5).map((entry: any, index: number) => (
-                                      <Cell 
-                                        key={`cell-${index}`} 
-                                        fill={(entry[chart.key] != null && entry[chart.key] < 0) ? '#f43f5e' : '#3b82f6'} 
-                                      />
-                                    ))}
-                                  </Bar>
-                                </BarChart>
-                              </ResponsiveContainer>
+                          { title: 'Çeyreklik Net Kâr', key: 'net_income' }
+                        ].map(chart => {
+                          const slice5 = quarterlyChartData.slice(-5);
+                          const latestVal = slice5.length > 0 ? slice5[slice5.length - 1]?.[chart.key] : null;
+                          return (
+                            <div key={chart.key} className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-bold text-white">{chart.title}</span>
+                                {latestVal != null && (
+                                  <span className={`text-xs font-mono font-bold ${latestVal < 0 ? 'text-rose-400' : 'text-slate-300'}`}>
+                                    {formatAmount(latestVal, 'bin', false, '', '', currentExtractedData?.currency || 'TRY')}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="h-36 w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <BarChart data={slice5} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
+                                    <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10 }} tickFormatter={(v: string) => v ? v.slice(2) : v} />
+                                    <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
+                                    <Bar dataKey={chart.key} name={chart.title} radius={[3, 3, 0, 0]}>
+                                      {slice5.map((entry: any, index: number) => (
+                                        <Cell 
+                                          key={`cell-${index}`} 
+                                          fill={(entry[chart.key] != null && entry[chart.key] < 0) ? '#f43f5e' : '#3b82f6'} 
+                                        />
+                                      ))}
+                                    </Bar>
+                                  </BarChart>
+                                </ResponsiveContainer>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                       
                       {/* Mini Sparkline Çizgi Grafikleri (3x2) */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {(currentSector === 'BANKING' ? [
-                          { title: 'Net Faiz Gelir Oranı (Çeyreklik)', calc: (d: any) => { const rev = d.revenue || d.net_interest_income; return (rev && d.total_assets) ? Number(((rev * 4 / d.total_assets) * 100).toFixed(1)) : null; } },
-                          { title: 'Aktif Kârlılığı (ROA)', calc: (d: any) => computeRatioForPeriod(d, 'roa', currentSector) },
-                          { title: 'Net Kar Marjı (Çeyreklik)', calc: (d: any) => { const rev = d.revenue || d.net_interest_income; return (rev && rev > 0 && d.net_income != null) ? Number((d.net_income / rev * 100).toFixed(1)) : null; } },
-                          { title: 'Kredi / Mevduat Oranı (x)', calc: (d: any) => { const loans = d.current_assets; const deps = d.current_liabilities; return (loans && deps && deps > 0) ? Number((loans / deps).toFixed(2)) : 0.88; } },
-                          { title: 'Kaldıraç Oranı', calc: (d: any) => computeRatioForPeriod(d, 'leverage_ratio', currentSector) },
-                          { title: 'Özkaynak Karlılığı (ROE)', calc: (d: any) => computeRatioForPeriod(d, 'roe', currentSector) }
+                          { title: 'Net Faiz Gelir Oranı', isPct: true, calc: (d: any) => { const rev = d.revenue || d.net_interest_income; return (rev && d.total_assets) ? Number(((rev * 4 / d.total_assets) * 100).toFixed(1)) : null; } },
+                          { title: 'Aktif Kârlılığı (ROA)', isPct: true, calc: (d: any) => computeRatioForPeriod(d, 'roa', currentSector) },
+                          { title: 'Net Kâr Marjı', isPct: true, calc: (d: any) => { const rev = d.revenue || d.net_interest_income; return (rev && rev > 0 && d.net_income != null) ? Number((d.net_income / rev * 100).toFixed(1)) : null; } },
+                          { title: 'Kredi / Mevduat (x)', isPct: false, calc: (d: any) => { const loans = d.current_assets; const deps = d.current_liabilities; return (loans && deps && deps > 0) ? Number((loans / deps).toFixed(2)) : 0.88; } },
+                          { title: 'Kaldıraç Oranı', isPct: true, calc: (d: any) => computeRatioForPeriod(d, 'leverage_ratio', currentSector) },
+                          { title: 'Özkaynak Kârlılığı (ROE)', isPct: true, calc: (d: any) => computeRatioForPeriod(d, 'roe', currentSector) }
                         ] : currentSector === 'FINANCIAL_SERVICES' ? [
-                          { title: 'Finansman Gelir Marjı (Çeyreklik)', calc: (d: any) => { const rev = d.revenue; return (rev && rev > 0 && d.operating_income != null) ? Number((d.operating_income / rev * 100).toFixed(1)) : null; } },
-                          { title: 'Aktif Kârlılığı (ROA)', calc: (d: any) => computeRatioForPeriod(d, 'roa', currentSector) },
-                          { title: 'Net Kar Marjı (Çeyreklik)', calc: (d: any) => { const rev = d.revenue; return (rev && rev > 0 && d.net_income != null) ? Number((d.net_income / rev * 100).toFixed(1)) : null; } },
-                          { title: 'Alacak / Aktif Oranı (%)', calc: (d: any) => (d.current_assets && d.total_assets) ? Number((d.current_assets / d.total_assets * 100).toFixed(1)) : 82.5 },
-                          { title: 'Kaldıraç Oranı', calc: (d: any) => computeRatioForPeriod(d, 'leverage_ratio', currentSector) },
-                          { title: 'Özkaynak Karlılığı (ROE)', calc: (d: any) => computeRatioForPeriod(d, 'roe', currentSector) }
+                          { title: 'Finansman Gelir Marjı', isPct: true, calc: (d: any) => { const rev = d.revenue; return (rev && rev > 0 && d.operating_income != null) ? Number((d.operating_income / rev * 100).toFixed(1)) : null; } },
+                          { title: 'Aktif Kârlılığı (ROA)', isPct: true, calc: (d: any) => computeRatioForPeriod(d, 'roa', currentSector) },
+                          { title: 'Net Kâr Marjı', isPct: true, calc: (d: any) => { const rev = d.revenue; return (rev && rev > 0 && d.net_income != null) ? Number((d.net_income / rev * 100).toFixed(1)) : null; } },
+                          { title: 'Alacak / Aktif (%)', isPct: true, calc: (d: any) => (d.current_assets && d.total_assets) ? Number((d.current_assets / d.total_assets * 100).toFixed(1)) : 82.5 },
+                          { title: 'Kaldıraç Oranı', isPct: true, calc: (d: any) => computeRatioForPeriod(d, 'leverage_ratio', currentSector) },
+                          { title: 'Özkaynak Kârlılığı (ROE)', isPct: true, calc: (d: any) => computeRatioForPeriod(d, 'roe', currentSector) }
                         ] : currentSector === 'INSURANCE' ? [
-                          { title: 'Hasar / Prim Oranı', calc: (d: any) => d.loss_ratio ?? 66.8 },
-                          { title: 'Teknik Kâr Marjı (Çeyreklik)', calc: (d: any) => { const denom = d.gross_written_premiums ?? d.written_premiums ?? d.revenue; const num = d.technical_balance ?? d.technical_profit ?? d.net_income; return (denom && denom > 0 && num != null) ? Number((num / denom * 100).toFixed(1)) : null; } },
-                          { title: 'Net Kar Marjı (Çeyreklik)', calc: (d: any) => { const denom = d.gross_written_premiums ?? d.written_premiums ?? d.revenue; return (denom && denom > 0 && d.net_income != null) ? Number((d.net_income / denom * 100).toFixed(1)) : null; } },
-                          { title: 'Bileşik Oran (Combined)', calc: (d: any) => d.combined_ratio ?? 81.6 },
-                          { title: 'Kaldıraç Oranı', calc: (d: any) => computeRatioForPeriod(d, 'leverage_ratio', currentSector) },
-                          { title: 'Özkaynak Karlılığı (ROE)', calc: (d: any) => computeRatioForPeriod(d, 'roe', currentSector) }
-                        ] : currentSector === 'RETAIL' ? [
-                          { title: 'Brüt Kar Marjı (Çeyreklik)', calc: (d: any) => (d.revenue && d.revenue > 0 && d.gross_profit != null) ? Number((d.gross_profit / d.revenue * 100).toFixed(1)) : null },
-                          { title: 'FAVÖK Marjı (Çeyreklik)', calc: (d: any) => (d.revenue && d.revenue > 0 && d.ebitda != null) ? Number((d.ebitda / d.revenue * 100).toFixed(1)) : null },
-                          { title: 'Net Kar Marjı (Çeyreklik)', calc: (d: any) => (d.revenue && d.revenue > 0 && d.net_income != null) ? Number((d.net_income / d.revenue * 100).toFixed(1)) : null },
-                          { title: 'Cari Oran (Negatif İşletme Sermayesi)', calc: (d: any) => computeRatioForPeriod(d, 'current_ratio', currentSector) },
-                          { title: 'Kaldıraç Oranı', calc: (d: any) => computeRatioForPeriod(d, 'leverage_ratio', currentSector) },
-                          { title: 'Özkaynak Karlılığı (ROE)', calc: (d: any) => computeRatioForPeriod(d, 'roe', currentSector) }
+                          { title: 'Hasar / Prim Oranı', isPct: true, calc: (d: any) => d.loss_ratio ?? 66.8 },
+                          { title: 'Teknik Kâr Marjı', isPct: true, calc: (d: any) => { const denom = d.gross_written_premiums ?? d.written_premiums ?? d.revenue; const num = d.technical_balance ?? d.technical_profit ?? d.net_income; return (denom && denom > 0 && num != null) ? Number((num / denom * 100).toFixed(1)) : null; } },
+                          { title: 'Net Kâr Marjı', isPct: true, calc: (d: any) => { const denom = d.gross_written_premiums ?? d.written_premiums ?? d.revenue; return (denom && denom > 0 && d.net_income != null) ? Number((d.net_income / denom * 100).toFixed(1)) : null; } },
+                          { title: 'Bileşik Oran (Combined)', isPct: true, calc: (d: any) => d.combined_ratio ?? 81.6 },
+                          { title: 'Kaldıraç Oranı', isPct: true, calc: (d: any) => computeRatioForPeriod(d, 'leverage_ratio', currentSector) },
+                          { title: 'Özkaynak Kârlılığı (ROE)', isPct: true, calc: (d: any) => computeRatioForPeriod(d, 'roe', currentSector) }
                         ] : [
-                          { title: 'Brüt Kar Marjı (Çeyreklik)', calc: (d: any) => (d.revenue && d.revenue > 0 && d.gross_profit != null) ? Number((d.gross_profit / d.revenue * 100).toFixed(1)) : null },
-                          { title: 'FAVÖK Marjı (Çeyreklik)', calc: (d: any) => (d.revenue && d.revenue > 0 && d.ebitda != null) ? Number((d.ebitda / d.revenue * 100).toFixed(1)) : null },
-                          { title: 'Net Kar Marjı (Çeyreklik)', calc: (d: any) => (d.revenue && d.revenue > 0 && d.net_income != null) ? Number((d.net_income / d.revenue * 100).toFixed(1)) : null },
-                          { title: 'Cari Oran', calc: (d: any) => computeRatioForPeriod(d, 'current_ratio', currentSector) },
-                          { title: 'Kaldıraç Oranı', calc: (d: any) => computeRatioForPeriod(d, 'leverage_ratio', currentSector) },
-                          { title: 'Özkaynak Karlılığı (ROE)', calc: (d: any) => computeRatioForPeriod(d, 'roe', currentSector) }
+                          { title: 'Brüt Kâr Marjı', isPct: true, calc: (d: any) => (d.revenue && d.revenue > 0 && d.gross_profit != null) ? Number((d.gross_profit / d.revenue * 100).toFixed(1)) : null },
+                          { title: 'FAVÖK Marjı', isPct: true, calc: (d: any) => (d.revenue && d.revenue > 0 && d.ebitda != null) ? Number((d.ebitda / d.revenue * 100).toFixed(1)) : null },
+                          { title: 'Net Kâr Marjı', isPct: true, calc: (d: any) => (d.revenue && d.revenue > 0 && d.net_income != null) ? Number((d.net_income / d.revenue * 100).toFixed(1)) : null },
+                          { title: 'Cari Oran', isPct: false, calc: (d: any) => computeRatioForPeriod(d, 'current_ratio', currentSector) },
+                          { title: 'Kaldıraç Oranı', isPct: true, calc: (d: any) => computeRatioForPeriod(d, 'leverage_ratio', currentSector) },
+                          { title: 'Özkaynak Kârlılığı (ROE)', isPct: true, calc: (d: any) => computeRatioForPeriod(d, 'roe', currentSector) }
                         ]).map(mini => {
-                          const miniData = quarterlyChartData.slice(-8).map((d:any) => ({ period: d.period, value: mini.calc(d) }));
-                           const values = miniData.map((d: any) => d.value).filter((v: any) => v != null && !isNaN(v));
-                           const trendColor = values.length >= 2 && values[values.length - 1] > values[0] ? '#10b981' : '#f87171';
+                          const miniData = quarterlyChartData.slice(-8).map((d: any) => ({ period: d.period, value: mini.calc(d) }));
+                          const values = miniData.map((d: any) => d.value).filter((v: any) => v != null && !isNaN(v));
+                          const latestVal = values.length > 0 ? values[values.length - 1] : null;
+                          const trendColor = values.length >= 2 && values[values.length - 1] >= values[0] ? '#10b981' : '#f43f5e';
+                          const latestFormatted = latestVal != null
+                            ? (mini.isPct ? `%${Number(latestVal).toFixed(1)}` : `${Number(latestVal).toFixed(2)}x`)
+                            : '—';
                           return (
-                            <div key={mini.title} className="bg-slate-900 border border-slate-800/90 rounded-2xl p-4 shadow-lg">
-                              <div className="text-xs font-bold text-white mb-2">{mini.title}</div>
-                              <div className="h-[150px] w-full">
+                            <div key={mini.title} className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-bold text-white">{mini.title}</span>
+                                <span className="text-xs font-mono font-bold text-slate-200">{latestFormatted}</span>
+                              </div>
+                              <div className="h-[130px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
-                                  <LineChart data={miniData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
-                                    <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10 }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
+                                  <LineChart data={miniData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                                    <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10 }} tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                     <YAxis hide />
                                     <Tooltip content={({ active, payload }) => {
                                       if (active && payload && payload.length) {
                                         const val = payload[0].value as number;
                                         const valText = (typeof val === 'number' && !isNaN(val))
-                                          ? (mini.title.includes('Marj') || mini.title.includes('Karlılığı') ? `%${val.toFixed(1)}` : mini.title.includes('Kaldıraç') ? `${val.toFixed(2)}x` : val.toFixed(2))
+                                          ? (mini.isPct ? `%${val.toFixed(1)}` : `${val.toFixed(2)}x`)
                                           : '—';
                                         return (
-                                          <div className="bg-slate-900 border border-slate-700 p-2 text-xs text-white rounded shadow-xl">
+                                          <div className="bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs font-mono text-white rounded shadow-md">
                                             {valText}
                                           </div>
                                         );
                                       }
                                       return null;
                                     }} />
-                                    <Line type="monotone" dataKey="value" stroke={trendColor} strokeWidth={2} dot={{ r: 2, fill: trendColor }} />
+                                    <Line type="monotone" dataKey="value" stroke={trendColor} strokeWidth={2} dot={{ r: 2.5, fill: trendColor }} />
                                   </LineChart>
                                 </ResponsiveContainer>
                               </div>
@@ -5230,52 +4882,30 @@ export default function ValuationTerminal({
                         })}
                       </div>
 
-                      {/* ========================================================================= */}
-                      {/* ÇEYREKLİK HAFIZA & DÖNEMSEL BESLENME                                      */}
-                      {/* ========================================================================= */}
-                      <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-5 shadow-lg space-y-3">
-                        <div className="flex items-center gap-2 border-b border-slate-800 pb-2.5 mb-3">
-                          <History className="w-4 h-4 text-emerald-400" />
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-white">
-                            Çeyreklik Hafıza & Dönemsel Karşılaştırma (Dönemsel Beslenme)
-                          </h4>
+                      {/* Çeyreklik Hafıza (Yalnızca önceki çeyrek karşılaştırması mevcutsa gösterilir) */}
+                      {previousQuarterComparison && (
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
+                          <div className="flex items-center gap-2">
+                            <History className="w-4 h-4 text-emerald-400 shrink-0" />
+                            <span className="font-bold text-white">Çeyreklik Revizyon Takibi:</span>
+                            <span className="text-slate-400">Önceki analiz raporuna göre hedef fiyat ve tavsiye değişimi</span>
+                          </div>
+                          <div className="flex items-center gap-4 font-mono">
+                            <div>
+                              <span className="text-slate-400 mr-1.5">Önceki:</span>
+                              <span className="font-bold text-slate-200">{previousQuarterComparison.prevFairValue} TL ({previousQuarterComparison.prevDecision})</span>
+                            </div>
+                            <span className="text-slate-600">→</span>
+                            <div>
+                              <span className="text-slate-400 mr-1.5">Güncel:</span>
+                              <span className="font-bold text-emerald-400">{previousQuarterComparison.currFairValue} TL</span>
+                              <span className={`ml-1.5 font-bold ${(previousQuarterComparison.diffPct || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                ({(previousQuarterComparison.diffPct || 0) >= 0 ? '+' : ''}%{previousQuarterComparison.diffPct})
+                              </span>
+                            </div>
+                          </div>
                         </div>
-
-                        {previousQuarterComparison ? (
-                          <div className="space-y-2.5 text-xs">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-center">
-                              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                                <span className="text-[10px] text-slate-400 uppercase block">Önceki Çeyrek Adil Değer</span>
-                                <span className="text-base font-mono font-bold text-slate-300 mt-1 block">
-                                  {previousQuarterComparison.prevFairValue} TL
-                                </span>
-                                <span className="text-[10px] text-slate-400">
-                                  Tavsiye: {previousQuarterComparison.prevDecision} (Skor: {previousQuarterComparison.prevScore || '—'})
-                                </span>
-                              </div>
-                              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                                <span className="text-[10px] text-slate-400 uppercase block">Güncel Çeyrek Adil Değer</span>
-                                <span className="text-base font-mono font-bold text-emerald-400 mt-1 block">
-                                  {previousQuarterComparison.currFairValue} TL
-                                </span>
-                                <span className={`text-[10px] font-mono font-bold ${
-                                  (previousQuarterComparison.diffPct || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                                }`}>
-                                  {(previousQuarterComparison.diffPct || 0) >= 0 ? '+' : ''}%{previousQuarterComparison.diffPct} Değişim
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="bg-emerald-950/30 border border-emerald-800/50 p-2.5 rounded-xl text-xs text-emerald-200">
-                              ✓ Uygulama önceki çeyrek analiz raporundan ve yönetim rehberliğinden beslenerek güncel değerlemeyi karşılaştırmalı olarak kalibre etmiştir.
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="p-4 text-center text-slate-500 bg-slate-950/60 rounded-xl border border-slate-800 text-xs">
-                            Bu hisse için arşivde kayıtlı önceki çeyrek analizi bulunmuyor. Yeni çeyrek verileri geldikçe dönemsel hafıza karşılaştırması aktif olacaktır.
-                          </div>
-                        )}
-                      </div>
+                      )}
 
                     </>
                   )}
@@ -5286,7 +4916,7 @@ export default function ValuationTerminal({
               {/* SEKME 1: GRAFİK TERMİNALİ (4'LÜ IZGARA) */}
               {activeTab === 'overview' && (
                 <ComponentErrorBoundary fallbackTitle="Grafik Terminali Hatası">
-                <div className="space-y-6">
+                <div className="space-y-4">
                   {chartData.length === 0 ? (
                     <div className="p-8 text-center text-slate-500 bg-slate-900 rounded-xl border border-slate-800 text-sm">
                       Grafik verisi bulunamadı.
@@ -5294,44 +4924,33 @@ export default function ValuationTerminal({
                   ) : (
                     <>
                       {/* Çeyreklik vs TTM Geçiş Kontrolü */}
-                      <div className="flex items-center justify-between flex-wrap gap-3 bg-slate-900 border border-slate-800/90 p-3.5 rounded-2xl shadow-lg">
-                        <div className="flex items-center gap-2.5">
-                          <div className="p-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400">
-                            <Activity className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <div className="text-xs font-bold text-white flex items-center gap-2">
-                              <span>Grafik Dönem Modu:</span>
-                              <span className="text-blue-400 font-mono">
-                                {chartMode === 'quarterly' ? 'Çeyreklik (Son 3 Ay)' : 'Yıllıklandırılmış (Son 12 Ay - TTM)'}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-slate-400">
-                              {chartMode === 'quarterly'
-                                ? 'Her çeyreğin salt kendi operasyonel hasılatı ve kâr performansı görüntülenir.'
-                                : 'Son 4 çeyreğin hareketli toplamı (TTM) ile mevsimsellikten arındırılmış yıllık trend izlenir.'}
-                            </p>
-                          </div>
+                      <div className="flex items-center justify-between flex-wrap gap-3 bg-slate-900 border border-slate-800 px-4 py-2.5 rounded-xl shadow-sm">
+                        <div className="flex items-center gap-2 text-xs">
+                          <Activity className="w-4 h-4 text-blue-400" />
+                          <span className="font-bold text-white">Veri Periyodu:</span>
+                          <span className="text-slate-400">
+                            {chartMode === 'quarterly' ? 'Çeyreklik (3 Aylık Akım)' : 'Yıllıklandırılmış (Son 12 Ay - TTM)'}
+                          </span>
                         </div>
 
-                        <div className="inline-flex items-center p-1 bg-slate-950 border border-slate-800 rounded-xl text-xs font-semibold">
+                        <div className="inline-flex items-center p-0.5 bg-slate-950 border border-slate-800 rounded-lg text-xs font-semibold">
                           <button
                             type="button"
                             onClick={() => setChartMode('quarterly')}
-                            className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                            className={`px-3 py-1 rounded-md transition cursor-pointer ${
                               chartMode === 'quarterly'
-                                ? 'bg-blue-600 text-white shadow-md'
+                                ? 'bg-blue-600 text-white'
                                 : 'text-slate-400 hover:text-white'
                             }`}
                           >
-                            Çeyreklik (Son 3 Ay)
+                            Çeyreklik
                           </button>
                           <button
                             type="button"
                             onClick={() => setChartMode('ttm')}
-                            className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                            className={`px-3 py-1 rounded-md transition cursor-pointer ${
                               chartMode === 'ttm'
-                                ? 'bg-blue-600 text-white shadow-md'
+                                ? 'bg-blue-600 text-white'
                                 : 'text-slate-400 hover:text-white'
                             }`}
                           >
@@ -5340,24 +4959,17 @@ export default function ValuationTerminal({
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
                         {/* Grafik 1: Büyüme Trendi: Satışlar ve Karlılık */}
-                        <div className="bg-slate-900 border border-slate-800/90 p-5 rounded-2xl space-y-4 shadow-lg">
-                          <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-                            <div className="flex items-center gap-2.5">
-                              <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400">
-                                <BarChart3 className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <span className="text-xs font-bold text-white">
-                                  {currentSector === 'INSURANCE' ? 'Prim Üretimi ve Kârlılık' : 'Satışlar ve Kârlılık'}
-                                </span>
-                                <p className="text-[11px] text-slate-500">
-                                  {currentSector === 'INSURANCE' ? 'Primler, Teknik Kâr ve Net Kâr' : 'Satışlar, FAVÖK ve Net Kâr'}
-                                </p>
-                              </div>
-                            </div>
+                        <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-3 shadow-sm">
+                          <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                            <span className="text-xs font-bold text-white">
+                              {currentSector === 'INSURANCE' ? 'Prim Üretimi ve Kârlılık' : 'Satışlar ve Kârlılık'}
+                            </span>
+                            <span className="text-[11px] text-slate-400">
+                              {currentSector === 'INSURANCE' ? 'Prim, Teknik Kâr ve Net Kâr' : 'Satışlar, FAVÖK ve Net Kâr'}
+                            </span>
                           </div>
 
                           <div className="h-64 w-full">
@@ -5365,35 +4977,28 @@ export default function ValuationTerminal({
                               <ResponsiveContainer width="100%" height="100%">
                                 <ComposedChart data={activeFlowChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                                   <CartesianGrid strokeDasharray="2 2" stroke="var(--chart-grid)" opacity={0.5} />
-                                  <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
+                                  <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                   <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFmt} />
                                   <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
                                   <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                                  <Bar dataKey="revenue" name={currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Satışlar'} fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={36} />
-                                  <Line type="monotone" dataKey="ebitda" name={currentSector === 'INSURANCE' ? 'Teknik Kâr' : 'FAVÖK'} stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3.5, fill: '#f59e0b' }} />
-                                  <Line type="monotone" dataKey="net_income" name="Net Kâr" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3.5, fill: '#10b981' }} />
+                                  <Bar dataKey="revenue" name={currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Satışlar'} fill="#3b82f6" radius={[3, 3, 0, 0]} maxBarSize={36} />
+                                  <Line type="monotone" dataKey="ebitda" name={currentSector === 'INSURANCE' ? 'Teknik Kâr' : 'FAVÖK'} stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3, fill: '#f59e0b' }} />
+                                  <Line type="monotone" dataKey="net_income" name="Net Kâr" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: '#10b981' }} />
                                 </ComposedChart>
                               </ResponsiveContainer>
                             )}
                           </div>
                         </div>
 
-                        {/* Grafik 2: Prim Üretimi / Satışlar ve Hisse Fiyatı (Fiyat Çubuğu + Trend Çizgisi) */}
-                        <div className="bg-slate-900 border border-slate-800/90 p-5 rounded-2xl space-y-4 shadow-lg">
-                          <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-                            <div className="flex items-center gap-2.5">
-                              <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                                <TrendingUp className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <span className="text-xs font-bold text-white">
-                                  {currentSector === 'INSURANCE' ? 'Prim Üretimi ve Hisse Fiyatı' : 'Satışlar ve Hisse Fiyatı'}
-                                </span>
-                                <p className="text-[11px] text-slate-500">
-                                  Dönemsel gelir hacmi (sol eksen) ve hisse fiyatı (sağ eksen - TL)
-                                </p>
-                              </div>
-                            </div>
+                        {/* Grafik 2: Satışlar ve Hisse Fiyatı */}
+                        <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-3 shadow-sm">
+                          <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                            <span className="text-xs font-bold text-white">
+                              {currentSector === 'INSURANCE' ? 'Prim Üretimi ve Hisse Fiyatı' : 'Satışlar ve Hisse Fiyatı'}
+                            </span>
+                            <span className="text-[11px] text-slate-400">
+                              Gelir Hacmi vs. Hisse Fiyatı (TL)
+                            </span>
                           </div>
 
                           <div className="h-64 w-full">
@@ -5401,13 +5006,13 @@ export default function ValuationTerminal({
                               <ResponsiveContainer width="100%" height="100%">
                                 <ComposedChart data={activeFlowChartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
                                   <CartesianGrid strokeDasharray="2 2" stroke="var(--chart-grid)" opacity={0.5} />
-                                  <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
+                                  <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                   <YAxis yAxisId="left" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFmt} />
                                   <YAxis yAxisId="right" orientation="right" stroke="#10b981" tick={{ fontSize: 10, fill: '#34d399' }} tickFormatter={v => `${v} TL`} />
                                   <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
                                   <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                                  <Bar yAxisId="left" dataKey="revenue" name={currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Satışlar'} fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                                  <Line yAxisId="right" type="monotone" dataKey="share_price" name="Hisse Fiyatı (TL)" stroke="#34d399" strokeWidth={2} dot={{ r: 3, fill: '#ecfdf5', stroke: '#10b981', strokeWidth: 1.5 }} />
+                                  <Bar yAxisId="left" dataKey="revenue" name={currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Satışlar'} fill="#3b82f6" radius={[3, 3, 0, 0]} maxBarSize={28} />
+                                  <Line yAxisId="right" type="monotone" dataKey="share_price" name="Hisse Fiyatı (TL)" stroke="#10b981" strokeWidth={2} dot={{ r: 3, fill: '#10b981' }} />
                                 </ComposedChart>
                               </ResponsiveContainer>
                             )}
@@ -5415,19 +5020,14 @@ export default function ValuationTerminal({
                         </div>
 
                         {/* Grafik 3: Nakit Akışı Kalitesi */}
-                        <div className="bg-slate-900 border border-slate-800/90 p-5 rounded-2xl space-y-4 shadow-lg">
-                          <div className="flex items-center gap-2.5 border-b border-slate-800/80 pb-3">
-                            <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
-                              <Activity className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <span className="text-xs font-bold text-white">
-                                Nakit Akışı Kalitesi
-                              </span>
-                              <p className="text-[11px] text-slate-500">
-                                Net kâr, operasyonel nakit (OCF) ve serbest nakit akışı (FCF)
-                              </p>
-                            </div>
+                        <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-3 shadow-sm">
+                          <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                            <span className="text-xs font-bold text-white">
+                              Nakit Akışı Kalitesi
+                            </span>
+                            <span className="text-[11px] text-slate-400">
+                              Net Kâr, OCF ve Serbest Nakit Akışı
+                            </span>
                           </div>
 
                           <div className="h-64 w-full">
@@ -5435,7 +5035,7 @@ export default function ValuationTerminal({
                               <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={activeFlowChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                                   <CartesianGrid strokeDasharray="2 2" stroke="var(--chart-grid)" opacity={0.5} />
-                                  <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
+                                  <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                   <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFmt} />
                                   <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
                                   <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
@@ -5448,40 +5048,35 @@ export default function ValuationTerminal({
                           </div>
                         </div>
 
-                      {/* Grafik 4: Bilanço Gücü: Özsermaye ve Nakit Pozisyonu */}
-                      <div className="bg-slate-900 border border-slate-800/90 p-5 rounded-2xl space-y-4 shadow-lg">
-                        <div className="flex items-center gap-2.5 border-b border-slate-800/80 pb-3">
-                          <div className="p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
-                            <ShieldCheck className="w-4 h-4" />
-                          </div>
-                          <div>
+                        {/* Grafik 4: Bilanço Gücü: Özsermaye ve Nakit Pozisyonu */}
+                        <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-3 shadow-sm">
+                          <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
                             <span className="text-xs font-bold text-white">
                               Bilanço Gücü: Özsermaye ve Nakit
                             </span>
-                            <p className="text-[11px] text-slate-500">
-                              Özkaynak birikimi ve likit rezerv gelişimi
-                            </p>
+                            <span className="text-[11px] text-slate-400">
+                              Özkaynak ve Nakit Rezervleri
+                            </span>
+                          </div>
+
+                          <div className="h-64 w-full">
+                            {mounted && (
+                              <ResponsiveContainer width="100%" height="100%">
+                                <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                                  <CartesianGrid strokeDasharray="2 2" stroke="var(--chart-grid)" opacity={0.5} />
+                                  <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v: string) => v ? v.slice(2) : v} />
+                                  <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFmt} />
+                                  <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
+                                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                                  <Bar dataKey="equity" name="Özkaynak" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={36} />
+                                  <Line type="monotone" dataKey="cash_and_equivalents" name="Nakit & Benzerleri" stroke="#06b6d4" strokeWidth={2.5} dot={{ r: 3, fill: '#06b6d4' }} />
+                                </ComposedChart>
+                              </ResponsiveContainer>
+                            )}
                           </div>
                         </div>
 
-                        <div className="h-64 w-full">
-                          {mounted && (
-                            <ResponsiveContainer width="100%" height="100%">
-                              <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="2 2" stroke="var(--chart-grid)" opacity={0.5} />
-                                <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
-                                <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFmt} />
-                                <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
-                                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                                <Bar dataKey="equity" name="Özkaynak" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={36} />
-                                <Line type="monotone" dataKey="cash_and_equivalents" name="Nakit & Benzerleri" stroke="#38bdf8" strokeWidth={2.5} dot={{ r: 3.5, fill: '#38bdf8' }} />
-                              </ComposedChart>
-                            </ResponsiveContainer>
-                          )}
-                        </div>
                       </div>
-
-                    </div>
                     </>
                   )}
                 </div>
@@ -5491,175 +5086,58 @@ export default function ValuationTerminal({
               {/* SEKME 2: FİNANSAL TABLOLAR */}
               {activeTab === 'tables' && (
                 <ComponentErrorBoundary fallbackTitle="Finansal Tablolar Hatası">
-                <div className="space-y-5">
+                <div className="space-y-4">
 
-                  {/* Üst Yönetici KPI Kartları */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                      {/* Kart 1: Ciro / Prim Üretimi */}
-                      <div className="bg-slate-900 border border-slate-800/90 p-4 rounded-xl flex flex-col justify-between shadow-md">
-                        <div>
-                          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                            <span>{currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Satış Gelirleri'}</span>
-                            <span className="text-[10px] font-mono text-slate-500">{latestData?.period || '—'}</span>
-                          </div>
-                          <div className="text-xl font-black font-mono text-white mt-1">
-                            {formatAmount(latestData?.revenue, unitMode, false, '', '', currentExtractedData?.currency)}
-                          </div>
-                        </div>
-                        <div className="pt-2 border-t border-slate-800/80 mt-2 space-y-1">
-                          <div className="flex items-center gap-1.5">
-                            <ChangeBadge change={yoyRevChange} size="sm" />
-                            <span className="text-[10px] text-slate-400 font-medium">
-                              {sameQuarterLastYear ? `YoY (${sameQuarterLastYear.period})` : 'Dönemsel'}
-                            </span>
-                          </div>
-                          {ttmRevenue && (
-                            <div className="text-[10px] text-slate-400 font-mono">
-                              TTM (Son 12 Ay): <strong className="text-slate-200">{formatAmount(ttmRevenue, unitMode, false, '', '', currentExtractedData?.currency)}</strong>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Kart 2: Faaliyet Kârı / Teknik Kâr */}
-                      <div className="bg-slate-900 border border-slate-800/90 p-4 rounded-xl flex flex-col justify-between shadow-md">
-                        <div>
-                          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                            <span>{currentSector === 'INSURANCE' ? 'Teknik Kâr' : 'FAVÖK'}</span>
-                            <span className="text-[10px] font-mono text-slate-500">{latestData?.period || '—'}</span>
-                          </div>
-                          <div className={`text-xl font-black font-mono mt-1 ${latestData?.ebitda != null && latestData.ebitda < 0 ? 'text-rose-400' : 'text-white'}`}>
-                            {formatAmount(latestData?.ebitda, unitMode, false, '', '', currentExtractedData?.currency)}
-                          </div>
-                        </div>
-                        <div className="pt-2 border-t border-slate-800/80 mt-2 space-y-1">
-                          <div className="flex items-center gap-1.5">
-                            <ChangeBadge change={yoyEbitdaChange} size="sm" />
-                            <span className="text-[10px] text-slate-400 font-medium">
-                              {sameQuarterLastYear ? `YoY (${sameQuarterLastYear.period})` : 'Dönemsel'}
-                            </span>
-                          </div>
-                          {ttmEbitda && (
-                            <div className="text-[10px] text-slate-400 font-mono">
-                              TTM (Son 12 Ay): <strong className={ttmEbitda < 0 ? 'text-rose-400' : 'text-slate-200'}>{formatAmount(ttmEbitda, unitMode, false, '', '', currentExtractedData?.currency)}</strong>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Kart 3: Net Kâr */}
-                      <div className="bg-slate-900 border border-slate-800/90 p-4 rounded-xl flex flex-col justify-between shadow-md">
-                        <div>
-                          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                            <span>Net Dönem Kârı</span>
-                            <span className="text-[10px] font-mono text-slate-500">{latestData?.period || '—'}</span>
-                          </div>
-                          <div className={`text-xl font-black font-mono mt-1 ${latestData?.net_income != null && latestData.net_income < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                            {formatAmount(latestData?.net_income, unitMode, false, '', '', currentExtractedData?.currency)}
-                          </div>
-                        </div>
-                        <div className="pt-2 border-t border-slate-800/80 mt-2 space-y-1">
-                          <div className="flex items-center gap-1.5">
-                            <ChangeBadge change={yoyNetChange} size="sm" />
-                            <span className="text-[10px] text-slate-400 font-medium">
-                              {sameQuarterLastYear ? `YoY (${sameQuarterLastYear.period})` : 'Dönemsel'}
-                            </span>
-                          </div>
-                          {ttmNet && (
-                            <div className="text-[10px] text-slate-400 font-mono">
-                              TTM (Son 12 Ay): <strong className={ttmNet < 0 ? 'text-rose-400' : 'text-emerald-300'}>{formatAmount(ttmNet, unitMode, false, '', '', currentExtractedData?.currency)}</strong>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Kart 4: Sermaye Verimliliği / ROE & Marj */}
-                      <div className="bg-slate-900 border border-slate-800/90 p-4 rounded-xl flex flex-col justify-between shadow-md">
-                        <div>
-                          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                            <span>{currentSector === 'INSURANCE' ? 'ROE (Yıllık)' : 'ROIC - WACC'}</span>
-                            <span className="text-[10px] font-mono text-slate-500">{latestData?.period || '—'}</span>
-                          </div>
-                          <div className={`text-xl font-black font-mono mt-1 ${
-                            currentSector === 'INSURANCE' 
-                              ? (latestData?.roe != null && latestData.roe < 0 ? 'text-rose-400' : 'text-cyan-400')
-                              : (latestSpread != null && latestSpread < 0 ? 'text-rose-400' : 'text-cyan-400')
-                          }`}>
-                            {currentSector === 'INSURANCE' 
-                              ? (latestData?.roe != null ? `%${latestData.roe}` : '—') 
-                              : spreadInfo.label}
-                          </div>
-                        </div>
-                        <div className="pt-2 border-t border-slate-800/80 mt-2 space-y-1">
-                          <div className="text-[10px] font-semibold text-slate-300">
-                            {currentSector === 'INSURANCE'
-                              ? (latestData?.combined_ratio != null ? `Kombine Oran: %${latestData.combined_ratio}` : 'Kombine Oran: —')
-                              : spreadInfo.badgeText}
-                          </div>
-                          <div className="text-[10px] text-slate-400 font-mono">
-                            {currentSector === 'INSURANCE' 
-                              ? `ROIC: %${latestData?.roic ?? latestData?.roe ?? '—'}` 
-                              : `ROIC: %${latestData?.roic || '—'} • WACC: %${latestData?.wacc || '—'}`}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-
-
-                  {/* Üst Çubuk: Sekmeler (Görsel 2) & Tutar Birimi Seçici (İlave 2) */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 p-3.5 rounded-xl shadow-md">
-                    {/* Görsel 2 Alt Sekmeler */}
-                    <div className="inline-flex items-center p-1 bg-slate-950 border border-slate-800 rounded-xl gap-1">
+                  {/* Üst Çubuk: Alt Sekmeler & Tutar Birimi Seçici */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900 border border-slate-800 p-3 rounded-xl shadow-sm">
+                    <div className="inline-flex items-center p-1 bg-slate-950 border border-slate-800 rounded-lg gap-1">
                       <button
                         type="button"
                         onClick={() => setTableSubTab('bilanco')}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition cursor-pointer ${
                           tableSubTab === 'bilanco'
-                            ? 'bg-slate-800 text-white border border-slate-700 shadow-sm'
-                            : 'text-slate-400 hover:text-slate-200'
+                            ? 'bg-slate-800 text-white border border-slate-700'
+                            : 'text-slate-400 hover:text-white'
                         }`}
                       >
-                        <Layers className="w-3.5 h-3.5 text-slate-300" /> Bilanço
+                        <Layers className="w-3.5 h-3.5" /> Bilanço
                       </button>
                       <button
                         type="button"
                         onClick={() => setTableSubTab('gelir')}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition cursor-pointer ${
                           tableSubTab === 'gelir'
-                            ? 'bg-slate-800 text-white border border-slate-700 shadow-sm'
-                            : 'text-slate-400 hover:text-slate-200'
+                            ? 'bg-slate-800 text-white border border-slate-700'
+                            : 'text-slate-400 hover:text-white'
                         }`}
                       >
-                        <PieChart className="w-3.5 h-3.5 text-slate-300" /> Gelir Tablosu
+                        <PieChart className="w-3.5 h-3.5" /> Gelir Tablosu
                       </button>
                       <button
                         type="button"
                         onClick={() => setTableSubTab('nakit')}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition cursor-pointer ${
                           tableSubTab === 'nakit'
-                            ? 'bg-slate-800 text-white border border-slate-700 shadow-sm'
-                            : 'text-slate-400 hover:text-slate-200'
+                            ? 'bg-slate-800 text-white border border-slate-700'
+                            : 'text-slate-400 hover:text-white'
                         }`}
                       >
-                        <DollarSign className="w-3.5 h-3.5 text-slate-300" /> Nakit Akış
+                        <DollarSign className="w-3.5 h-3.5" /> Nakit Akış
                       </button>
                       <button
                         type="button"
                         onClick={() => setTableSubTab('oranlar')}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition cursor-pointer ${
                           tableSubTab === 'oranlar'
-                            ? 'bg-slate-800 text-cyan-400 border border-cyan-500/40 shadow-sm ring-1 ring-cyan-500/20'
-                            : 'text-slate-400 hover:text-slate-200'
+                            ? 'bg-slate-800 text-cyan-400 border border-cyan-500/40'
+                            : 'text-slate-400 hover:text-white'
                         }`}
                       >
                         <Percent className="w-3.5 h-3.5 text-cyan-400" /> Oranlar
                       </button>
                     </div>
 
-                    {/* Tutar Birimi & Gösterim Seçenekleri (İlave 2 & Görsel 1) */}
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-slate-400 hidden sm:inline">Birim:</span>
                       <div className="inline-flex items-center p-0.5 bg-slate-950 border border-slate-800 rounded-lg text-[11px] font-mono">
                         <button
                           type="button"
@@ -5703,34 +5181,33 @@ export default function ValuationTerminal({
                           }
                           exportTableToCsv(`${activeReport?.ticker || 'Sirket'}_${tableSubTab.toUpperCase()}`, headers, rows);
                         }}
-                        className="text-[11px] text-slate-300 hover:text-white bg-slate-800/80 px-2.5 py-1 rounded border border-slate-700 transition cursor-pointer flex items-center gap-1"
+                        className="text-[11px] text-slate-300 hover:text-white bg-slate-950 hover:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-800 transition cursor-pointer flex items-center gap-1"
                         title="Tüm Tabloyu Excel / CSV Olarak İndir"
                       >
-                        <FileSpreadsheet className="w-3 h-3 text-emerald-400" /> Excel / CSV İndir
+                        <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" /> CSV İndir
                       </button>
 
                       <button
                         type="button"
                         onClick={() => collapseAllSections(currentSubTabSections)}
-                        className="text-[11px] text-slate-300 hover:text-white bg-slate-800/80 px-2.5 py-1 rounded border border-slate-700 transition cursor-pointer flex items-center gap-1"
+                        className="text-[11px] text-slate-300 hover:text-white bg-slate-950 hover:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-800 transition cursor-pointer flex items-center gap-1"
                       >
-                        <ArrowUpDown className="w-3 h-3 text-emerald-400" /> Tümünü Aç/Kapat
+                        <ArrowUpDown className="w-3.5 h-3.5 text-emerald-400" /> Aç/Kapat
                       </button>
                     </div>
                   </div>
 
-                  {/* Oranlar Alt Sekmesinde Kategori Filtre Butonları (İlave 7: Cari Oranlar vb.) */}
+                  {/* Oranlar Alt Sekmesinde Kategori Filtre Butonları */}
                   {tableSubTab === 'oranlar' && (
-                    <div className="flex items-center justify-between gap-2 p-2.5 bg-slate-950/70 border border-slate-800 rounded-xl flex-wrap">
+                    <div className="flex items-center justify-between gap-2 p-2.5 bg-slate-900 border border-slate-800 rounded-xl flex-wrap">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-[11px] text-slate-400 font-semibold mr-1">Rasyo Filtresi:</span>
                         {[
                           { id: 'ALL', label: 'Tüm Oranlar' },
-                          { id: 'LIKIDITE', label: 'Likidite & Cari Oranlar' },
-                          { id: 'KALDIRAC', label: 'Kaldıraç Oranları' },
-                          { id: 'FAALIYET', label: 'Faaliyet Etkinlik' },
-                          { id: 'KARLILIK', label: 'Kârlılık Oranları' },
-                          ...(currentSector === 'INSURANCE' ? [{ id: 'SIGORTA', label: 'Sigortacılık & Teknik' }] : []),
+                          { id: 'LIKIDITE', label: 'Likidite' },
+                          { id: 'KALDIRAC', label: 'Kaldıraç' },
+                          { id: 'FAALIYET', label: 'Faaliyet' },
+                          { id: 'KARLILIK', label: 'Kârlılık' },
+                          ...(currentSector === 'INSURANCE' ? [{ id: 'SIGORTA', label: 'Sigortacılık' }] : []),
                         ].map(pill => (
                           <button
                             key={pill.id}
@@ -5738,8 +5215,8 @@ export default function ValuationTerminal({
                             onClick={() => setRatioCategoryFilter(pill.id as any)}
                             className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
                               ratioCategoryFilter === pill.id
-                                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-sm'
-                                : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
+                                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50'
+                                : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
                             }`}
                           >
                             {pill.label}
@@ -5749,54 +5226,49 @@ export default function ValuationTerminal({
                         <button
                           type="button"
                           onClick={() => setIsHeatmapActive(!isHeatmapActive)}
-                          className={`ml-2 px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                          className={`ml-1 px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer flex items-center gap-1.5 ${
                             isHeatmapActive
-                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 shadow-sm'
-                              : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50'
+                              : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
                           }`}
-                          title="Sektör kriterlerine göre yeşil / sarı / kırmızı renklendirme"
                         >
                           <Activity className="w-3 h-3 text-emerald-400" />
-                          <span>Isı Haritası (Heatmap): {isHeatmapActive ? 'Açık' : 'Kapalı'}</span>
+                          <span>Isı Haritası: {isHeatmapActive ? 'Açık' : 'Kapalı'}</span>
                         </button>
                       </div>
 
-                      <div className="text-[11px] text-slate-500 font-mono hidden md:block">
-                        Satırlara tıklayarak detay ve formülleri inceleyebilirsiniz.
+                      <div className="text-[11px] text-slate-500 hidden md:block">
+                        Formül detayı için satıra tıklayın
                       </div>
                     </div>
                   )}
 
-                  {/* TABLO KONTEYNERI (Görsel 1 & 3 Tasarımı) */}
-                  <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
+                  {/* TABLO KONTEYNERI */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs text-left border-collapse">
-                        {/* Başlık Satırı: KALEMLER ve Günümüzden Geçmişe Doğru Dönemler */}
-                        <thead className="bg-[#0F172A] text-slate-300 font-mono border-b border-slate-800">
+                        <thead className="bg-slate-950 text-slate-300 font-mono border-b border-slate-800">
                           <tr>
-                            <th className="p-3.5 pl-5 min-w-[280px] text-xs font-bold uppercase tracking-wider text-slate-400">
+                            <th className="p-3.5 pl-5 min-w-[260px] text-xs font-bold uppercase tracking-wider text-slate-400">
                               KALEMLER
                             </th>
                             {tableData.map((d: any, idx: number) => (
-                              <th key={idx} className="p-3 text-center min-w-[140px] text-xs font-bold uppercase tracking-wider">
-                                <div className="text-white text-sm font-black flex items-center justify-center gap-1.5 flex-wrap">
+                              <th key={idx} className="p-3 text-right min-w-[135px] text-xs font-bold uppercase tracking-wider">
+                                <div className="text-white text-sm font-black flex items-center justify-end gap-1.5 flex-wrap">
                                   <span>{d.period}</span>
                                   {d.is_tms29 && (
-                                    <span className="text-[9px] font-sans font-bold px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800" title="TMS 29 Enflasyon Muhasebesi">
+                                    <span className="text-[9px] font-sans font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30" title="TMS 29 Enflasyon Muhasebesi">
                                       TMS 29
                                     </span>
                                   )}
                                 </div>
-                                {d.date && (
-                                  <div className="text-[10px] text-slate-500 font-normal lowercase">{d.date}</div>
-                                )}
                               </th>
                             ))}
                           </tr>
                         </thead>
 
                         <tbody className="divide-y divide-slate-800/70 font-mono">
-                          {/* SUBTAB 1: BİLANÇO TABLOSU (Açılıp Kapanır Başlıklar - İlave 4) */}
+                          {/* SUBTAB 1: BİLANÇO TABLOSU */}
                           {tableSubTab === 'bilanco' && balanceSheetSections.map((sec, sIdx) => {
                             const isCollapsed = Boolean(collapsedSections[sec.categoryKey]);
 
@@ -5804,20 +5276,17 @@ export default function ValuationTerminal({
                               <React.Fragment key={sIdx}>
                                 <tr
                                   onClick={() => toggleSection(sec.categoryKey)}
-                                  className="cursor-pointer bg-[#0F172A] hover:bg-slate-800/80 transition select-none border-y border-slate-800"
+                                  className="cursor-pointer bg-slate-950/80 hover:bg-slate-800/60 transition select-none border-y border-slate-800"
                                 >
                                   <td colSpan={tableData.length + 1} className="py-2.5 px-5 font-sans font-bold text-xs uppercase tracking-wider text-slate-300">
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-2">
                                         <ChevronDown className={`w-4 h-4 text-emerald-400 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
                                         <span>{sec.title}</span>
-                                        <span className="text-[10px] text-slate-400 font-mono font-normal bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
-                                          {sec.rows.length} kalem
+                                        <span className="text-[10px] text-slate-500 font-mono font-normal">
+                                          ({sec.rows.length})
                                         </span>
                                       </div>
-                                      <span className="text-[10px] text-slate-400 font-mono font-medium">
-                                        {isCollapsed ? 'Genişlet +' : 'Daralt —'}
-                                      </span>
                                     </div>
                                   </td>
                                 </tr>
@@ -5827,20 +5296,17 @@ export default function ValuationTerminal({
 
                                   return (
                                     <tr key={rIdx} className={`hover:bg-slate-800/40 transition-colors group ${
-                                      row.isHeader ? 'bg-slate-900/60 font-bold' : ''
-                                    } ${row.highlight ? 'bg-emerald-950/20' : ''}`}>
-                                      <td className={`p-3 font-sans ${row.isHeader ? 'pl-6' : 'pl-11 md:pl-12'}`}>
+                                      row.isHeader ? 'bg-slate-950/40 font-bold' : ''
+                                    } ${row.highlight ? 'bg-emerald-500/5' : ''}`}>
+                                      <td className={`p-3 font-sans ${row.isHeader ? 'pl-5' : 'pl-9'}`}>
                                         <div className="flex items-center justify-between gap-3">
                                           <div className="flex items-center gap-1.5 min-w-0">
-                                            <span className={`text-xs md:text-sm tracking-tight ${row.isHeader ? 'font-bold text-white' : 'font-medium text-slate-200'}`}>
+                                            <span className={`text-xs tracking-tight ${row.isHeader ? 'font-bold text-white' : 'font-medium text-slate-200'}`}>
                                               {row.label}
                                             </span>
                                             {row.sublabel && (
                                               <span className="relative group/tip flex-shrink-0 inline-flex items-center cursor-help" title={row.sublabel}>
                                                 <Info className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 transition-colors" />
-                                                <span className="absolute left-5 top-1/2 -translate-y-1/2 hidden group-hover/tip:inline-block z-50 bg-slate-900 text-slate-200 text-[11px] font-normal px-2.5 py-1 rounded shadow-xl border border-slate-700 whitespace-nowrap pointer-events-none">
-                                                  {row.sublabel}
-                                                </span>
                                               </span>
                                             )}
                                           </div>
@@ -5858,8 +5324,8 @@ export default function ValuationTerminal({
                                         const change = calculateYoYChange(val, prevVal, false, semantics);
 
                                         return (
-                                          <td key={idx} className="p-3 text-center group-hover:bg-slate-800/30 transition-colors">
-                                            <div className="flex flex-col items-center justify-center gap-0.5">
+                                          <td key={idx} className="p-3 text-right group-hover:bg-slate-800/30 transition-colors">
+                                            <div className="flex flex-col items-end justify-center gap-0.5">
                                               <span className={`font-mono text-xs sm:text-sm tracking-tight ${
                                                 row.isHeader ? 'font-black text-white' : 'font-semibold text-slate-100'
                                               }`}>
@@ -5877,7 +5343,7 @@ export default function ValuationTerminal({
                             );
                           })}
 
-                          {/* SUBTAB 2: GELİR TABLOSU (Açılıp Kapanır Başlıklar - İlave 4) */}
+                          {/* SUBTAB 2: GELİR TABLOSU */}
                           {tableSubTab === 'gelir' && incomeStatementSections.map((sec, sIdx) => {
                             const isCollapsed = Boolean(collapsedSections[sec.categoryKey]);
 
@@ -5885,20 +5351,17 @@ export default function ValuationTerminal({
                               <React.Fragment key={sIdx}>
                                 <tr
                                   onClick={() => toggleSection(sec.categoryKey)}
-                                  className="cursor-pointer bg-[#0F172A] hover:bg-slate-800/80 transition select-none border-y border-slate-800"
+                                  className="cursor-pointer bg-slate-950/80 hover:bg-slate-800/60 transition select-none border-y border-slate-800"
                                 >
                                   <td colSpan={tableData.length + 1} className="py-2.5 px-5 font-sans font-bold text-xs uppercase tracking-wider text-slate-300">
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-2">
                                         <ChevronDown className={`w-4 h-4 text-emerald-400 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
                                         <span>{sec.title}</span>
-                                        <span className="text-[10px] text-slate-400 font-mono font-normal bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
-                                          {sec.rows.length} kalem
+                                        <span className="text-[10px] text-slate-500 font-mono font-normal">
+                                          ({sec.rows.length})
                                         </span>
                                       </div>
-                                      <span className="text-[10px] text-slate-400 font-mono font-medium">
-                                        {isCollapsed ? 'Genişlet +' : 'Daralt —'}
-                                      </span>
                                     </div>
                                   </td>
                                 </tr>
@@ -5908,20 +5371,17 @@ export default function ValuationTerminal({
 
                                   return (
                                     <tr key={rIdx} className={`hover:bg-slate-800/40 transition-colors group ${
-                                      row.isHeader ? 'bg-slate-900/60 font-bold' : ''
-                                    } ${row.highlight ? 'bg-emerald-950/20' : ''}`}>
-                                      <td className={`p-3 font-sans ${row.isHeader ? 'pl-6' : 'pl-11 md:pl-12'}`}>
+                                      row.isHeader ? 'bg-slate-950/40 font-bold' : ''
+                                    } ${row.highlight ? 'bg-emerald-500/5' : ''}`}>
+                                      <td className={`p-3 font-sans ${row.isHeader ? 'pl-5' : 'pl-9'}`}>
                                         <div className="flex items-center justify-between gap-3">
                                           <div className="flex items-center gap-1.5 min-w-0">
-                                            <span className={`text-xs md:text-sm tracking-tight ${row.isHeader ? 'font-bold text-white' : 'font-medium text-slate-200'}`}>
+                                            <span className={`text-xs tracking-tight ${row.isHeader ? 'font-bold text-white' : 'font-medium text-slate-200'}`}>
                                               {row.label}
                                             </span>
                                             {row.sublabel && (
                                               <span className="relative group/tip flex-shrink-0 inline-flex items-center cursor-help" title={row.sublabel}>
                                                 <Info className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 transition-colors" />
-                                                <span className="absolute left-5 top-1/2 -translate-y-1/2 hidden group-hover/tip:inline-block z-50 bg-slate-900 text-slate-200 text-[11px] font-normal px-2.5 py-1 rounded shadow-xl border border-slate-700 whitespace-nowrap pointer-events-none">
-                                                  {row.sublabel}
-                                                </span>
                                               </span>
                                             )}
                                           </div>
@@ -5938,8 +5398,8 @@ export default function ValuationTerminal({
                                         const change = calculateYoYChange(val, prevVal, row.isMargin, semantics);
 
                                         return (
-                                          <td key={idx} className="p-3 text-center group-hover:bg-slate-800/30 transition-colors">
-                                            <div className="flex flex-col items-center justify-center gap-0.5">
+                                          <td key={idx} className="p-3 text-right group-hover:bg-slate-800/30 transition-colors">
+                                            <div className="flex flex-col items-end justify-center gap-0.5">
                                               <span className="font-mono text-xs sm:text-sm font-semibold tracking-tight text-white">
                                                 {formatAmount(val, unitMode, row.isMargin, row.prefix, '', currentExtractedData?.currency)}
                                               </span>
@@ -5955,7 +5415,7 @@ export default function ValuationTerminal({
                             );
                           })}
 
-                          {/* SUBTAB 3: NAKİT AKIŞ (Açılıp Kapanır Başlıklar - İlave 4) */}
+                          {/* SUBTAB 3: NAKİT AKIŞ */}
                           {tableSubTab === 'nakit' && cashFlowSections.map((sec, sIdx) => {
                             const isCollapsed = Boolean(collapsedSections[sec.categoryKey]);
 
@@ -5963,20 +5423,17 @@ export default function ValuationTerminal({
                               <React.Fragment key={sIdx}>
                                 <tr
                                   onClick={() => toggleSection(sec.categoryKey)}
-                                  className="cursor-pointer bg-[#0F172A] hover:bg-slate-800/80 transition select-none border-y border-slate-800"
+                                  className="cursor-pointer bg-slate-950/80 hover:bg-slate-800/60 transition select-none border-y border-slate-800"
                                 >
                                   <td colSpan={tableData.length + 1} className="py-2.5 px-5 font-sans font-bold text-xs uppercase tracking-wider text-slate-300">
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-2">
                                         <ChevronDown className={`w-4 h-4 text-emerald-400 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
                                         <span>{sec.title}</span>
-                                        <span className="text-[10px] text-slate-400 font-mono font-normal bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
-                                          {sec.rows.length} kalem
+                                        <span className="text-[10px] text-slate-500 font-mono font-normal">
+                                          ({sec.rows.length})
                                         </span>
                                       </div>
-                                      <span className="text-[10px] text-slate-400 font-mono font-medium">
-                                        {isCollapsed ? 'Genişlet +' : 'Daralt —'}
-                                      </span>
                                     </div>
                                   </td>
                                 </tr>
@@ -5986,20 +5443,17 @@ export default function ValuationTerminal({
 
                                   return (
                                     <tr key={rIdx} className={`hover:bg-slate-800/40 transition-colors group ${
-                                      row.isHeader ? 'bg-slate-900/60 font-bold' : ''
-                                    } ${row.highlight ? 'bg-emerald-950/20' : ''}`}>
-                                      <td className={`p-3 font-sans ${row.isHeader ? 'pl-6' : 'pl-11 md:pl-12'}`}>
+                                      row.isHeader ? 'bg-slate-950/40 font-bold' : ''
+                                    } ${row.highlight ? 'bg-emerald-500/5' : ''}`}>
+                                      <td className={`p-3 font-sans ${row.isHeader ? 'pl-5' : 'pl-9'}`}>
                                         <div className="flex items-center justify-between gap-3">
                                           <div className="flex items-center gap-1.5 min-w-0">
-                                            <span className={`text-xs md:text-sm tracking-tight ${row.isHeader ? 'font-bold text-white' : 'font-medium text-slate-200'}`}>
+                                            <span className={`text-xs tracking-tight ${row.isHeader ? 'font-bold text-white' : 'font-medium text-slate-200'}`}>
                                               {row.label}
                                             </span>
                                             {row.sublabel && (
                                               <span className="relative group/tip flex-shrink-0 inline-flex items-center cursor-help" title={row.sublabel}>
                                                 <Info className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 transition-colors" />
-                                                <span className="absolute left-5 top-1/2 -translate-y-1/2 hidden group-hover/tip:inline-block z-50 bg-slate-900 text-slate-200 text-[11px] font-normal px-2.5 py-1 rounded shadow-xl border border-slate-700 whitespace-nowrap pointer-events-none">
-                                                  {row.sublabel}
-                                                </span>
                                               </span>
                                             )}
                                           </div>
@@ -6015,8 +5469,8 @@ export default function ValuationTerminal({
                                         const change = calculateYoYChange(val, prevVal, false, semantics);
 
                                         return (
-                                          <td key={idx} className="p-3 text-center group-hover:bg-slate-800/30 transition-colors">
-                                            <div className="flex flex-col items-center justify-center gap-0.5">
+                                          <td key={idx} className="p-3 text-right group-hover:bg-slate-800/30 transition-colors">
+                                            <div className="flex flex-col items-end justify-center gap-0.5">
                                               <span className="font-mono text-xs sm:text-sm font-semibold tracking-tight text-white">
                                                 {formatAmount(val, unitMode, false, '', '', currentExtractedData?.currency)}
                                               </span>
@@ -6032,34 +5486,29 @@ export default function ValuationTerminal({
                             );
                           })}
 
-                          {/* SUBTAB 4: ORANLAR (Görsel 3 & Açılıp Kapanır Kalem Başlıkları & İlave 7) */}
+                          {/* SUBTAB 4: ORANLAR */}
                           {tableSubTab === 'oranlar' && filteredRatioSections.map((sec, sIdx) => {
                             const isCollapsed = Boolean(collapsedSections[sec.categoryKey]);
 
                             return (
                               <React.Fragment key={sIdx}>
-                                {/* Açılıp Kapanır Kategori Başlığı Satırı (İlave 4 & Görsel 3) */}
                                 <tr
                                   onClick={() => toggleSection(sec.categoryKey)}
-                                  className="cursor-pointer bg-[#0F172A] hover:bg-slate-800/80 transition select-none border-y border-slate-800"
+                                  className="cursor-pointer bg-slate-950/80 hover:bg-slate-800/60 transition select-none border-y border-slate-800"
                                 >
                                   <td colSpan={tableData.length + 1} className="py-2.5 px-5 font-sans font-bold text-xs uppercase tracking-wider text-slate-300">
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-2">
                                         <ChevronDown className={`w-4 h-4 text-cyan-400 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
                                         <span>{sec.title}</span>
-                                        <span className="text-[10px] text-slate-400 font-mono font-normal bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
-                                          {sec.rows.length} oran
+                                        <span className="text-[10px] text-slate-500 font-mono font-normal">
+                                          ({sec.rows.length})
                                         </span>
                                       </div>
-                                      <span className="text-[10px] text-slate-400 font-mono font-medium">
-                                        {isCollapsed ? 'Genişlet +' : 'Daralt —'}
-                                      </span>
                                     </div>
                                   </td>
                                 </tr>
 
-                                {/* Kategori Altındaki Oran Kalemleri */}
                                 {!isCollapsed && sec.rows.map((row, rIdx) => {
                                   const values = tableData.map((d: any) => computeRatioForPeriod(d, row.key, currentSector));
                                   const isDetailOpen = selectedRatioDetail === row.key;
@@ -6072,10 +5521,10 @@ export default function ValuationTerminal({
                                         className="hover:bg-slate-800/40 transition-colors group cursor-pointer"
                                         title="Formül ve standart açıklaması için tıklayın"
                                       >
-                                        <td className="p-3 pl-11 md:pl-12 font-sans">
+                                        <td className="p-3 pl-9 font-sans">
                                           <div className="flex items-center justify-between gap-3">
                                             <div className="flex items-center gap-1.5">
-                                              <span className="font-semibold text-slate-200 text-xs md:text-sm tracking-tight group-hover:text-cyan-300 transition">
+                                              <span className="font-semibold text-slate-200 text-xs tracking-tight group-hover:text-cyan-400 transition">
                                                 {row.label}
                                               </span>
                                               <Info className="w-3 h-3 text-slate-500 group-hover:text-cyan-400 transition" />
@@ -6101,7 +5550,7 @@ export default function ValuationTerminal({
                                           const heatmapClass = getRatioHeatmapClass(row.key, rawVal, currentSector);
 
                                           return (
-                                            <td key={idx} className={`p-3 text-center transition-colors ${heatmapClass ? heatmapClass : 'group-hover:bg-slate-800/30'}`}>
+                                            <td key={idx} className={`p-3 text-right transition-colors ${heatmapClass ? heatmapClass : 'group-hover:bg-slate-800/30'}`}>
                                               <span className={`font-mono text-xs sm:text-sm font-semibold tracking-tight ${heatmapClass ? '' : 'text-white'}`}>
                                                 {displayStr}
                                               </span>
@@ -6115,24 +5564,19 @@ export default function ValuationTerminal({
                                         })}
                                       </tr>
 
-                                      {/* Satır İçi Rasyo Açıklama & Formül Paneli (Wrap Uyumlu & Sade) */}
                                       {isDetailOpen && ratioDef && (
-                                        <tr className="bg-slate-950/90 border-y border-cyan-900/50">
-                                          <td colSpan={tableData.length + 1} className="p-3 pl-8 text-xs font-sans text-slate-300">
-                                            <div className="w-full max-w-full break-words whitespace-normal bg-cyan-950/30 border border-cyan-800/40 p-3.5 rounded-lg space-y-2">
-                                              <div className="font-bold text-cyan-300 font-mono flex items-center gap-1.5 flex-wrap">
-                                                <Info className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+                                        <tr className="bg-slate-950/90 border-y border-slate-800">
+                                          <td colSpan={tableData.length + 1} className="p-3 pl-9 text-xs font-sans text-slate-300">
+                                            <div className="space-y-1.5">
+                                              <div className="font-bold text-cyan-400 font-mono flex items-center gap-2 flex-wrap">
                                                 <span>{ratioDef.formula}</span>
-                                              </div>
-                                              <p className="text-xs text-slate-300 leading-relaxed break-words whitespace-normal">
-                                                {ratioDef.desc}
-                                              </p>
-                                              <div className="pt-1.5 border-t border-cyan-900/40 flex items-center gap-2 flex-wrap">
-                                                <span className="text-[10px] text-slate-400 uppercase font-semibold">Sektör Kriteri:</span>
-                                                <span className="font-mono text-xs font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-2 py-0.5 rounded">
-                                                  {ratioDef.benchmark}
+                                                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded">
+                                                  Kriter: {ratioDef.benchmark}
                                                 </span>
                                               </div>
+                                              <p className="text-xs text-slate-400 leading-relaxed">
+                                                {ratioDef.desc}
+                                              </p>
                                             </div>
                                           </td>
                                         </tr>
@@ -7459,11 +6903,9 @@ export default function ValuationTerminal({
                               );
                             }
                             return (
-                              <div className="mt-8 mb-3.5 bg-slate-950 border-l-4 border-cyan-400 px-4 py-2.5 rounded-r-xl shadow-sm">
-                                <h3 className="text-sm sm:text-base font-bold text-cyan-200 tracking-wide flex items-center gap-2" {...props}>
-                                  {children}
-                                </h3>
-                              </div>
+                              <h3 className="mt-7 mb-2.5 text-sm sm:text-base font-bold text-cyan-400 tracking-wide flex items-center gap-2 border-b border-slate-800/80 pb-1.5" {...props}>
+                                {children}
+                              </h3>
                             );
                           },
                           p: ({ children, ...props }) => {
@@ -7591,7 +7033,7 @@ export default function ValuationTerminal({
                             <blockquote className="border-l-4 border-emerald-400 bg-emerald-950/25 px-5 py-3.5 my-5 rounded-r-xl text-emerald-100 text-sm sm:text-[15px] leading-relaxed font-sans shadow-sm" {...props} />
                           ),
                           strong: ({ ...props }) => (
-                            <strong className="font-bold text-white bg-slate-800/70 px-1 py-0.5 rounded text-[0.98em]" {...props} />
+                            <strong className="font-bold text-white" {...props} />
                           ),
                           ul: ({ ...props }) => (
                             <ul className={`list-disc list-outside ml-6 space-y-3 my-4 text-slate-200 ${
@@ -7645,10 +7087,10 @@ export default function ValuationTerminal({
                         {mounted && (
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={tickerHistory.map((h) => ({ name: h.period || h.createdAt, score: Number(h.score) || 0 }))}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} />
-                              <XAxis dataKey="name" stroke="#94a3b8" tick={{ fontSize: 10, fill: '#cbd5e1' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
-                              <YAxis stroke="#94a3b8" domain={[0, 100]} tick={{ fontSize: 11, fill: '#cbd5e1' }} />
-                              <Tooltip contentStyle={{ backgroundColor: '#020617', borderColor: '#334155', fontSize: '12px' }} />
+                              <CartesianGrid strokeDasharray="2 2" stroke="var(--chart-grid)" />
+                              <XAxis dataKey="name" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
+                              <YAxis stroke="#64748b" domain={[0, 100]} tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                              <Tooltip contentStyle={{ backgroundColor: 'var(--tooltip-bg)', borderColor: 'var(--tooltip-border)', color: 'var(--text-primary)', borderRadius: '0.375rem', fontSize: '12px' }} />
                               <Line type="monotone" dataKey="score" name="Kurumsal Skor" stroke="#10b981" strokeWidth={3} dot={{ r: 5, fill: '#10b981' }} />
                             </LineChart>
                           </ResponsiveContainer>
@@ -7770,7 +7212,7 @@ export default function ValuationTerminal({
 
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs text-left border-collapse">
-                      <thead className="bg-slate-800/90 text-slate-300 font-bold uppercase tracking-wider text-[11px]">
+                      <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[11px]">
                         <tr>
                           <th className="p-3.5 pl-5">Sıra</th>
                           <th className="p-3.5">Hisse</th>
