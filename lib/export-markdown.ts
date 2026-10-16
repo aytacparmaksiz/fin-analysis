@@ -164,7 +164,7 @@ export function generateFullAuditMarkdown(report: SavedReport): string {
       const v = m.data?.companyValue != null ? `${m.data.companyValue.toFixed(2)}x` : '—';
       const b = m.data?.sectorMedian != null ? `${m.data.sectorMedian.toFixed(2)}x` : '—';
       const d = m.data?.diffPct != null ? `%${m.data.diffPct.toFixed(1)}` : '—';
-      const s = m.data?.status === 'DISCOUNTED' ? '🟢 Sektöre Göre İskontolu' : m.data?.status === 'PREMIUM' ? '🔴 Sektöre Göre Primli' : '🟡 Makul / Nötr';
+      const s = m.data?.status === 'DISCOUNTED' ? 'Sektöre Göre İskontolu' : m.data?.status === 'PREMIUM' ? 'Sektöre Göre Primli' : 'Makul / Nötr';
       md += `| ${m.name} | ${v} | ${b} | ${d} | ${s} |\n`;
     });
     md += `\n---\n\n`;

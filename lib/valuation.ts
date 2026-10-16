@@ -1725,7 +1725,7 @@ export function calculateSectorScore(
       s4 = 7; r4 = 'Operasyonel Nakit Açığı: Faaliyetlerden nakit üretimi zayıf.'; st4 = 'warning';
     }
     breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
-    conditionalWarnings.push('✈️ MEVSİMSELLİK UYARISI: Havacılık sektöründe kârlılık Q3 yaz döneminde zirve yapar. Yıllıklandırmada düz çarpma yapılmaz, TTM esastır.');
+    conditionalWarnings.push('MEVSİMSELLİK UYARISI: Havacılık sektöründe kârlılık Q3 yaz döneminde zirve yapar. Yıllıklandırmada düz çarpma yapılmaz, TTM esastır.');
 
   } else if (sector === 'RETAIL') {
     // 1. Negatif Çalışma Sermayesi & Nakit Üretimi (Max 25)
@@ -2010,11 +2010,11 @@ export function calculateSectorScore(
   if (isGreyZone) {
     if (anomalies.length > 0) {
       conditionalWarnings.push(
-        `⚠️ KOŞULLU ANALİZ: Şirket genel skor olarak değerlendirilebilir seviyede olsa da (${totalScore}/100), ${anomalies[0]} Yatırım tezi ancak nakit akışı ve borç dengesi düzelene kadar koşullu/temkinli izlenmelidir.`
+        `KOŞULLU ANALİZ: Şirket genel skor olarak değerlendirilebilir seviyede olsa da (${totalScore}/100), ${anomalies[0]} Yatırım tezi ancak nakit akışı ve borç dengesi düzelene kadar koşullu/temkinli izlenmelidir.`
       );
     } else if (isScoreBorderline) {
       conditionalWarnings.push(
-        `⚠️ SINIR KOŞUL UYARISI: Şirket skoru (${totalScore}/100) karar sınırındadır. Yeni çeyrekte marj koruması ve talep teyidi alınmadan agresif pozisyon açılması risklidir.`
+        `SINIR KOŞUL UYARISI: Şirket skoru (${totalScore}/100) karar sınırındadır. Yeni çeyrekte marj koruması ve talep teyidi alınmadan agresif pozisyon açılması risklidir.`
       );
     }
   }
@@ -2403,7 +2403,7 @@ export function detectValueTrap(
     isValueTrap,
     severity,
     reasons,
-    warningTitle: isValueTrap ? '🚨 DEĞER TUZAĞI (VALUE TRAP) RİSKİ' : '',
+    warningTitle: isValueTrap ? 'DEĞER TUZAĞI (VALUE TRAP) RİSKİ' : '',
     description: isValueTrap
       ? `Hisse kağıt üzerinde %${discountPct} iskontolu görünmektedir; ancak eriyen kâr marjları, negatif sermaye makası (ROIC < WACC) veya yüksek borçluluk nedeniyle bu iskonto bir "Değer Tuzağı" riski taşımaktadır.`
       : ''
@@ -2728,8 +2728,8 @@ export function optimizeFinalDecision({
     if (isValueTrap && !overrideApplied) {
       finalDecision = 'ALMA';
       overrideApplied = true;
-      overrideReason = `🚨 Değer Tuzağı Riski (Value Trap): Kağıt üzerinde cazip iskonto (%${discount}) bulunmasına rağmen şirket marj daralması, negatif EVA makası (ROIC < WACC) veya yüksek borç yükü nedeniyle değer tuzağı oluşturmaktadır. AL tavsiyesi ALMA olarak revize edildi.`;
-      safetyFlags.push(`🚨 Değer Tuzağı: ${valueTrapReasons.join('; ')}`);
+      overrideReason = `Değer Tuzağı Riski (Value Trap): Kağıt üzerinde cazip iskonto (%${discount}) bulunmasına rağmen şirket marj daralması, negatif EVA makası (ROIC < WACC) veya yüksek borç yükü nedeniyle değer tuzağı oluşturmaktadır. AL tavsiyesi ALMA olarak revize edildi.`;
+      safetyFlags.push(`Değer Tuzağı: ${valueTrapReasons.join('; ')}`);
     }
   }
 
@@ -2740,7 +2740,7 @@ export function optimizeFinalDecision({
   if (finalDecision === 'ALMA' && valuation) {
     if (valuation.is_value_trap) {
       valuation.boundary_warning = (valuation.boundary_warning ? valuation.boundary_warning + ' | ' : '') +
-        `🚨 DEĞER TUZAĞI (VALUE TRAP): Şirket kağıt üzerinde %${discount} iskonto gösterse de eriyen marjlar ve sermaye değer yıkımı nedeniyle emniyet marjı geçersizdir (UNSAFE).`;
+        `DEĞER TUZAĞI (VALUE TRAP): Şirket kağıt üzerinde %${discount} iskonto gösterse de eriyen marjlar ve sermaye değer yıkımı nedeniyle emniyet marjı geçersizdir (UNSAFE).`;
       valuation.margin_of_safety = 0;
       valuation.margin_of_safety_status = 'UNSAFE';
       marginOfSafetyStatus = 'UNSAFE';
@@ -2762,14 +2762,14 @@ export function optimizeFinalDecision({
     valuation.margin_of_safety_status = discount >= 25.0 ? 'SAFE' : 'BORDERLINE';
     marginOfSafetyStatus = valuation.margin_of_safety_status;
     valuation.boundary_warning = (valuation.boundary_warning ? valuation.boundary_warning + ' | ' : '') +
-      `⚠️ KOŞULLU EMNİYET MARJI: Hisse %${discount} iskonto potansiyeline sahiptir; ancak ${overrideReason || 'risk faktörleri'} nedeniyle nihai karar temkinli 'NÖTR' (Koşullu İzleme) olarak dengelenmiştir.`;
+      `KOŞULLU EMNİYET MARJI: Hisse %${discount} iskonto potansiyeline sahiptir; ancak ${overrideReason || 'risk faktörleri'} nedeniyle nihai karar temkinli 'NÖTR' (Koşullu İzleme) olarak dengelenmiştir.`;
   }
 
   // Sınır Koşulları ve Gri Alan Entegrasyonu
   const isGreyZone = scoreResult?.isGreyZone || marginOfSafetyStatus === 'BORDERLINE' || (finalDecision === 'NÖTR' && discount >= 20);
   if (isGreyZone && conditionalWarnings.length === 0) {
     conditionalWarnings.push(
-      `⚠️ KOŞULLU ANALİZ: Hisse değerleme iskontosuna sahip olsa da (%${discount}), sınır risk koşulları nedeniyle temkinli 'NÖTR' bölgededir. Yeni çeyrek nakit akışı teyidi beklenmelidir.`
+      `KOŞULLU ANALİZ: Hisse değerleme iskontosuna sahip olsa da (%${discount}), sınır risk koşulları nedeniyle temkinli 'NÖTR' bölgededir. Yeni çeyrek nakit akışı teyidi beklenmelidir.`
     );
   }
 
@@ -3864,8 +3864,8 @@ export function calculateEarningsQuality(
       statusTitle: sector === 'BANKING' ? 'Banka Fonlama & Mevduat Akışı' : 'Sigorta Float & Prim Tahsilatı',
       badgeColor: 'indigo',
       guidanceText: sector === 'BANKING' 
-        ? '💡 Bankacılıkta klasik işletme nakit akışı yerine kredi-mevduat büyümesi, net faiz marjı ve SYR sermaye yeterliliği takip edilir.'
-        : '💡 Sigorta şirketlerinde klasik nakit akışı yerine brüt prim tahsilatı, hasar ödeme oranı ve yatırım portföyü float getirisi esastır.',
+        ? 'Bankacılıkta klasik işletme nakit akışı yerine kredi-mevduat büyümesi, net faiz marjı ve SYR sermaye yeterliliği takip edilir.'
+        : 'Sigorta şirketlerinde klasik nakit akışı yerine brüt prim tahsilatı, hasar ödeme oranı ve yatırım portföyü float getirisi esastır.',
       beginnerExplanation,
       sloanAssessment: 'Finans ve sigorta sektörlerinde nakit akışı müşteri mevduat/prim hareketleriyle belirlendiğinden tahakkuk anomalisi uygulanmaz.',
       ocf,
@@ -3907,17 +3907,17 @@ export function calculateEarningsQuality(
     sloanRatio = Number(((safeNet - safeOcf) / totalAssets).toFixed(3));
     const sloanPct = (sloanRatio * 100).toFixed(1);
     if (safeNet < 0 && safeOcf < 0) {
-      sloanAssessment = `⚠️ Çift Yönlü Zarar ve Nakit Yakımı (%${sloanPct}): Şirket hem net zarar yazmakta hem de faaliyetlerinden nakit tüketmektedir. Tahakkuk farkının düşük seyretmesi operasyonel başarıdan değil, hem net zararın hem de nakit açığının derin negatif olmasından kaynaklanmaktadır.`;
+      sloanAssessment = `Çift Yönlü Zarar ve Nakit Yakımı (%${sloanPct}): Şirket hem net zarar yazmakta hem de faaliyetlerinden nakit tüketmektedir. Tahakkuk farkının düşük seyretmesi operasyonel başarıdan değil, hem net zararın hem de nakit açığının derin negatif olmasından kaynaklanmaktadır.`;
     } else if (safeNet > 0 && safeOcf <= 0) {
-      sloanAssessment = `🚨 Kritik Bilanço Makyajı Riski (%${sloanPct}): Şirket bilançoda net kâr göstermesine rağmen operasyonlarından nakit üretememiştir; kârın nakit karşılığı bulunmamaktadır.`;
+      sloanAssessment = `Kritik Bilanço Makyajı Riski (%${sloanPct}): Şirket bilançoda net kâr göstermesine rağmen operasyonlarından nakit üretememiştir; kârın nakit karşılığı bulunmamaktadır.`;
     } else if (safeNet <= 0 && safeOcf > 0) {
-      sloanAssessment = `💡 Gayrinakdi Gider Ayrışması (%${sloanPct}): Muhasebesel net zarar bulunmasına rağmen şirket faaliyetlerinden pozitif sıcak nakit üretmeye devam etmektedir.`;
+      sloanAssessment = `Gayrinakdi Gider Ayrışması (%${sloanPct}): Muhasebesel net zarar bulunmasına rağmen şirket faaliyetlerinden pozitif sıcak nakit üretmeye devam etmektedir.`;
     } else if (sloanRatio > 0.10) {
-      sloanAssessment = `🚨 Yüksek Tahakkuk Uyarısı (%${sloanPct}) (Bilanço Makyajı / Tahsil Edilemeyen Kâr Riski): Kârın önemli bir kısmı nakde dönüşmemiş alacak veya stoklardan kaynaklanmaktadır.`;
+      sloanAssessment = `Yüksek Tahakkuk Uyarısı (%${sloanPct}) (Bilanço Makyajı / Tahsil Edilemeyen Kâr Riski): Kârın önemli bir kısmı nakde dönüşmemiş alacak veya stoklardan kaynaklanmaktadır.`;
     } else if (sloanRatio < -0.10) {
-      sloanAssessment = `🌟 Muhafazakar Nakit Fazlası (%${sloanPct}): Operasyonel nakit üretimi muhasebesel net kârın belirgin üzerinde gerçekleşmiştir (Mükemmel Nakit Kalitesi).`;
+      sloanAssessment = `Muhafazakar Nakit Fazlası (%${sloanPct}): Operasyonel nakit üretimi muhasebesel net kârın belirgin üzerinde gerçekleşmiştir (Mükemmel Nakit Kalitesi).`;
     } else {
-      sloanAssessment = `✅ Dengeli Tahakkuk Seviyesi (%${sloanPct}): Şirketin pozitif net kârı ile operasyonel nakit üretimi sağlıklı bir denge içindedir.`;
+      sloanAssessment = `Dengeli Tahakkuk Seviyesi (%${sloanPct}): Şirketin pozitif net kârı ile operasyonel nakit üretimi sağlıklı bir denge içindedir.`;
     }
   }
 
@@ -3930,7 +3930,7 @@ export function calculateEarningsQuality(
       status: 'EXCELLENT',
       statusTitle: 'Mükemmel Nakit Kalitesi (Üretilen Kâr Sıcak Nakde Dönüşüyor)',
       badgeColor: 'emerald',
-      guidanceText: '🌟 Yüksek / Mükemmel Nakit Kalitesi: Kâr kağıt üzerinde kalmamış, sıcak nakde dönüşüyor ve doğrudan kasaya nakit girişi sağlanmaktadır. Tahsilat kabiliyeti çok güçlü.',
+      guidanceText: 'Yüksek / Mükemmel Nakit Kalitesi: Kâr kağıt üzerinde kalmamış, sıcak nakde dönüşüyor ve doğrudan kasaya nakit girişi sağlanmaktadır. Tahsilat kabiliyeti çok güçlü.',
       beginnerExplanation,
       sloanAssessment,
       ocf,
@@ -3950,8 +3950,8 @@ export function calculateEarningsQuality(
         : 'Zayıf Nakit Dönüşümü (Kâr Kağıt Üzerinde Kalıyor, Tahakkuk Riski)',
       badgeColor: isGood ? 'amber' : 'rose',
       guidanceText: isGood
-        ? '⚠️ Ilımlı / Makul Nakit Kalitesi: Kârın büyük kısmı nakde dönmektedir, kalan kısım işletme sermayesine veya stoklara bağlanmıştır.'
-        : '🚨 Zayıf Nakit Dönüşümü: Kâr kağıt üzerinde kalıyor, tahsilat gecikmeleri veya yüksek stok birikimi çalışma sermayesini eritiyor.',
+        ? 'Ilımlı / Makul Nakit Kalitesi: Kârın büyük kısmı nakde dönmektedir, kalan kısım işletme sermayesine veya stoklara bağlanmıştır.'
+        : 'Zayıf Nakit Dönüşümü: Kâr kağıt üzerinde kalıyor, tahsilat gecikmeleri veya yüksek stok birikimi çalışma sermayesini eritiyor.',
       beginnerExplanation,
       sloanAssessment,
       ocf,
@@ -3967,7 +3967,7 @@ export function calculateEarningsQuality(
       status: 'CRITICAL_RISK',
       statusTitle: 'Kritik Nakit Riski (Kağıt Üstünde Kâr Var Ancak Nakit Yakılıyor)',
       badgeColor: 'rose',
-      guidanceText: '🚨 Kritik Nakit Riski: Şirket kârlı görünmesine rağmen nakit yakılıyor! Operasyonlardan nakit üretilememiştir. Gayrinakdi gelirler veya alacak tahsilat krizine dikkat. Likidite baskısı oluşabilir.',
+      guidanceText: 'Kritik Nakit Riski: Şirket kârlı görünmesine rağmen nakit yakılıyor! Operasyonlardan nakit üretilememiştir. Gayrinakdi gelirler veya alacak tahsilat krizine dikkat. Likidite baskısı oluşabilir.',
       beginnerExplanation,
       sloanAssessment,
       ocf,
@@ -3983,7 +3983,7 @@ export function calculateEarningsQuality(
       status: 'DEPRECIATION_MASK',
       statusTitle: 'Amortisman / Parasal Kayıp Maskelemesi',
       badgeColor: 'indigo',
-      guidanceText: '💡 Amortisman / Parasal Kayıp Maskelemesi: Muhasebesel zarar görünse de operasyonlar nakit üretmeye devam etmektedir (Nakit Dönüşüm Oranı N/A).',
+      guidanceText: 'Amortisman / Parasal Kayıp Maskelemesi: Muhasebesel zarar görünse de operasyonlar nakit üretmeye devam etmektedir (Nakit Dönüşüm Oranı N/A).',
       beginnerExplanation,
       sloanAssessment,
       ocf,
@@ -3999,7 +3999,7 @@ export function calculateEarningsQuality(
       status: 'EXCELLENT',
       statusTitle: 'Pozitif Nakit Akışı (Güçlü Operasyonel Tahsilat)',
       badgeColor: 'emerald',
-      guidanceText: '💡 Pozitif Nakit Akışı: Şirket başabaş net kâr açıklasa da faaliyetlerinden sıcak nakit üretmeye devam etmektedir.',
+      guidanceText: 'Pozitif Nakit Akışı: Şirket başabaş net kâr açıklasa da faaliyetlerinden sıcak nakit üretmeye devam etmektedir.',
       beginnerExplanation,
       sloanAssessment,
       ocf,
@@ -4015,7 +4015,7 @@ export function calculateEarningsQuality(
       status: 'MODERATE',
       statusTitle: 'Başabaş Noktası & Durgun Nakit',
       badgeColor: 'amber',
-      guidanceText: '⚠️ Başabaş Noktası: Şirket dönem net kârı ve operasyonel nakit üretimi sıfır sınırındadır.',
+      guidanceText: 'Başabaş Noktası: Şirket dönem net kârı ve operasyonel nakit üretimi sıfır sınırındadır.',
       beginnerExplanation,
       sloanAssessment,
       ocf,
@@ -4031,7 +4031,7 @@ export function calculateEarningsQuality(
       status: 'DOUBLE_NEGATIVE',
       statusTitle: 'Zarar ve Negatif Nakit Akışı (Çift Yönlü Nakit & Kâr Baskısı)',
       badgeColor: 'rose',
-      guidanceText: `🔴 Kritik Nakit Riski: Şirket hem muhasebesel net zarar (${safeNet.toLocaleString('tr-TR')} TL) açıklamakta hem de operasyonlarından nakit tüketmektedir (${safeOcf.toLocaleString('tr-TR')} TL). İki negatif değerin matematiksel oranı analitik olarak anlamsız olduğu için Nakit Dönüşüm Oranı uygulanamaz (N/A). Faaliyetlerden nakit yakımı devam ettiği için çalışma sermayesi ve likidite riski çok yüksektir.`,
+      guidanceText: `Kritik Nakit Riski: Şirket hem muhasebesel net zarar (${safeNet.toLocaleString('tr-TR')} TL) açıklamakta hem de operasyonlarından nakit tüketmektedir (${safeOcf.toLocaleString('tr-TR')} TL). İki negatif değerin matematiksel oranı analitik olarak anlamsız olduğu için Nakit Dönüşüm Oranı uygulanamaz (N/A). Faaliyetlerden nakit yakımı devam ettiği için çalışma sermayesi ve likidite riski çok yüksektir.`,
       beginnerExplanation,
       sloanAssessment,
       ocf,
@@ -4639,7 +4639,7 @@ export function calculateCompanyMultiples(
         sectorMedian: sectorMed,
         diffPct: null,
         status: 'NA',
-        statusLabel: '⚠️ Negatif Çarpan (Net Zarar / Negatif Özkaynak)',
+        statusLabel: 'Negatif Çarpan (Net Zarar / Negatif Özkaynak)',
         badgeColor: 'rose',
         impliedPrice: null
       };
@@ -4647,16 +4647,16 @@ export function calculateCompanyMultiples(
 
     const diff = Number((((compVal - sectorMed) / sectorMed) * 100).toFixed(1));
     let status: 'DISCOUNTED' | 'PARITY' | 'PREMIUM' = 'PARITY';
-    let statusLabel = '⚖️ Sektör Ortalamasında';
+    let statusLabel = 'Sektör Ortalamasında';
     let badgeColor: 'emerald' | 'amber' | 'rose' = 'amber';
 
     if (diff <= -12.0) {
       status = 'DISCOUNTED';
-      statusLabel = `🌟 Sektöre Göre İskontolu (%${Math.abs(diff)} Ucuz)`;
+      statusLabel = `Sektöre Göre İskontolu (%${Math.abs(diff)} Ucuz)`;
       badgeColor = 'emerald';
     } else if (diff >= 15.0) {
       status = 'PREMIUM';
-      statusLabel = `🔴 Sektöre Göre Primli (%${diff} Pahalı)`;
+      statusLabel = `Sektöre Göre Primli (%${diff} Pahalı)`;
       badgeColor = 'rose';
     }
 

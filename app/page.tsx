@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -10,10 +10,10 @@ import {
   RefreshCw, Printer, PlusCircle, Plus, History, 
   ChevronRight, ChevronDown, UploadCloud, X, CheckCircle2, Search,
   TrendingUp, BarChart3, Target, Calendar, ArrowUpRight, ArrowDownRight, Minus,
-  DollarSign, ShieldCheck, ShieldAlert, Activity, Layers, Sparkles, Download, Upload,
+  DollarSign, ShieldCheck, ShieldAlert, Activity, Layers, Download, Upload,
   Trophy, Award, Trash2, ArrowUpDown, Filter, Copy, Percent, PieChart, Info,
-  PanelLeftClose, PanelLeftOpen, Pin, PinOff, Zap, Bookmark,
-  Check, Rocket, Gem, Shield
+  PanelLeftClose, PanelLeftOpen, Pin, PinOff, Bookmark,
+  Check, Rocket, Gem, Shield, Sun, Moon, Compass, SlidersHorizontal, Scale, ArrowRight
 } from 'lucide-react';
 
 import {
@@ -94,9 +94,9 @@ function renderThemeIcon(iconTag: string, className: string = "w-3.5 h-3.5") {
     case 'Gem': return <Gem className={className} />;
     case 'Shield': return <Shield className={className} />;
     case 'RefreshCw': return <RefreshCw className={className} />;
-    case 'Zap': return <Zap className={className} />;
+    case 'Zap': return <Activity className={className} />;
     case 'DollarSign': return <DollarSign className={className} />;
-    default: return <Sparkles className={className} />;
+    default: return <Compass className={className} />;
   }
 }
 
@@ -609,7 +609,7 @@ function DriverCard({
   );
 
   return (
-    <div className="bg-[#111827]/90 border border-slate-800 rounded-xl p-4 sm:p-5 flex flex-col justify-between shadow-lg space-y-3">
+    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-5 flex flex-col justify-between shadow-sm space-y-3">
       <div>
         <div className="text-xs font-semibold text-slate-300 tracking-tight">
           {title}
@@ -623,7 +623,7 @@ function DriverCard({
       </div>
 
       <div className="space-y-1.5 pt-1">
-        <div className="relative h-2 w-full rounded-full overflow-hidden flex bg-slate-900 border border-slate-800">
+        <div className="relative h-2 w-full rounded-full overflow-hidden flex bg-slate-950 border border-slate-800">
           <div className="w-1/2 h-full bg-gradient-to-r from-orange-600 to-amber-500" />
           <div className="w-1/2 h-full bg-gradient-to-r from-cyan-500 to-emerald-400" />
           <div 
@@ -668,7 +668,7 @@ const CustomChartTooltip = ({ active, payload, label, currency = 'Bin TRY' }: an
     });
 
     return (
-      <div className="bg-slate-950 border border-slate-700 p-3 rounded-lg shadow-2xl font-sans text-xs space-y-1.5 min-w-[210px] z-50">
+      <div className="bg-slate-900 border border-slate-700 p-3 rounded-lg shadow-lg font-sans text-xs space-y-1.5 min-w-[210px] z-50">
         <div className="font-bold text-white border-b border-slate-800 pb-1 font-mono text-sm flex items-center justify-between">
           <span>{label}</span>
           <span className="text-[10px] text-slate-400 font-normal">Dönem Sonu</span>
@@ -1199,6 +1199,20 @@ export default function ValuationTerminal({
 
   const [copiedReport, setCopiedReport] = useState(false);
   const [fontSizeMode, setFontSizeMode] = useState<'normal' | 'large' | 'compact'>('normal');
+  const [themeMode, setThemeMode] = useState<'dark' | 'light'>('dark');
+
+  const toggleThemeMode = useCallback(() => {
+    setThemeMode(prev => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      try {
+        localStorage.setItem('fin_ui_theme', next);
+        if (typeof document !== 'undefined') {
+          document.documentElement.setAttribute('data-theme', next);
+        }
+      } catch (e) {}
+      return next;
+    });
+  }, []);
 
   const [sidebarSort, setSidebarSort] = useState<'rank' | 'date'>('rank');
   const [collapsedDecisions, setCollapsedDecisions] = useState<Record<string, boolean>>({});
@@ -1394,7 +1408,7 @@ export default function ValuationTerminal({
     setLoading(false);
   }, [savedReports, initialTab]);
 
-  // NotebookLM İçin Tüm Metin & Tablo Verilerini Kopyalama
+  // Tüm Metin & Tablo Verilerini Kopyalama
   const [copiedNotebookLM, setCopiedNotebookLM] = useState(false);
   const handleCopyNotebookLM = useCallback(async () => {
     if (!activeReport) return;
@@ -1404,12 +1418,21 @@ export default function ValuationTerminal({
       setCopiedNotebookLM(true);
       setTimeout(() => setCopiedNotebookLM(false), 2500);
     } catch (err) {
-      prompt('NotebookLM İçin Bütüncül Markdown Metni:', fullMd);
+      prompt('Bütüncül Rapor Markdown Metni:', fullMd);
     }
   }, [activeReport]);
 
   useEffect(() => {
     setMounted(true);
+    try {
+      const savedTheme = localStorage.getItem('fin_ui_theme') as 'dark' | 'light' | null;
+      const initialTheme = savedTheme === 'light' ? 'light' : 'dark';
+      setThemeMode(initialTheme);
+      if (typeof document !== 'undefined') {
+        document.documentElement.setAttribute('data-theme', initialTheme);
+      }
+    } catch (e) {}
+
     let localData: SavedReport[] = [];
     try {
       const stored = localStorage.getItem('fin_valuation_reports');
@@ -1754,7 +1777,7 @@ export default function ValuationTerminal({
     setTicker(targetTicker);
     setPipelineStep(1);
     setPipelineProgress(25);
-    setStatusMessage(`[1/3] ⚡ Borsa İstanbul resmi mali tabloları ve canlı piyasa fiyatı çekiliyor: ${targetTicker}...`);
+    setStatusMessage(`[1/3] Borsa İstanbul resmi mali tabloları ve canlı piyasa fiyatı çekiliyor: ${targetTicker}...`);
 
     try {
       const res = await fetchWithClientRetry(
@@ -1935,7 +1958,7 @@ export default function ValuationTerminal({
       }
 
       setPipelineProgress(100);
-      setStatusMessage(`⚡ ${targetTicker} için ${currentData.financial_history.length} çeyreklik resmi veri başarıyla yüklendi!`);
+      setStatusMessage(`${targetTicker} için ${currentData.financial_history.length} çeyreklik resmi veri başarıyla yüklendi!`);
 
       setExtractedData(currentData);
       setStep('review');
@@ -3433,7 +3456,7 @@ export default function ValuationTerminal({
   }, [savedReports, currentTicker, activeReport?.id, valuationInfo.fair_value, dynamicValuationResult]);
 
   const renderEarningsQualityCard = (options?: { id?: string }) => (
-    <div id={options?.id} className={`bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-xl space-y-5 ${options?.id ? 'scroll-mt-24' : ''}`}>
+    <div id={options?.id} className={`bg-slate-900 border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-sm space-y-5 ${options?.id ? 'scroll-mt-24' : ''}`}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
         <div className="flex items-center gap-3">
           <div className={`p-2.5 rounded-xl border ${
@@ -3445,7 +3468,7 @@ export default function ValuationTerminal({
               ? 'bg-rose-500/10 border-rose-500/25 text-rose-400'
               : 'bg-indigo-500/10 border-indigo-500/25 text-indigo-400'
           }`}>
-            <Zap className="w-5 h-5" />
+            <Activity className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -3492,7 +3515,7 @@ export default function ValuationTerminal({
       {showCashQualityExplainer && (
         <div className="bg-slate-950/80 border border-cyan-900/40 p-4 rounded-xl text-xs text-slate-300 space-y-2">
           <div className="font-bold text-cyan-300 flex items-center gap-1.5">
-            <Sparkles className="w-4 h-4" /> Tecrübesiz Yatırımcı İçin Temel Kural:
+            <Info className="w-4 h-4" /> Tecrübesiz Yatırımcı İçin Temel Kural:
           </div>
           <p className="leading-relaxed">
             {earningsQuality.beginnerExplanation}
@@ -3507,7 +3530,7 @@ export default function ValuationTerminal({
 
       {/* 4 Temel Metrik Kartı */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+        <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/90">
           <span className="text-[10px] text-slate-400 uppercase font-semibold block">Nakit Dönüşüm Oranı</span>
           <div className={`text-xl font-black font-mono mt-1 ${
             earningsQuality.status === 'DOUBLE_NEGATIVE' ? 'text-rose-400' : 'text-white'
@@ -3521,7 +3544,7 @@ export default function ValuationTerminal({
           </span>
         </div>
 
-        <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+        <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/90">
           <span className="text-[10px] text-slate-400 uppercase font-semibold block">Sloan Tahakkuk Oranı</span>
           <div className={`text-xl font-black font-mono mt-1 ${
             earningsQuality.status === 'DOUBLE_NEGATIVE'
@@ -3535,7 +3558,7 @@ export default function ValuationTerminal({
           <span className="text-[10px] text-slate-500 block mt-0.5">Tahakkuk / Aktif Oranı</span>
         </div>
 
-        <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+        <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/90">
           <span className="text-[10px] text-slate-400 uppercase font-semibold block">İşletme Nakit Akışı (OCF)</span>
           <div className={`text-lg font-black font-mono mt-1 truncate ${
             (earningsQuality.ocf != null && earningsQuality.ocf < 0) ? 'text-rose-400' : 'text-emerald-400'
@@ -3545,7 +3568,7 @@ export default function ValuationTerminal({
           <span className="text-[10px] text-slate-500 block mt-0.5">Operasyonel Sıcak Para</span>
         </div>
 
-        <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+        <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/90">
           <span className="text-[10px] text-slate-400 uppercase font-semibold block">Raporlanan Net Kâr</span>
           <div className={`text-lg font-black font-mono mt-1 truncate ${
             (earningsQuality.netIncome != null && earningsQuality.netIncome < 0) ? 'text-rose-400' : 'text-cyan-400'
@@ -3565,7 +3588,7 @@ export default function ValuationTerminal({
   );
 
   const renderDuPontCard = () => (
-    <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+    <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-sm space-y-4">
       <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
         <div className="flex items-center gap-2">
           <Activity className="w-4 h-4 text-emerald-400" />
@@ -3586,7 +3609,7 @@ export default function ValuationTerminal({
 
       {/* 5 Aşamalı Boru Hattı Gösterimi */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-2">
-        <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800 text-center">
+        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
           <div className="text-[10px] text-slate-400 font-semibold uppercase">1. Vergi Yükü</div>
           <div className="text-base font-black font-mono text-white mt-1">
             {dupontResult.taxBurden != null ? `${dupontResult.taxBurden}x` : '—'}
@@ -3594,7 +3617,7 @@ export default function ValuationTerminal({
           <div className="text-[9px] text-slate-500 mt-0.5">Net Kâr / EBT</div>
         </div>
 
-        <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800 text-center">
+        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
           <div className="text-[10px] text-slate-400 font-semibold uppercase">
             {currentSector === 'INSURANCE' ? '2. Yatırım Katkısı' : '2. Faiz Yükü'}
           </div>
@@ -3606,7 +3629,7 @@ export default function ValuationTerminal({
           </div>
         </div>
 
-        <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800 text-center">
+        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
           <div className="text-[10px] text-slate-400 font-semibold uppercase">
             {currentSector === 'INSURANCE' ? '3. Teknik Kâr Marjı' : '3. Faaliyet Marjı'}
           </div>
@@ -3618,7 +3641,7 @@ export default function ValuationTerminal({
           </div>
         </div>
 
-        <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800 text-center">
+        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
           <div className="text-[10px] text-slate-400 font-semibold uppercase">4. Aktif Devri</div>
           <div className="text-base font-black font-mono text-amber-300 mt-1">
             {dupontResult.assetTurnover != null ? `${dupontResult.assetTurnover}x` : '—'}
@@ -3628,7 +3651,7 @@ export default function ValuationTerminal({
           </div>
         </div>
 
-        <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800 text-center col-span-2 sm:col-span-1">
+        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center col-span-2 sm:col-span-1">
           <div className="text-[10px] text-slate-400 font-semibold uppercase">
             {currentSector === 'INSURANCE' ? '5. Fon & Rezerv Çarpanı' : '5. Kaldıraç'}
           </div>
@@ -3642,18 +3665,18 @@ export default function ValuationTerminal({
       </div>
 
       <div className="bg-slate-950/70 border border-slate-800 p-3 rounded-xl text-xs text-slate-300 leading-relaxed">
-        <span className="font-bold text-white">💡 Kârlılık Teşhisi: </span>
+        <span className="font-bold text-white">Kârlılık Teşhisi: </span>
         <span>{dupontResult.driverSummary}</span>
       </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-[#0B0F19] text-slate-100 flex flex-col md:flex-row font-sans">
+    <div data-theme={themeMode} className="theme-canvas min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row font-sans transition-colors duration-200">
       
-      {/* Sol Kenar Çubuğu: Arşiv & Skor Takibi (Item 5: Kompakt Kenar Çubuğu ve Toggle Boyutu) */}
+      {/* Sol Kenar Çubuğu: Arşiv & Skor Takibi */}
       <aside 
-        className={`border-r border-slate-800 bg-[#0F172A]/90 flex flex-col flex-shrink-0 transition-all duration-300 print:hidden ${
+        className={`border-r border-slate-800 bg-slate-900 flex flex-col flex-shrink-0 transition-all duration-300 print:hidden ${
           isSidebarCollapsed ? 'w-full md:w-14' : 'w-full md:w-64'
         } max-h-56 md:max-h-none overflow-y-auto`}
       >
@@ -3845,10 +3868,10 @@ export default function ValuationTerminal({
                                 className={`p-2.5 rounded-lg border cursor-pointer transition flex items-center justify-between group ${
                                   activeReportId === item.id && step === 'report'
                                     ? item.decision === 'AL'
-                                      ? 'bg-slate-800/90 border-emerald-500/60 shadow-md shadow-emerald-950/30 ring-1 ring-emerald-500/30'
+                                      ? 'bg-slate-800/90 border-emerald-500/60 shadow-sm ring-1 ring-emerald-500/30'
                                       : item.decision === 'ALMA'
-                                      ? 'bg-slate-800/90 border-rose-500/60 shadow-md shadow-rose-950/30 ring-1 ring-rose-500/30'
-                                      : 'bg-slate-800/90 border-amber-500/60 shadow-md shadow-amber-950/30 ring-1 ring-amber-500/30'
+                                      ? 'bg-slate-800/90 border-rose-500/60 shadow-sm ring-1 ring-rose-500/30'
+                                      : 'bg-slate-800/90 border-amber-500/60 shadow-sm ring-1 ring-amber-500/30'
                                     : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800/60'
                                 }`}
                               >
@@ -3927,8 +3950,8 @@ export default function ValuationTerminal({
       </aside>
 
       {/* Sağ Ana Bölüm */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto bg-[#090D16]">
-        <header className="border-b border-slate-800/80 px-5 py-3 flex items-center justify-between bg-[#0B0F19]/90 backdrop-blur-md sticky top-0 z-30 print:hidden">
+      <main className="theme-canvas flex-1 flex flex-col min-w-0 overflow-y-auto bg-slate-950">
+        <header className="border-b border-slate-800/80 px-5 py-3 flex items-center justify-between bg-slate-900/95 backdrop-blur-md sticky top-0 z-30 print:hidden">
           <div 
             onClick={() => { setStep('input'); setActiveReportId(null); setError(null); }}
             role="button"
@@ -3952,16 +3975,36 @@ export default function ValuationTerminal({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Açık / Koyu Tema Seçici */}
+            <button
+              type="button"
+              onClick={toggleThemeMode}
+              className="flex items-center gap-1.5 text-xs py-1.5 px-2.5 rounded-lg border font-medium transition cursor-pointer bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800"
+              title={themeMode === 'dark' ? 'Açık Temaya (Editorial Paper) Geç' : 'Koyu Temaya (Matte Dark) Geç'}
+            >
+              {themeMode === 'dark' ? (
+                <>
+                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden md:inline">Açık Tema</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="hidden md:inline">Koyu Tema</span>
+                </>
+              )}
+            </button>
+
             <button
               onClick={() => setIsThemesModalOpen(true)}
               className={`flex items-center gap-1.5 text-xs py-1.5 px-3 rounded-lg border font-medium transition cursor-pointer ${
                 isThemesModalOpen
-                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm shadow-cyan-950/40'
+                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
                   : 'bg-slate-900 hover:bg-slate-800 text-cyan-300 border-cyan-900/50 hover:border-cyan-700/60'
               }`}
               title="Şirketleri 6 temel yatırım temasına göre filtreleyin ve inceleyin"
             >
-              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              <Compass className="w-3.5 h-3.5 text-cyan-400" />
               <span>Yatırım Temaları</span>
               {savedReports.length > 0 && (
                 <span className="ml-0.5 px-1.5 py-0.2 bg-cyan-950 text-cyan-300 text-[10px] rounded-full font-mono border border-cyan-800/80 font-bold">
@@ -4002,7 +4045,7 @@ export default function ValuationTerminal({
           {step === 'input' && (
             <div className="max-w-3xl mx-auto py-4 sm:py-10 space-y-5">
               {/* Ana Arama ve Analiz Başlatma Kartı */}
-              <div className="bg-[#0F1523] border border-slate-800/90 p-6 sm:p-8 rounded-2xl shadow-2xl space-y-5">
+              <div className="bg-slate-900 border border-slate-800/90 p-6 sm:p-8 rounded-2xl shadow-sm space-y-5">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
@@ -4012,7 +4055,7 @@ export default function ValuationTerminal({
                       BIST hisse kodunu girerek finansal tabloları ve adil değer modelini oluşturun.
                     </p>
                   </div>
-                  <span className="px-2.5 py-1 rounded-md text-[11px] font-mono font-semibold bg-slate-900 text-emerald-400 border border-slate-800">
+                  <span className="px-2.5 py-1 rounded-md text-[11px] font-mono font-semibold bg-slate-950 text-emerald-400 border border-slate-800">
                     BIST • KAP
                   </span>
                 </div>
@@ -4031,14 +4074,14 @@ export default function ValuationTerminal({
                         }
                       }}
                       placeholder="Hisse kodu (Örn: AGESA, THYAO, TUPRS, GARAN)"
-                      className="w-full bg-[#090D16] border border-slate-700/80 focus:border-emerald-500 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 font-mono font-bold tracking-wider focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+                      className="w-full bg-slate-950 border border-slate-700/80 focus:border-emerald-500 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 font-mono font-bold tracking-wider focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
                     />
                   </div>
                   <button
                     type="button"
                     onClick={() => handleBistDirectAnalysis()}
                     disabled={loading || !ticker.trim()}
-                    className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm rounded-xl shadow-lg shadow-emerald-950/40 flex items-center justify-center gap-2 transition disabled:opacity-40 cursor-pointer flex-shrink-0"
+                    className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm rounded-xl shadow-sm flex items-center justify-center gap-2 transition disabled:opacity-40 cursor-pointer flex-shrink-0"
                   >
                     {loading ? (
                       <>
@@ -4047,7 +4090,7 @@ export default function ValuationTerminal({
                       </>
                     ) : (
                       <>
-                        <Zap className="w-4 h-4" />
+                        <ArrowRight className="w-4 h-4" />
                         <span>Analiz Et</span>
                       </>
                     )}
@@ -4070,7 +4113,7 @@ export default function ValuationTerminal({
                       className={`px-2.5 py-1 rounded-md text-[11px] font-mono font-semibold border transition cursor-pointer ${
                         ticker === sym
                           ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50'
-                          : 'bg-[#090D16] hover:bg-slate-800 text-slate-300 border-slate-800 hover:border-slate-700'
+                          : 'bg-slate-950 hover:bg-slate-800 text-slate-300 border-slate-800 hover:border-slate-700'
                       }`}
                     >
                       {sym}
@@ -4080,7 +4123,7 @@ export default function ValuationTerminal({
               </div>
 
               {/* Ek Dokümanlar (KAP Entegrasyonu & Yatırımcı Sunumu Odaklı Yükleme) */}
-              <div className="bg-[#0F1523] border border-slate-800/90 p-5 sm:p-6 rounded-2xl shadow-xl space-y-4">
+              <div className="bg-slate-900 border border-slate-800/90 p-5 sm:p-6 rounded-2xl shadow-sm space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/60 pb-3">
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2">
@@ -4095,7 +4138,7 @@ export default function ValuationTerminal({
                   </div>
                   {(activityFiles.length + presentationFiles.length) > 0 && (
                     <span className="text-[11px] text-emerald-400 font-mono bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-1 rounded-md self-start sm:self-auto flex items-center gap-1.5">
-                      <Sparkles className="w-3 h-3 text-emerald-400" />
+                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                       {activityFiles.length + presentationFiles.length} PDF Eklendi
                     </span>
                   )}
@@ -4112,8 +4155,8 @@ export default function ValuationTerminal({
                     }}
                     className={`rounded-xl border p-4 transition flex flex-col justify-between ${
                       activityFiles.length > 0
-                        ? 'bg-[#090D16] border-sky-500/50'
-                        : 'bg-[#090D16]/60 border-slate-800 hover:border-slate-700'
+                        ? 'bg-slate-950 border-sky-500/50'
+                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
                     }`}
                   >
                     <div className="space-y-3">
@@ -4180,8 +4223,8 @@ export default function ValuationTerminal({
                     }}
                     className={`rounded-xl border p-4 transition flex flex-col justify-between ${
                       presentationFiles.length > 0
-                        ? 'bg-amber-950/20 border-amber-500/60 shadow-lg shadow-amber-950/30'
-                        : 'bg-[#090D16] border-amber-900/40 hover:border-amber-600/60 hover:bg-[#0c121f]'
+                        ? 'bg-amber-950/20 border-amber-500/60 shadow-sm'
+                        : 'bg-slate-950 border-slate-800 hover:border-amber-600/60'
                     }`}
                   >
                     <div className="space-y-3">
@@ -4200,9 +4243,9 @@ export default function ValuationTerminal({
                         tabIndex={0}
                         onClick={() => presentationInputRef.current?.click()}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); presentationInputRef.current?.click(); } }}
-                        className="border border-dashed border-amber-800/60 hover:border-amber-400 rounded-lg py-3 px-3 text-center cursor-pointer transition bg-amber-950/10 hover:bg-amber-950/30 select-none"
+                        className="border border-dashed border-slate-700 hover:border-amber-500/60 rounded-lg py-3 px-3 text-center cursor-pointer transition bg-slate-900/40 hover:bg-slate-900/80 select-none"
                       >
-                        <div className="flex items-center justify-center gap-1.5 text-xs font-medium text-amber-200">
+                        <div className="flex items-center justify-center gap-1.5 text-xs font-medium text-slate-300">
                           <UploadCloud className="w-4 h-4 text-amber-400" />
                           <span>Yatırımcı Sunumu Seç veya Sürükle</span>
                         </div>
@@ -4241,7 +4284,7 @@ export default function ValuationTerminal({
 
                 {/* İlerleme Çubuğu (Yükleme Sırasında) */}
                 {loading && (
-                  <div className="bg-[#090D16] border border-slate-800 rounded-xl p-4 space-y-3">
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-300 font-medium flex items-center gap-2">
                         <RefreshCw className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
@@ -4263,16 +4306,16 @@ export default function ValuationTerminal({
 
           {/* ADIM 2: ÇIKARILAN VERİLERİ İNCELEME & ONAYLAMA */}
           {step === 'review' && extractedData && (
-            <div className="space-y-6 bg-[#0F1523] border border-slate-800 p-6 md:p-8 rounded-2xl shadow-xl">
+            <div className="space-y-6 bg-slate-900 border border-slate-800 p-6 md:p-8 rounded-2xl shadow-sm">
               <div className="border-b border-slate-800 pb-3 flex items-center justify-between flex-wrap gap-2">
                 <span className="font-bold text-sm text-white flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Finansal Veri Özeti
                 </span>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono px-2.5 py-1 rounded bg-slate-900 text-emerald-400 border border-slate-800 font-bold">
+                  <span className="text-xs font-mono px-2.5 py-1 rounded bg-slate-950 text-emerald-400 border border-slate-800 font-bold">
                     {extractedData.ticker || ticker} • {currentSector}
                   </span>
-                  <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 px-2.5 py-1 rounded">
+                  <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-700 px-2.5 py-1 rounded">
                     <span className="text-[11px] text-slate-400 font-medium">Hisse Fiyatı:</span>
                     <input
                       type="number"
@@ -4336,7 +4379,7 @@ export default function ValuationTerminal({
               </div>
 
               {error && (
-                <div className="p-4 bg-rose-950/80 border border-rose-800 rounded-xl flex items-start gap-3 text-rose-300 text-xs shadow-lg animate-in fade-in">
+                <div className="p-4 bg-rose-950/80 border border-rose-800 rounded-xl flex items-start gap-3 text-rose-300 text-xs shadow-sm animate-in fade-in">
                   <AlertTriangle className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
                   <div className="space-y-1">
                     <div className="font-bold text-white text-xs">Değerleme Raporu Üretilemedi</div>
@@ -4371,7 +4414,7 @@ export default function ValuationTerminal({
                   type="button"
                   disabled={loading}
                   onClick={() => appendFinancialInputRef.current?.click()}
-                  className="sm:w-1/3 py-2.5 bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-slate-700 text-xs font-semibold rounded-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="sm:w-1/3 py-2.5 bg-slate-950 hover:bg-slate-800 text-cyan-300 border border-slate-700 text-xs font-semibold rounded-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <Plus className="w-4 h-4 text-cyan-400" /> Dönem PDF Ekle
                 </button>
@@ -4380,7 +4423,7 @@ export default function ValuationTerminal({
                   type="button"
                   disabled={loading}
                   onClick={handleEvaluate}
-                  className="sm:flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white text-xs font-bold rounded-lg transition flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+                  className="sm:flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white text-xs font-bold rounded-lg transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
                 >
                   {loading ? (
                     <>
@@ -4398,7 +4441,7 @@ export default function ValuationTerminal({
 
           {/* YÜKLENİYOR EKRANI: Ticker var ama henüz rapor oluşmadıysa arama formunu atla ve bu kartı göster */}
           {loading && !activeReport && (
-            <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-12 text-center space-y-4 shadow-xl">
+            <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-12 text-center space-y-4 shadow-sm">
               <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400">
                 <RefreshCw className="w-8 h-8 animate-spin" />
               </div>
@@ -4415,7 +4458,7 @@ export default function ValuationTerminal({
 
           {/* EKSİK RAPOR DURUMU: Step report ama activeReport yok ve loading bitti ise boş ekran yerine yönlendirici kart */}
           {step === 'report' && !activeReport && !loading && (
-            <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-10 text-center space-y-4 shadow-xl">
+            <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-10 text-center space-y-4 shadow-sm">
               <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
                 <FileText className="w-7 h-7" />
               </div>
@@ -4434,9 +4477,9 @@ export default function ValuationTerminal({
                     const target = (ticker || initialTicker || '').trim();
                     if (target) handleBistDirectAnalysis(target);
                   }}
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-emerald-950/40 flex items-center gap-2 cursor-pointer transition"
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl shadow-sm flex items-center gap-2 cursor-pointer transition"
                 >
-                  <Zap className="w-4 h-4" />
+                  <ArrowRight className="w-4 h-4" />
                   <span>{(ticker || initialTicker || 'Hisse')} Canlı Analizini Başlat</span>
                 </button>
                 <button
@@ -4455,18 +4498,18 @@ export default function ValuationTerminal({
             <div className="space-y-5">
 
               {/* Üst Hisse Özet Bilgi Kartı */}
-              <div className="bg-[#0F1523] border border-slate-800/90 p-4 sm:p-5 rounded-2xl shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="bg-slate-900 border border-slate-800/90 p-4 sm:p-5 rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3.5">
-                  <div className="w-11 h-11 rounded-xl bg-[#090D16] border border-slate-800 flex items-center justify-center font-black text-base text-white font-mono">
+                  <div className="w-11 h-11 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center font-black text-base text-white font-mono">
                     {activeReport.ticker.slice(0, 4)}
                   </div>
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <h2 className="text-lg font-black text-white tracking-tight">{activeReport.ticker}</h2>
-                      <span className="text-sm font-mono font-bold text-emerald-400 bg-[#090D16] px-3 py-0.5 rounded-md border border-slate-800">
+                      <span className="text-sm font-mono font-bold text-emerald-400 bg-slate-950 px-3 py-0.5 rounded-md border border-slate-800">
                         {activeReport.price} TL
                       </span>
-                      <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-slate-900 text-slate-400 border border-slate-800">
+                      <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-slate-950 text-slate-400 border border-slate-800">
                         {sectorMeta.badge}
                       </span>
                     </div>
@@ -4487,8 +4530,8 @@ export default function ValuationTerminal({
                     const theme = isAl
                       ? {
                           border: 'border-emerald-500/40 hover:border-emerald-500/60',
-                          bg: 'bg-gradient-to-br from-emerald-950/40 via-[#0B0F19] to-slate-950',
-                          glow: 'shadow-[0_0_15px_rgba(16,185,129,0.12)]',
+                          bg: 'bg-emerald-950/30',
+                          glow: '',
                           scoreColor: 'text-emerald-400',
                           badgeBg: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
                           barBg: 'bg-emerald-500',
@@ -4497,8 +4540,8 @@ export default function ValuationTerminal({
                       : isAlma
                       ? {
                           border: 'border-rose-500/40 hover:border-rose-500/60',
-                          bg: 'bg-gradient-to-br from-rose-950/40 via-[#0B0F19] to-slate-950',
-                          glow: 'shadow-[0_0_15px_rgba(244,63,94,0.12)]',
+                          bg: 'bg-rose-950/30',
+                          glow: '',
                           scoreColor: 'text-rose-400',
                           badgeBg: 'bg-rose-500/15 text-rose-300 border-rose-500/40',
                           barBg: 'bg-rose-500',
@@ -4506,8 +4549,8 @@ export default function ValuationTerminal({
                         }
                       : {
                           border: 'border-amber-500/40 hover:border-amber-500/60',
-                          bg: 'bg-gradient-to-br from-amber-950/40 via-[#0B0F19] to-slate-950',
-                          glow: 'shadow-[0_0_15px_rgba(245,158,11,0.12)]',
+                          bg: 'bg-amber-950/30',
+                          glow: '',
                           scoreColor: 'text-amber-400',
                           badgeBg: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
                           barBg: 'bg-amber-500',
@@ -4555,7 +4598,7 @@ export default function ValuationTerminal({
                             <div className="h-7 w-px bg-slate-800" />
                             <div className="flex flex-col items-center">
                               <span className="text-[9px] uppercase font-bold text-rose-500 tracking-wider">RİSK</span>
-                              <div className="flex items-center gap-1 px-2.5 py-0.5 mt-0.5 rounded-md border border-rose-500/50 bg-rose-500/20 text-rose-300 text-xs font-black tracking-wide font-mono animate-pulse">
+                              <div className="flex items-center gap-1 px-2.5 py-0.5 mt-0.5 rounded-md border border-rose-500/50 bg-rose-500/20 text-rose-300 text-xs font-black tracking-wide font-mono">
                                 <ShieldAlert className="w-3 h-3 text-rose-400" />
                                 <span>DEĞER TUZAĞI</span>
                               </div>
@@ -4569,25 +4612,25 @@ export default function ValuationTerminal({
                   <button
                     type="button"
                     onClick={handleCopyNotebookLM}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-[#090D16] hover:bg-cyan-950/60 text-slate-300 hover:text-cyan-300 rounded-xl border border-slate-800 hover:border-cyan-700/50 transition cursor-pointer text-xs font-semibold"
-                    title="Tüm Finansal Tabloları ve Raporu NotebookLM İçin Markdown Olarak Kopyala"
+                    className="flex items-center gap-1.5 px-3 py-2 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl border border-slate-800 transition cursor-pointer text-xs font-semibold"
+                    title="Tüm Finansal Tabloları ve Raporu Markdown Olarak Kopyala"
                   >
                     {copiedNotebookLM ? (
                       <>
-                        <Check className="w-3.5 h-3.5 text-cyan-400" />
-                        <span className="text-cyan-400 font-bold">Kopyalandı</span>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-emerald-400 font-bold">Kopyalandı</span>
                       </>
                     ) : (
                       <>
-                        <Bookmark className="w-3.5 h-3.5 text-cyan-400" />
-                        <span className="hidden sm:inline">NotebookLM</span>
+                        <Copy className="w-3.5 h-3.5 text-cyan-400" />
+                        <span className="hidden sm:inline">Raporu Kopyala</span>
                       </>
                     )}
                   </button>
 
                   <button
                     onClick={() => deleteReport(activeReport.id)}
-                    className="p-2.5 bg-slate-900 hover:bg-rose-950 text-slate-400 hover:text-rose-400 rounded-xl border border-slate-800 transition cursor-pointer"
+                    className="p-2.5 bg-slate-950 hover:bg-rose-950 text-slate-400 hover:text-rose-400 rounded-xl border border-slate-800 transition cursor-pointer"
                     title="Raporu Sil"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -4595,28 +4638,26 @@ export default function ValuationTerminal({
                 </div>
               </div>
 
-              {/* ANA SEKME NAVİGASYONU (Sade, tek bakışta okunabilir sekme yapısı) */}
-              <div className="flex flex-wrap items-center gap-1 bg-[#0F1523] p-1.5 rounded-xl border border-slate-800/90 print:hidden">
-
+              {/* ANA SEKME NAVİGASYONU (Kurumsal Underline Sekme Mimarisi) */}
+              <div className="flex items-center gap-1 overflow-x-auto border-b border-slate-800 bg-slate-900 px-2 pt-1 rounded-t-lg print:hidden">
                 <button
                   type="button"
                   onClick={() => setActiveTab('ozet')}
-                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer whitespace-nowrap ${
                     activeTab === 'ozet'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'border-emerald-500 text-emerald-400 font-bold bg-slate-800/40'
+                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
                   }`}
                 >
                   <PieChart className="w-3.5 h-3.5" /> Özet Rapor
                 </button>
                 <button
-
                   type="button"
                   onClick={() => setActiveTab('overview')}
-                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer whitespace-nowrap ${
                     activeTab === 'overview'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'border-emerald-500 text-emerald-400 font-bold bg-slate-800/40'
+                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
                   }`}
                 >
                   <BarChart3 className="w-3.5 h-3.5" /> Grafik Terminali
@@ -4624,10 +4665,10 @@ export default function ValuationTerminal({
                 <button
                   type="button"
                   onClick={() => setActiveTab('tables')}
-                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer whitespace-nowrap ${
                     activeTab === 'tables'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'border-emerald-500 text-emerald-400 font-bold bg-slate-800/40'
+                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
                   }`}
                 >
                   <Layers className="w-3.5 h-3.5" /> Finansal Tablolar
@@ -4635,10 +4676,10 @@ export default function ValuationTerminal({
                 <button
                   type="button"
                   onClick={() => setActiveTab('fairvalue')}
-                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer whitespace-nowrap ${
                     activeTab === 'fairvalue'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'border-emerald-500 text-emerald-400 font-bold bg-slate-800/40'
+                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
                   }`}
                 >
                   <Target className="w-3.5 h-3.5" /> Adil Değer & Sürücüler
@@ -4646,10 +4687,10 @@ export default function ValuationTerminal({
                 <button
                   type="button"
                   onClick={() => setActiveTab('multiples')}
-                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer whitespace-nowrap ${
                     activeTab === 'multiples'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'border-emerald-500 text-emerald-400 font-bold bg-slate-800/40'
+                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
                   }`}
                 >
                   <Percent className="w-3.5 h-3.5" /> Çarpanlar & Sektör Kıyası
@@ -4657,21 +4698,21 @@ export default function ValuationTerminal({
                 <button
                   type="button"
                   onClick={() => setActiveTab('proscons')}
-                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer whitespace-nowrap ${
                     activeTab === 'proscons'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'border-emerald-500 text-emerald-400 font-bold bg-slate-800/40'
+                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
                   }`}
                 >
-                  <Sparkles className="w-3.5 h-3.5" /> Güçlü & Zayıf Yönler
+                  <Scale className="w-3.5 h-3.5" /> Güçlü & Zayıf Yönler
                 </button>
                 <button
                   type="button"
                   onClick={() => setActiveTab('guidance')}
-                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer whitespace-nowrap ${
                     activeTab === 'guidance'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'border-emerald-500 text-emerald-400 font-bold bg-slate-800/40'
+                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
                   }`}
                 >
                   <Activity className="w-3.5 h-3.5" /> Faaliyet & Sunum Analizi
@@ -4679,10 +4720,10 @@ export default function ValuationTerminal({
                 <button
                   type="button"
                   onClick={() => setActiveTab('report')}
-                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer whitespace-nowrap ${
                     activeTab === 'report'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'border-emerald-500 text-emerald-400 font-bold bg-slate-800/40'
+                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
                   }`}
                 >
                   <FileText className="w-3.5 h-3.5" /> Değerleme Raporu
@@ -4690,23 +4731,23 @@ export default function ValuationTerminal({
                 <button
                   type="button"
                   onClick={() => setActiveTab('history')}
-                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer whitespace-nowrap ${
                     activeTab === 'history'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'border-emerald-500 text-emerald-400 font-bold bg-slate-800/40'
+                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
                   }`}
                 >
                   <History className="w-3.5 h-3.5" /> Geçmiş ({tickerHistory.length})
                 </button>
               </div>
 
-              
+
               {/* SEKME 0: ÖZET RAPOR */}
               {activeTab === 'ozet' && (
                 <ComponentErrorBoundary fallbackTitle="Özet Panosu Hatası">
                 <div className="space-y-6">
                   {chartData.length === 0 ? (
-                    <div className="p-8 text-center text-slate-500 bg-[#0F1523] rounded-xl border border-slate-800 text-sm">
+                    <div className="p-8 text-center text-slate-500 bg-slate-900 rounded-xl border border-slate-800 text-sm">
                       Grafik verisi bulunamadı.
                     </div>
                   ) : (
@@ -4760,10 +4801,10 @@ export default function ValuationTerminal({
                           <>
                             {/* İş Yatırım Canlı Piyasa Çarpanları Şeridi */}
                             {marketMultiples && (
-                        <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-4 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
                           <div className="flex items-center gap-3">
                             <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
-                              <Sparkles className="w-5 h-5" />
+                              <SlidersHorizontal className="w-5 h-5" />
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
@@ -4778,20 +4819,20 @@ export default function ValuationTerminal({
                             </div>
                           </div>
                           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
-                            <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                            <div className="bg-slate-950 border border-slate-800/80 px-3 py-2 rounded-xl text-center">
                               <div className="text-[10px] uppercase font-bold text-slate-500">F/K</div>
                               <div className="text-sm font-black font-mono text-emerald-400">
                                 {marketMultiples.pe != null ? marketMultiples.pe.toFixed(2) : 'A/D'}
                               </div>
                             </div>
-                            <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                            <div className="bg-slate-950 border border-slate-800/80 px-3 py-2 rounded-xl text-center">
                               <div className="text-[10px] uppercase font-bold text-slate-500">PD/DD</div>
                               <div className="text-sm font-black font-mono text-cyan-400">
                                 {marketMultiples.pb != null ? marketMultiples.pb.toFixed(2) : 'A/D'}
                               </div>
                             </div>
                             {isMetricDisabled('ev_ebitda', currentSector) ? (
-                              <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                              <div className="bg-slate-950 border border-slate-800/80 px-3 py-2 rounded-xl text-center">
                                 <div className="text-[10px] uppercase font-bold text-slate-500">
                                   {currentSector === 'INSURANCE' ? 'Bileşik Oran' : 'ROE'}
                                 </div>
@@ -4802,7 +4843,7 @@ export default function ValuationTerminal({
                                 </div>
                               </div>
                             ) : (
-                              <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                              <div className="bg-slate-950 border border-slate-800/80 px-3 py-2 rounded-xl text-center">
                                 <div className="text-[10px] uppercase font-bold text-slate-500">FD/FAVÖK</div>
                                 <div className="text-sm font-black font-mono text-amber-400">
                                   {marketMultiples.ev_ebitda != null ? marketMultiples.ev_ebitda.toFixed(2) : '—'}
@@ -4810,7 +4851,7 @@ export default function ValuationTerminal({
                               </div>
                             )}
                             {isMetricDisabled('ev_sales', currentSector) ? (
-                              <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                              <div className="bg-slate-950 border border-slate-800/80 px-3 py-2 rounded-xl text-center">
                                 <div className="text-[10px] uppercase font-bold text-slate-500">
                                   {currentSector === 'INSURANCE' ? 'ROE' : 'ROA'}
                                 </div>
@@ -4821,14 +4862,14 @@ export default function ValuationTerminal({
                                 </div>
                               </div>
                             ) : (
-                              <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                              <div className="bg-slate-950 border border-slate-800/80 px-3 py-2 rounded-xl text-center">
                                 <div className="text-[10px] uppercase font-bold text-slate-500">FD/Satışlar</div>
                                 <div className="text-sm font-black font-mono text-indigo-400">
                                   {marketMultiples.ev_sales != null ? marketMultiples.ev_sales.toFixed(2) : '—'}
                                 </div>
                               </div>
                             )}
-                            <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                            <div className="bg-slate-950 border border-slate-800/80 px-3 py-2 rounded-xl text-center">
                               <div className="text-[10px] uppercase font-bold text-slate-500">Yabancı Takas</div>
                               <div className="text-sm font-black font-mono text-emerald-400">
                                 {marketMultiples.foreign_share_pct != null ? `%${marketMultiples.foreign_share_pct.toFixed(2)}` : '—'}
@@ -4839,13 +4880,13 @@ export default function ValuationTerminal({
                                 </div>
                               )}
                             </div>
-                            <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                            <div className="bg-slate-950 border border-slate-800/80 px-3 py-2 rounded-xl text-center">
                               <div className="text-[10px] uppercase font-bold text-slate-500">Halka Açıklık</div>
                               <div className="text-sm font-black font-mono text-slate-200">
                                 %{marketMultiples.free_float_pct != null ? marketMultiples.free_float_pct.toFixed(1) : '—'}
                               </div>
                             </div>
-                            <div className="bg-[#090D16] border border-slate-800/80 px-3 py-2 rounded-xl text-center">
+                            <div className="bg-slate-950 border border-slate-800/80 px-3 py-2 rounded-xl text-center">
                               <div className="text-[10px] uppercase font-bold text-slate-500">Piyasa Değeri</div>
                               <div className="text-sm font-black font-mono text-purple-400">
                                 {marketMultiples.market_cap_mn_tl != null
@@ -4861,7 +4902,7 @@ export default function ValuationTerminal({
 
                       {/* Sektör Arketip Bilgilendirme ve Emniyet Uyarı Bannerları */}
                       {getFinancialArchetype(currentSector) === 'AVIATION' && (
-                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-center gap-3.5 text-amber-300 text-xs shadow-lg">
+                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-center gap-3.5 text-amber-300 text-xs shadow-sm">
                           <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
                           <div>
                             <span className="font-bold text-amber-200">Havacılık Sektörü Mevsimsellik Uyarısı:</span>{' '}
@@ -4871,7 +4912,7 @@ export default function ValuationTerminal({
                       )}
 
                       {getFinancialArchetype(currentSector) === 'RETAIL' && (
-                        <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl p-4 flex items-center gap-3.5 text-blue-300 text-xs shadow-lg">
+                        <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl p-4 flex items-center gap-3.5 text-blue-300 text-xs shadow-sm">
                           <Info className="w-5 h-5 text-blue-400 shrink-0" />
                           <div>
                             <span className="font-bold text-blue-200">Perakende Negatif İşletme Sermayesi Modeli:</span>{' '}
@@ -4881,7 +4922,7 @@ export default function ValuationTerminal({
                       )}
 
                       {(currentSector === 'BANKING' || currentSector === 'FINANCIAL_SERVICES') && (
-                        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4 flex items-center gap-3.5 text-emerald-300 text-xs shadow-lg">
+                        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4 flex items-center gap-3.5 text-emerald-300 text-xs shadow-sm">
                           <Info className="w-5 h-5 text-emerald-400 shrink-0" />
                           <div>
                             <span className="font-bold text-emerald-200">{currentSector === 'BANKING' ? 'Bankacılık Finansal Modeli' : 'Finansal Kiralama & Faktoring Modeli'}:</span>{' '}
@@ -4892,12 +4933,12 @@ export default function ValuationTerminal({
 
                       {/* Değer Tuzağı (Value Trap) Uyarı Bannerı */}
                       {(valuationInfo.is_value_trap || activeReport?.isValueTrap) && (
-                        <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 sm:p-5 flex items-start gap-3.5 text-rose-300 text-xs shadow-xl">
+                        <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 sm:p-5 flex items-start gap-3.5 text-rose-300 text-xs shadow-sm">
                           <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
                           <div className="space-y-1.5 flex-1">
                             <div className="flex items-center justify-between gap-2 flex-wrap">
                               <span className="font-bold text-rose-200 text-sm">
-                                🚨 Kritik Değer Tuzağı Riski (Value Trap Alert)
+                                Kritik Değer Tuzağı Riski (Value Trap Alert)
                               </span>
                               <span className="text-[10px] font-mono font-bold bg-rose-950/90 text-rose-400 border border-rose-800 px-2 py-0.5 rounded">
                                 {valuationInfo.value_trap_severity || activeReport?.valueTrapSeverity || 'YÜKSEK RİSK'}
@@ -4918,7 +4959,7 @@ export default function ValuationTerminal({
                       )}
 
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                        <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 shadow-lg">
+                        <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-5 shadow-lg">
                           <div className="flex justify-between items-center mb-4">
                             <h3 className="text-sm font-bold text-white">Özet Gelir Tablosu (Bin TRY)</h3>
                             <div className="flex items-center gap-2">
@@ -4987,7 +5028,7 @@ export default function ValuationTerminal({
                           </table>
                         </div>
                         
-                        <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 shadow-lg">
+                        <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-5 shadow-lg">
                           <div className="flex justify-between items-center mb-4">
                             <h3 className="text-sm font-bold text-white">Özet Bilanço (Bin TRY)</h3>
                             <div className="flex items-center gap-2">
@@ -5095,7 +5136,7 @@ export default function ValuationTerminal({
                           },
                           { title: 'Çeyreklik Net Kar', key: 'net_income' }
                         ].map(chart => (
-                          <div key={chart.key} className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-4 shadow-lg">
+                          <div key={chart.key} className="bg-slate-900 border border-slate-800/90 rounded-2xl p-4 shadow-lg">
                             <div className="text-xs font-bold text-white mb-2">{chart.title}</div>
                             <div className="h-40 w-full">
                               <ResponsiveContainer width="100%" height="100%">
@@ -5159,7 +5200,7 @@ export default function ValuationTerminal({
                            const values = miniData.map((d: any) => d.value).filter((v: any) => v != null && !isNaN(v));
                            const trendColor = values.length >= 2 && values[values.length - 1] > values[0] ? '#10b981' : '#f87171';
                           return (
-                            <div key={mini.title} className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-4 shadow-lg">
+                            <div key={mini.title} className="bg-slate-900 border border-slate-800/90 rounded-2xl p-4 shadow-lg">
                               <div className="text-xs font-bold text-white mb-2">{mini.title}</div>
                               <div className="h-[150px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
@@ -5192,7 +5233,7 @@ export default function ValuationTerminal({
                       {/* ========================================================================= */}
                       {/* ÇEYREKLİK HAFIZA & DÖNEMSEL BESLENME                                      */}
                       {/* ========================================================================= */}
-                      <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 shadow-lg space-y-3">
+                      <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-5 shadow-lg space-y-3">
                         <div className="flex items-center gap-2 border-b border-slate-800 pb-2.5 mb-3">
                           <History className="w-4 h-4 text-emerald-400" />
                           <h4 className="text-xs font-bold uppercase tracking-wider text-white">
@@ -5203,7 +5244,7 @@ export default function ValuationTerminal({
                         {previousQuarterComparison ? (
                           <div className="space-y-2.5 text-xs">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-center">
-                              <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800">
+                              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
                                 <span className="text-[10px] text-slate-400 uppercase block">Önceki Çeyrek Adil Değer</span>
                                 <span className="text-base font-mono font-bold text-slate-300 mt-1 block">
                                   {previousQuarterComparison.prevFairValue} TL
@@ -5212,7 +5253,7 @@ export default function ValuationTerminal({
                                   Tavsiye: {previousQuarterComparison.prevDecision} (Skor: {previousQuarterComparison.prevScore || '—'})
                                 </span>
                               </div>
-                              <div className="bg-[#090D16] p-3 rounded-xl border border-slate-800">
+                              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
                                 <span className="text-[10px] text-slate-400 uppercase block">Güncel Çeyrek Adil Değer</span>
                                 <span className="text-base font-mono font-bold text-emerald-400 mt-1 block">
                                   {previousQuarterComparison.currFairValue} TL
@@ -5247,13 +5288,13 @@ export default function ValuationTerminal({
                 <ComponentErrorBoundary fallbackTitle="Grafik Terminali Hatası">
                 <div className="space-y-6">
                   {chartData.length === 0 ? (
-                    <div className="p-8 text-center text-slate-500 bg-[#0F1523] rounded-xl border border-slate-800 text-sm">
+                    <div className="p-8 text-center text-slate-500 bg-slate-900 rounded-xl border border-slate-800 text-sm">
                       Grafik verisi bulunamadı.
                     </div>
                   ) : (
                     <>
                       {/* Çeyreklik vs TTM Geçiş Kontrolü */}
-                      <div className="flex items-center justify-between flex-wrap gap-3 bg-[#0F1523] border border-slate-800/90 p-3.5 rounded-2xl shadow-lg">
+                      <div className="flex items-center justify-between flex-wrap gap-3 bg-slate-900 border border-slate-800/90 p-3.5 rounded-2xl shadow-lg">
                         <div className="flex items-center gap-2.5">
                           <div className="p-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400">
                             <Activity className="w-4 h-4" />
@@ -5273,7 +5314,7 @@ export default function ValuationTerminal({
                           </div>
                         </div>
 
-                        <div className="inline-flex items-center p-1 bg-[#090D16] border border-slate-800 rounded-xl text-xs font-semibold">
+                        <div className="inline-flex items-center p-1 bg-slate-950 border border-slate-800 rounded-xl text-xs font-semibold">
                           <button
                             type="button"
                             onClick={() => setChartMode('quarterly')}
@@ -5302,7 +5343,7 @@ export default function ValuationTerminal({
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
                         {/* Grafik 1: Büyüme Trendi: Satışlar ve Karlılık */}
-                        <div className="bg-[#0F1523] border border-slate-800/90 p-5 rounded-2xl space-y-4 shadow-lg">
+                        <div className="bg-slate-900 border border-slate-800/90 p-5 rounded-2xl space-y-4 shadow-lg">
                           <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
                             <div className="flex items-center gap-2.5">
                               <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400">
@@ -5323,7 +5364,7 @@ export default function ValuationTerminal({
                             {mounted && (
                               <ResponsiveContainer width="100%" height="100%">
                                 <ComposedChart data={activeFlowChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
+                                  <CartesianGrid strokeDasharray="2 2" stroke="var(--chart-grid)" opacity={0.5} />
                                   <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                   <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFmt} />
                                   <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
@@ -5338,7 +5379,7 @@ export default function ValuationTerminal({
                         </div>
 
                         {/* Grafik 2: Prim Üretimi / Satışlar ve Hisse Fiyatı (Fiyat Çubuğu + Trend Çizgisi) */}
-                        <div className="bg-[#0F1523] border border-slate-800/90 p-5 rounded-2xl space-y-4 shadow-lg">
+                        <div className="bg-slate-900 border border-slate-800/90 p-5 rounded-2xl space-y-4 shadow-lg">
                           <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
                             <div className="flex items-center gap-2.5">
                               <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
@@ -5359,7 +5400,7 @@ export default function ValuationTerminal({
                             {mounted && (
                               <ResponsiveContainer width="100%" height="100%">
                                 <ComposedChart data={activeFlowChartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
-                                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
+                                  <CartesianGrid strokeDasharray="2 2" stroke="var(--chart-grid)" opacity={0.5} />
                                   <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                   <YAxis yAxisId="left" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFmt} />
                                   <YAxis yAxisId="right" orientation="right" stroke="#10b981" tick={{ fontSize: 10, fill: '#34d399' }} tickFormatter={v => `${v} TL`} />
@@ -5374,7 +5415,7 @@ export default function ValuationTerminal({
                         </div>
 
                         {/* Grafik 3: Nakit Akışı Kalitesi */}
-                        <div className="bg-[#0F1523] border border-slate-800/90 p-5 rounded-2xl space-y-4 shadow-lg">
+                        <div className="bg-slate-900 border border-slate-800/90 p-5 rounded-2xl space-y-4 shadow-lg">
                           <div className="flex items-center gap-2.5 border-b border-slate-800/80 pb-3">
                             <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
                               <Activity className="w-4 h-4" />
@@ -5393,7 +5434,7 @@ export default function ValuationTerminal({
                             {mounted && (
                               <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={activeFlowChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
+                                  <CartesianGrid strokeDasharray="2 2" stroke="var(--chart-grid)" opacity={0.5} />
                                   <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                   <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFmt} />
                                   <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
@@ -5408,7 +5449,7 @@ export default function ValuationTerminal({
                         </div>
 
                       {/* Grafik 4: Bilanço Gücü: Özsermaye ve Nakit Pozisyonu */}
-                      <div className="bg-[#0F1523] border border-slate-800/90 p-5 rounded-2xl space-y-4 shadow-lg">
+                      <div className="bg-slate-900 border border-slate-800/90 p-5 rounded-2xl space-y-4 shadow-lg">
                         <div className="flex items-center gap-2.5 border-b border-slate-800/80 pb-3">
                           <div className="p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
                             <ShieldCheck className="w-4 h-4" />
@@ -5427,7 +5468,7 @@ export default function ValuationTerminal({
                           {mounted && (
                             <ResponsiveContainer width="100%" height="100%">
                               <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
+                                <CartesianGrid strokeDasharray="2 2" stroke="var(--chart-grid)" opacity={0.5} />
                                 <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }}  tickFormatter={(v: string) => v ? v.slice(2) : v} />
                                 <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={chartYAxisFmt} />
                                 <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
@@ -5455,7 +5496,7 @@ export default function ValuationTerminal({
                   {/* Üst Yönetici KPI Kartları */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       {/* Kart 1: Ciro / Prim Üretimi */}
-                      <div className="bg-[#0F1523] border border-slate-800/90 p-4 rounded-xl flex flex-col justify-between shadow-md">
+                      <div className="bg-slate-900 border border-slate-800/90 p-4 rounded-xl flex flex-col justify-between shadow-md">
                         <div>
                           <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
                             <span>{currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Satış Gelirleri'}</span>
@@ -5481,7 +5522,7 @@ export default function ValuationTerminal({
                       </div>
 
                       {/* Kart 2: Faaliyet Kârı / Teknik Kâr */}
-                      <div className="bg-[#0F1523] border border-slate-800/90 p-4 rounded-xl flex flex-col justify-between shadow-md">
+                      <div className="bg-slate-900 border border-slate-800/90 p-4 rounded-xl flex flex-col justify-between shadow-md">
                         <div>
                           <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
                             <span>{currentSector === 'INSURANCE' ? 'Teknik Kâr' : 'FAVÖK'}</span>
@@ -5507,7 +5548,7 @@ export default function ValuationTerminal({
                       </div>
 
                       {/* Kart 3: Net Kâr */}
-                      <div className="bg-[#0F1523] border border-slate-800/90 p-4 rounded-xl flex flex-col justify-between shadow-md">
+                      <div className="bg-slate-900 border border-slate-800/90 p-4 rounded-xl flex flex-col justify-between shadow-md">
                         <div>
                           <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
                             <span>Net Dönem Kârı</span>
@@ -5533,7 +5574,7 @@ export default function ValuationTerminal({
                       </div>
 
                       {/* Kart 4: Sermaye Verimliliği / ROE & Marj */}
-                      <div className="bg-[#0F1523] border border-slate-800/90 p-4 rounded-xl flex flex-col justify-between shadow-md">
+                      <div className="bg-slate-900 border border-slate-800/90 p-4 rounded-xl flex flex-col justify-between shadow-md">
                         <div>
                           <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
                             <span>{currentSector === 'INSURANCE' ? 'ROE (Yıllık)' : 'ROIC - WACC'}</span>
@@ -5567,7 +5608,7 @@ export default function ValuationTerminal({
 
 
                   {/* Üst Çubuk: Sekmeler (Görsel 2) & Tutar Birimi Seçici (İlave 2) */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 bg-[#111827]/80 border border-slate-800 p-3.5 rounded-xl shadow-md">
+                  <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 p-3.5 rounded-xl shadow-md">
                     {/* Görsel 2 Alt Sekmeler */}
                     <div className="inline-flex items-center p-1 bg-slate-950 border border-slate-800 rounded-xl gap-1">
                       <button
@@ -5727,7 +5768,7 @@ export default function ValuationTerminal({
                   )}
 
                   {/* TABLO KONTEYNERI (Görsel 1 & 3 Tasarımı) */}
-                  <div className="bg-[#111827] border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs text-left border-collapse">
                         {/* Başlık Satırı: KALEMLER ve Günümüzden Geçmişe Doğru Dönemler */}
@@ -6080,7 +6121,7 @@ export default function ValuationTerminal({
                                           <td colSpan={tableData.length + 1} className="p-3 pl-8 text-xs font-sans text-slate-300">
                                             <div className="w-full max-w-full break-words whitespace-normal bg-cyan-950/30 border border-cyan-800/40 p-3.5 rounded-lg space-y-2">
                                               <div className="font-bold text-cyan-300 font-mono flex items-center gap-1.5 flex-wrap">
-                                                <Sparkles className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+                                                <Info className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
                                                 <span>{ratioDef.formula}</span>
                                               </div>
                                               <p className="text-xs text-slate-300 leading-relaxed break-words whitespace-normal">
@@ -6116,7 +6157,7 @@ export default function ValuationTerminal({
                 <ComponentErrorBoundary fallbackTitle="Adil Değer Panosu Hatası">
                 <div className="space-y-5">
                   {/* Fiyat & Değerleme Sonuç Kartları */}
-                  <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+                  <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-sm space-y-4">
                     <div className="border-b border-slate-800/80 pb-3 flex items-center justify-between flex-wrap gap-2">
                       <span className="font-bold text-sm text-white flex items-center gap-2">
                         <TrendingUp className="w-4 h-4 text-emerald-400" /> Adil Değer & Senaryo Hedefleri
@@ -6136,20 +6177,20 @@ export default function ValuationTerminal({
                             }
                           </span>
                         )}
-                        <span className="text-xs font-mono bg-slate-900 text-slate-300 border border-slate-800 px-2.5 py-0.5 rounded-md">
+                        <span className="text-xs font-mono bg-slate-950 text-slate-300 border border-slate-800 px-2.5 py-0.5 rounded-md">
                           {currentSector === 'INSURANCE' ? 'Gordon Büyüme & ROE' : 'DCF & Çarpan Hibrit'}
                         </span>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="bg-[#090D16] p-4 rounded-xl border border-slate-800/90">
+                      <div className="bg-slate-950 p-4 rounded-xl border border-slate-800/90">
                         <div className="text-[11px] text-slate-400 font-semibold uppercase">Piyasa Fiyatı</div>
                         <div className="text-2xl font-black font-mono text-white mt-1">{valuationInfo.current_price} TL</div>
                         <div className="text-[10px] text-slate-500 mt-1">Güncel Kapanış</div>
                       </div>
 
-                      <div className={`bg-[#090D16] p-4 rounded-xl border ${Number(valuationInfo.discount_pct) >= 0 ? 'border-emerald-800/70' : 'border-amber-800/70'}`}>
+                      <div className={`bg-slate-950 p-4 rounded-xl border ${Number(valuationInfo.discount_pct) >= 0 ? 'border-emerald-800/70' : 'border-amber-800/70'}`}>
                         <div className={`text-[11px] font-semibold uppercase ${Number(valuationInfo.discount_pct) >= 0 ? 'text-emerald-400' : 'text-amber-400'}`}>Adil Değer</div>
                         <div className={`text-2xl font-black font-mono mt-1 ${Number(valuationInfo.discount_pct) >= 0 ? 'text-emerald-400' : 'text-amber-400'}`}>{valuationInfo.fair_value} TL</div>
                         <div className={`text-[10px] mt-1 font-mono font-semibold ${Number(valuationInfo.discount_pct) >= 0 ? 'text-emerald-300' : 'text-amber-300'}`}>
@@ -6159,13 +6200,13 @@ export default function ValuationTerminal({
                         </div>
                       </div>
 
-                      <div className="bg-[#090D16] p-4 rounded-xl border border-slate-800/90">
+                      <div className="bg-slate-950 p-4 rounded-xl border border-slate-800/90">
                         <div className="text-[11px] text-slate-400 font-semibold uppercase">Ayı Senaryosu</div>
                         <div className="text-2xl font-black font-mono text-amber-400 mt-1">{valuationInfo.bear_price} TL</div>
                         <div className="text-[10px] text-slate-500 mt-1">Muhafazakar Taban</div>
                       </div>
 
-                      <div className="bg-[#090D16] p-4 rounded-xl border border-slate-800/90">
+                      <div className="bg-slate-950 p-4 rounded-xl border border-slate-800/90">
                         <div className="text-[11px] text-slate-400 font-semibold uppercase">Boğa Senaryosu</div>
                         <div className="text-2xl font-black font-mono text-cyan-400 mt-1">{valuationInfo.bull_price} TL</div>
                         <div className="text-[10px] text-slate-500 mt-1">İyimser Tavan</div>
@@ -6173,7 +6214,7 @@ export default function ValuationTerminal({
                     </div>
 
                     {(valuationInfo.gordon_formula_text || dynamicValuationResult?.valuation?.gordon_formula_text) && (
-                      <div className="mt-4 bg-[#090D16] border border-cyan-900/60 rounded-xl p-3 flex items-center justify-between gap-3 text-xs font-mono text-cyan-300">
+                      <div className="mt-4 bg-slate-950 border border-cyan-900/60 rounded-xl p-3 flex items-center justify-between gap-3 text-xs font-mono text-cyan-300">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 font-bold border border-cyan-800/80 text-[10px] uppercase">
                             Hedef Çarpan Modeli
@@ -6188,7 +6229,7 @@ export default function ValuationTerminal({
 
                   {/* Son 4 Çeyrek Adil Değer Trendi & Değer Tuzağı Erken Uyarı Kartı */}
                   {valuationInfo.fair_value_trend && valuationInfo.fair_value_trend.length > 0 && (
-                    <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+                    <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-sm space-y-4">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
                         <div className="flex items-center gap-2.5">
                           <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
@@ -6199,7 +6240,7 @@ export default function ValuationTerminal({
                               Son 4 Çeyrek Adil Değer Trendi vs. Piyasa Fiyatı Seyri
                               {valuationInfo.fair_value_trend.some(p => p.isEroding) && (
                                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-950/80 text-rose-400 border border-rose-800 font-bold">
-                                  ⚠️ Temel Değer Erozyonu
+                                  Temel Değer Erozyonu
                                 </span>
                               )}
                             </h3>
@@ -6224,7 +6265,7 @@ export default function ValuationTerminal({
                         <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 flex items-start gap-3 text-rose-300 text-xs">
                           <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
                           <div className="space-y-1">
-                            <span className="font-bold text-rose-200">🚨 Değer Tuzağı Riski (Value Trap Alert):</span>{' '}
+                            <span className="font-bold text-rose-200">Değer Tuzağı Riski (Value Trap Alert):</span>{' '}
                             Hisse senedi kağıt üzerinde %{valuationInfo.discount_pct} iskontolu görünmektedir; ancak eriyen kâr marjları, negatif sermaye makası (ROIC &lt; WACC) veya artan borç yükü nedeniyle içsel değer piyasa fiyatının altındadır veya erozyona uğramaktadır.
                             {valuationInfo.value_trap_reasons && (
                               <ul className="mt-1.5 space-y-0.5 pl-4 list-disc text-rose-300/90 font-mono text-[11px]">
@@ -6240,11 +6281,11 @@ export default function ValuationTerminal({
                       <div className="h-60 w-full pt-2">
                         <ResponsiveContainer width="100%" height="100%">
                           <LineChart data={valuationInfo.fair_value_trend} margin={{ top: 10, right: 15, left: 0, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                            <CartesianGrid strokeDasharray="2 2" stroke="var(--chart-grid)" />
                             <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={(v: string) => v ? v.slice(2) : v} />
                             <YAxis stroke="#64748b" tick={{ fontSize: 11, fill: '#94a3b8' }} domain={['auto', 'auto']} tickFormatter={(v) => `${v} TL`} />
                             <Tooltip
-                              contentStyle={{ backgroundColor: '#090D16', borderColor: '#334155', borderRadius: '0.75rem', fontSize: '12px' }}
+                              contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-subtle)', color: 'var(--text-primary)', borderRadius: '0.5rem', fontSize: '12px' }}
                               formatter={(value: any, name: any) => [`${Number(value).toFixed(2)} TL`, name === 'fairValue' ? 'Adil Değer' : 'Piyasa Fiyatı']}
                               labelFormatter={(label) => `Dönem: ${label}`}
                             />
@@ -6312,7 +6353,7 @@ export default function ValuationTerminal({
                   {renderEarningsQualityCard()}
 
                   {/* Sermaye Maliyeti (WACC) & Ekonomik Katma Değer (ROIC vs WACC) Analizi */}
-                  <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-xl space-y-5">
+                  <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-sm space-y-5">
                     <div className="border-b border-slate-800/80 pb-3 flex items-center justify-between flex-wrap gap-2">
                       <div>
                         <span className="font-bold text-sm text-white flex items-center gap-2">
@@ -6333,7 +6374,7 @@ export default function ValuationTerminal({
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                      <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+                      <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/90">
                         <div className="flex items-center justify-between">
                           <div className="text-[10px] text-slate-400 font-semibold uppercase">
                             {latestData?.is_tms29 ? 'WACC (Nominal / Reel)' : 'Hesaplanan WACC'}
@@ -6356,7 +6397,7 @@ export default function ValuationTerminal({
                           {latestData?.is_tms29 ? 'Nominal İskonto / Reel Maliyet' : 'Ağırlıklı Sermaye Maliyeti'}
                         </div>
                       </div>
-                      <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+                      <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/90">
                         <div className="flex items-center justify-between">
                           <div className="text-[10px] text-slate-400 font-semibold uppercase">
                             {latestData?.is_tms29 ? 'Reel ROIC (Yıllık)' : 'Yıllık ROIC / ROE'}
@@ -6374,24 +6415,24 @@ export default function ValuationTerminal({
                           {latestData?.is_tms29 ? 'Yatırılan Sermaye Getirisi (Reel)' : 'Yatırılan Sermaye Getirisi'}
                         </div>
                       </div>
-                      <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+                      <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/90">
                         <div className="text-[10px] text-slate-400 font-semibold uppercase">Özsermaye Maliyeti (Ke)</div>
                         <div className="text-lg font-black font-mono text-white mt-1">%{latestData?.cost_of_equity?.toFixed(1) ?? latestData?.wacc?.toFixed(1) ?? '35,1'}</div>
                         <div className="text-[10px] text-slate-500 mt-0.5">Rf (%{latestData?.risk_free_rate ?? 28}) + β({latestData?.beta ?? 0.95})×ERP(%{latestData?.erp ?? 7.5})</div>
                       </div>
-                      <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+                      <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/90">
                         <div className="text-[10px] text-slate-400 font-semibold uppercase">Net Borç Maliyeti (Kd)</div>
                         <div className="text-lg font-black font-mono text-slate-200 mt-1">%{latestData?.after_tax_cost_of_debt?.toFixed(1) ?? '31,5'}</div>
                         <div className="text-[10px] text-slate-500 mt-0.5">Vergi Kalkanı Sonrası Kd×(1-T)</div>
                       </div>
-                      <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+                      <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/90">
                         <div className="text-[10px] text-slate-400 font-semibold uppercase">Sermaye Ağırlığı (We / Wd)</div>
                         <div className="text-sm font-black font-mono text-slate-200 mt-1.5">
                           %{latestData?.equity_weight ?? 100} Öz / %{latestData?.debt_weight ?? 0} Borç
                         </div>
                         <div className="text-[10px] text-slate-500 mt-0.5">Optimal Bilanço Dağılımı</div>
                       </div>
-                      <div className="bg-[#090D16] p-3.5 rounded-xl border border-slate-800/90">
+                      <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800/90">
                         <div className="text-[10px] text-slate-400 font-semibold uppercase">Kaldıraçlı Beta (β)</div>
                         <div className="text-lg font-black font-mono text-emerald-400 mt-1">{latestData?.beta?.toFixed(2) ?? '0,95'}x</div>
                         <div className="text-[10px] text-slate-500 mt-0.5">Hamada Sektör Duyarlılığı</div>
@@ -6449,12 +6490,12 @@ export default function ValuationTerminal({
                       {mounted && (
                         <ResponsiveContainer width="100%" height="100%">
                           <ComposedChart data={chartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
+                            <CartesianGrid strokeDasharray="2 2" stroke="var(--chart-grid)" opacity={0.5} />
                             <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v: string) => v ? v.slice(2) : v} />
                             <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v) => `%${v}`} />
                             <Tooltip content={<CustomChartTooltip currency={currentExtractedData?.currency || 'Bin TRY'} />} />
                             <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
-                            <Bar dataKey="roic" name="Yıllıklandırılmış ROIC (%)" fill="#06b6d4" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                            <Bar dataKey="roic" name="Yıllıklandırılmış ROIC (%)" fill="#06b6d4" radius={[3, 3, 0, 0]} maxBarSize={32} />
                             <Line type="monotone" dataKey="benchmark_wacc" name="Karşılaştırma WACC (Reel/Nominal %)" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3.5, fill: '#f59e0b' }} />
                             <Line type="monotone" dataKey="eva_spread" name="EVA Makası (ROIC - WACC)" stroke="#10b981" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 3, fill: '#10b981' }} />
                           </ComposedChart>
@@ -6471,7 +6512,7 @@ export default function ValuationTerminal({
                 <ComponentErrorBoundary fallbackTitle="Çarpan Analizi Hatası">
                 <div className="space-y-6">
                   {/* Üst Başlık ve Sektörel Genel Değerleme Durumu */}
-                  <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
@@ -6491,18 +6532,18 @@ export default function ValuationTerminal({
                     <div className="flex items-center gap-3">
                       <div className={`px-4 py-2 rounded-xl border text-xs font-bold font-mono flex items-center gap-2 ${
                         companyMultiplesData.overallValuationStatus === 'CHEAP'
-                          ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40 shadow-emerald-950/50 shadow-md'
+                          ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40 shadow-sm'
                           : companyMultiplesData.overallValuationStatus === 'EXPENSIVE'
-                          ? 'bg-rose-950/80 text-rose-300 border-rose-500/40 shadow-rose-950/50 shadow-md'
-                          : 'bg-amber-950/80 text-amber-300 border-amber-500/40 shadow-amber-950/50 shadow-md'
+                          ? 'bg-rose-950/80 text-rose-300 border-rose-500/40 shadow-sm'
+                          : 'bg-amber-950/80 text-amber-300 border-amber-500/40 shadow-sm'
                       }`}>
-                        <Sparkles className="w-4 h-4" />
+                        <Scale className="w-4 h-4" />
                         <span>
                           {companyMultiplesData.overallValuationStatus === 'CHEAP'
-                            ? '🌟 Sektöre Göre Belirgin İskontolu'
+                            ? 'Sektöre Göre Belirgin İskontolu'
                             : companyMultiplesData.overallValuationStatus === 'EXPENSIVE'
-                            ? '🔴 Sektöre Göre Primli Değerleme'
-                            : '⚖️ Sektör Medyanı Seviyesinde'}
+                            ? 'Sektöre Göre Primli Değerleme'
+                            : 'Sektör Medyanı Seviyesinde'}
                         </span>
                       </div>
                     </div>
@@ -6518,7 +6559,7 @@ export default function ValuationTerminal({
                     ].map((m) => {
                       const isApplicable = m.companyValue !== null && m.sectorMedian !== null;
                       return (
-                        <div key={m.code} className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 shadow-lg flex flex-col justify-between space-y-4">
+                        <div key={m.code} className="bg-slate-900 border border-slate-800/90 rounded-2xl p-5 shadow-lg flex flex-col justify-between space-y-4">
                           <div>
                             <div className="flex items-center justify-between text-xs text-slate-400 font-semibold mb-2">
                               <span>{m.name}</span>
@@ -6593,7 +6634,7 @@ export default function ValuationTerminal({
 
                   {/* İş Yatırım Araştırma Konsensüs & Hedef Çarpan Tahminleri Kartı */}
                   {marketMultiples?.historical_estimates && (
-                    <div className="bg-[#0F1523] border border-blue-900/60 rounded-2xl p-5 shadow-xl space-y-4">
+                    <div className="bg-slate-900 border border-blue-900/60 rounded-2xl p-5 shadow-xl space-y-4">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
                         <div className="flex items-center gap-2.5">
                           <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
@@ -6615,7 +6656,7 @@ export default function ValuationTerminal({
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         {/* F/K Tahmin */}
-                        <div className="bg-[#090D16] border border-slate-800/80 p-4 rounded-xl space-y-2">
+                        <div className="bg-slate-950 border border-slate-800/80 p-4 rounded-xl space-y-2">
                           <div className="text-[11px] font-semibold text-slate-400 uppercase">F/K Tahmin & İskonto</div>
                           <div className="flex items-baseline justify-between">
                             <div className="text-2xl font-black font-mono text-cyan-400">
@@ -6635,7 +6676,7 @@ export default function ValuationTerminal({
                         </div>
 
                         {/* FD/FAVÖK Tahmin */}
-                        <div className="bg-[#090D16] border border-slate-800/80 p-4 rounded-xl space-y-2">
+                        <div className="bg-slate-950 border border-slate-800/80 p-4 rounded-xl space-y-2">
                           <div className="text-[11px] font-semibold text-slate-400 uppercase">FD/FAVÖK Tahmin & İskonto</div>
                           <div className="flex items-baseline justify-between">
                             <div className="text-2xl font-black font-mono text-amber-400">
@@ -6655,7 +6696,7 @@ export default function ValuationTerminal({
                         </div>
 
                         {/* PD/DD Tahmin */}
-                        <div className="bg-[#090D16] border border-slate-800/80 p-4 rounded-xl space-y-2">
+                        <div className="bg-slate-950 border border-slate-800/80 p-4 rounded-xl space-y-2">
                           <div className="text-[11px] font-semibold text-slate-400 uppercase">PD/DD Tahmin & İskonto</div>
                           <div className="flex items-baseline justify-between">
                             <div className="text-2xl font-black font-mono text-emerald-400">
@@ -6680,7 +6721,7 @@ export default function ValuationTerminal({
                   {/* Tarihsel Çeyreklik Çarpan Evrimi Grafiği & Sektör Benchmark Tablosu */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* 1. Tarihsel Çeyreklik Çarpan Trendi */}
-                    <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+                    <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
                       <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                         <div className="flex items-center gap-2">
                           <BarChart3 className="w-4 h-4 text-cyan-400" />
@@ -6712,7 +6753,7 @@ export default function ValuationTerminal({
                               })}
                               margin={{ top: 10, right: 15, left: -10, bottom: 0 }}
                             >
-                              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
+                              <CartesianGrid strokeDasharray="2 2" stroke="var(--chart-grid)" opacity={0.5} />
                               <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v: string) => v ? v.slice(2) : v} />
                               <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v) => `${v}x`} />
                               <Tooltip content={<CustomChartTooltip currency="x" />} />
@@ -6729,7 +6770,7 @@ export default function ValuationTerminal({
                     {renderDuPontCard()}
 
                     {/* 2. Borsa İstanbul Sektörel Benchmark Karşılaştırma Tablosu (İş Yatırım 53 Alt Sektör Birebir Resmi Veri) */}
-                    <div className="bg-[#0F1523] border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+                    <div className="bg-slate-900 border border-slate-800/90 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
                         <div className="flex items-center gap-2.5">
                           <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
@@ -6772,7 +6813,7 @@ export default function ValuationTerminal({
 
                       <div className="overflow-x-auto max-h-[520px] overflow-y-auto rounded-xl border border-slate-800/70">
                         <table className="w-full text-xs text-left">
-                          <thead className="sticky top-0 bg-[#0B0F1A] z-10 border-b border-slate-800 shadow-sm">
+                          <thead className="sticky top-0 bg-slate-950 z-10 border-b border-slate-800 shadow-sm">
                             <tr className="text-slate-400 uppercase text-[10px] tracking-wider">
                               <th className="py-2.5 px-3">Sektör</th>
                               <th className="py-2.5 px-2 text-right">F/K</th>
@@ -6787,7 +6828,7 @@ export default function ValuationTerminal({
                               <tr className="bg-emerald-950/70 text-emerald-300 font-bold border-l-4 border-emerald-400">
                                 <td className="py-2.5 px-3 font-sans">
                                   <div className="flex items-center gap-2">
-                                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
                                     <span>{companyMultiplesData.benchmark.sectorName}</span>
                                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-900/60 text-emerald-200 border border-emerald-700/50">Şirket Sektörü</span>
                                   </div>
@@ -6848,9 +6889,9 @@ export default function ValuationTerminal({
               {activeTab === 'proscons' && (
                 <ComponentErrorBoundary fallbackTitle="Güçlü/Zayıf Yönler Hatası">
                 <div className="space-y-6">
-                  <div className="bg-[#111827]/80 border border-slate-800 p-5 rounded-xl shadow-lg">
+                  <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl shadow-sm">
                     <div className="flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-emerald-400" />
+                      <Scale className="w-5 h-5 text-emerald-400" />
                       <h3 className="text-sm font-bold text-white tracking-tight">
                         {activeReport.ticker} Yatırım Tezi: Güçlü ve Zayıf Yönler Analizi
                       </h3>
@@ -6862,7 +6903,7 @@ export default function ValuationTerminal({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Güçlü Yönler */}
-                    <div className="bg-emerald-950/20 border border-emerald-900/60 rounded-xl p-6 space-y-4 shadow-lg">
+                    <div className="bg-emerald-950/20 border border-emerald-900/60 rounded-xl p-6 space-y-4 shadow-sm">
                       <div className="flex items-center gap-2 border-b border-emerald-900/60 pb-3">
                         <ArrowUpRight className="w-5 h-5 text-emerald-400" />
                         <span className="font-bold text-sm uppercase tracking-wider text-emerald-300">
@@ -6883,7 +6924,7 @@ export default function ValuationTerminal({
                     </div>
 
                     {/* Zayıf Yönler */}
-                    <div className="bg-rose-950/20 border border-rose-900/60 rounded-xl p-6 space-y-4 shadow-lg">
+                    <div className="bg-rose-950/20 border border-rose-900/60 rounded-xl p-6 space-y-4 shadow-sm">
                       <div className="flex items-center gap-2 border-b border-rose-900/60 pb-3">
                         <ArrowDownRight className="w-5 h-5 text-rose-400" />
                         <span className="font-bold text-sm uppercase tracking-wider text-rose-300">
@@ -6948,11 +6989,11 @@ export default function ValuationTerminal({
                   <ComponentErrorBoundary fallbackTitle="Yönetim Hedefleri Hatası">
                   <div className="space-y-6">
                     {/* 1. Üst Başlık ve Faaliyet Raporu / Sunum Stratejik Özeti */}
-                    <div className="bg-gradient-to-br from-[#111827] via-[#0F172A] to-emerald-950/20 border border-slate-800 rounded-xl p-6 space-y-4 shadow-xl">
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4 shadow-sm">
                       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
                         <div>
                           <div className="flex items-center gap-2">
-                            <Sparkles className="w-5 h-5 text-emerald-400" />
+                            <Compass className="w-5 h-5 text-emerald-400" />
                             <h3 className="text-base font-bold text-white tracking-tight">
                               {activeReport.ticker} Faaliyet Raporu, Yatırımcı Sunumu & Gelecek Dönem Hedef Analizi
                             </h3>
@@ -7045,7 +7086,7 @@ export default function ValuationTerminal({
                     </div>
 
                     {/* 4. Çok Yıllı Yönetim Rehberlik Karnesi Tablosu */}
-                    <div className="bg-[#111827] border border-slate-800 rounded-xl p-6 space-y-4 shadow-xl">
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4 shadow-xl">
                       <div className="border-b border-slate-800 pb-3 flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -7128,7 +7169,7 @@ export default function ValuationTerminal({
               {/* SEKME 6: DEĞERLEME RAPORU (BİLİŞSEL & AKADEMİK OKUNABİLİRLİK TASARIMI) */}
               <div id="kurumsal-degerleme-raporu" className={activeTab === 'report' ? 'space-y-4' : 'hidden print:block'}>
                 <ComponentErrorBoundary fallbackTitle="Değerleme Raporu Hatası">
-                  <div className="flex flex-wrap items-center justify-between gap-3 bg-[#111827] border border-slate-800 px-5 py-3.5 rounded-xl shadow-md print:hidden">
+                  <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900 border border-slate-800 px-5 py-3.5 rounded-xl shadow-md print:hidden">
                     <div className="flex flex-wrap items-center gap-3">
                       <div className="flex items-center gap-2">
                         <FileText className="w-4 h-4 text-emerald-400" />
@@ -7238,7 +7279,7 @@ export default function ValuationTerminal({
                       - Göz yorgunluğunu önleyen sıcak koyu arduvaz zemin (#0D1424)
                       - Bilimsel olarak kanıtlanmış en yüksek odak ve akılda kalıcılık sağlayan 78-85 karakterlik (max-w-4xl) satır genişliği
                       - Anahtar kavramları öne çıkaran (Bionic Lead-In) yüksek kontrastlı tipografi */}
-                  <div className="bg-[#0D1424] border border-slate-800/90 py-8 px-5 sm:px-10 md:px-14 rounded-2xl shadow-2xl print:p-0 print:border-none print:bg-white print:text-black w-full">
+                  <div className="bg-slate-900 border border-slate-800/90 py-8 px-5 sm:px-10 md:px-14 rounded-2xl shadow-sm print:p-0 print:border-none print:bg-white print:text-black w-full">
                     <div className="report-content w-full max-w-4xl mx-auto space-y-6">
                       {/* Kurumsal Araştırma Raporu Başlık Kartı (İş Yatırım & Goldman Sachs Standardı) */}
                       <div className="border-b border-slate-800/90 pb-6 mb-6">
@@ -7274,7 +7315,7 @@ export default function ValuationTerminal({
                             </p>
                           </div>
 
-                          <div className="flex items-center gap-3 bg-slate-950/90 border border-slate-800 p-3 rounded-xl shadow-lg">
+                          <div className="flex items-center gap-3 bg-slate-950/90 border border-slate-800 p-3 rounded-xl shadow-sm">
                             <div className="text-right">
                               <div className="text-[10px] text-slate-400 uppercase font-semibold">Tavsiye</div>
                               <div className={`font-mono text-base font-black ${
@@ -7302,7 +7343,7 @@ export default function ValuationTerminal({
                       </div>
 
                       {(valuationInfo.gordon_formula_text || dynamicValuationResult?.valuation?.gordon_formula_text) && (
-                        <div className="mb-6 p-3.5 rounded-xl bg-slate-950/80 border border-emerald-900/40 text-xs font-mono text-emerald-300 flex items-center justify-between flex-wrap gap-2 shadow-md">
+                        <div className="mb-6 p-3.5 rounded-xl bg-slate-950/80 border border-emerald-900/40 text-xs font-mono text-emerald-300 flex items-center justify-between flex-wrap gap-2 shadow-sm">
                           <span className="font-semibold text-slate-300">Hedef Çarpan & Değerleme Formülü:</span>
                           <span className="text-emerald-400 font-bold">
                             {valuationInfo.gordon_formula_text || dynamicValuationResult?.valuation?.gordon_formula_text}
@@ -7312,7 +7353,7 @@ export default function ValuationTerminal({
 
                       {/* Dönemsel Hafıza & Çeyreklik Karşılaştırma Kartı (Item 5) */}
                       {previousQuarterComparison && (
-                        <div className="p-4 rounded-xl bg-gradient-to-r from-blue-950/50 via-slate-900/90 to-slate-950 border border-blue-500/40 shadow-xl mb-6">
+                        <div className="p-4 rounded-xl bg-slate-950 border border-blue-500/40 shadow-sm mb-6">
                           <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2.5 border-b border-blue-900/40">
                             <div className="flex items-center gap-2">
                               <History className="w-4 h-4 text-blue-400" />
@@ -7361,7 +7402,7 @@ export default function ValuationTerminal({
                         components={{
                           h1: ({ children, ...props }) => (
                             <div className="border-b border-slate-800 pb-4 mb-6 mt-2">
-                              <h1 className="text-xl sm:text-2xl font-black text-[#F8FAFC] tracking-tight leading-snug" {...props}>
+                              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight leading-snug" {...props}>
                                 {children}
                               </h1>
                             </div>
@@ -7376,7 +7417,7 @@ export default function ValuationTerminal({
                               return (
                                 <div id={secId} className="scroll-mt-24 mt-12 mb-5 pt-5 border-t-2 border-emerald-500/30">
                                   <div className="flex items-center gap-2.5 mb-2.5">
-                                    <span className="px-3 py-1 rounded-md bg-emerald-500/25 text-emerald-300 font-mono text-xs font-black tracking-widest border border-emerald-500/50 uppercase shadow-md">
+                                    <span className="px-3 py-1 rounded-md bg-emerald-500/25 text-emerald-300 font-mono text-xs font-black tracking-widest border border-emerald-500/50 uppercase shadow-sm">
                                       BÖLÜM {roman}
                                     </span>
                                     <div className="h-px bg-slate-800 flex-1" />
@@ -7418,7 +7459,7 @@ export default function ValuationTerminal({
                               );
                             }
                             return (
-                              <div className="mt-8 mb-3.5 bg-slate-900/80 border-l-4 border-cyan-400 px-4 py-2.5 rounded-r-xl shadow-sm">
+                              <div className="mt-8 mb-3.5 bg-slate-950 border-l-4 border-cyan-400 px-4 py-2.5 rounded-r-xl shadow-sm">
                                 <h3 className="text-sm sm:text-base font-bold text-cyan-200 tracking-wide flex items-center gap-2" {...props}>
                                   {children}
                                 </h3>
@@ -7445,21 +7486,21 @@ export default function ValuationTerminal({
                               const cleanBody = text.replace(/^(?:#{1,3}\s*)?\*{0,2}Analist\s+Karar[ıi]\s*[:=-]?\s*\[?\s*\*?\*?\s*(?:ALMA|SAT|AL|NÖTR|NOTR|TUT)?\s*\*?\*?\]?\*{0,2}\s*/i, '').trim();
 
                               return (
-                                <div className={`my-8 rounded-2xl border p-6 md:p-8 shadow-2xl transition-all ${
+                                <div className={`my-8 rounded-2xl border p-6 md:p-8 shadow-sm transition-all ${
                                   isVerdictAl
-                                    ? 'bg-gradient-to-br from-emerald-950/70 via-slate-900/95 to-slate-950 border-emerald-500/50 shadow-emerald-950/40 ring-1 ring-emerald-500/20'
+                                    ? 'bg-emerald-950/30 border-emerald-500/50'
                                     : isVerdictAlma
-                                    ? 'bg-gradient-to-br from-rose-950/70 via-slate-900/95 to-slate-950 border-rose-500/50 shadow-rose-950/40 ring-1 ring-rose-500/20'
-                                    : 'bg-gradient-to-br from-amber-950/60 via-slate-900/95 to-slate-950 border-amber-500/50 shadow-amber-950/40 ring-1 ring-amber-500/20'
+                                    ? 'bg-rose-950/30 border-rose-500/50'
+                                    : 'bg-amber-950/30 border-amber-500/50'
                                 }`}>
                                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 pb-5 border-b border-slate-800">
                                     <div className="flex items-center gap-4">
-                                      <div className={`px-5 py-2.5 rounded-xl font-mono font-black text-xl tracking-wider shadow-lg flex items-center justify-center min-w-[90px] ${
+                                      <div className={`px-5 py-2.5 rounded-xl font-mono font-black text-xl tracking-wider shadow-sm flex items-center justify-center min-w-[90px] ${
                                         isVerdictAl 
-                                          ? 'bg-emerald-500 text-white shadow-emerald-950/60' 
+                                          ? 'bg-emerald-600 text-white' 
                                           : isVerdictAlma 
-                                          ? 'bg-rose-500 text-white shadow-rose-950/60' 
-                                          : 'bg-amber-500 text-slate-950 shadow-amber-950/60'
+                                          ? 'bg-rose-600 text-white' 
+                                          : 'bg-amber-500 text-slate-950'
                                       }`}>
                                         {verdict}
                                       </div>
@@ -7519,7 +7560,7 @@ export default function ValuationTerminal({
                               );
                             }
                             return (
-                              <p className={`text-[#E2E8F0] tracking-[0.01em] mb-4 ${
+                              <p className={`text-slate-200 tracking-[0.01em] mb-4 ${
                                 fontSizeMode === 'large' ? 'text-[17px] leading-[1.95]' :
                                 fontSizeMode === 'compact' ? 'text-[13.5px] leading-[1.7]' :
                                 'text-[15.5px] leading-[1.85]'
@@ -7529,7 +7570,7 @@ export default function ValuationTerminal({
                             );
                           },
                           table: ({ ...props }) => (
-                            <div className="overflow-x-auto my-6 border border-slate-700/80 rounded-xl shadow-lg bg-slate-950/80">
+                            <div className="overflow-x-auto my-6 border border-slate-700/80 rounded-xl shadow-sm bg-slate-950/80">
                               <table className="w-full text-left border-collapse text-xs sm:text-sm font-sans" {...props} />
                             </div>
                           ),
@@ -7547,27 +7588,27 @@ export default function ValuationTerminal({
                           th: ({ ...props }) => <th className="p-3.5 font-bold text-slate-200 tracking-wide text-xs" {...props} />,
                           td: ({ ...props }) => <td className="p-3.5 text-slate-100 font-mono text-xs sm:text-sm" {...props} />,
                           blockquote: ({ ...props }) => (
-                            <blockquote className="border-l-4 border-emerald-400 bg-emerald-950/25 px-5 py-3.5 my-5 rounded-r-xl text-emerald-100 text-sm sm:text-[15px] leading-relaxed font-sans shadow-md" {...props} />
+                            <blockquote className="border-l-4 border-emerald-400 bg-emerald-950/25 px-5 py-3.5 my-5 rounded-r-xl text-emerald-100 text-sm sm:text-[15px] leading-relaxed font-sans shadow-sm" {...props} />
                           ),
                           strong: ({ ...props }) => (
                             <strong className="font-bold text-white bg-slate-800/70 px-1 py-0.5 rounded text-[0.98em]" {...props} />
                           ),
                           ul: ({ ...props }) => (
-                            <ul className={`list-disc list-outside ml-6 space-y-3 my-4 text-[#E2E8F0] ${
+                            <ul className={`list-disc list-outside ml-6 space-y-3 my-4 text-slate-200 ${
                               fontSizeMode === 'large' ? 'text-[16.5px] leading-[1.9]' :
                               fontSizeMode === 'compact' ? 'text-[13px] leading-[1.65]' :
                               'text-[15px] leading-[1.8]'
                             }`} {...props} />
                           ),
                           ol: ({ ...props }) => (
-                            <ol className={`list-decimal list-outside ml-6 space-y-3 my-4 text-[#E2E8F0] ${
+                            <ol className={`list-decimal list-outside ml-6 space-y-3 my-4 text-slate-200 ${
                               fontSizeMode === 'large' ? 'text-[16.5px] leading-[1.9]' :
                               fontSizeMode === 'compact' ? 'text-[13px] leading-[1.65]' :
                               'text-[15px] leading-[1.8]'
                             }`} {...props} />
                           ),
                           li: ({ children, ...props }) => (
-                            <li className="pl-1.5 py-0.5 marker:text-emerald-400 marker:font-bold text-[#E2E8F0] leading-relaxed" {...props}>
+                            <li className="pl-1.5 py-0.5 marker:text-emerald-400 marker:font-bold text-slate-200 leading-relaxed" {...props}>
                               {children}
                             </li>
                           ),
@@ -7587,7 +7628,7 @@ export default function ValuationTerminal({
               {/* SEKME 7: ÇEYREKLİK SKOR TAKİBİ */}
               {activeTab === 'history' && (
                 <ComponentErrorBoundary fallbackTitle="Geçmiş Raporlar Hatası">
-                <div className="bg-[#111827] border border-slate-800 rounded-xl p-6 space-y-6 shadow-xl">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-6 shadow-xl">
                   <div className="border-b border-slate-800 pb-3">
                     <h3 className="text-sm font-bold text-white flex items-center gap-2">
                       <History className="w-4 h-4 text-emerald-400" /> {activeReport.ticker} Çeyreklik Karar & Skor Evrimi
@@ -7678,7 +7719,7 @@ export default function ValuationTerminal({
 
             return (
               <div className="space-y-6">
-                <div className="bg-[#111827] border border-slate-800 p-6 rounded-xl shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <h2 className="text-base font-bold text-white flex items-center gap-2">
                       <Trophy className="w-5 h-5 text-amber-400" /> Fon Portföyü & Hisse Sıralama Paneli
@@ -7698,7 +7739,7 @@ export default function ValuationTerminal({
                   </div>
                 </div>
 
-                <div className="bg-[#111827] border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
                   <div className="p-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-950/60">
                     <div className="relative flex-1 min-w-[200px] max-w-xs">
                       <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
@@ -7838,12 +7879,12 @@ export default function ValuationTerminal({
 
         return (
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
-            <div className="bg-[#0B0F19] border border-cyan-800/40 rounded-2xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
               {/* Modal Header */}
               <div className="p-4 sm:p-6 border-b border-slate-800 flex items-center justify-between bg-slate-950/80">
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-cyan-950/80 border border-cyan-700/60 text-cyan-400 shadow-md shadow-cyan-950/50">
-                    <Sparkles className="w-6 h-6" />
+                  <div className="p-2.5 rounded-xl bg-cyan-950/80 border border-cyan-700/60 text-cyan-400 shadow-sm">
+                    <Compass className="w-6 h-6" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
@@ -7869,7 +7910,7 @@ export default function ValuationTerminal({
               </div>
 
               {/* Tema Seçici Butonları */}
-              <div className="p-3 sm:p-4 border-b border-slate-800/80 bg-[#090D16] flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
+              <div className="p-3 sm:p-4 border-b border-slate-800/80 bg-slate-950 flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
                 <button
                   type="button"
                   onClick={() => setSelectedThemeFilter('ALL')}
@@ -7953,7 +7994,7 @@ export default function ValuationTerminal({
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
                 {displayedItems.length === 0 ? (
                   <div className="text-center py-16 text-slate-500 space-y-2">
-                    <Sparkles className="w-10 h-10 mx-auto text-slate-600 opacity-60" />
+                    <Compass className="w-10 h-10 mx-auto text-slate-600 opacity-60" />
                     <p className="text-sm font-semibold text-slate-400">
                       Bu kriterlere uyan kayıtlı şirket bulunamadı.
                     </p>
