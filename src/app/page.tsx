@@ -969,8 +969,8 @@ function preprocessReportMarkdown(text: string, valuation?: any): string {
   }
 
   // 1. Yapay AI başlıklarını, yabancı terimleri ve bozuk karakterleri (homoglyphs) temizle
-  cleaned = cleaned.replace(/🚨\s*\[KIRMIZI BAYRAK\]\s*ve\s*Yatırım Tezi\s*\(Storytelling\)/gi, '### Yönetici Özeti ve Temel Yatırım Tezi');
-  cleaned = cleaned.replace(/🚨\s*\[KIRMIZI BAYRAK\]\s*ve\s*Yatırım Tezi/gi, '### Yönetici Özeti ve Temel Yatırım Tezi');
+  cleaned = cleaned.replace(/🚨\s*\[KIRMIZI BAYRAK\]\s*ve\s*Yatırım Tezi\s*\(Storytelling\)/gi, '## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ');
+  cleaned = cleaned.replace(/🚨\s*\[KIRMIZI BAYRAK\]\s*ve\s*Yatırım Tezi/gi, '## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ');
   cleaned = cleaned.replace(/\[KIRMIZI BAYRAK\]/gi, 'Kritik Tespit:');
   cleaned = cleaned.replace(/\(\s*Storytelling\s*\)/gi, '');
   cleaned = cleaned.replace(/\bStorytelling\b/gi, 'Temel Yatırım Tezi');
@@ -981,42 +981,43 @@ function preprocessReportMarkdown(text: string, valuation?: any): string {
   cleaned = cleaned.replace(/iskont[\u10DD\u043E\u03BF]/gi, 'iskonto');
   cleaned = cleaned.replace(/[\u10DD]/g, 'o');
 
-  // 2. LaTeX komutlarını temiz, okunaklı Türkçe metne dönüştür (Hiçbir $ veya \text{} kalmasın)
-  cleaned = cleaned.replace(/\\(?:mathbf|textbf)\{([^{}]*?)\\text\{([^{}]*?)\}([^{}]*?)\}/g, '**$1$2$3**');
-  cleaned = cleaned.replace(/\\(?:mathbf|textbf)\{([^{}]*?)\}/g, '**$1**');
-  cleaned = cleaned.replace(/\\text\{([^{}]*?)\}/g, '$1');
-  cleaned = cleaned.replace(/\\frac\{([^{}]*?)\}\{([^{}]*?)\}/g, '($1) / ($2)');
-  cleaned = cleaned.replace(/\\times\b/g, '×');
-  cleaned = cleaned.replace(/\\cdot\b/g, '·');
-  cleaned = cleaned.replace(/\\%/g, '%');
-  cleaned = cleaned.replace(/\\approx\b/g, '≈');
-  cleaned = cleaned.replace(/\\geq\b/g, '≥');
-  cleaned = cleaned.replace(/\\leq\b/g, '≤');
+  // 2. Bölüm başlıklarını standart '## I. ...' seviyesine homojenleştir
+  cleaned = cleaned.replace(/^(?:###|\#)\s*(I{1,3}|IV|V|VI{1,3}|IX|X)[\.\:\s\-]+(.*)$/gim, '## $1. $2');
 
-  // 3. Tek harfli veya kısa satır içi $g$, $r$, $Ke$, $WACC$ ifadelerini temizle
-  cleaned = cleaned.replace(/\$([a-zA-Z0-9_.,%\s+\-*/=()]{1,35})\$/g, (_m: string, inner: string) => {
-    const t = inner.trim();
-    return t.length <= 4 ? `*${t}*` : `**${t}**`;
+  // 3. LaTeX display math bloklarını KaTeX uyumlu CommonMark formatına dönüştür
+  // 3a. \[ ... \] -> $$ ... $$
+  cleaned = cleaned.replace(/\\\\\[([\s\S]*?)\\\\\]/g, (_m, g1) => `\n\n$$\n${g1.trim()}\n$$\n\n`);
+  cleaned = cleaned.replace(/\\\[([\s\S]*?)\\\]/g, (_m, g1) => `\n\n$$\n${g1.trim()}\n$$\n\n`);
+
+  // 3b. Bağımsız veya satır başı '$' işaretlerini $$ bloğuna normalize et
+  cleaned = cleaned.replace(/(?:^|\n)\s*(?:[-*]\s*)?(?:->\s*|>\s*)?\$\s*(?=\r?\n|$)/g, () => '\n$$');
+
+  // 3c. Satır içi LaTeX içeren formülleri ($ \text{...} $) KaTeX bloklarına ($$ ... $$) dönüştür
+  cleaned = cleaned.replace(/(?:->\s*|>\s*)?\$(?!\$)\s*([^\n$]*\\[a-zA-Z]+[^\n$]*?)\s*\$/g, (_m, g1) => {
+    return `\n\n$$\n${g1.trim()}\n$$\n\n`;
   });
 
-  // 4. Çok satırlı $$ ... $$ veya $ ... $ bloklarını temiz akademik formül kutusuna (>) dönüştür
-  cleaned = cleaned.replace(/\$\$([\s\S]*?)\$\$/g, (_m: string, inner: string) => {
-    const lines = inner
+  // 3d. $$ ... $$ bloklarının içini temizle: içindeki boş satırları ve gereksiz boşlukları temizle
+  cleaned = cleaned.replace(/\$\$([\s\S]*?)\$\$/g, (_match: string, inner: string) => {
+    const cleanedInner = inner
       .split('\n')
-      .map((l: string) => l.replace(/^\s*->\s*/, '').trim())
-      .filter((l: string) => l.length > 0 && l !== '$');
-    if (lines.length === 0) return '';
-    return `\n\n> **Değerleme Hesaplaması:** ${lines.join(' | ')}\n\n`;
+      .map((line: string) => line.trim())
+      .filter((line: string) => line.length > 0)
+      .join('\n');
+    return `\n\n$$\n${cleanedInner}\n$$\n\n`;
   });
 
-  // 5. Kalan tek başına '$' satırlarını veya '-> $' işaretlerini tamamen kaldır
-  cleaned = cleaned.replace(/(?:^|\n)\s*(?:[-*]\s*)?(?:->\s*|>\s*)?\${1,2}\s*(?=\r?\n|$)/g, '\n');
-  cleaned = cleaned.replace(/\$\$/g, '');
-  // Metin içinde kalan yalnız '$' işaretlerini (eğer Amerikan Doları $100 değilse) temizle
-  cleaned = cleaned.replace(/\$(?!\d)/g, '');
+  // 3e. Satır içi LaTeX parantezlerini dönüştür: \( \text{...} \)
+  cleaned = cleaned.replace(/\\\((\s*\\text\{.*?\}\s*)\\\)/g, (_m, g1) => `\n\n$$${g1}$$\n\n`);
+  cleaned = cleaned.replace(/\\\((\s*\\frac\{.*?\}\{.*?\}\s*)\\\)/g, (_m, g1) => `\n\n$$${g1}$$\n\n`);
+  cleaned = cleaned.replace(/\\\((.*?)\\\)/g, '$1');
 
-  // 6. Mükerrer 'Analist Kararı:' kartlarını önle: Yalnızca raporun en sonundaki nihai karar bloğu kart olarak çizilmeli
-  const sectionViIdx = cleaned.search(/(?:###\s*(?:VI\b|6\b|Vİ\b)|###\s*Nihai\s+Değerleme)/i);
+  // 3f. $$ blokları etrafındaki boşlukları düzenle
+  cleaned = cleaned.replace(/\n{3,}\$\$/g, () => '\n\n$$');
+  cleaned = cleaned.replace(/\$\$\n{3,}/g, () => '$$\n\n');
+
+  // 4. Mükerrer 'Analist Kararı:' kartlarını önle: Yalnızca raporun en sonundaki nihai karar bloğu kart olarak çizilmeli
+  const sectionViIdx = cleaned.search(/(?:##\s*(?:VI\b|6\b|Vİ\b)|###\s*(?:VI\b|6\b|Vİ\b)|##\s*Nihai\s+Değerleme)/i);
   if (sectionViIdx !== -1) {
     const beforeSectionVi = cleaned.slice(0, sectionViIdx);
     const afterSectionVi = cleaned.slice(sectionViIdx);
@@ -1040,7 +1041,7 @@ function preprocessReportMarkdown(text: string, valuation?: any): string {
     });
   }
 
-  // 7. Fazla boş satırları normalize et
+  // 5. Fazla boş satırları normalize et
   cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
 
   return cleaned.trim();
@@ -3458,6 +3459,10 @@ export default function ValuationTerminal({
               ? 'bg-emerald-950/60 border-emerald-800/60 text-emerald-400'
               : earningsQuality.badgeColor === 'amber'
               ? 'bg-amber-950/60 border-amber-800/60 text-amber-400'
+              : earningsQuality.badgeColor === 'indigo'
+              ? 'bg-indigo-950/60 border-indigo-800/60 text-indigo-400'
+              : earningsQuality.badgeColor === 'gray'
+              ? 'bg-slate-800/80 border-slate-700/80 text-slate-300'
               : 'bg-rose-950/60 border-rose-800/60 text-rose-400'
           }`}>
             {earningsQuality.statusTitle}
@@ -3474,7 +3479,7 @@ export default function ValuationTerminal({
         </button>
       </div>
 
-      {/* 4 Temel Metrik Şeridi (İç İçe Kartlar Yerine İnce Çizgi Bölünmüş Yüzey) */}
+      {/* 4 Temel Metrik Şeridi */}
       <div className="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-800 bg-slate-950 border border-slate-800 rounded-lg overflow-hidden">
         <div className="p-3.5">
           <span className="text-[11px] text-slate-400 font-medium block">Nakit Dönüşümü (OCF / Net Kâr)</span>
@@ -3501,27 +3506,66 @@ export default function ValuationTerminal({
         </div>
 
         <div className="p-3.5">
-          <span className="text-[11px] text-slate-400 font-medium block">İşletme Nakit Akışı (OCF)</span>
-          <div className={`text-lg font-bold font-mono mt-1 truncate ${
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] text-slate-400 font-medium">İşletme Nakit Akışı (OCF)</span>
+            {earningsQuality.ocf != null && (
+              <span className="text-[10px] font-mono font-medium text-slate-400 uppercase">
+                {unitMode === 'bin' ? 'Bin TL' : unitMode === 'milyon' ? 'Mn TL' : 'TL'}
+              </span>
+            )}
+          </div>
+          <div className={`text-lg font-bold font-mono mt-1 flex items-baseline gap-1.5 flex-wrap ${
             (earningsQuality.ocf != null && earningsQuality.ocf < 0) ? 'text-rose-400' : 'text-emerald-400'
           }`}>
-            {formatAmount(earningsQuality.ocf, unitMode, false, '', '', currentExtractedData?.currency)}
+            <span>{formatAmount(earningsQuality.ocf, unitMode, false, '', '', currentExtractedData?.currency)}</span>
+            {earningsQuality.ocf != null && (
+              <span className="text-[11px] font-normal text-slate-400 font-sans">
+                {unitMode === 'bin' ? 'Bin TL' : 'TL'}
+              </span>
+            )}
           </div>
         </div>
 
         <div className="p-3.5">
-          <span className="text-[11px] text-slate-400 font-medium block">Net Dönem Kârı</span>
-          <div className={`text-lg font-bold font-mono mt-1 truncate ${
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] text-slate-400 font-medium">Net Dönem Kârı</span>
+            {earningsQuality.netIncome != null && (
+              <span className="text-[10px] font-mono font-medium text-slate-400 uppercase">
+                {unitMode === 'bin' ? 'Bin TL' : unitMode === 'milyon' ? 'Mn TL' : 'TL'}
+              </span>
+            )}
+          </div>
+          <div className={`text-lg font-bold font-mono mt-1 flex items-baseline gap-1.5 flex-wrap ${
             (earningsQuality.netIncome != null && earningsQuality.netIncome < 0) ? 'text-rose-400' : 'text-white'
           }`}>
-            {formatAmount(earningsQuality.netIncome, unitMode, false, '', '', currentExtractedData?.currency)}
+            <span>{formatAmount(earningsQuality.netIncome, unitMode, false, '', '', currentExtractedData?.currency)}</span>
+            {earningsQuality.netIncome != null && (
+              <span className="text-[11px] font-normal text-slate-400 font-sans">
+                {unitMode === 'bin' ? 'Bin TL' : 'TL'}
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="text-xs text-slate-300 leading-relaxed flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
-        <span>{earningsQuality.guidanceText}</span>
-        <span className="font-mono text-[11px] text-slate-400 shrink-0">{earningsQuality.sloanAssessment}</span>
+      {/* Sektörel Rehberlik & Tahakkuk Teşhisi Açıklama Kartı (Genişlik Kırılmasını Önleyen Blok Düzeni) */}
+      <div className="rounded-lg bg-slate-950/80 border border-slate-800/80 p-3.5 space-y-2.5 text-xs">
+        <div className="flex items-start gap-2.5">
+          <div className="mt-1 h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
+          <p className="text-slate-200 leading-relaxed font-normal flex-1">
+            {earningsQuality.guidanceText}
+          </p>
+        </div>
+
+        {earningsQuality.sloanAssessment && (
+          <div className="flex items-start gap-2.5 pt-2.5 border-t border-slate-800/60">
+            <div className="mt-1 h-2 w-2 rounded-full bg-cyan-400 shrink-0" />
+            <p className="text-slate-300 leading-relaxed flex-1 font-mono text-[11px]">
+              <span className="font-semibold text-slate-200 font-sans mr-1.5">Tahakkuk & Nakit Teşhisi:</span>
+              {earningsQuality.sloanAssessment}
+            </p>
+          </div>
+        )}
       </div>
 
       {showCashQualityExplainer && (
@@ -6727,17 +6771,18 @@ export default function ValuationTerminal({
                     <div className="report-content w-full max-w-4xl mx-auto space-y-6">
                       {/* Kurumsal Araştırma Raporu Başlık Kartı (İş Yatırım & Goldman Sachs Standardı) */}
                       <div className="border-b border-slate-800/90 pb-6 mb-6">
-                        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                          <div className="flex items-center gap-2">
-                            <span className="px-2.5 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-mono font-bold text-xs tracking-wider">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-3.5 border-b border-slate-800/80">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 dark:text-emerald-300 font-mono font-bold text-xs tracking-wider uppercase shadow-xs">
                               BİST KURUMSAL DEĞERLEME & HİSSE ANALİZ NOTU
                             </span>
-                            <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[11px] font-medium">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-slate-800/90 border border-slate-700/70 text-slate-300 text-xs font-medium">
                               Kurumsal Araştırma Standardı
                             </span>
                           </div>
-                          <div className="text-[11px] font-mono text-slate-400">
-                            Analiz Tarihi: <span className="text-slate-200">{activeReport.createdAt}</span>
+                          <div className="inline-flex items-center gap-1.5 text-xs font-mono text-slate-400 shrink-0">
+                            <span>Analiz Tarihi:</span>
+                            <span className="text-slate-200 font-semibold">{activeReport.createdAt}</span>
                           </div>
                         </div>
 
@@ -6842,7 +6887,8 @@ export default function ValuationTerminal({
                       </div>
 
                       <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
+                        remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
+                        rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]}
                         components={{
                           h1: ({ children, ...props }) => (
                             <div className="border-b border-slate-800 pb-4 mb-6 mt-2">

@@ -63,21 +63,35 @@ export async function POST(req: Request) {
     let systemInstruction = '';
 
     const universalAcademicReadabilityRules = `
-AKADEMİK OKUNABİLİRLİK, BİLİŞSEL TASARIM VE DİL KURALLARI (ZORUNLU):
-1. KESİNLİKLE DOLAR ($) VEYA LATEX İŞARETİ KULLANMA: Raporun hiçbir yerinde tek dolar ($) veya çift dolar ($$) veya \\text{}, \\frac{}, \\mathbf{} gibi LaTeX kodları KULLANMA! Matematiksel formülleri ve hesaplamaları temiz Türkçe metin olarak, alıntı bloğu (>) içinde kalın yazıyla göster.
-   Örnek Doğru Gösterim:
-   > **Hesaplama:** Hedef PD/DD = (Özkaynak Kârlılığı − Uzun Vadeli Büyüme) / (Sermaye Maliyeti − Uzun Vadeli Büyüme) = (%62,9 − %25,0) / (%44,0 − %25,0) = **2,00x**
-2. YABANCI TERİM VE JARGON YASAĞI: Rapor boyunca 'Storytelling', 'bancassurance', 'moat', 'guidance', 'run-rate', 'top-line', 'bottom-line', 'peer', 'bullish', 'bearish', 'Filme Bakış' gibi yabancı veya yapay kelimeler KESİNLİKLE KULLANMA!
-   - 'bancassurance' yerine her zaman **'banka sigortacılığı'** yaz.
-   - 'moat' yerine **'rekabet üstünlüğü'** yaz.
-   - 'Storytelling' yerine **'Temel Yatırım Tezi'** yaz.
-   - Yabancı alfabe karakterleri (örneğin Gürcüce veya Kiril harfleri, 'iskontო' gibi) asla kullanma; kusursuz Türkçe harfler ('iskonto') kullan.
-3. BİLİŞSEL AKADEMİK YAZIM TEKNİĞİ (BIONIC & CHUNKED READING):
-   - Uzun ve yorucu duvar paragrafları yazma! Her paragraf en fazla 3 cümleden oluşmalıdır.
-   - Maddeli analizlerde her maddenin ilk 3-5 kelimesini **kalın (bold) anahtar kavram** olarak başlat (Örn: **Güçlü Özkaynak Kârlılığı:** Şirket son dönemde %62,9 ROE üreterek...). Bu teknik okuyucunun gözünün metni %40 daha hızlı taramasını ve bilginin kalıcı olmasını sağlar.
-   - Her ana bölümün hemen altına ` + "`> **Bölüm Özeti:** ...`" + ` şeklinde 1 cümlelik net bir çıkarım kutusu ekle.
-4. TEKİL NİHAİ KARAR KURALI: 'Analist Kararı:' satırını SADECE raporun en sonunda (Bölüm VI altında) 1 kez yaz. Bölüm I (Yönetici Özeti) içinde 'Analist Kararı:' ifadesini tekrarlama.
-5. TİPOGRAFİK VE DİL YASAĞI: 'adil değer' (fair value) yerine asla yanlışlıkla veya sehven 'adli değer' (adli tıp / adliye) YAZMA! Değerleme metinlerinde her zaman 'adil değer' kelimesini doğru yaz.
+KURUMSAL ARAŞTIRMA STANDARDI, MATEMATİKSEL FORMÜLLER VE DİL KURALLARI (ZORUNLU):
+1. MATEMATİKSEL FORMÜLLER VE KATEX GÖSTERİMİ:
+   - Matematiksel ve değerleme formüllerini (Hedef PD/DD, WACC, Fisher Reel Sermaye Maliyeti, Reel EVA Makası, Serbest Nakit Akışı) temiz KaTeX display formatında, tek başına ayrı satırlarda '$$' blokları halinde sun.
+   - Örnek Doğru Formül Bloğu:
+$$
+\\text{Hedef PD/DD} = \\frac{\\text{ROE} - g}{\\text{Ke} - g} = \\frac{\\%62,9 - \\%25,0}{\\%44,0 - \\%25,0} = 2,00\\text{x}
+$$
+   - '$$' bloğu içine ASLA boş satır bırakma; formülü tek parça KaTeX bloğu olarak yaz.
+   - Formülün hemen altına Türkçe açıklamayı ve model çıkarımını ekle.
+2. ELİT KURUMSAL VE AKADEMİK TÜRKÇE FİNANSAL DİL (Goldman Sachs, Morgan Stanley, İş Yatırım Araştırma Seviyesi):
+   - 'Storytelling', 'bancassurance', 'moat', 'guidance', 'run-rate', 'top-line', 'bottom-line', 'peer', 'bullish', 'bearish', 'Filme Bakış' gibi yapay, sokak ağzı veya AI klişesi ifadeler KESİNLİKLE KULLANILAMAZ.
+   - 'bancassurance' yerine **'banka sigortacılığı'**; 'moat' yerine **'sürdürülebilir rekabet üstünlüğü'**; 'top-line' yerine **'hasılat / brüt prim üretimi'**; 'bottom-line' yerine **'net dönem kârlılığı'**; 'Storytelling' yerine **'Temel Yatırım Tezi'** yaz.
+   - Rapor dili son derece yetkin, ağırbaşlı, soğukkanlı, somut verilere ve bilanço nedenselliğine dayalı olmalıdır.
+3. BİLİŞSEL VE HIZLI TARAMA DÜZENİ (BIONIC & CHUNKED READING):
+   - Uzun ve boğucu blok paragraflar yerine net, veri odaklı ve derinlikli paragraflar kullan (her paragraf 2-4 odaklı analitik cümle).
+   - Analiz maddelerinin ilk 3-5 kelimesini **kalın anahtar kavram** ile başlat (Örn: **Sürdürülebilir Özkaynak Kârlılığı:** Şirket son dönemde %62,9 ROE ile sermaye maliyetini aşarak...). Bu teknik okuyucunun metni hızla taramasını ve bilginin kalıcı olmasını sağlar.
+   - Her ana bölümün hemen altına ` + "`> **Bölüm Özeti:** ...`" + ` şeklinde 1 cümlelik net kurumsal stratejik çıkarım ekle.
+4. BÖLÜM BAŞLIKLARI DÜZENİ (ZORUNLU):
+   Rapor ana bölümleri KESİNLİKLE '## ' (Seviye 2 Markdown) ve standart Romen rakamlarıyla başlatılmalıdır:
+   ## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ
+   ## II. KÂR KALİTESİ VE NAKİT AKIŞI TEŞHİSİ
+   ## III. SEKTÖREL REKABET VE DU PONT ANALİZİ
+   ## IV. SERMAYE MALİYETİ (WACC) VE DEĞERLEME MODELİ
+   ## V. DEĞER SÜRÜCÜLERİ VE DUYARLILIK ANALİZİ
+   ## VI. YATIRIM RİSKLERİ, KATALİZÖRLER VE NİHAİ KARAR
+5. TEKİL NİHAİ KARAR KURALI:
+   'Analist Kararı:' satırını SADECE raporun en sonunda (Bölüm VI altında) 1 kez yaz. Bölüm I (Yönetici Özeti) içinde 'Analist Kararı:' ifadesini tekrarlama.
+6. TİPOGRAFİK VE DİL YASAĞI:
+   'adil değer' (fair value) yerine asla 'adli değer' (adli tıp / adliye) YAZMA! Değerleme metinlerinde her zaman 'adil değer' kelimesini doğru yaz.
 `;
 
     const universalSafetyRules = `
@@ -105,21 +119,23 @@ SEKTÖREL KURALLAR (SİGORTACILIK & BİREYSEL EMEKLİLİK - Örn: AGESA, ANHYT, 
 2. ODAKLANILACAK DEĞER MOTORLARI:
    - **Brüt ve Net Prim Üretimi:** Hayat ve hayat dışı branşlarda reel prim büyümesi.
    - **Teknik Kârlılık ve Bileşik Oran:** Hasar/Prim Oranı ile Masraf Oranının toplamı olan Bileşik Oranın (%100'ün altı teknik kârlılığı gösterir) seyri.
-   - **Yatırım Portföyü ve Fon Gelirleri:** Teknik karşılıkların ve finansal varlıkların yüksek faiz ortamında ürettiği yatırım geliri.
-   - **Bireysel Emeklilik (BES) Fon Büyüklüğü:** Yönetilen fon büyüklüğü artışı ve banka sigortacılığı dağıtım ağı verimliliği.
+   - **Yatırım Portföyü ve Float Getirisi:** Teknik karşılıkların ve finansal varlıkların yüksek faiz ortamında ürettiği yatırım geliri.
+   - **Bireysel Emeklilik (BES) Fon Hacmi:** Yönetilen fon büyüklüğü artışı ve banka sigortacılığı dağıtım ağı verimliliği.
    - **Özkaynak Kârlılığı (ROE) ve Sermaye Maliyeti (Ke) Makası:** Özsermaye getirisinin sermaye maliyetini aşma gücü.
 3. DEĞERLEME MODELİ:
    - PD/DD (Fiyat/Defter Değeri) ve F/K çarpanları ile Gordon Büyüme / ROE bazlı Özsermaye Değerleme Modeli kullan.
-   - Hesaplamaları dolar ($) işareti olmadan temiz Türkçe formül kutusuyla yaz:
-     > **Değerleme Formülü:** Hedef PD/DD = (ROE − Uzun Vadeli Büyüme) / (Sermaye Maliyeti − Uzun Vadeli Büyüme)
+   - Değerleme formülünü tek başına KaTeX bloğu olarak sun:
+$$
+\\text{Hedef PD/DD} = \\frac{\\text{ROE} - g}{\\text{Ke} - g}
+$$
 
 RAPOR FORMATI KESİNLİKLE ŞU BAŞLIKLARLA OLMALIDIR:
-### I. Yönetici Özeti ve Temel Yatırım Tezi
-### II. Nakit Akışı, Portföy ve Kâr Kalitesi Teşhisi (Bileşik Oran ve Float Verimi)
-### III. Sektörel Karne ve Rekabet Konumu (Pazar Payı ve Büyüme)
-### IV. Sermaye Maliyeti (Ke / WACC) ve Gordon Değerleme Modeli
-### V. Değer Sürücüleri ve Hassasiyet Tablosu
-### VI. Temel Riskler, Katalizörler ve Nihai Karar
+## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ
+## II. KÂR KALİTESİ VE NAKİT AKIŞI TEŞHİSİ (Bileşik Oran ve Float Verimi)
+## III. SEKTÖREL REKABET VE DU PONT ANALİZİ (Pazar Payı ve Büyüme)
+## IV. SERMAYE MALİYETİ (WACC) VE DEĞERLEME MODELİ
+## V. DEĞER SÜRÜCÜLERİ VE DUYARLILIK ANALİZİ
+## VI. YATIRIM RİSKLERİ, KATALİZÖRLER VE NİHAİ KARAR
 
 | Metrik | Puan | Max | Gerekçe |
 | :--- | :--- | :--- | :--- |
@@ -153,12 +169,12 @@ SEKTÖREL KURALLAR (BANKACILIK SEKTÖRÜ - Örn: GARAN, AKBNK, ISCTR, YKBNK):
    | **Toplam Puan** | **X** | **100** | ... |
 
 RAPOR FORMATI KESİNLİKLE ŞU BAŞLIKLARLA OLMALIDIR:
-### I. Yönetici Özeti ve Temel Yatırım Tezi
-### II. Aktif Kalitesi, Fonlama ve Kâr Kalitesi Teşhisi (NIM ve Komisyon Gücü)
-### III. Sektörel Karne ve Rekabet Konumu (TGA Rasyosu ve SYR Tamponu)
-### IV. Sermaye Maliyeti (Ke / WACC) ve Gordon Değerleme Modeli
-### V. Değer Sürücüleri ve Hassasiyet Tablosu
-### VI. Temel Riskler, Katalizörler ve Nihai Karar
+## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ
+## II. KÂR KALİTESİ VE NAKİT AKIŞI TEŞHİSİ (Aktif Kalitesi, NIM ve Komisyon Gücü)
+## III. SEKTÖREL REKABET VE DU PONT ANALİZİ (TGA Rasyosu ve SYR Tamponu)
+## IV. SERMAYE MALİYETİ (WACC) VE DEĞERLEME MODELİ
+## V. DEĞER SÜRÜCÜLERİ VE DUYARLILIK ANALİZİ
+## VI. YATIRIM RİSKLERİ, KATALİZÖRLER VE NİHAİ KARAR
 
 Analist Kararı: [AL / ALMA / NÖTR]
 Yatırım Tezi: [1-2 net, duru Türkçe ve vurucu cümle ile nihai değerlendirme gerekçesi.]
@@ -179,12 +195,12 @@ SEKTÖREL KURALLAR (HOLDİNG SEKTÖRÜ - Örn: KCHOL, SAHOL, AGHOL):
    | **Toplam Puan** | **X** | **100** | ... |
 
 RAPOR FORMATI KESİNLİKLE ŞU BAŞLIKLARLA OLMALIDIR:
-### I. Yönetici Özeti ve Temel Yatırım Tezi
-### II. Nakit Akışı, Solo Likidite ve Kâr Kalitesi Teşhisi (Temettü Akışı ve Borçsuzluk)
-### III. Sektörel Karne ve Rekabet Konumu (İştirak Portföy Çeşitliliği)
-### IV. WACC ve İskontolu Değerleme Modeli (NAD / SOTP)
-### V. Değer Sürücüleri ve Kur Hassasiyet Tablosu
-### VI. Temel Riskler, Katalizörler ve Nihai Karar
+## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ
+## II. KÂR KALİTESİ VE NAKİT AKIŞI TEŞHİSİ (Solo Likidite, Temettü Akışı ve Borçsuzluk)
+## III. SEKTÖREL REKABET VE DU PONT ANALİZİ (İştirak Portföy Çeşitliliği)
+## IV. SERMAYE MALİYETİ (WACC) VE DEĞERLEME MODELİ (NAD / SOTP)
+## V. DEĞER SÜRÜCÜLERİ VE DUYARLILIK ANALİZİ
+## VI. YATIRIM RİSKLERİ, KATALİZÖRLER VE NİHAİ KARAR
 
 Analist Kararı: [AL / ALMA / NÖTR]
 Yatırım Tezi: [1-2 net, duru Türkçe ve vurucu cümle ile nihai değerlendirme gerekçesi.]
@@ -192,33 +208,33 @@ Kilit Katalizörler: [Fiyatı adil değere taşıyacak 2-3 somut şirket kataliz
 Riskler & Emniyet Marjı: [Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek temel riskler.]`;
     } else {
       // Standart Sanayi / Reel Sektör Promptu
-      systemInstruction = `Sen akademik düzeyde berrak, anlaşılır ve aşırı objektif yazan kurumsal bir fon yöneticisisin.
-Hiçbir veriyi güzelleştirme. Şirket ekonomik değer yaratmıyorsa (Yıllıklandırılmış ROIC < WACC) veya nakit akışı borçlanmayla finanse ediliyorsa bunu somut rakamlarla ortaya koy.
+      systemInstruction = `Sen Goldman Sachs, Morgan Stanley ve İş Yatırım Araştırma standardında akademik düzeyde yetkin, berrak ve objektif yazan kurumsal bir hisse senedi araştırma analistisin.
+Hiçbir veriyi güzelleştirme. Şirket ekonomik değer yaratmıyorsa (Yıllıklandırılmış ROIC < WACC) veya nakit akışı borçlanmayla finanse ediliyorsa bunu somut rakamlarla ve sebep-sonuç ilişkisiyle ortaya koy.
 ${universalSafetyRules}
 
 RAPOR FORMATI KESİNLİKLE ŞU BAŞLIKLARLA VE YAPIDA OLMALIDIR:
 
-### I. Yönetici Özeti ve Temel Yatırım Tezi
-(Şirketin iş modeli, rekabet üstünlüğü, güncel çarpan konumu ve en kritik temel bulguların özeti.)
+## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ
+(Şirketin iş modeli, sürdürülebilir rekabet üstünlüğü, güncel çarpan konumu ve en kritik temel bulguların özeti.)
 
-### II. Nakit Akışı ve Kâr Kalitesi Teşhisi (OCF, Nakit Dönüşümü ve Sloan Tahakkuk Oranı)
+## II. KÂR KALİTESİ VE NAKİT AKIŞI TEŞHİSİ (OCF, Nakit Dönüşümü ve Sloan Oranı)
 - **Nakit Dönüşüm Oranı (OCF / Net Kâr):** Kârın kağıt üzerinde mi kaldığı yoksa kasaya sıcak nakit mi girdiği analizi.
 - **Sloan Tahakkuk Oranı ve Bilanço Makyajı Teşhisi:** Gayrinakdi tahakkukların ve alacak/stok bağlamalarının değerlendirilmesi.
 - **Yatırım Harcamaları ve Serbest Nakit Akışı (FCF):** Buffett Kazancı ve serbest nakit üretim gücü.
 
-### III. Sektörel Karne ve Rekabet Konumu (DuPont 5 Aşamalı Kârlılık Ayrıştırması)
+## III. SEKTÖREL REKABET VE DU PONT ANALİZİ (5 Aşamalı ROE Ayrıştırması)
 - **DuPont Kârlılık Ayrıştırması:** ROE'nin vergi yükü, faiz yükü, EBIT marjı, aktif devir hızı ve kaldıraç bileşenleri.
-- **Sektörel Puanlama Karnesi:** Finansal sağlık, sermaye verimliliği ve moat gücü.
+- **Sektörel Puanlama Karnesi:** Finansal sağlık, sermaye verimliliği ve rekabet avantajı.
 
-### IV. WACC ve İskontolu Değerleme Modeli (Şirkete Özel Borçlanma Maliyeti Kd ve Hibrit Değerleme)
+## IV. SERMAYE MALİYETİ (WACC) VE DEĞERLEME MODELİ (ROIC vs Reel WACC)
 - **Sermaye Maliyeti (WACC):** Şirketin efektif borçlanma faizi (Kd), özkaynak maliyeti (Ke) ve sermaye yapısı ağırlıkları.
 - **İleriye Dönük Çarpanlar ve Hibrit Adil Değer:** FD/FAVÖK, F/K ve PD/DD bazlı adil değer hesaplaması ve iskonto oranı.
 
-### V. Değer Sürücüleri, Net Döviz Pozisyonu ve Hassasiyet Tablosu
+## V. DEĞER SÜRÜCÜLERİ VE DUYARLILIK ANALİZİ
 - **Net Döviz Pozisyonu ve Kur Hassasiyeti:** Döviz varlık/yükümlülük dengesi ve olası kur hareketlerinin kâra etkisi.
 - **Ayı ve Boğa Senaryoları:** En kötü ve en iyi senaryo hedef fiyatları ile duyarlılık analizi.
 
-### VI. Temel Riskler, Katalizörler ve Nihai Karar
+## VI. YATIRIM RİSKLERİ, KATALİZÖRLER VE NİHAİ KARAR
 
 | Metrik | Puan | Max | Gerekçe |
 | :--- | :--- | :--- | :--- |
@@ -316,10 +332,15 @@ DİKKAT VE TUTARLILIK KURALI:
 1. Raporunun Değerleme bölümünde belirteceğin Hisse Başı Adil Değer KESİNLİKLE yukarıda verilen **${valuation.fair_value} TL** olmalıdır.
 2. Ayı Senaryosu taban hedef fiyatı KESİNLİKLE **${valuation.bear_price} TL** olmalıdır.
 3. Boğa Senaryosu tavan hedef fiyatı KESİNLİKLE **${valuation.bull_price} TL** olmalıdır (Güncel fiyat olan ${activePrice} TL'nin ve Adil Değer olan ${valuation.fair_value} TL'nin üzerindedir).
-4. IV. BÖLÜMDEKİ DEĞERLEME FORMÜLÜNÜ KESİNLİKLE ŞU DOĞRULANMIŞ METİNDEN BİREBİR KOPYALA (ARİTMETİK SAYILARI KENDİNDEN DEĞİŞTİRME):
-> **Değerleme Formülü:** ${valuation.gordon_formula_text || valuation.formula_display || `Hedef Çarpan = ${drivers.target_multiple?.value} | Adil Değer = ${valuation.fair_value} TL`}
+4. IV. BÖLÜMDEKİ DEĞERLEME FORMÜLÜNÜ VE REEL EVA MAKASINI TEMİZ KATEX DISPLAY FORMATINDA AYRI SATIRLARDA GÖSTER:
+$$
+\\text{Hedef Adil Değer} = ${valuation.fair_value}\\text{ TL} \\quad | \\quad \\text{İskonto} = \\%${valuation.discount_pct}
+$$
+$$
+\\text{Reel EVA Makası} = \\text{ROIC} - \\text{Reel WACC} = \\%${roicVal} - \\%${realWaccVal} = ${Number(evaSpreadVal) >= 0 ? '+' : ''}${evaSpreadVal}\\text{ puan}
+$$
 5. VI. BÖLÜMDEKİ PUANLAMA TABLOSUNU KESİNLİKLE YUKARIDA VERİLEN DOĞRULANMIŞ TABLODAN BİREBİR KOPYALA. Tablodaki hiçbir satırın puanını, max puanını veya gerekçesindeki rasyo sayısını (ROIC, WACC, Solvency vb.) ASLA değiştirme veya kendinden uydurma!
-6. KESİNLİKLE '$' VEYA '$$' KULLANMA: Formülleri ve rakamları yazarken hiçbir yerde dolar ($) işareti kullanma! Tüm formülleri düz Türkçe metin olarak '> **Değerleme Özeti:** Hisse Başı Adil Değer = **${valuation.fair_value} TL** (Ayı Senaryosu: **${valuation.bear_price} TL** | Boğa Senaryosu: **${valuation.bull_price} TL**)' şeklinde yaz.
+6. KATEX KULLANIM KURALI: Matematiksel ve değerleme formüllerini yalnızca tek başına ayrı satırlarda '$$' blokları halinde yaz. Blok içine boş satır bırakma.
 7. KESİNLİKLE YABANCI KELİME KULLANMA: 'Storytelling', 'bancassurance', 'moat', 'guidance' gibi kelimeler yerine 'Temel Yatırım Tezi', 'banka sigortacılığı', 'rekabet üstünlüğü', 'yönetim hedefleri' ifadelerini kullan.
 8. SİGORTACILIK İÇİN BİLEŞİK ORAN UYUMU: Bileşik Oran = Hasar Oranı + Masraf Oranı (G&A ve komisyon giderleri) toplamıdır. Rakamların toplamı kesinlikle birbirini tutmalıdır. Masraf Oranı (%19,6), %8,7 Genel Yönetim Giderleri (G&A) ve %10,9 Acente/Banka Komisyon Giderlerinden oluşmaktadır (%62,0 Hasar + %19,6 Masraf = %81,6 Bileşik Oran).
 9. REEL WACC TUTARLILIĞI: IV. Bölüm metninde ve VI. Bölüm tablosunda Reel Sermaye Maliyeti (Reel WACC) KESİNLİKLE aynı sayı olarak (%${realWaccVal}) geçmelidir. Rapor içinde başka bir reel WACC sayısı (örneğin %14,7 gibi) ASLA yazılmamalıdır!
@@ -488,42 +509,47 @@ function generateAlgorithmicReportFallback(params: {
   const tangibleCapexVal = latestItem?.tangible_capex ?? latestItem?.capex;
   const freeCashFlowVal = latestItem?.free_cash_flow ?? (netOcfVal ? (netOcfVal - Math.abs(tangibleCapexVal || 0)) : null);
 
-  return `### I. Yönetici Özeti ve Temel Yatırım Tezi
-> **Bölüm Özeti:** ${ticker} hissesi için hesaplanan adil değer ${valuation.fair_value} TL olup, güncel ${price} TL piyasa fiyatına göre %${valuation.discount_pct} getiri potansiyeli taşımaktadır.
+  return `## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ
+> **Yönetici Özeti:** ${ticker} hissesi için hesaplanan adil değer ${valuation.fair_value} TL olup, güncel ${price} TL piyasa fiyatına göre %${valuation.discount_pct} getiri potansiyeli (${valuation.discount_pct >= 0 ? 'iskonto' : 'prim'}) taşımaktadır.
 
-**Temel Yatırım Tezi:** ${ticker}, ${sectorDef.title} sektöründe faaliyet göstermektedir. Yapılan ${valuation.valuation_model_name} analizine göre hissenin hesaplanan adil değeri **${valuation.fair_value} TL** seviyesindedir. Piyasa fiyatı olan **${price} TL** üzerinden yapılan emniyet marjı değerlendirmesi sonucunda model görünümü **${optimization.finalDecision}** yönünde şekillenmiştir.
+**Temel Yatırım Tezi:** ${ticker}, ${sectorDef.title} sektöründe faaliyet göstermektedir. Yapılan ${valuation.valuation_model_name} analizine göre hissenin hesaplanan adil değeri **${valuation.fair_value} TL** seviyesindedir. Piyasa fiyatı olan **${price} TL** üzerinden yapılan kurumsal emniyet marjı değerlendirmesi sonucunda model görünümü **${optimization.finalDecision}** yönünde şekillenmiştir.
 
 **Finansal Sağlık Skoru:** Şirket 100 üzerinden **${scoreResult.totalScore}** puan alarak sektörel finansal dayanıklılık ve sermaye verimliliği kriterlerini sağlamıştır.
 
-### II. Nakit Akışı ve Kâr Kalitesi Teşhisi
-> **Bölüm Özeti:** Şirketin operasyonel nakit üretimi ve kâr dönüşüm kalitesi finansal tablolar bazında incelenmiştir.
+## II. KÂR KALİTESİ VE NAKİT AKIŞI TEŞHİSİ
+> **Nakit Akışı Teşhisi:** Şirketin operasyonel nakit üretimi, tahakkuk kalitesi ve serbest nakit akışı finansal tablolar bazında incelenmiştir.
 
-- **Kâr Kalitesi ve Nakit Üretimi:** Şirketin operasyonel kârının nakde dönüşüm kabiliyeti çok güçlüdür.${grossOcfVal ? ` Çalışma sermayesi öncesi brüt faaliyet nakit üretimi ${(grossOcfVal / 1e9).toFixed(2)} Milyar TL,` : ''}${netOcfVal ? ` vergi ve işletme sermayesi düzeltmeleri sonrası resmi Net İşletme Nakit Akışı ise ${(netOcfVal / 1e9).toFixed(2)} Milyar TL seviyesindedir.` : ' operasyonel nakit üretimi pozitiftir.'} Nakit dönüşüm oranı yüksek tahsilat kabiliyetine işaret etmektedir.
-- **Yatırım Harcamaları ve Serbest Nakit Akışı (FCF):** ${tangibleCapexVal ? `Maddi duran varlık yatırımları (Tangible CAPEX) ${(Math.abs(tangibleCapexVal) / 1e9).toFixed(2)} Milyar TL düzeyindedir.` : 'Yatırımlar operasyonel nakit ile karşılanmaktadır.'} ${freeCashFlowVal ? `Şirket ${(freeCashFlowVal / 1e9).toFixed(2)} Milyar TL tutarında güçlü pozitif serbest nakit akışı üreterek hissedar değerini büyütmektedir.` : 'Serbest nakit üretimi pozitiftir.'}
+- **Kâr Kalitesi ve Nakit Üretimi:** Şirketin operasyonel kârının nakde dönüşüm kabiliyeti değerlendirilmiştir.${grossOcfVal ? ` Çalışma sermayesi öncesi brüt faaliyet nakit üretimi ${(grossOcfVal / 1e9).toFixed(2)} Milyar TL,` : ''}${netOcfVal ? ` vergi ve işletme sermayesi düzeltmeleri sonrası resmi Net İşletme Nakit Akışı ise ${(netOcfVal / 1e9).toFixed(2)} Milyar TL seviyesindedir.` : ' operasyonel nakit üretimi pozitiftir.'} Nakit dönüşüm oranı tahsilat kabiliyetine işaret etmektedir.
+- **Yatırım Harcamaları ve Serbest Nakit Akışı (FCF):** ${tangibleCapexVal ? `Maddi duran varlık yatırımları (Tangible CAPEX) ${(Math.abs(tangibleCapexVal) / 1e9).toFixed(2)} Milyar TL düzeyindedir.` : 'Yatırımlar operasyonel nakit ile karşılanmaktadır.'} ${freeCashFlowVal ? `Şirket ${(freeCashFlowVal / 1e9).toFixed(2)} Milyar TL tutarında güçlü serbest nakit akışı üreterek hissedar değerini büyütmektedir.` : 'Serbest nakit üretimi pozitiftir.'}
 - **Sermaye Verimliliği:** Şirketin sermaye maliyetini aşma gücü ve özkaynak kârlılığı ${drivers.margin?.label || 'Kârlılık Marjı'} (%${drivers.margin?.value || '0'}) seviyesindedir.
 
-### III. Sektörel Karne ve Rekabet Konumu
-> **Bölüm Özeti:** ${sectorDef.title} sektörü standartlarına göre 4 temel boyutta gerçekleştirilen detaylı karne analizi.
+## III. SEKTÖREL REKABET VE DU PONT ANALİZİ
+> **Sektörel Karne:** ${sectorDef.title} sektörü standartlarına göre 4 temel boyutta gerçekleştirilen detaylı karne analizi.
 
 - **Büyüme Dinamikleri:** ${drivers.revenue_growth?.label || 'Gelir Büyümesi'} baz varsayımı %${drivers.revenue_growth?.value || '0'} ve ${drivers.net_income_growth?.label || 'Net Kâr Büyümesi'} %${drivers.net_income_growth?.value || '0'} olarak gerçekleşmiştir.
 - **Pazar Konumu:** Sektörel çarpan ve kârlılık dinamikleri çerçevesinde rekabet gücü korunmaktadır.
 
-### IV. Sermaye Maliyeti (WACC / Ke) ve İskontolu Değerleme Modeli
-> **Değerleme Özeti:** Hisse Başı Adil Değer = **${valuation.fair_value} TL** (Ayı Senaryosu: **${valuation.bear_price} TL** | Boğa Senaryosu: **${valuation.bull_price} TL**)
+## IV. SERMAYE MALİYETİ (WACC) VE DEĞERLEME MODELİ
+$$
+\\text{Hedef Adil Değer} = ${valuation.fair_value}\\text{ TL} \\quad | \\quad \\text{İskonto} = \\%${valuation.discount_pct}
+$$
+$$
+\\text{Reel EVA Makası} = \\text{ROIC} - \\text{Reel WACC} = \\%${roicVal} - \\%${realWaccVal} = ${Number(evaSpreadVal) >= 0 ? '+' : ''}${evaSpreadVal}\\text{ puan}
+$$
 
-- **Sermaye Maliyeti (WACC):** Nominal Sermaye Maliyeti %${nominalWaccVal}, beklenen enflasyon %${expectedInfVal} ve Fisher denklemiyle hesaplanan Reel WACC %${realWaccVal} seviyesindedir. Yıllıklandırılmış ROIC (%${roicVal}) reel sermaye maliyetinin üzerinde olup pozitif ekonomik katma değer (EVA Spread: ${Number(evaSpreadVal) >= 0 ? '+' : ''}${evaSpreadVal} puan) yaratılmaktadır.
+- **Sermaye Maliyeti (WACC):** Nominal Sermaye Maliyeti %${nominalWaccVal}, beklenen enflasyon %${expectedInfVal} ve Fisher denklemiyle hesaplanan Reel WACC %${realWaccVal} seviyesindedir. Yıllıklandırılmış ROIC (%${roicVal}) reel sermaye maliyetinin üzerinde olup ekonomik katma değer (EVA Spread: ${Number(evaSpreadVal) >= 0 ? '+' : ''}${evaSpreadVal} puan) oluşturmaktadır.
 - **Uygulanan Değerleme Modeli:** ${valuation.valuation_model_name}
 - **Hedef Çarpan:** ${drivers.target_multiple?.label || 'Hedef Çarpan'} ${drivers.target_multiple?.value || '0'}x
 - **İskonto Oranı:** %${valuation.discount_pct} (${valuation.margin_of_safety_status || 'HESAPLANDI'})
 
-### V. Değer Sürücüleri ve Hassasiyet Tablosu
-> **Bölüm Özeti:** Farklı piyasa koşullarına göre senaryo bazlı hedef fiyat aralığı.
+## V. DEĞER SÜRÜCÜLERİ VE DUYARLILIK ANALİZİ
+> **Duyarlılık Matrisi:** Farklı piyasa ve marj koşullarına göre senaryo bazlı hedef fiyat aralığı.
 
-- **Ayı Senaryosu (Taban):** **${valuation.bear_price} TL** (Negatif piyasa koşulları ve sıkılaşan marjlar)
-- **Baz Senaryo (Adil Değer):** **${valuation.fair_value} TL** (Mevcut gerçekleşmeler ve dengeli büyüme)
-- **Boğa Senaryosu (Tavan):** **${valuation.bull_price} TL** (Hedeflerin aşılması ve güçlü çarpan genişlemesi)
+- **Ayı Senaryosu (Taban):** **${valuation.bear_price} TL** (Negatif makro koşullar ve daralan marjlar)
+- **Baz Senaryo (Adil Değer):** **${valuation.fair_value} TL** (Mevcut operasyonel gerçekleşmeler ve dengeli büyüme)
+- **Boğa Senaryosu (Tavan):** **${valuation.bull_price} TL** (Hedeflerin aşılması ve çarpan genişlemesi)
 
-### VI. Temel Riskler, Katalizörler ve Nihai Karar
+## VI. YATIRIM RİSKLERİ, KATALİZÖRLER VE NİHAİ KARAR
 
 | Metrik | Puan | Max | Gerekçe |
 | :--- | :--- | :--- | :--- |
