@@ -19,6 +19,10 @@ test('TCMB EVDS3 Macroeconomic Service & Dynamic WACC Suite', async (t) => {
     assert.ok(snapshot.latestSurveyDate, 'Must have survey date');
     assert.ok(snapshot.expectationsMap, 'Must contain expectations map');
     assert.ok(Object.keys(snapshot.expectationsMap).length >= 10, 'Must have monthly expectations');
+    assert.ok(snapshot.commercialLoanRate > 30, 'Commercial loan rate must be populated');
+    assert.ok(snapshot.policyRate12m > 15, '12M policy rate expectation must be populated');
+    assert.ok(snapshot.usdTry12m > 40, '12M USD/TRY expectation must be populated');
+    assert.ok(snapshot.gdpGrowth > 0, 'GDP growth expectation must be populated');
   });
 
   await t.test('2. getExpectedInflationForPeriod resolves period-specific survey expectations', () => {

@@ -5,7 +5,10 @@
  * Türkiye Cumhuriyet Merkez Bankası resmi web servisleri üzerinden:
  * 1. Piyasa Katılımcıları Anketi (PKA) 12 ve 24 Ay Sonrası TÜFE Beklentisi (TP.ENFBEK.PKA12ENF / PKA24ENF)
  * 2. Bankalarca Açılan Kredilere Uygulanan Ağırlıklı Ortalama Ticari Kredi Faizi (TP.KTF10)
- * 3. Fisher Denklemi ile Reel WACC ve Sermaye Maliyeti uyarlamaları için canlı makro göstergeler
+ * 3. 12 Ay Sonrası ve Yıl Sonu TCMB Politika Faizi Beklentisi (TP.PKAUO.S04.D.U / TP.PKAUO.S04.H.U)
+ * 4. 12 Ay Sonrası Dolar Kuru Beklentisi (TP.PKAUO.S05.C.U)
+ * 5. Yıllık Reel GSYH Büyüme Beklentisi (TP.PKAUO.S07.A.U)
+ * 6. Fisher Denklemi ile Reel WACC ve Sermaye Maliyeti uyarlamaları için canlı makro göstergeler
  */
 
 import https from 'node:https';
@@ -19,11 +22,23 @@ export interface TcmbInflationSurveyItem {
 }
 
 export interface MacroDataSnapshot {
+  // Enflasyon Göstergeleri (TCMB EVDS3)
   latestExpectedInflation: number; // Güncel 12 aylık TÜFE beklentisi (%)
   latestSurveyDate: string; // Örn: "2026-09"
   expectationsMap: Record<string, number>; // "2026/06" -> 23.81, "2024/12" -> 27.20 vb.
-  commercialLoanRate: number | null; // Güncel Kurumsal Kredi Faizi (TP.KTF10, %)
-  commercialLoanDate: string | null; // Örn: "09-10-2026"
+
+  // Borçlanma ve Kredi Faizleri (TCMB EVDS3)
+  commercialLoanRate: number; // Güncel Kurumsal Kredi Faizi (TP.KTF10, %)
+  commercialLoanDate: string; // Örn: "09-10-2026"
+
+  // Politika Faizi Beklentileri (TCMB EVDS3 PKA)
+  policyRate12m: number; // 12 Ay Sonrası Politika Faizi Beklentisi (TP.PKAUO.S04.D.U, %)
+  policyRateYearEnd: number; // Yıl Sonu Politika Faizi Beklentisi (TP.PKAUO.S04.H.U, %)
+
+  // Döviz Kuru ve Makro Büyüme Beklentileri (TCMB EVDS3 PKA)
+  usdTry12m: number; // 12 Ay Sonrası Dolar Kuru Beklentisi (TP.PKAUO.S05.C.U, TL)
+  gdpGrowth: number; // Yıllık Reel GSYH Büyüme Beklentisi (TP.PKAUO.S07.A.U, %)
+
   source: 'TCMB EVDS3 Canlı' | 'TCMB EVDS3 Önbellek' | 'TCMB Resmi Referans Tabanı';
   isLive: boolean;
   fetchedAt: string;
@@ -50,20 +65,20 @@ export const OFFICIAL_TCMB_INFLATION_BASELINE: Record<string, number> = {
   '2024/09': 27.49,
   '2024/10': 27.44,
   '2024/11': 27.20,
-  '2024/12': 27.20,
+  '2024/12': 27.07,
 
   // 2025 Anket Serisi
-  '2025/01': 26.50,
-  '2025/02': 25.80,
-  '2025/03': 25.40,
-  '2025/04': 25.10,
-  '2025/05': 24.80,
-  '2025/06': 24.50,
-  '2025/07': 24.10,
-  '2025/08': 23.80,
-  '2025/09': 23.50,
-  '2025/10': 23.40,
-  '2025/11': 23.35,
+  '2025/01': 25.38,
+  '2025/02': 25.26,
+  '2025/03': 24.55,
+  '2025/04': 25.56,
+  '2025/05': 25.06,
+  '2025/06': 24.56,
+  '2025/07': 23.39,
+  '2025/08': 22.84,
+  '2025/09': 22.25,
+  '2025/10': 23.26,
+  '2025/11': 23.49,
   '2025/12': 23.35,
 
   // 2026 Anket Serisi (TCMB EVDS3 Resmi Verileri)
@@ -145,7 +160,8 @@ function fetchEvdsJson(urlStr: string, apiKey: string, timeoutMs = 12000): Promi
 }
 
 /**
- * TCMB EVDS3 API üzerinden canlı enflasyon beklentilerini ve ticari kredi faizlerini çeker.
+ * TCMB EVDS3 API üzerinden canlı enflasyon beklentilerini, politika faizi beklentilerini,
+ * ticari kredi faizini, döviz kuru ve büyüme projeksiyonlarını çeker.
  */
 export async function fetchLiveTcmbMacroData(options?: {
   forceRefresh?: boolean;
@@ -169,8 +185,12 @@ export async function fetchLiveTcmbMacroData(options?: {
       latestExpectedInflation: 23.70,
       latestSurveyDate: '2026-09',
       expectationsMap: { ...OFFICIAL_TCMB_INFLATION_BASELINE },
-      commercialLoanRate: 42.0,
+      commercialLoanRate: 62.21,
       commercialLoanDate: 'Referans',
+      policyRate12m: 29.22,
+      policyRateYearEnd: 35.07,
+      usdTry12m: 58.60,
+      gdpGrowth: 3.02,
       source: 'TCMB Resmi Referans Tabanı',
       isLive: false,
       fetchedAt: new Date().toISOString()
@@ -181,23 +201,36 @@ export async function fetchLiveTcmbMacroData(options?: {
   }
 
   try {
-    // 1. Piyasa Katılımcıları Anketi Enflasyon Beklentileri (TP.ENFBEK.PKA12ENF)
-    const inflationUrl = `https://evds3.tcmb.gov.tr/igmevdsms-dis/series=TP.ENFBEK.PKA12ENF-TP.ENFBEK.PKA24ENF&startDate=01-01-2024&endDate=31-12-2026&type=json`;
+    // 1. Piyasa Katılımcıları Anketi Çoklu Makro Serileri (Enflasyon, Politika Faizi, Dolar Kuru, Büyüme)
+    const surveySeries = [
+      'TP.ENFBEK.PKA12ENF',
+      'TP.ENFBEK.PKA24ENF',
+      'TP.PKAUO.S04.D.U', // 12 Ay Politika Faizi
+      'TP.PKAUO.S04.H.U', // Yıl Sonu Politika Faizi
+      'TP.PKAUO.S05.C.U', // 12 Ay USD Kuru
+      'TP.PKAUO.S07.A.U'  // GSYH Büyüme
+    ].join('-');
+
+    const surveyUrl = `https://evds3.tcmb.gov.tr/igmevdsms-dis/series=${surveySeries}&startDate=01-01-2024&endDate=31-12-2026&type=json`;
     
     // 2. Ticari Kredi Faiz Oranı (TP.KTF10)
     const loanUrl = `https://evds3.tcmb.gov.tr/igmevdsms-dis/series=TP.KTF10&startDate=01-08-2026&endDate=31-12-2026&type=json`;
 
-    const [inflationRes, loanRes] = await Promise.all([
-      fetchEvdsJson(inflationUrl, effectiveKey),
+    const [surveyRes, loanRes] = await Promise.all([
+      fetchEvdsJson(surveyUrl, effectiveKey),
       fetchEvdsJson(loanUrl, effectiveKey)
     ]);
 
     const expectationsMap: Record<string, number> = { ...OFFICIAL_TCMB_INFLATION_BASELINE };
     let latest12m = 23.70;
     let latestSurveyDate = '2026-09';
+    let policyRate12m = 29.22;
+    let policyRateYearEnd = 35.07;
+    let usdTry12m = 58.60;
+    let gdpGrowth = 3.02;
 
-    if (inflationRes?.items && Array.isArray(inflationRes.items)) {
-      for (const item of inflationRes.items) {
+    if (surveyRes?.items && Array.isArray(surveyRes.items)) {
+      for (const item of surveyRes.items) {
         const rawDate = String(item.Tarih || '').trim();
         const raw12m = item.TP_ENFBEK_PKA12ENF;
 
@@ -217,6 +250,24 @@ export async function fetchLiveTcmbMacroData(options?: {
               latestSurveyDate = `${yr}-${mo}`;
             }
           }
+        }
+
+        // En son kayıttan faiz, kur ve büyüme beklentilerini al
+        if (item.TP_PKAUO_S04_D_U != null && item.TP_PKAUO_S04_D_U !== '') {
+          const pr12 = parseFloat(String(item.TP_PKAUO_S04_D_U));
+          if (!isNaN(pr12)) policyRate12m = Number(pr12.toFixed(2));
+        }
+        if (item.TP_PKAUO_S04_H_U != null && item.TP_PKAUO_S04_H_U !== '') {
+          const prYe = parseFloat(String(item.TP_PKAUO_S04_H_U));
+          if (!isNaN(prYe)) policyRateYearEnd = Number(prYe.toFixed(2));
+        }
+        if (item.TP_PKAUO_S05_C_U != null && item.TP_PKAUO_S05_C_U !== '') {
+          const usd = parseFloat(String(item.TP_PKAUO_S05_C_U));
+          if (!isNaN(usd)) usdTry12m = Number(usd.toFixed(2));
+        }
+        if (item.TP_PKAUO_S07_A_U != null && item.TP_PKAUO_S07_A_U !== '') {
+          const gdp = parseFloat(String(item.TP_PKAUO_S07_A_U));
+          if (!isNaN(gdp)) gdpGrowth = Number(gdp.toFixed(2));
         }
       }
     }
@@ -241,8 +292,12 @@ export async function fetchLiveTcmbMacroData(options?: {
       latestExpectedInflation: latest12m,
       latestSurveyDate,
       expectationsMap,
-      commercialLoanRate: commercialRate ?? 42.0,
-      commercialLoanDate: commercialDate ?? '2026-10',
+      commercialLoanRate: commercialRate ?? 62.21,
+      commercialLoanDate: commercialDate ?? '09-10-2026',
+      policyRate12m,
+      policyRateYearEnd,
+      usdTry12m,
+      gdpGrowth,
       source: 'TCMB EVDS3 Canlı',
       isLive: true,
       fetchedAt: new Date().toISOString()
@@ -257,8 +312,12 @@ export async function fetchLiveTcmbMacroData(options?: {
       latestExpectedInflation: 23.70,
       latestSurveyDate: '2026-09',
       expectationsMap: { ...OFFICIAL_TCMB_INFLATION_BASELINE },
-      commercialLoanRate: 42.0,
+      commercialLoanRate: 62.21,
       commercialLoanDate: 'Referans',
+      policyRate12m: 29.22,
+      policyRateYearEnd: 35.07,
+      usdTry12m: 58.60,
+      gdpGrowth: 3.02,
       source: 'TCMB Resmi Referans Tabanı',
       isLive: false,
       fetchedAt: new Date().toISOString()
@@ -299,7 +358,7 @@ export function getExpectedInflationForPeriod(
   }
 
   // 3. Yıl bazlı ortalama / en yakın çeyrek
-  if (yr === 2024) return map['2024/12'] ?? 27.20;
+  if (yr === 2024) return map['2024/12'] ?? 27.07;
   if (yr === 2025) return map['2025/12'] ?? 23.35;
 
   return snapshot?.latestExpectedInflation ?? cachedSnapshot?.latestExpectedInflation ?? 23.70;

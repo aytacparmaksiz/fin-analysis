@@ -911,7 +911,13 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
       else if (yr === 2023) { rf = 26.5; erp = 7.0; preTaxKd = 36.0; }
       else if (yr === 2024) { rf = 31.0; erp = 7.5; preTaxKd = 50.0; }
       else if (yr === 2025) { rf = 34.0; erp = 8.56; preTaxKd = 45.0; }
-      else { rf = 38.0; erp = 8.56; preTaxKd = 42.0; }
+      else { 
+        rf = 38.0; 
+        erp = 8.56; 
+        preTaxKd = (macroSnapshot?.commercialLoanRate && macroSnapshot.commercialLoanRate > 20) 
+          ? macroSnapshot.commercialLoanRate 
+          : 62.21; 
+      }
 
       if (parsedTlRate) {
         preTaxKd = parsedTlRate;
@@ -932,7 +938,9 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     let companySpecificKd: number | null = null;
     let kdSource = isForeignCurrency 
       ? `Global Gösterge Borçlanma Faizi (${reportCurrency} SOFR/EURIBOR)`
-      : 'BIST Sektörel / Makro Kurumsal Kredi Göstergesi';
+      : ((yr >= 2026 && macroSnapshot?.commercialLoanRate)
+          ? `TCMB EVDS3 Canlı Ticari Kredi Faizi (%${macroSnapshot.commercialLoanRate} - ${macroSnapshot.commercialLoanDate})`
+          : 'BIST Sektörel / Makro Kurumsal Kredi Göstergesi');
 
     if (intExpense !== null && intExpense > 0 && avgFinDebt > 0) {
       const calculatedKd = (intExpense / avgFinDebt) * annualFactor * 100;
@@ -1031,6 +1039,16 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     item.beta = leveredBeta;
     item.risk_free_rate = rf;
     item.erp = erp;
+
+    // TCMB EVDS3 Canlı Makro Göstergeleri
+    if (macroSnapshot) {
+      item.policy_rate_12m = macroSnapshot.policyRate12m;
+      item.policy_rate_year_end = macroSnapshot.policyRateYearEnd;
+      item.usd_try_12m = macroSnapshot.usdTry12m;
+      item.gdp_growth = macroSnapshot.gdpGrowth;
+      item.commercial_loan_rate = macroSnapshot.commercialLoanRate;
+      item.macro_source = macroSnapshot.source;
+    }
 
     if (item.wacc == null || item.wacc === 0 || isNaN(Number(item.wacc)) || item.wacc === 44.0 || item.wacc === 45.0) {
       item.wacc = computedWacc;
