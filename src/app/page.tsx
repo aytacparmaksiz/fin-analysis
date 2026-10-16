@@ -5986,14 +5986,14 @@ export default function ValuationTerminal({
                             <span className="font-bold text-white">TMS 29 Enflasyon Muhasebesi & Fisher Uyumu: </span>
                             <span className="text-slate-300">
                               Bilançolar endekslendiğinden hesaplanan <strong className="text-cyan-300">%{latestData?.roic != null ? latestData.roic.toFixed(2) : '15,20'} ROIC</strong> reel kârlılıktır.
-                              Nominal WACC (<span className="text-amber-300 font-mono">%{latestData?.nominal_wacc?.toFixed(1) ?? latestData?.wacc?.toFixed(1) ?? '29,6'}</span>) içindeki beklenen enflasyon primi (%{latestData?.expected_inflation ?? 18}), Fisher denklemi <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-200 text-[10px]">(1+WACC_nom) = (1+WACC_reel)×(1+Enf)</code> ile arındırılarak <strong className="text-emerald-400">Reel WACC: %{latestData?.real_wacc?.toFixed(1) ?? '9,8'}</strong> seviyesine normalize edilmiş ve net katma değer <strong className="text-emerald-300 font-mono">+{(latestData?.eva_spread ?? latestSpread ?? 0) > 0 ? '+' : ''}{(latestData?.eva_spread ?? latestSpread ?? 0).toFixed(1)} puan</strong> olarak tespit edilmiştir.
+                              Nominal WACC (<span className="text-amber-300 font-mono">%{latestData?.nominal_wacc?.toFixed(1) ?? latestData?.wacc?.toFixed(1) ?? '29,6'}</span>) içindeki beklenen enflasyon primi (%{latestData?.expected_inflation ?? 18}), Fisher denklemi <code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-200 text-[10px]">(1+WACC_nom) = (1+WACC_reel)×(1+Enf)</code> ile arındırılarak <strong className="text-emerald-400">Reel WACC: %{latestData?.real_wacc?.toFixed(1) ?? '9,8'}</strong> seviyesine normalize edilmiş ve net katma değer <strong className="text-emerald-300 font-mono">{(latestData?.eva_spread ?? latestSpread ?? 0) > 0 ? '+' : ''}{(latestData?.eva_spread ?? latestSpread ?? 0).toFixed(1)} puan</strong> olarak tespit edilmiştir.
                             </span>
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5 self-start md:self-auto flex-shrink-0">
                           <span className="text-[10px] font-semibold text-slate-400 uppercase">Reel Katma Değer:</span>
                           <span className="font-mono text-xs font-bold text-emerald-300 bg-emerald-950 border border-emerald-800/80 px-2 py-0.5 rounded-md">
-                            +{(latestData?.eva_spread ?? latestSpread ?? 0) > 0 ? '+' : ''}{(latestData?.eva_spread ?? latestSpread ?? 0).toFixed(1)} Puan
+                            {(latestData?.eva_spread ?? latestSpread ?? 0) > 0 ? '+' : ''}{(latestData?.eva_spread ?? latestSpread ?? 0).toFixed(1)} Puan
                           </span>
                         </div>
                       </div>
