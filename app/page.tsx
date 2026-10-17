@@ -3922,7 +3922,7 @@ export default function ValuationTerminal({
       </aside>
 
       {/* Sağ Ana Bölüm */}
-      <main className="theme-canvas flex-1 flex flex-col min-w-0 overflow-y-auto bg-slate-950">
+      <main id="main-scroll-container" className="theme-canvas flex-1 flex flex-col min-w-0 overflow-y-auto bg-slate-950">
         <header className="h-12 border-b border-slate-800 px-5 flex items-center justify-between bg-slate-900/95 backdrop-blur-md sticky top-0 z-30 print:hidden">
           <div 
             onClick={() => { setStep('input'); setActiveReportId(null); setError(null); }}
