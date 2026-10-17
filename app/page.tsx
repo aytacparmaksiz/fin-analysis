@@ -13,8 +13,10 @@ import {
   DollarSign, ShieldCheck, ShieldAlert, Activity, Layers, Download, Upload,
   Trophy, Award, Trash2, ArrowUpDown, Filter, Copy, Percent, PieChart, Info,
   PanelLeftClose, PanelLeftOpen, Pin, PinOff, Bookmark,
-  Check, Rocket, Gem, Shield, Sun, Moon, Compass, SlidersHorizontal, Scale, ArrowRight
+  Check, Rocket, Gem, Shield, Sun, Moon, Compass, SlidersHorizontal, Scale, ArrowRight, Sparkles
 } from 'lucide-react';
+
+import SimplyView from './simply/simply-view';
 
 import {
   ResponsiveContainer,
@@ -1145,15 +1147,18 @@ export default function ValuationTerminal({
   initialTicker,
   initialReport,
   initialTab,
+  initialLayout,
 }: {
   initialTicker?: string;
   initialReport?: SavedReport | null;
   initialTab?: 'ozet' | 'overview' | 'fairvalue' | 'tables' | 'multiples' | 'proscons' | 'guidance' | 'report' | 'history';
+  initialLayout?: 'terminal' | 'simply';
 } = {}) {
   // SSR'den gelen initialReport (Yalnızca veritabanında kayıtlı gerçek raporlar)
   const defaultReport = initialReport || null;
 
   const [mounted, setMounted] = useState(false);
+  const [layoutMode, setLayoutMode] = useState<'terminal' | 'simply'>(initialLayout || 'terminal');
   const [ticker, setTicker] = useState(defaultReport?.ticker || initialTicker || '');
   const [price, setPrice] = useState(defaultReport?.price || '');
   const [consensus, setConsensus] = useState('');
@@ -4467,6 +4472,36 @@ export default function ValuationTerminal({
                       );
                     })()}
 
+                    {/* Görünüm Modu Değiştirici: Klasik Terminal vs Simply Wall St */}
+                    <div className="flex items-center rounded-lg bg-slate-950 p-0.5 border border-slate-800 text-xs font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => setLayoutMode('terminal')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition cursor-pointer ${
+                          layoutMode === 'terminal'
+                            ? 'bg-slate-800 text-white shadow-sm'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                        title="Klasik Sekmeli Finansal Terminal"
+                      >
+                        <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
+                        <span className="hidden sm:inline">Terminal</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLayoutMode('simply')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition cursor-pointer ${
+                          layoutMode === 'simply'
+                            ? 'bg-amber-400/20 text-amber-300 border border-amber-400/40 shadow-sm'
+                            : 'text-slate-400 hover:text-amber-300'
+                        }`}
+                        title="Simply Wall St Tarzı Görsel İnfografik ve Kar Tanesi"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>❄️ Simply Wall St</span>
+                      </button>
+                    </div>
+
                     <button
                       type="button"
                       onClick={handleCopyNotebookLM}
@@ -4496,78 +4531,98 @@ export default function ValuationTerminal({
                   </div>
                 </div>
 
-                {/* Alt Şerit: 8'li Kurumsal Fiyat, Adil Değer ve Çarpanlar Barı */}
-                <div className="border-t border-slate-800 bg-slate-950/40 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 divide-y sm:divide-y-0 sm:divide-x divide-slate-800 text-xs">
-                  <div className="px-3.5 py-2.5">
-                    <div className="text-[10px] uppercase font-semibold text-slate-400">Piyasa Fiyatı</div>
-                    <div className="text-sm font-black font-mono text-white mt-0.5">{activeReport.price} TL</div>
-                  </div>
-                  <div className="px-3.5 py-2.5">
-                    <div className="text-[10px] uppercase font-semibold text-slate-400">Adil Değer</div>
-                    <div className="flex items-baseline gap-1.5 mt-0.5">
-                      <span className="text-sm font-black font-mono text-emerald-400">{valuationInfo.fair_value} TL</span>
-                      <span className={`text-[10px] font-mono font-bold ${Number(valuationInfo.discount_pct) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        ({Number(valuationInfo.discount_pct) >= 0 ? '+' : ''}%{valuationInfo.discount_pct})
-                      </span>
+                {/* Alt Şerit: 8'li Kurumsal Fiyat, Adil Değer ve Çarpanlar Barı (Klasik Terminalde) */}
+                {layoutMode === 'terminal' && (
+                  <div className="border-t border-slate-800 bg-slate-950/40 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 divide-y sm:divide-y-0 sm:divide-x divide-slate-800 text-xs">
+                    <div className="px-3.5 py-2.5">
+                      <div className="text-[10px] uppercase font-semibold text-slate-400">Piyasa Fiyatı</div>
+                      <div className="text-sm font-black font-mono text-white mt-0.5">{activeReport.price} TL</div>
+                    </div>
+                    <div className="px-3.5 py-2.5">
+                      <div className="text-[10px] uppercase font-semibold text-slate-400">Adil Değer</div>
+                      <div className="flex items-baseline gap-1.5 mt-0.5">
+                        <span className="text-sm font-black font-mono text-emerald-400">{valuationInfo.fair_value} TL</span>
+                        <span className={`text-[10px] font-mono font-bold ${Number(valuationInfo.discount_pct) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          ({Number(valuationInfo.discount_pct) >= 0 ? '+' : ''}%{valuationInfo.discount_pct})
+                        </span>
+                      </div>
+                    </div>
+                    <div className="px-3.5 py-2.5">
+                      <div className="text-[10px] uppercase font-semibold text-slate-400">F/K</div>
+                      <div className="text-sm font-bold font-mono text-white mt-0.5">
+                        {marketMultiples?.pe != null ? `${marketMultiples.pe.toFixed(2)}x` : (companyMultiplesData.multiples.pe.companyValue != null ? `${companyMultiplesData.multiples.pe.companyValue.toFixed(1)}x` : 'A/D')}
+                      </div>
+                    </div>
+                    <div className="px-3.5 py-2.5">
+                      <div className="text-[10px] uppercase font-semibold text-slate-400">PD/DD</div>
+                      <div className="text-sm font-bold font-mono text-white mt-0.5">
+                        {marketMultiples?.pb != null ? `${marketMultiples.pb.toFixed(2)}x` : (companyMultiplesData.multiples.pb.companyValue != null ? `${companyMultiplesData.multiples.pb.companyValue.toFixed(1)}x` : 'A/D')}
+                      </div>
+                    </div>
+                    <div className="px-3.5 py-2.5">
+                      <div className="text-[10px] uppercase font-semibold text-slate-400">
+                        {isMetricDisabled('ev_ebitda', currentSector) ? (currentSector === 'INSURANCE' ? 'Bileşik Oran' : 'ROE') : 'FD/FAVÖK'}
+                      </div>
+                      <div className="text-sm font-bold font-mono text-white mt-0.5">
+                        {isMetricDisabled('ev_ebitda', currentSector)
+                          ? (currentSector === 'INSURANCE'
+                              ? `%${(computeRatioForPeriod(latestData, 'combined_ratio', currentSector) ?? 81.6).toFixed(1)}`
+                              : `%${(computeRatioForPeriod(latestData, 'roe', currentSector) ?? 32.5).toFixed(1)}`)
+                          : (marketMultiples?.ev_ebitda != null ? `${marketMultiples.ev_ebitda.toFixed(2)}x` : (companyMultiplesData.multiples.evEbitda.companyValue != null ? `${companyMultiplesData.multiples.evEbitda.companyValue.toFixed(1)}x` : '—'))}
+                      </div>
+                    </div>
+                    <div className="px-3.5 py-2.5">
+                      <div className="text-[10px] uppercase font-semibold text-slate-400">
+                        {isMetricDisabled('ev_sales', currentSector) ? (currentSector === 'INSURANCE' ? 'ROE' : 'ROA') : 'FD/Satışlar'}
+                      </div>
+                      <div className="text-sm font-bold font-mono text-white mt-0.5">
+                        {isMetricDisabled('ev_sales', currentSector)
+                          ? (currentSector === 'INSURANCE'
+                              ? `%${(computeRatioForPeriod(latestData, 'roe', currentSector) ?? 48.2).toFixed(1)}`
+                              : `%${(computeRatioForPeriod(latestData, 'roa', currentSector) ?? 3.4).toFixed(2)}`)
+                          : (marketMultiples?.ev_sales != null ? `${marketMultiples.ev_sales.toFixed(2)}x` : (companyMultiplesData.multiples.evSales.companyValue != null ? `${companyMultiplesData.multiples.evSales.companyValue.toFixed(1)}x` : '—'))}
+                      </div>
+                    </div>
+                    <div className="px-3.5 py-2.5">
+                      <div className="text-[10px] uppercase font-semibold text-slate-400">Yabancı Payı</div>
+                      <div className="text-sm font-bold font-mono text-white mt-0.5">
+                        {marketMultiples?.foreign_share_pct != null ? `%${marketMultiples.foreign_share_pct.toFixed(1)}` : '—'}
+                      </div>
+                    </div>
+                    <div className="px-3.5 py-2.5">
+                      <div className="text-[10px] uppercase font-semibold text-slate-400">Piyasa Değeri</div>
+                      <div className="text-sm font-bold font-mono text-white mt-0.5">
+                        {marketMultiples?.market_cap_mn_tl != null
+                          ? (marketMultiples.market_cap_mn_tl >= 1000
+                              ? `${(marketMultiples.market_cap_mn_tl / 1000).toFixed(1)} Mr TL`
+                              : `${marketMultiples.market_cap_mn_tl.toFixed(0)} Mn TL`)
+                          : '—'}
+                      </div>
                     </div>
                   </div>
-                  <div className="px-3.5 py-2.5">
-                    <div className="text-[10px] uppercase font-semibold text-slate-400">F/K</div>
-                    <div className="text-sm font-bold font-mono text-white mt-0.5">
-                      {marketMultiples?.pe != null ? `${marketMultiples.pe.toFixed(2)}x` : (companyMultiplesData.multiples.pe.companyValue != null ? `${companyMultiplesData.multiples.pe.companyValue.toFixed(1)}x` : 'A/D')}
-                    </div>
-                  </div>
-                  <div className="px-3.5 py-2.5">
-                    <div className="text-[10px] uppercase font-semibold text-slate-400">PD/DD</div>
-                    <div className="text-sm font-bold font-mono text-white mt-0.5">
-                      {marketMultiples?.pb != null ? `${marketMultiples.pb.toFixed(2)}x` : (companyMultiplesData.multiples.pb.companyValue != null ? `${companyMultiplesData.multiples.pb.companyValue.toFixed(1)}x` : 'A/D')}
-                    </div>
-                  </div>
-                  <div className="px-3.5 py-2.5">
-                    <div className="text-[10px] uppercase font-semibold text-slate-400">
-                      {isMetricDisabled('ev_ebitda', currentSector) ? (currentSector === 'INSURANCE' ? 'Bileşik Oran' : 'ROE') : 'FD/FAVÖK'}
-                    </div>
-                    <div className="text-sm font-bold font-mono text-white mt-0.5">
-                      {isMetricDisabled('ev_ebitda', currentSector)
-                        ? (currentSector === 'INSURANCE'
-                            ? `%${(computeRatioForPeriod(latestData, 'combined_ratio', currentSector) ?? 81.6).toFixed(1)}`
-                            : `%${(computeRatioForPeriod(latestData, 'roe', currentSector) ?? 32.5).toFixed(1)}`)
-                        : (marketMultiples?.ev_ebitda != null ? `${marketMultiples.ev_ebitda.toFixed(2)}x` : (companyMultiplesData.multiples.evEbitda.companyValue != null ? `${companyMultiplesData.multiples.evEbitda.companyValue.toFixed(1)}x` : '—'))}
-                    </div>
-                  </div>
-                  <div className="px-3.5 py-2.5">
-                    <div className="text-[10px] uppercase font-semibold text-slate-400">
-                      {isMetricDisabled('ev_sales', currentSector) ? (currentSector === 'INSURANCE' ? 'ROE' : 'ROA') : 'FD/Satışlar'}
-                    </div>
-                    <div className="text-sm font-bold font-mono text-white mt-0.5">
-                      {isMetricDisabled('ev_sales', currentSector)
-                        ? (currentSector === 'INSURANCE'
-                            ? `%${(computeRatioForPeriod(latestData, 'roe', currentSector) ?? 48.2).toFixed(1)}`
-                            : `%${(computeRatioForPeriod(latestData, 'roa', currentSector) ?? 3.4).toFixed(2)}`)
-                        : (marketMultiples?.ev_sales != null ? `${marketMultiples.ev_sales.toFixed(2)}x` : (companyMultiplesData.multiples.evSales.companyValue != null ? `${companyMultiplesData.multiples.evSales.companyValue.toFixed(1)}x` : '—'))}
-                    </div>
-                  </div>
-                  <div className="px-3.5 py-2.5">
-                    <div className="text-[10px] uppercase font-semibold text-slate-400">Yabancı Payı</div>
-                    <div className="text-sm font-bold font-mono text-white mt-0.5">
-                      {marketMultiples?.foreign_share_pct != null ? `%${marketMultiples.foreign_share_pct.toFixed(1)}` : '—'}
-                    </div>
-                  </div>
-                  <div className="px-3.5 py-2.5">
-                    <div className="text-[10px] uppercase font-semibold text-slate-400">Piyasa Değeri</div>
-                    <div className="text-sm font-bold font-mono text-white mt-0.5">
-                      {marketMultiples?.market_cap_mn_tl != null
-                        ? (marketMultiples.market_cap_mn_tl >= 1000
-                            ? `${(marketMultiples.market_cap_mn_tl / 1000).toFixed(1)} Mr TL`
-                            : `${marketMultiples.market_cap_mn_tl.toFixed(0)} Mn TL`)
-                        : '—'}
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
 
-              {/* ANA SEKME NAVİGASYONU */}
-              <div className="flex items-center gap-1 overflow-x-auto border-b border-slate-800 bg-slate-900 px-2 rounded-lg print:hidden [scrollbar-width:none]">
+              {/* GÖRÜNÜM MODUNA GÖRE RENDER: SIMPLY WALL ST VS KLASİK TERMİNAL */}
+              {layoutMode === 'simply' ? (
+                <SimplyView
+                  report={activeReport}
+                  savedReports={savedReports}
+                  valuationInfo={valuationInfo}
+                  marketMultiples={marketMultiples}
+                  companyMultiplesData={companyMultiplesData}
+                  currentSector={currentSector}
+                  sectorMeta={sectorMeta}
+                  latestData={latestData}
+                  chartData={chartData}
+                  quarterlyChartData={quarterlyChartData}
+                  onSwitchToTerminal={() => setLayoutMode('terminal')}
+                  onSelectTicker={(tk) => handleBistDirectAnalysis(tk)}
+                />
+              ) : (
+                <>
+                  {/* ANA SEKME NAVİGASYONU */}
+                  <div className="flex items-center gap-1 overflow-x-auto border-b border-slate-800 bg-slate-900 px-2 rounded-lg print:hidden [scrollbar-width:none]">
                 {[
                   { id: 'ozet', label: 'Özet', icon: PieChart },
                   { id: 'overview', label: 'Grafikler', icon: BarChart3 },
@@ -7285,8 +7340,8 @@ export default function ValuationTerminal({
                 </div>
                 </ComponentErrorBoundary>
               )}
-
-
+                </>
+              )}
 
             </div>
           )}
