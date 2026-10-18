@@ -822,17 +822,19 @@ export default function SimplyView({
         key={c.period}
         className={`py-2 px-3 text-right font-mono text-xs ${textStyle} whitespace-nowrap overflow-hidden`}
       >
-        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+        <div className="flex items-center justify-end whitespace-nowrap">
           <span>{currentVal != null ? formatTableNumber(currentVal) : '—'}</span>
-          {isRowHovered && diffPct != null && (
-            <span
-              className={`text-[10px] font-bold ${
-                isGood ? 'text-emerald-400' : 'text-rose-400'
-              } transition-opacity duration-150 inline-block`}
-            >
-              %{diffPct > 0 ? `+${diffPct.toFixed(0)}` : diffPct.toFixed(0)}
-            </span>
-          )}
+          <span className="w-12 flex-shrink-0 text-left pl-1.5 inline-block">
+            {isRowHovered && diffPct != null && (
+              <span
+                className={`text-[10px] font-bold ${
+                  isGood ? 'text-emerald-400' : 'text-rose-400'
+                } transition-opacity duration-150 inline-block`}
+              >
+                %{diffPct > 0 ? `+${diffPct.toFixed(0)}` : diffPct.toFixed(0)}
+              </span>
+            )}
+          </span>
         </div>
       </td>
     );
@@ -1484,10 +1486,10 @@ export default function SimplyView({
                       <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
                       <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => formatMrTl(v, true)} />
                       <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
-                      <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
-                      <Bar dataKey="revenue" name={currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Hasılat'} fill="#3b82f6" radius={[3, 3, 0, 0]} maxBarSize={32} />
-                      <Line type="monotone" dataKey="ebitda" name={currentSector === 'INSURANCE' ? 'Teknik Kâr' : 'FAVÖK'} stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3, fill: '#f59e0b' }} />
-                      <Line type="monotone" dataKey="net_income" name="Net Kâr" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: '#10b981' }} />
+                      <Legend align="left" verticalAlign="bottom" wrapperStyle={{ fontSize: '11px', paddingTop: '8px', paddingLeft: '8px' }} />
+                      <Bar dataKey="revenue" name={currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Hasılat'} fill="#3b82f6" radius={[3, 3, 0, 0]} maxBarSize={32} legendType="square" />
+                      <Line type="monotone" dataKey="ebitda" name={currentSector === 'INSURANCE' ? 'Teknik Kâr' : 'FAVÖK'} stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3, fill: '#f59e0b' }} legendType="line" />
+                      <Line type="monotone" dataKey="net_income" name="Net Kâr" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: '#10b981' }} legendType="line" />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -1508,9 +1510,9 @@ export default function SimplyView({
                       <YAxis yAxisId="left" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => formatMrTl(v, true)} />
                       <YAxis yAxisId="right" orientation="right" stroke="#10b981" tick={{ fontSize: 10, fill: '#34d399' }} tickFormatter={(v) => `${v} TL`} />
                       <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
-                      <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
-                      <Bar yAxisId="left" dataKey="revenue" name={currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Hasılat'} fill="#3b82f6" radius={[3, 3, 0, 0]} maxBarSize={28} />
-                      <Line yAxisId="right" type="monotone" dataKey="share_price" name="Hisse Fiyatı (TL)" stroke="#10b981" strokeWidth={2} dot={{ r: 3, fill: '#10b981' }} />
+                      <Legend align="left" verticalAlign="bottom" wrapperStyle={{ fontSize: '11px', paddingTop: '8px', paddingLeft: '8px' }} />
+                      <Bar yAxisId="left" dataKey="revenue" name={currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Hasılat'} fill="#3b82f6" radius={[3, 3, 0, 0]} maxBarSize={28} legendType="square" />
+                      <Line yAxisId="right" type="monotone" dataKey="share_price" name="Hisse Fiyatı (TL)" stroke="#10b981" strokeWidth={2} dot={{ r: 3, fill: '#10b981' }} legendType="line" />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -1528,10 +1530,10 @@ export default function SimplyView({
                       <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
                       <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => formatMrTl(v, true)} />
                       <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
-                      <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
-                      <Bar dataKey="operating_cash_flow" name="İşletme Nakit Akışı" fill="#06b6d4" radius={[3, 3, 0, 0]} maxBarSize={32} />
-                      <Line type="monotone" dataKey="net_income" name="Net Kâr" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: '#10b981' }} />
-                      <Line type="monotone" dataKey="free_cash_flow" name="Serbest Nakit (FCF)" stroke="#a855f7" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 2.5, fill: '#a855f7' }} />
+                      <Legend align="left" verticalAlign="bottom" wrapperStyle={{ fontSize: '11px', paddingTop: '8px', paddingLeft: '8px' }} />
+                      <Bar dataKey="operating_cash_flow" name="İşletme Nakit Akışı" fill="#06b6d4" radius={[3, 3, 0, 0]} maxBarSize={32} legendType="square" />
+                      <Line type="monotone" dataKey="net_income" name="Net Kâr" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: '#10b981' }} legendType="line" />
+                      <Line type="monotone" dataKey="free_cash_flow" name="Serbest Nakit (FCF)" stroke="#a855f7" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 2.5, fill: '#a855f7' }} legendType="line" />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -1549,10 +1551,10 @@ export default function SimplyView({
                       <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
                       <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => formatMrTl(v, true)} />
                       <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
-                      <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
-                      <Bar dataKey="equity" name="Özkaynaklar" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={32} />
-                      <Line type="monotone" dataKey="cash_and_equivalents" name="Nakit & Benzerleri" stroke="#06b6d4" strokeWidth={2.5} dot={{ r: 3, fill: '#06b6d4' }} />
-                      <Line type="monotone" dataKey="financial_debt" name="Finansal Borçlar" stroke="#f43f5e" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 2.5, fill: '#f43f5e' }} />
+                      <Legend align="left" verticalAlign="bottom" wrapperStyle={{ fontSize: '11px', paddingTop: '8px', paddingLeft: '8px' }} />
+                      <Bar dataKey="equity" name="Özkaynaklar" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={32} legendType="square" />
+                      <Line type="monotone" dataKey="cash_and_equivalents" name="Nakit & Benzerleri" stroke="#06b6d4" strokeWidth={2.5} dot={{ r: 3, fill: '#06b6d4' }} legendType="line" />
+                      <Line type="monotone" dataKey="financial_debt" name="Finansal Borçlar" stroke="#f43f5e" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 2.5, fill: '#f43f5e' }} legendType="line" />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -1743,14 +1745,14 @@ export default function SimplyView({
 
                         return (
                           <th key={c.period} className="p-3 text-right text-slate-300 font-mono text-xs w-[11%] min-w-[105px]">
-                            <div className="flex items-center justify-end gap-1.5">
+                            <div className="flex items-center justify-end whitespace-nowrap">
                               {isFirst && (
                                 <button
                                   type="button"
                                   onClick={() => setPeriodOffset(prev => Math.max(0, prev - 1))}
                                   disabled={!canGoLeft}
                                   title="Daha Güncel Dönemler"
-                                  className={`w-5 h-5 flex items-center justify-center rounded transition ${
+                                  className={`w-5 h-5 mr-1 flex items-center justify-center rounded transition ${
                                     canGoLeft
                                       ? 'bg-[#181b20] hover:bg-[#343b48] text-[#f5c242] cursor-pointer border border-[#383e4d]'
                                       : 'text-slate-600 cursor-not-allowed opacity-20'
@@ -1760,21 +1762,23 @@ export default function SimplyView({
                                 </button>
                               )}
                               <span className="text-white font-bold">{c.period}</span>
-                              {isLast && (
-                                <button
-                                  type="button"
-                                  onClick={() => setPeriodOffset(prev => Math.min(maxPeriodOffset, prev + 1))}
-                                  disabled={!canGoRight}
-                                  title="Geçmiş Dönemler"
-                                  className={`w-5 h-5 flex items-center justify-center rounded transition ${
-                                    canGoRight
-                                      ? 'bg-[#181b20] hover:bg-[#343b48] text-[#f5c242] cursor-pointer border border-[#383e4d]'
-                                      : 'text-slate-600 cursor-not-allowed opacity-20'
-                                  }`}
-                                >
-                                  &gt;
-                                </button>
-                              )}
+                              <span className="w-12 flex-shrink-0 text-left pl-1.5 inline-block">
+                                {isLast && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setPeriodOffset(prev => Math.min(maxPeriodOffset, prev + 1))}
+                                    disabled={!canGoRight}
+                                    title="Geçmiş Dönemler"
+                                    className={`w-5 h-5 flex items-center justify-center rounded transition ${
+                                      canGoRight
+                                        ? 'bg-[#181b20] hover:bg-[#343b48] text-[#f5c242] cursor-pointer border border-[#383e4d]'
+                                        : 'text-slate-600 cursor-not-allowed opacity-20'
+                                    }`}
+                                  >
+                                    &gt;
+                                  </button>
+                                )}
+                              </span>
                             </div>
                           </th>
                         );
@@ -1972,8 +1976,11 @@ export default function SimplyView({
                               {row.label}
                             </td>
                             {visiblePeriods.map((c) => (
-                              <td key={c.period} className={`py-2 px-3 text-right font-mono text-xs font-bold ${row.isHighlight ? 'text-[#f5c242]' : 'text-slate-200'}`}>
-                                {row.calc(c)}
+                              <td key={c.period} className={`py-2 px-3 text-right font-mono text-xs font-bold ${row.isHighlight ? 'text-[#f5c242]' : 'text-slate-200'} whitespace-nowrap overflow-hidden`}>
+                                <div className="flex items-center justify-end whitespace-nowrap">
+                                  <span>{row.calc(c)}</span>
+                                  <span className="w-12 flex-shrink-0" />
+                                </div>
                               </td>
                             ))}
                           </tr>
