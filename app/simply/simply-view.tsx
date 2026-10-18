@@ -266,6 +266,7 @@ export default function SimplyView({
   const [chartPeriodMode, setChartPeriodMode] = useState<'quarterly' | 'ttm'>('quarterly');
   const [reportFontSize, setReportFontSize] = useState<'compact' | 'normal' | 'large'>('normal');
   const [copiedReport, setCopiedReport] = useState(false);
+  const [hoveredRowKey, setHoveredRowKey] = useState<string | null>(null);
 
   // Kurumsal Şirket Profili
   const profile = useMemo(() => {
@@ -779,6 +780,63 @@ export default function SimplyView({
       ]
     }
   ], []);
+
+  // Finansal Tablolar Hücre Çizici (Satır üzerine gelindiğinde %lik artış/azalış, sütun ve satırlar oynamadan)
+  const renderDataCell = (
+    c: any,
+    colIdx: number,
+    valKey: string,
+    fallbackKey?: string,
+    rowKey?: string,
+    isBold = false,
+    isGrandTotal = false,
+    invert = false
+  ) => {
+    const currentVal = c[valKey] ?? c[fallbackKey || ''];
+    const fullIdx = safePeriodOffset + colIdx;
+    const prevCol = fullIdx + 1 < reversedPeriods.length ? reversedPeriods[fullIdx + 1] : null;
+    const prevVal = prevCol ? (prevCol[valKey] ?? prevCol[fallbackKey || '']) : null;
+
+    let diffPct: number | null = null;
+    if (
+      currentVal != null &&
+      prevVal != null &&
+      !isNaN(Number(currentVal)) &&
+      !isNaN(Number(prevVal)) &&
+      Number(prevVal) !== 0
+    ) {
+      diffPct = ((Number(currentVal) - Number(prevVal)) / Math.abs(Number(prevVal))) * 100;
+    }
+
+    const isRowHovered = hoveredRowKey != null && hoveredRowKey === rowKey;
+    const isGood = invert ? (diffPct != null && diffPct <= 0) : (diffPct != null && diffPct >= 0);
+
+    const textStyle = isGrandTotal
+      ? 'font-black text-[#f5c242]'
+      : isBold
+      ? 'font-bold text-white'
+      : 'text-slate-200';
+
+    return (
+      <td
+        key={c.period}
+        className={`py-2 px-3 text-right font-mono text-xs ${textStyle} whitespace-nowrap overflow-hidden`}
+      >
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+          <span>{currentVal != null ? formatTableNumber(currentVal) : '—'}</span>
+          {isRowHovered && diffPct != null && (
+            <span
+              className={`text-[10px] font-bold ${
+                isGood ? 'text-emerald-400' : 'text-rose-400'
+              } transition-opacity duration-150 inline-block`}
+            >
+              %{diffPct > 0 ? `+${diffPct.toFixed(0)}` : diffPct.toFixed(0)}
+            </span>
+          )}
+        </div>
+      </td>
+    );
+  };
 
   // Aktif 4 Grafik Verisi (Tüm tarihsel periyotlar kronolojik sırada)
   const active4ChartsFlowData = chartPeriodMode === 'quarterly' ? quarterlyChartData : chartData;
@@ -1736,67 +1794,64 @@ export default function SimplyView({
 
                         {/* Alt Kalem Satırları */}
                         {sec.rows.map((row) => (
-                          <tr key={row.key} className="hover:bg-[#1f242c]/40 border-b border-[#222730] transition-colors">
+                          <tr
+                            key={row.key}
+                            onMouseEnter={() => setHoveredRowKey(row.key)}
+                            onMouseLeave={() => setHoveredRowKey(null)}
+                            className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
+                          >
                             <td className="py-2 px-3 pl-6 font-sans text-xs text-slate-300 font-normal truncate" title={row.label}>
                               {row.label}
                             </td>
-                            {visiblePeriods.map((c) => {
-                              const val = c[row.key] ?? c[(row as any).fallbackKey || ''];
-                              return (
-                                <td key={c.period} className="py-2 px-3 text-right font-mono text-xs text-slate-200">
-                                  {val != null ? formatTableNumber(val) : '—'}
-                                </td>
-                              );
-                            })}
+                            {visiblePeriods.map((c, colIdx) =>
+                              renderDataCell(c, colIdx, row.key, (row as any).fallbackKey, row.key, false, false, (row as any).invert)
+                            )}
                           </tr>
                         ))}
 
                         {/* Kategori Toplam Satırı */}
-                        <tr className="bg-[#1a1e24] border-t border-b border-[#2e3542]">
+                        <tr
+                          onMouseEnter={() => setHoveredRowKey(`total-${sec.id}`)}
+                          onMouseLeave={() => setHoveredRowKey(null)}
+                          className="bg-[#1a1e24] border-t border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
+                        >
                           <td className="py-2.5 px-3 font-sans font-bold text-white text-xs sm:text-sm truncate">
                             {sec.totalLabel}
                           </td>
-                          {visiblePeriods.map((c) => {
-                            const val = c[sec.totalKey];
-                            return (
-                              <td key={c.period} className="py-2.5 px-3 text-right font-mono font-bold text-white text-xs sm:text-sm">
-                                {val != null ? formatTableNumber(val) : '—'}
-                              </td>
-                            );
-                          })}
+                          {visiblePeriods.map((c, colIdx) =>
+                            renderDataCell(c, colIdx, sec.totalKey, undefined, `total-${sec.id}`, true, false)
+                          )}
                         </tr>
 
                         {/* Genel Toplam Satırı (Aktifler / Yükümlülükler) */}
                         {sec.grandTotalLabel && (
-                          <tr className="bg-[#242a35] border-t-2 border-b-2 border-[#f5c242]/40 font-bold">
+                          <tr
+                            onMouseEnter={() => setHoveredRowKey(`grand-${sec.id}`)}
+                            onMouseLeave={() => setHoveredRowKey(null)}
+                            className="bg-[#242a35] border-t-2 border-b-2 border-[#f5c242]/40 font-bold hover:bg-[#2c3442] transition-colors"
+                          >
                             <td className="py-3 px-3 font-sans font-extrabold text-[#f5c242] text-xs sm:text-sm tracking-wide truncate">
                               {sec.grandTotalLabel}
                             </td>
-                            {visiblePeriods.map((c) => {
-                              const val = c[sec.grandTotalKey];
-                              return (
-                                <td key={c.period} className="py-3 px-3 text-right font-mono font-black text-[#f5c242] text-xs sm:text-sm">
-                                  {val != null ? formatTableNumber(val) : '—'}
-                                </td>
-                              );
-                            })}
+                            {visiblePeriods.map((c, colIdx) =>
+                              renderDataCell(c, colIdx, sec.grandTotalKey, undefined, `grand-${sec.id}`, true, true)
+                            )}
                           </tr>
                         )}
 
                         {/* Ekstra Satır (Örn: Net Borç) */}
                         {sec.extraRow && (
-                          <tr className="bg-[#1a1e24] border-b border-[#2e3542]">
+                          <tr
+                            onMouseEnter={() => setHoveredRowKey(`extra-${sec.id}`)}
+                            onMouseLeave={() => setHoveredRowKey(null)}
+                            className="bg-[#1a1e24] border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
+                          >
                             <td className="py-2 px-3 pl-4 font-sans font-semibold text-slate-300 text-xs truncate">
                               {sec.extraRow.label}
                             </td>
-                            {visiblePeriods.map((c) => {
-                              const val = c[sec.extraRow.key];
-                              return (
-                                <td key={c.period} className="py-2 px-3 text-right font-mono font-bold text-slate-200 text-xs">
-                                  {val != null ? formatTableNumber(val) : '—'}
-                                </td>
-                              );
-                            })}
+                            {visiblePeriods.map((c, colIdx) =>
+                              renderDataCell(c, colIdx, sec.extraRow.key, undefined, `extra-${sec.id}`, true, false, true)
+                            )}
                           </tr>
                         )}
                       </React.Fragment>
@@ -1812,48 +1867,46 @@ export default function SimplyView({
                         </tr>
 
                         {sec.rows.map((row) => (
-                          <tr key={row.key} className="hover:bg-[#1f242c]/40 border-b border-[#222730] transition-colors">
+                          <tr
+                            key={row.key}
+                            onMouseEnter={() => setHoveredRowKey(row.key)}
+                            onMouseLeave={() => setHoveredRowKey(null)}
+                            className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
+                          >
                             <td className="py-2 px-3 pl-6 font-sans text-xs text-slate-300 font-normal truncate" title={row.label}>
                               {row.label}
                             </td>
-                            {visiblePeriods.map((c) => {
-                              const val = c[row.key] ?? c[(row as any).fallbackKey || ''];
-                              return (
-                                <td key={c.period} className="py-2 px-3 text-right font-mono text-xs text-slate-200">
-                                  {val != null ? formatTableNumber(val) : '—'}
-                                </td>
-                              );
-                            })}
+                            {visiblePeriods.map((c, colIdx) =>
+                              renderDataCell(c, colIdx, row.key, (row as any).fallbackKey, row.key, false, false, (row as any).invert)
+                            )}
                           </tr>
                         ))}
 
-                        <tr className="bg-[#1a1e24] border-t border-b border-[#2e3542]">
+                        <tr
+                          onMouseEnter={() => setHoveredRowKey(`total-${sec.id}`)}
+                          onMouseLeave={() => setHoveredRowKey(null)}
+                          className="bg-[#1a1e24] border-t border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
+                        >
                           <td className="py-2.5 px-3 font-sans font-bold text-white text-xs sm:text-sm truncate">
                             {sec.totalLabel}
                           </td>
-                          {visiblePeriods.map((c) => {
-                            const val = c[sec.totalKey];
-                            return (
-                              <td key={c.period} className="py-2.5 px-3 text-right font-mono font-bold text-white text-xs sm:text-sm">
-                                {val != null ? formatTableNumber(val) : '—'}
-                              </td>
-                            );
-                          })}
+                          {visiblePeriods.map((c, colIdx) =>
+                            renderDataCell(c, colIdx, sec.totalKey, undefined, `total-${sec.id}`, true, false)
+                          )}
                         </tr>
 
                         {sec.grandTotalLabel && (
-                          <tr className="bg-[#242a35] border-t-2 border-b-2 border-[#f5c242]/40 font-bold">
+                          <tr
+                            onMouseEnter={() => setHoveredRowKey(`grand-${sec.id}`)}
+                            onMouseLeave={() => setHoveredRowKey(null)}
+                            className="bg-[#242a35] border-t-2 border-b-2 border-[#f5c242]/40 font-bold hover:bg-[#2c3442] transition-colors"
+                          >
                             <td className="py-3 px-3 font-sans font-extrabold text-[#f5c242] text-xs sm:text-sm tracking-wide truncate">
                               {sec.grandTotalLabel}
                             </td>
-                            {visiblePeriods.map((c) => {
-                              const val = c[sec.grandTotalKey];
-                              return (
-                                <td key={c.period} className="py-3 px-3 text-right font-mono font-black text-[#f5c242] text-xs sm:text-sm">
-                                  {val != null ? formatTableNumber(val) : '—'}
-                                </td>
-                              );
-                            })}
+                            {visiblePeriods.map((c, colIdx) =>
+                              renderDataCell(c, colIdx, sec.grandTotalKey, undefined, `grand-${sec.id}`, true, true)
+                            )}
                           </tr>
                         )}
                       </React.Fragment>
@@ -1869,33 +1922,32 @@ export default function SimplyView({
                         </tr>
 
                         {sec.rows.map((row) => (
-                          <tr key={row.key} className="hover:bg-[#1f242c]/40 border-b border-[#222730] transition-colors">
+                          <tr
+                            key={row.key}
+                            onMouseEnter={() => setHoveredRowKey(row.key)}
+                            onMouseLeave={() => setHoveredRowKey(null)}
+                            className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
+                          >
                             <td className="py-2 px-3 pl-6 font-sans text-xs text-slate-300 font-normal truncate" title={row.label}>
                               {row.label}
                             </td>
-                            {visiblePeriods.map((c) => {
-                              const val = c[row.key] ?? c[(row as any).fallbackKey || ''];
-                              return (
-                                <td key={c.period} className="py-2 px-3 text-right font-mono text-xs text-slate-200">
-                                  {val != null ? formatTableNumber(val) : '—'}
-                                </td>
-                              );
-                            })}
+                            {visiblePeriods.map((c, colIdx) =>
+                              renderDataCell(c, colIdx, row.key, (row as any).fallbackKey, row.key, false, false, (row as any).invert)
+                            )}
                           </tr>
                         ))}
 
-                        <tr className="bg-[#1a1e24] border-t border-b border-[#2e3542]">
+                        <tr
+                          onMouseEnter={() => setHoveredRowKey(`total-${sec.id}`)}
+                          onMouseLeave={() => setHoveredRowKey(null)}
+                          className="bg-[#1a1e24] border-t border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
+                        >
                           <td className="py-2.5 px-3 font-sans font-bold text-white text-xs sm:text-sm truncate">
                             {sec.totalLabel}
                           </td>
-                          {visiblePeriods.map((c) => {
-                            const val = c[sec.totalKey];
-                            return (
-                              <td key={c.period} className="py-2.5 px-3 text-right font-mono font-bold text-white text-xs sm:text-sm">
-                                {val != null ? formatTableNumber(val) : '—'}
-                              </td>
-                            );
-                          })}
+                          {visiblePeriods.map((c, colIdx) =>
+                            renderDataCell(c, colIdx, sec.totalKey, undefined, `total-${sec.id}`, true, false)
+                          )}
                         </tr>
                       </React.Fragment>
                     ))}
@@ -1910,7 +1962,12 @@ export default function SimplyView({
                         </tr>
 
                         {sec.rows.map((row, idx) => (
-                          <tr key={idx} className="hover:bg-[#1f242c]/40 border-b border-[#222730] transition-colors">
+                          <tr
+                            key={idx}
+                            onMouseEnter={() => setHoveredRowKey(`ratio-${sec.id}-${idx}`)}
+                            onMouseLeave={() => setHoveredRowKey(null)}
+                            className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
+                          >
                             <td className={`py-2 px-3 pl-6 font-sans text-xs truncate ${row.isHighlight ? 'font-bold text-white' : 'font-normal text-slate-300'}`} title={row.label}>
                               {row.label}
                             </td>
