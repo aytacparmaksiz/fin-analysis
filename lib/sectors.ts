@@ -8,7 +8,8 @@ export type SectorType =
   | 'RETAIL'
   | 'UTILITIES_TELCO'
   | 'FINANCIAL_SERVICES'
-  | 'TECH';
+  | 'TECH'
+  | 'HEALTHCARE';
 
 export type FinancialArchetype =
   | 'INDUSTRIAL'          // A) REEL SEKTÖR & SANAYİ (Otomotiv, Kimya, Çimento, Demir-Çelik, Teknoloji)
@@ -380,6 +381,21 @@ export const SECTOR_SCORING_CONFIG: Record<SectorType, SectorScoringDefinition> 
       idealMarginOfSafety: 30.0,
     },
   },
+  HEALTHCARE: {
+    sector: 'HEALTHCARE',
+    categories: [
+      { key: 'financial_health', name: 'Finansal Sağlık & Borçluluk', maxScore: 25, description: 'Net Borç / FAVÖK (<3.0x) ve cari oran likidite dengesi' },
+      { key: 'capital_efficiency', name: 'Sermaye Verimliliği (ROIC > WACC)', maxScore: 25, description: 'Yatırılan hastane/tıbbi sermayenin reel getiri gücü' },
+      { key: 'cash_flow_quality', name: 'Nakit Akış Kalitesi (OCF & FCF)', maxScore: 25, description: 'Hasta tahsilatları ve medikal CapEx sonrası serbest nakit üretimi' },
+      { key: 'growth_moat', name: 'Sağlık Büyümesi & Fiyatlama Gücü', maxScore: 25, description: 'Sağlık turizmi döviz gelirleri ve reel hasta başı ciro artışı' },
+    ],
+    riskThresholds: {
+      criticalDebtRatio: 4.0,
+      minLiquidityRatio: 0.9,
+      minMarginOfSafety: 20.0,
+      idealMarginOfSafety: 30.0,
+    },
+  },
 };
 
 export const SECTOR_DEFINITIONS: Record<SectorType, SectorDefinition> = {
@@ -523,7 +539,33 @@ export const SECTOR_DEFINITIONS: Record<SectorType, SectorDefinition> = {
     valuationMultiples: 'FD/FAVÖK (EV/EBITDA), F/K & FD/Satışlar',
     primaryEfficiencyMetric: 'ROIC vs WACC Sermaye Makası',
   },
+  HEALTHCARE: {
+    id: 'HEALTHCARE',
+    title: 'Sağlık Hizmetleri & Hastane İşletmeciliği',
+    badge: 'Sağlık / Hastane & İlaç Modu',
+    description: 'Özel hastane işletmeciliği, sağlık turizmi ve medikal hizmetlerde hasta sayısı, yatak kapasitesi, FAVÖK marjı, net borç/FAVÖK ve ROIC sermaye verimliliği esastır.',
+    revenueLabel: 'Sağlık Gelirleri (Hasılat)',
+    revenueSublabel: 'Medikal Hizmetler, Ameliyat ve Yatan Hasta Gelirleri',
+    operatingProfitLabel: 'FAVÖK (EBITDA)',
+    operatingProfitSublabel: 'Sağlık Operasyonları Kârı (EBITDA)',
+    marginLabel: 'FAVÖK Marjı (%)',
+    marginSublabel: 'FAVÖK / Sağlık Gelirleri',
+    valuationMultiples: 'FD/FAVÖK (EV/EBITDA), F/K & FD/Satışlar',
+    primaryEfficiencyMetric: 'ROIC vs WACC & Hasta Başı Ciro',
+  },
 };
+
+export const BIST_HEALTHCARE_TICKERS = [
+  'MPARK',
+  'LKMNH',
+  'TNZTP',
+  'MEDTR',
+  'SELEC',
+  'GENIL',
+  'TRILC',
+  'DEVA',
+  'RTALB',
+];
 
 export const BIST_AVIATION_TICKERS = [
   'THYAO',
@@ -727,6 +769,9 @@ export function detectSector(ticker: string, contextText = ''): SectorType {
   if (BIST_TECH_TICKERS.includes(cleanTicker)) {
     return 'TECH';
   }
+  if (BIST_HEALTHCARE_TICKERS.includes(cleanTicker)) {
+    return 'HEALTHCARE';
+  }
 
   // 2. Türkçe ve bağlam metni analizi
   const text = (cleanTicker + ' ' + contextText)
@@ -839,6 +884,20 @@ export function detectSector(ticker: string, contextText = ''): SectorType {
     text.includes('ar-ge')
   ) {
     return 'TECH';
+  }
+
+  if (
+    text.includes('sağlık') ||
+    text.includes('hastane') ||
+    text.includes('medikal') ||
+    text.includes('klinik') ||
+    text.includes('tıp merkezi') ||
+    text.includes('hasta') ||
+    text.includes('tedavi') ||
+    text.includes('ilaç') ||
+    text.includes('ecza')
+  ) {
+    return 'HEALTHCARE';
   }
 
   return 'INDUSTRIAL';
