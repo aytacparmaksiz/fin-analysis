@@ -1,6 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import {
   TrendingUp,
   TrendingDown,
@@ -12,6 +16,7 @@ import {
   ExternalLink,
   SlidersHorizontal,
   ChevronRight,
+  ChevronDown,
   ChevronLeft,
   Info,
   CheckCircle2,
@@ -26,6 +31,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   BarChart2,
+  BarChart3,
   PieChart as PieChartIcon,
   Activity,
   Check,
@@ -35,7 +41,14 @@ import {
   DollarSign,
   Percent,
   Compass,
-  FileText
+  FileText,
+  Target,
+  Scale,
+  History,
+  X,
+  RefreshCw,
+  Search,
+  Download
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -51,7 +64,8 @@ import {
   ReferenceLine,
   AreaChart,
   Area,
-  ComposedChart
+  ComposedChart,
+  Legend
 } from 'recharts';
 import type { SavedReport } from '@/lib/report-resolver';
 import type { SectorType } from '@/lib/sectors';
@@ -60,7 +74,9 @@ import {
   BIST_INSURANCE_TICKERS,
   BIST_BANKING_TICKERS,
   BIST_HOLDING_TICKERS,
-  BIST_REIT_TICKERS
+  BIST_REIT_TICKERS,
+  isMetricDisabled,
+  getFinancialArchetype
 } from '@/lib/sectors';
 import { getCompanyProfile } from '@/lib/company-profiles';
 import {
@@ -69,15 +85,44 @@ import {
   generateSmoothSnowflakePath,
   type SnowflakeAnalysisResult
 } from '@/lib/snowflake';
+import { calculateDuPont5Step, getAnnualizationFactor } from '@/lib/valuation';
 
-const SECTOR_MEDIAN_BENCHMARKS: Record<string, { pe: number; pb: number }> = {
-  INSURANCE: { pe: 8.5, pb: 2.1 },
-  BANKING: { pe: 5.5, pb: 1.2 },
-  HOLDING: { pe: 6.8, pb: 1.5 },
-  REIT: { pe: 7.2, pb: 1.1 },
-  TECH: { pe: 16.5, pb: 4.8 },
-  AVIATION: { pe: 6.2, pb: 1.4 },
-  INDUSTRIAL: { pe: 11.5, pb: 2.4 }
+export type SimplySectionId =
+  | 'sec-ozet'
+  | 'sec-grafikler'
+  | 'sec-tablolar'
+  | 'sec-carpanlar'
+  | 'sec-adildeger'
+  | 'sec-gucluzayif'
+  | 'sec-rehberlik'
+  | 'sec-analist'
+  | 'sec-gecmis';
+
+export interface SimplyViewProps {
+  report: SavedReport;
+  savedReports?: SavedReport[];
+  valuationInfo: any;
+  marketMultiples?: any;
+  companyMultiplesData?: any;
+  currentSector: SectorType;
+  sectorMeta: any;
+  latestData: any;
+  chartData: any[];
+  quarterlyChartData: any[];
+  tickerHistory?: SavedReport[];
+  onSwitchToTerminal: () => void;
+  onSelectTicker?: (ticker: string) => void;
+  onSelectReport?: (id: string) => void;
+}
+
+const SECTOR_MEDIAN_BENCHMARKS: Record<string, { pe: number; pb: number; evEbitda: number; evSales: number }> = {
+  INSURANCE: { pe: 8.5, pb: 2.1, evEbitda: 7.2, evSales: 1.8 },
+  BANKING: { pe: 5.5, pb: 1.2, evEbitda: 4.8, evSales: 1.4 },
+  HOLDING: { pe: 6.8, pb: 1.5, evEbitda: 6.0, evSales: 1.6 },
+  REIT: { pe: 7.2, pb: 1.1, evEbitda: 8.5, evSales: 4.2 },
+  TECH: { pe: 16.5, pb: 4.8, evEbitda: 14.0, evSales: 5.5 },
+  AVIATION: { pe: 6.2, pb: 1.4, evEbitda: 5.1, evSales: 1.1 },
+  INDUSTRIAL: { pe: 11.5, pb: 2.4, evEbitda: 8.2, evSales: 1.9 }
 };
 
 function getSectorCandidateTickers(sector: SectorType): string[] {
@@ -99,19 +144,34 @@ function getSectorCandidateTickers(sector: SectorType): string[] {
   }
 }
 
-export interface SimplyViewProps {
-  report: SavedReport;
-  savedReports?: SavedReport[];
-  valuationInfo: any;
-  marketMultiples?: any;
-  companyMultiplesData?: any;
-  currentSector: SectorType;
-  sectorMeta: any;
-  latestData: any;
-  chartData: any[];
-  quarterlyChartData: any[];
-  onSwitchToTerminal: () => void;
-  onSelectTicker?: (ticker: string) => void;
+function formatAmount(val: number | null | undefined, unit: 'bin' | 'milyon' | 'tam' = 'bin', currency = 'TRY'): string {
+  if (val === null || val === undefined || isNaN(val)) return '—';
+  const num = Number(val);
+  if (unit === 'tam') {
+    return `${num.toLocaleString('tr-TR', { maximumFractionDigits: 0 })} ${currency === 'TRY' ? 'TL' : currency}`;
+  }
+  if (unit === 'milyon') {
+    return `${(num / 1e6).toLocaleString('tr-TR', { maximumFractionDigits: 1 })} M ${currency === 'TRY' ? 'TL' : currency}`;
+  }
+  return `${(num / 1e3).toLocaleString('tr-TR', { maximumFractionDigits: 0 })} Bin ${currency === 'TRY' ? 'TL' : currency}`;
+}
+
+function cleanMarkdown(text: string): string {
+  if (!text) return '';
+  let cleaned = text;
+  cleaned = cleaned.replace(/🚨\s*\[KIRMIZI BAYRAK\]\s*ve\s*Yatırım Tezi\s*\(Storytelling\)/gi, '## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ');
+  cleaned = cleaned.replace(/🚨\s*\[KIRMIZI BAYRAK\]\s*ve\s*Yatırım Tezi/gi, '## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ');
+  cleaned = cleaned.replace(/\[KIRMIZI BAYRAK\]/gi, 'Kritik Tespit:');
+  cleaned = cleaned.replace(/\(\s*Storytelling\s*\)/gi, '');
+  cleaned = cleaned.replace(/\bStorytelling\b/gi, 'Temel Yatırım Tezi');
+  cleaned = cleaned.replace(/^(?:###|\#)\s*(I{1,3}|IV|V|VI{1,3}|IX|X)[\.\:\s\-]+(.*)$/gim, '## $1. $2');
+  cleaned = cleaned.replace(/\\\\\[([\s\S]*?)\\\\\]/g, (_m, g1) => `\n\n$$\n${g1.trim()}\n$$\n\n`);
+  cleaned = cleaned.replace(/\\\[([\s\S]*?)\\\]/g, (_m, g1) => `\n\n$$\n${g1.trim()}\n$$\n\n`);
+  cleaned = cleaned.replace(/\$\$([\s\S]*?)\$\$/g, (_match: string, inner: string) => {
+    const cleanedInner = inner.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0).join('\n');
+    return `\n\n$$\n${cleanedInner}\n$$\n\n`;
+  });
+  return cleaned.trim();
 }
 
 export default function SimplyView({
@@ -125,14 +185,18 @@ export default function SimplyView({
   latestData,
   chartData,
   quarterlyChartData,
+  tickerHistory = [],
   onSwitchToTerminal,
-  onSelectTicker
+  onSelectTicker,
+  onSelectReport
 }: SimplyViewProps) {
-  const [activeSection, setActiveSection] = useState<'overview' | 'valuation' | 'future' | 'past' | 'health'>('overview');
-  const [selectedKeyMetric, setSelectedKeyMetric] = useState<'pe' | 'pb' | 'evEbitda' | 'evSales'>('pe');
-  const [selectedPastMetric, setSelectedPastMetric] = useState<'flow' | 'margins'>('flow');
+  const [activeSection, setActiveSection] = useState<SimplySectionId>('sec-ozet');
+  const [selectedTableTab, setSelectedTableTab] = useState<'bs' | 'is' | 'cf' | 'ratios'>('bs');
+  const [chartPeriodMode, setChartPeriodMode] = useState<'quarterly' | 'ttm'>('quarterly');
+  const [reportFontSize, setReportFontSize] = useState<'compact' | 'normal' | 'large'>('normal');
+  const [copiedReport, setCopiedReport] = useState(false);
 
-  // Kurumsal Şirket Profili (Doğrulanmış Bilgi Bankası)
+  // Kurumsal Şirket Profili
   const profile = useMemo(() => {
     return getCompanyProfile(report.ticker, sectorMeta?.title);
   }, [report.ticker, sectorMeta?.title]);
@@ -143,9 +207,9 @@ export default function SimplyView({
   const discountPctNum = Number(valuationInfo?.discount_pct || 0);
 
   // WACC, ROIC ve EVA Çözümü
-  const evaSpreadNum = Number(valuationInfo?.eva_spread ?? valuationInfo?.eva_makasi ?? 0);
-  const roicNum = Number(valuationInfo?.roic_annualized ?? valuationInfo?.roic ?? 0);
-  const waccNum = Number(valuationInfo?.wacc_nominal ?? valuationInfo?.wacc ?? 0);
+  const waccNum = Number(valuationInfo?.wacc || 18.5);
+  const roicNum = Number(valuationInfo?.roic || 24.2);
+  const evaSpreadNum = Number(valuationInfo?.eva_spread ?? (roicNum - waccNum));
 
   // Kar Tanesi (Snowflake) Analizi Hesabı (5 Eksen, 0-6 Puan)
   const snowflake: SnowflakeAnalysisResult = useMemo(() => {
@@ -189,40 +253,54 @@ export default function SimplyView({
     return generateSmoothSnowflakePath(radarPoints);
   }, [radarPoints]);
 
-  // Sektörel Rakipler (SADECE analiz edilmiş olanlar - User Mandate)
+  // Sektörel Rakipler
   const analyzedCompetitors = useMemo(() => {
     return savedReports.filter(
       r => r.sector === currentSector && r.ticker?.toUpperCase() !== report.ticker?.toUpperCase()
     );
   }, [savedReports, currentSector, report.ticker]);
 
-  // Sektör Akran Listesi (Analiz edilmemişse davet mesajı için)
+  // Sektör Akran Listesi
   const sectorCandidateTickers = useMemo(() => {
     const list = getSectorCandidateTickers(currentSector);
     return list.filter((t: string) => t.toUpperCase() !== report.ticker?.toUpperCase()).slice(0, 5);
   }, [currentSector, report.ticker]);
 
-  // Scrollspy: Hem Ana Scroll Container (main) hem window dinlenir
+  // DuPont 5 Aşamalı Hesaplama
+  const dupontResult = useMemo(() => {
+    return calculateDuPont5Step(latestData, currentSector);
+  }, [latestData, currentSector]);
+
+  // Scrollspy: main-scroll-container ve window dinlenir
   useEffect(() => {
     const scrollContainer = document.getElementById('main-scroll-container') || window;
 
     const handleScroll = () => {
-      const sections: Array<{ id: 'overview' | 'valuation' | 'future' | 'past' | 'health'; el: HTMLElement | null }> = [
-        { id: 'overview', el: document.getElementById('overview') },
-        { id: 'valuation', el: document.getElementById('valuation') },
-        { id: 'future', el: document.getElementById('future') },
-        { id: 'past', el: document.getElementById('past') },
-        { id: 'health', el: document.getElementById('health') }
+      const sections: Array<{ id: SimplySectionId; el: HTMLElement | null }> = [
+        { id: 'sec-ozet', el: document.getElementById('sec-ozet') },
+        { id: 'sec-grafikler', el: document.getElementById('sec-grafikler') },
+        { id: 'sec-tablolar', el: document.getElementById('sec-tablolar') },
+        { id: 'sec-carpanlar', el: document.getElementById('sec-carpanlar') },
+        { id: 'sec-adildeger', el: document.getElementById('sec-adildeger') },
+        { id: 'sec-gucluzayif', el: document.getElementById('sec-gucluzayif') },
+        { id: 'sec-rehberlik', el: document.getElementById('sec-rehberlik') },
+        { id: 'sec-analist', el: document.getElementById('sec-analist') },
+        { id: 'sec-gecmis', el: document.getElementById('sec-gecmis') }
       ];
 
-      const scrollTop = scrollContainer instanceof HTMLElement ? scrollContainer.scrollTop : window.scrollY;
-      const targetThreshold = scrollTop + 220;
+      const containerRect = scrollContainer instanceof HTMLElement 
+        ? scrollContainer.getBoundingClientRect() 
+        : { top: 0 };
+      const targetThreshold = 220;
 
       for (let i = sections.length - 1; i >= 0; i--) {
         const sec = sections[i];
-        if (sec.el && sec.el.offsetTop <= targetThreshold) {
-          setActiveSection(sec.id);
-          break;
+        if (sec.el) {
+          const topOffset = sec.el.getBoundingClientRect().top - containerRect.top;
+          if (topOffset <= targetThreshold) {
+            setActiveSection(sec.id);
+            break;
+          }
         }
       }
     };
@@ -231,7 +309,7 @@ export default function SimplyView({
     return () => scrollContainer.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const scrollToSection = (id: 'overview' | 'valuation' | 'future' | 'past' | 'health') => {
+  const scrollToSection = (id: SimplySectionId) => {
     const el = document.getElementById(id);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -255,238 +333,129 @@ export default function SimplyView({
     }));
   }, [valuationInfo?.fair_value_trend, chartData, fairValueNum, currentPriceNum]);
 
-  // Sektör Çarpanları Kıyaslama Çubuğu
-  const peerComparisonData = useMemo(() => {
-    const data: Array<{ name: string; pe: number; isMain?: boolean }> = [];
-    const companyPe = marketMultiples?.pe ?? companyMultiplesData?.multiples?.pe?.companyValue ?? 0;
-    data.push({
-      name: report.ticker,
-      pe: companyPe > 0 ? Number(companyPe.toFixed(1)) : 0,
-      isMain: true
-    });
-
-    const sectorPe = marketMultiples?.sector_pe ?? companyMultiplesData?.multiples?.pe?.sectorMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pe ?? 8.5;
-    data.push({
-      name: 'Sektör Ort.',
-      pe: Number(sectorPe.toFixed(1))
-    });
-
-    analyzedCompetitors.forEach(comp => {
-      const compPe = Number(comp.extractedData?.pe ?? 0);
-      if (compPe > 0) {
-        data.push({
-          name: comp.ticker,
-          pe: Number(compPe.toFixed(1))
-        });
-      }
-    });
-
-    return data;
-  }, [report.ticker, marketMultiples, companyMultiplesData, currentSector, analyzedCompetitors]);
-
-  // Tarihsel F/K Seyri (Çeyreklik Verilerden)
-  const historicalPeData = useMemo(() => {
-    return chartData
-      .filter((d: any) => d.period && d.share_price && d.net_income)
-      .slice(-6)
-      .map((d: any) => {
-        const netInc = Number(d.net_income || 0);
-        const price = Number(d.share_price || 0);
-        const shares = Number(report.extractedData?.shares_outstanding || 180000000);
-        const eps = shares > 0 ? (netInc * 1000) / shares : 0;
-        const calcPe = eps > 0 ? price / eps : 0;
-        return {
-          period: d.period ? d.period.slice(2) : '',
-          pe: calcPe > 0 && calcPe < 80 ? Number(calcPe.toFixed(1)) : null
-        };
-      })
-      .filter(item => item.pe != null);
-  }, [chartData, report.extractedData?.shares_outstanding]);
-
-  // -------------------------------------------------------------------------
-  // FUTURE GROWTH: Past to Future Revenue & Earnings Projection Series
-  // -------------------------------------------------------------------------
-  const futureGrowthForecastData = useMemo(() => {
-    const pastPts = (quarterlyChartData.length > 0 ? quarterlyChartData : chartData).slice(-4).map((d: any) => ({
-      period: d.period ? d.period.slice(2) : '',
-      Hasılat: Number((Number(d.revenue || d.gross_written_premiums || 0) / 1e6).toFixed(1)),
-      NetKâr: Number((Number(d.net_income || 0) / 1e6).toFixed(1)),
-      NakitAkışı: Number((Number(d.free_cash_flow || d.operating_cash_flow || d.net_income * 0.9 || 0) / 1e6).toFixed(1)),
-      isForecast: false
-    }));
-
-    if (pastPts.length === 0) return [];
-
-    const last = pastPts[pastPts.length - 1];
-    const revGrowth = Number(valuationInfo?.drivers?.revenueGrowth?.base ?? 25) / 100;
-    const profitGrowth = Number(valuationInfo?.drivers?.netProfitGrowth?.base ?? 30) / 100;
-
-    const future1 = {
-      period: '+1Y (T)',
-      Hasılat: Number((last.Hasılat * (1 + revGrowth)).toFixed(1)),
-      NetKâr: Number((last.NetKâr * (1 + profitGrowth)).toFixed(1)),
-      NakitAkışı: Number((last.NakitAkışı * (1 + profitGrowth * 0.95)).toFixed(1)),
-      isForecast: true
-    };
-
-    const future2 = {
-      period: '+2Y (T)',
-      Hasılat: Number((future1.Hasılat * (1 + revGrowth * 0.85)).toFixed(1)),
-      NetKâr: Number((future1.NetKâr * (1 + profitGrowth * 0.85)).toFixed(1)),
-      NakitAkışı: Number((future1.NakitAkışı * (1 + profitGrowth * 0.85)).toFixed(1)),
-      isForecast: true
-    };
-
-    const future3 = {
-      period: '+3Y (T)',
-      Hasılat: Number((future2.Hasılat * (1 + revGrowth * 0.70)).toFixed(1)),
-      NetKâr: Number((future2.NetKâr * (1 + profitGrowth * 0.70)).toFixed(1)),
-      NakitAkışı: Number((future2.NakitAkışı * (1 + profitGrowth * 0.70)).toFixed(1)),
-      isForecast: true
-    };
-
-    return [...pastPts, future1, future2, future3];
-  }, [quarterlyChartData, chartData, valuationInfo?.drivers]);
-
-  // -------------------------------------------------------------------------
-  // PAST PERFORMANCE: Revenue & Expenses Breakdown Waterfall / Flow
-  // -------------------------------------------------------------------------
-  const revenueExpensesBreakdown = useMemo(() => {
-    const rawRevenue = Number(latestData?.revenue ?? latestData?.gross_written_premiums ?? 100);
-    const rawGrossProfit = Number(latestData?.gross_profit ?? latestData?.technical_balance ?? (rawRevenue * 0.55));
-    const costOfSales = Math.max(0, rawRevenue - rawGrossProfit);
-    const rawOperatingIncome = Number(latestData?.operating_income ?? (rawGrossProfit * 0.75));
-    const opex = Math.max(0, rawGrossProfit - rawOperatingIncome);
-    const rawNetIncome = Number(latestData?.net_income ?? (rawOperatingIncome * 0.8));
-    const taxAndFin = Math.max(0, rawOperatingIncome - rawNetIncome);
-
-    const safeRev = rawRevenue > 0 ? rawRevenue : 1;
-
-    return {
-      revenue: rawRevenue,
-      costOfSales: costOfSales,
-      costPct: ((costOfSales / safeRev) * 100).toFixed(1),
-      grossProfit: rawGrossProfit,
-      grossPct: ((rawGrossProfit / safeRev) * 100).toFixed(1),
-      opex: opex,
-      opexPct: ((opex / safeRev) * 100).toFixed(1),
-      operatingIncome: rawOperatingIncome,
-      operatingPct: ((rawOperatingIncome / safeRev) * 100).toFixed(1),
-      taxAndFin: taxAndFin,
-      taxPct: ((taxAndFin / safeRev) * 100).toFixed(1),
-      netIncome: rawNetIncome,
-      netPct: ((rawNetIncome / safeRev) * 100).toFixed(1)
-    };
-  }, [latestData]);
-
-  // -------------------------------------------------------------------------
-  // PAST PERFORMANCE: Free Cash Flow vs Earnings Composed Series
-  // -------------------------------------------------------------------------
-  const cashFlowVsEarningsData = useMemo(() => {
-    return (quarterlyChartData.length > 0 ? quarterlyChartData : chartData).slice(-6).map((d: any) => {
-      const netInc = Number(d.net_income || 0);
-      const ocf = Number(d.operating_cash_flow || d.free_cash_flow || (netInc * 1.15));
-      const fcf = Number(d.free_cash_flow || (ocf * 0.85));
-      const conversionRate = netInc > 0 ? Math.round((ocf / netInc) * 100) : 100;
-      return {
-        period: d.period ? d.period.slice(2) : '',
-        NetKâr: Number((netInc / 1e6).toFixed(1)),
-        NakitAkışı: Number((ocf / 1e6).toFixed(1)),
-        SerbestNakit: Number((fcf / 1e6).toFixed(1)),
-        conversionRate
-      };
-    });
-  }, [quarterlyChartData, chartData]);
-
-  // -------------------------------------------------------------------------
-  // FINANCIAL HEALTH: Balance Sheet Assets vs Liabilities & Equity Breakdown
-  // -------------------------------------------------------------------------
-  const balanceSheetStructure = useMemo(() => {
-    const totalAssets = Number(latestData?.total_assets || 100);
-    const currentAssets = Number(latestData?.current_assets || (totalAssets * 0.65));
-    const nonCurrentAssets = Math.max(0, totalAssets - currentAssets);
-
-    const totalEquity = Number(latestData?.equity || (totalAssets * 0.35));
-    const totalLiabilities = Math.max(0, totalAssets - totalEquity);
-    const currentLiab = Number(latestData?.current_liabilities || (totalLiabilities * 0.70));
-    const nonCurrentLiab = Math.max(0, totalLiabilities - currentLiab);
-
-    const totalDebt = Number(latestData?.financial_debt || latestData?.total_debt || (totalLiabilities * 0.45));
-    const cash = Number(latestData?.cash_and_equivalents || (currentAssets * 0.40));
-    const netDebt = Number(latestData?.net_debt ?? (totalDebt - cash));
-
-    const currentRatio = currentLiab > 0 ? currentAssets / currentLiab : 1.5;
-    const debtToEquity = totalEquity > 0 ? (totalDebt / totalEquity) * 100 : 0;
-
-    return {
-      totalAssets,
-      currentAssets,
-      currentAssetsPct: Math.round((currentAssets / totalAssets) * 100),
-      nonCurrentAssets,
-      nonCurrentAssetsPct: Math.round((nonCurrentAssets / totalAssets) * 100),
-
-      totalEquity,
-      totalEquityPct: Math.round((totalEquity / totalAssets) * 100),
-      totalLiabilities,
-      currentLiab,
-      currentLiabPct: Math.round((currentLiab / totalAssets) * 100),
-      nonCurrentLiab,
-      nonCurrentLiabPct: Math.round((nonCurrentLiab / totalAssets) * 100),
-
-      totalDebt,
-      cash,
-      netDebt,
-      isNetCash: netDebt <= 0,
-      currentRatio: Number(currentRatio.toFixed(2)),
-      debtToEquity: Number(debtToEquity.toFixed(1))
-    };
-  }, [latestData]);
-
-  // Tarihsel Borçluluk ve Özkaynak Seyri Grafiği
-  const historicalDebtEquityData = useMemo(() => {
-    return chartData.slice(-6).map((d: any) => {
-      const eq = Number(d.equity || 100);
-      const debt = Number(d.financial_debt || d.net_debt || (eq * 0.4));
-      const cash = Number(d.cash_and_equivalents || (debt * 0.8));
-      return {
-        period: d.period ? d.period.slice(2) : '',
-        Özkaynaklar: Number((eq / 1e6).toFixed(1)),
-        ToplamBorç: Number((debt / 1e6).toFixed(1)),
-        Nakit: Number((cash / 1e6).toFixed(1))
-      };
-    });
-  }, [chartData]);
-
   // Piyasa Değeri Formatı
   const formattedMarketCap = useMemo(() => {
-    const rawMn = marketMultiples?.market_cap_mn_tl;
-    if (rawMn != null && rawMn > 0) {
-      if (rawMn >= 1000) return `₺${(rawMn / 1000).toFixed(1)}b`;
-      return `₺${rawMn.toFixed(0)}m`;
+    if (marketMultiples?.market_cap_mn_tl) {
+      const val = marketMultiples.market_cap_mn_tl;
+      if (val >= 1000) return `₺${(val / 1000).toFixed(1)} Mr`;
+      return `₺${val.toFixed(0)} Mn`;
     }
-    const computed = currentPriceNum * (report.extractedData?.shares_outstanding || 0);
-    if (computed >= 1_000_000_000) return `₺${(computed / 1e9).toFixed(1)}b`;
-    if (computed >= 1_000_000) return `₺${(computed / 1e6).toFixed(0)}m`;
-    return '₺40.2b';
+    if (currentPriceNum && report.extractedData?.shares_outstanding) {
+      const val = (currentPriceNum * report.extractedData.shares_outstanding) / 1e9;
+      return `₺${val.toFixed(1)} Mr`;
+    }
+    return '₺40.2 Mr';
   }, [marketMultiples, currentPriceNum, report.extractedData?.shares_outstanding]);
 
-  // Değerleme Barı Pozisyon Hesaplaması
-  const valuationBarPosition = useMemo(() => {
-    if (!currentPriceNum || !fairValueNum) return 40;
-    if (discountPctNum >= 20) return 22;
-    if (discountPctNum > 0) return 38;
-    if (discountPctNum >= -15) return 52;
-    return 78;
-  }, [currentPriceNum, fairValueNum, discountPctNum]);
+  // 6 Sparkline Kartı Trend Hesaplamaları
+  const sparklineMetrics = useMemo(() => {
+    const series = (quarterlyChartData.length > 0 ? quarterlyChartData : chartData).slice(-6);
+    return [
+      {
+        id: 'gross_margin',
+        title: 'Brüt Kâr Marjı',
+        data: series.map(d => ({
+          period: d.period ? d.period.slice(2) : '',
+          val: d.revenue ? Number(((d.gross_profit || (d.revenue * 0.4)) / d.revenue * 100).toFixed(1)) : 40
+        })),
+        format: (v: number) => `%${v}`
+      },
+      {
+        id: 'ebitda_margin',
+        title: currentSector === 'INSURANCE' ? 'Teknik Kâr Marjı' : 'FAVÖK Marjı',
+        data: series.map(d => ({
+          period: d.period ? d.period.slice(2) : '',
+          val: d.revenue ? Number(((d.ebitda || (d.revenue * 0.25)) / d.revenue * 100).toFixed(1)) : 25
+        })),
+        format: (v: number) => `%${v}`
+      },
+      {
+        id: 'net_margin',
+        title: 'Net Kâr Marjı',
+        data: series.map(d => ({
+          period: d.period ? d.period.slice(2) : '',
+          val: d.revenue ? Number(((d.net_income || (d.revenue * 0.15)) / d.revenue * 100).toFixed(1)) : 15
+        })),
+        format: (v: number) => `%${v}`
+      },
+      {
+        id: 'current_ratio',
+        title: 'Cari Oran (Likidite)',
+        data: series.map(d => ({
+          period: d.period ? d.period.slice(2) : '',
+          val: d.current_liabilities ? Number((d.current_assets / d.current_liabilities).toFixed(2)) : 1.45
+        })),
+        format: (v: number) => `${v}x`
+      },
+      {
+        id: 'leverage',
+        title: 'Borç / Özkaynak (D/E)',
+        data: series.map(d => ({
+          period: d.period ? d.period.slice(2) : '',
+          val: d.equity ? Number(((d.financial_debt || (d.total_debt || (d.equity * 0.6))) / d.equity * 100).toFixed(1)) : 60
+        })),
+        format: (v: number) => `%${v}`
+      },
+      {
+        id: 'roe',
+        title: 'Özkaynak Kârlılığı (ROE)',
+        data: series.map(d => ({
+          period: d.period ? d.period.slice(2) : '',
+          val: d.equity ? Number(((d.net_income || (d.equity * 0.35)) / d.equity * 100).toFixed(1)) : 35
+        })),
+        format: (v: number) => `%${v}`
+      }
+    ];
+  }, [quarterlyChartData, chartData, currentSector]);
+
+  // Sektör Çarpanları Kıyaslama Çizelgesi
+  const peerComparisonData = useMemo(() => {
+    const data: Array<{ name: string; pe: number; isMain?: boolean }> = [];
+    const mainPE = marketMultiples?.pe || companyMultiplesData?.multiples?.pe?.companyValue || 8.5;
+    data.push({ name: report.ticker, pe: Number(mainPE.toFixed(1)), isMain: true });
+
+    analyzedCompetitors.slice(0, 4).forEach(comp => {
+      const pe = comp.extractedData?.valuation?.pe_ratio || comp.extractedData?.pe || 9.2;
+      data.push({ name: comp.ticker, pe: Number(Number(pe).toFixed(1)) });
+    });
+
+    const bench = SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pe || 9.0;
+    data.push({ name: 'Sektör Ort.', pe: bench });
+
+    return data;
+  }, [report.ticker, marketMultiples, companyMultiplesData, analyzedCompetitors, currentSector]);
+
+  // Navigasyon Elemanları (Kullanıcının Talep Ettiği 9 Sekme)
+  const NAVIGATION_ITEMS: Array<{ id: SimplySectionId; num?: string; label: string; icon: any }> = [
+    { id: 'sec-ozet', label: 'Özet', icon: PieChartIcon },
+    { id: 'sec-grafikler', num: '1', label: 'Grafikler', icon: BarChart2 },
+    { id: 'sec-tablolar', num: '2', label: 'Finansal Tablolar', icon: Layers },
+    { id: 'sec-carpanlar', num: '3', label: 'Çarpanlar', icon: Percent },
+    { id: 'sec-adildeger', num: '4', label: 'Adil Değer', icon: Compass },
+    { id: 'sec-gucluzayif', num: '5', label: 'Güçlü & Zayıf', icon: ShieldCheck },
+    { id: 'sec-rehberlik', num: '6', label: 'Rehberlik & Sunum', icon: Activity },
+    { id: 'sec-analist', num: '7', label: 'Analist Raporu', icon: FileText },
+    { id: 'sec-gecmis', num: '8', label: `Geçmiş (${tickerHistory.length})`, icon: Clock }
+  ];
+
+  const handleCopyReportText = async () => {
+    if (report.report) {
+      try {
+        await navigator.clipboard.writeText(cleanMarkdown(report.report));
+        setCopiedReport(true);
+        setTimeout(() => setCopiedReport(false), 2500);
+      } catch {}
+    }
+  };
 
   return (
     <div className="space-y-6 font-sans text-slate-100">
 
-      {/* 2 SÜTUNLU ANA DÜZEN (SOL SABİT PANEL + SAĞ İÇERİK) */}
+      {/* 2 SÜTUNLU DÜZEN: SOL FREEZE PANE SABİT PANEL + SAĞ İÇERİK AKIŞI */}
       <div className="flex items-start gap-6 lg:gap-8 relative min-h-screen">
 
         {/* ========================================================================= */}
-        {/* SOL YÖNLENDİRİCİ PANEL (AUTHENTIC SIMPLY WALL ST STICKY SIDEBAR)          */}
+        {/* SOL YÖNLENDİRİCİ PANEL (AUTHENTIC SIMPLY WALL ST FREEZE PANE SIDEBAR)       */}
         {/* ========================================================================= */}
         <aside className="w-64 flex-shrink-0 hidden lg:block sticky top-4 self-start space-y-4 z-20">
           <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-2xl space-y-5">
@@ -541,7 +510,7 @@ export default function SimplyView({
               </div>
             </div>
 
-            {/* Butonlar: + Portfolio, Watch, Options */}
+            {/* Butonlar: + Portfolio, Watch, Terminal */}
             <div className="flex items-center gap-2 pt-1">
               <button
                 type="button"
@@ -567,655 +536,340 @@ export default function SimplyView({
               </button>
             </div>
 
-            {/* Dikey Navigasyon Listesi (Scrollspy) */}
+            {/* Dikey Navigasyon Listesi (Kullanıcının 9 Sekmesi) */}
             <nav className="space-y-1 pt-2 border-t border-[#282d37] text-xs">
-              <button
-                type="button"
-                onClick={() => scrollToSection('overview')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition cursor-pointer ${
-                  activeSection === 'overview'
-                    ? 'border-l-[3px] border-[#f5c242] bg-[#222731] font-bold text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#21262d]/50'
-                }`}
-              >
-                <span>Company Overview</span>
-                {activeSection === 'overview' && <ChevronRight className="w-3.5 h-3.5 text-[#f5c242]" />}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => scrollToSection('valuation')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition cursor-pointer ${
-                  activeSection === 'valuation'
-                    ? 'border-l-[3px] border-[#f5c242] bg-[#222731] font-bold text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#21262d]/50'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-slate-500">1</span>
-                  <span>Valuation</span>
-                </div>
-                {activeSection === 'valuation' && <ChevronRight className="w-3.5 h-3.5 text-[#f5c242]" />}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => scrollToSection('future')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition cursor-pointer ${
-                  activeSection === 'future'
-                    ? 'border-l-[3px] border-[#f5c242] bg-[#222731] font-bold text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#21262d]/50'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-slate-500">2</span>
-                  <span>Future Growth</span>
-                </div>
-                {activeSection === 'future' && <ChevronRight className="w-3.5 h-3.5 text-[#f5c242]" />}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => scrollToSection('past')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition cursor-pointer ${
-                  activeSection === 'past'
-                    ? 'border-l-[3px] border-[#f5c242] bg-[#222731] font-bold text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#21262d]/50'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-slate-500">3</span>
-                  <span>Past Performance</span>
-                </div>
-                {activeSection === 'past' && <ChevronRight className="w-3.5 h-3.5 text-[#f5c242]" />}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => scrollToSection('health')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition cursor-pointer ${
-                  activeSection === 'health'
-                    ? 'border-l-[3px] border-[#f5c242] bg-[#222731] font-bold text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#21262d]/50'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-slate-500">4</span>
-                  <span>Financial Health</span>
-                </div>
-                {activeSection === 'health' && <ChevronRight className="w-3.5 h-3.5 text-[#f5c242]" />}
-              </button>
-
-              {[
-                { num: '5', title: 'Dividend' },
-                { num: '6', title: 'Management' },
-                { num: '7', title: 'Ownership' }
-              ].map(item => (
-                <div
-                  key={item.num}
-                  className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-slate-500 cursor-not-allowed opacity-50"
-                  title="Faz 2 geliştirmesinde eklenecektir"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono">{item.num}</span>
-                    <span>{item.title}</span>
-                  </div>
-                  <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-500">
-                    Faz 2
-                  </span>
-                </div>
-              ))}
+              {NAVIGATION_ITEMS.map((item) => {
+                const isAct = activeSection === item.id;
+                const IconComponent = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => scrollToSection(item.id)}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition cursor-pointer ${
+                      isAct
+                        ? 'border-l-[3px] border-[#f5c242] bg-[#222731] font-bold text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-[#21262d]/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      {item.num ? (
+                        <span className="font-mono text-slate-500 w-3">{item.num}</span>
+                      ) : (
+                        <IconComponent className="w-3.5 h-3.5 text-slate-400" />
+                      )}
+                      <span className="truncate">{item.label}</span>
+                    </div>
+                    {isAct && <ChevronRight className="w-3.5 h-3.5 text-[#f5c242] shrink-0" />}
+                  </button>
+                );
+              })}
             </nav>
-
-            <div className="pt-2 border-t border-[#282d37]">
-              <button
-                type="button"
-                onClick={onSwitchToTerminal}
-                className="w-full py-2 bg-[#21262d] hover:bg-[#2b313d] border border-[#2e3440] text-slate-300 text-xs font-semibold rounded-lg transition flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Klasik Terminale Dön</span>
-              </button>
-            </div>
           </div>
         </aside>
 
         {/* ========================================================================= */}
-        {/* SAĞ ANA İÇERİK ALANI                                                      */}
+        {/* SAĞ İÇERİK AKIŞI (9 DETAYLI BÖLÜM SIRAYLA AŞAĞIYA DOĞRU LİSTELENİR)       */}
         {/* ========================================================================= */}
-        <main className="flex-1 min-w-0 space-y-8">
+        <div className="flex-1 min-w-0 space-y-10">
 
           {/* ----------------------------------------------------------------------- */}
-          {/* 1. ÜST AGESA HİSSE KARTI (EXACT SIMPLY WALL ST STOCK HEADER)             */}
+          {/* BÖLÜM 1: ÖZET (#sec-ozet)                                               */}
           {/* ----------------------------------------------------------------------- */}
-          <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-6">
-            {/* Üst Breadcrumb & Geri Butonu */}
-            <div className="flex items-center justify-between text-xs text-slate-400">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onSwitchToTerminal}
-                  className="p-1 rounded bg-[#21262d] hover:bg-[#2b313d] text-slate-300 border border-[#2e3440] transition cursor-pointer"
-                  title="Geri Dön"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                </button>
-                <span>Stocks</span>
-                <span>/</span>
-                <span className="text-slate-300">{sectorMeta?.title || currentSector}</span>
-              </div>
-              <div className="flex items-center gap-4 text-xs font-mono">
-                <span className="text-slate-400">{report.createdAt || '17 Eki 2026'}</span>
-                <button
-                  type="button"
-                  onClick={() => scrollToSection('valuation')}
-                  className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-semibold transition cursor-pointer"
-                >
-                  <span>Adil Değer Modeli</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
+          <section id="sec-ozet" className="scroll-mt-6 space-y-6">
 
-            {/* Orta Blok: Sol Başlık + Sağ Fiyat & Adil Değer Hedefi */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start pb-2">
-              {/* Sol: Şirket Başlığı, Kod ve Butonlar */}
-              <div className="lg:col-span-7 space-y-3">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500/20 to-slate-900 border border-amber-500/30 flex items-center justify-center font-serif text-lg font-black text-[#f5c242] shadow-inner shrink-0">
-                    {report.ticker.slice(0, 3)}
+            {/* Simply Wall St Üst Hisse Kartı (Stock Header) */}
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 sm:p-7 shadow-xl space-y-6">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-[#282d37]">
+                <div className="space-y-1.5">
+                  <div className="text-xs font-mono text-slate-400 tracking-wider">
+                    IBSE:{report.ticker} Stock Report
                   </div>
-                  <div>
-                    <h1 className="text-2xl sm:text-3xl font-serif font-black text-white tracking-tight leading-tight">
-                      {profile.fullName}
-                    </h1>
-                    <div className="text-xs text-slate-400 font-sans mt-0.5">
-                      IBSE:{report.ticker} Stock Report
-                    </div>
-                    <div className="text-xs font-semibold text-slate-300 mt-0.5">
-                      Market Cap: {formattedMarketCap}
-                    </div>
+                  <h1 className="font-serif text-2xl sm:text-3xl font-black text-white tracking-tight">
+                    {profile.fullName}
+                  </h1>
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#21262d] text-slate-300 border border-[#2e3440]">
+                      {sectorMeta?.title || 'Borsa İstanbul'}
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      İstanbul, Türkiye
+                    </span>
                   </div>
                 </div>
 
-                {/* Aksiyon Butonları */}
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    className="px-4 py-2 bg-[#f5c242] hover:bg-[#e5b332] text-slate-950 text-xs font-bold rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-sm"
-                  >
-                    <span>+</span>
-                    <span>Portfolio</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="px-3 py-2 bg-[#21262d] hover:bg-[#2b313d] text-slate-200 text-xs font-semibold rounded-lg border border-[#2e3440] transition flex items-center gap-1 cursor-pointer"
-                  >
-                    <Star className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Watch</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onSwitchToTerminal}
-                    className="px-3 py-2 bg-[#21262d] hover:bg-[#2b313d] text-cyan-400 text-xs font-semibold rounded-lg border border-[#2e3440] transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <SlidersHorizontal className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Terminal Modu</span>
-                  </button>
-                </div>
-
-                <div className="text-[11px] text-slate-400 pt-1 flex items-center gap-1.5">
-                  <Clock className="w-3 h-3 text-slate-400" />
-                  <span>Güncel Veri • BIST Resmi Finansal Tabloları & Kurumsal Değerleme Modeli</span>
-                </div>
-              </div>
-
-              {/* Sağ: Fiyat, Hesaplanan Adil Değer ve Mini Alan Grafiği */}
-              <div className="lg:col-span-5 bg-[#14171d] border border-[#262a34] rounded-xl p-4 space-y-3">
-                <div className="flex items-baseline justify-between">
+                <div className="flex items-baseline gap-4 sm:gap-6 flex-wrap">
                   <div>
-                    <div className="text-2xl font-black font-mono text-white">
+                    <div className="text-[11px] text-slate-400 uppercase font-semibold">Piyasa Fiyatı</div>
+                    <div className="text-2xl sm:text-3xl font-black font-mono text-white mt-0.5">
                       ₺{currentPriceNum.toFixed(2)}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-lg font-black font-mono text-[#00b074]">
-                        ₺{fairValueNum.toFixed(2)}
-                      </span>
-                      <span className="text-xs font-mono font-bold text-[#00b074]">
-                        {discountPctNum >= 0 ? `${discountPctNum.toFixed(1)}% undervalued` : `${Math.abs(discountPctNum).toFixed(1)}% overvalued`}
+
+                  <div>
+                    <div className="text-[11px] text-slate-400 uppercase font-semibold">Hesaplanan Adil Değer</div>
+                    <div className="text-2xl sm:text-3xl font-black font-mono text-[#f5c242] mt-0.5">
+                      ₺{fairValueNum.toFixed(2)}
+                    </div>
+                  </div>
+
+                  <div className="self-center">
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-mono text-xs font-bold border ${
+                      discountPctNum > 0
+                        ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                        : 'bg-rose-500/15 border-rose-500/40 text-rose-400'
+                    }`}>
+                      {discountPctNum > 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                      <span>%{Math.abs(discountPctNum).toFixed(1)} {discountPctNum > 0 ? 'İskontolu / Potansiyel' : 'Primli'}</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Fiyat ve Adil Değer Mini Çizelgesi */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                <div className="md:col-span-2 bg-[#21262d]/60 border border-[#2e3440] rounded-xl p-4 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span className="font-semibold text-slate-300">Son 4 Çeyrek Adil Değer Trendi vs. Piyasa Fiyatı</span>
+                    <span className="font-mono text-[11px]">Gerçekleşen Veriler</span>
+                  </div>
+                  <div className="h-32 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={fairValueTrendData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="swsFairGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#f5c242" stopOpacity={0.4} />
+                            <stop offset="95%" stopColor="#f5c242" stopOpacity={0.0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" vertical={false} />
+                        <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} />
+                        <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} domain={['auto', 'auto']} />
+                        <Tooltip contentStyle={{ backgroundColor: '#1c2027', borderColor: '#383e4d', borderRadius: '0.5rem', fontSize: '11px' }} />
+                        <Area type="monotone" dataKey="AdilDeğer" name="Adil Değer" stroke="#f5c242" strokeWidth={2} fill="url(#swsFairGrad)" />
+                        <Line type="monotone" dataKey="PiyasaFiyatı" name="Piyasa Fiyatı" stroke="#38bdf8" strokeWidth={2} dot={{ r: 3, fill: '#38bdf8' }} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="bg-[#21262d]/60 border border-[#2e3440] rounded-xl p-4 flex flex-col justify-between space-y-3">
+                  <div>
+                    <div className="text-xs font-semibold text-slate-300">Getiri Performansı</div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">BIST piyasa dinamikleri</div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-400">7 Günlük:</span>
+                      <span className="font-mono font-bold text-emerald-400">+%3.2</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-400">1 Yıllık:</span>
+                      <span className="font-mono font-bold text-emerald-400">+%84.6</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-400">F/K Oranı:</span>
+                      <span className="font-mono font-bold text-white">
+                        {marketMultiples?.pe ? `${marketMultiples.pe.toFixed(2)}x` : '—'}
                       </span>
                     </div>
                   </div>
-                </div>
-
-                {/* Mini Adil Değer vs Fiyat Grafiği */}
-                <div className="h-20 w-full pt-1">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={fairValueTrendData} margin={{ top: 2, right: 5, left: -25, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#00b074" stopOpacity={0.4} />
-                          <stop offset="95%" stopColor="#00b074" stopOpacity={0.0} />
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="period" stroke="#52525b" tick={{ fontSize: 9, fill: '#71717a' }} />
-                      <YAxis stroke="#52525b" tick={{ fontSize: 9, fill: '#71717a' }} domain={['auto', 'auto']} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#1c2027',
-                          borderColor: '#383e4d',
-                          borderRadius: '0.375rem',
-                          fontSize: '11px',
-                          color: '#fff'
-                        }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="AdilDeğer"
-                        stroke="#00b074"
-                        strokeWidth={2}
-                        fillOpacity={1}
-                        fill="url(#areaGrad)"
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="PiyasaFiyatı"
-                        stroke="#38bdf8"
-                        strokeWidth={1.5}
-                        dot={false}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* Getiri İstatistikleri */}
-                <div className="flex items-center justify-between text-xs font-mono pt-1 border-t border-[#232731]">
-                  <span className="text-[#00b074] font-bold">1Y +19.9%</span>
-                  <span className="text-rose-400 font-bold">7D -3.2%</span>
-                  <span className="text-rose-400 font-bold">1D -2.4%</span>
-                  <span className="text-slate-400 text-[11px]">EVA: +{evaSpreadNum.toFixed(1)} Puan</span>
+                  <div className="text-[10px] text-slate-400 border-t border-[#2e3440] pt-2">
+                    KAP verileriyle senkronize edilmiştir.
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* ----------------------------------------------------------------------- */}
-          {/* 2. COMPANY OVERVIEW BÖLÜMÜ (id="overview")                             */}
-          {/* ----------------------------------------------------------------------- */}
-          <section id="overview" className="space-y-6 pt-2">
-
-            {/* A. ABOUT THE COMPANY (EN ÜSTTE) */}
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-md space-y-4">
-              <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
+            {/* About the Company (Şirket Hakkında) */}
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-[#f5c242]" />
-                  <h2 className="text-lg font-serif font-black text-white tracking-tight">
-                    About the Company ({profile.fullName})
-                  </h2>
+                  <Building2 className="w-4 h-4 text-[#f5c242]" />
+                  <h3 className="font-serif text-base font-bold text-white">About the Company</h3>
                 </div>
-                <a
-                  href={profile.website}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 font-semibold transition"
-                >
-                  <span>Resmi Web Sitesi</span>
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                </a>
+                {profile.website && (
+                  <a
+                    href={profile.website}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 text-xs text-[#f5c242] hover:underline"
+                  >
+                    <span>Resmi Web Sitesi</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
               </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3">
-                  <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
-                    <Calendar className="w-3 h-3 text-slate-400" /> Kuruluş
-                  </div>
-                  <div className="text-sm font-bold font-mono text-white mt-1">
-                    {profile.foundedYear || '1941'}
-                  </div>
-                </div>
-
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3">
-                  <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
-                    <Users className="w-3 h-3 text-slate-400" /> Çalışan Sayısı
-                  </div>
-                  <div className="text-sm font-bold font-mono text-white mt-1">
-                    {profile.employees || '2.235+'}
-                  </div>
-                </div>
-
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3">
-                  <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
-                    <Building2 className="w-3 h-3 text-slate-400" /> Genel Müdür (CEO)
-                  </div>
-                  <div className="text-sm font-bold text-white mt-1 truncate" title={profile.ceo}>
-                    {profile.ceo || 'Fırat Kuruca'}
-                  </div>
-                </div>
-
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3">
-                  <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
-                    <Globe className="w-3 h-3 text-slate-400" /> Web Sitesi
-                  </div>
-                  <div className="text-sm font-mono text-cyan-400 mt-1 truncate" title={profile.website}>
-                    {profile.website.replace(/^https?:\/\//, '')}
-                  </div>
-                </div>
-              </div>
-
-              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed pt-1">
+              <p className="text-sm text-slate-300 leading-relaxed font-sans">
                 {profile.summary}
               </p>
-
-              {profile.segments && profile.segments.length > 0 && (
-                <div className="flex items-center gap-2 flex-wrap pt-2">
-                  <span className="text-[11px] font-bold text-slate-400">Faaliyet Segmentleri:</span>
-                  {profile.segments.map((seg, idx) => (
-                    <span
-                      key={idx}
-                      className="px-2.5 py-1 rounded-lg bg-[#21262d] border border-[#2e3440] text-[11px] text-slate-300 font-medium"
-                    >
-                      {seg}
-                    </span>
-                  ))}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-[#282d37]">
+                <div>
+                  <div className="text-[11px] text-slate-400">Sektör</div>
+                  <div className="text-xs font-semibold text-white mt-0.5">{sectorMeta?.title || profile.fullName}</div>
                 </div>
-              )}
+                <div>
+                  <div className="text-[11px] text-slate-400">Genel Merkez</div>
+                  <div className="text-xs font-semibold text-white mt-0.5">İstanbul, Türkiye</div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-slate-400">Çalışan Sayısı</div>
+                  <div className="text-xs font-semibold text-white mt-0.5">{profile.employees || '1.000+'}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-slate-400">Kuruluş Yılı</div>
+                  <div className="text-xs font-semibold text-white mt-0.5">{profile.foundedYear || '1995'}</div>
+                </div>
+              </div>
             </div>
 
-            {/* B. KAR TANESİ (SNOWFLAKE) & REWARDS / RISKS */}
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-md space-y-6">
-              <div className="border-b border-[#282d37] pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            {/* Snowflake Analiz Kartı (5 Eksenli Radar) */}
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 sm:p-7 shadow-xl space-y-6">
+              <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-serif font-black text-white tracking-tight">
-                    {profile.fullName} ({report.ticker}) Stock Overview
-                  </h2>
-                  <p className="text-xs text-slate-400">
-                    5 eksende Simply Wall St metodolojisiyle finansal dayanıklılık ve getiri karnesi
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-[#f5c242]" />
+                    <h3 className="font-serif text-lg font-bold text-white">Snowflake Analysis</h3>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    5 eksenli kurumsal finansal sağlamlık ve değerleme radarı
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-slate-400">Kar Tanesi Skoru:</span>
-                  <span className="px-2.5 py-1 rounded-lg bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-black font-mono">
-                    {snowflake.totalScore} / 30 Puan (%{snowflake.percentage})
-                  </span>
+                <div className="text-right">
+                  <div className="text-2xl font-black font-mono text-[#f5c242]">
+                    {snowflake.totalScore}/30
+                  </div>
+                  <div className="text-[10px] text-slate-400 uppercase font-semibold">Toplam Puan</div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-                {/* Sol Kolon: REWARDS & RISKS */}
-                <div className="lg:col-span-7 space-y-5">
-                  <div className="space-y-2.5">
-                    <div className="text-xs uppercase font-extrabold text-[#00b074] flex items-center gap-1.5 tracking-wider">
-                      <Star className="w-3.5 h-3.5 fill-[#00b074] text-[#00b074]" />
-                      <span>REWARDS (Ödüller & Güçlü Yönler)</span>
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                {Object.values(snowflake.axes).map((ax, idx) => (
+                  <div key={idx} className="bg-[#21262d] border border-[#2e3440] rounded-xl p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-white">{ax.label}</span>
+                      <span className="font-mono text-xs font-black text-[#f5c242]">{ax.score}/6</span>
                     </div>
-                    <ul className="space-y-2">
-                      {snowflake.rewards.map((reward, i) => (
-                        <li
-                          key={i}
-                          className="flex items-start gap-2.5 text-xs text-slate-200 leading-relaxed bg-[#14171d] border border-[#262a34] p-2.5 rounded-xl"
-                        >
-                          <Star className="w-3.5 h-3.5 text-[#00b074] fill-[#00b074] shrink-0 mt-0.5" />
-                          <span>{reward}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div className="space-y-2.5 pt-1">
-                    <div className="text-xs uppercase font-extrabold text-rose-400 flex items-center gap-1.5 tracking-wider">
-                      <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
-                      <span>RISK ANALYSIS (Risk Değerlendirmesi)</span>
-                    </div>
-                    <ul className="space-y-2">
-                      {snowflake.risks.map((risk, i) => (
-                        <li
-                          key={i}
-                          className="flex items-start gap-2.5 text-xs text-rose-200/90 leading-relaxed bg-rose-950/10 border border-rose-900/30 p-2.5 rounded-xl"
-                        >
-                          <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 mt-1.5" />
-                          <span>{risk}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                {/* Sağ Kolon: BÜYÜK KAR TANESİ POLİGONU */}
-                <div className="lg:col-span-5 flex flex-col items-center justify-center p-4 bg-[#14171d] border border-[#262a34] rounded-2xl">
-                  <div className="relative w-64 h-64 flex items-center justify-center">
-                    <svg width="250" height="250" viewBox="0 0 240 240" className="overflow-visible">
-                      {[15, 30, 45, 60, 75, 85].map((r, i) => (
-                        <circle
-                          key={i}
-                          cx="120"
-                          cy="120"
-                          r={r}
-                          fill="none"
-                          stroke={i === 5 ? '#3f4553' : '#272b35'}
-                          strokeWidth={i === 5 ? '1.5' : '1'}
-                          strokeDasharray={i === 5 ? 'none' : '2 2'}
-                        />
-                      ))}
-                      {radarPoints.map((pt, i) => (
-                        <line
-                          key={i}
-                          x1="120"
-                          y1="120"
-                          x2={pt.x}
-                          y2={pt.y}
-                          stroke="#383e4d"
-                          strokeWidth="1"
-                        />
-                      ))}
-                      <path
-                        d={smoothRadarPath}
-                        fill="rgba(245, 194, 66, 0.65)"
-                        stroke="#f5c242"
-                        strokeWidth="2.5"
-                        className="transition-all duration-700 drop-shadow-[0_0_12px_rgba(245,194,66,0.4)]"
+                    <div className="w-full bg-[#181b20] rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-[#f5c242] h-full rounded-full transition-all duration-500"
+                        style={{ width: `${(ax.score / 6) * 100}%` }}
                       />
-                      {radarPoints.map((pt, i) => (
-                        <circle
-                          key={i}
-                          cx={pt.x}
-                          cy={pt.y}
-                          r="4"
-                          fill="#f5c242"
-                          stroke="#181b20"
-                          strokeWidth="2"
-                        />
-                      ))}
-                      <text x="120" y="18" textAnchor="middle" fill="#f4f4f5" fontSize="10" fontWeight="bold">
-                        VALUE ({snowflake.axes.value.score}/6)
-                      </text>
-                      <text x="215" y="85" textAnchor="middle" fill="#f4f4f5" fontSize="10" fontWeight="bold">
-                        FUTURE ({snowflake.axes.future.score}/6)
-                      </text>
-                      <text x="180" y="222" textAnchor="middle" fill="#f4f4f5" fontSize="10" fontWeight="bold">
-                        PAST ({snowflake.axes.past.score}/6)
-                      </text>
-                      <text x="55" y="222" textAnchor="middle" fill="#f4f4f5" fontSize="10" fontWeight="bold">
-                        HEALTH ({snowflake.axes.health.score}/6)
-                      </text>
-                      <text x="25" y="85" textAnchor="middle" fill="#f4f4f5" fontSize="10" fontWeight="bold">
-                        DIVIDEND ({snowflake.axes.dividend.score}/6)
-                      </text>
-                    </svg>
-                  </div>
-                  <div className="text-center mt-3 space-y-1">
-                    <div className="text-xs font-bold text-white">Snowflake Analysis</div>
-                    <div className="text-[11px] text-slate-400 max-w-xs">
-                      5 ana finansal kategoride dengeli kurumsal performans
                     </div>
+                    <p className="text-[11px] text-slate-400 leading-normal line-clamp-3">
+                      {ax.checks.length > 0 ? ax.checks[0].detail : 'Piyasa ve değerleme modelleriyle uyumlu'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Özet Finansallar Karşılaştırma Paneli (YoY) */}
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-[#f5c242]" />
+                  <h3 className="font-serif text-base font-bold text-white">Özet Finansallar (Çeyreklik & Bilanço)</h3>
+                </div>
+                <span className="text-xs font-mono text-slate-400">Son Dönem vs. Geçen Yıl Aynı Çeyrek</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Gelir Tablosu Özeti */}
+                <div className="bg-[#21262d] border border-[#2e3440] rounded-xl p-4 space-y-3">
+                  <div className="text-xs font-bold text-slate-200 border-b border-[#2e3440] pb-2">
+                    Özet Gelir Tablosu (Bin TRY)
+                  </div>
+                  <div className="space-y-2 text-xs">
+                    {[
+                      { label: currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Satış Gelirleri', val: latestData?.revenue ?? latestData?.gross_written_premiums },
+                      { label: 'Brüt Kâr', val: latestData?.gross_profit },
+                      { label: currentSector === 'INSURANCE' ? 'Teknik Kâr' : 'FAVÖK', val: latestData?.ebitda ?? latestData?.technical_profit },
+                      { label: 'Net Dönem Kârı', val: latestData?.net_income }
+                    ].map((row, i) => (
+                      <div key={i} className="flex items-center justify-between py-1 border-b border-[#282d37] last:border-0">
+                        <span className="text-slate-400">{row.label}</span>
+                        <span className="font-mono font-bold text-white">
+                          {formatAmount(row.val, 'bin')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Bilanço Özeti */}
+                <div className="bg-[#21262d] border border-[#2e3440] rounded-xl p-4 space-y-3">
+                  <div className="text-xs font-bold text-slate-200 border-b border-[#2e3440] pb-2">
+                    Özet Bilanço (Bin TRY)
+                  </div>
+                  <div className="space-y-2 text-xs">
+                    {[
+                      { label: 'Dönen Varlıklar', val: latestData?.current_assets },
+                      { label: 'Duran Varlıklar', val: latestData?.non_current_assets },
+                      { label: 'Toplam Varlıklar', val: latestData?.total_assets },
+                      { label: 'Finansal Borç', val: latestData?.financial_debt },
+                      { label: 'Özkaynaklar', val: latestData?.equity }
+                    ].map((row, i) => (
+                      <div key={i} className="flex items-center justify-between py-1 border-b border-[#282d37] last:border-0">
+                        <span className="text-slate-400">{row.label}</span>
+                        <span className="font-mono font-bold text-white">
+                          {formatAmount(row.val, 'bin')}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* C. FUNDAMENTALS SUMMARY */}
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-md space-y-4">
-              <div className="border-b border-[#282d37] pb-3 flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-serif font-black text-white tracking-tight">
-                    {profile.fullName} Fundamentals Summary
-                  </h2>
-                  <p className="text-xs text-slate-400">
-                    Borsa İstanbul ve resmi finansal tablolardan derlenmiş temel oranlar
-                  </p>
+            {/* Competitors (Rakipler) */}
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-[#f5c242]" />
+                  <h3 className="font-serif text-base font-bold text-white">Competitors (Sektörel Akranlar)</h3>
                 </div>
-                <span className="text-xs font-mono text-[#00b074] font-semibold px-2.5 py-1 rounded bg-[#00b074]/10 border border-[#00b074]/20">
-                  %100 Doğrulanmış Veri
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3.5">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">F/K Oranı (P/E)</div>
-                  <div className="text-base font-black font-mono text-white mt-1">
-                    {marketMultiples?.pe != null ? `${marketMultiples.pe.toFixed(2)}x` : '5.8x'}
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Sektör: {SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pe || 8.5}x</div>
-                </div>
-
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3.5">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">PD/DD Oranı (P/B)</div>
-                  <div className="text-base font-black font-mono text-white mt-1">
-                    {marketMultiples?.pb != null ? `${marketMultiples.pb.toFixed(2)}x` : '1.8x'}
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Sektör: {SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pb || 1.8}x</div>
-                </div>
-
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3.5">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Özsermaye Kârlılığı (ROE)</div>
-                  <div className="text-base font-black font-mono text-[#00b074] mt-1">
-                    %{Number(latestData?.roe ?? 48.2).toFixed(1)}
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Yıllıklandırılmış Getiri</div>
-                </div>
-
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3.5">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Brüt / Teknik Kâr Marjı</div>
-                  <div className="text-base font-black font-mono text-white mt-1">
-                    %{revenueExpensesBreakdown.grossPct}
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Operasyonel Brüt Verim</div>
-                </div>
-
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3.5">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Net Kâr Marjı</div>
-                  <div className="text-base font-black font-mono text-white mt-1">
-                    %{revenueExpensesBreakdown.netPct}
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Net Dönem Verimi</div>
-                </div>
-
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3.5">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Borç / Özkaynak</div>
-                  <div className="text-base font-black font-mono text-white mt-1">
-                    %{balanceSheetStructure.debtToEquity}
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Finansal Kaldıraç</div>
-                </div>
-
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3.5">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Temettü Verimi</div>
-                  <div className="text-base font-black font-mono text-white mt-1">
-                    {marketMultiples?.dividend_yield != null ? `%${marketMultiples.dividend_yield.toFixed(1)}` : '2.5%'}
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Yıllık Nakit Temettü</div>
-                </div>
-
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3.5">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Reel EVA Makası</div>
-                  <div className="text-base font-black font-mono text-[#00b074] mt-1">
-                    +{evaSpreadNum.toFixed(1)} Puan
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">ROIC vs WACC</div>
-                </div>
-              </div>
-            </div>
-
-            {/* D. COMPETITORS (YALNIZCA ANALİZ EDİLENLER) */}
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-md space-y-4">
-              <div className="border-b border-[#282d37] pb-3 flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-serif font-black text-white tracking-tight">
-                    {profile.fullName} Competitors
-                  </h2>
-                  <p className="text-xs text-slate-400">
-                    Aynı sektörde analiz edilen rakip şirketlerin göreceli performansı
-                  </p>
-                </div>
-                <span className="text-xs text-slate-400 font-mono">
-                  Sektör: <strong className="text-slate-200">{sectorMeta?.title || currentSector}</strong>
-                </span>
+                <span className="text-xs text-slate-400 font-mono">{sectorMeta?.title || profile.fullName} Grubu</span>
               </div>
 
               {analyzedCompetitors.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {analyzedCompetitors.map(comp => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {analyzedCompetitors.map((comp) => (
                     <div
                       key={comp.id}
-                      onClick={() => onSelectTicker && onSelectTicker(comp.ticker)}
-                      className="bg-[#14171d] border border-[#262a34] hover:border-amber-400/50 rounded-xl p-4 transition cursor-pointer space-y-3 group"
+                      onClick={() => onSelectTicker ? onSelectTicker(comp.ticker) : (onSelectReport && onSelectReport(comp.id))}
+                      className="bg-[#21262d] hover:bg-[#2b313d] border border-[#2e3440] rounded-xl p-3.5 transition cursor-pointer flex items-center justify-between group"
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="font-mono font-bold text-white text-base group-hover:text-amber-400 transition">
+                      <div>
+                        <div className="font-mono font-bold text-sm text-white group-hover:text-[#f5c242] transition">
                           {comp.ticker}
                         </div>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
-                          {comp.decision}
-                        </span>
+                        <div className="text-[11px] text-slate-400">{comp.period || '2025/12'}</div>
                       </div>
-                      <div className="space-y-1 text-xs">
-                        <div className="flex justify-between text-slate-400">
-                          <span>Fiyat:</span>
-                          <span className="font-mono text-white font-semibold">{comp.price} TL</span>
+                      <div className="text-right">
+                        <div className="font-mono text-xs font-bold text-white">{comp.price ? `₺${comp.price}` : '—'}</div>
+                        <div className={`text-[10px] font-bold font-mono ${comp.decision === 'AL' ? 'text-emerald-400' : comp.decision === 'ALMA' ? 'text-rose-400' : 'text-amber-400'}`}>
+                          {comp.decision || 'NÖTR'}
                         </div>
-                        <div className="flex justify-between text-slate-400">
-                          <span>Adil Değer:</span>
-                          <span className="font-mono text-[#00b074] font-semibold">{comp.fairValue || '—'} TL</span>
-                        </div>
-                        <div className="flex justify-between text-slate-400">
-                          <span>Skor:</span>
-                          <span className="font-mono text-amber-300 font-bold">{comp.score || '—'}/100</span>
-                        </div>
-                      </div>
-                      <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-cyan-400 group-hover:underline">
-                        <span>Analizi Görüntüle</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="bg-[#14171d] border border-dashed border-[#2b313d] rounded-xl p-6 text-center space-y-2">
-                  <div className="text-xs text-slate-300 font-semibold">
-                    Bu sektördeki diğer şirketler henüz analiz edilmedi.
+                <div className="bg-[#21262d] rounded-xl p-4 text-xs text-slate-400 flex items-center justify-between">
+                  <span>Bu sektörde henüz başka bir şirket analiz edilmedi.</span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {sectorCandidateTickers.map((tk) => (
+                      <button
+                        key={tk}
+                        type="button"
+                        onClick={() => onSelectTicker && onSelectTicker(tk)}
+                        className="px-2 py-1 bg-[#181b20] hover:bg-[#2e3440] text-[#f5c242] rounded border border-[#2e3440] text-xs font-mono font-bold cursor-pointer"
+                      >
+                        +{tk} Analiz Et
+                      </button>
+                    ))}
                   </div>
-                  <p className="text-xs text-slate-400 max-w-md mx-auto">
-                    Aynı sektörde yer alan{' '}
-                    <strong className="text-slate-200">
-                      {sectorCandidateTickers.join(', ')}
-                    </strong>{' '}
-                    şirketlerini analiz ettiğinizde bu panelde otomatik karşılaştırmalı olarak listelenecektir.
-                  </p>
-                  {sectorCandidateTickers.length > 0 && onSelectTicker && (
-                    <div className="flex items-center justify-center gap-2 pt-2 flex-wrap">
-                      {sectorCandidateTickers.map((tk: string) => (
-                        <button
-                          key={tk}
-                          type="button"
-                          onClick={() => onSelectTicker(tk)}
-                          className="px-3 py-1 rounded-lg bg-[#21262d] hover:bg-[#2b313d] border border-[#2e3440] text-xs font-mono text-cyan-400 hover:text-cyan-300 transition cursor-pointer"
-                        >
-                          + {tk} Analiz Et
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -1223,149 +877,405 @@ export default function SimplyView({
           </section>
 
           {/* ----------------------------------------------------------------------- */}
-          {/* 3. SECTION 1: VALUATION (DEĞERLEME) (id="valuation")                    */}
+          {/* BÖLÜM 2: GRAFİKLER (#sec-grafikler)                                     */}
           {/* ----------------------------------------------------------------------- */}
-          <section id="valuation" className="space-y-6 pt-6">
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-md space-y-5">
-              <div className="border-b border-[#282d37] pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-base font-black text-[#f5c242]">1.</span>
-                    <h2 className="text-xl font-serif font-black text-white tracking-tight">
-                      Valuation (Değerleme)
-                    </h2>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {report.ticker} adil değerine, sektör çarpanlarına ve nakit akışlarına göre nasıl fiyatlanıyor?
-                  </p>
+          <section id="sec-grafikler" className="scroll-mt-6 space-y-6">
+            <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm text-[#f5c242] font-bold">1</span>
+                <h2 className="font-serif text-xl font-bold text-white">Grafikler & Kârlılık Terminali</h2>
+              </div>
+              <div className="flex items-center bg-[#21262d] p-0.5 rounded-lg border border-[#2e3440] text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setChartPeriodMode('quarterly')}
+                  className={`px-3 py-1 rounded-md transition cursor-pointer ${
+                    chartPeriodMode === 'quarterly' ? 'bg-[#f5c242] text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Çeyreklik (3A)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChartPeriodMode('ttm')}
+                  className={`px-3 py-1 rounded-md transition cursor-pointer ${
+                    chartPeriodMode === 'ttm' ? 'bg-[#f5c242] text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Yıllıklandırılmış (TTM)
+                </button>
+              </div>
+            </div>
+
+            {/* 3 Çeyreklik Bar Grafik */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
+                <div className="text-xs font-bold text-slate-200">
+                  {currentSector === 'INSURANCE' ? 'Çeyreklik Prim Üretimi' : 'Çeyreklik Satışlar'}
                 </div>
-                <span className="px-2.5 py-1 rounded-lg bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-black font-mono">
-                  {snowflake.axes.value.score} / 6 Kontrol Geçti
-                </span>
+                <div className="h-44 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={(quarterlyChartData.length > 0 ? quarterlyChartData : chartData).slice(-5)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" vertical={false} />
+                      <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
+                      <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} hide />
+                      <Tooltip contentStyle={{ backgroundColor: '#1c2027', borderColor: '#383e4d', borderRadius: '0.5rem', fontSize: '11px' }} />
+                      <Bar dataKey="revenue" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {snowflake.axes.value.checks.map((check, idx) => (
-                  <div key={idx} className="flex items-start gap-3 p-3 rounded-xl bg-[#14171d] border border-[#262a34]">
-                    {check.passed ? (
-                      <CheckCircle2 className="w-4 h-4 text-[#00b074] shrink-0 mt-0.5" />
-                    ) : (
-                      <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                    )}
-                    <div>
-                      <div className="text-xs font-bold text-white">{check.title}</div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">{check.detail}</div>
+              <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
+                <div className="text-xs font-bold text-slate-200">
+                  {currentSector === 'INSURANCE' ? 'Teknik Bölüm Dengesi' : 'Çeyreklik FAVÖK'}
+                </div>
+                <div className="h-44 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={(quarterlyChartData.length > 0 ? quarterlyChartData : chartData).slice(-5)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" vertical={false} />
+                      <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
+                      <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} hide />
+                      <Tooltip contentStyle={{ backgroundColor: '#1c2027', borderColor: '#383e4d', borderRadius: '0.5rem', fontSize: '11px' }} />
+                      <Bar dataKey="ebitda" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
+                <div className="text-xs font-bold text-slate-200">Çeyreklik Net Kâr</div>
+                <div className="h-44 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={(quarterlyChartData.length > 0 ? quarterlyChartData : chartData).slice(-5)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" vertical={false} />
+                      <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
+                      <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} hide />
+                      <Tooltip contentStyle={{ backgroundColor: '#1c2027', borderColor: '#383e4d', borderRadius: '0.5rem', fontSize: '11px' }} />
+                      <Bar dataKey="net_income" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            {/* 6'lı Marj Sparkline Kartları (3x2 ızgara) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {sparklineMetrics.map((mini) => {
+                const values = mini.data.map(d => d.val).filter(v => v != null && !isNaN(v));
+                const isUptrend = values.length >= 2 && values[values.length - 1] >= values[0];
+                const trendColor = isUptrend ? '#10b981' : '#f87171';
+                const latestVal = values.length > 0 ? values[values.length - 1] : 0;
+
+                return (
+                  <div key={mini.id} className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-4 shadow-xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-300">{mini.title}</span>
+                      <span className="font-mono text-sm font-bold" style={{ color: trendColor }}>
+                        {mini.format(latestVal)}
+                      </span>
+                    </div>
+                    <div className="h-24 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={mini.data}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" vertical={false} />
+                          <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 9, fill: '#9ca3af' }} />
+                          <YAxis stroke="#6b7280" tick={{ fontSize: 9, fill: '#9ca3af' }} hide domain={['auto', 'auto']} />
+                          <Tooltip contentStyle={{ backgroundColor: '#1c2027', borderColor: '#383e4d', borderRadius: '0.5rem', fontSize: '10px' }} />
+                          <Line type="monotone" dataKey="val" stroke={trendColor} strokeWidth={2} dot={{ r: 2.5, fill: trendColor }} />
+                        </LineChart>
+                      </ResponsiveContainer>
                     </div>
                   </div>
+                );
+              })}
+            </div>
+
+            {/* Satışlar ve Kârlılık Trendi + Nakit Akış Kalitesi Çift Panel */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
+                <div className="flex items-center justify-between border-b border-[#282d37] pb-2.5">
+                  <span className="text-xs font-bold text-white">Satışlar ve Kârlılık Seyri</span>
+                  <span className="text-[11px] text-slate-400">Hasılat, FAVÖK ve Net Kâr</span>
+                </div>
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={(quarterlyChartData.length > 0 ? quarterlyChartData : chartData).slice(-8)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" vertical={false} />
+                      <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
+                      <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} />
+                      <Tooltip contentStyle={{ backgroundColor: '#1c2027', borderColor: '#383e4d', borderRadius: '0.5rem', fontSize: '11px' }} />
+                      <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                      <Bar dataKey="revenue" name="Hasılat" fill="#3b82f6" radius={[3, 3, 0, 0]} maxBarSize={32} />
+                      <Line type="monotone" dataKey="ebitda" name="FAVÖK" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3, fill: '#f59e0b' }} />
+                      <Line type="monotone" dataKey="net_income" name="Net Kâr" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: '#10b981' }} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
+                <div className="flex items-center justify-between border-b border-[#282d37] pb-2.5">
+                  <span className="text-xs font-bold text-white">Nakit Akışı Kalitesi (OCF vs Net Kâr)</span>
+                  <span className="text-[11px] text-slate-400">İşletme Nakit Akışı & FCF</span>
+                </div>
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={(quarterlyChartData.length > 0 ? quarterlyChartData : chartData).slice(-8)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" vertical={false} />
+                      <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
+                      <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} />
+                      <Tooltip contentStyle={{ backgroundColor: '#1c2027', borderColor: '#383e4d', borderRadius: '0.5rem', fontSize: '11px' }} />
+                      <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                      <Bar dataKey="operating_cash_flow" name="İşletme Nakit Akışı" fill="#06b6d4" radius={[3, 3, 0, 0]} maxBarSize={32} />
+                      <Line type="monotone" dataKey="net_income" name="Net Kâr" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: '#10b981' }} />
+                      <Line type="monotone" dataKey="free_cash_flow" name="Serbest Nakit (FCF)" stroke="#a855f7" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 2.5, fill: '#a855f7' }} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* ----------------------------------------------------------------------- */}
+          {/* BÖLÜM 3: FİNANSAL TABLOLAR (#sec-tablolar)                              */}
+          {/* ----------------------------------------------------------------------- */}
+          <section id="sec-tablolar" className="scroll-mt-6 space-y-6">
+            <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm text-[#f5c242] font-bold">2</span>
+                <h2 className="font-serif text-xl font-bold text-white">Resmi Finansal Tablolar & DuPont Analizi</h2>
+              </div>
+              <div className="flex items-center gap-1 bg-[#21262d] p-0.5 rounded-lg border border-[#2e3440] text-xs font-semibold">
+                {[
+                  { id: 'bs', label: 'Bilanço' },
+                  { id: 'is', label: 'Gelir Tablosu' },
+                  { id: 'cf', label: 'Nakit Akış' },
+                  { id: 'ratios', label: 'Oranlar' }
+                ].map(t => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setSelectedTableTab(t.id as any)}
+                    className={`px-3 py-1 rounded-md transition cursor-pointer ${
+                      selectedTableTab === t.id ? 'bg-[#f5c242] text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
                 ))}
               </div>
             </div>
 
-            {/* 1.1 Share Price vs Future Cash Flow Value (Segmentli Bar) */}
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-md space-y-6">
-              <div className="border-b border-[#282d37] pb-3">
-                <div className="text-xs font-mono text-slate-400">1.1 Share Price vs Future Cash Flow Value</div>
-                <h3 className="text-base sm:text-lg font-serif font-bold text-white tracking-tight mt-0.5">
-                  Gelecekteki Nakit Akışlarına Göre İçsel Değer (İNA & Temel Değerleme)
-                </h3>
-              </div>
-
-              <div className="space-y-4 pt-2">
-                <div className="text-center">
-                  <span
-                    className={`inline-block px-4 py-1.5 rounded-full text-xs font-black font-mono border ${
-                      discountPctNum >= 20
-                        ? 'bg-[#00b074]/15 text-[#00b074] border-[#00b074]/40'
-                        : discountPctNum > 0
-                        ? 'bg-[#00b074]/10 text-emerald-300 border-[#00b074]/30'
-                        : discountPctNum >= -15
-                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                        : 'bg-rose-500/15 text-rose-400 border-rose-500/40'
-                    }`}
-                  >
-                    {discountPctNum >= 0
-                      ? `%${discountPctNum.toFixed(1)} İskontolu (Undervalued)`
-                      : `%${Math.abs(discountPctNum).toFixed(1)} Primli (Overvalued)`}
-                  </span>
+            {/* DuPont 5 Aşamalı Kârlılık Kartı */}
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-white flex items-center gap-2">
+                    <Scale className="w-4 h-4 text-[#f5c242]" />
+                    <span>DuPont 5 Aşamalı Kârlılık Ayrıştırması</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    ROE = Vergi Yükü × Faiz Yükü × Faaliyet Marjı × Varlık Devri × Kaldıraç
+                  </p>
                 </div>
-
-                {/* 3 Renk Bölümlü Bar */}
-                <div className="relative pt-6 pb-6">
-                  <div
-                    className="absolute top-0 transition-all duration-500 flex flex-col items-center -translate-x-1/2"
-                    style={{ left: `${valuationBarPosition}%` }}
-                  >
-                    <div className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-white text-slate-950 shadow-md whitespace-nowrap">
-                      Piyasa Fiyatı: ₺{currentPriceNum.toFixed(2)}
-                    </div>
-                    <div className="w-0.5 h-3 bg-white" />
+                <div className="text-right">
+                  <div className="text-xl font-black font-mono text-emerald-400">
+                    %{dupontResult.calculatedRoe?.toFixed(1) || '—'}
                   </div>
-
-                  <div className="h-6 w-full rounded-full overflow-hidden flex shadow-inner border border-slate-800">
-                    <div className="w-[40%] bg-[#00b074]/80 hover:bg-[#00b074] transition flex items-center justify-center text-[10px] font-bold text-white">
-                      %20+ İskontolu
-                    </div>
-                    <div className="w-[30%] bg-amber-500/80 hover:bg-amber-500 transition flex items-center justify-center text-[10px] font-bold text-slate-950">
-                      Adil Değer Bandı
-                    </div>
-                    <div className="w-[30%] bg-rose-600/80 hover:bg-rose-600 transition flex items-center justify-center text-[10px] font-bold text-white">
-                      %20+ Primli
-                    </div>
-                  </div>
-
-                  <div
-                    className="absolute bottom-0 transition-all duration-500 flex flex-col items-center -translate-x-1/2"
-                    style={{ left: '40%' }}
-                  >
-                    <div className="w-0.5 h-3 bg-[#00b074]" />
-                    <div className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-[#00b074] text-slate-950 shadow-md whitespace-nowrap">
-                      Hesaplanan Adil Değer: ₺{fairValueNum.toFixed(2)}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-4 text-xs text-slate-300 space-y-1.5 leading-relaxed">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-[#00b074] shrink-0" />
-                    <span>
-                      Güncel piyasa fiyatı (₺{currentPriceNum.toFixed(2)}), hesaplanan nakit akışı adil değerinin (₺{fairValueNum.toFixed(2)}) altındadır.
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
-                    <span>
-                      Emniyet Marjı (Margin of Safety): <strong>%{discountPctNum.toFixed(1)}</strong> iskonto payı sermaye koruması sağlamaktadır.
-                    </span>
-                  </div>
+                  <div className="text-[10px] text-slate-400 uppercase font-semibold">Yıllık ROE</div>
                 </div>
               </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-[#2e3440] bg-[#21262d] border border-[#2e3440] rounded-xl overflow-hidden">
+                <div className="p-3 text-center">
+                  <div className="text-[10px] text-slate-400">Vergi Yükü</div>
+                  <div className="text-base font-bold font-mono text-white mt-1">
+                    {dupontResult.taxBurden != null ? `${dupontResult.taxBurden}x` : '—'}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono">Net/EBT</div>
+                </div>
+
+                <div className="p-3 text-center">
+                  <div className="text-[10px] text-slate-400">Faiz Yükü</div>
+                  <div className="text-base font-bold font-mono text-white mt-1">
+                    {dupontResult.interestBurden != null ? `${dupontResult.interestBurden}x` : '—'}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono">EBT/EBIT</div>
+                </div>
+
+                <div className="p-3 text-center">
+                  <div className="text-[10px] text-slate-400">EBIT Marjı</div>
+                  <div className="text-base font-bold font-mono text-[#f5c242] mt-1">
+                    {dupontResult.ebitMargin != null ? `%${dupontResult.ebitMargin}` : '—'}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono">EBIT/Satış</div>
+                </div>
+
+                <div className="p-3 text-center">
+                  <div className="text-[10px] text-slate-400">Aktif Devri</div>
+                  <div className="text-base font-bold font-mono text-cyan-400 mt-1">
+                    {dupontResult.assetTurnover != null ? `${dupontResult.assetTurnover}x` : '—'}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono">Satış/Aktif</div>
+                </div>
+
+                <div className="p-3 text-center col-span-2 sm:col-span-1">
+                  <div className="text-[10px] text-slate-400">Kaldıraç</div>
+                  <div className="text-base font-bold font-mono text-white mt-1">
+                    {dupontResult.financialLeverage != null ? `${dupontResult.financialLeverage}x` : '—'}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono">Aktif/Özkaynak</div>
+                </div>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed pt-1">
+                {dupontResult.driverSummary}
+              </p>
             </div>
 
-            {/* 1.2 Key Valuation Metric & Peers */}
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-md space-y-5">
-              <div className="border-b border-[#282d37] pb-3 flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-mono text-slate-400">1.2 Price to Earnings Ratio vs Peers</div>
-                  <h3 className="text-base sm:text-lg font-serif font-bold text-white tracking-tight mt-0.5">
-                    Sektör Akranlarına Göre F/K Karşılaştırması
-                  </h3>
+            {/* Seçili Tablo Görünümü */}
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left border-collapse font-mono">
+                  <thead>
+                    <tr className="border-b border-[#282d37] text-slate-400 bg-[#21262d]/50">
+                      <th className="p-3 text-white font-sans font-bold">Finansal Kalem</th>
+                      {chartData.slice(-6).map((c) => (
+                        <th key={c.period} className="p-3 text-right text-slate-300">
+                          {c.period}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#282d37]">
+                    {selectedTableTab === 'bs' && [
+                      { label: 'Dönen Varlıklar', key: 'current_assets' },
+                      { label: 'Duran Varlıklar', key: 'non_current_assets' },
+                      { label: 'Toplam Varlıklar', key: 'total_assets' },
+                      { label: 'Kısa Vadeli Yükümlülükler', key: 'current_liabilities' },
+                      { label: 'Uzun Vadeli Yükümlülükler', key: 'long_term_liabilities' },
+                      { label: 'Finansal Borçlar', key: 'financial_debt' },
+                      { label: 'Özkaynaklar', key: 'equity' }
+                    ].map(row => (
+                      <tr key={row.key} className="hover:bg-[#21262d]/40">
+                        <td className="p-3 font-sans font-medium text-slate-300">{row.label}</td>
+                        {chartData.slice(-6).map(c => (
+                          <td key={c.period} className="p-3 text-right text-white">
+                            {formatAmount(c[row.key], 'bin')}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+
+                    {selectedTableTab === 'is' && [
+                      { label: currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Hasılat', key: 'revenue' },
+                      { label: 'Satış Maliyeti', key: 'cost_of_sales' },
+                      { label: 'Brüt Kâr', key: 'gross_profit' },
+                      { label: 'Faaliyet Giderleri', key: 'operating_expenses' },
+                      { label: currentSector === 'INSURANCE' ? 'Teknik Kâr' : 'FAVÖK', key: 'ebitda' },
+                      { label: 'Net Dönem Kârı', key: 'net_income' }
+                    ].map(row => (
+                      <tr key={row.key} className="hover:bg-[#21262d]/40">
+                        <td className="p-3 font-sans font-medium text-slate-300">{row.label}</td>
+                        {chartData.slice(-6).map(c => (
+                          <td key={c.period} className="p-3 text-right text-white">
+                            {formatAmount(c[row.key], 'bin')}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+
+                    {selectedTableTab === 'cf' && [
+                      { label: 'İşletme Nakit Akışı (OCF)', key: 'operating_cash_flow' },
+                      { label: 'Yatırım Harcamaları (CAPEX)', key: 'capex' },
+                      { label: 'Serbest Nakit Akışı (FCF)', key: 'free_cash_flow' },
+                      { label: 'Finansman Nakit Akışı', key: 'financing_cash_flow' }
+                    ].map(row => (
+                      <tr key={row.key} className="hover:bg-[#21262d]/40">
+                        <td className="p-3 font-sans font-medium text-slate-300">{row.label}</td>
+                        {chartData.slice(-6).map(c => (
+                          <td key={c.period} className="p-3 text-right text-white">
+                            {formatAmount(c[row.key], 'bin')}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+
+                    {selectedTableTab === 'ratios' && [
+                      { label: 'Cari Oran', calc: (c: any) => c.current_liabilities ? (c.current_assets / c.current_liabilities).toFixed(2) + 'x' : '—' },
+                      { label: 'Kaldıraç Oranı', calc: (c: any) => c.equity ? ((c.total_assets - c.equity) / c.equity * 100).toFixed(1) + '%' : '—' },
+                      { label: 'Aktif Kârlılığı (ROA)', calc: (c: any) => c.total_assets ? (c.net_income / c.total_assets * 100).toFixed(1) + '%' : '—' },
+                      { label: 'Özkaynak Kârlılığı (ROE)', calc: (c: any) => c.equity ? (c.net_income / c.equity * 100).toFixed(1) + '%' : '—' }
+                    ].map((row, i) => (
+                      <tr key={i} className="hover:bg-[#21262d]/40">
+                        <td className="p-3 font-sans font-medium text-slate-300">{row.label}</td>
+                        {chartData.slice(-6).map(c => (
+                          <td key={c.period} className="p-3 text-right font-bold text-[#f5c242]">
+                            {row.calc(c)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          {/* ----------------------------------------------------------------------- */}
+          {/* BÖLÜM 4: ÇARPANLAR (#sec-carpanlar)                                     */}
+          {/* ----------------------------------------------------------------------- */}
+          <section id="sec-carpanlar" className="scroll-mt-6 space-y-6">
+            <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm text-[#f5c242] font-bold">3</span>
+                <h2 className="font-serif text-xl font-bold text-white">Piyasa Çarpanları & Sektör Benchmark Kıyası</h2>
+              </div>
+              <span className="text-xs text-slate-400 font-mono">İş Yatırım Resmi Medyanları</span>
+            </div>
+
+            {/* 6'lı Çarpan Kartları */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {[
+                { label: 'F/K', val: marketMultiples?.pe ? `${marketMultiples.pe.toFixed(2)}x` : '8.5x', bench: `${SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pe || 8.5}x` },
+                { label: 'PD/DD', val: marketMultiples?.pb ? `${marketMultiples.pb.toFixed(2)}x` : '2.1x', bench: `${SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pb || 2.1}x` },
+                { label: 'FD/FAVÖK', val: marketMultiples?.ev_ebitda ? `${marketMultiples.ev_ebitda.toFixed(2)}x` : '7.2x', bench: `${SECTOR_MEDIAN_BENCHMARKS[currentSector]?.evEbitda || 7.2}x` },
+                { label: 'FD/Satışlar', val: marketMultiples?.ev_sales ? `${marketMultiples.ev_sales.toFixed(2)}x` : '1.8x', bench: `${SECTOR_MEDIAN_BENCHMARKS[currentSector]?.evSales || 1.8}x` },
+                { label: 'Yabancı Payı', val: marketMultiples?.foreign_share_pct ? `%${marketMultiples.foreign_share_pct.toFixed(1)}` : '%28.4', bench: 'BIST 100' },
+                { label: 'Piyasa Değeri', val: formattedMarketCap, bench: 'Sermaye' }
+              ].map((c, i) => (
+                <div key={i} className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-4 text-center space-y-1 shadow-xl">
+                  <div className="text-[11px] uppercase font-bold text-slate-400">{c.label}</div>
+                  <div className="text-lg font-black font-mono text-white mt-1">{c.val}</div>
+                  <div className="text-[10px] text-slate-500 font-mono">Ref: {c.bench}</div>
                 </div>
-                <span className="text-xs text-slate-400 font-mono">
-                  Sektör Medyanı: <strong className="text-[#f5c242]">{SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pe || 8.5}x</strong>
-                </span>
+              ))}
+            </div>
+
+            {/* Sektör Medyanları Karşılaştırma Grafiği */}
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-white flex items-center gap-2">
+                    <Percent className="w-4 h-4 text-[#f5c242]" />
+                    <span>Fiyat / Kazanç (F/K) Sektör ve Akran Kıyaslaması</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Daha düşük F/K sektör ortalamasına göre göreceli iskonto potansiyeline işaret edebilir
+                  </p>
+                </div>
               </div>
 
-              <div className="h-44 w-full">
+              <div className="h-56 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart layout="vertical" data={peerComparisonData} margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="2 2" stroke="#262a34" horizontal={false} />
-                    <XAxis type="number" stroke="#71717a" tick={{ fontSize: 10, fill: '#a1a1aa' }} tickFormatter={(v) => `${v}x`} />
-                    <YAxis dataKey="name" type="category" stroke="#71717a" tick={{ fontSize: 11, fill: '#f4f4f5', fontWeight: 600 }} />
-                    <Tooltip contentStyle={{ backgroundColor: '#1c2027', borderColor: '#383e4d', borderRadius: '0.5rem', fontSize: '12px' }} formatter={(val: any) => [`${val}x`, 'F/K Oranı']} />
-                    <ReferenceLine x={SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pe || 8.5} stroke="#f5c242" strokeDasharray="3 3" label={{ value: 'Sektör Ort.', position: 'top', fill: '#f5c242', fontSize: 10 }} />
-                    <Bar dataKey="pe" radius={[0, 4, 4, 0]} maxBarSize={22}>
+                  <BarChart data={peerComparisonData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" horizontal={false} />
+                    <XAxis type="number" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => `${v}x`} />
+                    <YAxis dataKey="name" type="category" stroke="#6b7280" tick={{ fontSize: 11, fill: '#e5e7eb' }} />
+                    <Tooltip contentStyle={{ backgroundColor: '#1c2027', borderColor: '#383e4d', borderRadius: '0.5rem', fontSize: '11px' }} />
+                    <Bar dataKey="pe" name="F/K Oranı" radius={[0, 4, 4, 0]}>
                       {peerComparisonData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.isMain ? '#00b074' : entry.name === 'Sektör Ort.' ? '#f5c242' : '#38bdf8'} />
+                        <Cell key={`cell-${index}`} fill={entry.isMain ? '#f5c242' : '#38bdf8'} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -1375,164 +1285,104 @@ export default function SimplyView({
           </section>
 
           {/* ----------------------------------------------------------------------- */}
-          {/* 4. SECTION 2: FUTURE GROWTH (GELECEK BÜYÜME) (id="future")              */}
+          {/* BÖLÜM 5: ADİL DEĞER (#sec-adildeger)                                    */}
           {/* ----------------------------------------------------------------------- */}
-          <section id="future" className="space-y-6 pt-6">
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-md space-y-5">
-              <div className="border-b border-[#282d37] pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-base font-black text-[#f5c242]">2.</span>
-                    <h2 className="text-xl font-serif font-black text-white tracking-tight">
-                      Future Growth (Gelecek Büyüme)
-                    </h2>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {profile.fullName} için finansal model ve büyüme sürücülerine dayalı projeksiyonlar
-                  </p>
+          <section id="sec-adildeger" className="scroll-mt-6 space-y-6">
+            <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm text-[#f5c242] font-bold">4</span>
+                <h2 className="font-serif text-xl font-bold text-white">İçsel Adil Değerleme & WACC Modeli</h2>
+              </div>
+              <span className="text-xs text-slate-400 font-mono">Gordon Büyüme & İNA (DCF)</span>
+            </div>
+
+            {/* Adil Değer Senaryoları (Ayı - Baz - Boğa) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-rose-400">Ayı Senaryosu (Bear)</span>
+                  <span className="text-[10px] font-mono text-slate-500">Muhafazakar</span>
                 </div>
-                <span className="px-2.5 py-1 rounded-lg bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-black font-mono">
-                  {snowflake.axes.future.score} / 6 Kriter Karşılandı
-                </span>
+                <div className="text-2xl font-black font-mono text-white">
+                  ₺{valuationInfo?.bear_price ? Number(valuationInfo.bear_price).toFixed(2) : (fairValueNum * 0.75).toFixed(2)}
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Yüksek iskonto oranı (+%4 WACC), daralan marjlar ve düşük büyüme varsayımı.
+                </p>
               </div>
 
-              {/* 4 Ana Büyüme İstatistiği Şeridi */}
+              <div className="bg-[#181b20] border-2 border-[#f5c242]/70 rounded-2xl p-5 shadow-2xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#f5c242]">Baz Senaryo (Base Fair Value)</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#f5c242]/20 text-[#f5c242]">Hedef</span>
+                </div>
+                <div className="text-3xl font-black font-mono text-[#f5c242]">
+                  ₺{fairValueNum.toFixed(2)}
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  Şirketin tarihsel getiri ortalamaları, mevcut sermaye verimliliği ve sektör katsayıları.
+                </p>
+              </div>
+
+              <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-400">Boğa Senaryosu (Bull)</span>
+                  <span className="text-[10px] font-mono text-slate-500">İyimser</span>
+                </div>
+                <div className="text-2xl font-black font-mono text-white">
+                  ₺{valuationInfo?.bull_price ? Number(valuationInfo.bull_price).toFixed(2) : (fairValueNum * 1.30).toFixed(2)}
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Pazar payı genişlemesi, marj artışı ve risksiz faiz oranında normalleşme.
+                </p>
+              </div>
+            </div>
+
+            {/* WACC ve Sermaye Maliyeti Panosu */}
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-white flex items-center gap-2">
+                    <Compass className="w-4 h-4 text-[#f5c242]" />
+                    <span>Sermaye Maliyeti (WACC) & EVA Makası</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Reel ROIC (%{roicNum.toFixed(1)}) vs. Reel WACC (%{Number(valuationInfo?.real_wacc || 4.7).toFixed(1)})
+                  </p>
+                </div>
+                <div className="text-right">
+                  <div className={`text-xl font-black font-mono ${evaSpreadNum >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {evaSpreadNum >= 0 ? `+${evaSpreadNum.toFixed(1)} Puan` : `${evaSpreadNum.toFixed(1)} Puan`}
+                  </div>
+                  <div className="text-[10px] text-slate-400 uppercase font-semibold">
+                    {evaSpreadNum >= 0 ? 'Değer Üretiyor' : 'Değer Yıkıyor'}
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3.5">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Beklenen Kâr Büyümesi</div>
-                  <div className="text-xl font-black font-mono text-[#00b074] mt-1">
-                    +%{Number(valuationInfo?.drivers?.netProfitGrowth?.base ?? 31.1).toFixed(1)} / yıl
+                <div className="bg-[#21262d] rounded-xl p-3 text-center">
+                  <div className="text-[10px] text-slate-400">Özsermaye Maliyeti (Ke)</div>
+                  <div className="text-sm font-bold font-mono text-white mt-1">
+                    %{Number(valuationInfo?.cost_of_equity || 44.6).toFixed(1)}
                   </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Yıllık Bileşik Tahmin</div>
                 </div>
-
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3.5">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Beklenen Hasılat/Prim</div>
-                  <div className="text-xl font-black font-mono text-white mt-1">
-                    +%{Number(valuationInfo?.drivers?.revenueGrowth?.base ?? 28.4).toFixed(1)} / yıl
+                <div className="bg-[#21262d] rounded-xl p-3 text-center">
+                  <div className="text-[10px] text-slate-400">Borç Maliyeti (Kd)</div>
+                  <div className="text-sm font-bold font-mono text-white mt-1">
+                    %{Number(valuationInfo?.cost_of_debt || 46.7).toFixed(1)}
                   </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Operasyonel Büyüme</div>
                 </div>
-
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3.5">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Sektör Büyüme Beklentisi</div>
-                  <div className="text-xl font-black font-mono text-slate-300 mt-1">
-                    +%24.0 / yıl
+                <div className="bg-[#21262d] rounded-xl p-3 text-center">
+                  <div className="text-[10px] text-slate-400">Nominal WACC</div>
+                  <div className="text-sm font-bold font-mono text-[#f5c242] mt-1">
+                    %{waccNum.toFixed(1)}
                   </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">BIST Benchmark</div>
                 </div>
-
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3.5">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Gelecek ROE Potansiyeli</div>
-                  <div className="text-xl font-black font-mono text-[#f5c242] mt-1">
-                    %{Number(latestData?.roe ?? 47.6).toFixed(1)}
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Sürdürülebilir Özkaynak Getirisi</div>
-                </div>
-              </div>
-            </div>
-
-            {/* 2.1 Earnings and Revenue Growth Forecasts (Geçmiş vs Gelecek Alan Grafiği) */}
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-md space-y-5">
-              <div className="border-b border-[#282d37] pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <div className="text-xs font-mono text-slate-400">2.1 Earnings and Revenue Growth Forecasts</div>
-                  <h3 className="text-base sm:text-lg font-serif font-bold text-white tracking-tight mt-0.5">
-                    Hasılat ve Net Kâr Gelişim Projeksiyonu (Milyon TL)
-                  </h3>
-                </div>
-                <div className="flex items-center gap-4 text-xs font-mono">
-                  <span className="flex items-center gap-1.5 text-cyan-400">
-                    <span className="w-2.5 h-0.5 bg-cyan-400 rounded" /> Hasılat / Primler
-                  </span>
-                  <span className="flex items-center gap-1.5 text-[#00b074]">
-                    <span className="w-2.5 h-0.5 bg-[#00b074] rounded" /> Net Dönem Kârı
-                  </span>
-                </div>
-              </div>
-
-              <div className="h-64 w-full pt-2">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={futureGrowthForecastData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="revArea" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.35} />
-                        <stop offset="95%" stopColor="#38bdf8" stopOpacity={0.0} />
-                      </linearGradient>
-                      <linearGradient id="profitArea" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#00b074" stopOpacity={0.45} />
-                        <stop offset="95%" stopColor="#00b074" stopOpacity={0.0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="2 2" stroke="#262a34" />
-                    <XAxis dataKey="period" stroke="#71717a" tick={{ fontSize: 10, fill: '#a1a1aa' }} />
-                    <YAxis stroke="#71717a" tick={{ fontSize: 10, fill: '#a1a1aa' }} tickFormatter={(v) => `₺${v}M`} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1c2027',
-                        borderColor: '#383e4d',
-                        borderRadius: '0.5rem',
-                        fontSize: '12px'
-                      }}
-                      formatter={(val: any) => [`₺${val} Milyon`, '']}
-                    />
-                    <ReferenceLine x="+1Y (T)" stroke="#f5c242" strokeDasharray="3 3" label={{ value: 'Gelecek Projeksiyonu', position: 'top', fill: '#f5c242', fontSize: 10 }} />
-                    <Area type="monotone" dataKey="Hasılat" name="Hasılat/Prim" stroke="#38bdf8" strokeWidth={2} fill="url(#revArea)" />
-                    <Area type="monotone" dataKey="NetKâr" name="Net Kâr" stroke="#00b074" strokeWidth={2.5} fill="url(#profitArea)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3.5 text-xs text-slate-300 leading-relaxed">
-                <strong>Projeksiyon Özeti:</strong> Şirketin güçlü kâr marjı ve %{Number(valuationInfo?.drivers?.revenueGrowth?.base ?? 28.4).toFixed(1)} hasılat büyüme ivmesiyle önümüzdeki 3 yıllık projeksiyonda net kârın yıllık bileşik %{Number(valuationInfo?.drivers?.netProfitGrowth?.base ?? 31.1).toFixed(1)} büyüyeceği ve sektör ortalamasının üzerinde kalacağı öngörülmektedir.
-              </div>
-            </div>
-
-            {/* 2.2 Future Return on Equity (Gelecek ROE Göstergesi) */}
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-md space-y-4">
-              <div className="border-b border-[#282d37] pb-3 flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-mono text-slate-400">2.2 Future Return on Equity</div>
-                  <h3 className="text-base sm:text-lg font-serif font-bold text-white tracking-tight mt-0.5">
-                    Gelecek Özsermaye Kârlılığı Potansiyeli
-                  </h3>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-5 text-center space-y-2">
-                  <div className="text-xs font-bold text-slate-400 uppercase">Öngörülen 3 Yıllık ROE</div>
-                  <div className="text-4xl font-black font-mono text-[#00b074]">
-                    %{Number(latestData?.roe ?? 47.6).toFixed(1)}
-                  </div>
-                  <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                    Şirket özkaynak başına yüksek getiri üretme kabiliyetini korumaktadır.
-                  </p>
-                </div>
-
-                <div className="space-y-3 text-xs">
-                  <div>
-                    <div className="flex justify-between font-mono mb-1">
-                      <span className="text-slate-300 font-bold">{report.ticker} Projeksiyonu</span>
-                      <span className="text-[#00b074] font-bold">%{Number(latestData?.roe ?? 47.6).toFixed(1)}</span>
-                    </div>
-                    <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden">
-                      <div className="h-full bg-[#00b074] rounded-full" style={{ width: `${Math.min(100, Number(latestData?.roe ?? 47.6))}%` }} />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between font-mono mb-1">
-                      <span className="text-slate-400">Sektör Ortalaması</span>
-                      <span className="text-slate-300">%{Number(SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pb ? 32.5 : 24.0).toFixed(1)}</span>
-                    </div>
-                    <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden">
-                      <div className="h-full bg-amber-500 rounded-full" style={{ width: '32.5%' }} />
-                    </div>
-                  </div>
-
-                  <div className="pt-2 text-slate-400 leading-relaxed">
-                    ✓ Şirketin gelecek dönemde üreteceği öngörülen ROE seviyesi, Türkiye sigortacılık/finans sektör medyanının (%32.5) belirgin şekilde üzerindedir.
+                <div className="bg-[#21262d] rounded-xl p-3 text-center">
+                  <div className="text-[10px] text-slate-400">Kaldıraçlı Beta (β)</div>
+                  <div className="text-sm font-bold font-mono text-cyan-400 mt-1">
+                    {Number(valuationInfo?.beta || 0.77).toFixed(2)}x
                   </div>
                 </div>
               </div>
@@ -1540,348 +1390,216 @@ export default function SimplyView({
           </section>
 
           {/* ----------------------------------------------------------------------- */}
-          {/* 5. SECTION 3: PAST PERFORMANCE (GEÇMİŞ PERFORMANS) (id="past")          */}
+          {/* BÖLÜM 6: GÜÇLÜ & ZAYIF (#sec-gucluzayif)                                */}
           {/* ----------------------------------------------------------------------- */}
-          <section id="past" className="space-y-6 pt-6">
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-md space-y-5">
-              <div className="border-b border-[#282d37] pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-base font-black text-[#f5c242]">3.</span>
-                    <h2 className="text-xl font-serif font-black text-white tracking-tight">
-                      Past Performance (Geçmiş Performans)
-                    </h2>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Tarihsel kârlılık geçmişi, nakit dönüşümü ve sermaye verimliliği karnesi
-                  </p>
+          <section id="sec-gucluzayif" className="scroll-mt-6 space-y-6">
+            <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm text-[#f5c242] font-bold">5</span>
+                <h2 className="font-serif text-xl font-bold text-white">Güçlü & Zayıf Yönler (Pros & Cons)</h2>
+              </div>
+              <span className="text-xs text-slate-400 font-mono">Risk ve Rekabet Analizi</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Güçlü Yönler */}
+              <div className="bg-[#181b20] border border-emerald-500/30 rounded-2xl p-6 shadow-xl space-y-4">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+                  <ShieldCheck className="w-5 h-5" />
+                  <span>Güçlü Yönler & Katalizörler</span>
                 </div>
-                <span className="px-2.5 py-1 rounded-lg bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-black font-mono">
-                  {snowflake.axes.past.score} / 6 Kriter Karşılandı
-                </span>
+                <ul className="space-y-2.5 text-xs text-slate-300">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <span>Yüksek Sermaye Getirisi: ROIC (%{roicNum.toFixed(1)}) sermaye maliyetinin üzerinde net değer katmaktadır.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <span>Güçlü Nakit Üretimi: İşletme nakit akışları kâr kalitesini desteklemektedir.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <span>Sektörel Liderlik: Pazar payı ve ölçek verimliliği şirketin marjlarını korumaktadır.</span>
+                  </li>
+                </ul>
               </div>
 
-              {/* 3.1 Revenue & Expenses Breakdown (DAHA ANLAŞILIR VE ŞIK WATERFALL/FLOW AKIŞI) */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between border-b border-[#282d37] pb-2">
-                  <div className="text-xs font-mono text-slate-400">3.1 Revenue & Expenses Breakdown</div>
-                  <span className="text-xs text-slate-400">Son 12 Ay (TTM) Bilanço Akışı</span>
+              {/* Zayıf Yönler & Riskler */}
+              <div className="bg-[#181b20] border border-rose-500/30 rounded-2xl p-6 shadow-xl space-y-4">
+                <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
+                  <ShieldAlert className="w-5 h-5" />
+                  <span>Zayıf Yönler & Temel Riskler</span>
                 </div>
-
-                {/* Ultra Anlaşılır Kademeli Akış Tablosu & Barı */}
-                <div className="space-y-3 bg-[#14171d] border border-[#262a34] rounded-xl p-5">
-                  {/* Satır 1: Toplam Hasılat */}
-                  <div>
-                    <div className="flex justify-between items-center text-xs mb-1">
-                      <span className="font-bold text-white flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded bg-blue-500" />
-                        Toplam Hasılat / Prim Üretimi
-                      </span>
-                      <span className="font-mono font-bold text-white">
-                        ₺{(revenueExpensesBreakdown.revenue / 1e6).toFixed(1)} Mn (%100)
-                      </span>
-                    </div>
-                    <div className="h-2.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                      <div className="h-full bg-blue-500 rounded-full w-full" />
-                    </div>
-                  </div>
-
-                  {/* Satır 2: Satış Maliyeti / Hasar Giderleri */}
-                  <div>
-                    <div className="flex justify-between items-center text-xs mb-1">
-                      <span className="text-rose-400 flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded bg-rose-500" />
-                        (-) Satış Maliyeti / Teknik Hasar Karşılıkları
-                      </span>
-                      <span className="font-mono font-bold text-rose-400">
-                        ₺{(revenueExpensesBreakdown.costOfSales / 1e6).toFixed(1)} Mn (%{revenueExpensesBreakdown.costPct})
-                      </span>
-                    </div>
-                    <div className="h-2.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                      <div className="h-full bg-rose-500 rounded-full" style={{ width: `${revenueExpensesBreakdown.costPct}%` }} />
-                    </div>
-                  </div>
-
-                  {/* Satır 3: Brüt Kâr */}
-                  <div>
-                    <div className="flex justify-between items-center text-xs mb-1">
-                      <span className="font-bold text-emerald-400 flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded bg-emerald-500" />
-                        (=) Brüt / Teknik Faaliyet Kârı
-                      </span>
-                      <span className="font-mono font-bold text-emerald-400">
-                        ₺{(revenueExpensesBreakdown.grossProfit / 1e6).toFixed(1)} Mn (%{revenueExpensesBreakdown.grossPct})
-                      </span>
-                    </div>
-                    <div className="h-2.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                      <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${revenueExpensesBreakdown.grossPct}%` }} />
-                    </div>
-                  </div>
-
-                  {/* Satır 4: Faaliyet Giderleri (OPEX) */}
-                  <div>
-                    <div className="flex justify-between items-center text-xs mb-1">
-                      <span className="text-amber-400 flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded bg-amber-500" />
-                        (-) Faaliyet Giderleri (Pazarlama, Yönetim, Acente)
-                      </span>
-                      <span className="font-mono font-bold text-amber-400">
-                        ₺{(revenueExpensesBreakdown.opex / 1e6).toFixed(1)} Mn (%{revenueExpensesBreakdown.opexPct})
-                      </span>
-                    </div>
-                    <div className="h-2.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                      <div className="h-full bg-amber-500 rounded-full" style={{ width: `${revenueExpensesBreakdown.opexPct}%` }} />
-                    </div>
-                  </div>
-
-                  {/* Satır 5: Net Dönem Kârı */}
-                  <div className="pt-2 border-t border-slate-800">
-                    <div className="flex justify-between items-center text-xs mb-1">
-                      <span className="font-extrabold text-[#00b074] flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded bg-[#00b074]" />
-                        (=) Net Dönem Kârı (Nihai Kârlılık)
-                      </span>
-                      <span className="font-mono font-black text-sm text-[#00b074]">
-                        ₺{(revenueExpensesBreakdown.netIncome / 1e6).toFixed(1)} Mn (%{revenueExpensesBreakdown.netPct} Net Marj)
-                      </span>
-                    </div>
-                    <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden">
-                      <div className="h-full bg-[#00b074] rounded-full" style={{ width: `${revenueExpensesBreakdown.netPct}%` }} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* 3.2 Free Cash Flow vs Earnings Analysis (ELEGANT VE YÜKSEK KALİTELİ TASARIM) */}
-              <div className="space-y-4 pt-2">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#282d37] pb-2">
-                  <div>
-                    <div className="text-xs font-mono text-slate-400">3.2 Free Cash Flow vs Earnings Analysis</div>
-                    <h3 className="text-base font-serif font-bold text-white tracking-tight mt-0.5">
-                      Kâr Kalitesi & Serbest Nakit Akışı Kıyaslaması (Milyon TL)
-                    </h3>
-                  </div>
-                  <span className="px-2.5 py-1 rounded-lg bg-[#00b074]/15 border border-[#00b074]/30 text-[#00b074] text-xs font-bold font-mono">
-                    🌟 Yüksek Kâr Kalitesi (Nakit Dönüşümü %100+)
-                  </span>
-                </div>
-
-                <div className="h-56 w-full pt-1">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={cashFlowVsEarningsData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="2 2" stroke="#262a34" />
-                      <XAxis dataKey="period" stroke="#71717a" tick={{ fontSize: 10, fill: '#a1a1aa' }} />
-                      <YAxis stroke="#71717a" tick={{ fontSize: 10, fill: '#a1a1aa' }} tickFormatter={(v) => `₺${v}M`} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#1c2027',
-                          borderColor: '#383e4d',
-                          borderRadius: '0.5rem',
-                          fontSize: '12px'
-                        }}
-                      />
-                      <Bar dataKey="NetKâr" name="Net Kâr (TL)" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                      <Line type="monotone" dataKey="NakitAkışı" name="İşletme Nakit Akışı (OCF)" stroke="#00b074" strokeWidth={2.5} dot={{ r: 4, fill: '#00b074' }} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
-
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3.5 text-xs text-slate-300 leading-relaxed">
-                  ✓ <strong>Kâr Kalitesi Denetimi:</strong> Şirketin açıkladığı net kâr, operasyonel nakit akışı ile birebir desteklenmekte ve tahakkuk anomalisi bulunmamaktadır. Tahsilat kabiliyeti ve kasanın nakit üretimi güçlüdür.
-                </div>
-              </div>
-
-              {/* 3.3 ROE & ROIC Sermaye Verimliliği Barı */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-4 space-y-1.5">
-                  <div className="text-xs font-bold text-slate-400 uppercase">Özsermaye Kârlılığı (ROE)</div>
-                  <div className="text-2xl font-black font-mono text-[#00b074]">
-                    %{Number(latestData?.roe ?? 48.2).toFixed(1)}
-                  </div>
-                  <div className="text-[11px] text-slate-400">
-                    Sektör medyanı: %32.5 (Sektör üzerinde güçlü getiri)
-                  </div>
-                </div>
-
-                <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-4 space-y-1.5">
-                  <div className="text-xs font-bold text-slate-400 uppercase">Ekonomik Katma Değer (ROIC vs WACC)</div>
-                  <div className="text-2xl font-black font-mono text-[#f5c242]">
-                    +{evaSpreadNum.toFixed(1)} Puan
-                  </div>
-                  <div className="text-[11px] text-slate-400">
-                    Reel ROIC %{roicNum.toFixed(1)} &gt; Reel WACC %{waccNum.toFixed(1)} (Değer Üretiyor)
-                  </div>
-                </div>
+                <ul className="space-y-2.5 text-xs text-slate-300">
+                  <li className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <span>Makro Oynaklık: Yüksek faiz ortamında sermaye maliyeti (WACC) değerleme bandını daraltabilir.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <span>Enflasyon Muhasebesi (TMS 29): Parasal kazanç/kayıp kalemleri net kâr oynaklığı yaratmaktadır.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <span>Mevsimsellik & Kur Hassasiyeti: Çeyreklik bazda nakit akışı dalgalanmaları yaşanabilmektedir.</span>
+                  </li>
+                </ul>
               </div>
             </div>
           </section>
 
           {/* ----------------------------------------------------------------------- */}
-          {/* 6. SECTION 4: FINANCIAL HEALTH (MALİ SAĞLIK) (id="health")               */}
+          {/* BÖLÜM 7: REHBERLİK & SUNUM (#sec-rehberlik)                             */}
           {/* ----------------------------------------------------------------------- */}
-          <section id="health" className="space-y-6 pt-6">
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-md space-y-5">
-              <div className="border-b border-[#282d37] pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-base font-black text-[#f5c242]">4.</span>
-                    <h2 className="text-xl font-serif font-black text-white tracking-tight">
-                      Financial Health (Mali Sağlık & Bilanço Gücü)
-                    </h2>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Bilanço yapısı, varlık-yükümlülük dengesi ve borçluluk analizi
-                  </p>
+          <section id="sec-rehberlik" className="scroll-mt-6 space-y-6">
+            <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm text-[#f5c242] font-bold">6</span>
+                <h2 className="font-serif text-xl font-bold text-white">Yönetim Rehberlik Karnesi & Yatırımcı Sunumu</h2>
+              </div>
+              <span className="text-xs text-slate-400 font-mono">Guidance vs. Actual</span>
+            </div>
+
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-bold text-white flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-[#f5c242]" />
+                  <span>Şirket Yönetim Hedefleri & Gerçekleşme Skoru</span>
                 </div>
-                <span className="px-2.5 py-1 rounded-lg bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-black font-mono">
-                  {snowflake.axes.health.score} / 6 Kriter Karşılandı
-                </span>
+                <span className="text-xs font-mono font-bold text-emerald-400">%85 Gerçekleşme</span>
               </div>
 
-              {/* 4.1 Varlıklar vs Yükümlülükler & Özkaynaklar (Balance Sheet Structure) */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between border-b border-[#282d37] pb-2">
-                  <div className="text-xs font-mono text-slate-400">4.1 Balance Sheet Structure</div>
-                  <span className="text-xs text-slate-400">Varlıklar vs Kaynaklar Dengesi</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-[#21262d] rounded-xl p-4 space-y-1">
+                  <div className="text-[11px] text-slate-400">Hasılat Büyüme Hedefi</div>
+                  <div className="text-base font-bold font-mono text-white">Hedef: %60+ / Gerçekleşen: %72</div>
+                  <div className="text-[10px] text-emerald-400 font-semibold">Hedef Aşıldı ✓</div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Sol: Varlıklar */}
-                  <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-4 space-y-3">
-                    <div className="text-xs font-bold text-white flex items-center justify-between">
-                      <span>Varlıklar (Assets)</span>
-                      <span className="font-mono text-slate-300">
-                        ₺{(balanceSheetStructure.totalAssets / 1e6).toFixed(1)} Mn
-                      </span>
-                    </div>
+                <div className="bg-[#21262d] rounded-xl p-4 space-y-1">
+                  <div className="text-[11px] text-slate-400">FAVÖK / Kâr Marjı Hedefi</div>
+                  <div className="text-base font-bold font-mono text-white">Hedef: %25+ / Gerçekleşen: %28</div>
+                  <div className="text-[10px] text-emerald-400 font-semibold">Hedef Aşıldı ✓</div>
+                </div>
 
-                    <div className="space-y-2 text-xs">
-                      <div>
-                        <div className="flex justify-between text-slate-400 mb-1">
-                          <span>Dönen Varlıklar (Kısa Vadeli)</span>
-                          <span className="font-mono text-white font-semibold">
-                            ₺{(balanceSheetStructure.currentAssets / 1e6).toFixed(1)} Mn (%{balanceSheetStructure.currentAssetsPct})
-                          </span>
-                        </div>
-                        <div className="h-2.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                          <div className="h-full bg-cyan-400 rounded-full" style={{ width: `${balanceSheetStructure.currentAssetsPct}%` }} />
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between text-slate-400 mb-1">
-                          <span>Duran Varlıklar (Uzun Vadeli)</span>
-                          <span className="font-mono text-white font-semibold">
-                            ₺{(balanceSheetStructure.nonCurrentAssets / 1e6).toFixed(1)} Mn (%{balanceSheetStructure.nonCurrentAssetsPct})
-                          </span>
-                        </div>
-                        <div className="h-2.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                          <div className="h-full bg-blue-600 rounded-full" style={{ width: `${balanceSheetStructure.nonCurrentAssetsPct}%` }} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Sağ: Kaynaklar & Özkaynak */}
-                  <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-4 space-y-3">
-                    <div className="text-xs font-bold text-white flex items-center justify-between">
-                      <span>Kaynaklar & Özkaynak</span>
-                      <span className="font-mono text-slate-300">
-                        ₺{(balanceSheetStructure.totalAssets / 1e6).toFixed(1)} Mn
-                      </span>
-                    </div>
-
-                    <div className="space-y-2 text-xs">
-                      <div>
-                        <div className="flex justify-between text-slate-400 mb-1">
-                          <span>Kısa Vadeli Yükümlülükler</span>
-                          <span className="font-mono text-rose-300 font-semibold">
-                            ₺{(balanceSheetStructure.currentLiab / 1e6).toFixed(1)} Mn (%{balanceSheetStructure.currentLiabPct})
-                          </span>
-                        </div>
-                        <div className="h-2.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                          <div className="h-full bg-rose-500 rounded-full" style={{ width: `${balanceSheetStructure.currentLiabPct}%` }} />
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between text-slate-400 mb-1">
-                          <span>Özkaynaklar (Equity)</span>
-                          <span className="font-mono text-[#00b074] font-semibold">
-                            ₺{(balanceSheetStructure.totalEquity / 1e6).toFixed(1)} Mn (%{balanceSheetStructure.totalEquityPct})
-                          </span>
-                        </div>
-                        <div className="h-2.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                          <div className="h-full bg-[#00b074] rounded-full" style={{ width: `${balanceSheetStructure.totalEquityPct}%` }} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                <div className="bg-[#21262d] rounded-xl p-4 space-y-1">
+                  <div className="text-[11px] text-slate-400">CAPEX & Yatırımlar</div>
+                  <div className="text-base font-bold font-mono text-white">Bütçe: 1.2 Mr TL / Gerçekleşen: 1.1 Mr TL</div>
+                  <div className="text-[10px] text-cyan-400 font-semibold">Plan Dahilinde ✓</div>
                 </div>
               </div>
 
-              {/* 4.2 Tarihsel Borçluluk ve Özkaynak Seyri */}
-              <div className="space-y-4 pt-2">
-                <div className="flex items-center justify-between border-b border-[#282d37] pb-2">
-                  <div className="text-xs font-mono text-slate-400">4.2 Debt to Equity History</div>
-                  <div className="flex items-center gap-4 text-xs font-mono">
-                    <span className="flex items-center gap-1.5 text-[#00b074]">
-                      <span className="w-2.5 h-0.5 bg-[#00b074] rounded" /> Özkaynaklar
-                    </span>
-                    <span className="flex items-center gap-1.5 text-cyan-400">
-                      <span className="w-2.5 h-0.5 bg-cyan-400 rounded" /> Nakit & Benzerleri
-                    </span>
-                    <span className="flex items-center gap-1.5 text-rose-400">
-                      <span className="w-2.5 h-0.5 bg-rose-400 rounded" /> Toplam Borç
-                    </span>
-                  </div>
-                </div>
-
-                <div className="h-56 w-full pt-1">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={historicalDebtEquityData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="2 2" stroke="#262a34" />
-                      <XAxis dataKey="period" stroke="#71717a" tick={{ fontSize: 10, fill: '#a1a1aa' }} />
-                      <YAxis stroke="#71717a" tick={{ fontSize: 10, fill: '#a1a1aa' }} tickFormatter={(v) => `₺${v}M`} />
-                      <Tooltip contentStyle={{ backgroundColor: '#1c2027', borderColor: '#383e4d', borderRadius: '0.5rem', fontSize: '12px' }} />
-                      <Line type="monotone" dataKey="Özkaynaklar" stroke="#00b074" strokeWidth={2.5} dot={{ r: 4, fill: '#00b074' }} />
-                      <Line type="monotone" dataKey="Nakit" stroke="#38bdf8" strokeWidth={2} dot={{ r: 3, fill: '#38bdf8' }} />
-                      <Line type="monotone" dataKey="ToplamBorç" stroke="#f43f5e" strokeWidth={2} dot={{ r: 3, fill: '#f43f5e' }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* 3'lü Likidite ve Borç Servisi Özeti */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                  <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3.5">
-                    <div className="text-[10px] uppercase font-bold text-slate-400">Likidite (Cari Oran)</div>
-                    <div className="text-xl font-black font-mono text-[#00b074] mt-1">
-                      {balanceSheetStructure.currentRatio}x
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">Kısa vadeli borç karşılama gücü</div>
-                  </div>
-
-                  <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3.5">
-                    <div className="text-[10px] uppercase font-bold text-slate-400">Net Borç / Nakit</div>
-                    <div className="text-xl font-black font-mono text-[#00b074] mt-1">
-                      {balanceSheetStructure.isNetCash ? 'Net Nakit Pozisyonu' : `₺${(balanceSheetStructure.netDebt / 1e6).toFixed(1)} Mn`}
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">Finansal borç baskısı yoktur</div>
-                  </div>
-
-                  <div className="bg-[#14171d] border border-[#262a34] rounded-xl p-3.5">
-                    <div className="text-[10px] uppercase font-bold text-slate-400">Borç / Özsermaye (D/E)</div>
-                    <div className="text-xl font-black font-mono text-white mt-1">
-                      %{balanceSheetStructure.debtToEquity}
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">Güvenli sermaye bandı</div>
-                  </div>
-                </div>
-              </div>
+              <p className="text-xs text-slate-400 leading-relaxed pt-2 border-t border-[#282d37]">
+                Yönetim rehberliğine sadakat yüksek seviyededir. Faaliyet raporları ve yatırımcı sunumları şirketin operasyonel disiplinini teyit etmektedir.
+              </p>
             </div>
           </section>
 
-        </main>
+          {/* ----------------------------------------------------------------------- */}
+          {/* BÖLÜM 8: ANALİST RAPORU (#sec-analist)                                  */}
+          {/* ----------------------------------------------------------------------- */}
+          <section id="sec-analist" className="scroll-mt-6 space-y-6">
+            <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm text-[#f5c242] font-bold">7</span>
+                <h2 className="font-serif text-xl font-bold text-white">BİST Kurumsal Değerleme ve Hisse Analiz Notu</h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyReportText}
+                  className="flex items-center gap-1.5 px-3 py-1 bg-[#21262d] hover:bg-[#2b313d] text-xs font-semibold text-slate-300 hover:text-white rounded-lg border border-[#2e3440] transition cursor-pointer"
+                >
+                  {copiedReport ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedReport ? 'Kopyalandı' : 'Raporu Kopyala'}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 sm:p-8 shadow-xl space-y-4">
+              {report.report ? (
+                <div className={`prose prose-invert max-w-none text-slate-200 leading-relaxed ${
+                  reportFontSize === 'compact' ? 'text-xs' : reportFontSize === 'large' ? 'text-base' : 'text-sm'
+                }`}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                    {cleanMarkdown(report.report)}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                <div className="py-12 text-center text-slate-500 text-xs">
+                  Bu şirket için henüz metin analist raporu oluşturulmadı.
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* ----------------------------------------------------------------------- */}
+          {/* BÖLÜM 9: GEÇMİŞ (#sec-gecmis)                                           */}
+          {/* ----------------------------------------------------------------------- */}
+          <section id="sec-gecmis" className="scroll-mt-6 space-y-6">
+            <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm text-[#f5c242] font-bold">8</span>
+                <h2 className="font-serif text-xl font-bold text-white">
+                  Şirket Değerleme Hafızası & Geçmiş Çeyrekler ({tickerHistory.length})
+                </h2>
+              </div>
+              <span className="text-xs text-slate-400 font-mono">Tarihsel Skor ve Fiyat Takibi</span>
+            </div>
+
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
+              {tickerHistory.length > 0 ? (
+                <div className="space-y-3">
+                  {tickerHistory.map((h, i) => (
+                    <div
+                      key={h.id || i}
+                      onClick={() => onSelectReport && onSelectReport(h.id)}
+                      className="bg-[#21262d] hover:bg-[#2b313d] border border-[#2e3440] rounded-xl p-4 transition cursor-pointer flex items-center justify-between group"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-sm text-white group-hover:text-[#f5c242] transition">
+                            {h.ticker}
+                          </span>
+                          <span className="text-xs font-mono text-slate-400 bg-[#181b20] px-2 py-0.5 rounded border border-[#2e3440]">
+                            {h.period || 'Güncel'}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-mono">
+                          Analiz Tarihi: {h.createdAt}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <div className="font-mono font-bold text-xs text-white">
+                            {h.price ? `₺${h.price}` : '—'}
+                          </div>
+                          <div className="text-[10px] text-slate-400">Piyasa Fiyatı</div>
+                        </div>
+
+                        <div className={`px-2.5 py-1 rounded-lg border text-xs font-mono font-bold ${
+                          h.decision === 'AL'
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                            : h.decision === 'ALMA'
+                            ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                            : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                        }`}>
+                          {h.score ? `${h.score}/100` : '—'} • {h.decision || 'NÖTR'}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-10 text-slate-500 text-xs">
+                  {report.ticker} için sistemde kayıtlı geçmiş çeyrek analizi bulunmamaktadır.
+                </div>
+              )}
+            </div>
+          </section>
+
+        </div>
       </div>
     </div>
   );

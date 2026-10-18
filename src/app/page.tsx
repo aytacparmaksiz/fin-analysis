@@ -12,7 +12,7 @@ import {
   TrendingUp, BarChart3, Target, Calendar, ArrowUpRight, ArrowDownRight, Minus,
   DollarSign, ShieldCheck, ShieldAlert, Activity, Layers, Download, Upload,
   Trophy, Award, Trash2, ArrowUpDown, Filter, Copy, Percent, PieChart, Info,
-  PanelLeftClose, PanelLeftOpen, Pin, PinOff, Bookmark,
+  PanelLeftClose, PanelLeftOpen, Pin, PinOff, Bookmark, Building2,
   Check, Rocket, Gem, Shield, Sun, Moon, Compass, SlidersHorizontal, Scale, ArrowRight, Sparkles
 } from 'lucide-react';
 
@@ -1296,9 +1296,10 @@ export default function ValuationTerminal({
     return null;
   }, [savedReports, activeReportId, ticker, initialTicker, defaultReport]);
 
-  // Kenar Çubuğu Katlanabilirlik ve Sabitleme Durumu (Item 6)
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isSidebarPinned, setIsSidebarPinned] = useState(true);
+  // Analiz Edilen Şirketler Modal & Filtre Durumu
+  const [isAnalyzedModalOpen, setIsAnalyzedModalOpen] = useState(false);
+  const [analyzedTab, setAnalyzedTab] = useState<'ALL' | 'AL' | 'NÖTR' | 'ALMA'>('ALL');
+  const [analyzedSearch, setAnalyzedSearch] = useState('');
 
   const toggleSection = (sectionKey: string) => {
     setCollapsedSections(prev => ({
@@ -3705,223 +3706,9 @@ export default function ValuationTerminal({
   );
 
   return (
-    <div data-theme={themeMode} className="theme-canvas min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row font-sans transition-colors duration-200">
+    <div data-theme={themeMode} className="theme-canvas min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans transition-colors duration-200">
       
-      {/* Sol Kenar Çubuğu: Kurumsal Arşiv & Skor Listesi */}
-      <aside 
-        className={`border-r border-slate-800 bg-slate-900 flex flex-col flex-shrink-0 transition-all duration-200 print:hidden ${
-          isSidebarCollapsed ? 'w-full md:w-14' : 'w-full md:w-60'
-        } max-h-56 md:max-h-none overflow-y-auto`}
-      >
-        {/* Kenar Çubuğu Üst Başlık & Sıralama */}
-        <div className="h-12 px-3 border-b border-slate-800 flex items-center justify-between gap-1">
-          {!isSidebarCollapsed && (
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate">
-                Analiz Arşivi
-              </span>
-              <span className="text-[10px] font-mono text-slate-500">
-                ({savedReports.length})
-              </span>
-            </div>
-          )}
-
-          <div className="flex items-center gap-1 ml-auto">
-            {!isSidebarCollapsed && (
-              <div className="flex items-center bg-slate-950 p-0.5 rounded-md border border-slate-800 mr-1">
-                <button
-                  type="button"
-                  onClick={() => setSidebarSort('rank')}
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
-                    sidebarSort === 'rank' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Puan
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSidebarSort('date')}
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
-                    sidebarSort === 'date' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Tarih
-                </button>
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => setIsSidebarCollapsed(c => !c)}
-              className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition cursor-pointer"
-              title={isSidebarCollapsed ? 'Kenar Çubuğunu Genişlet' : 'Kenar Çubuğunu Daralt'}
-            >
-              {isSidebarCollapsed ? <PanelLeftOpen className="w-3.5 h-3.5 text-emerald-400" /> : <PanelLeftClose className="w-3.5 h-3.5" />}
-            </button>
-          </div>
-        </div>
-
-        {/* Daraltılmış Modda İkon Çubuğu */}
-        {isSidebarCollapsed ? (
-          <div className="flex-1 flex flex-col items-center py-3 space-y-1.5 overflow-y-auto px-1.5 [scrollbar-width:none]">
-            {savedReports.map(item => (
-              <button
-                key={item.id}
-                onClick={() => { setActiveReportId(item.id); setStep('report'); }}
-                className={`w-full py-1.5 rounded-md flex flex-col items-center justify-center font-mono font-bold text-[10px] transition cursor-pointer border ${
-                  activeReportId === item.id && step === 'report'
-                    ? 'bg-slate-800 border-emerald-500/60 text-white'
-                    : 'bg-transparent border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-white'
-                }`}
-                title={`${item.ticker} • ${item.decision} (${item.score || '—'}/100)`}
-              >
-                <span className="truncate max-w-[38px]">{item.ticker.slice(0, 4)}</span>
-                <span className={`w-1.5 h-1.5 rounded-full mt-1 ${
-                  item.decision === 'AL' ? 'bg-emerald-400' :
-                  item.decision === 'ALMA' ? 'bg-rose-400' : 'bg-amber-400'
-                }`} />
-              </button>
-            ))}
-          </div>
-        ) : (
-          <>
-            {/* Kayıtlı Raporlar Listesi (Düzleştirilmiş Kurumsal Liste) */}
-            <div className="flex-1 overflow-y-auto px-2 py-2.5 space-y-3">
-              {savedReports.length === 0 ? (
-                <div className="text-center py-10 text-slate-500 text-xs">
-                  Henüz kayıtlı rapor yok.
-                </div>
-              ) : (
-                ([
-                  {
-                    key: 'AL',
-                    title: 'AL',
-                    dot: 'bg-emerald-400',
-                    textColor: 'text-emerald-400',
-                    reports: savedReports.filter(r => (r.decision || '').trim().toUpperCase() === 'AL')
-                  },
-                  {
-                    key: 'NÖTR',
-                    title: 'NÖTR',
-                    dot: 'bg-amber-400',
-                    textColor: 'text-amber-400',
-                    reports: savedReports.filter(r => {
-                      const d = (r.decision || '').trim().toUpperCase();
-                      return d === 'NÖTR' || d === 'NOTR';
-                    })
-                  },
-                  {
-                    key: 'ALMA',
-                    title: 'ALMA',
-                    dot: 'bg-rose-400',
-                    textColor: 'text-rose-400',
-                    reports: savedReports.filter(r => (r.decision || '').trim().toUpperCase() === 'ALMA')
-                  }
-                ] as const).map(group => {
-                  const sortedGroup = sidebarSort === 'rank' 
-                    ? sortReportsByScoreDesc(group.reports) 
-                    : sortReportsByDate(group.reports);
-                  const isCollapsed = !!collapsedDecisions[group.key];
-
-                  return (
-                    <div key={group.key} className="space-y-0.5">
-                      <button
-                        type="button"
-                        onClick={() => toggleDecisionCollapse(group.key)}
-                        className="w-full flex items-center justify-between px-2 py-1 rounded text-[11px] font-bold uppercase tracking-wider text-slate-400 hover:text-white hover:bg-slate-800/50 transition cursor-pointer"
-                      >
-                        <div className="flex items-center gap-1.5">
-                          {isCollapsed ? (
-                            <ChevronRight className="w-3 h-3 text-slate-500" />
-                          ) : (
-                            <ChevronDown className="w-3 h-3 text-slate-500" />
-                          )}
-                          <span className={`w-1.5 h-1.5 rounded-full ${group.dot}`} />
-                          <span>{group.title}</span>
-                        </div>
-                        <span className="text-[10px] font-mono text-slate-500">
-                          {group.reports.length}
-                        </span>
-                      </button>
-
-                      {!isCollapsed && sortedGroup.length > 0 && (
-                        <div className="space-y-0.5 pt-0.5">
-                          {sortedGroup.map((item) => {
-                            const isActive = activeReportId === item.id && step === 'report';
-                            return (
-                              <div
-                                key={item.id}
-                                onClick={() => { setActiveReportId(item.id); setStep('report'); }}
-                                className={`px-2.5 py-1.5 rounded-md cursor-pointer transition flex items-center justify-between group ${
-                                  isActive
-                                    ? 'bg-slate-800 text-white font-semibold border-l-2 border-emerald-500'
-                                    : 'text-slate-300 hover:bg-slate-800/50'
-                                }`}
-                              >
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <span className="font-mono font-bold text-xs text-white truncate">
-                                    {item.ticker}
-                                  </span>
-                                  {item.period && (
-                                    <span className="text-[10px] font-mono text-slate-500 truncate">
-                                      {item.period}
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1.5 flex-shrink-0">
-                                  {item.score && (
-                                    <span className={`text-[11px] font-mono font-bold ${group.textColor}`}>
-                                      {item.score}
-                                    </span>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={(e) => deleteReport(item.id, e)}
-                                    title="Raporu Sil"
-                                    className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-500 hover:text-rose-400 rounded transition cursor-pointer"
-                                  >
-                                    <Trash2 className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Yedek Al / İçe Aktar */}
-            <div className="p-2.5 border-t border-slate-800 flex items-center justify-between gap-1.5">
-              <button
-                type="button"
-                onClick={exportBackup}
-                disabled={savedReports.length === 0}
-                className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-slate-400 hover:text-white bg-slate-950 hover:bg-slate-800 disabled:opacity-40 py-1.5 px-2 rounded border border-slate-800 transition cursor-pointer"
-              >
-                <Download className="w-3 h-3 text-emerald-400" />
-                Yedekle
-              </button>
-              <label
-                className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-slate-400 hover:text-white bg-slate-950 hover:bg-slate-800 py-1.5 px-2 rounded border border-slate-800 transition cursor-pointer"
-              >
-                <Upload className="w-3 h-3 text-cyan-400" />
-                Yükle
-                <input
-                  type="file"
-                  accept="application/json"
-                  onChange={importBackup}
-                  className="hidden"
-                />
-              </label>
-            </div>
-          </>
-        )}
-      </aside>
-
-      {/* Sağ Ana Bölüm */}
+      {/* Ana Bölüm */}
       <main id="main-scroll-container" className="theme-canvas flex-1 flex flex-col min-w-0 overflow-y-auto bg-slate-950">
         <header className="h-12 border-b border-slate-800 px-5 flex items-center justify-between bg-slate-900/95 backdrop-blur-md sticky top-0 z-30 print:hidden">
           <div 
@@ -3969,6 +3756,25 @@ export default function ValuationTerminal({
             >
               <Trophy className="w-3.5 h-3.5 text-amber-400" />
               <span className="hidden sm:inline">Sıralama</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsAnalyzedModalOpen(true)}
+              className={`flex items-center gap-1.5 text-xs py-1.5 px-2.5 rounded-lg border font-semibold transition cursor-pointer ${
+                isAnalyzedModalOpen
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800'
+              }`}
+              title="Analiz Edilen Şirketler (AL, NÖTR, ALMA)"
+            >
+              <Building2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Analiz Edilen Şirketler</span>
+              {savedReports.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                  {savedReports.length}
+                </span>
+              )}
             </button>
 
             <button
@@ -4616,8 +4422,10 @@ export default function ValuationTerminal({
                   latestData={latestData}
                   chartData={chartData}
                   quarterlyChartData={quarterlyChartData}
+                  tickerHistory={tickerHistory}
                   onSwitchToTerminal={() => setLayoutMode('terminal')}
                   onSelectTicker={(tk) => handleBistDirectAnalysis(tk)}
+                  onSelectReport={(id: string) => { setActiveReportId(id); setStep('report'); }}
                 />
               ) : (
                 <>
@@ -7762,6 +7570,257 @@ export default function ValuationTerminal({
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ANALİZ EDİLEN ŞİRKETLER MODALI (AL - NÖTR - ALMA SEKME KURGUSU) */}
+      {isAnalyzedModalOpen && (() => {
+        const alReports = savedReports.filter(r => (r.decision || '').trim().toUpperCase() === 'AL');
+        const notrReports = savedReports.filter(r => {
+          const d = (r.decision || '').trim().toUpperCase();
+          return d === 'NÖTR' || d === 'NOTR';
+        });
+        const almaReports = savedReports.filter(r => (r.decision || '').trim().toUpperCase() === 'ALMA');
+
+        let currentList = analyzedTab === 'AL' 
+          ? alReports 
+          : analyzedTab === 'NÖTR' 
+          ? notrReports 
+          : analyzedTab === 'ALMA' 
+          ? almaReports 
+          : savedReports;
+
+        if (analyzedSearch.trim()) {
+          const q = analyzedSearch.trim().toUpperCase();
+          currentList = currentList.filter(r => 
+            (r.ticker || '').toUpperCase().includes(q) || 
+            ((r as any).companyName || r.extractedData?.company_name || '').toUpperCase().includes(q)
+          );
+        }
+
+        const sortedList = sidebarSort === 'rank' 
+          ? sortReportsByScoreDesc(currentList) 
+          : sortReportsByDate(currentList);
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 print:hidden">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden divide-y divide-slate-800">
+              
+              {/* Modal Başlığı & Kapatma */}
+              <div className="p-4 sm:px-6 flex items-center justify-between bg-slate-950/60">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                    <Building2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-white tracking-tight">
+                        Analiz Edilen Şirketler
+                      </h3>
+                      <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                        {savedReports.length} Şirket
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Kayıtlı hisse değerlemeleri, skorlar ve yatırım kararları
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* Sıralama */}
+                  <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs font-medium">
+                    <button
+                      type="button"
+                      onClick={() => setSidebarSort('rank')}
+                      className={`px-2.5 py-1 rounded transition cursor-pointer ${
+                        sidebarSort === 'rank' 
+                          ? 'bg-emerald-600 text-white font-semibold shadow-sm' 
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Puana Göre
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSidebarSort('date')}
+                      className={`px-2.5 py-1 rounded transition cursor-pointer ${
+                        sidebarSort === 'date' 
+                          ? 'bg-slate-700 text-white font-semibold shadow-sm' 
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Tarihe Göre
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsAnalyzedModalOpen(false)}
+                    className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                    title="Kapat"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Sekmeler (AL - NÖTR - ALMA) & Arama Kutusu */}
+              <div className="p-3 sm:px-6 bg-slate-950/40 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto [scrollbar-width:none]">
+                  {[
+                    { key: 'ALL', label: 'TÜMÜ', count: savedReports.length, dot: 'bg-slate-400' },
+                    { key: 'AL', label: 'AL', count: alReports.length, dot: 'bg-emerald-400', activeCls: 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300' },
+                    { key: 'NÖTR', label: 'NÖTR', count: notrReports.length, dot: 'bg-amber-400', activeCls: 'border-amber-500/50 bg-amber-500/10 text-amber-300' },
+                    { key: 'ALMA', label: 'ALMA', count: almaReports.length, dot: 'bg-rose-400', activeCls: 'border-rose-500/50 bg-rose-500/10 text-rose-300' },
+                  ].map(tab => {
+                    const isSelected = analyzedTab === tab.key;
+                    return (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setAnalyzedTab(tab.key as any)}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer border ${
+                          isSelected
+                            ? tab.activeCls || 'border-slate-700 bg-slate-800 text-white'
+                            : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-800/40'
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${tab.dot}`} />
+                        <span>{tab.label}</span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-900 border border-slate-800 text-slate-400">
+                          {tab.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    value={analyzedSearch}
+                    onChange={(e) => setAnalyzedSearch(e.target.value)}
+                    placeholder="Hisse kodu veya şirket ara..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-emerald-500 transition"
+                  />
+                </div>
+              </div>
+
+              {/* Şirket Kartları Izgarası */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
+                {sortedList.length === 0 ? (
+                  <div className="text-center py-16 space-y-2">
+                    <Building2 className="w-10 h-10 text-slate-700 mx-auto" />
+                    <div className="text-slate-400 text-sm font-medium">
+                      Bu kategoride kayıtlı şirket analizi bulunamadı.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {sortedList.map((item) => {
+                      const isAl = (item.decision || '').trim().toUpperCase() === 'AL';
+                      const isAlma = (item.decision || '').trim().toUpperCase() === 'ALMA';
+                      const badgeCls = isAl
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                        : isAlma
+                        ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                        : 'bg-amber-500/10 border-amber-500/30 text-amber-400';
+
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => {
+                            setActiveReportId(item.id);
+                            setStep('report');
+                            setIsAnalyzedModalOpen(false);
+                          }}
+                          className="bg-slate-950 hover:bg-slate-800/80 border border-slate-800 hover:border-slate-700 rounded-xl p-4 transition cursor-pointer flex items-center justify-between group shadow-sm"
+                        >
+                          <div className="space-y-1 min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-black text-sm text-white group-hover:text-emerald-400 transition">
+                                {item.ticker}
+                              </span>
+                              {item.period && (
+                                <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+                                  {item.period}
+                                </span>
+                              )}
+                              {((item as any).companyName || item.extractedData?.company_name) && (
+                                <span className="text-xs text-slate-400 truncate max-w-[140px] hidden sm:inline">
+                                  {(item as any).companyName || item.extractedData?.company_name}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-500 flex items-center gap-2 font-mono">
+                              <span>Tarih: {item.createdAt || '—'}</span>
+                              {item.price && (
+                                <>
+                                  <span>•</span>
+                                  <span>Fiyat: {item.price} TL</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 flex-shrink-0">
+                            <div className={`px-2.5 py-1 rounded-lg border text-xs font-mono font-bold flex items-center gap-2 ${badgeCls}`}>
+                              <span>{item.score ? `${item.score}/100` : '—'}</span>
+                              <span className="w-1 h-3 bg-current opacity-30" />
+                              <span>{item.decision || 'NÖTR'}</span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteReport(item.id, e);
+                              }}
+                              title="Analizi Sil"
+                              className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-rose-400 rounded transition cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Alt Bilgi & Yedekleme */}
+              <div className="p-3 sm:px-6 bg-slate-950/70 flex items-center justify-between">
+                <div className="text-xs text-slate-500 font-mono">
+                  Toplam {savedReports.length} analiz kayıtlı
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={exportBackup}
+                    disabled={savedReports.length === 0}
+                    className="flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 py-1.5 px-3 rounded-lg border border-slate-800 transition cursor-pointer disabled:opacity-40"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Yedekle</span>
+                  </button>
+                  <label className="flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 py-1.5 px-3 rounded-lg border border-slate-800 transition cursor-pointer">
+                    <Upload className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Yükle</span>
+                    <input
+                      type="file"
+                      accept="application/json"
+                      onChange={importBackup}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
             </div>
           </div>
         );
