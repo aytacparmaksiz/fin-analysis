@@ -62,9 +62,9 @@ import {
   BIST_BANKING_TICKERS,
   BIST_HOLDING_TICKERS,
   BIST_REIT_TICKERS,
-  BIST_HEALTHCARE_TICKERS,
   isMetricDisabled
 } from '@/lib/sectors';
+import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from '@/lib/isyatirim-multiples-cache';
 import { getCompanyProfile } from '@/lib/company-profiles';
 import {
   computeSnowflakeAnalysis,
@@ -109,36 +109,25 @@ const SECTOR_MEDIAN_BENCHMARKS: Record<string, { pe: number; pb: number; evEbitd
   REIT: { pe: 7.2, pb: 1.1, evEbitda: 8.5, evSales: 4.2 },
   TECH: { pe: 16.5, pb: 4.8, evEbitda: 14.0, evSales: 5.5 },
   AVIATION: { pe: 6.2, pb: 1.4, evEbitda: 5.1, evSales: 1.1 },
-  HEALTHCARE: { pe: 14.5, pb: 3.8, evEbitda: 10.2, evSales: 2.4 },
   INDUSTRIAL: { pe: 11.5, pb: 2.4, evEbitda: 8.2, evSales: 1.9 }
 };
 
-function getSectorCandidateTickers(sector: SectorType): string[] {
-  switch (sector) {
-    case 'INSURANCE':
-      return BIST_INSURANCE_TICKERS;
-    case 'BANKING':
-      return BIST_BANKING_TICKERS;
-    case 'HOLDING':
-      return BIST_HOLDING_TICKERS;
-    case 'REIT':
-      return BIST_REIT_TICKERS;
-    case 'TECH':
-      return ['LOGO', 'MIATK', 'VBTYZ', 'ARDYZ', 'KONTR', 'KFEIN'];
-    case 'AVIATION':
-      return ['THYAO', 'PGSUS', 'TAVHL'];
-    case 'HEALTHCARE':
-      return ['LKMNH', 'TNZTP', 'MEDTR', 'GENIL', 'SELEC'];
-    default:
-      return ['FROTO', 'TOASO', 'EREGL', 'KRDMD', 'BIMAS', 'MGROS'];
-  }
+// Şirket Adı Temizleyici (Anonim Şirketi, Ticaret ve parantez içlerini kaldırır)
+function getCleanCompanyName(fullName: string | undefined, ticker: string): string {
+  if (!fullName) return ticker;
+  let clean = fullName.replace(/\s*\([^)]*\)/g, '').trim();
+  clean = clean.replace(/\b(Anonim Şirketi|Anonim Ortaklığı|A\.Ş\.|AŞ|Ticaret ve Sanayi|Sanayi ve Ticaret|Ticaret|Sanayi)\b/gi, '').trim();
+  clean = clean.replace(/[,.\-\s]+$/, '').trim();
+  return clean || fullName;
 }
 
 // BIST Finansal Sayı Formatlayıcı (Bin TRY formatı, hücrelerde BİN TL eki olmadan sade sayı)
 function formatTableNumber(val: number | null | undefined): string {
   if (val === null || val === undefined || isNaN(val)) return '—';
   const num = Number(val);
-  const inThousands = Math.abs(num) < 10_000_000_000 ? Math.round(num) : Math.round(num / 1000);
+  if (num === 0) return '0';
+  // BIST finansal tablolarındaki nominal TL değerleri Bin TRY formatı için 1000'e bölünür
+  const inThousands = Math.abs(num) >= 50_000 ? Math.round(num / 1000) : Math.round(num);
   return inThousands.toLocaleString('tr-TR');
 }
 
@@ -146,28 +135,28 @@ function formatTableNumber(val: number | null | undefined): string {
 function formatMrTl(val: number | null | undefined, isAxis = false): string {
   if (val === null || val === undefined || isNaN(val)) return '—';
   const num = Number(val);
-  const nominalTL = Math.abs(num) < 10_000_000_000 ? num * 1000 : num;
-  const abs = Math.abs(nominalTL);
+  if (num === 0) return '0 TL';
+  const abs = Math.abs(num);
 
   if (abs >= 1_000_000_000) {
-    const mr = nominalTL / 1_000_000_000;
+    const mr = num / 1_000_000_000;
     return isAxis
       ? `${mr.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} Mr`
       : `${mr.toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 2 })} Mr TL`;
   }
   if (abs >= 1_000_000) {
-    const mn = nominalTL / 1_000_000;
+    const mn = num / 1_000_000;
     return isAxis
       ? `${mn.toLocaleString('tr-TR', { maximumFractionDigits: 0 })} Mn`
-      : `${mn.toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} Mn TL`;
+      : `${mn.toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })} Mn TL`;
   }
   if (abs >= 1_000) {
-    const bin = nominalTL / 1_000;
+    const bin = num / 1_000;
     return isAxis
       ? `${bin.toLocaleString('tr-TR', { maximumFractionDigits: 0 })} Bin`
       : `${bin.toLocaleString('tr-TR', { maximumFractionDigits: 0 })} Bin TL`;
   }
-  return isAxis ? `${nominalTL.toLocaleString('tr-TR')}` : `${nominalTL.toLocaleString('tr-TR')} TL`;
+  return isAxis ? `${num.toLocaleString('tr-TR')}` : `${num.toLocaleString('tr-TR')} TL`;
 }
 
 const TURKISH_DATA_KEY_LABELS: Record<string, string> = {
@@ -277,7 +266,6 @@ export default function SimplyView({
   const [chartPeriodMode, setChartPeriodMode] = useState<'quarterly' | 'ttm'>('quarterly');
   const [reportFontSize, setReportFontSize] = useState<'compact' | 'normal' | 'large'>('normal');
   const [copiedReport, setCopiedReport] = useState(false);
-  const [hoveredRowKey, setHoveredRowKey] = useState<string | null>(null);
 
   // Kurumsal Şirket Profili
   const profile = useMemo(() => {
@@ -336,18 +324,47 @@ export default function SimplyView({
     return generateSmoothSnowflakePath(radarPoints);
   }, [radarPoints]);
 
-  // Sektörel Rakipler
-  const analyzedCompetitors = useMemo(() => {
-    return savedReports.filter(
-      r => r.sector === currentSector && r.ticker?.toUpperCase() !== report.ticker?.toUpperCase()
-    );
-  }, [savedReports, currentSector, report.ticker]);
+  // İş Yatırım Resmi Sektör Tanımı ve Sektörel Akranlar
+  const isYatirimEntry = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[report.ticker.toUpperCase()];
+  const officialSectorName = marketMultiples?.sectorName || companyMultiplesData?.benchmark?.sectorName || isYatirimEntry?.sectorName || sectorMeta?.title || 'Sanayi';
 
-  // Sektör Akran Listesi
+  // Aynı Sektördeki Resmi BİST Şirketleri (İş Yatırım Sektör Dağılımı)
+  const sameSectorPeers = useMemo(() => {
+    const currentSec = (officialSectorName || '').trim().toLowerCase();
+    const allInSector: Array<{ ticker: string; name: string; marketCapMnTl: number | null }> = [];
+
+    for (const [tk, item] of Object.entries(OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE)) {
+      if (tk.toUpperCase() === report.ticker.toUpperCase()) continue;
+      if (item.sectorName && item.sectorName.trim().toLowerCase() === currentSec) {
+        allInSector.push({
+          ticker: item.ticker,
+          name: item.name,
+          marketCapMnTl: item.marketCapMnTl
+        });
+      }
+    }
+    // Piyasa değerine göre büyükten küçüğe sırala
+    allInSector.sort((a, b) => (b.marketCapMnTl || 0) - (a.marketCapMnTl || 0));
+    return allInSector;
+  }, [officialSectorName, report.ticker]);
+
+  // Kullanıcının daha önce analiz ettiği akran şirketler
+  const analyzedCompetitors = useMemo(() => {
+    const peerTickers = new Set(sameSectorPeers.map(p => p.ticker.toUpperCase()));
+    return savedReports.filter(
+      r => (peerTickers.has(r.ticker?.toUpperCase()) || (r.sector === currentSector && sameSectorPeers.length === 0)) &&
+           r.ticker?.toUpperCase() !== report.ticker?.toUpperCase()
+    );
+  }, [savedReports, sameSectorPeers, currentSector, report.ticker]);
+
+  // Henüz analiz edilmemiş en büyük 6 akran hisse adayı
   const sectorCandidateTickers = useMemo(() => {
-    const list = getSectorCandidateTickers(currentSector);
-    return list.filter((t: string) => t.toUpperCase() !== report.ticker?.toUpperCase()).slice(0, 5);
-  }, [currentSector, report.ticker]);
+    const analyzedTickers = new Set(savedReports.map(r => r.ticker?.toUpperCase()));
+    return sameSectorPeers
+      .filter(p => !analyzedTickers.has(p.ticker.toUpperCase()))
+      .slice(0, 6)
+      .map(p => p.ticker);
+  }, [sameSectorPeers, savedReports]);
 
   // DuPont 5 Aşamalı Hesaplama
   const dupontResult = useMemo(() => {
@@ -422,19 +439,20 @@ export default function SimplyView({
     }));
   }, [valuationInfo?.fair_value_trend, chartData, fairValueNum, currentPriceNum]);
 
-  // Piyasa Değeri Formatı
+  // Piyasa Değeri Formatı (İş Yatırım resmi verisi ve canlı fiyatla)
   const formattedMarketCap = useMemo(() => {
-    if (marketMultiples?.market_cap_mn_tl) {
-      const val = marketMultiples.market_cap_mn_tl;
-      if (val >= 1000) return `₺${(val / 1000).toFixed(1)} Mr`;
-      return `₺${val.toFixed(0)} Mn`;
+    const isYEntry = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[report.ticker.toUpperCase()];
+    const capMn = marketMultiples?.market_cap_mn_tl || isYEntry?.marketCapMnTl;
+    if (capMn != null && capMn > 0) {
+      if (capMn >= 1000) return `₺${(capMn / 1000).toFixed(1)} Mr`;
+      return `₺${capMn.toFixed(0)} Mn`;
     }
     if (currentPriceNum && report.extractedData?.shares_outstanding) {
       const val = (currentPriceNum * report.extractedData.shares_outstanding) / 1e9;
       return `₺${val.toFixed(1)} Mr`;
     }
-    return '₺40.2 Mr';
-  }, [marketMultiples, currentPriceNum, report.extractedData?.shares_outstanding]);
+    return '—';
+  }, [marketMultiples, report.ticker, currentPriceNum, report.extractedData?.shares_outstanding]);
 
   // 6 Sparkline Kartı Trend Hesaplamaları
   const sparklineMetrics = useMemo(() => {
@@ -447,7 +465,7 @@ export default function SimplyView({
           period: d.period ? d.period.slice(2) : '',
           val: d.revenue ? Number(((d.gross_profit || (d.revenue * 0.4)) / d.revenue * 100).toFixed(1)) : 40
         })),
-        format: (v: number) => `%${v}`
+        format: (v: number) => `%${v.toFixed(1)}`
       },
       {
         id: 'ebitda_margin',
@@ -456,7 +474,7 @@ export default function SimplyView({
           period: d.period ? d.period.slice(2) : '',
           val: d.revenue ? Number(((d.ebitda || (d.revenue * 0.25)) / d.revenue * 100).toFixed(1)) : 25
         })),
-        format: (v: number) => `%${v}`
+        format: (v: number) => `%${v.toFixed(1)}`
       },
       {
         id: 'net_margin',
@@ -465,7 +483,7 @@ export default function SimplyView({
           period: d.period ? d.period.slice(2) : '',
           val: d.revenue ? Number(((d.net_income || (d.revenue * 0.15)) / d.revenue * 100).toFixed(1)) : 15
         })),
-        format: (v: number) => `%${v}`
+        format: (v: number) => `%${v.toFixed(1)}`
       },
       {
         id: 'current_ratio',
@@ -474,7 +492,7 @@ export default function SimplyView({
           period: d.period ? d.period.slice(2) : '',
           val: d.current_liabilities ? Number((d.current_assets / d.current_liabilities).toFixed(2)) : 1.45
         })),
-        format: (v: number) => `${v}x`
+        format: (v: number) => `${v.toFixed(2)}x`
       },
       {
         id: 'leverage',
@@ -483,7 +501,7 @@ export default function SimplyView({
           period: d.period ? d.period.slice(2) : '',
           val: d.equity ? Number(((d.financial_debt || (d.total_debt || (d.equity * 0.6))) / d.equity * 100).toFixed(1)) : 60
         })),
-        format: (v: number) => `%${v}`
+        format: (v: number) => `%${v.toFixed(1)}`
       },
       {
         id: 'roe',
@@ -492,7 +510,7 @@ export default function SimplyView({
           period: d.period ? d.period.slice(2) : '',
           val: d.equity ? Number(((d.net_income || (d.equity * 0.35)) / d.equity * 100).toFixed(1)) : 35
         })),
-        format: (v: number) => `%${v}`
+        format: (v: number) => `%${v.toFixed(1)}`
       }
     ];
   }, [quarterlyChartData, chartData, currentSector]);
@@ -538,9 +556,10 @@ export default function SimplyView({
   };
 
   // =========================================================================
-  // Özet Finansallar Veri Eşitlemesi (Terminal Mantığı)
+  // Özet Finansallar Veri Eşitlemesi (YTD Kümülatif Karşılaştırma)
   // =========================================================================
-  const flowSeries = quarterlyChartData.length > 0 ? quarterlyChartData : chartData;
+  // Özet Gelir Tablosu kümülatiftir: 2026/06 son 2 çeyreği, 2025/06 ise geçen yılın ilk 2 çeyreğini kıyaslar
+  const flowSeries = chartData;
   const latestFlow = flowSeries[flowSeries.length - 1];
   const latestFlowLabel = latestFlow?.period || '';
   const yoyFlowLabel = latestFlowLabel
@@ -566,80 +585,199 @@ export default function SimplyView({
   };
 
   // =========================================================================
-  // Finansal Tablolar Verileri (Ters Kronolojik: Günümüz solda, geçmiş sağda)
+  // Finansal Tablolar Verileri (Ters Kronolojik: Günümüz solda, 6 Dönem Fix)
   // =========================================================================
   const reversedPeriods = useMemo(() => [...chartData].reverse(), [chartData]);
+  const [periodOffset, setPeriodOffset] = useState<number>(0);
+  const maxVisiblePeriods = 6;
+  const maxPeriodOffset = Math.max(0, reversedPeriods.length - maxVisiblePeriods);
+  const safePeriodOffset = Math.min(periodOffset, maxPeriodOffset);
+  const visiblePeriods = useMemo(() => {
+    return reversedPeriods.slice(safePeriodOffset, safePeriodOffset + maxVisiblePeriods);
+  }, [reversedPeriods, safePeriodOffset]);
 
-  // Tablo Satır Tanımları (Görsel hiyerarşi: Başlıklar kalın beyaz, alt kalemler soluk gri ve girintili)
-  const balanceSheetRows = useMemo(() => [
-    { label: 'Cari Varlıklar (Dönen Varlıklar)', key: 'current_assets', isHeader: true },
-    { label: 'Nakit ve Nakit Benzerleri', key: 'cash_and_equivalents', fallbackKey: 'cash' },
-    { label: 'Finansal Yatırımlar', key: 'financial_assets_insured', fallbackKey: 'financial_investments' },
-    { label: 'Ticari Alacaklar', key: 'trade_receivables', fallbackKey: 'receivables' },
-    { label: 'Stoklar', key: 'inventories' },
-    { label: '= Toplam Dönen Varlıklar', key: 'current_assets', isTotal: true },
-    { label: 'Cari Olmayan Varlıklar (Duran Varlıklar)', key: 'non_current_assets', isHeader: true },
-    { label: 'Maddi Duran Varlıklar', key: 'tangible_assets' },
-    { label: 'Maddi Olmayan Duran Varlıklar', key: 'intangible_assets' },
-    { label: '= Toplam Duran Varlıklar', key: 'non_current_assets', fallbackKey: 'fixed_assets', isTotal: true },
-    { label: '= Toplam Varlıklar (Aktifler)', key: 'total_assets', fallbackKey: 'assets', isTotal: true, highlight: true },
-    { label: 'Kısa Vadeli Yükümlülükler', key: 'current_liabilities', isHeader: true, invert: true },
-    { label: 'Kısa Vadeli Finansal Borçlar', key: 'short_term_debt', invert: true },
-    { label: 'Ticari Borçlar', key: 'trade_payables', invert: true },
-    { label: '= Toplam Kısa Vadeli Yükümlülükler', key: 'current_liabilities', isTotal: true, invert: true },
-    { label: 'Uzun Vadeli Yükümlülükler', key: 'long_term_liabilities', isHeader: true, invert: true },
-    { label: 'Uzun Vadeli Finansal Borçlar', key: 'long_term_debt', invert: true },
-    { label: '= Toplam Uzun Vadeli Yükümlülükler', key: 'long_term_liabilities', isTotal: true, invert: true },
-    { label: '= Toplam Yükümlülükler (Borçlar)', key: 'total_liabilities', isTotal: true, invert: true },
-    { label: 'Finansal Borçlar (Toplam)', key: 'financial_debt', invert: true },
-    { label: 'Net Borç', key: 'net_debt', invert: true, highlight: true },
-    { label: 'Özkaynaklar', key: 'equity', isHeader: true },
-    { label: 'Ödenmiş Sermaye', key: 'paid_in_capital' },
-    { label: '= Toplam Özkaynaklar (Ana Ortaklık)', key: 'equity', fallbackKey: 'total_equity', isTotal: true, highlight: true }
+  // Bilanço Bölümleri (Görseldeki gibi kart içi belirgin kategori blokları)
+  const balanceSheetSections = useMemo(() => [
+    {
+      id: 'donen',
+      title: 'Dönen Varlıklar',
+      totalLabel: '+ Toplam Dönen Varlıklar',
+      totalKey: 'current_assets',
+      rows: [
+        { label: 'Nakit ve Nakit Benzerleri', key: 'cash_and_equivalents', fallbackKey: 'cash' },
+        { label: 'Finansal Yatırımlar', key: 'financial_assets_insured', fallbackKey: 'financial_investments' },
+        { label: 'Ticari Alacaklar', key: 'trade_receivables', fallbackKey: 'receivables' },
+        { label: 'Diğer Alacaklar', key: 'other_receivables' },
+        { label: 'Türev Araçlar', key: 'derivative_instruments' },
+        { label: 'Stoklar', key: 'inventories' },
+        { label: 'Peşin Ödenmiş Giderler', key: 'prepaid_expenses' },
+        { label: 'Diğer Dönen Varlıklar', key: 'other_current_assets' }
+      ]
+    },
+    {
+      id: 'duran',
+      title: 'Duran Varlıklar',
+      totalLabel: '+ Toplam Duran Varlıklar',
+      totalKey: 'non_current_assets',
+      rows: [
+        { label: 'Finansal Yatırımlar', key: 'non_current_financial_investments' },
+        { label: 'Ticari Alacaklar', key: 'non_current_trade_receivables' },
+        { label: 'Maddi Duran Varlıklar', key: 'tangible_assets' },
+        { label: 'Maddi Olmayan Duran Varlıklar', key: 'intangible_assets' },
+        { label: 'Kullanım Hakkı Varlıkları', key: 'right_of_use_assets' },
+        { label: 'Ertelenmiş Vergi Varlığı', key: 'deferred_tax_assets' },
+        { label: 'Diğer Duran Varlıklar', key: 'other_non_current_assets' }
+      ],
+      grandTotalLabel: '+ TOPLAM VARLIKLAR (AKTİFLER)',
+      grandTotalKey: 'total_assets'
+    },
+    {
+      id: 'kvy',
+      title: 'Kısa Vadeli Yükümlülükler',
+      totalLabel: '+ Toplam Kısa Vadeli Yükümlülükler',
+      totalKey: 'current_liabilities',
+      rows: [
+        { label: 'Kısa Vadeli Finansal Borçlar', key: 'short_term_debt' },
+        { label: 'Ticari Borçlar', key: 'trade_payables' },
+        { label: 'Çalışanlara Sağlanan Faydalar', key: 'employee_benefit_obligations' },
+        { label: 'Diğer Kısa Vadeli Yükümlülükler', key: 'other_current_liabilities' }
+      ]
+    },
+    {
+      id: 'uvy',
+      title: 'Uzun Vadeli Yükümlülükler',
+      totalLabel: '+ Toplam Uzun Vadeli Yükümlülükler',
+      totalKey: 'long_term_liabilities',
+      rows: [
+        { label: 'Uzun Vadeli Finansal Borçlar', key: 'long_term_debt' },
+        { label: 'Diğer Uzun Vadeli Yükümlülükler', key: 'other_long_term_liabilities' }
+      ],
+      grandTotalLabel: '+ TOPLAM YÜKÜMLÜLÜKLER (BORÇLAR)',
+      grandTotalKey: 'total_liabilities',
+      extraRow: { label: 'Net Borç', key: 'net_debt' }
+    },
+    {
+      id: 'ozkaynak',
+      title: 'Özkaynaklar',
+      totalLabel: '+ Toplam Özkaynaklar (Ana Ortaklık)',
+      totalKey: 'equity',
+      rows: [
+        { label: 'Ödenmiş Sermaye', key: 'paid_in_capital' },
+        { label: 'Kâr Yedekleri & Geçmiş Yıl Kârları', key: 'retained_earnings' },
+        { label: 'Net Dönem Kârı', key: 'net_income' }
+      ]
+    }
   ], []);
 
-  const incomeStatementRows = useMemo(() => [
+  // Gelir Tablosu Bölümleri
+  const incomeStatementSections = useMemo(() => [
     {
-      label: currentSector === 'INSURANCE' ? 'Brüt Yazılan Primler (Prim Üretimi)' : 'Satış Gelirleri (Hasılat)',
-      key: 'revenue',
-      fallbackKey: 'gross_written_premiums',
-      isHeader: true
+      id: 'hasilat',
+      title: 'Hasılat & Brüt Kârlılık',
+      totalLabel: '+ Brüt Kâr (Zarar)',
+      totalKey: 'gross_profit',
+      rows: [
+        {
+          label: currentSector === 'INSURANCE' ? 'Brüt Yazılan Primler (Prim Üretimi)' : 'Satış Gelirleri (Hasılat)',
+          key: 'revenue',
+          fallbackKey: 'gross_written_premiums'
+        },
+        { label: 'Satışların Maliyeti (-)', key: 'cost_of_sales' }
+      ]
     },
-    { label: 'Satışların Maliyeti (-)', key: 'cost_of_sales', invert: true },
-    { label: '= Brüt Kâr (Zarar)', key: 'gross_profit', isTotal: true, highlight: true },
-    { label: 'Faaliyet Giderleri (Genel Yönetim, Pazarlama, Ar-Ge) (-)', key: 'operating_expenses', invert: true },
     {
-      label: currentSector === 'INSURANCE' ? 'Teknik Bölüm Dengesi / Kârı' : '= Esas Faaliyet Kârı (EBIT)',
-      key: currentSector === 'INSURANCE' ? 'ebitda' : 'operating_profit',
-      fallbackKey: currentSector === 'INSURANCE' ? 'technical_profit' : 'operating_income',
-      isTotal: true
+      id: 'faaliyet',
+      title: 'Faaliyet Giderleri & Esas Faaliyet Kârı',
+      totalLabel: currentSector === 'INSURANCE' ? '+ Teknik Bölüm Kârı / Dengesi' : '+ Esas Faaliyet Kârı (EBIT)',
+      totalKey: currentSector === 'INSURANCE' ? 'ebitda' : 'operating_profit',
+      rows: [
+        { label: 'Pazarlama, Satış ve Dağıtım Giderleri (-)', key: 'marketing_expenses' },
+        { label: 'Genel Yönetim Giderleri (-)', key: 'administrative_expenses' },
+        { label: 'Araştırma ve Geliştirme Giderleri (-)', key: 'rd_expenses' },
+        { label: 'Esas Faaliyetlerden Diğer Gelirler / (Giderler)', key: 'other_operating_income_net' }
+      ],
+      grandTotalLabel: '+ FAVÖK (EBITDA)',
+      grandTotalKey: 'ebitda'
     },
-    { label: 'Finansman Gelirleri', key: 'financing_income' },
-    { label: 'Finansman Giderleri (-)', key: 'financing_expenses', invert: true },
-    { label: 'Vergi Gideri / Geliri (-)', key: 'tax_expense', invert: true },
-    { label: '= Net Dönem Kârı / (Zararı)', key: 'net_income', fallbackKey: 'net_profit', isTotal: true, highlight: true },
-    { label: 'FAVÖK (EBITDA)', key: 'ebitda', isTotal: true, highlight: true }
+    {
+      id: 'finansman',
+      title: 'Finansman Gelir/Giderleri & Net Kâr',
+      totalLabel: '+ Net Dönem Kârı / (Zararı)',
+      totalKey: 'net_income',
+      rows: [
+        { label: 'Finansman Gelirleri', key: 'financing_income' },
+        { label: 'Finansman Giderleri (-)', key: 'financing_expenses' },
+        { label: 'Vergi Öncesi Kâr', key: 'profit_before_tax' },
+        { label: 'Dönem Vergi Gideri / (Geliri) (-)', key: 'tax_expense' }
+      ]
+    }
   ], [currentSector]);
 
-  const cashFlowRows = useMemo(() => [
-    { label: 'İşletme Faaliyetlerinden Nakit Akışları (OCF)', key: 'operating_cash_flow', isHeader: true, highlight: true },
-    { label: 'Yatırım Faaliyetlerinden Nakit Akışları (CapEx Dahil)', key: 'capex', invert: true },
-    { label: '= Serbest Nakit Akışı (FCF = OCF - CapEx)', key: 'free_cash_flow', isTotal: true, highlight: true },
-    { label: 'Finansman Faaliyetlerinden Nakit Akışları', key: 'financing_cash_flow' },
-    { label: 'Dönem Sonu Nakit ve Nakit Benzerleri', key: 'cash_and_equivalents', fallbackKey: 'cash', isTotal: true }
+  // Nakit Akışı Bölümleri
+  const cashFlowSections = useMemo(() => [
+    {
+      id: 'isletme',
+      title: 'İşletme Faaliyetlerinden Nakit Akışları',
+      totalLabel: '+ Net İşletme Nakit Akışı (OCF)',
+      totalKey: 'operating_cash_flow',
+      rows: [
+        { label: 'Dönem Kârı / (Zararı)', key: 'net_income' },
+        { label: 'Amortisman ve İtfa Düzeltmeleri', key: 'depreciation' },
+        { label: 'İşletme Sermayesindeki Net Değişimler', key: 'working_capital_change' }
+      ]
+    },
+    {
+      id: 'yatirim',
+      title: 'Yatırım Faaliyetleri & Serbest Nakit (FCF)',
+      totalLabel: '+ Serbest Nakit Akışı (FCF = OCF - CapEx)',
+      totalKey: 'free_cash_flow',
+      rows: [
+        { label: 'Maddi & Maddi Olmayan Duran Varlık Alımları (CapEx) (-)', key: 'capex' }
+      ]
+    },
+    {
+      id: 'finansman_nakit',
+      title: 'Finansman Faaliyetleri & Nakit Dengesi',
+      totalLabel: '+ Dönem Sonu Nakit ve Nakit Benzerleri',
+      totalKey: 'cash_and_equivalents',
+      rows: [
+        { label: 'Finansman Faaliyetlerinden Nakit Akışları', key: 'financing_cash_flow' },
+        { label: 'Ödenen Temettüler (-)', key: 'dividends_paid' }
+      ]
+    }
   ], []);
 
-  const ratiosRows = useMemo(() => [
-    { label: 'Cari Oran (Likidite)', calc: (c: any) => c.current_liabilities ? (c.current_assets / c.current_liabilities).toFixed(2) + 'x' : '—', isHeader: true },
-    { label: 'Likidite (Asit-Test) Oranı', calc: (c: any) => c.current_liabilities ? ((c.current_assets - (c.inventories || 0)) / c.current_liabilities).toFixed(2) + 'x' : '—' },
-    { label: 'Nakit Oranı', calc: (c: any) => c.current_liabilities ? ((c.cash_and_equivalents || c.cash || 0) / c.current_liabilities).toFixed(2) + 'x' : '—' },
-    { label: 'Kaldıraç Oranı (Toplam Borç / Özkaynak)', calc: (c: any) => c.equity ? ((c.total_assets - c.equity) / c.equity * 100).toFixed(1) + '%' : '—', invert: true },
-    { label: 'Net Borç / FAVÖK', calc: (c: any) => c.ebitda && c.ebitda > 0 ? (c.net_debt / c.ebitda).toFixed(2) + 'x' : '—', invert: true, isHeader: true },
-    { label: 'Brüt Kâr Marjı', calc: (c: any) => c.revenue ? ((c.gross_profit || (c.revenue * 0.4)) / c.revenue * 100).toFixed(1) + '%' : '—', isHeader: true },
-    { label: 'FAVÖK Marjı', calc: (c: any) => c.revenue ? ((c.ebitda || (c.revenue * 0.25)) / c.revenue * 100).toFixed(1) + '%' : '—', isHeader: true },
-    { label: 'Net Kâr Marjı', calc: (c: any) => c.revenue ? ((c.net_income || (c.revenue * 0.15)) / c.revenue * 100).toFixed(1) + '%' : '—', isHeader: true },
-    { label: 'Özkaynak Kârlılığı (ROE)', calc: (c: any) => c.equity ? (c.net_income / c.equity * 100).toFixed(1) + '%' : '—', isTotal: true, highlight: true },
-    { label: 'Aktif Kârlılığı (ROA)', calc: (c: any) => c.total_assets ? (c.net_income / c.total_assets * 100).toFixed(1) + '%' : '—', isTotal: true }
+  // Rasyolar Bölümleri
+  const ratiosSections = useMemo(() => [
+    {
+      id: 'likidite',
+      title: 'Likidite Rasyoları',
+      rows: [
+        { label: 'Cari Oran (Likidite)', calc: (c: any) => c.current_liabilities ? (c.current_assets / c.current_liabilities).toFixed(2) + 'x' : '—', isHighlight: true },
+        { label: 'Likidite (Asit-Test) Oranı', calc: (c: any) => c.current_liabilities ? ((c.current_assets - (c.inventories || 0)) / c.current_liabilities).toFixed(2) + 'x' : '—' },
+        { label: 'Nakit Oranı', calc: (c: any) => c.current_liabilities ? ((c.cash_and_equivalents || c.cash || 0) / c.current_liabilities).toFixed(2) + 'x' : '—' }
+      ]
+    },
+    {
+      id: 'borcluluk',
+      title: 'Borçluluk ve Kaldıraç Rasyoları',
+      rows: [
+        { label: 'Kaldıraç Oranı (Toplam Borç / Özkaynak)', calc: (c: any) => c.equity ? ((c.total_assets - c.equity) / c.equity * 100).toFixed(1) + '%' : '—' },
+        { label: 'Net Borç / FAVÖK', calc: (c: any) => c.ebitda && c.ebitda > 0 ? (c.net_debt / c.ebitda).toFixed(2) + 'x' : '—', isHighlight: true },
+        { label: 'Borç / Aktif Oranı', calc: (c: any) => c.total_assets ? (c.total_liabilities / c.total_assets * 100).toFixed(1) + '%' : '—' }
+      ]
+    },
+    {
+      id: 'karlilik',
+      title: 'Kârlılık ve Sermaye Getirisi Rasyoları',
+      rows: [
+        { label: 'Brüt Kâr Marjı', calc: (c: any) => c.revenue ? ((c.gross_profit || (c.revenue * 0.4)) / c.revenue * 100).toFixed(1) + '%' : '—' },
+        { label: 'FAVÖK Marjı', calc: (c: any) => c.revenue ? ((c.ebitda || (c.revenue * 0.25)) / c.revenue * 100).toFixed(1) + '%' : '—' },
+        { label: 'Net Kâr Marjı', calc: (c: any) => c.revenue ? ((c.net_income || (c.revenue * 0.15)) / c.revenue * 100).toFixed(1) + '%' : '—' },
+        { label: 'Özkaynak Kârlılığı (ROE)', calc: (c: any) => c.equity ? (c.net_income / c.equity * 100).toFixed(1) + '%' : '—', isHighlight: true },
+        { label: 'Aktif Kârlılığı (ROA)', calc: (c: any) => c.total_assets ? (c.net_income / c.total_assets * 100).toFixed(1) + '%' : '—' }
+      ]
+    }
   ], []);
 
   // Aktif 4 Grafik Verisi (Tüm tarihsel periyotlar kronolojik sırada)
@@ -654,12 +792,12 @@ export default function SimplyView({
         {/* ========================================================================= */}
         {/* SOL YÖNLENDİRİCİ PANEL (AUTHENTIC SIMPLY WALL ST FREEZE PANE SIDEBAR)       */}
         {/* ========================================================================= */}
-        <aside className="w-64 flex-shrink-0 hidden lg:block sticky top-16 self-start space-y-4 z-20 max-h-[calc(100vh-5rem)] overflow-y-auto [scrollbar-width:none]">
-          <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-2xl space-y-5">
+        <aside className="w-64 flex-shrink-0 hidden lg:block sticky top-16 self-start z-20">
+          <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-4 shadow-2xl space-y-3">
             {/* Mini Kar Tanesi Radarı */}
-            <div className="flex flex-col items-center justify-center pt-1">
-              <div className="relative w-36 h-36 flex items-center justify-center">
-                <svg width="144" height="144" viewBox="0 0 240 240" className="overflow-visible">
+            <div className="flex flex-col items-center justify-center pt-0.5">
+              <div className="relative w-28 h-28 flex items-center justify-center">
+                <svg width="112" height="112" viewBox="0 0 240 240" className="overflow-visible">
                   {[28, 56, 85].map((r, i) => (
                     <circle
                       key={i}
@@ -694,47 +832,40 @@ export default function SimplyView({
               </div>
 
               {/* Ticker & Şirket Bilgisi */}
-              <div className="text-center mt-2 space-y-0.5">
-                <h3 className="font-serif text-sm font-bold text-white tracking-tight line-clamp-1">
-                  {profile.fullName}
+              <div className="text-center mt-1.5 space-y-0.5">
+                <h3 className="font-serif text-xs font-bold text-white tracking-tight line-clamp-1" title={profile.fullName}>
+                  {getCleanCompanyName(profile.fullName, report.ticker)}
                 </h3>
-                <div className="text-[11px] font-sans text-slate-400">
-                  IBSE:{report.ticker} Stock Report
+                <div className="text-xs font-mono font-bold text-[#f5c242] tracking-wider">
+                  ${report.ticker.toUpperCase()}
                 </div>
-                <div className="text-[11px] font-semibold text-slate-300">
+                <div className="text-[11px] font-semibold text-slate-300 font-mono">
                   Market Cap: {formattedMarketCap}
                 </div>
               </div>
             </div>
 
-            {/* Butonlar: + Portfolio, Watch, Terminal */}
-            <div className="flex items-center gap-2 pt-1">
+            {/* Butonlar: + Portfolio, Watch (Terminal butonu kaldırıldı, 2 eşit buton) */}
+            <div className="grid grid-cols-2 gap-2 pt-0.5 w-full">
               <button
                 type="button"
-                className="flex-1 py-2 bg-[#f5c242] hover:bg-[#e5b332] text-slate-950 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                className="py-2 px-2 bg-[#f5c242] hover:bg-[#e5b332] text-slate-950 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1 cursor-pointer shadow-sm"
               >
                 <span>+</span>
                 <span>Portfolio</span>
               </button>
               <button
                 type="button"
-                className="px-3 py-2 bg-[#21262d] hover:bg-[#2b313d] text-slate-300 hover:text-white text-xs font-semibold rounded-lg border border-[#2e3440] transition cursor-pointer"
+                className="py-2 px-2 bg-[#21262d] hover:bg-[#2b313d] text-slate-200 hover:text-white text-xs font-semibold rounded-lg border border-[#2e3440] transition cursor-pointer flex items-center justify-center gap-1"
                 title="İzleme Listesi"
               >
-                <span>★ Watch</span>
-              </button>
-              <button
-                type="button"
-                onClick={onSwitchToTerminal}
-                className="px-2.5 py-2 bg-[#21262d] hover:bg-[#2b313d] text-cyan-400 text-xs font-semibold rounded-lg border border-[#2e3440] transition cursor-pointer"
-                title="Klasik Terminal Görünümüne Dön"
-              >
-                Terminal
+                <span>★</span>
+                <span>Watch</span>
               </button>
             </div>
 
             {/* 9 Sekme Listesi (Sayfayla Birlikte Akan Freeze Pane Menüsü) */}
-            <nav className="space-y-1 border-t border-[#282d37] pt-4">
+            <nav className="space-y-0.5 border-t border-[#282d37] pt-2.5">
               {NAVIGATION_ITEMS.map((item) => {
                 const isActive = activeSection === item.id;
                 const Icon = item.icon;
@@ -744,7 +875,7 @@ export default function SimplyView({
                     key={item.id}
                     type="button"
                     onClick={() => scrollToSection(item.id)}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer text-left ${
+                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-left ${
                       isActive
                         ? 'bg-[#21262d] text-[#f5c242] font-bold border-l-4 border-[#f5c242] shadow-sm'
                         : 'text-slate-400 hover:text-slate-200 hover:bg-[#21262d]/60'
@@ -1091,8 +1222,8 @@ export default function SimplyView({
                   <Users className="w-4 h-4 text-[#f5c242]" />
                   <h3 className="font-serif text-base font-bold text-white">Competitors (Sektörel Akranlar)</h3>
                 </div>
-                <span className="text-xs text-slate-400 font-mono">
-                  {sectorMeta?.title || 'Sektör'} Grubu
+                <span className="text-xs text-[#f5c242] font-mono font-semibold">
+                  {officialSectorName} Sektörü
                 </span>
               </div>
 
@@ -1256,10 +1387,11 @@ export default function SimplyView({
                             content={({ active, payload }) => {
                               if (active && payload && payload.length) {
                                 const d = payload[0];
+                                const valNum = Number(d.value);
+                                const displayVal = mini.format ? mini.format(valNum) : `%${valNum.toFixed(1)}`;
                                 return (
-                                  <div className="bg-[#1c2027] border border-[#383e4d] px-2.5 py-1.5 rounded-lg shadow-lg text-[11px] font-mono">
-                                    <span className="text-slate-400 font-sans mr-1">{mini.title}:</span>
-                                    <span className="font-bold text-white">%{Number(d.value).toFixed(1)}</span>
+                                  <div className="bg-[#1c2027] border border-[#383e4d] px-2 py-1 rounded-md shadow-lg text-xs font-mono">
+                                    <span className="font-bold text-white">{displayVal}</span>
                                   </div>
                                 );
                               }
@@ -1286,9 +1418,6 @@ export default function SimplyView({
                   <span className="text-xs font-bold text-white">
                     {currentSector === 'INSURANCE' ? 'Prim Üretimi ve Kârlılık' : 'Satışlar ve Kârlılık'}
                   </span>
-                  <span className="text-[11px] text-slate-400">
-                    {currentSector === 'INSURANCE' ? 'Prim, Teknik Kâr ve Net Kâr' : 'Hasılat, FAVÖK ve Net Kâr'}
-                  </span>
                 </div>
                 <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -1312,9 +1441,6 @@ export default function SimplyView({
                   <span className="text-xs font-bold text-white">
                     {currentSector === 'INSURANCE' ? 'Prim Üretimi ve Hisse Fiyatı' : 'Satışlar ve Hisse Fiyatı'}
                   </span>
-                  <span className="text-[11px] text-slate-400">
-                    Gelir Hacmi vs. Hisse Fiyatı (TL)
-                  </span>
                 </div>
                 <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -1336,7 +1462,6 @@ export default function SimplyView({
               <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
                 <div className="flex items-center justify-between border-b border-[#282d37] pb-2.5">
                   <span className="text-xs font-bold text-white">Nakit Akışı Kalitesi (Kâr vs Nakit)</span>
-                  <span className="text-[11px] text-slate-400">Net Kâr, OCF ve Serbest Nakit (FCF)</span>
                 </div>
                 <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -1358,7 +1483,6 @@ export default function SimplyView({
               <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
                 <div className="flex items-center justify-between border-b border-[#282d37] pb-2.5">
                   <span className="text-xs font-bold text-white">Bilanço Gücü: Özsermaye ve Borç/Nakit</span>
-                  <span className="text-[11px] text-slate-400">Özkaynak, Nakit Rezervi ve Borç</span>
                 </div>
                 <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -1392,8 +1516,8 @@ export default function SimplyView({
                 {[
                   { id: 'bs', label: 'Bilanço' },
                   { id: 'is', label: 'Gelir Tablosu' },
-                  { id: 'cf', label: 'Nakit Akış' },
-                  { id: 'ratios', label: 'Oranlar' }
+                  { id: 'cf', label: 'Nakit Akışı' },
+                  { id: 'ratios', label: 'Rasyolar' }
                 ].map(t => (
                   <button
                     key={t.id}
@@ -1476,174 +1600,329 @@ export default function SimplyView({
             </div>
 
             {/* ========================================================================= */}
-            {/* SEÇİLİ FİNANSAL TABLO (Ters Kronolojik, Hover Değişim, Tipografi)          */}
+            {/* SEÇİLİ FİNANSAL TABLO (6 Dönem Fix, Sayfalama Okları, Kategori Blokları)    */}
             {/* ========================================================================= */}
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center justify-between text-xs text-slate-400 border-b border-[#282d37] pb-2">
-                <span>Birim: Bin TRY (Satır üzerine gelindiğinde çeyreklik değişim oranı görüntülenir)</span>
-                <span className="font-mono text-slate-300">En güncel dönem solda</span>
+              
+              {/* Tablo Üst Kontrol & Alt Sekme Çubuğu */}
+              <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-[#282d37]">
+                <div className="flex items-center gap-1 bg-[#21262d] p-1 rounded-xl border border-[#2e3440] text-xs font-semibold">
+                  {[
+                    { id: 'bs', label: 'Bilanço' },
+                    { id: 'is', label: 'Gelir Tablosu' },
+                    { id: 'cf', label: 'Nakit Akışı' },
+                    { id: 'ratios', label: 'Rasyolar' }
+                  ].map(t => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setSelectedTableTab(t.id as any)}
+                      className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                        selectedTableTab === t.id ? 'bg-[#f5c242] text-slate-950 font-bold shadow-sm' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-mono text-slate-400">
+                    {selectedTableTab === 'ratios' ? 'Birim: Oran / Katsayı' : 'Birim: Bin TRY'}
+                  </span>
+                  {reversedPeriods.length > maxVisiblePeriods && (
+                    <div className="flex items-center gap-1.5 bg-[#21262d] px-2 py-1 rounded-lg border border-[#2e3440] text-xs font-mono">
+                      <button
+                        type="button"
+                        onClick={() => setPeriodOffset(prev => Math.max(0, prev - 1))}
+                        disabled={safePeriodOffset <= 0}
+                        className={`px-1.5 py-0.5 rounded transition ${
+                          safePeriodOffset > 0
+                            ? 'text-[#f5c242] hover:bg-[#2e3440] cursor-pointer font-bold'
+                            : 'text-slate-600 cursor-not-allowed opacity-30'
+                        }`}
+                        title="Daha Yeni Dönemler"
+                      >
+                        &lt;
+                      </button>
+                      <span className="text-[11px] text-slate-400 px-1">
+                        {safePeriodOffset + 1}-{Math.min(reversedPeriods.length, safePeriodOffset + maxVisiblePeriods)} / {reversedPeriods.length}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPeriodOffset(prev => Math.min(maxPeriodOffset, prev + 1))}
+                        disabled={safePeriodOffset >= maxPeriodOffset}
+                        className={`px-1.5 py-0.5 rounded transition ${
+                          safePeriodOffset < maxPeriodOffset
+                            ? 'text-[#f5c242] hover:bg-[#2e3440] cursor-pointer font-bold'
+                            : 'text-slate-600 cursor-not-allowed opacity-30'
+                        }`}
+                        title="Daha Eski Dönemler"
+                      >
+                        &gt;
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
+              {/* Finansal Tablo Grid */}
               <div className="overflow-x-auto">
-                <table className="w-full text-xs text-left border-collapse font-mono">
+                <table className="w-full text-xs text-left border-collapse font-mono table-fixed">
                   <thead>
-                    <tr className="border-b border-[#282d37] text-slate-400 bg-[#21262d]/70">
-                      <th className="p-3 text-white font-sans font-bold min-w-[240px]">Finansal Kalem</th>
-                      {reversedPeriods.map((c) => (
-                        <th key={c.period} className="p-3 text-right text-slate-300 min-w-[130px]">
-                          <span className="text-white font-bold">{c.period}</span>
-                        </th>
-                      ))}
+                    <tr className="border-b border-[#282d37] text-slate-400 bg-[#21262d]/90">
+                      <th className="p-3 text-white font-sans font-bold text-xs sm:text-sm w-[34%] min-w-[200px]">
+                        {selectedTableTab === 'bs' && 'Bilanço Kalemleri'}
+                        {selectedTableTab === 'is' && 'Gelir Tablosu Kalemleri'}
+                        {selectedTableTab === 'cf' && 'Nakit Akışı Kalemleri'}
+                        {selectedTableTab === 'ratios' && 'Rasyolar & Göstergeler'}
+                      </th>
+                      {visiblePeriods.map((c, colIdx) => {
+                        const isFirst = colIdx === 0;
+                        const isLast = colIdx === visiblePeriods.length - 1;
+                        const canGoLeft = safePeriodOffset > 0;
+                        const canGoRight = safePeriodOffset < maxPeriodOffset;
+
+                        return (
+                          <th key={c.period} className="p-3 text-right text-slate-300 font-mono text-xs w-[11%] min-w-[105px]">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {isFirst && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPeriodOffset(prev => Math.max(0, prev - 1))}
+                                  disabled={!canGoLeft}
+                                  title="Daha Güncel Dönemler"
+                                  className={`w-5 h-5 flex items-center justify-center rounded transition ${
+                                    canGoLeft
+                                      ? 'bg-[#181b20] hover:bg-[#343b48] text-[#f5c242] cursor-pointer border border-[#383e4d]'
+                                      : 'text-slate-600 cursor-not-allowed opacity-20'
+                                  }`}
+                                >
+                                  &lt;
+                                </button>
+                              )}
+                              <span className="text-white font-bold">{c.period}</span>
+                              {isLast && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPeriodOffset(prev => Math.min(maxPeriodOffset, prev + 1))}
+                                  disabled={!canGoRight}
+                                  title="Geçmiş Dönemler"
+                                  className={`w-5 h-5 flex items-center justify-center rounded transition ${
+                                    canGoRight
+                                      ? 'bg-[#181b20] hover:bg-[#343b48] text-[#f5c242] cursor-pointer border border-[#383e4d]'
+                                      : 'text-slate-600 cursor-not-allowed opacity-20'
+                                  }`}
+                                >
+                                  &gt;
+                                </button>
+                              )}
+                            </div>
+                          </th>
+                        );
+                      })}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#282d37]">
-                    {selectedTableTab === 'bs' && balanceSheetRows.map(row => {
-                      const isHovered = hoveredRowKey === row.key;
-                      const isMainOrTotal = row.isHeader || row.isTotal;
-
-                      return (
-                        <tr
-                          key={row.key}
-                          onMouseEnter={() => setHoveredRowKey(row.key)}
-                          onMouseLeave={() => setHoveredRowKey(null)}
-                          className={`transition-colors ${
-                            isMainOrTotal ? 'bg-[#181b20]/80' : ''
-                          } hover:bg-[#21262d]/60`}
-                        >
-                          <td className={`p-3 font-sans ${isMainOrTotal ? 'pl-3 font-bold text-white text-xs sm:text-sm' : 'pl-7 font-normal text-slate-400 text-xs'}`}>
-                            {row.label}
+                  <tbody className="divide-y divide-[#282d37]/40">
+                    {/* 1. BİLANÇO GÖRÜNÜMÜ */}
+                    {selectedTableTab === 'bs' && balanceSheetSections.map((sec) => (
+                      <React.Fragment key={sec.id}>
+                        {/* Kategori Başlık Çubuğu */}
+                        <tr className="bg-[#1f242c]/90 border-t border-b border-[#2b313d]">
+                          <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3 font-sans font-bold text-slate-100 text-xs sm:text-sm tracking-wide">
+                            {sec.title}
                           </td>
-                          {reversedPeriods.map((c, colIdx) => {
-                            const val = c[row.key] ?? c[row.fallbackKey || ''];
-                            const prevCol = colIdx < reversedPeriods.length - 1 ? reversedPeriods[colIdx + 1] : null;
-                            const prevVal = prevCol ? (prevCol[row.key] ?? prevCol[row.fallbackKey || '']) : null;
-
-                            let diffPct: number | null = null;
-                            if (val != null && prevVal != null && !isNaN(val) && !isNaN(prevVal) && prevVal !== 0) {
-                              diffPct = ((Number(val) - Number(prevVal)) / Math.abs(Number(prevVal))) * 100;
-                            }
-                            const isGood = row.invert ? (diffPct != null && diffPct <= 0) : (diffPct != null && diffPct >= 0);
-
-                            return (
-                              <td key={c.period} className={`p-3 text-right ${isMainOrTotal ? 'font-bold text-white' : 'font-normal text-slate-300'}`}>
-                                <span>{formatTableNumber(val)}</span>
-                                {isHovered && diffPct != null && (
-                                  <span className={`ml-1.5 text-[10px] font-bold ${isGood ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                    %{diffPct > 0 ? `+${diffPct.toFixed(0)}` : diffPct.toFixed(0)}
-                                  </span>
-                                )}
-                              </td>
-                            );
-                          })}
                         </tr>
-                      );
-                    })}
 
-                    {selectedTableTab === 'is' && incomeStatementRows.map(row => {
-                      const isHovered = hoveredRowKey === row.key;
-                      const isMainOrTotal = row.isHeader || row.isTotal;
-
-                      return (
-                        <tr
-                          key={row.key}
-                          onMouseEnter={() => setHoveredRowKey(row.key)}
-                          onMouseLeave={() => setHoveredRowKey(null)}
-                          className={`transition-colors ${
-                            isMainOrTotal ? 'bg-[#181b20]/80' : ''
-                          } hover:bg-[#21262d]/60`}
-                        >
-                          <td className={`p-3 font-sans ${isMainOrTotal ? 'pl-3 font-bold text-white text-xs sm:text-sm' : 'pl-7 font-normal text-slate-400 text-xs'}`}>
-                            {row.label}
-                          </td>
-                          {reversedPeriods.map((c, colIdx) => {
-                            const val = c[row.key] ?? c[row.fallbackKey || ''];
-                            const prevCol = colIdx < reversedPeriods.length - 1 ? reversedPeriods[colIdx + 1] : null;
-                            const prevVal = prevCol ? (prevCol[row.key] ?? prevCol[row.fallbackKey || '']) : null;
-
-                            let diffPct: number | null = null;
-                            if (val != null && prevVal != null && !isNaN(val) && !isNaN(prevVal) && prevVal !== 0) {
-                              diffPct = ((Number(val) - Number(prevVal)) / Math.abs(Number(prevVal))) * 100;
-                            }
-                            const isGood = row.invert ? (diffPct != null && diffPct <= 0) : (diffPct != null && diffPct >= 0);
-
-                            return (
-                              <td key={c.period} className={`p-3 text-right ${isMainOrTotal ? 'font-bold text-white' : 'font-normal text-slate-300'}`}>
-                                <span>{formatTableNumber(val)}</span>
-                                {isHovered && diffPct != null && (
-                                  <span className={`ml-1.5 text-[10px] font-bold ${isGood ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                    %{diffPct > 0 ? `+${diffPct.toFixed(0)}` : diffPct.toFixed(0)}
-                                  </span>
-                                )}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })}
-
-                    {selectedTableTab === 'cf' && cashFlowRows.map(row => {
-                      const isHovered = hoveredRowKey === row.key;
-                      const isMainOrTotal = row.isHeader || row.isTotal;
-
-                      return (
-                        <tr
-                          key={row.key}
-                          onMouseEnter={() => setHoveredRowKey(row.key)}
-                          onMouseLeave={() => setHoveredRowKey(null)}
-                          className={`transition-colors ${
-                            isMainOrTotal ? 'bg-[#181b20]/80' : ''
-                          } hover:bg-[#21262d]/60`}
-                        >
-                          <td className={`p-3 font-sans ${isMainOrTotal ? 'pl-3 font-bold text-white text-xs sm:text-sm' : 'pl-7 font-normal text-slate-400 text-xs'}`}>
-                            {row.label}
-                          </td>
-                          {reversedPeriods.map((c, colIdx) => {
-                            const val = c[row.key] ?? c[row.fallbackKey || ''];
-                            const prevCol = colIdx < reversedPeriods.length - 1 ? reversedPeriods[colIdx + 1] : null;
-                            const prevVal = prevCol ? (prevCol[row.key] ?? prevCol[row.fallbackKey || '']) : null;
-
-                            let diffPct: number | null = null;
-                            if (val != null && prevVal != null && !isNaN(val) && !isNaN(prevVal) && prevVal !== 0) {
-                              diffPct = ((Number(val) - Number(prevVal)) / Math.abs(Number(prevVal))) * 100;
-                            }
-                            const isGood = row.invert ? (diffPct != null && diffPct <= 0) : (diffPct != null && diffPct >= 0);
-
-                            return (
-                              <td key={c.period} className={`p-3 text-right ${isMainOrTotal ? 'font-bold text-white' : 'font-normal text-slate-300'}`}>
-                                <span>{formatTableNumber(val)}</span>
-                                {isHovered && diffPct != null && (
-                                  <span className={`ml-1.5 text-[10px] font-bold ${isGood ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                    %{diffPct > 0 ? `+${diffPct.toFixed(0)}` : diffPct.toFixed(0)}
-                                  </span>
-                                )}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })}
-
-                    {selectedTableTab === 'ratios' && ratiosRows.map((row, i) => {
-                      const isMainOrTotal = row.isHeader || row.isTotal;
-
-                      return (
-                        <tr
-                          key={i}
-                          className={`transition-colors ${
-                            isMainOrTotal ? 'bg-[#181b20]/80' : ''
-                          } hover:bg-[#21262d]/60`}
-                        >
-                          <td className={`p-3 font-sans ${isMainOrTotal ? 'pl-3 font-bold text-white text-xs sm:text-sm' : 'pl-7 font-normal text-slate-400 text-xs'}`}>
-                            {row.label}
-                          </td>
-                          {reversedPeriods.map(c => (
-                            <td key={c.period} className={`p-3 text-right font-bold ${row.highlight ? 'text-[#f5c242]' : 'text-slate-200'}`}>
-                              {row.calc(c)}
+                        {/* Alt Kalem Satırları */}
+                        {sec.rows.map((row) => (
+                          <tr key={row.key} className="hover:bg-[#1f242c]/40 border-b border-[#222730] transition-colors">
+                            <td className="py-2 px-3 pl-6 font-sans text-xs text-slate-300 font-normal truncate" title={row.label}>
+                              {row.label}
                             </td>
-                          ))}
+                            {visiblePeriods.map((c) => {
+                              const val = c[row.key] ?? c[(row as any).fallbackKey || ''];
+                              return (
+                                <td key={c.period} className="py-2 px-3 text-right font-mono text-xs text-slate-200">
+                                  {val != null ? formatTableNumber(val) : '—'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+
+                        {/* Kategori Toplam Satırı */}
+                        <tr className="bg-[#1a1e24] border-t border-b border-[#2e3542]">
+                          <td className="py-2.5 px-3 font-sans font-bold text-white text-xs sm:text-sm truncate">
+                            {sec.totalLabel}
+                          </td>
+                          {visiblePeriods.map((c) => {
+                            const val = c[sec.totalKey];
+                            return (
+                              <td key={c.period} className="py-2.5 px-3 text-right font-mono font-bold text-white text-xs sm:text-sm">
+                                {val != null ? formatTableNumber(val) : '—'}
+                              </td>
+                            );
+                          })}
                         </tr>
-                      );
-                    })}
+
+                        {/* Genel Toplam Satırı (Aktifler / Yükümlülükler) */}
+                        {sec.grandTotalLabel && (
+                          <tr className="bg-[#242a35] border-t-2 border-b-2 border-[#f5c242]/40 font-bold">
+                            <td className="py-3 px-3 font-sans font-extrabold text-[#f5c242] text-xs sm:text-sm tracking-wide truncate">
+                              {sec.grandTotalLabel}
+                            </td>
+                            {visiblePeriods.map((c) => {
+                              const val = c[sec.grandTotalKey];
+                              return (
+                                <td key={c.period} className="py-3 px-3 text-right font-mono font-black text-[#f5c242] text-xs sm:text-sm">
+                                  {val != null ? formatTableNumber(val) : '—'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        )}
+
+                        {/* Ekstra Satır (Örn: Net Borç) */}
+                        {sec.extraRow && (
+                          <tr className="bg-[#1a1e24] border-b border-[#2e3542]">
+                            <td className="py-2 px-3 pl-4 font-sans font-semibold text-slate-300 text-xs truncate">
+                              {sec.extraRow.label}
+                            </td>
+                            {visiblePeriods.map((c) => {
+                              const val = c[sec.extraRow.key];
+                              return (
+                                <td key={c.period} className="py-2 px-3 text-right font-mono font-bold text-slate-200 text-xs">
+                                  {val != null ? formatTableNumber(val) : '—'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))}
+
+                    {/* 2. GELİR TABLOSU GÖRÜNÜMÜ */}
+                    {selectedTableTab === 'is' && incomeStatementSections.map((sec) => (
+                      <React.Fragment key={sec.id}>
+                        <tr className="bg-[#1f242c]/90 border-t border-b border-[#2b313d]">
+                          <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3 font-sans font-bold text-slate-100 text-xs sm:text-sm tracking-wide">
+                            {sec.title}
+                          </td>
+                        </tr>
+
+                        {sec.rows.map((row) => (
+                          <tr key={row.key} className="hover:bg-[#1f242c]/40 border-b border-[#222730] transition-colors">
+                            <td className="py-2 px-3 pl-6 font-sans text-xs text-slate-300 font-normal truncate" title={row.label}>
+                              {row.label}
+                            </td>
+                            {visiblePeriods.map((c) => {
+                              const val = c[row.key] ?? c[(row as any).fallbackKey || ''];
+                              return (
+                                <td key={c.period} className="py-2 px-3 text-right font-mono text-xs text-slate-200">
+                                  {val != null ? formatTableNumber(val) : '—'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+
+                        <tr className="bg-[#1a1e24] border-t border-b border-[#2e3542]">
+                          <td className="py-2.5 px-3 font-sans font-bold text-white text-xs sm:text-sm truncate">
+                            {sec.totalLabel}
+                          </td>
+                          {visiblePeriods.map((c) => {
+                            const val = c[sec.totalKey];
+                            return (
+                              <td key={c.period} className="py-2.5 px-3 text-right font-mono font-bold text-white text-xs sm:text-sm">
+                                {val != null ? formatTableNumber(val) : '—'}
+                              </td>
+                            );
+                          })}
+                        </tr>
+
+                        {sec.grandTotalLabel && (
+                          <tr className="bg-[#242a35] border-t-2 border-b-2 border-[#f5c242]/40 font-bold">
+                            <td className="py-3 px-3 font-sans font-extrabold text-[#f5c242] text-xs sm:text-sm tracking-wide truncate">
+                              {sec.grandTotalLabel}
+                            </td>
+                            {visiblePeriods.map((c) => {
+                              const val = c[sec.grandTotalKey];
+                              return (
+                                <td key={c.period} className="py-3 px-3 text-right font-mono font-black text-[#f5c242] text-xs sm:text-sm">
+                                  {val != null ? formatTableNumber(val) : '—'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))}
+
+                    {/* 3. NAKİT AKIŞI GÖRÜNÜMÜ */}
+                    {selectedTableTab === 'cf' && cashFlowSections.map((sec) => (
+                      <React.Fragment key={sec.id}>
+                        <tr className="bg-[#1f242c]/90 border-t border-b border-[#2b313d]">
+                          <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3 font-sans font-bold text-slate-100 text-xs sm:text-sm tracking-wide">
+                            {sec.title}
+                          </td>
+                        </tr>
+
+                        {sec.rows.map((row) => (
+                          <tr key={row.key} className="hover:bg-[#1f242c]/40 border-b border-[#222730] transition-colors">
+                            <td className="py-2 px-3 pl-6 font-sans text-xs text-slate-300 font-normal truncate" title={row.label}>
+                              {row.label}
+                            </td>
+                            {visiblePeriods.map((c) => {
+                              const val = c[row.key] ?? c[(row as any).fallbackKey || ''];
+                              return (
+                                <td key={c.period} className="py-2 px-3 text-right font-mono text-xs text-slate-200">
+                                  {val != null ? formatTableNumber(val) : '—'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+
+                        <tr className="bg-[#1a1e24] border-t border-b border-[#2e3542]">
+                          <td className="py-2.5 px-3 font-sans font-bold text-white text-xs sm:text-sm truncate">
+                            {sec.totalLabel}
+                          </td>
+                          {visiblePeriods.map((c) => {
+                            const val = c[sec.totalKey];
+                            return (
+                              <td key={c.period} className="py-2.5 px-3 text-right font-mono font-bold text-white text-xs sm:text-sm">
+                                {val != null ? formatTableNumber(val) : '—'}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </React.Fragment>
+                    ))}
+
+                    {/* 4. RASYOLAR GÖRÜNÜMÜ */}
+                    {selectedTableTab === 'ratios' && ratiosSections.map((sec) => (
+                      <React.Fragment key={sec.id}>
+                        <tr className="bg-[#1f242c]/90 border-t border-b border-[#2b313d]">
+                          <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3 font-sans font-bold text-slate-100 text-xs sm:text-sm tracking-wide">
+                            {sec.title}
+                          </td>
+                        </tr>
+
+                        {sec.rows.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-[#1f242c]/40 border-b border-[#222730] transition-colors">
+                            <td className={`py-2 px-3 pl-6 font-sans text-xs truncate ${row.isHighlight ? 'font-bold text-white' : 'font-normal text-slate-300'}`} title={row.label}>
+                              {row.label}
+                            </td>
+                            {visiblePeriods.map((c) => (
+                              <td key={c.period} className={`py-2 px-3 text-right font-mono text-xs font-bold ${row.isHighlight ? 'text-[#f5c242]' : 'text-slate-200'}`}>
+                                {row.calc(c)}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </React.Fragment>
+                    ))}
                   </tbody>
                 </table>
               </div>
