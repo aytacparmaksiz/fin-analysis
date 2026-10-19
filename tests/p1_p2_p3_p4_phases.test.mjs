@@ -81,17 +81,21 @@ test('Phases P1-P2-P3-P4 Comprehensive Verification Suite', async (t) => {
 
   await t.test('4. P3 (Robustness & Error Boundaries) Verification', () => {
     const pageContent = fs.readFileSync(path.resolve('app/page.tsx'), 'utf8');
+    const simplyContent = fs.existsSync(path.resolve('app/simply/simply-view.tsx'))
+      ? fs.readFileSync(path.resolve('app/simply/simply-view.tsx'), 'utf8')
+      : '';
+    const combinedContent = pageContent + simplyContent;
 
     assert.ok(pageContent.includes('class ComponentErrorBoundary'), 'ComponentErrorBoundary must be defined in app/page.tsx');
-    assert.ok(pageContent.includes('fallbackTitle="Özet Panosu Hatası"'), 'Özet tab must be wrapped with ErrorBoundary');
-    assert.ok(pageContent.includes('fallbackTitle="Grafik Terminali Hatası"'), 'Overview tab must be wrapped with ErrorBoundary');
-    assert.ok(pageContent.includes('fallbackTitle="Finansal Tablolar Hatası"'), 'Tables tab must be wrapped with ErrorBoundary');
-    assert.ok(pageContent.includes('fallbackTitle="Adil Değer Panosu Hatası"'), 'Fairvalue tab must be wrapped with ErrorBoundary');
-    assert.ok(pageContent.includes('fallbackTitle="Çarpan Analizi Hatası"'), 'Multiples tab must be wrapped with ErrorBoundary');
-    assert.ok(pageContent.includes('fallbackTitle="Güçlü/Zayıf Yönler Hatası"'), 'Proscons tab must be wrapped with ErrorBoundary');
-    assert.ok(pageContent.includes('fallbackTitle="Yönetim Hedefleri Hatası"'), 'Guidance tab must be wrapped with ErrorBoundary');
-    assert.ok(pageContent.includes('fallbackTitle="Değerleme Raporu Hatası"'), 'Report tab must be wrapped with ErrorBoundary');
-    assert.ok(pageContent.includes('fallbackTitle="Geçmiş Raporlar Hatası"'), 'History tab must be wrapped with ErrorBoundary');
+    assert.ok(combinedContent.includes('fallbackTitle="Özet Panosu Hatası"'), 'Özet tab must be wrapped with ErrorBoundary');
+    assert.ok(combinedContent.includes('fallbackTitle="Grafik Terminali Hatası"'), 'Overview tab must be wrapped with ErrorBoundary');
+    assert.ok(combinedContent.includes('fallbackTitle="Finansal Tablolar Hatası"'), 'Tables tab must be wrapped with ErrorBoundary');
+    assert.ok(combinedContent.includes('fallbackTitle="Adil Değer Panosu Hatası"'), 'Fairvalue tab must be wrapped with ErrorBoundary');
+    assert.ok(combinedContent.includes('fallbackTitle="Çarpan Analizi Hatası"'), 'Multiples tab must be wrapped with ErrorBoundary');
+    assert.ok(combinedContent.includes('fallbackTitle="Güçlü/Zayıf Yönler Hatası"'), 'Proscons tab must be wrapped with ErrorBoundary');
+    assert.ok(combinedContent.includes('fallbackTitle="Yönetim Hedefleri Hatası"'), 'Guidance tab must be wrapped with ErrorBoundary');
+    assert.ok(combinedContent.includes('fallbackTitle="Değerleme Raporu Hatası"'), 'Report tab must be wrapped with ErrorBoundary');
+    assert.ok(combinedContent.includes('fallbackTitle="Geçmiş Raporlar Hatası"'), 'History tab must be wrapped with ErrorBoundary');
   });
 
   await t.test('5. P4 (Decision Engine Harmonization - SAHOL Contradiction Resolution)', () => {

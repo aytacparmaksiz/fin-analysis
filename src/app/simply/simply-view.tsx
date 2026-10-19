@@ -109,6 +109,7 @@ const SECTOR_MEDIAN_BENCHMARKS: Record<string, { pe: number; pb: number; evEbitd
   REIT: { pe: 7.2, pb: 1.1, evEbitda: 8.5, evSales: 4.2 },
   TECH: { pe: 16.5, pb: 4.8, evEbitda: 14.0, evSales: 5.5 },
   AVIATION: { pe: 6.2, pb: 1.4, evEbitda: 5.1, evSales: 1.1 },
+  HEALTHCARE: { pe: 14.2, pb: 3.8, evEbitda: 9.6, evSales: 2.1 },
   INDUSTRIAL: { pe: 11.5, pb: 2.4, evEbitda: 8.2, evSales: 1.9 }
 };
 
@@ -180,10 +181,10 @@ const TURKISH_DATA_KEY_LABELS: Record<string, string> = {
 function SimplyChartTooltip({ active, payload, label, currentSector }: any) {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-[#181b20] border border-[#2b313d] p-3 rounded-xl shadow-2xl font-sans text-xs space-y-1.5 min-w-[200px] z-50">
-        <div className="font-bold text-white border-b border-[#282d37] pb-1 font-mono text-xs flex items-center justify-between">
+      <div className="bg-[#181b20] border border-[#2b313d] p-3.5 rounded-xl shadow-2xl font-sans text-sm space-y-2 min-w-[220px] z-50">
+        <div className="font-bold text-white border-b border-[#282d37] pb-1.5 font-mono text-sm flex items-center justify-between">
           <span>{label}</span>
-          <span className="text-[10px] text-slate-400 font-normal">Dönem</span>
+          <span className="text-sm text-slate-400 font-normal">Dönem</span>
         </div>
         {payload.map((entry: any, i: number) => {
           const key = entry.dataKey;
@@ -207,7 +208,7 @@ function SimplyChartTooltip({ active, payload, label, currentSector }: any) {
           }
 
           return (
-            <div key={i} className="flex items-center justify-between gap-4 py-0.5 text-xs">
+            <div key={i} className="flex items-center justify-between gap-4 py-0.5 text-sm">
               <span className="flex items-center gap-1.5 text-slate-300">
                 <span
                   className="w-2.5 h-2.5 rounded-full flex-shrink-0"
@@ -232,9 +233,9 @@ function PeerTooltip({ active, payload }: any) {
   if (active && payload && payload.length) {
     const item = payload[0];
     return (
-      <div className="bg-[#181b20] border border-[#383e4d] rounded-xl px-3 py-2 shadow-2xl z-50">
-        <div className="text-[11px] font-bold text-white mb-0.5">{item.payload?.name}</div>
-        <div className="text-xs font-mono font-bold text-[#f5c242] flex items-center gap-1.5">
+      <div className="bg-[#181b20] border border-[#383e4d] rounded-xl px-3.5 py-2.5 shadow-2xl z-50 text-sm">
+        <div className="text-sm font-bold text-white mb-0.5">{item.payload?.name}</div>
+        <div className="text-sm font-mono font-bold text-[#f5c242] flex items-center gap-1.5">
           <span className="text-slate-400 font-normal">F/K Oranı:</span>
           <span>{item.value != null ? `${Number(item.value).toFixed(1)}x` : '—'}</span>
         </div>
@@ -248,13 +249,13 @@ function PeerTooltip({ active, payload }: any) {
 function MultiplesTrendTooltip({ active, payload, label }: any) {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-[#181b20] border border-[#383e4d] rounded-xl p-3 shadow-2xl text-xs space-y-1.5 min-w-[175px] z-50">
-        <div className="font-bold text-white font-mono border-b border-[#2e3440] pb-1 flex items-center justify-between">
+      <div className="bg-[#181b20] border border-[#383e4d] rounded-xl p-3.5 shadow-2xl text-sm space-y-2 min-w-[190px] z-50">
+        <div className="font-bold text-white font-mono border-b border-[#2e3440] pb-1 flex items-center justify-between text-sm">
           <span>{label}</span>
-          <span className="text-[10px] text-slate-400 font-normal">Dönem</span>
+          <span className="text-sm text-slate-400 font-normal">Dönem</span>
         </div>
         {payload.map((entry: any, idx: number) => (
-          <div key={idx} className="flex items-center justify-between gap-3 text-[11px] font-mono">
+          <div key={idx} className="flex items-center justify-between gap-3 text-sm font-mono">
             <span className="flex items-center gap-1.5" style={{ color: entry.color }}>
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
               <span>{entry.name}:</span>
@@ -414,12 +415,66 @@ function cleanMarkdown(text: string): string {
   cleaned = cleaned.replace(/\bStorytelling\b/gi, 'Temel Yatırım Tezi');
   cleaned = cleaned.replace(/^(?:###|\#)\s*(I{1,3}|IV|V|VI{1,3}|IX|X)[\.\:\s\-]+(.*)$/gim, '## $1. $2');
   cleaned = cleaned.replace(/\\\\\[([\s\S]*?)\\\\\]/g, (_m, g1) => `\n\n$$\n${g1.trim()}\n$$\n\n`);
-  cleaned = cleaned.replace(/\\\[([\s\S]*?)\\\]/g, (_m, g1) => `\n\n$$\n${g1.trim()}\n$$\n\n`);
   cleaned = cleaned.replace(/\$\$([\s\S]*?)\$\$/g, (_match: string, inner: string) => {
     const cleanedInner = inner.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0).join('\n');
     return `\n\n$$\n${cleanedInner}\n$$\n\n`;
   });
+  // Remove redundant bin TL parenthetical when preceded by milyar/Mr TL
+  cleaned = cleaned.replace(/(\b\d+(?:[.,]\d+)?\s*(?:milyar|Mr)\s*TL)\s*\(\s*[\d.,]+\s*bin\s*TL\s*\)/gi, '$1');
+
+  // Strip trailing unformatted Analist Kararı block from markdown body (it is rendered in the executive card)
+  cleaned = cleaned.replace(/(?:###?\s*)?\*{0,2}Analist\s+Karar[ıi]\s*[:=-][\s\S]*$/i, '');
+
   return cleaned.trim();
+}
+
+
+interface ErrorBoundaryProps {
+  fallbackTitle?: string;
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error?: Error;
+}
+
+export class ComponentErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('SimplyView ErrorBoundary yakaladı:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="bg-rose-950/30 border border-rose-900/60 rounded-xl p-6 text-center my-4 space-y-3">
+          <div className="flex items-center justify-center gap-2 text-rose-400 font-semibold text-sm">
+            <AlertTriangle className="w-5 h-5" />
+            <span>{this.props.fallbackTitle || 'Bileşen Yüklenirken Bir Hata Oluştu'}</span>
+          </div>
+          <p className="text-xs text-slate-400 max-w-md mx-auto">
+            Bu bölümdeki veri görselleştirmesi sırasında beklenmeyen bir durum oluştu ancak diğer analiz sekmeleri ve raporunuz sorunsuz çalışmaya devam etmektedir.
+          </p>
+          <button
+            onClick={() => this.setState({ hasError: false })}
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700 transition-colors"
+          >
+            Yeniden Dene
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 export default function SimplyView({
@@ -476,6 +531,11 @@ export default function SimplyView({
   const earningsQuality = useMemo(() => {
     return calculateEarningsQuality(chartData, currentSector);
   }, [chartData, currentSector]);
+
+  // Yönetici Analist Kararı & Yatırım Tezi Çözümü (Tek ve Otoriter Karar Kartı)
+  const executiveVerdict = useMemo(() => {
+    return parseVerdictNarrative(report.report || '', report.decision);
+  }, [report.report, report.decision]);
 
   // Değer Sürücüleri (12 Ay İleri Hasılat ve Net Kâr Büyümesi vb.)
   const drivers = useMemo(() => {
@@ -1281,14 +1341,14 @@ export default function SimplyView({
     return (
       <td
         key={c.period}
-        className={`py-2 px-3 text-right font-mono text-xs ${textStyle} whitespace-nowrap overflow-hidden`}
+        className={`py-2 px-3 text-right font-mono text-sm ${textStyle} whitespace-nowrap overflow-hidden`}
       >
         <div className="flex items-center justify-end whitespace-nowrap">
           <span>{currentVal != null ? formatTableNumber(currentVal) : '—'}</span>
           <span className="w-12 flex-shrink-0 text-left pl-1.5 inline-block">
             {isRowHovered && diffPct != null && (
               <span
-                className={`text-[10px] font-bold ${
+                className={`text-xs font-bold ${
                   isGood ? 'text-emerald-400' : 'text-rose-400'
                 } transition-opacity duration-150 inline-block`}
               >
@@ -1353,14 +1413,14 @@ export default function SimplyView({
               </div>
 
               {/* Ticker & Şirket Bilgisi */}
-              <div className="text-center mt-1.5 space-y-0.5">
-                <h3 className="font-serif text-xs font-bold text-white tracking-tight line-clamp-1" title={profile.fullName}>
+              <div className="text-center mt-2 space-y-1">
+                <h3 className="font-serif text-[15px] font-bold text-white tracking-tight line-clamp-1" title={profile.fullName}>
                   {getCleanCompanyName(profile.fullName, report.ticker)}
                 </h3>
-                <div className="text-xs font-mono font-bold text-[#f5c242] tracking-wider">
+                <div className="text-sm font-mono font-bold text-[#f5c242] tracking-wider">
                   ${report.ticker.toUpperCase()}
                 </div>
-                <div className="text-[11px] font-semibold text-slate-300 font-mono">
+                <div className="text-sm font-semibold text-slate-300 font-mono">
                   Market Cap: {formattedMarketCap}
                 </div>
               </div>
@@ -1370,14 +1430,14 @@ export default function SimplyView({
             <div className="grid grid-cols-2 gap-2 pt-0.5 w-full">
               <button
                 type="button"
-                className="py-2 px-2 bg-[#f5c242] hover:bg-[#e5b332] text-slate-950 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1 cursor-pointer shadow-sm"
+                className="py-2 px-2 bg-[#f5c242] hover:bg-[#e5b332] text-slate-950 text-sm font-bold rounded-lg transition flex items-center justify-center gap-1 cursor-pointer shadow-sm"
               >
                 <span>+</span>
                 <span>Portfolio</span>
               </button>
               <button
                 type="button"
-                className="py-2 px-2 bg-[#21262d] hover:bg-[#2b313d] text-slate-200 hover:text-white text-xs font-semibold rounded-lg border border-[#2e3440] transition cursor-pointer flex items-center justify-center gap-1"
+                className="py-2 px-2 bg-[#21262d] hover:bg-[#2b313d] text-slate-200 hover:text-white text-sm font-semibold rounded-lg border border-[#2e3440] transition cursor-pointer flex items-center justify-center gap-1"
                 title="İzleme Listesi"
               >
                 <span>★</span>
@@ -1386,20 +1446,20 @@ export default function SimplyView({
             </div>
 
             {/* Hızlı Değerleme Özeti & Karar Rozeti (Sürekli Görünür Panel) */}
-            <div className="bg-[#21262d]/90 border border-[#2e3440] rounded-xl p-2.5 space-y-1.5 text-xs font-mono">
+            <div className="bg-[#21262d]/90 border border-[#2e3440] rounded-xl p-3 space-y-2 text-sm font-mono">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-slate-400 font-sans">Adil Değer</span>
+                <span className="text-sm text-slate-400 font-sans">Adil Değer</span>
                 <span className="font-bold text-[#f5c242]">₺{fairValueNum.toFixed(2)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-slate-400 font-sans">Son Fiyat</span>
+                <span className="text-sm text-slate-400 font-sans">Son Fiyat</span>
                 <span className="text-white font-semibold">₺{currentPriceNum.toFixed(2)}</span>
               </div>
-              <div className="flex items-center justify-between pt-1 border-t border-[#2e3440]">
-                <span className={`text-[10px] font-bold ${discountPctNum > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              <div className="flex items-center justify-between pt-1.5 border-t border-[#2e3440]">
+                <span className={`text-sm font-bold ${discountPctNum > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                   %{Math.abs(discountPctNum).toFixed(1)} {discountPctNum > 0 ? 'İskonto' : 'Prim'}
                 </span>
-                <span className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold ${
+                <span className={`px-2.5 py-0.5 rounded text-sm font-bold ${
                   (report.decision === 'AL') ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
                   (report.decision === 'ALMA') ? 'bg-rose-950 text-rose-400 border border-rose-800' :
                   'bg-amber-950 text-amber-400 border border-amber-800'
@@ -1410,7 +1470,7 @@ export default function SimplyView({
             </div>
 
             {/* 9 Sekme Listesi (Sayfayla Birlikte Akan Freeze Pane Menüsü) */}
-            <nav className="space-y-0.5 border-t border-[#282d37] pt-2.5">
+            <nav className="space-y-1 border-t border-[#282d37] pt-3">
               {NAVIGATION_ITEMS.map((item) => {
                 const isActive = activeSection === item.id;
                 const Icon = item.icon;
@@ -1420,24 +1480,24 @@ export default function SimplyView({
                     key={item.id}
                     type="button"
                     onClick={() => scrollToSection(item.id)}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-left ${
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition cursor-pointer text-left ${
                       isActive
                         ? 'bg-[#21262d] text-[#f5c242] font-bold border-l-4 border-[#f5c242] shadow-sm'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-[#21262d]/60'
+                        : 'text-slate-300 hover:text-white hover:bg-[#21262d]/60'
                     }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       {item.num ? (
-                        <span className="font-mono text-[11px] text-slate-500 w-4 text-center">
+                        <span className="font-mono text-sm text-slate-400 font-bold w-4 text-center">
                           {item.num}
                         </span>
                       ) : (
-                        <Icon className="w-3.5 h-3.5 text-slate-400" />
+                        <Icon className="w-4 h-4 text-slate-400" />
                       )}
                       <span className="truncate">{item.label}</span>
                     </div>
                     {isActive && (
-                      <ChevronRight className="w-3.5 h-3.5 text-[#f5c242] flex-shrink-0" />
+                      <ChevronRight className="w-4 h-4 text-[#f5c242] flex-shrink-0" />
                     )}
                   </button>
                 );
@@ -1454,10 +1514,11 @@ export default function SimplyView({
           {/* ----------------------------------------------------------------------- */}
           {/* BÖLÜM 1: GENEL BAKIŞ & SNOWFLAKE (#sec-ozet)                             */}
           {/* ----------------------------------------------------------------------- */}
+          <ComponentErrorBoundary fallbackTitle="Özet Panosu Hatası">
           <section id="sec-ozet" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-4 flex-wrap gap-3">
               <div className="flex items-center gap-3">
-                <span className="px-2.5 py-1 rounded-md bg-[#f5c242]/15 text-[#f5c242] font-bold border border-[#f5c242]/30 text-xs font-mono">ÖZET</span>
+                <span className="px-2.5 py-1 rounded-md bg-[#f5c242]/15 text-[#f5c242] font-bold border border-[#f5c242]/30 text-sm font-mono">ÖZET</span>
                 <div>
                   <h2 className="font-serif text-2xl sm:text-3xl font-bold text-white tracking-tight">Genel Bakış & Snowflake Analizi</h2>
                 </div>
@@ -1467,8 +1528,8 @@ export default function SimplyView({
             {/* Sub-Card 1: Üst Şirket Bilgi ve Fiyat Özeti Kartı */}
             <div className="bg-[#181b20] border border-[#2b313d] rounded-xl p-6 sm:p-7 shadow-md space-y-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-[#282d37]">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-sm font-mono text-slate-300">
                     <span className="text-[#f5c242] font-bold">IBSE:{report.ticker}</span>
                     <span>•</span>
                     <span>{report.period || '2025/12'} Bilanço Dönemi</span>
@@ -1476,11 +1537,11 @@ export default function SimplyView({
                   <h1 className="font-serif text-2xl sm:text-3xl font-black text-white tracking-tight">
                     {profile.fullName}
                   </h1>
-                  <div className="flex items-center gap-2 pt-1">
-                    <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#21262d] text-slate-300 border border-[#2e3440]">
+                  <div className="flex items-center gap-2.5 pt-1">
+                    <span className="px-3 py-1 rounded-full text-sm font-semibold bg-[#21262d] text-slate-200 border border-[#2e3440]">
                       {sectorMeta?.title || 'Borsa İstanbul'}
                     </span>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-sm text-slate-400">
                       İstanbul, Türkiye
                     </span>
                   </div>
@@ -1488,26 +1549,26 @@ export default function SimplyView({
 
                 <div className="flex items-baseline gap-4 sm:gap-6 flex-wrap">
                   <div>
-                    <div className="text-[11px] text-slate-400 uppercase font-semibold">Piyasa Fiyatı</div>
+                    <div className="text-sm text-slate-400 uppercase font-semibold">Piyasa Fiyatı</div>
                     <div className="text-2xl sm:text-3xl font-black font-mono text-white mt-0.5">
                       ₺{currentPriceNum.toFixed(2)}
                     </div>
                   </div>
 
                   <div>
-                    <div className="text-[11px] text-slate-400 uppercase font-semibold">Hesaplanan Adil Değer</div>
+                    <div className="text-sm text-slate-400 uppercase font-semibold">Hesaplanan Adil Değer</div>
                     <div className="text-2xl sm:text-3xl font-black font-mono text-[#f5c242] mt-0.5">
                       ₺{fairValueNum.toFixed(2)}
                     </div>
                   </div>
 
                   <div className="self-center">
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-mono text-xs font-bold border ${
+                    <span className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl font-mono text-sm font-bold border ${
                       discountPctNum > 0
                         ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
                         : 'bg-rose-500/15 border-rose-500/40 text-rose-400'
                     }`}>
-                      {discountPctNum > 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                      {discountPctNum > 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                       <span>%{Math.abs(discountPctNum).toFixed(1)} {discountPctNum > 0 ? 'İskontolu / Potansiyel' : 'Primli'}</span>
                     </span>
                   </div>
@@ -1516,12 +1577,12 @@ export default function SimplyView({
 
               {/* Fiyat ve Adil Değer Mini Çizelgesi */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-                <div className="md:col-span-2 bg-[#21262d]/60 border border-[#2e3440] rounded-xl p-4 space-y-2">
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span className="font-semibold text-slate-300">Son 4 Çeyrek Adil Değer Trendi vs. Piyasa Fiyatı</span>
-                    <span className="font-mono text-[11px]">Gerçekleşen Veriler</span>
+                <div className="md:col-span-2 bg-[#21262d]/60 border border-[#2e3440] rounded-xl p-4 sm:p-5 space-y-3">
+                  <div className="flex items-center justify-between text-sm text-slate-300">
+                    <span className="font-bold text-white text-[15px]">Son 4 Çeyrek Adil Değer Trendi vs. Piyasa Fiyatı</span>
+                    <span className="font-mono text-sm text-[#f5c242]">Gerçekleşen Veriler</span>
                   </div>
-                  <div className="h-32 w-full">
+                  <div className="h-36 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={fairValueTrendData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                         <defs>
@@ -1531,38 +1592,38 @@ export default function SimplyView({
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" vertical={false} />
-                        <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} />
-                        <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} domain={['auto', 'auto']} />
+                        <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 12, fill: '#9ca3af' }} />
+                        <YAxis stroke="#6b7280" tick={{ fontSize: 12, fill: '#9ca3af' }} domain={['auto', 'auto']} />
                         <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
                         <Area type="monotone" dataKey="AdilDeğer" name="Adil Değer" stroke="#f5c242" strokeWidth={2} fill="url(#swsFairGrad)" />
-                        <Line type="monotone" dataKey="PiyasaFiyatı" name="Piyasa Fiyatı" stroke="#38bdf8" strokeWidth={2} dot={{ r: 3, fill: '#38bdf8' }} />
+                        <Line type="monotone" dataKey="PiyasaFiyatı" name="Piyasa Fiyatı" stroke="#38bdf8" strokeWidth={2} dot={{ r: 3.5, fill: '#38bdf8' }} />
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
 
-                <div className="bg-[#21262d]/60 border border-[#2e3440] rounded-xl p-4 flex flex-col justify-between space-y-3">
+                <div className="bg-[#21262d]/60 border border-[#2e3440] rounded-xl p-4 sm:p-5 flex flex-col justify-between space-y-3">
                   <div>
-                    <div className="text-xs font-semibold text-slate-300">Getiri Performansı</div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">BIST piyasa dinamikleri</div>
+                    <div className="text-[15px] font-bold text-white">Getiri Performansı</div>
+                    <div className="text-sm text-slate-300 mt-0.5">BIST piyasa dinamikleri</div>
                   </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-400">7 Günlük:</span>
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-300">7 Günlük:</span>
                       <span className="font-mono font-bold text-emerald-400">+%3.2</span>
                     </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-400">1 Yıllık:</span>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-300">1 Yıllık:</span>
                       <span className="font-mono font-bold text-emerald-400">+%84.6</span>
                     </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-400">F/K Oranı:</span>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-300">F/K Oranı:</span>
                       <span className="font-mono font-bold text-white">
                         {marketMultiples?.pe ? `${marketMultiples.pe.toFixed(2)}x` : '—'}
                       </span>
                     </div>
                   </div>
-                  <div className="text-[10px] text-slate-400 border-t border-[#2e3440] pt-2">
+                  <div className="text-sm text-slate-400 border-t border-[#2e3440] pt-2.5">
                     KAP verileriyle senkronize edilmiştir.
                   </div>
                 </div>
@@ -1573,40 +1634,40 @@ export default function SimplyView({
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-[#f5c242]" />
-                  <h3 className="font-serif text-base font-bold text-white">About the Company</h3>
+                  <Building2 className="w-5 h-5 text-[#f5c242]" />
+                  <h3 className="font-serif text-lg font-bold text-white">About the Company</h3>
                 </div>
                 {profile.website && (
                   <a
                     href={profile.website}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex items-center gap-1 text-xs text-[#f5c242] hover:underline"
+                    className="flex items-center gap-1.5 text-sm text-[#f5c242] hover:underline font-semibold"
                   >
                     <span>Resmi Web Sitesi</span>
-                    <ExternalLink className="w-3 h-3" />
+                    <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                 )}
               </div>
-              <p className="text-sm text-slate-300 leading-relaxed font-sans">
+              <p className="text-sm sm:text-[15px] text-slate-200 leading-relaxed font-sans">
                 {profile.summary}
               </p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-[#282d37]">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-3 border-t border-[#282d37]">
                 <div>
-                  <div className="text-[11px] text-slate-400">Sektör</div>
-                  <div className="text-xs font-semibold text-white mt-0.5">{sectorMeta?.title || profile.fullName}</div>
+                  <div className="text-sm text-slate-400 font-medium">Sektör</div>
+                  <div className="text-sm font-bold text-white mt-1">{sectorMeta?.title || profile.fullName}</div>
                 </div>
                 <div>
-                  <div className="text-[11px] text-slate-400">Genel Merkez</div>
-                  <div className="text-xs font-semibold text-white mt-0.5">İstanbul, Türkiye</div>
+                  <div className="text-sm text-slate-400 font-medium">Genel Merkez</div>
+                  <div className="text-sm font-bold text-white mt-1">İstanbul, Türkiye</div>
                 </div>
                 <div>
-                  <div className="text-[11px] text-slate-400">Çalışan Sayısı</div>
-                  <div className="text-xs font-semibold text-white mt-0.5">{profile.employees || '1.000+'}</div>
+                  <div className="text-sm text-slate-400 font-medium">Çalışan Sayısı</div>
+                  <div className="text-sm font-bold text-white mt-1">{profile.employees || '1.000+'}</div>
                 </div>
                 <div>
-                  <div className="text-[11px] text-slate-400">Kuruluş Yılı</div>
-                  <div className="text-xs font-semibold text-white mt-0.5">{profile.foundedYear || '1995'}</div>
+                  <div className="text-sm text-slate-400 font-medium">Kuruluş Yılı</div>
+                  <div className="text-sm font-bold text-white mt-1">{profile.foundedYear || '1995'}</div>
                 </div>
               </div>
             </div>
@@ -1622,8 +1683,8 @@ export default function SimplyView({
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <div className={`px-3.5 py-1.5 rounded-xl border text-xs font-mono font-bold flex items-center gap-2 shadow-sm ${snowflakeTheme.badgeClass}`}>
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: snowflakeTheme.statusColor }} />
+                  <div className={`px-4 py-2 rounded-xl border text-sm font-mono font-bold flex items-center gap-2 shadow-sm ${snowflakeTheme.badgeClass}`}>
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: snowflakeTheme.statusColor }} />
                     <span>{snowflakeTheme.status}</span>
                     <span className="text-white/60">•</span>
                     <span>%{snowflake.percentage}</span>
@@ -1633,7 +1694,7 @@ export default function SimplyView({
                     <div className="text-2xl font-black font-mono" style={{ color: snowflakeTheme.statusColor }}>
                       {snowflake.totalScore}/30
                     </div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase font-mono tracking-wider">Toplam Skor</span>
+                    <span className="text-xs font-bold text-slate-400 uppercase font-mono tracking-wider">Toplam Skor</span>
                   </div>
                 </div>
               </div>
@@ -1779,13 +1840,13 @@ export default function SimplyView({
 
                     return (
                       <div key={axis.key} className="bg-[#151821] border border-[#2b313d] rounded-xl p-3 space-y-1.5">
-                        <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center justify-between text-sm">
                           <span className="font-bold text-white font-mono flex items-center gap-1.5">
                             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
                             <span>{axis.label}</span>
                           </span>
                           <div className="flex items-center gap-2 font-mono">
-                            <span className="text-[11px] text-slate-400">
+                            <span className="text-sm text-slate-300">
                               {axis.score >= 5 ? 'Mükemmel' : axis.score >= 3 ? 'Dengeli' : 'Riskli'}
                             </span>
                             <span className="font-bold text-sm" style={{ color }}>
@@ -1804,7 +1865,7 @@ export default function SimplyView({
 
                         {/* İlk Temel Kontrol Açıklaması */}
                         {topCheck && (
-                          <p className="text-[11px] text-slate-300 leading-tight truncate font-sans" title={topCheck.detail}>
+                          <p className="text-sm text-slate-200 leading-normal font-sans" title={topCheck.detail}>
                             {topCheck.passed ? '✓' : '✗'} {topCheck.detail}
                           </p>
                         )}
@@ -1816,11 +1877,11 @@ export default function SimplyView({
 
               {/* Alt Kısım: Öne Çıkan Güçlü Yönler (Rewards) ve Riskler (Risks) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-                <div className="bg-[#151821] border border-emerald-900/30 rounded-xl p-4 space-y-2">
-                  <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
-                    <Sparkles className="w-3.5 h-3.5" /> Öne Çıkan Güçlü Yönler (Rewards)
+                <div className="bg-[#151821] border border-emerald-900/30 rounded-xl p-4 sm:p-5 space-y-2.5">
+                  <div className="text-[15px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                    <Sparkles className="w-4 h-4" /> Öne Çıkan Güçlü Yönler (Rewards)
                   </div>
-                  <div className="space-y-1.5 text-xs text-slate-200">
+                  <div className="space-y-2 text-sm text-slate-200">
                     {snowflake.rewards.slice(0, 3).map((r, i) => (
                       <div key={i} className="flex items-start gap-2">
                         <span className="text-emerald-400 font-bold">★</span>
@@ -1830,11 +1891,11 @@ export default function SimplyView({
                   </div>
                 </div>
 
-                <div className="bg-[#151821] border border-amber-900/30 rounded-xl p-4 space-y-2">
-                  <div className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
-                    <AlertTriangle className="w-3.5 h-3.5" /> Dikkat Edilmesi Gereken Riskler
+                <div className="bg-[#151821] border border-amber-900/30 rounded-xl p-4 sm:p-5 space-y-2.5">
+                  <div className="text-sm font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                    <AlertTriangle className="w-4 h-4" /> Dikkat Edilmesi Gereken Riskler
                   </div>
-                  <div className="space-y-1.5 text-xs text-slate-200">
+                  <div className="space-y-2 text-sm text-slate-200">
                     {snowflake.risks.slice(0, 3).map((rk, i) => (
                       <div key={i} className="flex items-start gap-2">
                         <span className="text-amber-400 font-bold">⚠️</span>
@@ -1861,13 +1922,13 @@ export default function SimplyView({
                 {/* Sol Tablo: Özet Gelir Tablosu (YoY) */}
                 <div className="bg-[#21262d] border border-[#2e3440] rounded-xl p-4 sm:p-5 space-y-3">
                   <div className="flex items-center justify-between border-b border-[#2e3440] pb-2.5">
-                    <h4 className="text-sm sm:text-base font-bold text-white tracking-wide">Özet Gelir Tablosu</h4>
-                    <span className="text-xs text-slate-400 font-mono">YoY Çeyreklik</span>
+                    <h4 className="text-[15px] sm:text-base font-bold text-white tracking-wide">Özet Gelir Tablosu</h4>
+                    <span className="text-sm text-slate-400 font-mono">YoY Çeyreklik</span>
                   </div>
 
-                  <table className="w-full text-sm text-left">
+                  <table className="w-full text-sm sm:text-[15px] text-left">
                     <thead>
-                      <tr className="text-slate-300 border-b border-[#282d37] text-xs sm:text-sm">
+                      <tr className="text-slate-300 border-b border-[#282d37] text-sm">
                         <th className="pb-2.5 font-semibold">Kalem</th>
                         <th className="pb-2.5 text-right font-mono font-bold text-white">{latestFlowLabel}</th>
                         <th className="pb-2.5 text-right font-mono text-slate-300">{yoyFlowLabel || 'Geçen Yıl'}</th>
@@ -1915,13 +1976,13 @@ export default function SimplyView({
                 {/* Sağ Tablo: Özet Bilanço (QoQ) */}
                 <div className="bg-[#21262d] border border-[#2e3440] rounded-xl p-4 sm:p-5 space-y-3">
                   <div className="flex items-center justify-between border-b border-[#2e3440] pb-2.5">
-                    <h4 className="text-sm sm:text-base font-bold text-white tracking-wide">Özet Bilanço</h4>
-                    <span className="text-xs text-slate-400 font-mono">QoQ Çeyreklik</span>
+                    <h4 className="text-[15px] sm:text-base font-bold text-white tracking-wide">Özet Bilanço</h4>
+                    <span className="text-sm text-slate-400 font-mono">QoQ Çeyreklik</span>
                   </div>
 
-                  <table className="w-full text-sm text-left">
+                  <table className="w-full text-sm sm:text-[15px] text-left">
                     <thead>
-                      <tr className="text-slate-300 border-b border-[#282d37] text-xs sm:text-sm">
+                      <tr className="text-slate-300 border-b border-[#282d37] text-sm">
                         <th className="pb-2.5 font-semibold">Kalem</th>
                         <th className="pb-2.5 text-right font-mono font-bold text-white">{latestBS?.period}</th>
                         <th className="pb-2.5 text-right font-mono text-slate-300">{prevBSLabel || 'Önc. Çeyrek'}</th>
@@ -1975,36 +2036,36 @@ export default function SimplyView({
                   <Users className="w-5 h-5 text-[#f5c242]" />
                   <h3 className="font-serif text-lg sm:text-xl font-bold text-white">Sektörel Akranlar</h3>
                 </div>
-                <span className="text-xs text-[#f5c242] font-mono font-semibold">
+                <span className="text-sm text-[#f5c242] font-mono font-bold">
                   {officialSectorName} Sektörü
                 </span>
               </div>
 
               {analyzedCompetitors.length > 0 ? (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="space-y-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
                     {analyzedCompetitors.map((comp) => (
                       <div
                         key={comp.id}
                         onClick={() => onSelectTicker ? onSelectTicker(comp.ticker) : (onSelectReport && onSelectReport(comp.id))}
-                        className="bg-[#21262d] hover:bg-[#2b313d] border border-[#2e3440] rounded-xl p-3.5 transition cursor-pointer flex items-center justify-between group"
+                        className="bg-[#21262d] hover:bg-[#2b313d] border border-[#2e3440] rounded-xl p-4 transition cursor-pointer flex items-center justify-between group shadow-sm"
                       >
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-lg bg-[#181b20] border border-[#2e3440] flex items-center justify-center font-black font-mono text-xs text-[#f5c242]">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-lg bg-[#181b20] border border-[#2e3440] flex items-center justify-center font-black font-mono text-sm text-[#f5c242]">
                             {comp.ticker.slice(0, 4)}
                           </div>
                           <div>
-                            <div className="font-bold text-xs text-white group-hover:text-[#f5c242] transition">
+                            <div className="font-bold text-sm text-white group-hover:text-[#f5c242] transition">
                               {comp.ticker}
                             </div>
-                            <div className="text-[10px] text-slate-400">
+                            <div className="text-sm text-slate-400 font-mono">
                               Skor: {comp.score || 75}/100
                             </div>
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="font-mono text-xs font-bold text-white">{comp.price ? `₺${comp.price}` : '—'}</div>
-                          <div className={`text-[10px] font-bold font-mono ${comp.decision === 'AL' ? 'text-emerald-400' : comp.decision === 'ALMA' ? 'text-rose-400' : 'text-amber-400'}`}>
+                          <div className="font-mono text-sm font-bold text-white">{comp.price ? `₺${comp.price}` : '—'}</div>
+                          <div className={`text-sm font-bold font-mono ${comp.decision === 'AL' ? 'text-emerald-400' : comp.decision === 'ALMA' ? 'text-rose-400' : 'text-amber-400'}`}>
                             {comp.decision || 'NÖTR'}
                           </div>
                         </div>
@@ -2013,15 +2074,15 @@ export default function SimplyView({
                   </div>
 
                   {sectorCandidateTickers.length > 0 && (
-                    <div className="pt-2 border-t border-[#282d37] flex items-center justify-between flex-wrap gap-2 text-xs text-slate-400">
-                      <span className="text-[11px]">Sektördeki diğer akranları analiz et:</span>
-                      <div className="flex items-center gap-1.5 flex-wrap">
+                    <div className="pt-2.5 border-t border-[#282d37] flex items-center justify-between flex-wrap gap-2 text-sm text-slate-300">
+                      <span className="text-sm font-medium">Sektördeki diğer akranları analiz et:</span>
+                      <div className="flex items-center gap-2 flex-wrap">
                         {sectorCandidateTickers.slice(0, 5).map((tk) => (
                           <button
                             key={tk}
                             type="button"
                             onClick={() => onSelectTicker && onSelectTicker(tk)}
-                            className="px-2 py-0.5 bg-[#21262d] hover:bg-[#2e3440] text-[#f5c242] rounded-md border border-[#2e3440] text-[11px] font-mono font-bold cursor-pointer transition"
+                            className="px-2.5 py-1 bg-[#21262d] hover:bg-[#2e3440] text-[#f5c242] rounded-lg border border-[#2e3440] text-sm font-mono font-bold cursor-pointer transition"
                             title={`${tk} hissesini doğrudan analiz et`}
                           >
                             +{tk}
@@ -2032,9 +2093,9 @@ export default function SimplyView({
                   )}
                 </div>
               ) : (
-                <div className="bg-[#21262d] rounded-xl p-4 text-xs text-slate-400 flex items-center justify-between flex-wrap gap-3">
+                <div className="bg-[#21262d] rounded-xl p-4 text-sm text-slate-300 flex items-center justify-between flex-wrap gap-3">
                   <span>Bu sektörde henüz başka bir şirket analiz edilmedi. Sektörel akranları ekleyebilirsiniz:</span>
-                  <div className="flex items-center gap-1.5 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
                     {sectorCandidateTickers.map((tk) => (
                       <button
                         key={tk}
@@ -2051,10 +2112,12 @@ export default function SimplyView({
             </div>
 
           </section>
+          </ComponentErrorBoundary>
 
           {/* ----------------------------------------------------------------------- */}
           {/* BÖLÜM 2: GRAFİKLER (#sec-grafikler)                                     */}
           {/* ----------------------------------------------------------------------- */}
+          <ComponentErrorBoundary fallbackTitle="Grafik Terminali Hatası">
           <section id="sec-grafikler" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3 flex-wrap gap-3">
               <div className="flex items-center gap-2.5">
@@ -2086,7 +2149,7 @@ export default function SimplyView({
             {/* 3 Çeyreklik Mini Bar Grafiği */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
-                <div className="text-xs font-bold text-slate-200">
+                <div className="text-[15px] font-bold text-white">
                   {currentSector === 'INSURANCE' ? 'Çeyreklik Prim Üretimi' : 'Çeyreklik Satışlar'}
                 </div>
                 <div className="h-44 w-full">
@@ -2103,7 +2166,7 @@ export default function SimplyView({
               </div>
 
               <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
-                <div className="text-xs font-bold text-slate-200">
+                <div className="text-[15px] font-bold text-white">
                   {currentSector === 'INSURANCE' ? 'Teknik Bölüm Dengesi' : 'Çeyreklik FAVÖK'}
                 </div>
                 <div className="h-44 w-full">
@@ -2120,7 +2183,7 @@ export default function SimplyView({
               </div>
 
               <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
-                <div className="text-xs font-bold text-slate-200">Çeyreklik Net Kâr</div>
+                <div className="text-[15px] font-bold text-white">Çeyreklik Net Kâr</div>
                 <div className="h-44 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={(quarterlyChartData.length > 0 ? quarterlyChartData : chartData).slice(-5)}>
@@ -2146,7 +2209,7 @@ export default function SimplyView({
                 return (
                   <div key={mini.id} className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-4 shadow-xl space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-300">{mini.title}</span>
+                      <span className="text-[15px] font-bold text-white">{mini.title}</span>
                       <span className="font-mono text-sm font-bold" style={{ color: trendColor }}>
                         {mini.format(latestVal)}
                       </span>
@@ -2189,7 +2252,7 @@ export default function SimplyView({
               {/* Grafik 1: Satışlar ve Kârlılık */}
               <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
                 <div className="flex items-center justify-between border-b border-[#282d37] pb-2.5">
-                  <span className="text-xs font-bold text-white">
+                  <span className="text-base font-bold text-white">
                     {currentSector === 'INSURANCE' ? 'Prim Üretimi ve Kârlılık' : 'Satışlar ve Kârlılık'}
                   </span>
                 </div>
@@ -2200,7 +2263,7 @@ export default function SimplyView({
                       <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
                       <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => formatMrTl(v, true)} />
                       <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
-                      <Legend align="left" verticalAlign="bottom" wrapperStyle={{ fontSize: '11px', paddingTop: '8px', paddingLeft: '8px' }} />
+                      <Legend align="left" verticalAlign="bottom" wrapperStyle={{ fontSize: '12px', paddingTop: '8px', paddingLeft: '8px' }} />
                       <Bar dataKey="revenue" name={currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Hasılat'} fill="#3b82f6" radius={[3, 3, 0, 0]} maxBarSize={32} legendType="square" />
                       <Line type="monotone" dataKey="ebitda" name={currentSector === 'INSURANCE' ? 'Teknik Kâr' : 'FAVÖK'} stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3, fill: '#f59e0b' }} legendType="line" />
                       <Line type="monotone" dataKey="net_income" name="Net Kâr" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: '#10b981' }} legendType="line" />
@@ -2212,7 +2275,7 @@ export default function SimplyView({
               {/* Grafik 2: Satışlar ve Hisse Fiyatı */}
               <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
                 <div className="flex items-center justify-between border-b border-[#282d37] pb-2.5">
-                  <span className="text-xs font-bold text-white">
+                  <span className="text-base font-bold text-white">
                     {currentSector === 'INSURANCE' ? 'Prim Üretimi ve Hisse Fiyatı' : 'Satışlar ve Hisse Fiyatı'}
                   </span>
                 </div>
@@ -2224,7 +2287,7 @@ export default function SimplyView({
                       <YAxis yAxisId="left" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => formatMrTl(v, true)} />
                       <YAxis yAxisId="right" orientation="right" stroke="#10b981" tick={{ fontSize: 10, fill: '#34d399' }} tickFormatter={(v) => `${v} TL`} />
                       <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
-                      <Legend align="left" verticalAlign="bottom" wrapperStyle={{ fontSize: '11px', paddingTop: '8px', paddingLeft: '8px' }} />
+                      <Legend align="left" verticalAlign="bottom" wrapperStyle={{ fontSize: '12px', paddingTop: '8px', paddingLeft: '8px' }} />
                       <Bar yAxisId="left" dataKey="revenue" name={currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Hasılat'} fill="#3b82f6" radius={[3, 3, 0, 0]} maxBarSize={28} legendType="square" />
                       <Line yAxisId="right" type="monotone" dataKey="share_price" name="Hisse Fiyatı (TL)" stroke="#10b981" strokeWidth={2} dot={{ r: 3, fill: '#10b981' }} legendType="line" />
                     </ComposedChart>
@@ -2235,7 +2298,7 @@ export default function SimplyView({
               {/* Grafik 3: Nakit Akışı Kalitesi */}
               <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
                 <div className="flex items-center justify-between border-b border-[#282d37] pb-2.5">
-                  <span className="text-xs font-bold text-white">Nakit Akışı Kalitesi</span>
+                  <span className="text-base font-bold text-white">Nakit Akışı Kalitesi</span>
                 </div>
                 <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -2244,7 +2307,7 @@ export default function SimplyView({
                       <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
                       <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => formatMrTl(v, true)} />
                       <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
-                      <Legend align="left" verticalAlign="bottom" wrapperStyle={{ fontSize: '11px', paddingTop: '8px', paddingLeft: '8px' }} />
+                      <Legend align="left" verticalAlign="bottom" wrapperStyle={{ fontSize: '12px', paddingTop: '8px', paddingLeft: '8px' }} />
                       <Bar dataKey="operating_cash_flow" name="İşletme Nakit Akışı" fill="#06b6d4" radius={[3, 3, 0, 0]} maxBarSize={32} legendType="square" />
                       <Line type="monotone" dataKey="net_income" name="Net Kâr" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: '#10b981' }} legendType="line" />
                       <Line type="monotone" dataKey="free_cash_flow" name="Serbest Nakit (FCF)" stroke="#a855f7" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 2.5, fill: '#a855f7' }} legendType="line" />
@@ -2256,7 +2319,7 @@ export default function SimplyView({
               {/* Grafik 4: Bilanço Gücü: Özsermaye ve Nakit */}
               <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
                 <div className="flex items-center justify-between border-b border-[#282d37] pb-2.5">
-                  <span className="text-xs font-bold text-white">Bilanço Gücü: Özsermaye ve Borç/Nakit</span>
+                  <span className="text-base font-bold text-white">Bilanço Gücü: Özsermaye ve Borç/Nakit</span>
                 </div>
                 <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -2276,10 +2339,12 @@ export default function SimplyView({
 
             </div>
           </section>
+          </ComponentErrorBoundary>
 
           {/* ----------------------------------------------------------------------- */}
           {/* BÖLÜM 3: FİNANSAL TABLOLAR (#sec-tablolar)                              */}
           {/* ----------------------------------------------------------------------- */}
+          <ComponentErrorBoundary fallbackTitle="Finansal Tablolar Hatası">
           <section id="sec-tablolar" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3 flex-wrap gap-3">
               <div className="flex items-center gap-2.5">
@@ -2311,11 +2376,11 @@ export default function SimplyView({
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-xs font-bold text-white flex items-center gap-2">
+                  <div className="text-base font-bold text-white flex items-center gap-2">
                     <Scale className="w-4 h-4 text-[#f5c242]" />
                     <span>DuPont 5 Aşamalı Kârlılık Ayrıştırması</span>
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className="text-sm text-slate-300 mt-0.5">
                     ROE = Vergi Yükü × Faiz Yükü × Faaliyet Marjı × Varlık Devri × Kaldıraç
                   </p>
                 </div>
@@ -2323,52 +2388,52 @@ export default function SimplyView({
                   <div className="text-xl font-black font-mono text-emerald-400">
                     %{dupontResult.calculatedRoe?.toFixed(1) || '—'}
                   </div>
-                  <div className="text-[10px] text-slate-400 uppercase font-semibold">Yıllık ROE</div>
+                  <div className="text-sm text-slate-400 font-semibold">Yıllık ROE</div>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-[#2e3440] bg-[#21262d] border border-[#2e3440] rounded-xl overflow-hidden">
                 <div className="p-3 text-center">
-                  <div className="text-[10px] text-slate-400">Vergi Yükü</div>
+                  <div className="text-sm text-slate-400">Vergi Yükü</div>
                   <div className="text-base font-bold font-mono text-white mt-1">
                     {dupontResult.taxBurden != null ? `${dupontResult.taxBurden}x` : '—'}
                   </div>
-                  <div className="text-[10px] text-slate-500 font-mono">Net/EBT</div>
+                  <div className="text-xs text-slate-400 font-mono">Net/EBT</div>
                 </div>
 
                 <div className="p-3 text-center">
-                  <div className="text-[10px] text-slate-400">Faiz Yükü</div>
+                  <div className="text-sm text-slate-400">Faiz Yükü</div>
                   <div className="text-base font-bold font-mono text-white mt-1">
                     {dupontResult.interestBurden != null ? `${dupontResult.interestBurden}x` : '—'}
                   </div>
-                  <div className="text-[10px] text-slate-500 font-mono">EBT/EBIT</div>
+                  <div className="text-xs text-slate-400 font-mono">EBT/EBIT</div>
                 </div>
 
                 <div className="p-3 text-center">
-                  <div className="text-[10px] text-slate-400">EBIT Marjı</div>
+                  <div className="text-sm text-slate-400">EBIT Marjı</div>
                   <div className="text-base font-bold font-mono text-[#f5c242] mt-1">
                     {dupontResult.ebitMargin != null ? `%${dupontResult.ebitMargin}` : '—'}
                   </div>
-                  <div className="text-[10px] text-slate-500 font-mono">EBIT/Satış</div>
+                  <div className="text-xs text-slate-400 font-mono">EBIT/Satış</div>
                 </div>
 
                 <div className="p-3 text-center">
-                  <div className="text-[10px] text-slate-400">Aktif Devri</div>
+                  <div className="text-sm text-slate-400">Aktif Devri</div>
                   <div className="text-base font-bold font-mono text-cyan-400 mt-1">
                     {dupontResult.assetTurnover != null ? `${dupontResult.assetTurnover}x` : '—'}
                   </div>
-                  <div className="text-[10px] text-slate-500 font-mono">Satış/Aktif</div>
+                  <div className="text-xs text-slate-400 font-mono">Satış/Aktif</div>
                 </div>
 
                 <div className="p-3 text-center col-span-2 sm:col-span-1">
-                  <div className="text-[10px] text-slate-400">Kaldıraç</div>
+                  <div className="text-sm text-slate-400">Kaldıraç</div>
                   <div className="text-base font-bold font-mono text-white mt-1">
                     {dupontResult.financialLeverage != null ? `${dupontResult.financialLeverage}x` : '—'}
                   </div>
-                  <div className="text-[10px] text-slate-500 font-mono">Aktif/Özkaynak</div>
+                  <div className="text-xs text-slate-400 font-mono">Aktif/Özkaynak</div>
                 </div>
               </div>
-              <p className="text-xs text-slate-400 leading-relaxed pt-1">
+              <p className="text-sm text-slate-300 leading-relaxed pt-1">
                 {dupontResult.driverSummary}
               </p>
             </div>
@@ -2380,7 +2445,7 @@ export default function SimplyView({
               
               {/* Tablo Üst Kontrol & Alt Sekme Çubuğu */}
               <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-[#282d37]">
-                <div className="flex items-center gap-1 bg-[#21262d] p-1 rounded-xl border border-[#2e3440] text-xs font-semibold">
+                <div className="flex items-center gap-1 bg-[#21262d] p-1 rounded-xl border border-[#2e3440] text-sm font-semibold">
                   {[
                     { id: 'bs', label: 'Bilanço' },
                     { id: 'is', label: 'Gelir Tablosu' },
@@ -2391,7 +2456,7 @@ export default function SimplyView({
                       key={t.id}
                       type="button"
                       onClick={() => setSelectedTableTab(t.id as any)}
-                      className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                      className={`px-3.5 py-1.5 rounded-lg text-sm transition cursor-pointer ${
                         selectedTableTab === t.id ? 'bg-[#f5c242] text-slate-950 font-bold shadow-sm' : 'text-slate-400 hover:text-white'
                       }`}
                     >
@@ -2405,7 +2470,7 @@ export default function SimplyView({
                     <button
                       type="button"
                       onClick={() => setIsHeatmapActive(prev => !prev)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border ${
+                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5 transition cursor-pointer border ${
                         isHeatmapActive
                           ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
                           : 'bg-[#21262d] text-slate-400 border-[#2e3440] hover:text-white'
@@ -2415,11 +2480,11 @@ export default function SimplyView({
                       <span>Isı Haritası: {isHeatmapActive ? 'Açık' : 'Kapalı'}</span>
                     </button>
                   )}
-                  <span className="text-xs font-mono text-slate-400">
+                  <span className="text-sm font-mono text-slate-300">
                     {selectedTableTab === 'ratios' ? 'Birim: Oran / Katsayı' : 'Birim: Bin TRY'}
                   </span>
                   {reversedPeriods.length > maxVisiblePeriods && (
-                    <div className="flex items-center gap-1.5 bg-[#21262d] px-2 py-1 rounded-lg border border-[#2e3440] text-xs font-mono">
+                    <div className="flex items-center gap-1.5 bg-[#21262d] px-2.5 py-1 rounded-lg border border-[#2e3440] text-sm font-mono">
                       <button
                         type="button"
                         onClick={() => setPeriodOffset(prev => Math.max(0, prev - 1))}
@@ -2433,7 +2498,7 @@ export default function SimplyView({
                       >
                         &lt;
                       </button>
-                      <span className="text-[11px] text-slate-400 px-1">
+                      <span className="text-sm text-slate-300 px-1.5">
                         {safePeriodOffset + 1}-{Math.min(reversedPeriods.length, safePeriodOffset + maxVisiblePeriods)} / {reversedPeriods.length}
                       </span>
                       <button
@@ -2519,7 +2584,7 @@ export default function SimplyView({
                       <React.Fragment key={sec.id}>
                         {/* Kategori Başlık Çubuğu */}
                         <tr className="bg-[#1f242c]/90 border-t border-b border-[#2b313d]">
-                          <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3 font-sans font-bold text-slate-100 text-xs sm:text-sm tracking-wide">
+                          <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3 font-sans font-bold text-slate-100 text-[15px] tracking-wide">
                             {sec.title}
                           </td>
                         </tr>
@@ -2532,7 +2597,7 @@ export default function SimplyView({
                             onMouseLeave={() => setHoveredRowKey(null)}
                             className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
                           >
-                            <td className="py-2 px-3 pl-6 font-sans text-xs text-slate-300 font-normal truncate" title={row.label}>
+                            <td className="py-2.5 px-3 pl-6 font-sans text-sm text-slate-200 font-normal truncate" title={row.label}>
                               {row.label}
                             </td>
                             {visiblePeriods.map((c, colIdx) =>
@@ -2547,7 +2612,7 @@ export default function SimplyView({
                           onMouseLeave={() => setHoveredRowKey(null)}
                           className="bg-[#1a1e24] border-t border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
                         >
-                          <td className="py-2.5 px-3 font-sans font-bold text-white text-xs sm:text-sm truncate">
+                          <td className="py-2.5 px-3 font-sans font-bold text-white text-[15px] truncate">
                             {sec.totalLabel}
                           </td>
                           {visiblePeriods.map((c, colIdx) =>
@@ -2562,7 +2627,7 @@ export default function SimplyView({
                             onMouseLeave={() => setHoveredRowKey(null)}
                             className="bg-[#242a35] border-t-2 border-b-2 border-[#f5c242]/40 font-bold hover:bg-[#2c3442] transition-colors"
                           >
-                            <td className="py-3 px-3 font-sans font-extrabold text-[#f5c242] text-xs sm:text-sm tracking-wide truncate">
+                            <td className="py-3 px-3 font-sans font-extrabold text-[#f5c242] text-base tracking-wide truncate">
                               {sec.grandTotalLabel}
                             </td>
                             {visiblePeriods.map((c, colIdx) =>
@@ -2578,7 +2643,7 @@ export default function SimplyView({
                             onMouseLeave={() => setHoveredRowKey(null)}
                             className="bg-[#1a1e24] border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
                           >
-                            <td className="py-2 px-3 pl-4 font-sans font-semibold text-slate-300 text-xs truncate">
+                            <td className="py-2.5 px-3 pl-4 font-sans font-semibold text-slate-200 text-sm truncate">
                               {sec.extraRow.label}
                             </td>
                             {visiblePeriods.map((c, colIdx) =>
@@ -2593,7 +2658,7 @@ export default function SimplyView({
                     {selectedTableTab === 'is' && incomeStatementSections.map((sec) => (
                       <React.Fragment key={sec.id}>
                         <tr className="bg-[#1f242c]/90 border-t border-b border-[#2b313d]">
-                          <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3 font-sans font-bold text-slate-100 text-xs sm:text-sm tracking-wide">
+                          <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3 font-sans font-bold text-slate-100 text-[15px] tracking-wide">
                             {sec.title}
                           </td>
                         </tr>
@@ -2605,7 +2670,7 @@ export default function SimplyView({
                             onMouseLeave={() => setHoveredRowKey(null)}
                             className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
                           >
-                            <td className="py-2 px-3 pl-6 font-sans text-xs text-slate-300 font-normal truncate" title={row.label}>
+                            <td className="py-2.5 px-3 pl-6 font-sans text-sm text-slate-200 font-normal truncate" title={row.label}>
                               {row.label}
                             </td>
                             {visiblePeriods.map((c, colIdx) =>
@@ -2619,7 +2684,7 @@ export default function SimplyView({
                           onMouseLeave={() => setHoveredRowKey(null)}
                           className="bg-[#1a1e24] border-t border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
                         >
-                          <td className="py-2.5 px-3 font-sans font-bold text-white text-xs sm:text-sm truncate">
+                          <td className="py-2.5 px-3 font-sans font-bold text-white text-[15px] truncate">
                             {sec.totalLabel}
                           </td>
                           {visiblePeriods.map((c, colIdx) =>
@@ -2633,7 +2698,7 @@ export default function SimplyView({
                             onMouseLeave={() => setHoveredRowKey(null)}
                             className="bg-[#242a35] border-t-2 border-b-2 border-[#f5c242]/40 font-bold hover:bg-[#2c3442] transition-colors"
                           >
-                            <td className="py-3 px-3 font-sans font-extrabold text-[#f5c242] text-xs sm:text-sm tracking-wide truncate">
+                            <td className="py-3 px-3 font-sans font-extrabold text-[#f5c242] text-base tracking-wide truncate">
                               {sec.grandTotalLabel}
                             </td>
                             {visiblePeriods.map((c, colIdx) =>
@@ -2648,7 +2713,7 @@ export default function SimplyView({
                     {selectedTableTab === 'cf' && cashFlowSections.map((sec) => (
                       <React.Fragment key={sec.id}>
                         <tr className="bg-[#1f242c]/90 border-t border-b border-[#2b313d]">
-                          <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3 font-sans font-bold text-slate-100 text-xs sm:text-sm tracking-wide">
+                          <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3 font-sans font-bold text-slate-100 text-[15px] tracking-wide">
                             {sec.title}
                           </td>
                         </tr>
@@ -2660,7 +2725,7 @@ export default function SimplyView({
                             onMouseLeave={() => setHoveredRowKey(null)}
                             className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
                           >
-                            <td className="py-2 px-3 pl-6 font-sans text-xs text-slate-300 font-normal truncate" title={row.label}>
+                            <td className="py-2.5 px-3 pl-6 font-sans text-sm text-slate-200 font-normal truncate" title={row.label}>
                               {row.label}
                             </td>
                             {visiblePeriods.map((c, colIdx) =>
@@ -2674,7 +2739,7 @@ export default function SimplyView({
                           onMouseLeave={() => setHoveredRowKey(null)}
                           className="bg-[#1a1e24] border-t border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
                         >
-                          <td className="py-2.5 px-3 font-sans font-bold text-white text-xs sm:text-sm truncate">
+                          <td className="py-2.5 px-3 font-sans font-bold text-white text-[15px] truncate">
                             {sec.totalLabel}
                           </td>
                           {visiblePeriods.map((c, colIdx) =>
@@ -2688,7 +2753,7 @@ export default function SimplyView({
                     {selectedTableTab === 'ratios' && ratiosSections.map((sec) => (
                       <React.Fragment key={sec.id}>
                         <tr className="bg-[#1f242c]/90 border-t border-b border-[#2b313d]">
-                          <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3 font-sans font-bold text-slate-100 text-xs sm:text-sm tracking-wide">
+                          <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3 font-sans font-bold text-slate-100 text-[15px] tracking-wide">
                             {sec.title}
                           </td>
                         </tr>
@@ -2700,7 +2765,7 @@ export default function SimplyView({
                             onMouseLeave={() => setHoveredRowKey(null)}
                             className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
                           >
-                            <td className={`py-2 px-3 pl-6 font-sans text-xs truncate ${row.isHighlight ? 'font-bold text-white' : 'font-normal text-slate-300'}`} title={row.label}>
+                            <td className={`py-2.5 px-3 pl-6 font-sans text-sm truncate ${row.isHighlight ? 'font-bold text-white' : 'font-normal text-slate-200'}`} title={row.label}>
                               {row.label}
                             </td>
                             {visiblePeriods.map((c) => {
@@ -2709,7 +2774,7 @@ export default function SimplyView({
                               return (
                                 <td
                                   key={c.period}
-                                  className={`py-2 px-3 text-right font-mono text-xs font-bold transition-colors whitespace-nowrap overflow-hidden ${
+                                  className={`py-2.5 px-3 text-right font-mono text-sm font-bold transition-colors whitespace-nowrap overflow-hidden ${
                                     hmClass ? hmClass : (row.isHighlight ? 'text-[#f5c242]' : 'text-slate-200')
                                   }`}
                                 >
@@ -2729,10 +2794,12 @@ export default function SimplyView({
               </div>
             </div>
           </section>
+          </ComponentErrorBoundary>
 
           {/* ----------------------------------------------------------------------- */}
           {/* BÖLÜM 4: ÇARPANLAR (#sec-carpanlar)                                     */}
           {/* ----------------------------------------------------------------------- */}
+          <ComponentErrorBoundary fallbackTitle="Çarpan Analizi Hatası">
           <section id="sec-carpanlar" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
               <div className="flex items-center gap-2.5">
@@ -2918,10 +2985,12 @@ export default function SimplyView({
               </div>
             </div>
           </section>
+          </ComponentErrorBoundary>
 
           {/* ----------------------------------------------------------------------- */}
           {/* BÖLÜM 5: ADİL DEĞER (#sec-adildeger)                                    */}
           {/* ----------------------------------------------------------------------- */}
+          <ComponentErrorBoundary fallbackTitle="Adil Değer Panosu Hatası">
           <section id="sec-adildeger" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
               <div className="flex items-center gap-2.5">
@@ -2960,13 +3029,13 @@ export default function SimplyView({
 
               <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-emerald-400">Boğa Senaryosu</span>
-                  <span className="text-[10px] font-mono text-slate-500">İyimser</span>
+                  <span className="text-sm font-bold text-emerald-400">Boğa Senaryosu</span>
+                  <span className="text-sm font-mono text-slate-400">İyimser</span>
                 </div>
                 <div className="text-2xl font-black font-mono text-white">
                   ₺{valuationInfo?.bull_price ? Number(valuationInfo.bull_price).toFixed(2) : (fairValueNum * 1.30).toFixed(2)}
                 </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
+                <p className="text-sm text-slate-300 leading-relaxed">
                   Pazar payı genişlemesi, marj artışı ve risksiz faiz oranında normalleşme.
                 </p>
               </div>
@@ -3018,14 +3087,14 @@ export default function SimplyView({
                 ].map((d, idx) => (
                   <div key={idx} className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-4 flex flex-col justify-between space-y-3 shadow-xl">
                     <div>
-                      <div className="text-sm sm:text-[15px] font-bold text-white font-sans truncate" title={d.title}>
+                      <div className="text-[15px] font-bold text-white font-sans truncate" title={d.title}>
                         {d.title}
                       </div>
                       <div className="flex items-baseline gap-1.5 mt-1">
                         <span className="text-xl font-black font-mono text-[#f5c242] tracking-tight">
                           {d.valueText}
                         </span>
-                        <span className="text-[10px] text-slate-500 font-mono">baz</span>
+                        <span className="text-sm text-slate-400 font-mono">baz</span>
                       </div>
                     </div>
 
@@ -3041,14 +3110,14 @@ export default function SimplyView({
                         />
                       </div>
 
-                      <div className="flex items-center justify-between text-[11px] font-mono text-slate-300 leading-tight">
+                      <div className="flex items-center justify-between text-sm font-mono text-slate-300 leading-tight">
                         <span className="truncate">{d.bearText}</span>
                         <span className="truncate text-right text-slate-200">{d.bullText}</span>
                       </div>
                     </div>
 
                     {d.note && (
-                      <p className="text-xs sm:text-[13px] text-slate-200 leading-relaxed pt-2.5 border-t border-[#282d37] font-sans" title={d.note}>
+                      <p className="text-sm text-slate-200 leading-relaxed pt-2.5 border-t border-[#282d37] font-sans" title={d.note}>
                         {d.note}
                       </p>
                     )}
@@ -3070,7 +3139,7 @@ export default function SimplyView({
                   <div className={`text-xl font-black font-mono ${evaSpreadNum >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                     {evaSpreadNum >= 0 ? `+${evaSpreadNum.toFixed(1)} Puan` : `${evaSpreadNum.toFixed(1)} Puan`}
                   </div>
-                  <div className="text-[10px] text-slate-400 uppercase font-semibold">
+                  <div className="text-sm text-slate-400 font-semibold">
                     {evaSpreadNum >= 0 ? 'Değer Üretiyor' : 'Değer Yıkıyor'}
                   </div>
                 </div>
@@ -3078,31 +3147,31 @@ export default function SimplyView({
 
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 <div className="bg-[#21262d] rounded-xl p-3 text-center border border-emerald-500/30">
-                  <div className="text-[11px] font-medium text-emerald-400">Reel ROIC</div>
+                  <div className="text-sm font-semibold text-emerald-400">Reel ROIC</div>
                   <div className="text-base font-bold font-mono text-emerald-400 mt-1">
                     %{roicNum.toFixed(1)}
                   </div>
                 </div>
                 <div className="bg-[#21262d] rounded-xl p-3 text-center border border-[#2e3440]">
-                  <div className="text-[11px] text-slate-400">Özsermaye Maliyeti</div>
+                  <div className="text-sm text-slate-400">Özsermaye Maliyeti</div>
                   <div className="text-sm font-bold font-mono text-white mt-1">
                     %{Number(valuationInfo?.cost_of_equity || 44.6).toFixed(1)}
                   </div>
                 </div>
                 <div className="bg-[#21262d] rounded-xl p-3 text-center border border-[#2e3440]">
-                  <div className="text-[11px] text-slate-400">Borç Maliyeti</div>
+                  <div className="text-sm text-slate-400">Borç Maliyeti</div>
                   <div className="text-sm font-bold font-mono text-white mt-1">
                     %{Number(valuationInfo?.cost_of_debt || 46.7).toFixed(1)}
                   </div>
                 </div>
                 <div className="bg-[#21262d] rounded-xl p-3 text-center border border-[#2e3440]">
-                  <div className="text-[11px] text-slate-400">Nominal WACC</div>
+                  <div className="text-sm text-slate-400">Nominal WACC</div>
                   <div className="text-sm font-bold font-mono text-[#f5c242] mt-1">
                     %{nominalWaccNum.toFixed(1)}
                   </div>
                 </div>
                 <div className="bg-[#21262d] rounded-xl p-3 text-center border border-[#2e3440]">
-                  <div className="text-[11px] text-slate-400">Kaldıraçlı Beta</div>
+                  <div className="text-sm text-slate-400">Kaldıraçlı Beta</div>
                   <div className="text-sm font-bold font-mono text-cyan-400 mt-1">
                     {Number(valuationInfo?.beta || 0.77).toFixed(2)}x
                   </div>
@@ -3118,7 +3187,7 @@ export default function SimplyView({
                   <h3 className="text-base sm:text-lg font-serif font-bold text-white">
                     Kâr Kalitesi ve Nakit Dönüşümü
                   </h3>
-                  <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                  <span className={`text-sm font-mono font-bold px-2.5 py-0.5 rounded border ${
                     earningsQuality.badgeColor === 'emerald'
                       ? 'bg-emerald-950/70 border-emerald-800/60 text-emerald-400'
                       : earningsQuality.badgeColor === 'amber'
@@ -3136,7 +3205,7 @@ export default function SimplyView({
                 <button
                   type="button"
                   onClick={() => setShowCashQualityExplainer(prev => !prev)}
-                  className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white px-2.5 py-1 rounded-lg border border-[#2e3440] hover:bg-[#21262d] transition cursor-pointer"
+                  className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-[#2e3440] hover:bg-[#21262d] transition cursor-pointer"
                   title="Metodoloji ve formülleri görüntüle"
                 >
                   <Info className="w-3.5 h-3.5 text-[#f5c242]" />
@@ -3189,23 +3258,23 @@ export default function SimplyView({
                   }`}>
                     {formatMrTl(earningsQuality.netIncome)}
                   </div>
-                  <span className="text-[9.5px] text-slate-500 font-mono">Muhasebesel Net Kâr</span>
+                  <span className="text-xs text-slate-400 font-mono">Muhasebesel Net Kâr</span>
                 </div>
               </div>
 
               {/* Sektörel Rehberlik & Teşhis Açıklama Kartı */}
-              <div className="rounded-xl bg-[#21262d]/90 border border-[#2e3440] p-4 space-y-2 text-xs">
+              <div className="rounded-xl bg-[#21262d]/90 border border-[#2e3440] p-4 space-y-2 text-sm">
                 <div className="flex items-start gap-2.5">
-                  <div className="mt-1 h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
-                  <p className="text-slate-200 leading-relaxed font-normal flex-1">
+                  <div className="mt-1.5 h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
+                  <p className="text-slate-200 leading-relaxed font-normal flex-1 text-sm">
                     {earningsQuality.guidanceText}
                   </p>
                 </div>
 
                 {earningsQuality.sloanAssessment && (
                   <div className="flex items-start gap-2.5 pt-2.5 border-t border-[#282d37]">
-                    <div className="mt-1 h-2 w-2 rounded-full bg-cyan-400 shrink-0" />
-                    <p className="text-slate-300 leading-relaxed flex-1 font-mono text-[11px]">
+                    <div className="mt-1.5 h-2 w-2 rounded-full bg-cyan-400 shrink-0" />
+                    <p className="text-slate-300 leading-relaxed flex-1 font-mono text-sm">
                       <span className="font-semibold text-slate-200 font-sans mr-1.5">Tahakkuk & Nakit Teşhisi:</span>
                       {earningsQuality.sloanAssessment}
                     </p>
@@ -3214,18 +3283,18 @@ export default function SimplyView({
               </div>
 
               {showCashQualityExplainer && (
-                <div className="bg-[#121417] border border-[#2e3440] p-4 rounded-xl text-xs text-slate-300 space-y-2">
+                <div className="bg-[#121417] border border-[#2e3440] p-4 rounded-xl text-sm text-slate-300 space-y-2">
                   <div className="font-bold text-white flex items-center gap-1.5">
                     <Info className="w-3.5 h-3.5 text-[#f5c242]" />
                     <span>Kâr Kalitesi Metodolojisi & Değerlendirme Çerçevesi</span>
                   </div>
-                  <p className="leading-relaxed text-slate-300">
+                  <p className="leading-relaxed text-slate-300 text-sm">
                     {earningsQuality.beginnerExplanation}
                   </p>
-                  <div className="text-[11px] text-slate-400 font-mono bg-[#1a1e24] p-2.5 rounded-lg border border-[#282d37] space-y-1">
+                  <div className="text-sm text-slate-400 font-mono bg-[#1a1e24] p-3 rounded-lg border border-[#282d37] space-y-1">
                     <div>• <strong>Sloan Tahakkuk Oranı</strong> = (Net Kâr − OCF) / Toplam Varlıklar</div>
                     <div>• <strong>Nakit Dönüşüm Oranı</strong> = İşletme Nakit Akışı (OCF) / Net Kâr</div>
-                    <div className="text-[10px] text-slate-500 pt-0.5">
+                    <div className="text-xs text-slate-400 pt-0.5">
                       Oran %100'ün üzerindeyse şirket kağıt üzerinde kâr yazmanın ötesinde fiilen kasaya nakit sokuyor demektir.
                     </div>
                   </div>
@@ -3233,10 +3302,12 @@ export default function SimplyView({
               )}
             </div>
           </section>
+          </ComponentErrorBoundary>
 
           {/* ----------------------------------------------------------------------- */}
           {/* BÖLÜM 6: GÜÇLÜ & ZAYIF (#sec-gucluzayif)                                */}
           {/* ----------------------------------------------------------------------- */}
+          <ComponentErrorBoundary fallbackTitle="Güçlü/Zayıf Yönler Hatası">
           <section id="sec-gucluzayif" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
               <div className="flex items-center gap-2.5">
@@ -3250,7 +3321,7 @@ export default function SimplyView({
               <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
                 <div className="flex items-center gap-2 border-b border-[#282d37] pb-3">
                   <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                  <h3 className="font-serif text-base font-bold text-white">Güçlü Yönler</h3>
+                  <h3 className="font-serif text-[15px] font-bold text-white">Güçlü Yönler</h3>
                 </div>
                 <div className="space-y-3">
                   {(((report as any).pros && (report as any).pros.length > 0) ? (report as any).pros : [
@@ -3259,7 +3330,7 @@ export default function SimplyView({
                     'Sektör medyanlarına kıyasla cazip içsel değerleme iskontosu',
                     'Enflasyonist ortamda güçlü fiyatlama ve pazar payı koruma gücü'
                   ]).map((pro: string, i: number) => (
-                    <div key={i} className="flex items-start gap-2.5 text-xs text-slate-300 leading-relaxed bg-[#21262d]/50 p-3 rounded-xl border border-[#2e3440]">
+                    <div key={i} className="flex items-start gap-2.5 text-sm text-slate-200 leading-relaxed bg-[#21262d]/50 p-3 rounded-xl border border-[#2e3440]">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 flex-shrink-0" />
                       <span>{pro}</span>
                     </div>
@@ -3271,7 +3342,7 @@ export default function SimplyView({
               <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
                 <div className="flex items-center gap-2 border-b border-[#282d37] pb-3">
                   <AlertTriangle className="w-5 h-5 text-rose-400" />
-                  <h3 className="font-serif text-base font-bold text-white">Zayıf Yönler & Temel Riskler</h3>
+                  <h3 className="font-serif text-[15px] font-bold text-white">Zayıf Yönler & Temel Riskler</h3>
                 </div>
                 <div className="space-y-3">
                   {(((report as any).cons && (report as any).cons.length > 0) ? (report as any).cons : [
@@ -3279,7 +3350,7 @@ export default function SimplyView({
                     'İşletme sermayesi döngüsünde dönemsel alacak vadeleri takibi ihtiyacı',
                     'Sektörel regülasyon ve asgari ücret artışlarının operasyonel marj etkisi'
                   ]).map((con: string, i: number) => (
-                    <div key={i} className="flex items-start gap-2.5 text-xs text-slate-300 leading-relaxed bg-[#21262d]/50 p-3 rounded-xl border border-[#2e3440]">
+                    <div key={i} className="flex items-start gap-2.5 text-sm text-slate-200 leading-relaxed bg-[#21262d]/50 p-3 rounded-xl border border-[#2e3440]">
                       <span className="w-1.5 h-1.5 rounded-full bg-rose-400 mt-1.5 flex-shrink-0" />
                       <span>{con}</span>
                     </div>
@@ -3288,10 +3359,12 @@ export default function SimplyView({
               </div>
             </div>
           </section>
+          </ComponentErrorBoundary>
 
           {/* ----------------------------------------------------------------------- */}
           {/* BÖLÜM 7: REHBERLİK & HEDEFLER (#sec-rehberlik)                          */}
           {/* ----------------------------------------------------------------------- */}
+          <ComponentErrorBoundary fallbackTitle="Yönetim Hedefleri Hatası">
           <section id="sec-rehberlik" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
               <div className="flex items-center gap-2.5">
@@ -3311,14 +3384,14 @@ export default function SimplyView({
 
               {Array.isArray(report.extractedData?.guidance_track_record) && report.extractedData.guidance_track_record.length > 0 ? (
                 <div className="overflow-x-auto border border-[#2e3440] rounded-xl">
-                  <table className="w-full text-sm sm:text-[15px] text-left border-collapse font-sans">
+                  <table className="w-full table-fixed text-sm sm:text-[15px] text-left border-collapse font-sans">
                     <thead className="bg-[#21262d] text-white text-sm sm:text-[15px] border-b border-[#2e3440]">
                       <tr>
-                        <th className="p-3.5 sm:p-4 font-bold font-mono">Dönem</th>
-                        <th className="p-3.5 sm:p-4 font-bold">Açıklanan Yönetim Hedefi / Stratejik Plan</th>
-                        <th className="p-3.5 sm:p-4 text-right font-bold">Dönem Sonu Gerçekleşen</th>
-                        <th className="p-3.5 sm:p-4 text-center font-bold">Karne Durumu</th>
-                        <th className="p-3.5 sm:p-4 font-bold">Sapma & Değerlendirme</th>
+                        <th className="w-[11%] min-w-[75px] p-3.5 sm:p-4 font-bold font-mono">Dönem</th>
+                        <th className="w-[33%] p-3.5 sm:p-4 font-bold">Açıklanan Yönetim Hedefi / Stratejik Plan</th>
+                        <th className="w-[21%] p-3.5 sm:p-4 text-right font-bold">Dönem Sonu Gerçekleşen</th>
+                        <th className="w-[13%] min-w-[90px] p-3.5 sm:p-4 text-center font-bold">Karne Durumu</th>
+                        <th className="w-[22%] p-3.5 sm:p-4 font-bold">Sapma & Değerlendirme</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#282d37]">
@@ -3336,8 +3409,8 @@ export default function SimplyView({
                         return (
                           <tr key={idx} className="hover:bg-[#21262d]/50 transition-colors">
                             <td className="p-3.5 sm:p-4 font-bold font-mono text-[#f5c242] text-sm sm:text-[15px] whitespace-nowrap">{g?.year_or_period || '—'}</td>
-                            <td className="p-3.5 sm:p-4 text-slate-100 text-sm sm:text-[15px] leading-relaxed max-w-sm">{cleanGuidance}</td>
-                            <td className={`p-3.5 sm:p-4 text-right font-mono font-bold text-sm sm:text-[15px] whitespace-nowrap ${cleanStatus === 'BAŞARISIZ' ? 'text-rose-400' : 'text-emerald-300'}`}>
+                            <td className="p-3.5 sm:p-4 text-slate-100 text-sm sm:text-[15px] leading-relaxed break-words">{cleanGuidance}</td>
+                            <td className={`p-3.5 sm:p-4 text-right font-mono font-bold text-sm sm:text-[15px] break-words ${cleanStatus === 'BAŞARISIZ' ? 'text-rose-400' : 'text-emerald-300'}`}>
                               {cleanActual}
                             </td>
                             <td className="p-3.5 sm:p-4 text-center">
@@ -3351,7 +3424,7 @@ export default function SimplyView({
                                 {cleanStatus}
                               </span>
                             </td>
-                            <td className="p-3.5 sm:p-4 text-slate-200 text-sm sm:text-[15px] leading-relaxed max-w-md">
+                            <td className="p-3.5 sm:p-4 text-slate-200 text-sm sm:text-[15px] leading-relaxed break-words">
                               {String(g?.analysis || '').replace(/\bbancassurance\b/gi, 'banka sigortacılığı')}
                             </td>
                           </tr>
@@ -3361,12 +3434,12 @@ export default function SimplyView({
                   </table>
                 </div>
               ) : (
-                <div className="bg-[#21262d]/70 border border-[#2e3440] rounded-xl p-5 text-center space-y-1.5">
-                  <div className="text-xs font-semibold text-slate-300">
+                <div className="bg-[#21262d]/70 border border-[#2e3440] rounded-xl p-6 text-center space-y-2">
+                  <div className="text-base font-bold text-white">
                     Geçmiş Yönetim Karnesi Verisi
                   </div>
-                  <p className="text-[11px] text-slate-400 max-w-xl mx-auto leading-relaxed">
-                    Şirketin geçmiş faaliyet raporu ve yatırımcı sunumlarında açıklanan hedefler ile gerçekleşmelerin kıyası için yeni analiz ekranındaki <strong>Alan 2 (Faaliyet Raporları)</strong> veya <strong>Alan 3 (Yatırımcı Sunumu)</strong> bölümlerine PDF belgelerini ekleyebilirsiniz.
+                  <p className="text-sm text-slate-300 max-w-xl mx-auto leading-relaxed">
+                    Şirketin geçmiş faaliyet raporu ve yatırımcı sunumlarında açıklanan hedefler ile gerçekleşmelerin kıyası için yeni analiz ekranındaki <strong className="text-white">Alan 2 (Faaliyet Raporları)</strong> veya <strong className="text-white">Alan 3 (Yatırımcı Sunumu)</strong> bölümlerine PDF belgelerini ekleyebilirsiniz.
                   </p>
                 </div>
               )}
@@ -3418,11 +3491,11 @@ export default function SimplyView({
                   >
                     <div className="space-y-2">
                       <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                        <span className="px-3 py-0.5 rounded text-sm font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                           {item.category || 'STRATEJİK KATALİZÖR'}
                         </span>
                         {item.period_or_target && (
-                          <span className="text-[11px] font-mono font-semibold text-cyan-300 bg-cyan-950/50 border border-cyan-800/50 px-2 py-0.5 rounded">
+                          <span className="text-sm font-mono font-semibold text-cyan-300 bg-cyan-950/50 border border-cyan-800/50 px-2.5 py-0.5 rounded">
                             {item.period_or_target}
                           </span>
                         )}
@@ -3444,30 +3517,32 @@ export default function SimplyView({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
                   {report.extractedData.capex_and_kpi.management_guidance && (
                     <div className="bg-[#21262d]/60 border border-[#2e3440] p-3.5 rounded-xl space-y-1">
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-cyan-400">Yönetim Beklentileri</div>
-                      <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">{report.extractedData.capex_and_kpi.management_guidance}</p>
+                      <div className="text-[15px] font-bold text-cyan-400">Yönetim Beklentileri</div>
+                      <p className="text-sm sm:text-[15px] text-slate-200 leading-relaxed">{report.extractedData.capex_and_kpi.management_guidance}</p>
                     </div>
                   )}
                   {report.extractedData.capex_and_kpi.planned_capex_budget && (
                     <div className="bg-[#21262d]/60 border border-[#2e3440] p-3.5 rounded-xl space-y-1">
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Planlanan Yatırım & Büyüme</div>
-                      <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">{report.extractedData.capex_and_kpi.planned_capex_budget}</p>
+                      <div className="text-[15px] font-bold text-emerald-400">Planlanan Yatırım & Büyüme</div>
+                      <p className="text-sm sm:text-[15px] text-slate-200 leading-relaxed">{report.extractedData.capex_and_kpi.planned_capex_budget}</p>
                     </div>
                   )}
                   {report.extractedData.capex_and_kpi.sectoral_kpis && (
                     <div className="bg-[#21262d]/60 border border-[#2e3440] p-3.5 rounded-xl space-y-1">
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-amber-400">Sektörel Operasyonel KPI</div>
-                      <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">{report.extractedData.capex_and_kpi.sectoral_kpis}</p>
+                      <div className="text-[15px] font-bold text-amber-400">Sektörel Operasyonel KPI</div>
+                      <p className="text-sm sm:text-[15px] text-slate-200 leading-relaxed">{report.extractedData.capex_and_kpi.sectoral_kpis}</p>
                     </div>
                   )}
                 </div>
               )}
             </div>
           </section>
+          </ComponentErrorBoundary>
 
           {/* ----------------------------------------------------------------------- */}
           {/* BÖLÜM 8: ANALİST RAPORU (#sec-analist)                                  */}
           {/* ----------------------------------------------------------------------- */}
+          <ComponentErrorBoundary fallbackTitle="Değerleme Raporu Hatası">
           <section id="sec-analist" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3 flex-wrap gap-3">
               <div className="flex items-center gap-2.5">
@@ -3477,7 +3552,7 @@ export default function SimplyView({
               <button
                 type="button"
                 onClick={handleCopyReportText}
-                className="px-3.5 py-1.5 bg-[#21262d] hover:bg-[#2b313d] text-slate-200 hover:text-white rounded-lg border border-[#2e3440] text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer"
+                className="px-3.5 py-1.5 bg-[#21262d] hover:bg-[#2b313d] text-slate-200 hover:text-white rounded-lg border border-[#2e3440] text-sm font-semibold flex items-center gap-2 transition cursor-pointer"
               >
                 {copiedReport ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-cyan-400" />}
                 <span>{copiedReport ? 'Kopyalandı' : 'Raporu Kopyala'}</span>
@@ -3498,9 +3573,9 @@ export default function SimplyView({
                     {report.decision === 'AL' ? 'AL' : report.decision === 'ALMA' ? 'SAT' : 'TUT'}
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] uppercase font-mono font-bold tracking-wider text-slate-400">Resmi Analist Kararı</span>
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm uppercase font-mono font-bold tracking-wider text-slate-300">Resmi Analist Kararı</span>
+                      <span className={`px-3 py-1 rounded-full text-sm font-mono font-bold border ${
                         report.decision === 'AL'
                           ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                           : report.decision === 'ALMA'
@@ -3510,7 +3585,7 @@ export default function SimplyView({
                         {report.decision === 'AL' ? 'GÜÇLÜ ALIM POTANSİYELİ' : report.decision === 'ALMA' ? 'YÜKSEK RİSK / DEĞER TUZAĞI' : 'ENDEKSE PARALEL GETİRİ'}
                       </span>
                     </div>
-                    <h3 className="font-serif text-lg font-bold text-white mt-0.5">
+                    <h3 className="font-serif text-lg font-bold text-white mt-1">
                       {report.ticker} için 12 Aylık Hedef & Değerleme Perspektifi
                     </h3>
                   </div>
@@ -3518,17 +3593,17 @@ export default function SimplyView({
 
                 <div className="flex items-center gap-5">
                   <div className="text-right">
-                    <div className="text-[10px] text-slate-400 font-mono uppercase">Güncel Fiyat</div>
+                    <div className="text-sm text-slate-400 font-mono uppercase">Güncel Fiyat</div>
                     <div className="text-xl font-black font-mono text-white">₺{currentPriceNum.toFixed(2)}</div>
                   </div>
                   <div className="h-8 w-px bg-[#282d37]" />
                   <div className="text-right">
-                    <div className="text-[10px] text-slate-400 font-mono uppercase">Hedef Adil Değer</div>
+                    <div className="text-sm text-slate-400 font-mono uppercase">Hedef Adil Değer</div>
                     <div className="text-xl font-black font-mono text-[#f5c242]">₺{fairValueNum.toFixed(2)}</div>
                   </div>
                   <div className="h-8 w-px bg-[#282d37]" />
                   <div className="text-right">
-                    <div className="text-[10px] text-slate-400 font-mono uppercase">Potansiyel</div>
+                    <div className="text-sm text-slate-400 font-mono uppercase">Potansiyel</div>
                     <div className={`text-xl font-black font-mono ${fairValueNum >= currentPriceNum ? 'text-emerald-400' : 'text-rose-400'}`}>
                       {currentPriceNum > 0
                         ? `${fairValueNum >= currentPriceNum ? '+' : ''}${(((fairValueNum - currentPriceNum) / currentPriceNum) * 100).toFixed(1)}%`
@@ -3539,38 +3614,46 @@ export default function SimplyView({
               </div>
 
               {/* 3 Sütunlu Hızlı Analist Çerçevesi (Yatırım Tezi, Katalizörler, Riskler) */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-                <div className="bg-[#21262d]/70 border border-[#2e3440] rounded-xl p-4 space-y-2">
-                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
-                    <Target className="w-4 h-4" />
-                    <span className="font-serif font-bold text-white">Temel Yatırım Tezi</span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+                <div className="bg-[#21262d] border border-emerald-500/30 rounded-xl p-4 sm:p-5 space-y-2.5">
+                  <div className="flex items-center gap-2 text-sm font-bold text-emerald-400">
+                    <Target className="w-4 h-4 shrink-0" />
+                    <span className="font-serif font-bold text-white text-[15px]">Temel Yatırım Tezi</span>
                   </div>
-                  <p className="text-xs text-slate-300 leading-relaxed font-sans">
-                    {evaSpreadNum >= 0
-                      ? `Şirket reel sermaye maliyetinin üzerinde (+%${evaSpreadNum.toFixed(1)} EVA makası) sermaye getirisi üretmekte olup içsel sermaye birikimi hissedar değerini istikrarlı şekilde büyütmektedir.`
-                      : 'Sermaye getirisi ile sermaye maliyeti arasındaki makas daralmış olup operasyonel kâr marjlarının ve serbest nakit akışının korunması kritik önemdedir.'}
+                  <p className="text-sm sm:text-[14px] text-slate-200 leading-relaxed font-sans">
+                    {executiveVerdict.thesis || (
+                      report.decision === 'AL'
+                        ? 'Şirketin asgari güvenlik marjı kuralını sağlayan adil değer iskontosu, sermaye maliyetini aşan ROIC performansı ve dengeli borç yapısı, hisse senedini model portföy için cazip kılmaktadır.'
+                        : report.decision === 'ALMA'
+                        ? 'Şirketin eriyen kâr marjları, negatif sermaye makası (ROIC < WACC) veya yüksek borçluluk baskısı nedeniyle içsel değer piyasa fiyatının altındadır ve sermaye kaybı riski yüksektir.'
+                        : 'Hisse mevcut değerleme çarpanları ve makro risk dengesi gözetildiğinde adil değerine yakın işlem görmekte olup endekse paralel getiri potansiyeli sunmaktadır.'
+                    )}
                   </p>
                 </div>
 
-                <div className="bg-[#21262d]/70 border border-[#2e3440] rounded-xl p-4 space-y-2">
-                  <div className="flex items-center gap-2 text-xs font-bold text-cyan-400">
-                    <Sparkles className="w-4 h-4" />
-                    <span className="font-serif font-bold text-white">Büyüme Katalizörleri</span>
+                <div className="bg-[#21262d] border border-cyan-500/30 rounded-xl p-4 sm:p-5 space-y-2.5">
+                  <div className="flex items-center gap-2 text-sm font-bold text-cyan-400">
+                    <Sparkles className="w-4 h-4 shrink-0" />
+                    <span className="font-serif font-bold text-white text-[15px]">Kilit Katalizörler</span>
                   </div>
-                  <p className="text-xs text-slate-300 leading-relaxed font-sans">
-                    {`12 aylık ileri projeksiyonlarda beklenen %${Number(drivers.revenue_growth.value).toFixed(0)} hasılat artışı ve %${Number(drivers.net_income_growth.value).toFixed(0)} net kâr dinamizmi ana içsel değer iticisi konumundadır.`}
+                  <p className="text-sm sm:text-[14px] text-slate-200 leading-relaxed font-sans">
+                    {executiveVerdict.catalysts || (
+                      `12 aylık ileri projeksiyonlarda beklenen %${Number(drivers.revenue_growth.value).toFixed(0)} hasılat artışı, pazar payı genişlemesi ve %${Number(drivers.net_income_growth.value).toFixed(0)} operasyonel kâr dinamizmi ana değer katalizörleridir.`
+                    )}
                   </p>
                 </div>
 
-                <div className="bg-[#21262d]/70 border border-[#2e3440] rounded-xl p-4 space-y-2">
-                  <div className="flex items-center gap-2 text-xs font-bold text-rose-400">
-                    <AlertTriangle className="w-4 h-4" />
-                    <span className="font-serif font-bold text-white">Kritik Risk Faktörleri</span>
+                <div className="bg-[#21262d] border border-rose-500/30 rounded-xl p-4 sm:p-5 space-y-2.5">
+                  <div className="flex items-center gap-2 text-sm font-bold text-rose-400">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span className="font-serif font-bold text-white text-[15px]">Riskler & Emniyet Marjı</span>
                   </div>
-                  <p className="text-xs text-slate-300 leading-relaxed font-sans">
-                    {report.overrideReason
-                      ? report.overrideReason
-                      : 'Makro faiz dalgalanmaları, işletme sermayesi tahsilat süreleri ve sektörel maliyet enflasyonu yakından takip edilmelidir.'}
+                  <p className="text-sm sm:text-[14px] text-slate-200 leading-relaxed font-sans">
+                    {executiveVerdict.risks || (
+                      report.overrideReason
+                        ? report.overrideReason
+                        : 'Makro faiz dalgalanmaları, enflasyon muhasebesi kaynaklı marj daralmaları ve işletme sermayesi tahsilat süreleri temel izleme riskleridir.'
+                    )}
                   </p>
                 </div>
               </div>
@@ -3581,9 +3664,9 @@ export default function SimplyView({
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#282d37] pb-3">
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-[#f5c242]" />
-                  <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">BİST Kurumsal Araştırma Standardı</span>
+                  <span className="text-sm font-bold text-white uppercase tracking-wider font-mono">BİST Kurumsal Araştırma Standardı</span>
                 </div>
-                <div className="text-[11px] font-mono text-slate-400">
+                <div className="text-sm font-mono text-slate-300">
                   Model: Gordon Büyüme & İNA • Reel WACC
                 </div>
               </div>
@@ -3605,7 +3688,7 @@ export default function SimplyView({
                       const el = document.getElementById(pill.id);
                       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }}
-                    className="px-2.5 py-1 rounded-lg text-xs font-medium bg-[#21262d] hover:bg-[#2b313d] text-slate-300 hover:text-[#f5c242] border border-[#2e3440] transition cursor-pointer"
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-[#21262d] hover:bg-[#2b313d] text-slate-300 hover:text-[#f5c242] border border-[#2e3440] transition cursor-pointer"
                   >
                     {pill.label}
                   </button>
@@ -3616,7 +3699,7 @@ export default function SimplyView({
             {/* Markdown Rapor İçeriği - Rahat Okunabilir Tipografi */}
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 sm:p-9 shadow-xl">
               <div className={`prose prose-invert max-w-none font-sans leading-relaxed text-slate-200 ${
-                reportFontSize === 'compact' ? 'text-xs' : reportFontSize === 'large' ? 'text-base' : 'text-sm'
+                reportFontSize === 'compact' ? 'text-sm' : reportFontSize === 'large' ? 'text-lg' : 'text-base'
               }`}>
                 {report.report ? (
                   <ReactMarkdown
@@ -3676,92 +3759,9 @@ export default function SimplyView({
                       },
                       p: ({ children, ...props }: any) => {
                         const text = extractTextFromChildren(children);
+                        // Analist kararı ve yatırım tezi üstteki tek ve resmi yönetim kartında gösterildiği için mükerrer kart render edilmez
                         if (/Analist\s+Karar[ıi]\s*[:=-]/i.test(text) || (text.includes('Yatırım Tezi:') && (text.includes('Katalizör') || text.includes('Risk')))) {
-                          const parsed = parseVerdictNarrative(text, report.decision);
-                          const isAl = parsed.verdict === 'AL';
-                          const isAlma = parsed.verdict === 'ALMA';
-
-                          return (
-                            <div className="my-6 rounded-2xl border border-[#2b313d] bg-[#181b20] p-6 shadow-xl space-y-5">
-                              <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#282d37]">
-                                <div className="flex items-center gap-3.5">
-                                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-mono font-black text-xl border shadow-lg ${
-                                    isAl
-                                      ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-400 shadow-emerald-950/50'
-                                      : isAlma
-                                      ? 'bg-rose-950/80 border-rose-500/50 text-rose-400 shadow-rose-950/50'
-                                      : 'bg-amber-950/80 border-amber-500/50 text-amber-400 shadow-amber-950/50'
-                                  }`}>
-                                    {isAl ? 'AL' : isAlma ? 'SAT' : 'TUT'}
-                                  </div>
-                                  <div>
-                                    <div className="text-[11px] uppercase font-mono font-bold tracking-wider text-slate-400">
-                                      Resmi Nihai Analist Kararı
-                                    </div>
-                                    <div className={`text-base font-bold ${
-                                      isAl ? 'text-emerald-300' : isAlma ? 'text-rose-300' : 'text-amber-300'
-                                    }`}>
-                                      {parsed.verdictTitle}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center gap-3">
-                                  <div className="bg-[#21262d] border border-[#2e3440] px-3.5 py-1.5 rounded-xl text-center">
-                                    <span className="text-[10px] text-slate-400 font-mono block">Hedef Adil Değer</span>
-                                    <span className="font-mono text-sm font-bold text-[#f5c242]">₺{fairValueNum.toFixed(2)}</span>
-                                  </div>
-                                  {currentPriceNum > 0 && (
-                                    <div className="bg-[#21262d] border border-[#2e3440] px-3.5 py-1.5 rounded-xl text-center">
-                                      <span className="text-[10px] text-slate-400 font-mono block">Güncel Fiyat</span>
-                                      <span className="font-mono text-sm font-bold text-white">₺{currentPriceNum.toFixed(2)}</span>
-                                    </div>
-                                  )}
-                                  <div className="bg-[#21262d] border border-[#2e3440] px-3.5 py-1.5 rounded-xl text-center">
-                                    <span className="text-[10px] text-slate-400 font-mono block">Kurumsal Skor</span>
-                                    <span className={`font-mono text-sm font-black ${
-                                      (Number(report.score) || 0) >= 70 ? 'text-emerald-400' : (Number(report.score) || 0) >= 50 ? 'text-amber-400' : 'text-rose-400'
-                                    }`}>
-                                      {report.score || 0} / 100
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* 3 Sütunlu Ayrı Kartlar (Yatırım Tezi, Katalizörler, Riskler) */}
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-                                <div className="bg-[#21262d] border border-emerald-500/30 rounded-xl p-4 space-y-2">
-                                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
-                                    <Target className="w-4 h-4 shrink-0" />
-                                    <span className="font-serif font-bold text-white">Temel Yatırım Tezi</span>
-                                  </div>
-                                  <p className="text-xs sm:text-[13px] text-slate-200 leading-relaxed font-sans">
-                                    {parsed.thesis || text}
-                                  </p>
-                                </div>
-
-                                <div className="bg-[#21262d] border border-cyan-500/30 rounded-xl p-4 space-y-2">
-                                  <div className="flex items-center gap-2 text-xs font-bold text-cyan-400">
-                                    <Sparkles className="w-4 h-4 shrink-0" />
-                                    <span className="font-serif font-bold text-white">Kilit Katalizörler</span>
-                                  </div>
-                                  <p className="text-xs sm:text-[13px] text-slate-200 leading-relaxed font-sans">
-                                    {parsed.catalysts || 'Yapay zeka projeleri, operasyonel verimlilik ve pazar payı genişlemesi.'}
-                                  </p>
-                                </div>
-
-                                <div className="bg-[#21262d] border border-rose-500/30 rounded-xl p-4 space-y-2">
-                                  <div className="flex items-center gap-2 text-xs font-bold text-rose-400">
-                                    <AlertTriangle className="w-4 h-4 shrink-0" />
-                                    <span className="font-serif font-bold text-white">Riskler & Emniyet Marjı</span>
-                                  </div>
-                                  <p className="text-xs sm:text-[13px] text-slate-200 leading-relaxed font-sans">
-                                    {parsed.risks || 'Makro faiz dalgalanmaları ve enflasyon muhasebesi kaynaklı marj daralmaları.'}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          );
+                          return null;
                         }
                         return <p className="leading-relaxed mb-4 text-slate-200 text-sm sm:text-[15px] font-sans" {...props}>{children}</p>;
                       },
@@ -3812,7 +3812,7 @@ export default function SimplyView({
                       ),
                       table: ({ ...props }) => (
                         <div className="overflow-x-auto my-5 rounded-xl border border-[#2e3440] bg-[#1a1d24]">
-                          <table className="w-full text-xs text-left border-collapse font-mono" {...props} />
+                          <table className="w-full text-sm text-left border-collapse font-mono" {...props} />
                         </div>
                       ),
                       th: ({ ...props }) => <th className="bg-[#21262d] p-3 font-bold text-white border-b border-[#2e3440]" {...props} />,
@@ -3822,17 +3822,19 @@ export default function SimplyView({
                     {cleanMarkdown(report.report)}
                   </ReactMarkdown>
                 ) : (
-                  <div className="text-center py-10 text-slate-500 font-mono text-xs">
+                  <div className="text-center py-10 text-slate-400 font-mono text-sm">
                     Bu analiz için detaylı analist rapor metni henüz üretilmedi.
                   </div>
                 )}
               </div>
             </div>
           </section>
+          </ComponentErrorBoundary>
 
           {/* ----------------------------------------------------------------------- */}
           {/* BÖLÜM 9: GEÇMİŞ ANALİZLER (#sec-gecmis)                                 */}
           {/* ----------------------------------------------------------------------- */}
+          <ComponentErrorBoundary fallbackTitle="Geçmiş Raporlar Hatası">
           <section id="sec-gecmis" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
               <div className="flex items-center gap-2.5">
@@ -3851,19 +3853,19 @@ export default function SimplyView({
                       className="py-3 flex items-center justify-between hover:bg-[#21262d]/50 px-3 rounded-xl transition cursor-pointer"
                     >
                       <div>
-                        <div className="font-bold text-xs text-white flex items-center gap-2">
+                        <div className="font-bold text-[15px] text-white flex items-center gap-2">
                           <span>{hist.ticker}</span>
-                          <span className="text-[11px] font-mono text-slate-400">({hist.period || '2025/12'})</span>
+                          <span className="text-sm font-mono text-slate-300">({hist.period || '2025/12'})</span>
                         </div>
-                        <div className="text-[10px] text-slate-500 mt-0.5">
+                        <div className="text-sm text-slate-400 mt-0.5 font-mono">
                           Tarih: {hist.createdAt}
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="font-mono text-xs font-bold text-[#f5c242]">
+                        <div className="font-mono text-[15px] font-bold text-[#f5c242]">
                           Adil Değer: ₺{hist.fairValue || '—'}
                         </div>
-                        <div className={`text-[10px] font-bold font-mono ${hist.decision === 'AL' ? 'text-emerald-400' : hist.decision === 'ALMA' ? 'text-rose-400' : 'text-amber-400'}`}>
+                        <div className={`text-sm font-bold font-mono ${hist.decision === 'AL' ? 'text-emerald-400' : hist.decision === 'ALMA' ? 'text-rose-400' : 'text-amber-400'}`}>
                           Karar: {hist.decision || 'NÖTR'}
                         </div>
                       </div>
@@ -3871,12 +3873,13 @@ export default function SimplyView({
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-6 text-slate-500 font-mono text-xs">
+                <div className="text-center py-6 text-slate-400 font-mono text-sm">
                   {report.ticker} için sistemde kayıtlı geçmiş başka bir rapor bulunmuyor.
                 </div>
               )}
             </div>
           </section>
+          </ComponentErrorBoundary>
 
         </div>
       </div>

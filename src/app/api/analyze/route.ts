@@ -326,8 +326,8 @@ SERMAYE MALİYETİ (WACC) VE FISHER REEL KÂRLILIK PARAMETRELERİ (IV. VE VI. B�
 - Reel EVA Makası (ROIC - Reel WACC): ${Number(evaSpreadVal) >= 0 ? '+' : ''}${evaSpreadVal} puan
 
 ${netOcfVal ? `NAKİT AKIŞI VE YATIRIM HARCAMASI GÖSTERGELERİ (II. BÖLÜMDE BU TANIMLARI BİREBİR KULLANACAKSIN):
-- Net İşletme Nakit Akışı (KAP resmi çalışma sermayesi ve vergi sonrası): ${(netOcfVal / 1e9).toFixed(2)} Milyar TL (${(netOcfVal / 1e3).toLocaleString('tr-TR')} bin TL) ${netIncomeVal ? `[Net kârın %${((netOcfVal / netIncomeVal) * 100).toFixed(1)}'i]` : ''}
-${grossOcfVal ? `- İşletme Sermayesi Öncesi Brüt Faaliyet Nakit Akışı: ${(grossOcfVal / 1e9).toFixed(2)} Milyar TL (${(grossOcfVal / 1e3).toLocaleString('tr-TR')} bin TL) ${netIncomeVal ? `[Net kârın %${((grossOcfVal / netIncomeVal) * 100).toFixed(1)}'i]` : ''}` : ''}
+- Net İşletme Nakit Akışı (KAP resmi çalışma sermayesi ve vergi sonrası): ${(netOcfVal / 1e9).toFixed(2)} Milyar TL ${netIncomeVal ? `[Net kârın %${((netOcfVal / netIncomeVal) * 100).toFixed(1)}'i]` : ''}
+${grossOcfVal ? `- İşletme Sermayesi Öncesi Brüt Faaliyet Nakit Akışı: ${(grossOcfVal / 1e9).toFixed(2)} Milyar TL ${netIncomeVal ? `[Net kârın %${((grossOcfVal / netIncomeVal) * 100).toFixed(1)}'i]` : ''}` : ''}
 ${tangibleCapexVal ? `- Maddi ve Maddi Olmayan Duran Varlık Yatırımı (Tangible CAPEX): ${(Math.abs(tangibleCapexVal) / 1e9).toFixed(2)} Milyar TL` : ''}
 ${totalCapexVal ? `- Toplam Yatırım Nakit Çıkışı (Finansal vb. dahil): ${(Math.abs(totalCapexVal) / 1e9).toFixed(2)} Milyar TL` : ''}
 - Serbest Nakit Akışı (FCF): Güçlü Pozitif [Net OCF bazlı ${(latestItem?.free_cash_flow ? (latestItem.free_cash_flow / 1e9).toFixed(2) : ((netOcfVal - Math.abs(tangibleCapexVal || 0)) / 1e9).toFixed(2))} Milyar TL ${latestItem?.gross_free_cash_flow ? `| Brüt OCF bazlı ${(latestItem.gross_free_cash_flow / 1e9).toFixed(2)} Milyar TL` : ''}]

@@ -123,5 +123,24 @@ test('Investment Themes and Company Categorization Engine Test Suite', async (t)
     assert.equal(summary.GROWTH.length, 1);
     assert.equal(summary.DEEP_VALUE.length, 1);
     assert.equal(summary.DEFENSIVE.length, 1);
+    assert.ok(Array.isArray(summary.AVOID), 'AVOID theme must be an array in getThemeSummary');
+  });
+
+  await t.test('7. categorizes risky/avoid company correctly', () => {
+    const report = {
+      id: 'r_avoid',
+      ticker: 'RISK1',
+      decision: 'ALMA',
+      extractedData: {
+        financial_history: [
+          { period: '2025/12', roic: -5.2, wacc: 22.0, ebitda: 100, net_debt: 800, net_income: -50 }
+        ]
+      }
+    };
+
+    const matches = categorizeCompany(report);
+    const avoidMatch = matches.find(m => m.themeId === 'AVOID');
+    assert.ok(avoidMatch, 'Company should be categorized as AVOID');
+    assert.ok(avoidMatch.reason.includes('ALMA') || avoidMatch.reason.includes('Risk') || avoidMatch.reason.includes('Negatif'));
   });
 });

@@ -8,10 +8,11 @@ export type SectorType =
   | 'RETAIL'
   | 'UTILITIES_TELCO'
   | 'FINANCIAL_SERVICES'
+  | 'HEALTHCARE'
   | 'TECH';
 
 export type FinancialArchetype =
-  | 'INDUSTRIAL'          // A) REEL SEKTÖR & SANAYİ (Otomotiv, Kimya, Çimento, Demir-Çelik, Teknoloji)
+  | 'INDUSTRIAL'          // A) REEL SEKTÖR & SANAYİ (Otomotiv, Kimya, Çimento, Demir-Çelik, Teknoloji, Sağlık)
   | 'AVIATION'            // B) HAVACILIK & ULAŞTIRMA (TAVHL, THYAO, PGSUS)
   | 'BANKING'             // C) BANKACILIK (GARAN, AKBNK, ISCTR, YKBNK)
   | 'INSURANCE'           // D) SİGORTACILIK (TURSG, AGESA, ANSGR)
@@ -37,6 +38,7 @@ export function getFinancialArchetype(sector: SectorType): FinancialArchetype {
       return 'UTILITIES_TELCO';
     case 'FINANCIAL_SERVICES':
       return 'FINANCIAL_SERVICES';
+    case 'HEALTHCARE':
     case 'TECH':
     case 'INDUSTRIAL':
     default:
@@ -380,6 +382,21 @@ export const SECTOR_SCORING_CONFIG: Record<SectorType, SectorScoringDefinition> 
       idealMarginOfSafety: 30.0,
     },
   },
+  HEALTHCARE: {
+    sector: 'HEALTHCARE',
+    categories: [
+      { key: 'operating_margin', name: 'Operasyonel Kârlılık & FAVÖK', maxScore: 25, description: 'Sağlık hizmetleri FAVÖK marjı ve hasta başı verimlilik' },
+      { key: 'capital_efficiency', name: 'Sermaye Verimliliği (ROIC vs WACC)', maxScore: 25, description: 'Hastane yatırımlarının sermaye maliyetini aşan getiri oranı' },
+      { key: 'balance_sheet_safety', name: 'Bilanço & Borçluluk Güvenliği', maxScore: 25, description: 'Net Borç / FAVÖK (<3.0x) ve güçlü işletme nakit akışı' },
+      { key: 'growth_moat', name: 'Hasılat & Medikal Turizm Büyümesi', maxScore: 25, description: 'Yurt içi ve uluslararası sağlık hizmetleri ciro büyümesi' },
+    ],
+    riskThresholds: {
+      criticalDebtRatio: 3.5,
+      minLiquidityRatio: 1.0,
+      minMarginOfSafety: 20.0,
+      idealMarginOfSafety: 30.0,
+    },
+  },
 };
 
 export const SECTOR_DEFINITIONS: Record<SectorType, SectorDefinition> = {
@@ -521,6 +538,20 @@ export const SECTOR_DEFINITIONS: Record<SectorType, SectorDefinition> = {
     marginLabel: 'FAVÖK Marjı (%)',
     marginSublabel: 'FAVÖK / Satış Gelirleri',
     valuationMultiples: 'FD/FAVÖK (EV/EBITDA), F/K & FD/Satışlar',
+    primaryEfficiencyMetric: 'ROIC vs WACC Sermaye Makası',
+  },
+  HEALTHCARE: {
+    id: 'HEALTHCARE',
+    title: 'Sağlık & Hastanecilik',
+    badge: 'Sağlık & Hastanecilik Modu',
+    description: 'Özel hastane zincirleri, medikal turizm, yatak kapasitesi, ARPU ve operasyonel FAVÖK marjı kilit değer sürücüleridir.',
+    revenueLabel: 'Sağlık Hizmet Gelirleri (Hasılat)',
+    revenueSublabel: 'Yurt İçi Hasta ve Uluslararası Medikal Turizm Gelirleri',
+    operatingProfitLabel: 'FAVÖK (EBITDA)',
+    operatingProfitSublabel: 'Faiz, Amortisman ve Vergi Öncesi Operasyonel Kâr',
+    marginLabel: 'FAVÖK Marjı (%)',
+    marginSublabel: 'FAVÖK / Sağlık Hizmet Hasılatı',
+    valuationMultiples: 'FD/FAVÖK (EV/EBITDA), F/K & PD/DD',
     primaryEfficiencyMetric: 'ROIC vs WACC Sermaye Makası',
   },
 };
@@ -695,11 +726,27 @@ export const BIST_TECH_TICKERS = [
   'BINHO',
 ];
 
+export const BIST_HEALTHCARE_TICKERS = [
+  'MPARK',
+  'LKMNH',
+  'TNZTP',
+  'GENIL',
+  'SELEC',
+  'TRILC',
+  'RTALB',
+  'ANGEN',
+  'MEDTR',
+  'ONCSM',
+];
+
 export function detectSector(ticker: string, contextText = ''): SectorType {
   const normTicker = (ticker || '').toUpperCase().trim();
   const cleanTicker = normTicker.replace(/\.IS$/i, '').trim();
 
   // 1. Ticker bazlı kesin eşleştirme
+  if (BIST_HEALTHCARE_TICKERS.includes(cleanTicker)) {
+    return 'HEALTHCARE';
+  }
   if (BIST_AVIATION_TICKERS.includes(cleanTicker)) {
     return 'AVIATION';
   }
@@ -839,6 +886,17 @@ export function detectSector(ticker: string, contextText = ''): SectorType {
     text.includes('ar-ge')
   ) {
     return 'TECH';
+  }
+
+  if (
+    text.includes('sağlık') ||
+    text.includes('hastane') ||
+    text.includes('hastanecilik') ||
+    text.includes('medikal') ||
+    text.includes('ilaç') ||
+    text.includes('medical park')
+  ) {
+    return 'HEALTHCARE';
   }
 
   return 'INDUSTRIAL';

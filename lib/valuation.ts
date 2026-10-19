@@ -4469,6 +4469,15 @@ export const SECTOR_MULTIPLE_BENCHMARKS: Record<SectorType, SectorMultipleBenchm
     evEbitdaMedian: null,
     evSalesMedian: null,
     description: 'İş Yatırım Fin.Kiralama ve Faktoring resmi piyasa çarpan ortalamaları'
+  },
+  HEALTHCARE: {
+    sector: 'HEALTHCARE',
+    sectorName: 'Sağlık Hizmetleri & Hastanecilik',
+    peMedian: 14.20,
+    pbMedian: 3.80,
+    evEbitdaMedian: 9.60,
+    evSalesMedian: 2.10,
+    description: 'İş Yatırım Sağlık ve İlaç sektörü resmi piyasa çarpan ortalamaları'
   }
 };
 

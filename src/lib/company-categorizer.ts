@@ -7,7 +7,8 @@ export type InvestmentThemeId =
   | 'DEFENSIVE' 
   | 'TURNAROUND' 
   | 'HIGH_ROIC' 
-  | 'CASH_COW';
+  | 'CASH_COW'
+  | 'AVOID';
 
 export interface InvestmentThemeDefinition {
   id: InvestmentThemeId;
@@ -91,6 +92,16 @@ export const INVESTMENT_THEMES: Record<InvestmentThemeId, InvestmentThemeDefinit
     badgeClass: 'bg-teal-950/80 text-teal-300 border-teal-700/80',
     description: 'Muhasebe kârını yüksek oranda kasaya giren serbest nakit akışına (FCF) dönüştürebilen nakit üretim makineleri.',
     criteriaSummary: 'Nakit Dönüşümü (OCF/Net Kâr) ≥ 0.90x veya FCF/Hasılat ≥ %8',
+  },
+  AVOID: {
+    id: 'AVOID',
+    name: 'Uzak Durulması Gerekenler & Yüksek Risk',
+    shortLabel: 'Uzak Dur / Riskli',
+    iconTag: 'AlertTriangle',
+    colorClass: 'text-rose-400',
+    badgeClass: 'bg-rose-950/80 text-rose-300 border-rose-700/80',
+    description: 'Değer tuzağı riski taşıyan, sermaye eritici negatif getiri üreten, aşırı borçlu veya ALMA kararı verilmiş şirketler.',
+    criteriaSummary: 'ALMA Kararı • Değer Tuzağı Riski • Negatif ROIC (Sermaye Yıkımı) • Net Borç/FAVÖK > 4.5x',
   },
 };
 
@@ -258,6 +269,33 @@ export function categorizeCompany(report: SavedReport): CompanyThemeMatch[] {
     });
   }
 
+  // 7. UZAK DURULMASI GEREKENLER & YÜKSEK RİSK (AVOID)
+  const isAlma = (report.decision || '').trim().toUpperCase() === 'ALMA';
+  const isValueTrap = Boolean(report.isValueTrap || data?.valuation?.is_value_trap);
+  const isSevereDebt = netDebt !== null && latestEbitda !== null && latestEbitda > 0 && (netDebt / (latestEbitda * 4)) > 4.5;
+  const isDestroyingCapital = roic !== null && roic < 0;
+
+  if (isAlma || isValueTrap || isSevereDebt || isDestroyingCapital) {
+    const riskReason = isValueTrap
+      ? 'Değer Tuzağı Riski: Kağıt üzerinde ucuz görünse de kâr marjları ve operasyonel getiri hızla erozyona uğruyor.'
+      : isAlma
+      ? 'Resmi Analist Kararı: ALMA (Yatırım Önerilmez, model portföy güvenlik sınırlarını aşan risk faktörleri).'
+      : isSevereDebt
+      ? `Kritik Borçluluk Baskısı: Net Borç / FAVÖK çarpanı (${(netDebt! / ((latestEbitda || 1) * 4)).toFixed(1)}x) emniyet tavanını aşmış durumda.`
+      : 'Sermaye Değer Yıkımı: Şirketin getirisi (ROIC negatif) sermaye maliyetini karşılayamıyor.';
+
+    matches.push({
+      themeId: 'AVOID',
+      themeName: INVESTMENT_THEMES.AVOID.name,
+      shortLabel: INVESTMENT_THEMES.AVOID.shortLabel,
+      iconTag: INVESTMENT_THEMES.AVOID.iconTag,
+      badgeClass: INVESTMENT_THEMES.AVOID.badgeClass,
+      reason: riskReason,
+      metricLabel: 'Risk Durumu',
+      metricValue: isValueTrap ? 'Değer Tuzağı' : isAlma ? 'ALMA Kararı' : 'Yüksek Risk',
+    });
+  }
+
   return matches;
 }
 
@@ -272,6 +310,7 @@ export function getThemeSummary(reports: SavedReport[]) {
     TURNAROUND: [],
     HIGH_ROIC: [],
     CASH_COW: [],
+    AVOID: [],
   };
 
   reports.forEach(report => {
