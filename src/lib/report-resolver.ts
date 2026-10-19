@@ -22,6 +22,8 @@ export interface SavedReport {
   valueTrapSeverity?: 'NONE' | 'MODERATE' | 'HIGH' | 'CRITICAL';
   valueTrapReasons?: string[];
   fairValueTrend?: any[];
+  dividendHistory?: any[];
+  consensusTarget?: any;
 }
 
 /**

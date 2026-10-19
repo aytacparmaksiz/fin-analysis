@@ -36,7 +36,8 @@ import {
   FileText,
   Target,
   Scale,
-  History
+  History,
+  Coins
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -80,6 +81,7 @@ export type SimplySectionId =
   | 'sec-tablolar'
   | 'sec-carpanlar'
   | 'sec-adildeger'
+  | 'sec-temettu'
   | 'sec-gucluzayif'
   | 'sec-rehberlik'
   | 'sec-analist'
@@ -503,6 +505,50 @@ export default function SimplyView({
   const [reportFontSize, setReportFontSize] = useState<'compact' | 'normal' | 'large'>('normal');
   const [copiedReport, setCopiedReport] = useState(false);
   const [hoveredRowKey, setHoveredRowKey] = useState<string | null>(null);
+
+  // Şirket Kartı: Temettü Geçmişi, Analist Konsensüs Hedef Fiyat ve MKK Yabancı Oranı
+  const [liveCompanyDetails, setLiveCompanyDetails] = useState<{
+    dividends: any[];
+    consensus: any;
+    foreignShare: any;
+  } | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const initialDividends = report.dividendHistory || report.extractedData?.dividend_history;
+    const initialConsensus = report.consensusTarget || report.extractedData?.consensus_target;
+    const initialForeign = report.extractedData?.foreign_share || (marketMultiples?.foreign_share_pct != null ? {
+      currentPct: marketMultiples.foreign_share_pct,
+      prevPct: marketMultiples.foreign_share_prev_pct,
+      changeBps: marketMultiples.foreign_share_change_bps
+    } : null);
+
+    if (initialDividends && initialDividends.length > 0) {
+      setLiveCompanyDetails({
+        dividends: initialDividends,
+        consensus: initialConsensus || null,
+        foreignShare: initialForeign
+      });
+      return;
+    }
+
+    if (report.ticker) {
+      fetch(`/api/company-details?ticker=${encodeURIComponent(report.ticker)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (isMounted && data.success) {
+            setLiveCompanyDetails({
+              dividends: data.dividends || [],
+              consensus: data.consensus || null,
+              foreignShare: data.foreignShare || initialForeign
+            });
+          }
+        })
+        .catch(() => {});
+    }
+
+    return () => { isMounted = false; };
+  }, [report.ticker, report.dividendHistory, report.consensusTarget, report.extractedData, marketMultiples]);
 
   // Kurumsal Şirket Profili
   const profile = useMemo(() => {
@@ -1000,17 +1046,18 @@ export default function SimplyView({
     return data;
   }, [report.ticker, marketMultiples, companyMultiplesData, analyzedCompetitors, currentSector]);
 
-  // Navigasyon Elemanları (9 Sekme)
+  // Navigasyon Elemanları (10 Sekme)
   const NAVIGATION_ITEMS: Array<{ id: SimplySectionId; num?: string; label: string; icon: any }> = [
     { id: 'sec-ozet', label: 'Özet', icon: PieChartIcon },
     { id: 'sec-grafikler', num: '1', label: 'Grafikler', icon: BarChart2 },
     { id: 'sec-tablolar', num: '2', label: 'Finansal Tablolar', icon: Layers },
     { id: 'sec-carpanlar', num: '3', label: 'Çarpanlar', icon: Percent },
     { id: 'sec-adildeger', num: '4', label: 'Adil Değer', icon: Target },
-    { id: 'sec-gucluzayif', num: '5', label: 'Güçlü & Zayıf', icon: Scale },
-    { id: 'sec-rehberlik', num: '6', label: 'Rehberlik & Sunum', icon: Target },
-    { id: 'sec-analist', num: '7', label: 'Analist Raporu', icon: FileText },
-    { id: 'sec-gecmis', num: '8', label: 'Geçmiş', icon: History }
+    { id: 'sec-temettu', num: '5', label: 'Temettü', icon: Coins },
+    { id: 'sec-gucluzayif', num: '6', label: 'Güçlü & Zayıf', icon: Scale },
+    { id: 'sec-rehberlik', num: '7', label: 'Rehberlik & Sunum', icon: Target },
+    { id: 'sec-analist', num: '8', label: 'Analist Raporu', icon: FileText },
+    { id: 'sec-gecmis', num: '9', label: 'Geçmiş', icon: History }
   ];
 
   const handleCopyReportText = async () => {
@@ -2990,6 +3037,55 @@ export default function SimplyView({
                 </div>
               </div>
             </div>
+
+            {/* 3. MKK & İş Yatırım Yabancı Saklama Dağılımı Kartı */}
+            {(() => {
+              const foreignPct = marketMultiples?.foreign_share_pct ?? liveCompanyDetails?.foreignShare?.currentPct;
+              const prevForeignPct = marketMultiples?.foreign_share_prev_pct ?? liveCompanyDetails?.foreignShare?.prevPct;
+              const changeBps = marketMultiples?.foreign_share_change_bps ?? liveCompanyDetails?.foreignShare?.changeBps;
+
+              if (foreignPct == null) return null;
+
+              return (
+                <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#282d37] pb-3">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-5 h-5 text-cyan-400" />
+                      <span className="font-serif text-base sm:text-lg font-bold text-white">MKK & İş Yatırım Yabancı Saklama Dağılımı</span>
+                    </div>
+                    <span className="text-xs font-mono text-slate-400">Resmi Günlük Takas Verisi</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="bg-[#12151b] border border-[#232834] rounded-xl p-4 space-y-1">
+                      <div className="text-xs text-slate-400">Güncel Yabancı Payı</div>
+                      <div className="text-2xl font-bold font-mono text-cyan-400">%{Number(foreignPct).toFixed(2)}</div>
+                      <div className="text-[11px] text-slate-500">MKK saklama takasındaki pay</div>
+                    </div>
+
+                    <div className="bg-[#12151b] border border-[#232834] rounded-xl p-4 space-y-1">
+                      <div className="text-xs text-slate-400">Önceki Gün</div>
+                      <div className="text-2xl font-bold font-mono text-slate-200">
+                        {prevForeignPct != null ? `%${Number(prevForeignPct).toFixed(2)}` : '—'}
+                      </div>
+                      <div className="text-[11px] text-slate-500">Önceki seans kapanış saklaması</div>
+                    </div>
+
+                    <div className="bg-[#12151b] border border-[#232834] rounded-xl p-4 space-y-1">
+                      <div className="text-xs text-slate-400">Günlük Değişim</div>
+                      <div className={`text-2xl font-bold font-mono ${
+                        (changeBps ?? 0) > 0 ? 'text-emerald-400' : (changeBps ?? 0) < 0 ? 'text-rose-400' : 'text-slate-300'
+                      }`}>
+                        {changeBps != null ? `${changeBps > 0 ? '+' : ''}${changeBps.toFixed(2)} bps` : '—'}
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        {(changeBps ?? 0) > 0 ? 'Yabancı para girişi pozitif' : (changeBps ?? 0) < 0 ? 'Yabancı kâr satışı / çıkışı' : 'Yatay saklama'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </section>
           </ComponentErrorBoundary>
 
@@ -3046,6 +3142,87 @@ export default function SimplyView({
                 </p>
               </div>
             </div>
+
+            {/* Aracı Kurum Konsensüs Hedef Fiyat & Öneri Dengesi */}
+            {(() => {
+              const consensus = liveCompanyDetails?.consensus || report.consensusTarget || report.extractedData?.consensus_target;
+              if (!consensus || !consensus.targetPrice) return null;
+
+              const upsidePct = currentPriceNum > 0
+                ? ((consensus.targetPrice - currentPriceNum) / currentPriceNum) * 100
+                : 0;
+
+              const rec = String(consensus.recommendation || 'TUT').toUpperCase();
+              const isBuy = rec.includes('AL') || rec.includes('BUY') || rec.includes('OUTPERFORM');
+              const isSell = rec.includes('SAT') || rec.includes('SELL') || rec.includes('UNDERPERFORM');
+
+              return (
+                <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#282d37] pb-3">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="w-5 h-5 text-[#f5c242]" />
+                      <span className="font-serif text-base sm:text-lg font-bold text-white">
+                        İş Yatırım & Piyasa Konsensüs Hedef Fiyat Kıyası
+                      </span>
+                    </div>
+                    <span className="text-xs font-mono text-slate-400">
+                      Son Öneri: {consensus.date || 'Güncel'} ({consensus.source || 'İş Yatırım Araştırma'})
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    <div className="bg-[#12151b] border border-[#232834] rounded-xl p-4 space-y-1">
+                      <div className="text-xs text-slate-400">Konsensüs Tavsiye</div>
+                      <div className={`text-xl font-black font-mono px-2 py-0.5 rounded w-fit ${
+                        isBuy ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
+                        isSell ? 'bg-rose-950 text-rose-400 border border-rose-800' :
+                        'bg-amber-950 text-amber-400 border border-amber-800'
+                      }`}>
+                        {rec}
+                      </div>
+                      <div className="text-[11px] text-slate-500">Resmi analist derecelendirmesi</div>
+                    </div>
+
+                    <div className="bg-[#12151b] border border-[#232834] rounded-xl p-4 space-y-1">
+                      <div className="text-xs text-slate-400">Konsensüs Hedef Fiyat</div>
+                      <div className="text-2xl font-bold font-mono text-white">₺{Number(consensus.targetPrice).toFixed(2)}</div>
+                      <div className={`text-[11px] font-semibold ${upsidePct > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {upsidePct > 0 ? '+' : ''}%{upsidePct.toFixed(1)} Potansiyel
+                      </div>
+                    </div>
+
+                    <div className="bg-[#12151b] border border-[#232834] rounded-xl p-4 space-y-1">
+                      <div className="text-xs text-slate-400">Modelimiz Adil Değeri</div>
+                      <div className="text-2xl font-bold font-mono text-[#f5c242]">₺{fairValueNum.toFixed(2)}</div>
+                      <div className="text-[11px] text-slate-500">
+                        {fairValueNum > consensus.targetPrice ? 'Modele göre daha yüksek içsel değer' : 'Konsensüs ile dengeli/uyumlu'}
+                      </div>
+                    </div>
+
+                    <div className="bg-[#12151b] border border-[#232834] rounded-xl p-4 space-y-1">
+                      <div className="text-xs text-slate-400">Hedef Revizyon Trendi</div>
+                      <div className="text-sm font-mono text-slate-300 space-y-0.5 pt-0.5">
+                        {consensus.targetPrice1M != null && (
+                          <div className="flex justify-between text-xs">
+                            <span className="text-slate-500">1 Ay Önce:</span>
+                            <span className="font-bold">₺{Number(consensus.targetPrice1M).toFixed(2)}</span>
+                          </div>
+                        )}
+                        {consensus.targetPrice3M != null && (
+                          <div className="flex justify-between text-xs">
+                            <span className="text-slate-500">3 Ay Önce:</span>
+                            <span className="font-bold">₺{Number(consensus.targetPrice3M).toFixed(2)}</span>
+                          </div>
+                        )}
+                        {!consensus.targetPrice1M && !consensus.targetPrice3M && (
+                          <div className="text-xs text-slate-500">Önceki revizyon bulunmuyor</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Gelecek Büyüme & Değer Sürücüleri - Ayrı Alt Kart */}
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
@@ -3311,13 +3488,194 @@ export default function SimplyView({
           </ComponentErrorBoundary>
 
           {/* ----------------------------------------------------------------------- */}
+          {/* BÖLÜM 5: TEMETTÜ ANALİZİ & VERİM GEÇMİŞİ (#sec-temettu)                  */}
+          {/* ----------------------------------------------------------------------- */}
+          <ComponentErrorBoundary fallbackTitle="Temettü Panosu Hatası">
+          <section id="sec-temettu" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#282d37] pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">5</span>
+                <div>
+                  <h2 className="font-serif text-xl sm:text-2xl font-bold text-white">Temettü Analizi & Kâr Dağıtım Karnesi</h2>
+                  <p className="text-xs text-slate-400">Resmi nakit temettü geçmişi, hisse başı getiri ve dağıtma oranı serisi</p>
+                </div>
+              </div>
+              <span className="text-xs font-mono px-2.5 py-1 rounded-md bg-[#21262d] text-slate-400 border border-[#2e3440]">
+                🏛️ Kaynak: İş Yatırım Resmi Şirket Kartı
+              </span>
+            </div>
+
+            {(() => {
+              const dividends: any[] = liveCompanyDetails?.dividends || report.dividendHistory || report.extractedData?.dividend_history || [];
+              const hasDividends = Array.isArray(dividends) && dividends.length > 0;
+
+              if (!hasDividends) {
+                return (
+                  <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-8 text-center space-y-3">
+                    <Coins className="w-10 h-10 text-slate-500 mx-auto" />
+                    <div className="text-base font-bold text-white">Geçmiş Nakit Temettü Dağıtımı Bulunmuyor</div>
+                    <p className="text-sm text-slate-400 max-w-lg mx-auto leading-relaxed">
+                      {report.ticker} için resmi kayıtlarda nakit temettü dağıtım kaydı tespit edilmemiştir. Şirket kârını büyüme, Ar-Ge ve kapasite yatırımlarında kullanıyor veya bünyesinde tutuyor olabilir.
+                    </p>
+                  </div>
+                );
+              }
+
+              const latestDiv = dividends[0];
+              const latestYield = latestDiv.yieldPct ?? 0;
+              const latestPerShare = latestDiv.perShareTl ?? 0;
+              const latestPayout = latestDiv.payoutRatioPct ?? 0;
+              const totalPayoutCount = dividends.length;
+
+              // Grafik verisi (kronolojik, eskiden yeniye)
+              const chartDataChronological = [...dividends].reverse().map(d => ({
+                tarih: d.date ? d.date.slice(-4) : String(d.year || ''),
+                fullDate: d.date,
+                verim: d.yieldPct ?? 0,
+                hisseBasi: d.perShareTl ?? 0,
+                dagitmaOrani: Math.min(200, d.payoutRatioPct ?? 0)
+              }));
+
+              return (
+                <div className="space-y-6">
+                  {/* 4'lü Temettü Karnesi */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-1">
+                      <div className="text-xs text-slate-400 font-sans">Son Temettü Verimi</div>
+                      <div className="text-2xl sm:text-3xl font-black font-mono text-emerald-400">
+                        %{latestYield.toFixed(2)}
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-sans">
+                        {latestYield >= 5.0 ? '🌟 Yüksek Temettü Verimi' : latestYield >= 2.0 ? 'Sağlıklı Getiri Oranı' : 'Ilımlı Temettü Getirisi'}
+                      </div>
+                    </div>
+
+                    <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-1">
+                      <div className="text-xs text-slate-400 font-sans">Hisse Başına Nakit</div>
+                      <div className="text-2xl sm:text-3xl font-black font-mono text-white">
+                        ₺{latestPerShare.toFixed(3)}
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-sans">
+                        Son Dağıtım: {latestDiv.date}
+                      </div>
+                    </div>
+
+                    <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-1">
+                      <div className="text-xs text-slate-400 font-sans">Kâr Dağıtma Oranı</div>
+                      <div className="text-2xl sm:text-3xl font-black font-mono text-[#f5c242]">
+                        %{latestPayout.toFixed(0)}
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-sans">
+                        Net Kârdan Dağıtılan Pay (Payout)
+                      </div>
+                    </div>
+
+                    <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-1">
+                      <div className="text-xs text-slate-400 font-sans">Temettü Sürekliliği</div>
+                      <div className="text-2xl sm:text-3xl font-black font-mono text-cyan-400">
+                        {totalPayoutCount} Dağıtım
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-sans">
+                        Resmi temettü arşivi kaydı
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Temettü Verimi & Dağıtma Oranı Trend Grafiği */}
+                  <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
+                    <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
+                      <div className="flex items-center gap-2">
+                        <Coins className="w-5 h-5 text-[#f5c242]" />
+                        <span className="font-serif text-base sm:text-lg font-bold text-white">Tarihsel Temettü Verimi ve Kâr Dağıtma Trendi</span>
+                      </div>
+                      <span className="text-[11px] font-mono text-slate-500">Yıllık Dağıtım Döngüsü</span>
+                    </div>
+
+                    <div className="h-56 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={chartDataChronological} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #2b313d)" vertical={false} />
+                          <XAxis dataKey="tarih" stroke="#6b7280" tick={{ fontSize: 11, fill: '#9ca3af' }} />
+                          <YAxis yAxisId="left" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => `%${v}`} />
+                          <YAxis yAxisId="right" orientation="right" stroke="#f59e0b" tick={{ fontSize: 10, fill: '#fbbf24' }} tickFormatter={(v) => `%${v}`} />
+                          <Tooltip content={({ active, payload }) => {
+                            if (!active || !payload || !payload.length) return null;
+                            const d = payload[0].payload;
+                            return (
+                              <div className="bg-[#151821] border border-[#2E3440] p-3 rounded-xl shadow-2xl text-xs space-y-1 font-mono">
+                                <div className="font-bold text-white font-sans">{d.fullDate || d.tarih}</div>
+                                <div className="text-emerald-400">Temettü Verimi: %{Number(d.verim).toFixed(2)}</div>
+                                <div className="text-white">Hisse Başına: ₺{Number(d.hisseBasi).toFixed(4)}</div>
+                                <div className="text-amber-400">Dağıtma Oranı: %{Number(d.dagitmaOrani).toFixed(1)}</div>
+                              </div>
+                            );
+                          }} />
+                          <Legend align="left" verticalAlign="bottom" wrapperStyle={{ fontSize: '11px', paddingTop: '8px', paddingLeft: '8px' }} />
+                          <Bar yAxisId="left" dataKey="verim" name="Temettü Verimi (%)" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                          <Line yAxisId="right" type="monotone" dataKey="dagitmaOrani" name="Dağıtma Oranı (%)" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3, fill: '#f59e0b' }} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* Tarihsel Temettü Tablosu */}
+                  <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
+                    <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
+                      <span className="font-serif text-base sm:text-lg font-bold text-white">Geçmiş Nakit Temettü Ödemeleri Detayı</span>
+                      <span className="text-xs font-mono text-slate-400">Toplam {dividends.length} Temettü Dönemi</span>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm font-mono">
+                        <thead>
+                          <tr className="border-b border-[#282d37] text-slate-400 text-xs">
+                            <th className="py-2.5 px-3">Dağıtım Tarihi</th>
+                            <th className="py-2.5 px-3 text-right">Temettü Verimi</th>
+                            <th className="py-2.5 px-3 text-right">Hisse Başı Net TL</th>
+                            <th className="py-2.5 px-3 text-right">Brüt Oran (%)</th>
+                            <th className="py-2.5 px-3 text-right">Toplam Temettü (TL)</th>
+                            <th className="py-2.5 px-3 text-right">Dağıtma Oranı</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#232834]">
+                          {dividends.map((row: any, idx: number) => (
+                            <tr key={idx} className="hover:bg-[#21262d]/50 transition">
+                              <td className="py-3 px-3 text-white font-medium">{row.date}</td>
+                              <td className="py-3 px-3 text-right text-emerald-400 font-bold">
+                                {row.yieldPct != null ? `%${Number(row.yieldPct).toFixed(2)}` : '—'}
+                              </td>
+                              <td className="py-3 px-3 text-right text-white">
+                                {row.perShareTl != null ? `₺${Number(row.perShareTl).toFixed(4)}` : '—'}
+                              </td>
+                              <td className="py-3 px-3 text-right text-slate-300">
+                                {row.grossRatePct != null ? `%${Number(row.grossRatePct).toFixed(1)}` : '—'}
+                              </td>
+                              <td className="py-3 px-3 text-right text-slate-300">
+                                {row.totalAmountTl != null ? Number(row.totalAmountTl).toLocaleString('tr-TR') + ' TL' : '—'}
+                              </td>
+                              <td className="py-3 px-3 text-right text-[#f5c242] font-semibold">
+                                {row.payoutRatioPct != null ? `%${Number(row.payoutRatioPct).toFixed(0)}` : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </section>
+          </ComponentErrorBoundary>
+
+          {/* ----------------------------------------------------------------------- */}
           {/* BÖLÜM 6: GÜÇLÜ & ZAYIF (#sec-gucluzayif)                                */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Güçlü/Zayıf Yönler Hatası">
           <section id="sec-gucluzayif" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
               <div className="flex items-center gap-2.5">
-                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">5</span>
+                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">6</span>
                 <h2 className="font-serif text-xl font-bold text-white">Güçlü & Zayıf Yönler</h2>
               </div>
             </div>
@@ -3374,7 +3732,7 @@ export default function SimplyView({
           <section id="sec-rehberlik" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
               <div className="flex items-center gap-2.5">
-                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">6</span>
+                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">7</span>
                 <h2 className="font-serif text-xl sm:text-2xl font-bold text-white">Yönetim Rehberlik Karnesi & Şirket Hedefleri</h2>
               </div>
             </div>
@@ -3552,7 +3910,7 @@ export default function SimplyView({
           <section id="sec-analist" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3 flex-wrap gap-3">
               <div className="flex items-center gap-2.5">
-                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">7</span>
+                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">8</span>
                 <h2 className="font-serif text-xl sm:text-2xl font-bold text-white">Kurumsal Hisse Değerleme & Araştırma Raporu</h2>
               </div>
               <button
@@ -3844,7 +4202,7 @@ export default function SimplyView({
           <section id="sec-gecmis" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3 flex-wrap gap-2">
               <div className="flex items-center gap-2.5">
-                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">8</span>
+                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">9</span>
                 <h2 className="font-serif text-xl sm:text-2xl font-bold text-white">Geçmiş Raporlar & Çeyreklik Hafıza</h2>
               </div>
               {(onAnalyzeTicker || onSelectTicker) && (

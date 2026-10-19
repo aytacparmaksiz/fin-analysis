@@ -8,6 +8,7 @@ import {
 import {
   getIsYatirimMultiplesForTicker,
   getIsYatirimSectorAverages,
+  fetchIsYatirimCompanyDetails,
   type IsYatirimStockMultiples,
   type IsYatirimSectorAverage
 } from './isyatirim-service.ts';
@@ -1145,6 +1146,9 @@ export async function fetchAndAnalyzeBistCompany(
   // 8. İş Yatırım Resmi Sektör Ortalamalarını Çözümle
   const sectorAverages = await getIsYatirimSectorAverages(finalMultiples?.sectorName || meta.sector);
 
+  // 8.5. İş Yatırım Resmi Temettü Geçmişi ve Konsensüs Hedef Fiyat Verilerini Çözümle
+  const companyDetails = await fetchIsYatirimCompanyDetails(ticker);
+
   // 9. Tek Doğruluk Kaynağı: Merkezi Rasyo ve Metrik Motorunu Çalıştır
   const unifiedMetrics = FinancialRatioEngine.computeMetrics({
     ticker,
@@ -1213,6 +1217,8 @@ export async function fetchAndAnalyzeBistCompany(
       } : null,
       source: 'İş Yatırım Resmi Çarpanları'
     } : null,
+    dividend_history: companyDetails.dividends,
+    consensus_target: companyDetails.consensus,
     macro: macroSnapshot,
     generatedAt: new Date().toISOString()
   };

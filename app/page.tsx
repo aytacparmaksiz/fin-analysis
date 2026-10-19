@@ -2481,6 +2481,8 @@ export default function ValuationTerminal({
 
       const finalExtracted = {
         ...enrichedExtractedData,
+        dividend_history: data.dividend_history || enrichedExtractedData?.dividend_history || currentExtractedData?.dividend_history,
+        consensus_target: data.consensus_target || enrichedExtractedData?.consensus_target || currentExtractedData?.consensus_target,
         valuation: data.valuation || enrichedExtractedData?.valuation,
         fair_value_drivers: data.drivers || enrichedExtractedData?.fair_value_drivers,
         score_result: data.scoreResult,
@@ -2505,6 +2507,8 @@ export default function ValuationTerminal({
         valueTrapSeverity: opt?.valueTrapSeverity ?? data.valuation?.value_trap_severity,
         valueTrapReasons: opt?.valueTrapReasons ?? data.valuation?.value_trap_reasons,
         fairValueTrend: data.valuation?.fair_value_trend,
+        dividendHistory: finalExtracted.dividend_history,
+        consensusTarget: finalExtracted.consensus_target,
         score,
         sector: activeSector,
         extractedData: finalExtracted
