@@ -99,6 +99,7 @@ export interface SimplyViewProps {
   tickerHistory?: SavedReport[];
   onSwitchToTerminal: () => void;
   onSelectTicker?: (ticker: string) => void;
+  onAnalyzeTicker?: (ticker: string) => void;
   onSelectReport?: (id: string) => void;
 }
 
@@ -491,6 +492,7 @@ export default function SimplyView({
   tickerHistory = [],
   onSwitchToTerminal,
   onSelectTicker,
+  onAnalyzeTicker,
   onSelectReport
 }: SimplyViewProps) {
   const [activeSection, setActiveSection] = useState<SimplySectionId>('sec-ozet');
@@ -3836,41 +3838,78 @@ export default function SimplyView({
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Geçmiş Raporlar Hatası">
           <section id="sec-gecmis" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
-            <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
+            <div className="flex items-center justify-between border-b border-[#282d37] pb-3 flex-wrap gap-2">
               <div className="flex items-center gap-2.5">
                 <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">8</span>
                 <h2 className="font-serif text-xl sm:text-2xl font-bold text-white">Geçmiş Raporlar & Çeyreklik Hafıza</h2>
               </div>
+              {(onAnalyzeTicker || onSelectTicker) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onAnalyzeTicker) onAnalyzeTicker(report.ticker);
+                    else if (onSelectTicker) onSelectTicker(report.ticker);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#21262d] hover:bg-[#2b313d] text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 text-xs sm:text-sm font-semibold transition cursor-pointer shadow-sm"
+                  title={`${report.ticker} için yeni bilanço dönemini analiz et`}
+                >
+                  <Sparkles className="w-4 h-4 text-emerald-400" />
+                  <span>{report.ticker} Yeni Çeyrek Güncelle</span>
+                </button>
+              )}
             </div>
 
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-3">
               {tickerHistory.length > 0 ? (
                 <div className="divide-y divide-[#282d37]">
-                  {tickerHistory.map((hist) => (
-                    <div
-                      key={hist.id}
-                      onClick={() => onSelectReport && onSelectReport(hist.id)}
-                      className="py-3 flex items-center justify-between hover:bg-[#21262d]/50 px-3 rounded-xl transition cursor-pointer"
-                    >
-                      <div>
-                        <div className="font-bold text-[15px] text-white flex items-center gap-2">
-                          <span>{hist.ticker}</span>
-                          <span className="text-sm font-mono text-slate-300">({hist.period || '2025/12'})</span>
+                  {tickerHistory.map((hist) => {
+                    // Adil Değer Güvenli Çözümleyici (₺— hatasını engeller)
+                    let rawFv: any = hist.fairValue;
+                    if (!rawFv || rawFv === '—' || rawFv === 'null' || rawFv === 'undefined') {
+                      rawFv = hist.extractedData?.valuation?.composite_fair_value ??
+                              hist.extractedData?.valuation?.fair_value ??
+                              hist.extractedData?.valuation?.dcf_fair_value ??
+                              (hist as any).valuation?.composite_fair_value ??
+                              (hist as any).valuation?.fair_value ??
+                              (hist as any).valuationInfo?.fair_value;
+                    }
+                    if (!rawFv && hist.report) {
+                      const match = hist.report.match(/(?:Hesaplanan\s+Adil\s+Değer|Adil\s+Değer)\s*[:=]\s*₺?\s*([\d\.,]+)/i);
+                      if (match && match[1]) rawFv = match[1];
+                    }
+                    const numFv = parseFinancialNumber(rawFv);
+                    const fairValDisplay = numFv != null && !isNaN(numFv) && numFv > 0
+                      ? `₺${numFv.toFixed(2)}`
+                      : '—';
+
+                    return (
+                      <div
+                        key={hist.id}
+                        onClick={() => onSelectReport && onSelectReport(hist.id)}
+                        className="py-3.5 flex items-center justify-between hover:bg-[#21262d]/50 px-3 rounded-xl transition cursor-pointer group"
+                      >
+                        <div>
+                          <div className="font-bold text-[15px] text-white flex items-center gap-2">
+                            <span className="group-hover:text-emerald-400 transition">{hist.ticker}</span>
+                            <span className="text-sm font-mono text-slate-300 bg-[#21262d] px-2 py-0.5 rounded border border-[#2e3440]">
+                              {hist.period || '2025/12'}
+                            </span>
+                          </div>
+                          <div className="text-sm text-slate-400 mt-1 font-mono">
+                            Tarih: {hist.createdAt}
+                          </div>
                         </div>
-                        <div className="text-sm text-slate-400 mt-0.5 font-mono">
-                          Tarih: {hist.createdAt}
+                        <div className="text-right">
+                          <div className="font-mono text-[15px] font-bold text-[#f5c242]">
+                            Adil Değer: {fairValDisplay}
+                          </div>
+                          <div className={`text-sm font-bold font-mono mt-0.5 ${hist.decision === 'AL' ? 'text-emerald-400' : hist.decision === 'ALMA' ? 'text-rose-400' : 'text-amber-400'}`}>
+                            Karar: {hist.decision || 'NÖTR'}
+                          </div>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="font-mono text-[15px] font-bold text-[#f5c242]">
-                          Adil Değer: ₺{hist.fairValue || '—'}
-                        </div>
-                        <div className={`text-sm font-bold font-mono ${hist.decision === 'AL' ? 'text-emerald-400' : hist.decision === 'ALMA' ? 'text-rose-400' : 'text-amber-400'}`}>
-                          Karar: {hist.decision || 'NÖTR'}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-center py-6 text-slate-400 font-mono text-sm">

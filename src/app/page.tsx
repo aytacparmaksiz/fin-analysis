@@ -1599,7 +1599,18 @@ export default function ValuationTerminal({
   }, [step, activeReport?.ticker, mounted]);
 
   const saveReport = async (newReport: SavedReport) => {
-    const updated = [newReport, ...savedReports.filter(r => r.id !== newReport.id && r.ticker?.toUpperCase() !== newReport.ticker?.toUpperCase())];
+    // Aynı hissenin aynı çeyreklik dönem raporu varsa güncelle; farklı çeyrekse (örn: 2026/06 ve 2026/09) hafızada birlikte sakla
+    const isSameQuarter = (a: SavedReport, b: SavedReport) => {
+      const sameTicker = (a.ticker || '').trim().toUpperCase() === (b.ticker || '').trim().toUpperCase();
+      const aPeriod = (a.period || '').trim().toLowerCase();
+      const bPeriod = (b.period || '').trim().toLowerCase();
+      if (aPeriod && bPeriod) {
+        return sameTicker && aPeriod === bPeriod;
+      }
+      return sameTicker;
+    };
+
+    const updated = [newReport, ...savedReports.filter(r => r.id !== newReport.id && !isSameQuarter(r, newReport))];
     setSavedReports(updated);
     try {
       localStorage.setItem('fin_valuation_reports', JSON.stringify(updated));
@@ -2535,7 +2546,9 @@ export default function ValuationTerminal({
   const sectorMeta = SECTOR_DEFINITIONS[currentSector] || SECTOR_DEFINITIONS.INDUSTRIAL;
 
   const tickerHistory = activeReport 
-    ? savedReports.filter(r => r.ticker === activeReport.ticker).reverse()
+    ? savedReports
+        .filter(r => (r.ticker || '').trim().toUpperCase() === (activeReport.ticker || '').trim().toUpperCase())
+        .sort((a, b) => (b.period || b.createdAt || '').localeCompare(a.period || a.createdAt || ''))
     : [];
 
   // Zaman Serisi Grafik Verisi (eskiden yeniye, kronolojik)
@@ -3719,26 +3732,51 @@ export default function ValuationTerminal({
       {/* Ana Bölüm */}
       <main id="main-scroll-container" className="theme-canvas flex-1 flex flex-col min-w-0 bg-slate-950">
         <header className="h-12 border-b border-slate-800 px-5 flex items-center justify-between bg-slate-900/95 backdrop-blur-md sticky top-0 z-30 print:hidden">
-          <div 
-            onClick={() => { setStep('input'); setActiveReportId(null); setError(null); }}
-            role="button"
-            tabIndex={0}
-            title="Yeni Analiz Ekranına Dön"
-            className="flex items-center gap-2.5 cursor-pointer hover:opacity-85 transition select-none"
-          >
-            <FairValueLogo className="w-6 h-6" />
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-white tracking-tight">
-                FAIR <span className="text-emerald-400">VALUE</span>
-              </span>
-              <span className="text-slate-700 hidden sm:inline">/</span>
-              <span className="text-slate-400 font-medium text-xs hidden sm:inline">BIST Araştırma Terminali</span>
-              {isCloudConfigured && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-full">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Bulut
+          <div className="flex items-center gap-3">
+            <div 
+              onClick={() => { setStep('input'); setActiveReportId(null); setError(null); }}
+              role="button"
+              tabIndex={0}
+              title="Yeni Analiz Ekranına Dön"
+              className="flex items-center gap-2.5 cursor-pointer hover:opacity-85 transition select-none"
+            >
+              <FairValueLogo className="w-6 h-6" />
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-white tracking-tight">
+                  FAIR <span className="text-emerald-400">VALUE</span>
+                </span>
+                <span className="text-slate-700 hidden sm:inline">/</span>
+                <span className="text-slate-400 font-medium text-xs hidden sm:inline">BIST Araştırma Terminali</span>
+                {isCloudConfigured && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-full">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Bulut
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Ayrıcı Çizgi */}
+            <div className="h-4 w-px bg-slate-800 hidden md:block" />
+
+            {/* Analiz Edilen Şirketler (Header Sol Bölümü) */}
+            <button
+              type="button"
+              onClick={() => setStep('saved')}
+              className={`flex items-center gap-2 text-sm py-1.5 px-3 rounded-xl border font-semibold transition cursor-pointer ${
+                step === 'saved'
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800'
+              }`}
+              title="Analiz Edilen Şirketler Portföyü (AL, NÖTR, ALMA)"
+            >
+              <Building2 className="w-4 h-4 text-emerald-400" />
+              <span>Analiz Edilen Şirketler</span>
+              {savedReports.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold">
+                  {savedReports.length}
                 </span>
               )}
-            </div>
+            </button>
           </div>
 
           <div className="flex items-center gap-2">
@@ -3766,25 +3804,6 @@ export default function ValuationTerminal({
             >
               <Trophy className="w-4 h-4 text-amber-400" />
               <span className="hidden sm:inline">Sıralama</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setStep('saved')}
-              className={`flex items-center gap-2 text-sm py-2 px-3.5 rounded-xl border font-semibold transition cursor-pointer ${
-                step === 'saved'
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
-                  : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800'
-              }`}
-              title="Analiz Edilen Şirketler Portföyü (AL, NÖTR, ALMA)"
-            >
-              <Building2 className="w-4 h-4 text-emerald-400" />
-              <span>Analiz Edilen Şirketler</span>
-              {savedReports.length > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-xs font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold">
-                  {savedReports.length}
-                </span>
-              )}
             </button>
 
             <button
@@ -4300,6 +4319,11 @@ export default function ValuationTerminal({
                 tickerHistory={tickerHistory}
                 onSwitchToTerminal={() => {}}
                 onSelectTicker={(tk) => handleBistDirectAnalysis(tk)}
+                onAnalyzeTicker={(tk) => {
+                  setTicker(tk);
+                  setStep('input');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
                 onSelectReport={(id: string) => { setActiveReportId(id); setStep('report'); }}
               />
             </div>
@@ -4878,7 +4902,7 @@ export default function ValuationTerminal({
                         : 'bg-amber-500/10 border-amber-500/30 text-amber-400';
 
                       const repVal = (item as any).valuation || item.extractedData?.valuation;
-                      const fairVal = repVal?.fair_value || 0;
+                      const fairVal = parseFinancialNumber(item.fairValue ?? repVal?.composite_fair_value ?? repVal?.fair_value ?? repVal?.dcf_fair_value) || 0;
                       const priceNum = parseFloat(item.price || '0') || 0;
                       const discount = (fairVal > 0 && priceNum > 0)
                         ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))

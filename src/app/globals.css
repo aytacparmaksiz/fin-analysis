@@ -51,7 +51,7 @@
 
 body {
   background: var(--background);
-  color: #FFFFFF;
+  color: var(--foreground);
   font-family: var(--font-ibm-plex-sans), 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
   font-size: 16px;
   font-weight: 400;
@@ -61,10 +61,10 @@ body {
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
-/* Headings: IBM Plex Serif, pure white, 28px Medium for largest titles */
+/* Headings: IBM Plex Serif, adaptable text color */
 h1, h2, h3, h4, .font-serif {
   font-family: var(--font-ibm-plex-serif), 'IBM Plex Serif', Georgia, Cambria, 'Times New Roman', Times, serif !important;
-  color: #FFFFFF;
+  color: var(--text-primary);
 }
 
 h1 {
@@ -93,7 +93,7 @@ h4 {
 
 /* Base Body and Text Styling */
 p, li {
-  color: #F8FAFC;
+  color: var(--foreground);
 }
 
 /* Subtext & Description Contrast Safeguard */
@@ -219,6 +219,113 @@ input[type="number"],
 [data-theme="light"] [class*="divide-slate-800"] > :not([hidden]) ~ :not([hidden]),
 [data-theme="light"] [class*="divide-slate-700"] > :not([hidden]) ~ :not([hidden]) {
   border-color: #E2E8F0 !important;
+}
+
+/* ==========================================================================
+   SIMPLY WALL ST & BIST RADAR CUSTOM HEX STYLES (LIGHT THEME OVERRIDES)
+   ========================================================================== */
+/* Kart Gövdeleri: Koyu Hex Kodlarını Saf Beyaza Çevir */
+[data-theme="light"] [class*="bg-[#12151b]"],
+[data-theme="light"] [class*="bg-[#12151c]"],
+[data-theme="light"] [class*="bg-[#14171d]"],
+[data-theme="light"] [class*="bg-[#101216]"],
+[data-theme="light"] [class*="bg-[#121417]"],
+[data-theme="light"] [class*="bg-[#151821]"],
+[data-theme="light"] [class*="bg-[#181b20]"],
+[data-theme="light"] [class*="bg-[#1a1d24]"],
+[data-theme="light"] [class*="bg-[#1a1e24]"],
+[data-theme="light"] [class*="bg-[#1a1e26]"],
+[data-theme="light"] [class*="bg-[#1c2027]"],
+[data-theme="light"] [class*="bg-[#1f242c]"] {
+  background-color: #FFFFFF !important;
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.05) !important;
+}
+
+/* Kart İçi Alt Paneller, Tablo Başlıkları, İnset Alanlar: Açık Gri Slate */
+[data-theme="light"] [class*="bg-[#21262d]"],
+[data-theme="light"] [class*="bg-[#222832]"],
+[data-theme="light"] [class*="bg-[#242a35]"],
+[data-theme="light"] [class*="bg-[#282d37]"],
+[data-theme="light"] [class*="bg-[#2b313d]"],
+[data-theme="light"] [class*="bg-[#2c3442]"],
+[data-theme="light"] [class*="bg-[#2e3440]"],
+[data-theme="light"] [class*="bg-[#343b48]"] {
+  background-color: #F1F5F9 !important;
+}
+
+/* Beyaz Kart İçindeki İkincil Kutular Kontrastı */
+[data-theme="light"] [class*="bg-[#12151b]"] [class*="bg-[#181b20]"],
+[data-theme="light"] [class*="bg-[#181b20]"] [class*="bg-[#21262d]"],
+[data-theme="light"] [class*="bg-[#1a1e26]"] [class*="bg-[#12151c]"],
+[data-theme="light"] [class*="bg-[#1a1e26]"] [class*="bg-[#21262d]"],
+[data-theme="light"] [class*="bg-[#12151b]"] [class*="bg-[#21262d]"] {
+  background-color: #F8FAFC !important;
+}
+
+/* Hex Hover Durumları */
+[data-theme="light"] [class*="hover:bg-[#21262d]"]:hover,
+[data-theme="light"] [class*="hover:bg-[#2b313d]"]:hover,
+[data-theme="light"] [class*="hover:bg-[#2e3440]"]:hover,
+[data-theme="light"] [class*="hover:bg-[#1a1e26]"]:hover,
+[data-theme="light"] [class*="hover:bg-[#282d37]"]:hover,
+[data-theme="light"] [class*="hover:bg-[#181b20]"]:hover,
+[data-theme="light"] [class*="hover:bg-[#1f242c]"]:hover {
+  background-color: #E2E8F0 !important;
+}
+
+/* Hex Kenarlıklar (Borders) */
+[data-theme="light"] [class*="border-[#282d37]"],
+[data-theme="light"] [class*="border-[#2b313d]"],
+[data-theme="light"] [class*="border-[#2e3440]"],
+[data-theme="light"] [class*="border-[#383e4d]"],
+[data-theme="light"] [class*="border-[#262c37]"],
+[data-theme="light"] [class*="border-[#222730]"],
+[data-theme="light"] [class*="border-[#2e3542]"] {
+  border-color: #E2E8F0 !important;
+}
+
+/* Hex Bölücüler (Divides) */
+[data-theme="light"] [class*="divide-[#282d37]"] > :not([hidden]) ~ :not([hidden]),
+[data-theme="light"] [class*="divide-[#2e3440]"] > :not([hidden]) ~ :not([hidden]),
+[data-theme="light"] [class*="divide-[#2b313d]"] > :not([hidden]) ~ :not([hidden]) {
+  border-color: #E2E8F0 !important;
+}
+
+/* Simply Altın Sarısı Marka Vurgusu: Beyaz Zemin Üzerinde Yüksek Kontrastlı Zengin Kehribar (#B45309) */
+[data-theme="light"] [class*="text-[#f5c242]"] {
+  color: #B45309 !important;
+}
+
+/* Altın Sarısı Aksiyon Butonları */
+[data-theme="light"] [class*="bg-[#f5c242]"] {
+  background-color: #f5c242 !important;
+  color: #0F172A !important;
+}
+[data-theme="light"] [class*="bg-[#f5c242]"] * {
+  color: #0F172A !important;
+}
+[data-theme="light"] [class*="bg-[#e5b332]"] {
+  background-color: #e5b332 !important;
+  color: #0F172A !important;
+}
+
+/* Altın Sarısı Hafif Rozetler */
+[data-theme="light"] [class*="bg-[#f5c242]/"] {
+  background-color: #FEF3C7 !important;
+  border-color: #FDE68A !important;
+  color: #B45309 !important;
+}
+
+/* Header Arka Planı ve Giriş Alanları */
+[data-theme="light"] header {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-color: #E2E8F0 !important;
+}
+
+[data-theme="light"] input,
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+  color: #0F172A !important;
 }
 
 /* Tipografi & Kontrast Dönüşümleri (Hover Durumları Dahil) */
