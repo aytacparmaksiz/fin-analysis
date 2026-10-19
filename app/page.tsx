@@ -3815,23 +3815,22 @@ export default function ValuationTerminal({
 
         <div className="p-4 sm:p-6 w-full max-w-[1600px] mx-auto space-y-5">
           
-          {/* ADIM 1: YENİ ANALİZ EKRANI (KURUMSAL DEĞERLEME & ARAŞTIRMA MERKEZİ) */}
+          {/* ADIM 1: YENİ ANALİZ EKRANI (ŞİRKET DEĞERLEME & BİLANÇO ANALİZİ) */}
           {step === 'input' && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 py-4 items-start">
-              {/* Sol Sütun: Arama, Analiz ve PDF Entegrasyonu (7 Kolon) */}
-              <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl shadow-sm overflow-hidden divide-y divide-slate-800">
+            <div className="py-6 sm:py-10 flex justify-center items-center">
+              <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden divide-y divide-slate-800">
                 {/* Üst Bölüm: Hisse Kodu Arama & Hızlı Seçim */}
-                <div className="p-6 sm:p-7 space-y-5">
+                <div className="p-6 sm:p-8 space-y-5">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <h2 className="text-lg font-bold text-white tracking-tight">
+                      <h2 className="text-xl font-bold text-white tracking-tight font-serif">
                         Şirket Değerleme & Bilanço Analizi
                       </h2>
-                      <p className="text-slate-400 text-xs mt-0.5">
+                      <p className="text-slate-400 text-xs sm:text-sm mt-0.5">
                         BIST hisse kodunu girerek resmi finansal tabloları ve adil değer modelini oluşturun.
                       </p>
                     </div>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-950 text-emerald-400 border border-slate-800 shrink-0">
+                    <span className="px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-slate-950 text-emerald-400 border border-slate-800 shrink-0">
                       BIST • KAP
                     </span>
                   </div>
@@ -3848,13 +3847,13 @@ export default function ValuationTerminal({
                         }
                       }}
                       placeholder="Hisse kodu (Örn: AGESA, THYAO, TUPRS, GARAN)"
-                      className="flex-1 bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-500 font-mono font-bold tracking-wider focus:outline-none transition"
+                      className="flex-1 bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 font-mono font-bold tracking-wider focus:outline-none transition shadow-inner"
                     />
                     <button
                       type="button"
                       onClick={() => handleBistDirectAnalysis()}
                       disabled={loading || !ticker.trim()}
-                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm rounded-lg flex items-center justify-center gap-2 transition disabled:opacity-40 cursor-pointer flex-shrink-0"
+                      className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-40 cursor-pointer flex-shrink-0 shadow-md"
                     >
                       {loading ? (
                         <>
@@ -3871,7 +3870,7 @@ export default function ValuationTerminal({
                   </div>
 
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-slate-500 text-[11px] font-medium mr-1">
+                    <span className="text-slate-500 text-xs font-medium mr-1">
                       Örnekler:
                     </span>
                     {['VESBE', 'AGESA', 'THYAO', 'EREGL', 'TUPRS', 'GARAN', 'ASELS', 'KCHOL', 'BIMAS', 'FROTO', 'SISE'].map((sym) => (
@@ -3882,7 +3881,7 @@ export default function ValuationTerminal({
                           setTicker(sym);
                           handleBistDirectAnalysis(sym);
                         }}
-                        className={`px-2 py-0.5 rounded text-[11px] font-mono font-semibold border transition cursor-pointer ${
+                        className={`px-2.5 py-1 rounded-md text-xs font-mono font-semibold border transition cursor-pointer ${
                           ticker === sym
                             ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40'
                             : 'bg-slate-950 hover:bg-slate-800 text-slate-300 border-slate-800'
@@ -3895,7 +3894,7 @@ export default function ValuationTerminal({
                 </div>
 
                 {/* Alt Bölüm: Opsiyonel PDF Doküman Entegrasyonu */}
-                <div className="p-5 sm:p-6 bg-slate-950/40 space-y-3">
+                <div className="p-5 sm:p-7 bg-slate-950/40 space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
                       <FileText className="w-3.5 h-3.5 text-slate-400" />
@@ -3908,7 +3907,7 @@ export default function ValuationTerminal({
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     {/* Faaliyet Raporu */}
                     <div
                       onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
@@ -3917,7 +3916,7 @@ export default function ValuationTerminal({
                         e.stopPropagation();
                         if (e.dataTransfer.files) handleAddActivityFiles(e.dataTransfer.files);
                       }}
-                      className="rounded-lg border border-slate-800 bg-slate-950 p-3 space-y-2"
+                      className="rounded-xl border border-slate-800 bg-slate-950 p-3.5 space-y-2 hover:border-slate-700 transition"
                     >
                       <div
                         role="button"
@@ -3971,7 +3970,7 @@ export default function ValuationTerminal({
                         e.stopPropagation();
                         if (e.dataTransfer.files) handleAddPresentationFiles(e.dataTransfer.files);
                       }}
-                      className="rounded-lg border border-slate-800 bg-slate-950 p-3 space-y-2"
+                      className="rounded-xl border border-slate-800 bg-slate-950 p-3.5 space-y-2 hover:border-slate-700 transition"
                     >
                       <div
                         role="button"
@@ -4035,130 +4034,6 @@ export default function ValuationTerminal({
                       </div>
                     </div>
                   )}
-                </div>
-              </div>
-
-              {/* Sağ Sütun: Son Analizler & BIST Popüler Şirketler (5 Kolon) */}
-              <div className="lg:col-span-5 space-y-4">
-                {/* Son Analiz Edilen Şirketler (Varsa) */}
-                {savedReports.length > 0 && (
-                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-3">
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-emerald-400" />
-                        <h3 className="text-xs font-bold text-white uppercase tracking-wider">Son Analiz Edilen Şirketler</h3>
-                      </div>
-                      <span className="text-[11px] font-mono text-slate-400">{savedReports.length} Rapor</span>
-                    </div>
-
-                    <div className="divide-y divide-slate-800/60 max-h-64 overflow-y-auto">
-                      {savedReports.slice(0, 5).map((r) => (
-                        <div
-                          key={r.id}
-                          onClick={() => { setActiveReportId(r.id); setStep('report'); }}
-                          className="py-2.5 px-2 hover:bg-slate-800/40 rounded-lg transition cursor-pointer flex items-center justify-between group"
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-center font-black font-mono text-xs text-emerald-400 group-hover:text-white transition">
-                              {r.ticker.slice(0, 4)}
-                            </div>
-                            <div>
-                              <div className="font-bold text-xs text-white group-hover:text-emerald-400 transition flex items-center gap-1.5">
-                                <span>{r.ticker}</span>
-                                <span className="text-[10px] text-slate-500 font-normal">({r.period || '2025/12'})</span>
-                              </div>
-                              <div className="text-[10.5px] font-mono text-slate-400">
-                                Adil Değer: <span className="text-emerald-300 font-semibold">₺{r.fairValue || '—'}</span>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
-                              r.decision === 'AL' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
-                              r.decision === 'ALMA' ? 'bg-rose-950 text-rose-400 border border-rose-800' :
-                              'bg-amber-950 text-amber-400 border border-amber-800'
-                            }`}>
-                              {r.decision || 'NÖTR'}
-                            </span>
-                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                              Skor: {r.score || 75}/100
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* BIST Sektörel Liderler (1 Tıkla Analiz) */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-[#f5c242]" />
-                      <h3 className="text-xs font-bold text-white uppercase tracking-wider">BIST Sektörel Hızlı Analiz</h3>
-                    </div>
-                    <span className="text-[10px] text-slate-500 font-mono">1 Tıkla Canlı Veri</span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    {[
-                      { ticker: 'THYAO', name: 'Türk Hava Yolları', sector: 'Havacılık' },
-                      { ticker: 'BIMAS', name: 'BİM Mağazalar', sector: 'Perakende' },
-                      { ticker: 'MPARK', name: 'MLP Sağlık (Medical Park)', sector: 'Sağlık' },
-                      { ticker: 'FROTO', name: 'Ford Otosan', sector: 'Otomotiv' },
-                      { ticker: 'AGESA', name: 'Agesa Emeklilik', sector: 'Sigorta' },
-                      { ticker: 'TUPRS', name: 'Tüpraş', sector: 'Rafineri' },
-                      { ticker: 'ASELS', name: 'Aselsan', sector: 'Savunma' },
-                      { ticker: 'KCHOL', name: 'Koç Holding', sector: 'Holding' },
-                      { ticker: 'EKGYO', name: 'Emlak Konut GYO', sector: 'GYO' },
-                      { ticker: 'MGROS', name: 'Migros Ticaret', sector: 'Gıda Perakende' },
-                    ].map((item) => (
-                      <button
-                        key={item.ticker}
-                        type="button"
-                        onClick={() => {
-                          setTicker(item.ticker);
-                          handleBistDirectAnalysis(item.ticker);
-                        }}
-                        className="p-2 bg-slate-950 hover:bg-slate-800/80 border border-slate-800 hover:border-emerald-500/50 rounded-lg text-left transition cursor-pointer flex items-center justify-between group"
-                      >
-                        <div>
-                          <div className="font-mono font-bold text-white text-xs group-hover:text-emerald-400 transition">
-                            {item.ticker}
-                          </div>
-                          <div className="text-[10px] text-slate-500 truncate max-w-[120px]">
-                            {item.sector}
-                          </div>
-                        </div>
-                        <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-emerald-400 transition flex-shrink-0" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Sektör Benchmark Medyanları Özeti */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm text-xs text-slate-400 space-y-2">
-                  <div className="font-semibold text-slate-300 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <BarChart3 className="w-3.5 h-3.5 text-cyan-400" />
-                      İş Yatırım Resmi Medyanları
-                    </span>
-                    <span className="text-[10px] font-mono text-slate-500">Güncel Baseline</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 text-center font-mono text-xs pt-1">
-                    <div className="bg-slate-950 p-2 rounded border border-slate-800/80">
-                      <div className="text-[10px] text-slate-500">Sanayi F/K</div>
-                      <div className="font-bold text-white mt-0.5">10.8x</div>
-                    </div>
-                    <div className="bg-slate-950 p-2 rounded border border-slate-800/80">
-                      <div className="text-[10px] text-slate-500">Bankacılık F/K</div>
-                      <div className="font-bold text-white mt-0.5">4.2x</div>
-                    </div>
-                    <div className="bg-slate-950 p-2 rounded border border-slate-800/80">
-                      <div className="text-[10px] text-slate-500">Sigorta F/K</div>
-                      <div className="font-bold text-white mt-0.5">5.6x</div>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
@@ -6259,7 +6134,7 @@ export default function ValuationTerminal({
                       <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                         <div className="flex items-center gap-2">
                           <BarChart3 className="w-4 h-4 text-cyan-400" />
-                          <h3 className="text-sm font-bold text-white">Çeyreklik Çarpan Trendi (F/K & PD/DD)</h3>
+                          <h3 className="text-sm font-bold text-white">Çeyreklik Çarpan Trendi</h3>
                         </div>
                         <span className="text-[11px] text-slate-400 font-mono">Son {Math.min(8, chartData.length)} Çeyrek</span>
                       </div>
