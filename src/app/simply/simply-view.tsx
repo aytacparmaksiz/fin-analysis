@@ -72,7 +72,7 @@ import {
   generateSmoothSnowflakePath,
   type SnowflakeAnalysisResult
 } from '@/lib/snowflake';
-import { calculateDuPont5Step } from '@/lib/valuation';
+import { calculateDuPont5Step, calculateEarningsQuality, parseFinancialNumber } from '@/lib/valuation';
 
 export type SimplySectionId =
   | 'sec-ozet'
@@ -227,6 +227,100 @@ function SimplyChartTooltip({ active, payload, label, currentSector }: any) {
   return null;
 }
 
+// Akran Kıyaslama Tooltip (Koyu zemin, yüksek kontrast, okunaklı F/K)
+function PeerTooltip({ active, payload }: any) {
+  if (active && payload && payload.length) {
+    const item = payload[0];
+    return (
+      <div className="bg-[#181b20] border border-[#383e4d] rounded-xl px-3 py-2 shadow-2xl z-50">
+        <div className="text-[11px] font-bold text-white mb-0.5">{item.payload?.name}</div>
+        <div className="text-xs font-mono font-bold text-[#f5c242] flex items-center gap-1.5">
+          <span className="text-slate-400 font-normal">F/K Oranı:</span>
+          <span>{item.value != null ? `${Number(item.value).toFixed(1)}x` : '—'}</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
+// Çeyreklik Çarpan Trendi Tooltip
+function MultiplesTrendTooltip({ active, payload, label }: any) {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-[#181b20] border border-[#383e4d] rounded-xl p-3 shadow-2xl text-xs space-y-1.5 min-w-[175px] z-50">
+        <div className="font-bold text-white font-mono border-b border-[#2e3440] pb-1 flex items-center justify-between">
+          <span>{label}</span>
+          <span className="text-[10px] text-slate-400 font-normal">Dönem</span>
+        </div>
+        {payload.map((entry: any, idx: number) => (
+          <div key={idx} className="flex items-center justify-between gap-3 text-[11px] font-mono">
+            <span className="flex items-center gap-1.5" style={{ color: entry.color }}>
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+              <span>{entry.name}:</span>
+            </span>
+            <span className="font-bold text-white">
+              {entry.value != null ? `${Number(entry.value).toFixed(1)}x` : '—'}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return null;
+}
+
+// Sürücü çubuğu pin yüzdesi hesaplayıcı
+function calculateDriverPin(
+  type: 'rev' | 'net' | 'margin' | 'multiple',
+  value: number,
+  sector?: SectorType,
+  targetNum?: number
+): number {
+  if (value === null || value === undefined || isNaN(value)) return 50;
+
+  if (type === 'rev') {
+    if (value <= -20) return 10;
+    if (value >= 150) return 92;
+    if (value <= 0) return Math.round(10 + ((value + 20) / 20) * 15);
+    if (value <= 40) return Math.round(25 + (value / 40) * 25);
+    if (value <= 80) return Math.round(50 + ((value - 40) / 40) * 25);
+    return Math.round(75 + ((value - 80) / 70) * 17);
+  }
+
+  if (type === 'net') {
+    if (value <= -30) return 10;
+    if (value >= 200) return 92;
+    if (value <= 0) return Math.round(10 + ((value + 30) / 30) * 18);
+    if (value <= 40) return Math.round(28 + (value / 40) * 22);
+    if (value <= 100) return Math.round(50 + ((value - 40) / 60) * 25);
+    return Math.round(75 + ((value - 100) / 100) * 17);
+  }
+
+  if (type === 'margin') {
+    if (sector === 'INSURANCE') {
+      if (value <= 75) return 92;
+      if (value >= 115) return 10;
+      if (value <= 88) return Math.round(92 - ((value - 75) / 13) * 24);
+      if (value <= 98) return Math.round(68 - ((value - 88) / 10) * 25);
+      return Math.round(43 - ((value - 98) / 17) * 33);
+    } else {
+      if (value <= 5) return 15;
+      if (value >= 40) return 90;
+      return Math.round(15 + ((value - 5) / 35) * 75);
+    }
+  }
+
+  if (type === 'multiple') {
+    const num = targetNum || value;
+    if (num <= 1.0) return 25;
+    if (num >= 5.0) return 85;
+    return Math.round(25 + ((num - 1.0) / 4.0) * 60);
+  }
+
+  return 50;
+}
+
 function cleanMarkdown(text: string): string {
   if (!text) return '';
   let cleaned = text;
@@ -278,10 +372,99 @@ export default function SimplyView({
   const fairValueNum = Number(valuationInfo?.fair_value || report.fairValue || 0);
   const discountPctNum = Number(valuationInfo?.discount_pct || 0);
 
-  // WACC, ROIC ve EVA Çözümü
-  const waccNum = Number(valuationInfo?.wacc || 18.5);
-  const roicNum = Number(valuationInfo?.roic || 24.2);
-  const evaSpreadNum = Number(valuationInfo?.eva_spread ?? (roicNum - waccNum));
+  // WACC, ROIC ve EVA Çözümü (TMS 29 Reel WACC ve Terminal ile %100 Senkronize)
+  const isTms29 = Boolean(latestData?.is_tms29 ?? report.extractedData?.is_tms29 ?? true);
+  const realWaccNum = Number(latestData?.real_wacc ?? valuationInfo?.real_wacc ?? (latestData?.wacc ? latestData.wacc - 18 : 4.7));
+  const nominalWaccNum = Number(latestData?.nominal_wacc ?? latestData?.wacc ?? valuationInfo?.wacc ?? 22.8);
+  const benchmarkWacc = isTms29 && realWaccNum ? realWaccNum : nominalWaccNum;
+  const waccNum = benchmarkWacc;
+
+  const roicNum = Number(latestData?.roic ?? valuationInfo?.roic ?? 15.5);
+  const evaSpreadNum = Number(
+    latestData?.eva_spread ??
+    valuationInfo?.real_eva_spread ??
+    valuationInfo?.eva_spread ??
+    (roicNum - benchmarkWacc)
+  );
+
+  const [showCashQualityExplainer, setShowCashQualityExplainer] = useState(false);
+
+  // Kâr Kalitesi ve Nakit Dönüşümü (Sloan Tahakkuk & OCF)
+  const earningsQuality = useMemo(() => {
+    return calculateEarningsQuality(chartData, currentSector);
+  }, [chartData, currentSector]);
+
+  // Değer Sürücüleri (12 Ay İleri Hasılat ve Net Kâr Büyümesi vb.)
+  const drivers = useMemo(() => {
+    const raw = valuationInfo?.drivers || report.extractedData?.fair_value_drivers;
+    return {
+      revenue_growth: {
+        label: raw?.revenue_growth?.label || (currentSector === 'INSURANCE' ? 'Prim Büyümesi (12A İleri)' : 'Hasılat Büyümesi (12A İleri)'),
+        value: typeof raw?.revenue_growth?.value === 'number' ? raw.revenue_growth.value : 45.0,
+        bearLabel: raw?.revenue_growth?.bearLabel || 'Düşük Büyüme',
+        bullLabel: raw?.revenue_growth?.bullLabel || 'Yüksek Büyüme',
+        note: raw?.revenue_growth?.note || raw?.revenue_growth?.sourceExplanation || 'Enflasyon ve pazar payı projeksiyonu'
+      },
+      net_income_growth: {
+        label: raw?.net_income_growth?.label || 'Net Kâr Büyümesi (12A İleri)',
+        value: typeof raw?.net_income_growth?.value === 'number' ? raw.net_income_growth.value : 50.0,
+        bearLabel: raw?.net_income_growth?.bearLabel || 'Düşük Kârlılık',
+        bullLabel: raw?.net_income_growth?.bullLabel || 'Yüksek Verimlilik',
+        note: raw?.net_income_growth?.note || raw?.net_income_growth?.sourceExplanation || 'Operasyonel kârlılık ve içsel sermaye üretimi'
+      },
+      margin: {
+        label: raw?.margin?.label || (currentSector === 'INSURANCE' ? 'Kombine Oran Beklentisi' : 'Operasyonel Marj'),
+        value: typeof raw?.margin?.value === 'number' ? raw.margin.value : 22.0,
+        bearLabel: raw?.margin?.bearLabel || 'Daralan Marj',
+        bullLabel: raw?.margin?.bullLabel || 'Fiyatlama Gücü',
+        note: raw?.margin?.note || raw?.margin?.sourceExplanation || 'Çekirdek faaliyet marjı hedefi'
+      },
+      target_multiple: {
+        label: raw?.target_multiple?.label || 'Hedef Çarpan',
+        value: raw?.target_multiple?.value || '2.5x PD/DD',
+        numericValue: typeof raw?.target_multiple?.numericValue === 'number' ? raw.target_multiple.numericValue : 2.5,
+        bearLabel: raw?.target_multiple?.bearLabel || 'Muhafazakar Çarpan',
+        bullLabel: raw?.target_multiple?.bullLabel || 'Piyasa Primi',
+        note: raw?.target_multiple?.note || raw?.target_multiple?.sourceExplanation || 'Sektör ve kârlılık dinamiklerine dayalı hedef çarpan'
+      }
+    };
+  }, [valuationInfo?.drivers, report.extractedData?.fair_value_drivers, currentSector]);
+
+  // Çeyreklik Çarpan Trendi Verisi (F/K, PD/DD ve Sektör Referans Çizgileri)
+  const quarterlyMultiplesData = useMemo(() => {
+    if (!chartData || chartData.length === 0) return [];
+    const shares = parseFinancialNumber(report.extractedData?.shares_outstanding ?? report.extractedData?.share_count) ?? 180000000;
+    const sectorPe = SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pe || 8.5;
+    const sectorPb = SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pb || 2.1;
+
+    return chartData.slice(-8).map((d: any) => {
+      const periodPrice = Number(d.share_price || currentPriceNum || 0);
+      const mCap = periodPrice * shares;
+      const normCurr = String(report.extractedData?.currency || d.currency || '').trim().toLowerCase();
+      const refScale = Math.abs(d.equity ?? d.net_income ?? 0);
+      const isBinTry = normCurr.includes('bin') || normCurr.includes('thousand') || (refScale > 0 && refScale < 250_000_000 && shares >= 1_000_000);
+      const chartUnitScale = isBinTry ? 1000 : 1;
+      const scaledNet = d.net_income != null ? d.net_income * chartUnitScale : null;
+      const scaledEquity = d.equity != null ? d.equity * chartUnitScale : null;
+
+      const periodStr = String(d.period || '').toLowerCase();
+      let annualFactor = 1.0;
+      if (/(?:\/0?3\b|3a\b|q1\b|1\.ç|1ç)/i.test(periodStr)) annualFactor = 4.0;
+      else if (/(?:\/0?6\b|6a\b|q2\b|2\.ç|2ç)/i.test(periodStr)) annualFactor = 2.0;
+      else if (/(?:\/0?9\b|9a\b|q3\b|3\.ç|3ç)/i.test(periodStr)) annualFactor = 12.0 / 9.0;
+
+      const rawPe = (scaledNet && scaledNet > 0 && mCap > 0) ? Number((mCap / (scaledNet * annualFactor)).toFixed(1)) : null;
+      const rawPb = (scaledEquity && scaledEquity > 0 && mCap > 0) ? Number((mCap / scaledEquity).toFixed(1)) : null;
+
+      return {
+        period: d.period,
+        pe: (rawPe && rawPe > 0 && rawPe < 80) ? rawPe : null,
+        pb: (rawPb && rawPb > 0 && rawPb < 25) ? rawPb : null,
+        sector_pe: sectorPe,
+        sector_pb: sectorPb,
+      };
+    });
+  }, [chartData, report.extractedData, currentPriceNum, currentSector]);
 
   // Kar Tanesi (Snowflake) Analizi Hesabı (5 Eksen, 0-6 Puan)
   const snowflake: SnowflakeAnalysisResult = useMemo(() => {
@@ -2005,52 +2188,188 @@ export default function SimplyView({
               <span className="text-xs text-slate-400 font-mono">İş Yatırım Resmi Medyanları</span>
             </div>
 
-            {/* 6'lı Çarpan Kartları */}
+            {/* 6'lı Çarpan Kartları - Şık & Kurumsal UI Renklendirmesi */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               {[
-                { label: 'F/K', val: marketMultiples?.pe ? `${marketMultiples.pe.toFixed(2)}x` : '8.5x', bench: `${SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pe || 8.5}x` },
-                { label: 'PD/DD', val: marketMultiples?.pb ? `${marketMultiples.pb.toFixed(2)}x` : '2.1x', bench: `${SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pb || 2.1}x` },
-                { label: 'FD/FAVÖK', val: marketMultiples?.ev_ebitda ? `${marketMultiples.ev_ebitda.toFixed(2)}x` : '7.2x', bench: `${SECTOR_MEDIAN_BENCHMARKS[currentSector]?.evEbitda || 7.2}x` },
-                { label: 'FD/Satışlar', val: marketMultiples?.ev_sales ? `${marketMultiples.ev_sales.toFixed(2)}x` : '1.8x', bench: `${SECTOR_MEDIAN_BENCHMARKS[currentSector]?.evSales || 1.8}x` },
-                { label: 'Yabancı Payı', val: marketMultiples?.foreign_share_pct ? `%${marketMultiples.foreign_share_pct.toFixed(1)}` : '%28.4', bench: 'BIST 100' },
-                { label: 'Piyasa Değeri', val: formattedMarketCap, bench: 'Sermaye' }
-              ].map((c, i) => (
-                <div key={i} className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-4 text-center space-y-1 shadow-xl">
-                  <div className="text-[11px] uppercase font-bold text-slate-400">{c.label}</div>
-                  <div className="text-lg font-black font-mono text-white mt-1">{c.val}</div>
-                  <div className="text-[10px] text-slate-500 font-mono">Ref: {c.bench}</div>
-                </div>
-              ))}
+                {
+                  label: 'F/K',
+                  rawVal: marketMultiples?.pe ?? companyMultiplesData?.multiples?.pe?.companyValue,
+                  benchNum: SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pe || 8.5,
+                  format: (v: number) => `${v.toFixed(1)}x`,
+                  isMultiple: true,
+                  customType: 'multiple' as const
+                },
+                {
+                  label: 'PD/DD',
+                  rawVal: marketMultiples?.pb ?? companyMultiplesData?.multiples?.pb?.companyValue,
+                  benchNum: SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pb || 2.1,
+                  format: (v: number) => `${v.toFixed(2)}x`,
+                  isMultiple: true,
+                  customType: 'multiple' as const
+                },
+                {
+                  label: 'FD/FAVÖK',
+                  rawVal: marketMultiples?.ev_ebitda ?? companyMultiplesData?.multiples?.evEbitda?.companyValue,
+                  benchNum: SECTOR_MEDIAN_BENCHMARKS[currentSector]?.evEbitda || 7.2,
+                  format: (v: number) => `${v.toFixed(1)}x`,
+                  isMultiple: true,
+                  customType: 'multiple' as const
+                },
+                {
+                  label: 'FD/Satışlar',
+                  rawVal: marketMultiples?.ev_sales ?? companyMultiplesData?.multiples?.evSales?.companyValue,
+                  benchNum: SECTOR_MEDIAN_BENCHMARKS[currentSector]?.evSales || 1.8,
+                  format: (v: number) => `${v.toFixed(1)}x`,
+                  isMultiple: true,
+                  customType: 'multiple' as const
+                },
+                {
+                  label: 'Yabancı Payı',
+                  rawVal: marketMultiples?.foreign_share_pct,
+                  benchNum: 30.0,
+                  format: (v: number) => `%${v.toFixed(1)}`,
+                  isMultiple: false,
+                  customType: 'foreign' as const
+                },
+                {
+                  label: 'Piyasa Değeri',
+                  valStr: formattedMarketCap,
+                  benchStr: 'BIST Sermaye',
+                  isMultiple: false,
+                  customType: 'mcap' as const
+                }
+              ].map((c, i) => {
+                if (c.customType === 'mcap') {
+                  return (
+                    <div key={i} className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-4 text-center space-y-1 shadow-xl">
+                      <div className="text-[11px] uppercase font-bold text-slate-400">{c.label}</div>
+                      <div className="text-lg font-black font-mono text-[#f5c242] mt-1">{c.valStr}</div>
+                      <div className="text-[10px] text-slate-500 font-mono">Ref: {c.benchStr}</div>
+                      <div className="pt-1">
+                        <span className="inline-block text-[9.5px] font-mono font-medium px-2 py-0.5 rounded-md bg-amber-950/40 text-amber-300 border border-amber-800/40">
+                          Halka Açık Değer
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (c.customType === 'foreign') {
+                  const val = c.rawVal != null ? Number(c.rawVal) : 28.4;
+                  return (
+                    <div key={i} className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-4 text-center space-y-1 shadow-xl">
+                      <div className="text-[11px] uppercase font-bold text-slate-400">{c.label}</div>
+                      <div className="text-lg font-black font-mono text-cyan-400 mt-1">{c.format(val)}</div>
+                      <div className="text-[10px] text-slate-500 font-mono">Ref: BIST 100 (%30)</div>
+                      <div className="pt-1">
+                        <span className="inline-block text-[9.5px] font-mono font-medium px-2 py-0.5 rounded-md bg-cyan-950/40 text-cyan-300 border border-cyan-800/40">
+                          {val >= 25 ? 'Kurumsal İlgi' : 'Ortalama Pay'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                const bench = c.benchNum ?? 1.0;
+                const val = c.rawVal != null ? Number(c.rawVal) : bench;
+                const diffPct = ((val - bench) / bench) * 100;
+                const isCheap = diffPct <= -8;
+                const isExpensive = diffPct >= 8;
+
+                const valColor = isCheap ? 'text-emerald-400' : isExpensive ? 'text-rose-400' : 'text-slate-100';
+                const cardBorder = isCheap ? 'border-emerald-900/40' : isExpensive ? 'border-rose-900/40' : 'border-[#2b313d]';
+                const formattedVal = typeof c.format === 'function' ? c.format(val) : `${val.toFixed(1)}x`;
+
+                return (
+                  <div key={i} className={`bg-[#181b20] border ${cardBorder} rounded-2xl p-4 text-center space-y-1 shadow-xl transition-colors`}>
+                    <div className="text-[11px] uppercase font-bold text-slate-400">{c.label}</div>
+                    <div className={`text-lg font-black font-mono mt-1 ${valColor}`}>
+                      {formattedVal}
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-mono">
+                      Ref: {bench.toFixed(c.label === 'PD/DD' ? 2 : 1)}x
+                    </div>
+                    <div className="pt-1">
+                      {isCheap ? (
+                        <span className="inline-block text-[9.5px] font-mono font-bold px-2 py-0.5 rounded-md bg-emerald-950/60 text-emerald-400 border border-emerald-800/50">
+                          -%{Math.abs(diffPct).toFixed(0)} İskontolu
+                        </span>
+                      ) : isExpensive ? (
+                        <span className="inline-block text-[9.5px] font-mono font-bold px-2 py-0.5 rounded-md bg-rose-950/60 text-rose-400 border border-rose-800/50">
+                          +%{diffPct.toFixed(0)} Primli
+                        </span>
+                      ) : (
+                        <span className="inline-block text-[9.5px] font-mono font-medium px-2 py-0.5 rounded-md bg-[#21262d] text-slate-300 border border-[#2e3440]">
+                          Sektörle Uyumlu
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
-            {/* Sektör Medyanları Karşılaştırma Grafiği */}
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center justify-between">
+            {/* Sektör Karşılaştırma & Çeyreklik Çarpan Trendi (2 Sütunlu Grid) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* 1. Sektör ve Akran F/K Kıyaslaması (Kompakt ve temiz) */}
+              <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3 flex flex-col justify-between">
                 <div>
                   <div className="text-xs font-bold text-white flex items-center gap-2">
                     <Percent className="w-4 h-4 text-[#f5c242]" />
                     <span>Fiyat / Kazanç (F/K) Sektör ve Akran Kıyaslaması</span>
                   </div>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    Daha düşük F/K sektör ortalamasına göre göreceli iskonto potansiyeline işaret edebilir
+                    Daha düşük F/K sektör ortalamasına göre göreceli iskonto potansiyeline işaret eder
                   </p>
+                </div>
+
+                <div className="h-44 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={peerComparisonData} layout="vertical" margin={{ top: 5, right: 30, left: 15, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" horizontal={false} />
+                      <XAxis type="number" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => `${v}x`} />
+                      <YAxis dataKey="name" type="category" stroke="#6b7280" tick={{ fontSize: 11, fill: '#e5e7eb' }} />
+                      <Tooltip cursor={false} content={<PeerTooltip />} />
+                      <Bar dataKey="pe" name="F/K Oranı" maxBarSize={20} radius={[0, 4, 4, 0]}>
+                        {peerComparisonData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.isMain ? '#f5c242' : '#38bdf8'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
 
-              <div className="h-56 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={peerComparisonData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" horizontal={false} />
-                    <XAxis type="number" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => `${v}x`} />
-                    <YAxis dataKey="name" type="category" stroke="#6b7280" tick={{ fontSize: 11, fill: '#e5e7eb' }} />
-                    <Tooltip contentStyle={{ backgroundColor: '#1c2027', borderColor: '#383e4d', borderRadius: '0.5rem', fontSize: '11px' }} />
-                    <Bar dataKey="pe" name="F/K Oranı" radius={[0, 4, 4, 0]}>
-                      {peerComparisonData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.isMain ? '#f5c242' : '#38bdf8'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+              {/* 2. Çeyreklik Çarpan Trendi (F/K & PD/DD vs Sektör Ortalaması) */}
+              <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3 flex flex-col justify-between">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-bold text-white flex items-center gap-2">
+                      <BarChart3 className="w-4 h-4 text-cyan-400" />
+                      <span>Çeyreklik Çarpan Trendi (F/K & PD/DD)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Tarihsel çarpan gelişimi ve kesikli çizgilerle sektör ortalamaları
+                    </p>
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-mono">Son {Math.min(8, quarterlyMultiplesData.length)} Çeyrek</span>
+                </div>
+
+                <div className="h-44 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={quarterlyMultiplesData} margin={{ top: 5, right: 15, left: -10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" vertical={false} />
+                      <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
+                      <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => `${v}x`} />
+                      <Tooltip content={<MultiplesTrendTooltip />} />
+                      <Legend align="left" verticalAlign="bottom" wrapperStyle={{ fontSize: '10.5px', paddingTop: '4px', paddingLeft: '8px' }} />
+                      <Line type="monotone" dataKey="pe" name="F/K" stroke="#38bdf8" strokeWidth={2.5} dot={{ r: 3, fill: '#38bdf8' }} legendType="line" />
+                      <Line type="monotone" dataKey="pb" name="PD/DD" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: '#10b981' }} legendType="line" />
+                      <Line type="monotone" dataKey="sector_pe" name="Sektör F/K (Ref)" stroke="#fbbf24" strokeWidth={1.5} strokeDasharray="4 4" dot={false} strokeOpacity={0.45} legendType="line" />
+                      <Line type="monotone" dataKey="sector_pb" name="Sektör PD/DD (Ref)" stroke="#34d399" strokeWidth={1.5} strokeDasharray="4 4" dot={false} strokeOpacity={0.45} legendType="line" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
           </section>
@@ -2109,6 +2428,92 @@ export default function SimplyView({
               </div>
             </div>
 
+            {/* Gelecek Büyüme & Değer Sürücüleri (12 Ay İleri Projeksiyonları) */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between border-b border-[#282d37] pb-2">
+                <div className="text-xs font-bold text-white flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-[#f5c242]" />
+                  <span>Gelecek Büyüme & Değer Sürücüleri (12 Ay İleri)</span>
+                </div>
+                <span className="text-[10px] text-slate-400 font-mono">İNA & Gordon Büyüme Parametreleri</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  {
+                    title: drivers.revenue_growth.label,
+                    valueText: `%${Number(drivers.revenue_growth.value).toFixed(1)}`,
+                    pinPercent: calculateDriverPin('rev', Number(drivers.revenue_growth.value), currentSector),
+                    bearText: drivers.revenue_growth.bearLabel,
+                    bullText: drivers.revenue_growth.bullLabel,
+                    note: drivers.revenue_growth.note
+                  },
+                  {
+                    title: drivers.net_income_growth.label,
+                    valueText: `%${Number(drivers.net_income_growth.value).toFixed(1)}`,
+                    pinPercent: calculateDriverPin('net', Number(drivers.net_income_growth.value), currentSector),
+                    bearText: drivers.net_income_growth.bearLabel,
+                    bullText: drivers.net_income_growth.bullLabel,
+                    note: drivers.net_income_growth.note
+                  },
+                  {
+                    title: drivers.margin.label,
+                    valueText: `%${Number(drivers.margin.value).toFixed(1)}`,
+                    pinPercent: calculateDriverPin('margin', Number(drivers.margin.value), currentSector),
+                    bearText: drivers.margin.bearLabel,
+                    bullText: drivers.margin.bullLabel,
+                    note: drivers.margin.note
+                  },
+                  {
+                    title: drivers.target_multiple.label,
+                    valueText: String(drivers.target_multiple.value || '2.5x PD/DD'),
+                    pinPercent: calculateDriverPin('multiple', Number(drivers.target_multiple.numericValue || 2.5), currentSector, Number(drivers.target_multiple.numericValue || 2.5)),
+                    bearText: drivers.target_multiple.bearLabel,
+                    bullText: drivers.target_multiple.bullLabel,
+                    note: drivers.target_multiple.note
+                  }
+                ].map((d, idx) => (
+                  <div key={idx} className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-4 flex flex-col justify-between space-y-3 shadow-xl">
+                    <div>
+                      <div className="text-[11px] font-semibold text-slate-400 truncate" title={d.title}>
+                        {d.title}
+                      </div>
+                      <div className="flex items-baseline gap-1.5 mt-1">
+                        <span className="text-xl font-black font-mono text-[#f5c242] tracking-tight">
+                          {d.valueText}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">baz</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="relative h-1.5 w-full rounded-full bg-[#101216] border border-[#2b313d] overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-500/40 rounded-full"
+                          style={{ width: `${Math.max(8, Math.min(100, d.pinPercent))}%` }}
+                        />
+                        <div
+                          className="absolute top-0 bottom-0 w-1.5 bg-[#f5c242] rounded-full"
+                          style={{ left: `calc(${d.pinPercent}% - 3px)` }}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between text-[9.5px] font-mono text-slate-400 leading-tight">
+                        <span className="truncate max-w-[48%]">{d.bearText}</span>
+                        <span className="truncate max-w-[48%] text-right text-slate-300">{d.bullText}</span>
+                      </div>
+                    </div>
+
+                    {d.note && (
+                      <p className="text-[10px] text-slate-400 leading-relaxed pt-2 border-t border-[#282d37] line-clamp-2" title={d.note}>
+                        {d.note}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* WACC ve Sermaye Maliyeti Panosu */}
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
               <div className="flex items-center justify-between">
@@ -2118,7 +2523,7 @@ export default function SimplyView({
                     <span>Sermaye Maliyeti (WACC) & EVA Makası</span>
                   </div>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    Reel ROIC (%{roicNum.toFixed(1)}) vs. Reel WACC (%{Number(valuationInfo?.real_wacc || 4.7).toFixed(1)})
+                    Reel ROIC (%{roicNum.toFixed(1)}) vs. Reel WACC (%{realWaccNum.toFixed(1)})
                   </p>
                 </div>
                 <div className="text-right">
@@ -2147,7 +2552,7 @@ export default function SimplyView({
                 <div className="bg-[#21262d] rounded-xl p-3 text-center">
                   <div className="text-[10px] text-slate-400">Nominal WACC</div>
                   <div className="text-sm font-bold font-mono text-[#f5c242] mt-1">
-                    %{waccNum.toFixed(1)}
+                    %{nominalWaccNum.toFixed(1)}
                   </div>
                 </div>
                 <div className="bg-[#21262d] rounded-xl p-3 text-center">
@@ -2157,6 +2562,129 @@ export default function SimplyView({
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Kâr Kalitesi ve Nakit Dönüşümü (Earnings Quality Audit) */}
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#282d37] pb-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-[#f5c242]" />
+                  <h3 className="text-sm font-bold text-white">
+                    Kâr Kalitesi ve Nakit Dönüşümü
+                  </h3>
+                  <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                    earningsQuality.badgeColor === 'emerald'
+                      ? 'bg-emerald-950/70 border-emerald-800/60 text-emerald-400'
+                      : earningsQuality.badgeColor === 'amber'
+                      ? 'bg-amber-950/70 border-amber-800/60 text-amber-400'
+                      : earningsQuality.badgeColor === 'indigo'
+                      ? 'bg-indigo-950/70 border-indigo-800/60 text-indigo-400'
+                      : earningsQuality.badgeColor === 'gray'
+                      ? 'bg-[#21262d] border-[#2e3440] text-slate-300'
+                      : 'bg-rose-950/70 border-rose-800/60 text-rose-400'
+                  }`}>
+                    {earningsQuality.statusTitle}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowCashQualityExplainer(prev => !prev)}
+                  className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white px-2.5 py-1 rounded-lg border border-[#2e3440] hover:bg-[#21262d] transition cursor-pointer"
+                  title="Metodoloji ve formülleri görüntüle"
+                >
+                  <Info className="w-3.5 h-3.5 text-[#f5c242]" />
+                  <span>{showCashQualityExplainer ? 'Detayı Gizle' : 'Metodoloji (i)'}</span>
+                </button>
+              </div>
+
+              {/* 4 Temel Metrik Şeridi */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-[#21262d] rounded-xl p-3.5 border border-[#2e3440]">
+                  <span className="text-[10.5px] text-slate-400 block">Nakit Dönüşümü (OCF / Net)</span>
+                  <div className={`text-base font-black font-mono mt-1 ${
+                    earningsQuality.status === 'DOUBLE_NEGATIVE' ? 'text-rose-400' : 'text-white'
+                  }`}>
+                    {earningsQuality.status === 'DOUBLE_NEGATIVE'
+                      ? 'A/D'
+                      : (earningsQuality.cashConversionRatio != null ? `%${earningsQuality.cashConversionRatio}` : '—')}
+                  </div>
+                  <span className="text-[9.5px] text-slate-500 font-mono">Hedef: &gt; %100</span>
+                </div>
+
+                <div className="bg-[#21262d] rounded-xl p-3.5 border border-[#2e3440]">
+                  <span className="text-[10.5px] text-slate-400 block">Sloan Tahakkuk Oranı</span>
+                  <div className={`text-base font-black font-mono mt-1 ${
+                    earningsQuality.status === 'DOUBLE_NEGATIVE'
+                      ? 'text-rose-400'
+                      : (earningsQuality.sloanAccrualRatio != null && earningsQuality.sloanAccrualRatio < 0.05
+                        ? 'text-emerald-400'
+                        : 'text-amber-400')
+                  }`}>
+                    {earningsQuality.sloanAccrualRatio != null ? `%${(earningsQuality.sloanAccrualRatio * 100).toFixed(1)}` : '—'}
+                  </div>
+                  <span className="text-[9.5px] text-slate-500 font-mono">Hedef: &lt; %5 (Düşük Tahakkuk)</span>
+                </div>
+
+                <div className="bg-[#21262d] rounded-xl p-3.5 border border-[#2e3440]">
+                  <span className="text-[10.5px] text-slate-400 block">İşletme Nakit Akışı (OCF)</span>
+                  <div className={`text-base font-black font-mono mt-1 ${
+                    (earningsQuality.ocf != null && earningsQuality.ocf < 0) ? 'text-rose-400' : 'text-emerald-400'
+                  }`}>
+                    {formatMrTl(earningsQuality.ocf)}
+                  </div>
+                  <span className="text-[9.5px] text-slate-500 font-mono">Fiili Operasyonel Nakit</span>
+                </div>
+
+                <div className="bg-[#21262d] rounded-xl p-3.5 border border-[#2e3440]">
+                  <span className="text-[10.5px] text-slate-400 block">Net Dönem Kârı</span>
+                  <div className={`text-base font-black font-mono mt-1 ${
+                    (earningsQuality.netIncome != null && earningsQuality.netIncome < 0) ? 'text-rose-400' : 'text-white'
+                  }`}>
+                    {formatMrTl(earningsQuality.netIncome)}
+                  </div>
+                  <span className="text-[9.5px] text-slate-500 font-mono">Muhasebesel Net Kâr</span>
+                </div>
+              </div>
+
+              {/* Sektörel Rehberlik & Teşhis Açıklama Kartı */}
+              <div className="rounded-xl bg-[#21262d]/90 border border-[#2e3440] p-4 space-y-2 text-xs">
+                <div className="flex items-start gap-2.5">
+                  <div className="mt-1 h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
+                  <p className="text-slate-200 leading-relaxed font-normal flex-1">
+                    {earningsQuality.guidanceText}
+                  </p>
+                </div>
+
+                {earningsQuality.sloanAssessment && (
+                  <div className="flex items-start gap-2.5 pt-2.5 border-t border-[#282d37]">
+                    <div className="mt-1 h-2 w-2 rounded-full bg-cyan-400 shrink-0" />
+                    <p className="text-slate-300 leading-relaxed flex-1 font-mono text-[11px]">
+                      <span className="font-semibold text-slate-200 font-sans mr-1.5">Tahakkuk & Nakit Teşhisi:</span>
+                      {earningsQuality.sloanAssessment}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {showCashQualityExplainer && (
+                <div className="bg-[#121417] border border-[#2e3440] p-4 rounded-xl text-xs text-slate-300 space-y-2">
+                  <div className="font-bold text-white flex items-center gap-1.5">
+                    <Info className="w-3.5 h-3.5 text-[#f5c242]" />
+                    <span>Kâr Kalitesi Metodolojisi & Değerlendirme Çerçevesi</span>
+                  </div>
+                  <p className="leading-relaxed text-slate-300">
+                    {earningsQuality.beginnerExplanation}
+                  </p>
+                  <div className="text-[11px] text-slate-400 font-mono bg-[#1a1e24] p-2.5 rounded-lg border border-[#282d37] space-y-1">
+                    <div>• <strong>Sloan Tahakkuk Oranı</strong> = (Net Kâr − OCF) / Toplam Varlıklar</div>
+                    <div>• <strong>Nakit Dönüşüm Oranı</strong> = İşletme Nakit Akışı (OCF) / Net Kâr</div>
+                    <div className="text-[10px] text-slate-500 pt-0.5">
+                      Oran %100'ün üzerindeyse şirket kağıt üzerinde kâr yazmanın ötesinde fiilen kasaya nakit sokuyor demektir.
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </section>
 

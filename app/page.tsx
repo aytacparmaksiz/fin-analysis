@@ -3401,6 +3401,7 @@ export default function ValuationTerminal({
     value_trap_severity: dynamicValuationResult.valuation.value_trap_severity ?? activeReport?.valueTrapSeverity,
     value_trap_reasons: dynamicValuationResult.valuation.value_trap_reasons ?? activeReport?.valueTrapReasons,
     fair_value_trend: dynamicValuationResult.valuation.fair_value_trend ?? activeReport?.fairValueTrend,
+    drivers: drivers,
   };
 
   if (!valuationInfo.fair_value || valuationInfo.fair_value <= 0) {
@@ -6157,6 +6158,8 @@ export default function ValuationTerminal({
                                   period: d.period,
                                   pe: (pe && pe > 0 && pe < 80) ? pe : null,
                                   pb: (pb && pb > 0 && pb < 25) ? pb : null,
+                                  sector_pe: companyMultiplesData?.benchmark?.peMedian || 8.5,
+                                  sector_pb: companyMultiplesData?.benchmark?.pbMedian || 2.1,
                                 };
                               })}
                               margin={{ top: 10, right: 15, left: -10, bottom: 0 }}
@@ -6168,6 +6171,8 @@ export default function ValuationTerminal({
                               <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
                               <Line type="monotone" dataKey="pe" name="F/K Çarpanı (P/E)" stroke="#06b6d4" strokeWidth={2.5} dot={{ r: 3.5, fill: '#06b6d4' }} />
                               <Line type="monotone" dataKey="pb" name="PD/DD Çarpanı (P/B)" stroke="#10b981" strokeWidth={2} dot={{ r: 3, fill: '#10b981' }} />
+                              <Line type="monotone" dataKey="sector_pe" name="Sektör F/K (Ref)" stroke="#fbbf24" strokeWidth={1.5} strokeDasharray="4 4" dot={false} strokeOpacity={0.45} />
+                              <Line type="monotone" dataKey="sector_pb" name="Sektör PD/DD (Ref)" stroke="#34d399" strokeWidth={1.5} strokeDasharray="4 4" dot={false} strokeOpacity={0.45} />
                             </LineChart>
                           </ResponsiveContainer>
                         )}
