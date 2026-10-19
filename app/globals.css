@@ -41,34 +41,18 @@
   --border-subtle: #CBD5E1;
 }
 
-@font-face {
-  font-family: 'BureauSherif';
-  src: local('BureauSherif'), local('Bureau Serif'), local('BureauSerif'), local('Bureau-Serif'), local('FB Bureau Serif'),
-       url('https://fonts.gstatic.com/s/sourceserif4/v8/neIIzC-mg0IKP31qn5uyAsKPK-991v6B.woff2') format('woff2');
-  font-weight: 300 800;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'BureauSans';
-  src: local('BureauSans'), local('Bureau Sans'), local('Bureau-Sans'), local('Bureau Grot'), local('Bureau Grotesque'),
-       url('https://fonts.gstatic.com/s/publicsans/v15/ijwRs572Xtc6ZYQws9YVwnNFJ_E81G87BB6HQw.woff2') format('woff2');
-  font-weight: 300 800;
-  font-display: swap;
-}
-
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: 'BureauSans', 'Bureau Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-serif: 'BureauSherif', 'Bureau Serif', Georgia, Cambria, 'Times New Roman', Times, serif;
-  --font-mono: 'BureauSans', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-sans: var(--font-ibm-plex-sans), 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-serif: var(--font-ibm-plex-serif), 'IBM Plex Serif', Georgia, Cambria, 'Times New Roman', Times, serif;
+  --font-mono: var(--font-ibm-plex-sans), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 body {
   background: var(--background);
   color: #FFFFFF;
-  font-family: 'BureauSans', 'Bureau Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+  font-family: var(--font-ibm-plex-sans), 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
   font-size: 16px;
   font-weight: 400;
   line-height: 1.6;
@@ -77,9 +61,9 @@ body {
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
-/* Headings: BureauSherif, pure white, 28px Medium for largest titles */
+/* Headings: IBM Plex Serif, pure white, 28px Medium for largest titles */
 h1, h2, h3, h4, .font-serif {
-  font-family: 'BureauSherif', 'Bureau Serif', Georgia, Cambria, 'Times New Roman', Times, serif !important;
+  font-family: var(--font-ibm-plex-serif), 'IBM Plex Serif', Georgia, Cambria, 'Times New Roman', Times, serif !important;
   color: #FFFFFF;
 }
 
