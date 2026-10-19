@@ -1504,7 +1504,7 @@ export default function ValuationTerminal({
     // Doğrudan URL veya initialTicker kontrolü (/analysis/VESBE veya /report/VESBE)
     let pathTicker = '';
     if (typeof window !== 'undefined') {
-      const match = window.location.pathname.match(/\/(?:analysis|report)\/([A-Za-z0-9_]+)/i);
+      const match = window.location.pathname.match(/\/(?:analysis|report|simply)\/([A-Za-z0-9_]+)/i);
       if (match && match[1]) {
         pathTicker = match[1].toUpperCase();
       }
@@ -1525,11 +1525,10 @@ export default function ValuationTerminal({
         // Yerel depoda yoksa buluttan kontrol et. Bulutta da yoksa loadTickerDirect step='input' yapacaktır.
         loadTickerDirect(targetTicker, localData);
       }
-    } else if (localData.length > 0) {
-      setActiveReportId(localData[0].id);
-      setStep('report');
-      if (!initialTab) setActiveTab('ozet');
     } else {
+      // Hedef bir hisse belirtilmemişse (ana sayfa / veya /simply):
+      // ASLA otomatik olarak kaydedilmiş bir şirketi açıp /analysis/XXX adresine yönlendirme yapma.
+      // Kullanıcıyı her zaman doğrudan YENİ ANALİZ paneli ('input') karşılasın.
       setActiveReportId(null);
       setTicker('');
       setStep('input');
@@ -1577,21 +1576,29 @@ export default function ValuationTerminal({
     syncWithCloud();
   }, []);
 
-  // Adres Çubuğu Senkronizasyonu (Shareable URL: /analysis/HISSE_KODU)
+  // Adres Çubuğu Senkronizasyonu (Shareable URL: /analysis/HISSE_KODU veya /simply/HISSE_KODU)
   useEffect(() => {
     if (typeof window !== 'undefined' && mounted) {
       if (step === 'report' && activeReport?.ticker) {
-        const targetPath = `/analysis/${activeReport.ticker.toUpperCase()}`;
+        const isSimply = layoutMode === 'simply' || window.location.pathname.startsWith('/simply');
+        const targetPath = isSimply
+          ? `/simply/${activeReport.ticker.toUpperCase()}`
+          : `/analysis/${activeReport.ticker.toUpperCase()}`;
         if (window.location.pathname !== targetPath && !window.location.pathname.startsWith('/report/')) {
           window.history.replaceState(null, '', targetPath);
         }
       } else if (step === 'input') {
-        if (window.location.pathname.startsWith('/analysis/') || window.location.pathname.startsWith('/report/')) {
-          window.history.replaceState(null, '', '/');
+        if (
+          window.location.pathname.startsWith('/analysis/') ||
+          window.location.pathname.startsWith('/report/') ||
+          window.location.pathname.startsWith('/simply/')
+        ) {
+          const rootTarget = layoutMode === 'simply' || window.location.pathname.startsWith('/simply') ? '/simply' : '/';
+          window.history.replaceState(null, '', rootTarget);
         }
       }
     }
-  }, [step, activeReport?.ticker, mounted]);
+  }, [step, activeReport?.ticker, mounted, layoutMode]);
 
   const saveReport = async (newReport: SavedReport) => {
     const updated = [newReport, ...savedReports.filter(r => r.id !== newReport.id && r.ticker?.toUpperCase() !== newReport.ticker?.toUpperCase())];
