@@ -10636,7 +10636,7 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
   "RALYH": {
     "ticker": "RALYH",
     "name": "Ral Yatırım Holding",
-    "sectorName": "Tekstil Entegre",
+    "sectorName": "Holdingler",
     "lastPrice": 33.16,
     "marketCapMnTl": 11042.3,
     "marketCapMnUsd": 223.7,

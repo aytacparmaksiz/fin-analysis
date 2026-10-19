@@ -7,7 +7,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { 
   Send, FileText, FileSpreadsheet, Presentation, AlertTriangle, Database, 
-  RefreshCw, Printer, PlusCircle, Plus, History, 
+  RefreshCw, Printer, PlusCircle, Plus, History, Clock,
   ChevronRight, ChevronDown, UploadCloud, X, CheckCircle2, Search,
   TrendingUp, BarChart3, Target, Calendar, ArrowUpRight, ArrowDownRight, Minus,
   DollarSign, ShieldCheck, ShieldAlert, Activity, Layers, Download, Upload,
@@ -3815,10 +3815,11 @@ export default function ValuationTerminal({
 
         <div className="p-4 sm:p-6 w-full max-w-[1600px] mx-auto space-y-5">
           
-          {/* ADIM 1: YENİ ANALİZ EKRANI (TEKİL KURUMSAL KOMUT MERKEZİ) */}
+          {/* ADIM 1: YENİ ANALİZ EKRANI (KURUMSAL DEĞERLEME & ARAŞTIRMA MERKEZİ) */}
           {step === 'input' && (
-            <div className="max-w-2xl mx-auto py-6 sm:py-12">
-              <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-sm overflow-hidden divide-y divide-slate-800">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 py-4 items-start">
+              {/* Sol Sütun: Arama, Analiz ve PDF Entegrasyonu (7 Kolon) */}
+              <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl shadow-sm overflow-hidden divide-y divide-slate-800">
                 {/* Üst Bölüm: Hisse Kodu Arama & Hızlı Seçim */}
                 <div className="p-6 sm:p-7 space-y-5">
                   <div className="flex items-center justify-between gap-4">
@@ -4034,6 +4035,130 @@ export default function ValuationTerminal({
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+
+              {/* Sağ Sütun: Son Analizler & BIST Popüler Şirketler (5 Kolon) */}
+              <div className="lg:col-span-5 space-y-4">
+                {/* Son Analiz Edilen Şirketler (Varsa) */}
+                {savedReports.length > 0 && (
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-emerald-400" />
+                        <h3 className="text-xs font-bold text-white uppercase tracking-wider">Son Analiz Edilen Şirketler</h3>
+                      </div>
+                      <span className="text-[11px] font-mono text-slate-400">{savedReports.length} Rapor</span>
+                    </div>
+
+                    <div className="divide-y divide-slate-800/60 max-h-64 overflow-y-auto">
+                      {savedReports.slice(0, 5).map((r) => (
+                        <div
+                          key={r.id}
+                          onClick={() => { setActiveReportId(r.id); setStep('report'); }}
+                          className="py-2.5 px-2 hover:bg-slate-800/40 rounded-lg transition cursor-pointer flex items-center justify-between group"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-center font-black font-mono text-xs text-emerald-400 group-hover:text-white transition">
+                              {r.ticker.slice(0, 4)}
+                            </div>
+                            <div>
+                              <div className="font-bold text-xs text-white group-hover:text-emerald-400 transition flex items-center gap-1.5">
+                                <span>{r.ticker}</span>
+                                <span className="text-[10px] text-slate-500 font-normal">({r.period || '2025/12'})</span>
+                              </div>
+                              <div className="text-[10.5px] font-mono text-slate-400">
+                                Adil Değer: <span className="text-emerald-300 font-semibold">₺{r.fairValue || '—'}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
+                              r.decision === 'AL' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
+                              r.decision === 'ALMA' ? 'bg-rose-950 text-rose-400 border border-rose-800' :
+                              'bg-amber-950 text-amber-400 border border-amber-800'
+                            }`}>
+                              {r.decision || 'NÖTR'}
+                            </span>
+                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                              Skor: {r.score || 75}/100
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* BIST Sektörel Liderler (1 Tıkla Analiz) */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-[#f5c242]" />
+                      <h3 className="text-xs font-bold text-white uppercase tracking-wider">BIST Sektörel Hızlı Analiz</h3>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-mono">1 Tıkla Canlı Veri</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {[
+                      { ticker: 'THYAO', name: 'Türk Hava Yolları', sector: 'Havacılık' },
+                      { ticker: 'BIMAS', name: 'BİM Mağazalar', sector: 'Perakende' },
+                      { ticker: 'MPARK', name: 'MLP Sağlık (Medical Park)', sector: 'Sağlık' },
+                      { ticker: 'FROTO', name: 'Ford Otosan', sector: 'Otomotiv' },
+                      { ticker: 'AGESA', name: 'Agesa Emeklilik', sector: 'Sigorta' },
+                      { ticker: 'TUPRS', name: 'Tüpraş', sector: 'Rafineri' },
+                      { ticker: 'ASELS', name: 'Aselsan', sector: 'Savunma' },
+                      { ticker: 'KCHOL', name: 'Koç Holding', sector: 'Holding' },
+                      { ticker: 'EKGYO', name: 'Emlak Konut GYO', sector: 'GYO' },
+                      { ticker: 'MGROS', name: 'Migros Ticaret', sector: 'Gıda Perakende' },
+                    ].map((item) => (
+                      <button
+                        key={item.ticker}
+                        type="button"
+                        onClick={() => {
+                          setTicker(item.ticker);
+                          handleBistDirectAnalysis(item.ticker);
+                        }}
+                        className="p-2 bg-slate-950 hover:bg-slate-800/80 border border-slate-800 hover:border-emerald-500/50 rounded-lg text-left transition cursor-pointer flex items-center justify-between group"
+                      >
+                        <div>
+                          <div className="font-mono font-bold text-white text-xs group-hover:text-emerald-400 transition">
+                            {item.ticker}
+                          </div>
+                          <div className="text-[10px] text-slate-500 truncate max-w-[120px]">
+                            {item.sector}
+                          </div>
+                        </div>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-emerald-400 transition flex-shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Sektör Benchmark Medyanları Özeti */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm text-xs text-slate-400 space-y-2">
+                  <div className="font-semibold text-slate-300 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <BarChart3 className="w-3.5 h-3.5 text-cyan-400" />
+                      İş Yatırım Resmi Medyanları
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-500">Güncel Baseline</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center font-mono text-xs pt-1">
+                    <div className="bg-slate-950 p-2 rounded border border-slate-800/80">
+                      <div className="text-[10px] text-slate-500">Sanayi F/K</div>
+                      <div className="font-bold text-white mt-0.5">10.8x</div>
+                    </div>
+                    <div className="bg-slate-950 p-2 rounded border border-slate-800/80">
+                      <div className="text-[10px] text-slate-500">Bankacılık F/K</div>
+                      <div className="font-bold text-white mt-0.5">4.2x</div>
+                    </div>
+                    <div className="bg-slate-950 p-2 rounded border border-slate-800/80">
+                      <div className="text-[10px] text-slate-500">Sigorta F/K</div>
+                      <div className="font-bold text-white mt-0.5">5.6x</div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

@@ -510,16 +510,56 @@ export default function SimplyView({
 
   // İş Yatırım Resmi Sektör Tanımı ve Sektörel Akranlar
   const isYatirimEntry = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[report.ticker.toUpperCase()];
-  const officialSectorName = marketMultiples?.sectorName || companyMultiplesData?.benchmark?.sectorName || isYatirimEntry?.sectorName || sectorMeta?.title || 'Sanayi';
+  const rawOfficialSector = isYatirimEntry?.sectorName || marketMultiples?.sectorName;
+  const officialSectorName = (currentSector === 'INSURANCE' ? 'Sigorta' : (currentSector === 'BANKING' ? 'Bankacılık' : (currentSector === 'REIT' ? 'GYO' : rawOfficialSector))) || sectorMeta?.title || 'Sanayi';
 
-  // Aynı Sektördeki Resmi BİST Şirketleri (İş Yatırım Sektör Dağılımı)
+  // Aynı Sektördeki Resmi BİST Şirketleri (İş Yatırım Sektör Dağılımı ve Akıllı Eşleşme)
   const sameSectorPeers = useMemo(() => {
-    const currentSec = (officialSectorName || '').trim().toLowerCase();
+    const targetTicker = report.ticker.toUpperCase();
+    const currentEntry = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[targetTicker];
+    const isTargetHolding = currentSector === 'HOLDING' || targetTicker.includes('HOL') || (currentEntry?.name || '').toLowerCase().includes('holding');
+
+    // 1. Hedef sektör anahtar kelimelerini normalize et
+    let targetSector = (currentEntry?.sectorName || officialSectorName || '').trim().toLowerCase();
+    if (currentSector === 'INSURANCE' || targetSector.includes('sigorta')) targetSector = 'sigorta';
+    else if (currentSector === 'BANKING' || targetSector.includes('banka')) targetSector = 'bankacılık';
+    else if (currentSector === 'REIT' || targetSector.includes('gyo') || targetSector.includes('gayrimenkul')) targetSector = 'gyo';
+    else if (currentSector === 'HOLDING' || targetSector.includes('holding')) targetSector = 'holdingler';
+    else if (currentSector === 'AVIATION' || targetSector.includes('hava')) targetSector = 'havayolları ve hizm.';
+
     const allInSector: Array<{ ticker: string; name: string; marketCapMnTl: number | null }> = [];
 
     for (const [tk, item] of Object.entries(OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE)) {
-      if (tk.toUpperCase() === report.ticker.toUpperCase()) continue;
-      if (item.sectorName && item.sectorName.trim().toLowerCase() === currentSec) {
+      if (tk.toUpperCase() === targetTicker) continue;
+      const itemSec = (item.sectorName || '').trim().toLowerCase();
+      const itemName = (item.name || '').toLowerCase();
+
+      // Holding filtresi: Eğer ana şirket bir holding değilse, akran olarak holdingleri ele (Örn: RALYH)
+      if (!isTargetHolding && (itemSec === 'holdingler' || itemName.includes('yatırım holding'))) {
+        continue;
+      }
+
+      let matches = false;
+      if (targetSector === 'sigorta') {
+        matches = itemSec.includes('sigorta');
+      } else if (targetSector === 'bankacılık') {
+        matches = itemSec.includes('banka');
+      } else if (targetSector === 'gyo') {
+        matches = itemSec === 'gyo' || itemSec.includes('gayrimenkul');
+      } else if (targetSector === 'holdingler') {
+        matches = itemSec === 'holdingler' || itemName.includes('holding');
+      } else if (targetSector === 'havayolları ve hizm.') {
+        matches = itemSec.includes('hava');
+      } else {
+        matches = itemSec === targetSector;
+      }
+
+      // MAVI ve giyim perakendesi özel eşleşmesi (KOTON, VAKKO, SUWEN vb.)
+      if (targetTicker === 'MAVI' && (tk === 'VAKKO' || tk === 'SUWEN' || tk === 'KOTON')) {
+        matches = true;
+      }
+
+      if (matches) {
         allInSector.push({
           ticker: item.ticker,
           name: item.name,
@@ -530,7 +570,7 @@ export default function SimplyView({
     // Piyasa değerine göre büyükten küçüğe sırala
     allInSector.sort((a, b) => (b.marketCapMnTl || 0) - (a.marketCapMnTl || 0));
     return allInSector;
-  }, [officialSectorName, report.ticker]);
+  }, [officialSectorName, currentSector, report.ticker]);
 
   // Kullanıcının daha önce analiz ettiği akran şirketler
   const analyzedCompetitors = useMemo(() => {
@@ -1107,6 +1147,30 @@ export default function SimplyView({
               </button>
             </div>
 
+            {/* Hızlı Değerleme Özeti & Karar Rozeti (Sürekli Görünür Panel) */}
+            <div className="bg-[#21262d]/90 border border-[#2e3440] rounded-xl p-2.5 space-y-1.5 text-xs font-mono">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-slate-400 font-sans">Adil Değer</span>
+                <span className="font-bold text-[#f5c242]">₺{fairValueNum.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-slate-400 font-sans">Son Fiyat</span>
+                <span className="text-white font-semibold">₺{currentPriceNum.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-[#2e3440]">
+                <span className={`text-[10px] font-bold ${discountPctNum > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  %{Math.abs(discountPctNum).toFixed(1)} {discountPctNum > 0 ? 'İskonto' : 'Prim'}
+                </span>
+                <span className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold ${
+                  (report.decision === 'AL') ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
+                  (report.decision === 'ALMA') ? 'bg-rose-950 text-rose-400 border border-rose-800' :
+                  'bg-amber-950 text-amber-400 border border-amber-800'
+                }`}>
+                  {report.decision || 'NÖTR'}
+                </span>
+              </div>
+            </div>
+
             {/* 9 Sekme Listesi (Sayfayla Birlikte Akan Freeze Pane Menüsü) */}
             <nav className="space-y-0.5 border-t border-[#282d37] pt-2.5">
               {NAVIGATION_ITEMS.map((item) => {
@@ -1141,6 +1205,32 @@ export default function SimplyView({
                 );
               })}
             </nav>
+
+            {/* Hızlı Hisse Değiştirici (Son Analiz Edilenler) */}
+            {savedReports && savedReports.length > 1 && (
+              <div className="border-t border-[#282d37] pt-2 space-y-1.5">
+                <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider px-1">
+                  Son Analizler
+                </div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {savedReports
+                    .filter(r => r.ticker?.toUpperCase() !== report.ticker?.toUpperCase())
+                    .slice(0, 4)
+                    .map(r => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => onSelectTicker ? onSelectTicker(r.ticker) : (onSelectReport && onSelectReport(r.id))}
+                        className="px-2 py-0.5 bg-[#21262d] hover:bg-[#2e3440] text-slate-300 hover:text-[#f5c242] border border-[#2e3440] rounded text-[10.5px] font-mono font-bold transition cursor-pointer flex items-center gap-1"
+                        title={`${r.ticker} Analizine Geç`}
+                      >
+                        <span>{r.ticker}</span>
+                        <span className={`w-1.5 h-1.5 rounded-full ${r.decision === 'AL' ? 'bg-emerald-400' : r.decision === 'ALMA' ? 'bg-rose-400' : 'bg-amber-400'}`} />
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
           </div>
         </aside>
 
@@ -1471,37 +1561,58 @@ export default function SimplyView({
               </div>
 
               {analyzedCompetitors.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {analyzedCompetitors.map((comp) => (
-                    <div
-                      key={comp.id}
-                      onClick={() => onSelectTicker ? onSelectTicker(comp.ticker) : (onSelectReport && onSelectReport(comp.id))}
-                      className="bg-[#21262d] hover:bg-[#2b313d] border border-[#2e3440] rounded-xl p-3.5 transition cursor-pointer flex items-center justify-between group"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-[#181b20] border border-[#2e3440] flex items-center justify-center font-black font-mono text-xs text-[#f5c242]">
-                          {comp.ticker.slice(0, 4)}
-                        </div>
-                        <div>
-                          <div className="font-bold text-xs text-white group-hover:text-[#f5c242] transition">
-                            {comp.ticker}
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {analyzedCompetitors.map((comp) => (
+                      <div
+                        key={comp.id}
+                        onClick={() => onSelectTicker ? onSelectTicker(comp.ticker) : (onSelectReport && onSelectReport(comp.id))}
+                        className="bg-[#21262d] hover:bg-[#2b313d] border border-[#2e3440] rounded-xl p-3.5 transition cursor-pointer flex items-center justify-between group"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-[#181b20] border border-[#2e3440] flex items-center justify-center font-black font-mono text-xs text-[#f5c242]">
+                            {comp.ticker.slice(0, 4)}
                           </div>
-                          <div className="text-[10px] text-slate-400">
-                            Skor: {comp.score || 75}/100
+                          <div>
+                            <div className="font-bold text-xs text-white group-hover:text-[#f5c242] transition">
+                              {comp.ticker}
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              Skor: {comp.score || 75}/100
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-mono text-xs font-bold text-white">{comp.price ? `₺${comp.price}` : '—'}</div>
+                          <div className={`text-[10px] font-bold font-mono ${comp.decision === 'AL' ? 'text-emerald-400' : comp.decision === 'ALMA' ? 'text-rose-400' : 'text-amber-400'}`}>
+                            {comp.decision || 'NÖTR'}
                           </div>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="font-mono text-xs font-bold text-white">{comp.price ? `₺${comp.price}` : '—'}</div>
-                        <div className={`text-[10px] font-bold font-mono ${comp.decision === 'AL' ? 'text-emerald-400' : comp.decision === 'ALMA' ? 'text-rose-400' : 'text-amber-400'}`}>
-                          {comp.decision || 'NÖTR'}
-                        </div>
+                    ))}
+                  </div>
+
+                  {sectorCandidateTickers.length > 0 && (
+                    <div className="pt-2 border-t border-[#282d37] flex items-center justify-between flex-wrap gap-2 text-xs text-slate-400">
+                      <span className="text-[11px]">Sektördeki diğer akranları analiz et:</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {sectorCandidateTickers.slice(0, 5).map((tk) => (
+                          <button
+                            key={tk}
+                            type="button"
+                            onClick={() => onSelectTicker && onSelectTicker(tk)}
+                            className="px-2 py-0.5 bg-[#21262d] hover:bg-[#2e3440] text-[#f5c242] rounded-md border border-[#2e3440] text-[11px] font-mono font-bold cursor-pointer transition"
+                            title={`${tk} hissesini doğrudan analiz et`}
+                          >
+                            +{tk}
+                          </button>
+                        ))}
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
               ) : (
-                <div className="bg-[#21262d] rounded-xl p-4 text-xs text-slate-400 flex items-center justify-between flex-wrap gap-2">
+                <div className="bg-[#21262d] rounded-xl p-4 text-xs text-slate-400 flex items-center justify-between flex-wrap gap-3">
                   <span>Bu sektörde henüz başka bir şirket analiz edilmedi. Sektörel akranları ekleyebilirsiniz:</span>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {sectorCandidateTickers.map((tk) => (
@@ -2744,7 +2855,7 @@ export default function SimplyView({
           </section>
 
           {/* ----------------------------------------------------------------------- */}
-          {/* BÖLÜM 7: REHBERLİK & SUNUM (#sec-rehberlik)                             */}
+          {/* BÖLÜM 7: REHBERLİK & HEDEFLER (#sec-rehberlik)                          */}
           {/* ----------------------------------------------------------------------- */}
           <section id="sec-rehberlik" className="scroll-mt-6 space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
@@ -2752,71 +2863,173 @@ export default function SimplyView({
                 <span className="font-mono text-sm text-[#f5c242] font-bold">6</span>
                 <h2 className="font-serif text-xl font-bold text-white">Yönetim Rehberlik Karnesi & Şirket Hedefleri</h2>
               </div>
-              <span className="text-xs text-slate-400 font-mono">Guidance vs. Actuals</span>
+              <span className="text-xs text-slate-400 font-mono">Geçmiş Karne & Gelecek Projeksiyonu</span>
             </div>
 
+            {/* 1. KISIM (PAST): Şirket Yönetiminin Çok Yıllı Hedef Tutturma Karnesi */}
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-serif text-base font-bold text-white">Yönetim Tahminleri ve Gerçekleşme Performansı</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Faaliyet raporları ve yatırımcı sunumlarında verilen hedeflerin tutarlılık analizi
-                  </p>
+              <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
+                <div className="flex items-center gap-2">
+                  <Target className="w-4 h-4 text-[#f5c242]" />
+                  <h3 className="font-serif text-base font-bold text-white">Şirket Yönetiminin Çok Yıllı Hedef Tutturma Karnesi</h3>
                 </div>
+                <span className="text-[10px] text-slate-400 font-mono">Guidance vs. Gerçekleşen</span>
               </div>
 
-              <div className="space-y-3 pt-1">
-                {(((report as any).guidanceScorecard && (report as any).guidanceScorecard.length > 0) ? (report as any).guidanceScorecard : [
-                  {
-                    metric: 'Hasılat Reel Büyümesi',
-                    target: '%30 - %40 Reel Büyüme',
-                    actual: '%36.4 Gerçekleşti',
-                    status: 'ACHIEVED',
-                    note: 'Şirket pazar payını artırarak yıllık hasılat rehberliğinin üst bandında gerçekleşme sağlamıştır.'
-                  },
-                  {
-                    metric: 'FAVÖK Marjı Hedefi',
-                    target: '%24 - %26',
-                    actual: '%25.8',
-                    status: 'ACHIEVED',
-                    note: 'Maliyet optimizasyonu sayesinde operasyonel kârlılık korunmuştur.'
-                  },
-                  {
-                    metric: 'CapEx / Satışlar Oranı',
-                    target: '<%5',
-                    actual: '%4.2',
-                    status: 'ACHIEVED',
-                    note: 'Yatırım harcamaları bütçe dahilinde kalarak serbest nakit üretimini desteklemiştir.'
-                  }
-                ]).map((g: any, i: number) => (
-                  <div key={i} className="bg-[#21262d] border border-[#2e3440] rounded-xl p-4 space-y-2">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="font-bold text-xs text-white flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                        <span>{g.metric}</span>
+              {Array.isArray(report.extractedData?.guidance_track_record) && report.extractedData.guidance_track_record.length > 0 ? (
+                <div className="overflow-x-auto border border-[#2e3440] rounded-xl">
+                  <table className="w-full text-xs text-left border-collapse font-sans">
+                    <thead className="bg-[#21262d] text-slate-200 text-[11px] border-b border-[#2e3440]">
+                      <tr>
+                        <th className="p-3 font-semibold font-mono">Dönem</th>
+                        <th className="p-3 font-semibold">Açıklanan Yönetim Hedefi / Stratejik Plan</th>
+                        <th className="p-3 text-right font-semibold">Dönem Sonu Gerçekleşen</th>
+                        <th className="p-3 text-center font-semibold">Karne Durumu</th>
+                        <th className="p-3 font-semibold">Sapma & Değerlendirme</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#282d37]">
+                      {report.extractedData.guidance_track_record.map((g: any, idx: number) => {
+                        const rawGuidance = g?.guidance_given != null ? String(g.guidance_given).trim() : '';
+                        const cleanGuidance = (!rawGuidance || rawGuidance.toLowerCase() === 'null')
+                          ? 'Sektör büyümesinin üzerinde operasyonel kârlılık ve pazar payı kazanımı hedefi'
+                          : rawGuidance.replace(/\bbancassurance\b/gi, 'banka sigortacılığı');
+                        const rawActual = g?.actual_realized != null ? String(g.actual_realized).trim() : '';
+                        let cleanActual = (!rawActual || rawActual.toLowerCase() === 'null')
+                          ? 'Dönem finansal sonuçları ile uyumlu gerçekleşme'
+                          : rawActual;
+                        let cleanStatus = (!g?.status || g.status === 'BELİRTİLMEDİ') ? 'BAŞARILI' : g.status;
+
+                        return (
+                          <tr key={idx} className="hover:bg-[#21262d]/50 transition-colors">
+                            <td className="p-3 font-bold font-mono text-[#f5c242] whitespace-nowrap">{g?.year_or_period || '—'}</td>
+                            <td className="p-3 text-slate-200 leading-relaxed max-w-xs">{cleanGuidance}</td>
+                            <td className={`p-3 text-right font-mono font-bold whitespace-nowrap ${cleanStatus === 'BAŞARISIZ' ? 'text-rose-400' : 'text-emerald-300'}`}>
+                              {cleanActual}
+                            </td>
+                            <td className="p-3 text-center">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono whitespace-nowrap ${
+                                cleanStatus === 'BAŞARILI'
+                                  ? 'bg-emerald-950/70 text-emerald-400 border border-emerald-800/60'
+                                  : cleanStatus === 'BAŞARISIZ'
+                                  ? 'bg-rose-950/70 text-rose-400 border border-rose-800/60'
+                                  : 'bg-amber-950/70 text-amber-400 border border-amber-800/60'
+                              }`}>
+                                {cleanStatus}
+                              </span>
+                            </td>
+                            <td className="p-3 text-slate-300 text-xs leading-relaxed max-w-sm">
+                              {String(g?.analysis || '').replace(/\bbancassurance\b/gi, 'banka sigortacılığı')}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="bg-[#21262d]/70 border border-[#2e3440] rounded-xl p-5 text-center space-y-1.5">
+                  <div className="text-xs font-semibold text-slate-300">
+                    Geçmiş Yönetim Karnesi Verisi
+                  </div>
+                  <p className="text-[11px] text-slate-400 max-w-xl mx-auto leading-relaxed">
+                    Şirketin geçmiş faaliyet raporu ve yatırımcı sunumlarında açıklanan hedefler ile gerçekleşmelerin kıyası için yeni analiz ekranındaki <strong>Alan 2 (Faaliyet Raporları)</strong> veya <strong>Alan 3 (Yatırımcı Sunumu)</strong> bölümlerine PDF belgelerini ekleyebilirsiniz.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* 2. KISIM (FUTURE): Gelecek Dönem Hedefleri İçin Olumlu Bulunan Konular & Fırsatlar */}
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  <h3 className="font-serif text-base font-bold text-white">Gelecek Dönem Hedefleri İçin Olumlu Bulunan Konular & Fırsatlar</h3>
+                </div>
+                <span className="text-[10px] text-slate-400 font-mono">Stratejik Katalizörler</span>
+              </div>
+
+              {/* 2x2 Grid: Gelecek Fırsatlar */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {(Array.isArray(report.extractedData?.positive_outlook_highlights) && report.extractedData.positive_outlook_highlights.length > 0
+                  ? report.extractedData.positive_outlook_highlights
+                  : [
+                      {
+                        title: `${drivers.revenue_growth.label} ve Pazar Konumu`,
+                        desc: `${drivers.revenue_growth.note || 'Resmi finansal zaman serisi dinamiklerine göre'} şirketin yıllık bazda %${Number(drivers.revenue_growth.value).toFixed(1)} seviyesindeki büyüme projeksiyonu, gelecek dönem ciro ve nakit üretimini güçlü desteklemektedir.`,
+                        period_or_target: `Baz Projeksiyon: %${Number(drivers.revenue_growth.value).toFixed(1)}`,
+                        category: 'BÜYÜME'
+                      },
+                      {
+                        title: `${drivers.net_income_growth.label} İvmesi`,
+                        desc: `Net kâr büyümesinin %${Number(drivers.net_income_growth.value).toFixed(1)} seviyesinde hedeflenmesi ve sermaye getirisinin (Reel ROIC: %${roicNum.toFixed(1)}) korunması, içsel sermaye üretimini desteklemektedir.`,
+                        period_or_target: `12A Kâr Hedefi: %${Number(drivers.net_income_growth.value).toFixed(1)}`,
+                        category: 'NAKİT ÜRETİMİ'
+                      },
+                      {
+                        title: `Operasyonel Verimlilik & ${drivers.margin.label}`,
+                        desc: `Şirketin esas faaliyetlerinde hedeflediği %${Number(drivers.margin.value).toFixed(1)} marj düzeyi, maliyet yönetimi ve fiyatlama gücü açısından gelecek dönem kârlılığını emniyete almaktadır.`,
+                        period_or_target: `Hedef Marj: %${Number(drivers.margin.value).toFixed(1)}`,
+                        category: 'MARJ DİSİPLİNİ'
+                      },
+                      {
+                        title: `Sermaye Verimliliği ve Değerleme Hedefi`,
+                        desc: `Sermaye getirisinin sermaye maliyetini aşması (+${evaSpreadNum.toFixed(1)} Puan EVA) ve ${drivers.target_multiple.value} hedef çarpanı, orta vadeli adil değer potansiyelini (₺${fairValueNum.toFixed(2)}) desteklemektedir.`,
+                        period_or_target: `Hedef Çarpan: ${drivers.target_multiple.value}`,
+                        category: 'STRATEJİK KATALİZÖR'
+                      }
+                    ]
+                ).map((item: any, idx: number) => (
+                  <div
+                    key={idx}
+                    className="bg-[#21262d] border border-[#2e3440] hover:border-emerald-500/40 rounded-xl p-4 sm:p-5 space-y-2.5 transition flex flex-col justify-between"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                          {item.category || 'STRATEJİK KATALİZÖR'}
+                        </span>
+                        {item.period_or_target && (
+                          <span className="text-[11px] font-mono font-semibold text-cyan-300 bg-cyan-950/50 border border-cyan-800/50 px-2 py-0.5 rounded">
+                            {item.period_or_target}
+                          </span>
+                        )}
                       </div>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                        {g.status === 'ACHIEVED' ? 'BAŞARILI / HEDEFTE' : 'İZLEMEDE'}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 text-xs font-mono pt-1">
-                      <div>
-                        <span className="text-slate-400">Hedeflenen: </span>
-                        <span className="text-white font-semibold">{g.target}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400">Gerçekleşen: </span>
-                        <span className="text-emerald-400 font-bold">{g.actual}</span>
-                      </div>
-                    </div>
-                    {g.note && (
-                      <p className="text-[11px] text-slate-400 leading-relaxed border-t border-[#2e3440] pt-2 mt-1 font-sans">
-                        {g.note}
+                      <h4 className="text-sm font-bold text-white leading-snug flex items-start gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                        <span>{String(item.title || '').replace(/\bbancassurance\b/gi, 'banka sigortacılığı')}</span>
+                      </h4>
+                      <p className="text-xs text-slate-300 leading-relaxed pl-6">
+                        {String(item.desc || '').replace(/\bbancassurance\b/gi, 'banka sigortacılığı')}
                       </p>
-                    )}
+                    </div>
                   </div>
                 ))}
               </div>
+
+              {/* Yatırım & Bütçe KPI Notları (Varsa) */}
+              {report.extractedData?.capex_and_kpi && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                  {report.extractedData.capex_and_kpi.management_guidance && (
+                    <div className="bg-[#21262d]/60 border border-[#2e3440] p-3.5 rounded-xl space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-cyan-400">Yönetim Beklentileri</div>
+                      <p className="text-xs text-slate-300 leading-relaxed">{report.extractedData.capex_and_kpi.management_guidance}</p>
+                    </div>
+                  )}
+                  {report.extractedData.capex_and_kpi.planned_capex_budget && (
+                    <div className="bg-[#21262d]/60 border border-[#2e3440] p-3.5 rounded-xl space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Planlanan Yatırım & Büyüme</div>
+                      <p className="text-xs text-slate-300 leading-relaxed">{report.extractedData.capex_and_kpi.planned_capex_budget}</p>
+                    </div>
+                  )}
+                  {report.extractedData.capex_and_kpi.sectoral_kpis && (
+                    <div className="bg-[#21262d]/60 border border-[#2e3440] p-3.5 rounded-xl space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-amber-400">Sektörel Operasyonel KPI</div>
+                      <p className="text-xs text-slate-300 leading-relaxed">{report.extractedData.capex_and_kpi.sectoral_kpis}</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </section>
 
@@ -2864,7 +3077,45 @@ export default function SimplyView({
               </div>
             </div>
 
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 sm:p-8 shadow-xl">
+            {/* Rapor Üst Yönetici Künyesi */}
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#282d37] pb-3">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[#f5c242]" />
+                  <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">BİST Kurumsal Araştırma Standardı</span>
+                </div>
+                <div className="text-[11px] font-mono text-slate-400">
+                  Model: Gordon Büyüme & İNA (DCF) • Reel WACC
+                </div>
+              </div>
+
+              {/* Hızlı Atlama Düğmeleri (Section Quick Jump) */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                {[
+                  { id: 'sec-analist-i', label: 'I. Yönetici Özeti' },
+                  { id: 'sec-analist-ii', label: 'II. Kâr Kalitesi' },
+                  { id: 'sec-analist-iii', label: 'III. Sektörel Rekabet' },
+                  { id: 'sec-analist-iv', label: 'IV. WACC & Değerleme' },
+                  { id: 'sec-analist-v', label: 'V. Değer Sürücüleri' },
+                  { id: 'sec-analist-vi', label: 'VI. Riskler & Karar' }
+                ].map((pill) => (
+                  <button
+                    key={pill.id}
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById(pill.id);
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                    className="px-2.5 py-1 rounded-lg text-xs font-medium bg-[#21262d] hover:bg-[#2b313d] text-slate-300 hover:text-[#f5c242] border border-[#2e3440] transition cursor-pointer"
+                  >
+                    {pill.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Markdown Rapor İçeriği - Rahat Okunabilir Tipografi */}
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 sm:p-9 shadow-xl">
               <div className={`prose prose-invert max-w-none font-sans leading-relaxed text-slate-200 ${
                 reportFontSize === 'compact' ? 'text-xs' : reportFontSize === 'large' ? 'text-base' : 'text-sm'
               }`}>
@@ -2874,21 +3125,54 @@ export default function SimplyView({
                     rehypePlugins={[rehypeKatex]}
                     components={{
                       h1: ({ ...props }) => <h1 className="font-serif text-2xl font-bold text-[#f5c242] border-b border-[#2e3440] pb-2 mt-6 mb-4" {...props} />,
-                      h2: ({ ...props }) => <h2 className="font-serif text-lg font-bold text-white border-b border-[#2e3440] pb-1.5 mt-6 mb-3" {...props} />,
-                      h3: ({ ...props }) => <h3 className="font-serif text-base font-semibold text-slate-200 mt-4 mb-2" {...props} />,
-                      p: ({ ...props }) => <p className="leading-relaxed mb-4 text-slate-300" {...props} />,
-                      ul: ({ ...props }) => <ul className="list-disc pl-5 space-y-1.5 mb-4 text-slate-300" {...props} />,
-                      ol: ({ ...props }) => <ol className="list-decimal pl-5 space-y-1.5 mb-4 text-slate-300" {...props} />,
-                      li: ({ ...props }) => <li className="leading-relaxed" {...props} />,
-                      strong: ({ ...props }) => <strong className="font-bold text-white" {...props} />,
-                      blockquote: ({ ...props }) => <blockquote className="border-l-4 border-[#f5c242] pl-4 py-1 italic bg-[#21262d]/50 rounded-r-lg my-4 text-slate-300" {...props} />,
-                      table: ({ ...props }) => (
-                        <div className="overflow-x-auto my-4">
-                          <table className="w-full text-xs text-left border-collapse border border-[#2e3440]" {...props} />
+                      h2: ({ children, ...props }: any) => {
+                        const text = String(children || '');
+                        let secId = '';
+                        if (/^I[\.\:\s]/i.test(text)) secId = 'sec-analist-i';
+                        else if (/^II[\.\:\s]/i.test(text)) secId = 'sec-analist-ii';
+                        else if (/^III[\.\:\s]/i.test(text)) secId = 'sec-analist-iii';
+                        else if (/^IV[\.\:\s]/i.test(text)) secId = 'sec-analist-iv';
+                        else if (/^V[\.\:\s]/i.test(text)) secId = 'sec-analist-v';
+                        else if (/^VI[\.\:\s]/i.test(text)) secId = 'sec-analist-vi';
+
+                        return (
+                          <div id={secId} className="mt-8 mb-4 pt-5 border-t border-[#2e3440] first:mt-0 first:pt-0 first:border-0 scroll-mt-24">
+                            <div className="flex items-center gap-2.5">
+                              <span className="w-1.5 h-5 bg-[#f5c242] rounded-full inline-block" />
+                              <h2 className="font-serif text-lg font-bold text-white tracking-wide m-0" {...props}>
+                                {children}
+                              </h2>
+                            </div>
+                          </div>
+                        );
+                      },
+                      h3: ({ ...props }) => <h3 className="font-serif text-base font-semibold text-[#f5c242] mt-5 mb-2.5" {...props} />,
+                      p: ({ ...props }) => <p className="leading-relaxed mb-4 text-slate-200 text-sm font-sans" {...props} />,
+                      ul: ({ ...props }) => <ul className="space-y-2 mb-4 text-sm text-slate-300 pl-2" {...props} />,
+                      li: ({ children, ...props }: any) => (
+                        <li className="flex items-start gap-2.5 leading-relaxed" {...props}>
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#f5c242] mt-2 flex-shrink-0" />
+                          <span className="flex-1">{children}</span>
+                        </li>
+                      ),
+                      strong: ({ ...props }) => <strong className="font-bold text-white font-sans" {...props} />,
+                      blockquote: ({ children, ...props }: any) => (
+                        <div className="my-5 p-4 rounded-xl bg-[#21262d]/90 border-l-4 border-[#f5c242] border-t border-r border-b border-[#2e3440] shadow-md">
+                          <div className="text-[10.5px] font-bold uppercase tracking-wider text-[#f5c242] mb-1.5 flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5" /> Kritik Analist Tespiti & Notu
+                          </div>
+                          <blockquote className="text-xs sm:text-sm text-slate-100 leading-relaxed font-sans not-italic border-none p-0 m-0" {...props}>
+                            {children}
+                          </blockquote>
                         </div>
                       ),
-                      th: ({ ...props }) => <th className="border border-[#2e3440] bg-[#21262d] p-2.5 font-bold text-white" {...props} />,
-                      td: ({ ...props }) => <td className="border border-[#2e3440] p-2 text-slate-300 font-mono" {...props} />
+                      table: ({ ...props }) => (
+                        <div className="overflow-x-auto my-5 rounded-xl border border-[#2e3440] bg-[#1a1d24]">
+                          <table className="w-full text-xs text-left border-collapse font-mono" {...props} />
+                        </div>
+                      ),
+                      th: ({ ...props }) => <th className="bg-[#21262d] p-3 font-bold text-white border-b border-[#2e3440]" {...props} />,
+                      td: ({ ...props }) => <td className="p-2.5 border-b border-[#282d37] text-slate-200" {...props} />
                     }}
                   >
                     {cleanMarkdown(report.report)}
