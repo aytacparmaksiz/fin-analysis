@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -324,6 +324,12 @@ function calculateDriverPin(
 function cleanMarkdown(text: string): string {
   if (!text) return '';
   let cleaned = text;
+  cleaned = cleaned.replace(/\*\*\[AL\]\*\*/gi, '**AL (Yatırım Önerisi)**');
+  cleaned = cleaned.replace(/\*\*\[ALMA\]\*\*/gi, '**ALMA (Risk / Primli)**');
+  cleaned = cleaned.replace(/\*\*\[TUT\]\*\*/gi, '**TUT (Dengeli Görünüm)**');
+  cleaned = cleaned.replace(/\[AL\]/g, 'AL');
+  cleaned = cleaned.replace(/\[ALMA\]/g, 'ALMA');
+  cleaned = cleaned.replace(/\[TUT\]/g, 'TUT');
   cleaned = cleaned.replace(/🚨\s*\[KIRMIZI BAYRAK\]\s*ve\s*Yatırım Tezi\s*\(Storytelling\)/gi, '## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ');
   cleaned = cleaned.replace(/🚨\s*\[KIRMIZI BAYRAK\]\s*ve\s*Yatırım Tezi/gi, '## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ');
   cleaned = cleaned.replace(/\[KIRMIZI BAYRAK\]/gi, 'Kritik Tespit:');
@@ -499,14 +505,111 @@ export default function SimplyView({
     latestData
   ]);
 
-  // Kar Tanesi SVG Koordinatları
+  // Kar Tanesi SVG Koordinatları (280x280 viewBox, cx=140, cy=140, maxRadius=95)
   const radarPoints = useMemo(() => {
-    return getSnowflakeCoordinates(snowflake.axes, 120, 120, 85);
+    return getSnowflakeCoordinates(snowflake.axes, 140, 140, 95);
   }, [snowflake.axes]);
 
   const smoothRadarPath = useMemo(() => {
     return generateSmoothSnowflakePath(radarPoints);
   }, [radarPoints]);
+
+  // Kar Tanesi Dinamik Renk & Tonlama (İyi durumda yeşil, dengeliyse sarı/amber, kötüyse turuncu/kırmızı)
+  const snowflakeTheme = useMemo(() => {
+    const score = snowflake.totalScore;
+    if (score >= 20) {
+      return {
+        status: 'Çok Güçlü',
+        statusColor: '#10b981',
+        stroke: '#10b981',
+        glow: 'rgba(16, 185, 129, 0.45)',
+        gradId: 'snowflakeGradGreen',
+        badgeClass: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+      };
+    } else if (score >= 13) {
+      return {
+        status: 'Dengeli',
+        statusColor: '#f5c242',
+        stroke: '#f5c242',
+        glow: 'rgba(245, 194, 66, 0.45)',
+        gradId: 'snowflakeGradAmber',
+        badgeClass: 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+      };
+    } else {
+      return {
+        status: 'Riskli',
+        statusColor: '#ef4444',
+        stroke: '#ef4444',
+        glow: 'rgba(239, 68, 68, 0.45)',
+        gradId: 'snowflakeGradRed',
+        badgeClass: 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+      };
+    }
+  }, [snowflake.totalScore]);
+
+  // Rasyolar Ekranı Isı Haritası (Heatmap) Durumu ve Hesaplayıcı
+  const [isHeatmapActive, setIsHeatmapActive] = useState(true);
+
+  const getRatioHeatmapClass = useCallback((key: string, rawVal: number | null, sec: SectorType): string => {
+    if (!isHeatmapActive || rawVal === null || isNaN(rawVal)) return '';
+    switch (key) {
+      case 'current_ratio': {
+        const minGood = (sec === 'INSURANCE' || sec === 'REIT') ? 1.10 : (sec === 'RETAIL' ? 0.60 : 1.50);
+        const minWarn = (sec === 'INSURANCE' || sec === 'REIT') ? 0.95 : (sec === 'RETAIL' ? 0.45 : 1.00);
+        if (rawVal >= minGood) return 'bg-emerald-950/50 text-emerald-300 font-semibold border-b border-emerald-800/40';
+        if (rawVal >= minWarn) return 'bg-amber-950/40 text-amber-300 border-b border-amber-800/40';
+        return 'bg-rose-950/50 text-rose-300 border-b border-rose-800/40';
+      }
+      case 'quick_ratio': {
+        if (rawVal >= 1.00) return 'bg-emerald-950/50 text-emerald-300 font-semibold';
+        if (rawVal >= 0.75) return 'bg-amber-950/40 text-amber-300';
+        return 'bg-rose-950/50 text-rose-300';
+      }
+      case 'cash_ratio': {
+        if (rawVal >= 0.30) return 'bg-emerald-950/50 text-emerald-300 font-semibold';
+        if (rawVal >= 0.15) return 'bg-amber-950/40 text-amber-300';
+        return 'bg-rose-950/50 text-rose-300';
+      }
+      case 'leverage_ratio': {
+        if (rawVal <= 100) return 'bg-emerald-950/50 text-emerald-300 font-semibold';
+        if (rawVal <= 200) return 'bg-amber-950/40 text-amber-300';
+        return 'bg-rose-950/50 text-rose-300';
+      }
+      case 'debt_to_ebitda': {
+        if (rawVal <= 0) return 'bg-emerald-950/50 text-emerald-300 font-bold';
+        if (rawVal <= 1.5) return 'bg-emerald-950/50 text-emerald-300 font-semibold';
+        if (rawVal <= 3.0) return 'bg-amber-950/40 text-amber-300';
+        return 'bg-rose-950/50 text-rose-300';
+      }
+      case 'gross_margin': {
+        if (rawVal >= 35.0) return 'bg-emerald-950/50 text-emerald-300 font-semibold';
+        if (rawVal >= 20.0) return 'bg-amber-950/40 text-amber-300';
+        return 'bg-rose-950/50 text-rose-300';
+      }
+      case 'ebitda_margin': {
+        if (rawVal >= 20.0) return 'bg-emerald-950/50 text-emerald-300 font-semibold';
+        if (rawVal >= 10.0) return 'bg-amber-950/40 text-amber-300';
+        return 'bg-rose-950/50 text-rose-300';
+      }
+      case 'net_margin': {
+        if (rawVal >= 15.0) return 'bg-emerald-950/50 text-emerald-300 font-semibold';
+        if (rawVal >= 7.0) return 'bg-amber-950/40 text-amber-300';
+        return 'bg-rose-950/50 text-rose-300';
+      }
+      case 'roe': {
+        if (rawVal >= 35.0) return 'bg-emerald-950/50 text-emerald-300 font-semibold';
+        if (rawVal >= 20.0) return 'bg-amber-950/40 text-amber-300';
+        return 'bg-rose-950/50 text-rose-300';
+      }
+      case 'roa': {
+        if (rawVal >= 8.0) return 'bg-emerald-950/50 text-emerald-300 font-semibold';
+        if (rawVal >= 4.0) return 'bg-amber-950/40 text-amber-300';
+        return 'bg-rose-950/50 text-rose-300';
+      }
+      default:
+        return '';
+    }
+  }, [isHeatmapActive]);
 
   // İş Yatırım Resmi Sektör Tanımı ve Sektörel Akranlar
   const isYatirimEntry = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[report.ticker.toUpperCase()];
@@ -971,35 +1074,93 @@ export default function SimplyView({
     }
   ], []);
 
-  // Rasyolar Bölümleri
+  // Rasyolar Bölümleri (Isı Haritası için dinamik raw değerler dahil)
   const ratiosSections = useMemo(() => [
     {
       id: 'likidite',
       title: 'Likidite Rasyoları',
       rows: [
-        { label: 'Cari Oran (Likidite)', calc: (c: any) => c.current_liabilities ? (c.current_assets / c.current_liabilities).toFixed(2) + 'x' : '—', isHighlight: true },
-        { label: 'Likidite (Asit-Test) Oranı', calc: (c: any) => c.current_liabilities ? ((c.current_assets - (c.inventories || 0)) / c.current_liabilities).toFixed(2) + 'x' : '—' },
-        { label: 'Nakit Oranı', calc: (c: any) => c.current_liabilities ? ((c.cash_and_equivalents || c.cash || 0) / c.current_liabilities).toFixed(2) + 'x' : '—' }
+        {
+          key: 'current_ratio',
+          label: 'Cari Oran (Likidite)',
+          calc: (c: any) => c.current_liabilities ? (c.current_assets / c.current_liabilities).toFixed(2) + 'x' : '—',
+          raw: (c: any) => c.current_liabilities ? (c.current_assets / c.current_liabilities) : null,
+          isHighlight: true
+        },
+        {
+          key: 'quick_ratio',
+          label: 'Likidite (Asit-Test) Oranı',
+          calc: (c: any) => c.current_liabilities ? ((c.current_assets - (c.inventories || 0)) / c.current_liabilities).toFixed(2) + 'x' : '—',
+          raw: (c: any) => c.current_liabilities ? ((c.current_assets - (c.inventories || 0)) / c.current_liabilities) : null
+        },
+        {
+          key: 'cash_ratio',
+          label: 'Nakit Oranı',
+          calc: (c: any) => c.current_liabilities ? ((c.cash_and_equivalents || c.cash || 0) / c.current_liabilities).toFixed(2) + 'x' : '—',
+          raw: (c: any) => c.current_liabilities ? ((c.cash_and_equivalents || c.cash || 0) / c.current_liabilities) : null
+        }
       ]
     },
     {
       id: 'borcluluk',
       title: 'Borçluluk ve Kaldıraç Rasyoları',
       rows: [
-        { label: 'Kaldıraç Oranı (Toplam Borç / Özkaynak)', calc: (c: any) => c.equity ? ((c.total_assets - c.equity) / c.equity * 100).toFixed(1) + '%' : '—' },
-        { label: 'Net Borç / FAVÖK', calc: (c: any) => c.ebitda && c.ebitda > 0 ? (c.net_debt / c.ebitda).toFixed(2) + 'x' : '—', isHighlight: true },
-        { label: 'Borç / Aktif Oranı', calc: (c: any) => c.total_assets ? (c.total_liabilities / c.total_assets * 100).toFixed(1) + '%' : '—' }
+        {
+          key: 'leverage_ratio',
+          label: 'Kaldıraç Oranı (Toplam Borç / Özkaynak)',
+          calc: (c: any) => c.equity ? ((c.total_assets - c.equity) / c.equity * 100).toFixed(1) + '%' : '—',
+          raw: (c: any) => c.equity ? ((c.total_assets - c.equity) / c.equity * 100) : null
+        },
+        {
+          key: 'debt_to_ebitda',
+          label: 'Net Borç / FAVÖK',
+          calc: (c: any) => c.ebitda && c.ebitda > 0 ? (c.net_debt / c.ebitda).toFixed(2) + 'x' : (c.net_debt <= 0 ? 'Net Nakit' : '—'),
+          raw: (c: any) => c.ebitda && c.ebitda > 0 ? (c.net_debt / c.ebitda) : (c.net_debt <= 0 ? 0 : null),
+          isHighlight: true
+        },
+        {
+          key: 'debt_to_assets',
+          label: 'Borç / Aktif Oranı',
+          calc: (c: any) => c.total_assets ? (c.total_liabilities / c.total_assets * 100).toFixed(1) + '%' : '—',
+          raw: (c: any) => c.total_assets ? (c.total_liabilities / c.total_assets * 100) : null
+        }
       ]
     },
     {
       id: 'karlilik',
       title: 'Kârlılık ve Sermaye Getirisi Rasyoları',
       rows: [
-        { label: 'Brüt Kâr Marjı', calc: (c: any) => c.revenue ? ((c.gross_profit || (c.revenue * 0.4)) / c.revenue * 100).toFixed(1) + '%' : '—' },
-        { label: 'FAVÖK Marjı', calc: (c: any) => c.revenue ? ((c.ebitda || (c.revenue * 0.25)) / c.revenue * 100).toFixed(1) + '%' : '—' },
-        { label: 'Net Kâr Marjı', calc: (c: any) => c.revenue ? ((c.net_income || (c.revenue * 0.15)) / c.revenue * 100).toFixed(1) + '%' : '—' },
-        { label: 'Özkaynak Kârlılığı (ROE)', calc: (c: any) => c.equity ? (c.net_income / c.equity * 100).toFixed(1) + '%' : '—', isHighlight: true },
-        { label: 'Aktif Kârlılığı (ROA)', calc: (c: any) => c.total_assets ? (c.net_income / c.total_assets * 100).toFixed(1) + '%' : '—' }
+        {
+          key: 'gross_margin',
+          label: 'Brüt Kâr Marjı',
+          calc: (c: any) => c.revenue ? ((c.gross_profit || (c.revenue * 0.4)) / c.revenue * 100).toFixed(1) + '%' : '—',
+          raw: (c: any) => c.revenue ? ((c.gross_profit || (c.revenue * 0.4)) / c.revenue * 100) : null
+        },
+        {
+          key: 'ebitda_margin',
+          label: 'FAVÖK Marjı',
+          calc: (c: any) => c.revenue ? ((c.ebitda || (c.revenue * 0.25)) / c.revenue * 100).toFixed(1) + '%' : '—',
+          raw: (c: any) => c.revenue ? ((c.ebitda || (c.revenue * 0.25)) / c.revenue * 100) : null
+        },
+        {
+          key: 'net_margin',
+          label: 'Net Kâr Marjı',
+          calc: (c: any) => c.revenue ? ((c.net_income || (c.revenue * 0.15)) / c.revenue * 100).toFixed(1) + '%' : '—',
+          raw: (c: any) => c.revenue ? ((c.net_income || (c.revenue * 0.15)) / c.revenue * 100) : null
+        },
+        {
+          key: 'roe',
+          label: 'Özkaynak Kârlılığı (ROE)',
+          calc: (c: any) => c.equity ? (c.net_income / c.equity * 100).toFixed(1) + '%' : '—',
+          raw: (c: any) => c.equity ? (c.net_income / c.equity * 100) : null,
+          isHighlight: true
+        },
+        {
+          key: 'roa',
+          label: 'Aktif Kârlılığı (ROA)',
+          calc: (c: any) => c.total_assets ? (c.net_income / c.total_assets * 100).toFixed(1) + '%' : '—',
+          raw: (c: any) => c.total_assets ? (c.net_income / c.total_assets * 100) : null
+        }
       ]
     }
   ], []);
@@ -1240,12 +1401,21 @@ export default function SimplyView({
         <div className="flex-1 min-w-0 space-y-8">
 
           {/* ----------------------------------------------------------------------- */}
-          {/* BÖLÜM 1: ÖZET (#sec-ozet)                                               */}
+          {/* BÖLÜM 1: GENEL BAKIŞ & SNOWFLAKE (#sec-ozet)                             */}
           {/* ----------------------------------------------------------------------- */}
-          <section id="sec-ozet" className="scroll-mt-6 space-y-6">
+          <section id="sec-ozet" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
+            <div className="flex items-center justify-between border-b border-[#282d37] pb-4 flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <span className="px-2.5 py-1 rounded-md bg-[#f5c242]/15 text-[#f5c242] font-bold border border-[#f5c242]/30 text-xs font-mono">ÖZET</span>
+                <div>
+                  <h2 className="font-serif text-xl sm:text-2xl font-bold text-white tracking-tight">Genel Bakış & Kar Tanesi (Snowflake)</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Şirket profili, anlık piyasa değerlemesi ve 5 eksenli finansal sağlık radarı</p>
+                </div>
+              </div>
+            </div>
 
-            {/* Üst Şirket Bilgi ve Fiyat Özeti Kartı */}
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 sm:p-8 shadow-xl space-y-6">
+            {/* Sub-Card 1: Üst Şirket Bilgi ve Fiyat Özeti Kartı */}
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-xl p-6 sm:p-7 shadow-md space-y-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-[#282d37]">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
@@ -1391,38 +1561,241 @@ export default function SimplyView({
               </div>
             </div>
 
-            {/* Snowflake Analiz Kartı (5 Eksenli Radar) */}
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 sm:p-7 shadow-xl space-y-6">
-              <div className="flex items-center justify-between">
+            {/* Sub-Card 2: Snowflake (Kar Tanesi) Analiz Kartı (SVG Radar + 5 Eksen + Ödüller) */}
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-xl p-5 sm:p-7 shadow-md space-y-6">
+              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#282d37] pb-4">
                 <div>
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-[#f5c242]" />
-                    <h3 className="font-serif text-lg font-bold text-white">Snowflake Analysis</h3>
+                    <h3 className="font-serif text-lg sm:text-xl font-bold text-white">Snowflake (Kar Tanesi) Analizi</h3>
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    5 eksenli kurumsal finansal sağlamlık ve değerleme radarı
+                    5 eksenli (Değer, Gelecek, Geçmiş, Mali Sağlık, Temettü) bütünleşik kurumsal finansal karne
                   </p>
                 </div>
-                <div className="text-right">
-                  <div className="text-2xl font-black font-mono text-[#f5c242]">
-                    {snowflake.totalScore}/30
+
+                <div className="flex items-center gap-3">
+                  <div className={`px-3.5 py-1.5 rounded-xl border text-xs font-mono font-bold flex items-center gap-2 shadow-sm ${snowflakeTheme.badgeClass}`}>
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: snowflakeTheme.statusColor }} />
+                    <span>{snowflakeTheme.status}</span>
+                    <span className="text-white/60">•</span>
+                    <span>%{snowflake.percentage}</span>
                   </div>
-                  <span className="text-[11px] font-bold text-slate-400 uppercase font-mono">Toplam Puan</span>
+
+                  <div className="text-right pl-3 border-l border-[#2b313d]">
+                    <div className="text-2xl font-black font-mono" style={{ color: snowflakeTheme.statusColor }}>
+                      {snowflake.totalScore}/30
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase font-mono tracking-wider">Toplam Skor</span>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 pt-2">
-                {Object.values(snowflake.axes).map((axis: any) => (
-                  <div key={axis.key} className="bg-[#21262d] border border-[#2e3440] rounded-xl p-3 text-center space-y-1">
-                    <div className="text-xs font-semibold text-slate-300">{axis.label}</div>
-                    <div className="text-lg font-black font-mono text-[#f5c242]">
-                      {axis.score}/6
-                    </div>
-                    <div className="text-[10px] text-slate-400 leading-tight">
-                      {axis.score >= 5 ? 'Çok Güçlü' : axis.score >= 3 ? 'Dengeli' : 'Riskli'}
-                    </div>
+              {/* SVG Radar Görseli & 5 Eksen Kartları */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                {/* Sol: Dinamik Renkli Organik SVG Snowflake Radarı (5 Kolon) */}
+                <div className="lg:col-span-5 flex flex-col items-center justify-center p-3 bg-[#14171d] rounded-2xl border border-[#262c37] relative">
+                  <svg
+                    viewBox="0 0 280 280"
+                    className="w-full max-w-[280px] h-auto overflow-visible select-none"
+                  >
+                    <defs>
+                      <linearGradient id="snowflakeGradGreen" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity="0.75" />
+                        <stop offset="100%" stopColor="#047857" stopOpacity="0.35" />
+                      </linearGradient>
+                      <linearGradient id="snowflakeGradAmber" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#f5c242" stopOpacity="0.75" />
+                        <stop offset="100%" stopColor="#b45309" stopOpacity="0.35" />
+                      </linearGradient>
+                      <linearGradient id="snowflakeGradRed" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#f97316" stopOpacity="0.75" />
+                        <stop offset="100%" stopColor="#b91c1c" stopOpacity="0.35" />
+                      </linearGradient>
+
+                      <filter id="snowflakeGlow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feGaussianBlur stdDeviation="3.5" result="blur" />
+                        <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                      </filter>
+                    </defs>
+
+                    {/* 6 Kademeli Konsantrik Poligon Kılavuz Halkaları */}
+                    {[1, 2, 3, 4, 5, 6].map((level) => {
+                      const r = (level / 6) * 95;
+                      const pts = [0, 1, 2, 3, 4].map((idx) => {
+                        const angle = -Math.PI / 2 + (idx * 2 * Math.PI) / 5;
+                        return `${(140 + r * Math.cos(angle)).toFixed(1)},${(140 + r * Math.sin(angle)).toFixed(1)}`;
+                      }).join(' ');
+                      return (
+                        <polygon
+                          key={level}
+                          points={pts}
+                          fill={level === 6 ? '#181c24' : 'none'}
+                          stroke="#2e3440"
+                          strokeWidth={level === 6 ? '1.5' : '1'}
+                          strokeDasharray={level === 6 ? 'none' : '2,3'}
+                          opacity={level === 6 ? '0.7' : '0.5'}
+                        />
+                      );
+                    })}
+
+                    {/* Merkezden Dışarı 5 Eksen İskelet Çizgileri */}
+                    {[0, 1, 2, 3, 4].map((idx) => {
+                      const angle = -Math.PI / 2 + (idx * 2 * Math.PI) / 5;
+                      const x2 = 140 + 95 * Math.cos(angle);
+                      const y2 = 140 + 95 * Math.sin(angle);
+                      return (
+                        <line
+                          key={idx}
+                          x1="140"
+                          y1="140"
+                          x2={x2.toFixed(1)}
+                          y2={y2.toFixed(1)}
+                          stroke="#2e3440"
+                          strokeWidth="1.2"
+                        />
+                      );
+                    })}
+
+                    {/* Dinamik Organik Snowflake Veri Poligonu */}
+                    {smoothRadarPath && (
+                      <path
+                        d={smoothRadarPath}
+                        fill={`url(#${snowflakeTheme.gradId})`}
+                        stroke={snowflakeTheme.stroke}
+                        strokeWidth="2.5"
+                        strokeLinejoin="round"
+                        filter="url(#snowflakeGlow)"
+                        className="transition-all duration-700"
+                      />
+                    )}
+
+                    {/* Eksen Tepe Noktaları */}
+                    {radarPoints.map((pt) => (
+                      <g key={pt.axis} className="transition-all duration-700">
+                        <circle
+                          cx={pt.x}
+                          cy={pt.y}
+                          r="5.5"
+                          fill="#12151b"
+                          stroke={snowflakeTheme.stroke}
+                          strokeWidth="2"
+                        />
+                        <circle
+                          cx={pt.x}
+                          cy={pt.y}
+                          r="2.5"
+                          fill={snowflakeTheme.stroke}
+                        />
+                      </g>
+                    ))}
+
+                    {/* Merkez Ticker Rozeti */}
+                    <circle cx="140" cy="140" r="14" fill="#181c24" stroke="#2e3440" strokeWidth="1.2" />
+                    <text
+                      x="140"
+                      y="144"
+                      textAnchor="middle"
+                      fill="#f5c242"
+                      fontSize="9"
+                      fontWeight="bold"
+                      fontFamily="monospace"
+                    >
+                      {report.ticker.slice(0, 4)}
+                    </text>
+
+                    {/* 5 Eksen Dış Etiketleri */}
+                    <text x="140" y="24" textAnchor="middle" fill="#ffffff" fontSize="10" fontWeight="bold" fontFamily="monospace">
+                      DEĞER ({snowflake.axes.value.score}/6)
+                    </text>
+                    <text x="242" y="98" textAnchor="start" fill="#ffffff" fontSize="10" fontWeight="bold" fontFamily="monospace">
+                      GELECEK ({snowflake.axes.future.score}/6)
+                    </text>
+                    <text x="210" y="246" textAnchor="start" fill="#ffffff" fontSize="10" fontWeight="bold" fontFamily="monospace">
+                      GEÇMİŞ ({snowflake.axes.past.score}/6)
+                    </text>
+                    <text x="70" y="246" textAnchor="end" fill="#ffffff" fontSize="10" fontWeight="bold" fontFamily="monospace">
+                      SAĞLIK ({snowflake.axes.health.score}/6)
+                    </text>
+                    <text x="38" y="98" textAnchor="end" fill="#ffffff" fontSize="10" fontWeight="bold" fontFamily="monospace">
+                      TEMETTÜ ({snowflake.axes.dividend.score}/6)
+                    </text>
+                  </svg>
+                </div>
+
+                {/* Sağ: 5 Eksen Puan Detayı ve İlerleme Barları (7 Kolon) */}
+                <div className="lg:col-span-7 space-y-2.5">
+                  {Object.values(snowflake.axes).map((axis: any) => {
+                    const pct = (axis.score / 6) * 100;
+                    const color = axis.score >= 4 ? '#10b981' : axis.score >= 2 ? '#f5c242' : '#ef4444';
+                    const topCheck = axis.checks?.[0];
+
+                    return (
+                      <div key={axis.key} className="bg-[#151821] border border-[#2b313d] rounded-xl p-3 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-white font-mono flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                            <span>{axis.label}</span>
+                          </span>
+                          <div className="flex items-center gap-2 font-mono">
+                            <span className="text-[11px] text-slate-400">
+                              {axis.score >= 5 ? 'Mükemmel' : axis.score >= 3 ? 'Dengeli' : 'Riskli'}
+                            </span>
+                            <span className="font-bold text-sm" style={{ color }}>
+                              {axis.score}/6
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* İlerleme Çubuğu */}
+                        <div className="w-full bg-[#21262d] rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{ width: `${pct}%`, backgroundColor: color }}
+                          />
+                        </div>
+
+                        {/* İlk Temel Kontrol Açıklaması */}
+                        {topCheck && (
+                          <p className="text-[11px] text-slate-300 leading-tight truncate font-sans" title={topCheck.detail}>
+                            {topCheck.passed ? '✓' : '✗'} {topCheck.detail}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Alt Kısım: Öne Çıkan Güçlü Yönler (Rewards) ve Riskler (Risks) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                <div className="bg-[#151821] border border-emerald-900/30 rounded-xl p-4 space-y-2">
+                  <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                    <Sparkles className="w-3.5 h-3.5" /> Öne Çıkan Güçlü Yönler (Rewards)
                   </div>
-                ))}
+                  <div className="space-y-1.5 text-xs text-slate-200">
+                    {snowflake.rewards.slice(0, 3).map((r, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <span className="text-emerald-400 font-bold">★</span>
+                        <span className="leading-relaxed">{r}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-[#151821] border border-amber-900/30 rounded-xl p-4 space-y-2">
+                  <div className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                    <AlertTriangle className="w-3.5 h-3.5" /> Dikkat Edilmesi Gereken Riskler
+                  </div>
+                  <div className="space-y-1.5 text-xs text-slate-200">
+                    {snowflake.risks.slice(0, 3).map((rk, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <span className="text-amber-400 font-bold">⚠️</span>
+                        <span className="leading-relaxed">{rk}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1635,10 +2008,10 @@ export default function SimplyView({
           {/* ----------------------------------------------------------------------- */}
           {/* BÖLÜM 2: GRAFİKLER (#sec-grafikler)                                     */}
           {/* ----------------------------------------------------------------------- */}
-          <section id="sec-grafikler" className="scroll-mt-6 space-y-6">
+          <section id="sec-grafikler" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3 flex-wrap gap-3">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm text-[#f5c242] font-bold">1</span>
+              <div className="flex items-center gap-2.5">
+                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">1</span>
                 <h2 className="font-serif text-xl font-bold text-white">Grafikler & Kârlılık Terminali</h2>
               </div>
               <div className="flex items-center bg-[#21262d] p-0.5 rounded-lg border border-[#2e3440] text-xs font-semibold">
@@ -1860,10 +2233,10 @@ export default function SimplyView({
           {/* ----------------------------------------------------------------------- */}
           {/* BÖLÜM 3: FİNANSAL TABLOLAR (#sec-tablolar)                              */}
           {/* ----------------------------------------------------------------------- */}
-          <section id="sec-tablolar" className="scroll-mt-6 space-y-6">
+          <section id="sec-tablolar" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3 flex-wrap gap-3">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm text-[#f5c242] font-bold">2</span>
+              <div className="flex items-center gap-2.5">
+                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">2</span>
                 <h2 className="font-serif text-xl font-bold text-white">Resmi Finansal Tablolar & DuPont Analizi</h2>
               </div>
               <div className="flex items-center gap-1 bg-[#21262d] p-0.5 rounded-lg border border-[#2e3440] text-xs font-semibold">
@@ -1981,6 +2354,20 @@ export default function SimplyView({
                 </div>
 
                 <div className="flex items-center gap-3">
+                  {selectedTableTab === 'ratios' && (
+                    <button
+                      type="button"
+                      onClick={() => setIsHeatmapActive(prev => !prev)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border ${
+                        isHeatmapActive
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                          : 'bg-[#21262d] text-slate-400 border-[#2e3440] hover:text-white'
+                      }`}
+                    >
+                      <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Isı Haritası: {isHeatmapActive ? 'Açık' : 'Kapalı'}</span>
+                    </button>
+                  )}
                   <span className="text-xs font-mono text-slate-400">
                     {selectedTableTab === 'ratios' ? 'Birim: Oran / Katsayı' : 'Birim: Bin TRY'}
                   </span>
@@ -2269,14 +2656,23 @@ export default function SimplyView({
                             <td className={`py-2 px-3 pl-6 font-sans text-xs truncate ${row.isHighlight ? 'font-bold text-white' : 'font-normal text-slate-300'}`} title={row.label}>
                               {row.label}
                             </td>
-                            {visiblePeriods.map((c) => (
-                              <td key={c.period} className={`py-2 px-3 text-right font-mono text-xs font-bold ${row.isHighlight ? 'text-[#f5c242]' : 'text-slate-200'} whitespace-nowrap overflow-hidden`}>
-                                <div className="flex items-center justify-end whitespace-nowrap">
-                                  <span>{row.calc(c)}</span>
-                                  <span className="w-12 flex-shrink-0" />
-                                </div>
-                              </td>
-                            ))}
+                            {visiblePeriods.map((c) => {
+                              const rawVal = (row as any).raw ? (row as any).raw(c) : null;
+                              const hmClass = getRatioHeatmapClass((row as any).key, rawVal, currentSector);
+                              return (
+                                <td
+                                  key={c.period}
+                                  className={`py-2 px-3 text-right font-mono text-xs font-bold transition-colors whitespace-nowrap overflow-hidden ${
+                                    hmClass ? hmClass : (row.isHighlight ? 'text-[#f5c242]' : 'text-slate-200')
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-end whitespace-nowrap">
+                                    <span>{row.calc(c)}</span>
+                                    <span className="w-12 flex-shrink-0" />
+                                  </div>
+                                </td>
+                              );
+                            })}
                           </tr>
                         ))}
                       </React.Fragment>
@@ -2290,10 +2686,10 @@ export default function SimplyView({
           {/* ----------------------------------------------------------------------- */}
           {/* BÖLÜM 4: ÇARPANLAR (#sec-carpanlar)                                     */}
           {/* ----------------------------------------------------------------------- */}
-          <section id="sec-carpanlar" className="scroll-mt-6 space-y-6">
+          <section id="sec-carpanlar" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm text-[#f5c242] font-bold">3</span>
+              <div className="flex items-center gap-2.5">
+                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">3</span>
                 <h2 className="font-serif text-xl font-bold text-white">Piyasa Çarpanları & Sektör Benchmark Kıyası</h2>
               </div>
               <span className="text-xs text-slate-400 font-mono">İş Yatırım Resmi Medyanları</span>
@@ -2488,10 +2884,10 @@ export default function SimplyView({
           {/* ----------------------------------------------------------------------- */}
           {/* BÖLÜM 5: ADİL DEĞER (#sec-adildeger)                                    */}
           {/* ----------------------------------------------------------------------- */}
-          <section id="sec-adildeger" className="scroll-mt-6 space-y-6">
+          <section id="sec-adildeger" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm text-[#f5c242] font-bold">4</span>
+              <div className="flex items-center gap-2.5">
+                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">4</span>
                 <h2 className="font-serif text-xl font-bold text-white">İçsel Adil Değerleme & WACC Modeli</h2>
               </div>
               <span className="text-xs text-slate-400 font-mono">Gordon Büyüme & İNA (DCF)</span>
@@ -2539,12 +2935,12 @@ export default function SimplyView({
               </div>
             </div>
 
-            {/* Gelecek Büyüme & Değer Sürücüleri (12 Ay İleri Projeksiyonları) */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between border-b border-[#282d37] pb-2">
+            {/* Gelecek Büyüme & Değer Sürücüleri (12 Ay İleri Projeksiyonları) - Ayrı Alt Kart */}
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
                 <div className="text-xs font-bold text-white flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-[#f5c242]" />
-                  <span>Gelecek Büyüme & Değer Sürücüleri (12 Ay İleri)</span>
+                  <span className="font-serif text-sm font-bold">Gelecek Büyüme & Değer Sürücüleri (12 Ay İleri)</span>
                 </div>
                 <span className="text-[10px] text-slate-400 font-mono">İNA & Gordon Büyüme Parametreleri</span>
               </div>
@@ -2802,10 +3198,10 @@ export default function SimplyView({
           {/* ----------------------------------------------------------------------- */}
           {/* BÖLÜM 6: GÜÇLÜ & ZAYIF (#sec-gucluzayif)                                */}
           {/* ----------------------------------------------------------------------- */}
-          <section id="sec-gucluzayif" className="scroll-mt-6 space-y-6">
+          <section id="sec-gucluzayif" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm text-[#f5c242] font-bold">5</span>
+              <div className="flex items-center gap-2.5">
+                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">5</span>
                 <h2 className="font-serif text-xl font-bold text-white">Güçlü & Zayıf Yönler (Pros & Cons)</h2>
               </div>
             </div>
@@ -2857,10 +3253,10 @@ export default function SimplyView({
           {/* ----------------------------------------------------------------------- */}
           {/* BÖLÜM 7: REHBERLİK & HEDEFLER (#sec-rehberlik)                          */}
           {/* ----------------------------------------------------------------------- */}
-          <section id="sec-rehberlik" className="scroll-mt-6 space-y-6">
+          <section id="sec-rehberlik" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm text-[#f5c242] font-bold">6</span>
+              <div className="flex items-center gap-2.5">
+                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">6</span>
                 <h2 className="font-serif text-xl font-bold text-white">Yönetim Rehberlik Karnesi & Şirket Hedefleri</h2>
               </div>
               <span className="text-xs text-slate-400 font-mono">Geçmiş Karne & Gelecek Projeksiyonu</span>
@@ -3036,10 +3432,10 @@ export default function SimplyView({
           {/* ----------------------------------------------------------------------- */}
           {/* BÖLÜM 8: ANALİST RAPORU (#sec-analist)                                  */}
           {/* ----------------------------------------------------------------------- */}
-          <section id="sec-analist" className="scroll-mt-6 space-y-6">
+          <section id="sec-analist" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3 flex-wrap gap-3">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm text-[#f5c242] font-bold">7</span>
+              <div className="flex items-center gap-2.5">
+                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">7</span>
                 <h2 className="font-serif text-xl font-bold text-white">Kurumsal Hisse Değerleme & Araştırma Raporu</h2>
               </div>
               <div className="flex items-center gap-2">
@@ -3074,6 +3470,98 @@ export default function SimplyView({
                   {copiedReport ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-cyan-400" />}
                   <span>{copiedReport ? 'Kopyalandı' : 'Raporu Kopyala'}</span>
                 </button>
+              </div>
+            </div>
+
+            {/* Üst Yönetici Karar & Değerleme Kartı (Executive Analyst Decision Card) */}
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#282d37] pb-4">
+                <div className="flex items-center gap-3.5">
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-mono font-black text-xl border shadow-lg ${
+                    report.decision === 'AL'
+                      ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-400 shadow-emerald-950/50'
+                      : report.decision === 'ALMA'
+                      ? 'bg-rose-950/80 border-rose-500/50 text-rose-400 shadow-rose-950/50'
+                      : 'bg-amber-950/80 border-amber-500/50 text-amber-400 shadow-amber-950/50'
+                  }`}>
+                    {report.decision === 'AL' ? 'AL' : report.decision === 'ALMA' ? 'SAT' : 'TUT'}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] uppercase font-mono font-bold tracking-wider text-slate-400">Resmi Analist Kararı</span>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
+                        report.decision === 'AL'
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                          : report.decision === 'ALMA'
+                          ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                          : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      }`}>
+                        {report.decision === 'AL' ? 'GÜÇLÜ ALIM POTANSİYELİ' : report.decision === 'ALMA' ? 'YÜKSEK RİSK / DEĞER TUZAĞI' : 'ENDEKSE PARALEL GETİRİ'}
+                      </span>
+                    </div>
+                    <h3 className="font-serif text-lg font-bold text-white mt-0.5">
+                      {report.ticker} için 12 Aylık Hedef & Değerleme Perspektifi
+                    </h3>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-5">
+                  <div className="text-right">
+                    <div className="text-[10px] text-slate-400 font-mono uppercase">Güncel Fiyat</div>
+                    <div className="text-xl font-black font-mono text-white">₺{currentPriceNum.toFixed(2)}</div>
+                  </div>
+                  <div className="h-8 w-px bg-[#282d37]" />
+                  <div className="text-right">
+                    <div className="text-[10px] text-slate-400 font-mono uppercase">Hedef Adil Değer</div>
+                    <div className="text-xl font-black font-mono text-[#f5c242]">₺{fairValueNum.toFixed(2)}</div>
+                  </div>
+                  <div className="h-8 w-px bg-[#282d37]" />
+                  <div className="text-right">
+                    <div className="text-[10px] text-slate-400 font-mono uppercase">Potansiyel</div>
+                    <div className={`text-xl font-black font-mono ${fairValueNum >= currentPriceNum ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {currentPriceNum > 0
+                        ? `${fairValueNum >= currentPriceNum ? '+' : ''}${(((fairValueNum - currentPriceNum) / currentPriceNum) * 100).toFixed(1)}%`
+                        : '—'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3 Sütunlu Hızlı Analist Çerçevesi (Yatırım Tezi, Katalizörler, Riskler) */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                <div className="bg-[#21262d]/70 border border-[#2e3440] rounded-xl p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
+                    <Target className="w-4 h-4" />
+                    <span className="font-serif font-bold text-white">Temel Yatırım Tezi</span>
+                  </div>
+                  <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                    {evaSpreadNum >= 0
+                      ? `Şirket reel sermaye maliyetinin üzerinde (+%${evaSpreadNum.toFixed(1)} EVA makası) sermaye getirisi üretmekte olup içsel sermaye birikimi hissedar değerini istikrarlı şekilde büyütmektedir.`
+                      : 'Sermaye getirisi ile sermaye maliyeti arasındaki makas daralmış olup operasyonel kâr marjlarının ve serbest nakit akışının korunması kritik önemdedir.'}
+                  </p>
+                </div>
+
+                <div className="bg-[#21262d]/70 border border-[#2e3440] rounded-xl p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-cyan-400">
+                    <Sparkles className="w-4 h-4" />
+                    <span className="font-serif font-bold text-white">Büyüme Katalizörleri</span>
+                  </div>
+                  <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                    {`12 aylık ileri projeksiyonlarda beklenen %${Number(drivers.revenue_growth.value).toFixed(0)} hasılat artışı ve %${Number(drivers.net_income_growth.value).toFixed(0)} net kâr dinamizmi ana içsel değer iticisi konumundadır.`}
+                  </p>
+                </div>
+
+                <div className="bg-[#21262d]/70 border border-[#2e3440] rounded-xl p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-rose-400">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span className="font-serif font-bold text-white">Kritik Risk Faktörleri</span>
+                  </div>
+                  <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                    {report.overrideReason
+                      ? report.overrideReason
+                      : 'Makro faiz dalgalanmaları, işletme sermayesi tahsilat süreleri ve sektörel maliyet enflasyonu yakından takip edilmelidir.'}
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -3146,7 +3634,35 @@ export default function SimplyView({
                           </div>
                         );
                       },
-                      h3: ({ ...props }) => <h3 className="font-serif text-base font-semibold text-[#f5c242] mt-5 mb-2.5" {...props} />,
+                      h3: ({ children, ...props }: any) => {
+                        const text = String(children || '');
+                        let badgeColor = 'text-[#f5c242] bg-[#f5c242]/10 border-[#f5c242]/30';
+                        let icon = '📌';
+                        if (/tez|neden|fırsat/i.test(text)) {
+                          badgeColor = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
+                          icon = '🎯';
+                        } else if (/katalizör|itici|tetik/i.test(text)) {
+                          badgeColor = 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30';
+                          icon = '⚡';
+                        } else if (/risk|tehdit|uyarı|dikkat/i.test(text)) {
+                          badgeColor = 'text-rose-400 bg-rose-500/10 border-rose-500/30';
+                          icon = '⚠️';
+                        } else if (/değerleme|fiyat|hedef|çarpan/i.test(text)) {
+                          badgeColor = 'text-[#f5c242] bg-[#f5c242]/10 border-[#f5c242]/30';
+                          icon = '💎';
+                        }
+
+                        return (
+                          <div className="mt-6 mb-3 pt-2">
+                            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-serif font-bold ${badgeColor} shadow-sm`}>
+                              <span>{icon}</span>
+                              <h3 className="m-0 font-serif text-sm sm:text-base font-bold text-white" {...props}>
+                                {children}
+                              </h3>
+                            </div>
+                          </div>
+                        );
+                      },
                       p: ({ ...props }) => <p className="leading-relaxed mb-4 text-slate-200 text-sm font-sans" {...props} />,
                       ul: ({ ...props }) => <ul className="space-y-2 mb-4 text-sm text-slate-300 pl-2" {...props} />,
                       li: ({ children, ...props }: any) => (
@@ -3155,7 +3671,34 @@ export default function SimplyView({
                           <span className="flex-1">{children}</span>
                         </li>
                       ),
-                      strong: ({ ...props }) => <strong className="font-bold text-white font-sans" {...props} />,
+                      strong: ({ children, ...props }: any) => {
+                        const text = String(children || '').trim();
+                        if (/^(\[?(AL|GÜÇLÜ AL|ALIM)\]?)$/i.test(text)) {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-black font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm mx-1 align-middle">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                              {text.replace(/[\[\]]/g, '')}
+                            </span>
+                          );
+                        }
+                        if (/^(\[?(ALMA|SAT|AZALT|YÜKSEK RİSK)\]?)$/i.test(text)) {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-black font-mono bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm mx-1 align-middle">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                              {text.replace(/[\[\]]/g, '')}
+                            </span>
+                          );
+                        }
+                        if (/^(\[?(TUT|NÖTR|ENDEKSE PARALEL)\]?)$/i.test(text)) {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-black font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm mx-1 align-middle">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                              {text.replace(/[\[\]]/g, '')}
+                            </span>
+                          );
+                        }
+                        return <strong className="font-bold text-white font-sans" {...props}>{children}</strong>;
+                      },
                       blockquote: ({ children, ...props }: any) => (
                         <div className="my-5 p-4 rounded-xl bg-[#21262d]/90 border-l-4 border-[#f5c242] border-t border-r border-b border-[#2e3440] shadow-md">
                           <div className="text-[10.5px] font-bold uppercase tracking-wider text-[#f5c242] mb-1.5 flex items-center gap-1.5">
@@ -3189,10 +3732,10 @@ export default function SimplyView({
           {/* ----------------------------------------------------------------------- */}
           {/* BÖLÜM 9: GEÇMİŞ ANALİZLER (#sec-gecmis)                                 */}
           {/* ----------------------------------------------------------------------- */}
-          <section id="sec-gecmis" className="scroll-mt-6 space-y-6">
+          <section id="sec-gecmis" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm text-[#f5c242] font-bold">8</span>
+              <div className="flex items-center gap-2.5">
+                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">8</span>
                 <h2 className="font-serif text-xl font-bold text-white">Geçmiş Raporlar & Çeyreklik Hafıza</h2>
               </div>
               <span className="text-xs text-slate-400 font-mono">Hisse Arşivi</span>

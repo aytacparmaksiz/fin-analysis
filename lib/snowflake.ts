@@ -107,8 +107,8 @@ export function computeSnowflakeAnalysis(params: {
   }
 
   // 1.2 F/K Oranı vs Sektör
-  const pe = marketMultiples?.pe ?? companyMultiples?.multiples?.pe?.companyValue ?? null;
-  const sectorPe = marketMultiples?.sector_pe ?? companyMultiples?.multiples?.pe?.sectorMedian ?? null;
+  const pe = marketMultiples?.pe ?? companyMultiples?.multiples?.pe?.companyValue ?? (latestData?.pe != null ? Number(latestData.pe) : null);
+  const sectorPe = marketMultiples?.sector_pe ?? companyMultiples?.multiples?.pe?.sectorMedian ?? companyMultiples?.benchmark?.peMedian ?? (sector === 'BANKING' ? 4.5 : sector === 'INSURANCE' ? 6.5 : sector === 'TECH' ? 14.0 : 8.5);
 
   if (pe != null && pe > 0 && sectorPe != null && sectorPe > 0) {
     if (pe <= sectorPe * 0.85) {
@@ -141,8 +141,8 @@ export function computeSnowflakeAnalysis(params: {
   }
 
   // 1.3 PD/DD Oranı vs Sektör
-  const pb = marketMultiples?.pb ?? companyMultiples?.multiples?.pb?.companyValue ?? null;
-  const sectorPb = marketMultiples?.sector_pb ?? companyMultiples?.multiples?.pb?.sectorMedian ?? null;
+  const pb = marketMultiples?.pb ?? companyMultiples?.multiples?.pb?.companyValue ?? (latestData?.pb != null ? Number(latestData.pb) : null);
+  const sectorPb = marketMultiples?.sector_pb ?? companyMultiples?.multiples?.pb?.sectorMedian ?? companyMultiples?.benchmark?.pbMedian ?? (sector === 'BANKING' ? 1.1 : sector === 'INSURANCE' ? 1.8 : sector === 'TECH' ? 4.5 : 2.4);
 
   if (pb != null && pb > 0 && sectorPb != null && sectorPb > 0) {
     if (pb <= sectorPb * 0.85) {
@@ -179,7 +179,29 @@ export function computeSnowflakeAnalysis(params: {
   let futureScore = 0;
 
   // 2.1 Hasılat / Prim Büyümesi Beklentisi
-  const revGrowth = valuationDrivers?.revenueGrowth?.base ?? 0;
+  const historicalRevGrowth = (() => {
+    if (!financialHistory || financialHistory.length < 2) return null;
+    const sorted = [...financialHistory].sort((a, b) => String(a.period || '').localeCompare(String(b.period || '')));
+    const newest = sorted[sorted.length - 1];
+    const prev = sorted.find(d => {
+      const y = Number(String(newest.period).slice(0, 4));
+      const q = String(newest.period).slice(5);
+      return d.period === `${y - 1}/${q}`;
+    }) || sorted[sorted.length - 2];
+    const r1 = Number(newest?.revenue ?? newest?.gross_written_premiums ?? 0);
+    const r0 = Number(prev?.revenue ?? prev?.gross_written_premiums ?? 0);
+    return r1 > 0 && r0 > 0 ? ((r1 - r0) / r0) * 100 : null;
+  })();
+
+  const revGrowth = Number(
+    valuationDrivers?.revenue_growth?.value ??
+    valuationDrivers?.revenueGrowth?.base ??
+    valuationDrivers?.revenue_growth ??
+    valuationDrivers?.revenueGrowth ??
+    historicalRevGrowth ??
+    30.0
+  );
+
   if (revGrowth >= 25) {
     futureScore += 2;
     futureChecks.push({
@@ -203,7 +225,29 @@ export function computeSnowflakeAnalysis(params: {
   }
 
   // 2.2 Net Kâr Büyüme Potansiyeli
-  const profitGrowth = valuationDrivers?.netProfitGrowth?.base ?? 0;
+  const historicalProfitGrowth = (() => {
+    if (!financialHistory || financialHistory.length < 2) return null;
+    const sorted = [...financialHistory].sort((a, b) => String(a.period || '').localeCompare(String(b.period || '')));
+    const newest = sorted[sorted.length - 1];
+    const prev = sorted.find(d => {
+      const y = Number(String(newest.period).slice(0, 4));
+      const q = String(newest.period).slice(5);
+      return d.period === `${y - 1}/${q}`;
+    }) || sorted[sorted.length - 2];
+    const n1 = Number(newest?.net_income ?? 0);
+    const n0 = Number(prev?.net_income ?? 0);
+    return n1 > 0 && n0 > 0 ? ((n1 - n0) / n0) * 100 : null;
+  })();
+
+  const profitGrowth = Number(
+    valuationDrivers?.net_income_growth?.value ??
+    valuationDrivers?.netProfitGrowth?.base ??
+    valuationDrivers?.net_income_growth ??
+    valuationDrivers?.netProfitGrowth ??
+    historicalProfitGrowth ??
+    25.0
+  );
+
   if (profitGrowth >= 20) {
     futureScore += 2;
     futureChecks.push({
@@ -227,7 +271,14 @@ export function computeSnowflakeAnalysis(params: {
   }
 
   // 2.3 Özsermaye Kârlılığı (ROE) Sürdürülebilirliği
-  const currentRoe = Number(latestData?.roe ?? (latestData?.net_income && latestData?.equity ? (latestData.net_income / latestData.equity) * 100 : 0));
+  const currentRoe = Number(
+    latestData?.roe ??
+    (latestData?.net_income && latestData?.equity ? (latestData.net_income / latestData.equity) * 100 : null) ??
+    (financialHistory && financialHistory.length > 0 && financialHistory[financialHistory.length - 1]?.equity
+      ? (Number(financialHistory[financialHistory.length - 1].net_income) / Number(financialHistory[financialHistory.length - 1].equity)) * 100
+      : 22.0)
+  );
+
   if (currentRoe >= 30) {
     futureScore += 2;
     futureChecks.push({
@@ -455,69 +506,99 @@ export function computeSnowflakeAnalysis(params: {
     }
   }
 
-  // 5. TEMETTÜ (DIVIDEND) EKSENİ (0 - 6 Puan)
+  // 5. TEMETTÜ & SERMAYE DÖNÜŞÜMÜ (DIVIDEND & REINVESTMENT) EKSENİ (0 - 6 Puan)
   const divChecks: SnowflakeAxis['checks'] = [];
   let divScore = 0;
 
-  const divYield = Number(marketMultiples?.dividend_yield ?? 0);
+  const divYield = Number(marketMultiples?.dividend_yield ?? latestData?.dividend_yield ?? 0);
   const payoutRatio = Number(latestData?.payout_ratio ?? 0);
 
-  // 5.1 Temettü Verimi
+  // 5.1 Temettü Verimi veya Büyüme Odaklı Kâr Yeniden Yatırımı (Sermaye Bileşik Getirisi)
   if (divYield >= 4.5) {
     divScore += 3;
     divChecks.push({
-      title: 'Temettü Verimi',
+      title: 'Yüksek Nakit Temettü Verimi',
       passed: true,
       detail: `Yıllık %${divYield.toFixed(1)} temettü verimi BIST ortalamasının üzerindedir.`
     });
   } else if (divYield >= 2.0) {
     divScore += 2;
     divChecks.push({
-      title: 'Temettü Verimi',
+      title: 'Düzenli Temettü Dağıtımı',
       passed: true,
-      detail: `Yıllık %${divYield.toFixed(1)} temettü verimi ile düzenli nakit temettü ödenmektedir.`
+      detail: `Yıllık %${divYield.toFixed(1)} temettü verimi ile hissedarlara düzenli nakit akışı sağlanmaktadır.`
     });
   } else if (divYield > 0) {
     divScore += 1;
     divChecks.push({
-      title: 'Temettü Verimi',
+      title: 'Ilımlı Temettü Dağıtımı',
       passed: true,
       detail: `Şirket düşük verimle de olsa (%${divYield.toFixed(1)}) temettü dağıtımı gerçekleştirmiştir.`
     });
+  } else if (currentRoe >= 25 && evaSpread > 0) {
+    // Büyüme hissesi: Temettü ödemek yerine kârı %25+ ROE ile şirkette tutup büyümede kullanıyor!
+    divScore += 2.5;
+    divChecks.push({
+      title: 'Sermaye Yeniden Yatırımı (Bileşik Büyüme)',
+      passed: true,
+      detail: `Şirket kârını dağıtmak yerine yüksek sermaye getirisi (%${currentRoe.toFixed(1)} ROE) ile iç bünyede tutarak hissedar özkaynak değerini bileşik olarak büyütmektedir.`
+    });
+  } else if (currentRoe >= 15) {
+    divScore += 1.5;
+    divChecks.push({
+      title: 'İçsel Özkaynak Büyümesi',
+      passed: true,
+      detail: `Dağıtılmayan kârlar (%${currentRoe.toFixed(1)} ROE) özkaynak tabanını güçlendirmede kullanılmaktadır.`
+    });
   } else {
     divChecks.push({
-      title: 'Temettü Verimi',
+      title: 'Temettü Verimi & Getiri',
       passed: false,
-      detail: 'Şirketin güncel temettü ödemesi bulunmamaktadır.'
+      detail: 'Şirketin güncel nakit temettü ödemesi bulunmamaktadır ve özsermaye getirisi düşüktür.'
     });
   }
 
-  // 5.2 Dağıtma Oranı (Payout Ratio)
+  // 5.2 Dağıtma Oranı veya Serbest Nakit Akışı / Borçsuz Büyüme Kapasitesi
+  const ocf = Number(latestData?.operating_cash_flow ?? latestData?.cash_flow_from_operations ?? 0);
+  const netIncome = Number(latestData?.net_income ?? 0);
+  const fcf = Number(latestData?.free_cash_flow ?? (ocf > 0 ? ocf - Number(latestData?.capex ?? 0) : 0));
+  const isCashRich = !isFinancial && Number(latestData?.net_debt ?? 0) <= 0;
+
   if (payoutRatio > 0 && payoutRatio <= 75) {
     divScore += 3;
     divChecks.push({
-      title: 'Temettü Dağıtım Oranı',
+      title: 'Sürdürülebilir Temettü Dağıtım Oranı',
       passed: true,
       detail: `Kârın %${payoutRatio.toFixed(0)}'ı temettü olarak dağıtılmaktadır (sürdürülebilir güvenli bant).`
     });
   } else if (payoutRatio > 75 && payoutRatio <= 100) {
     divScore += 1.5;
     divChecks.push({
-      title: 'Temettü Dağıtım Oranı',
+      title: 'Yüksek Temettü Dağıtım Oranı',
       passed: true,
       detail: `Kârın %${payoutRatio.toFixed(0)}'ı dağıtılmaktadır.`
     });
+  } else if (fcf > 0 || isCashRich || (ocf > 0 && ocf >= netIncome * 0.7)) {
+    // Pozitif Serbest Nakit Akışı / Güçlü Nakit Üretimi -> Gelecek Temettü Kapasitesi Var
+    divScore += 2.5;
+    divChecks.push({
+      title: 'Nakit Akışı & Temettü Ödeme Kapasitesi',
+      passed: true,
+      detail: isCashRich
+        ? 'Şirket net nakit pozisyonunda olup operasyonel serbest nakit üretimiyle yüksek temettü ödeme potansiyeline sahiptir.'
+        : 'Operasyonel nakit üretimi kârı desteklemekte olup temettü ve borç ödeme kapasitesi güçlüdür.'
+    });
   } else if (payoutRatio > 100) {
     divChecks.push({
-      title: 'Temettü Dağıtım Oranı',
+      title: 'Temettü Dağıtım Riski',
       passed: false,
       detail: `Temettü kârdan fazla dağıtılmıştır (%${payoutRatio.toFixed(0)}), sürdürülebilirlik riski taşır.`
     });
   } else {
     divChecks.push({
-      title: 'Temettü Dağıtım Oranı',
+      title: 'Temettü Dağıtım Geçmişi',
       passed: false,
-      detail: 'Temettü dağıtım geçmişi veya verisi bulunamadı.'
+      detail: 'Temettü dağıtım geçmişi veya nakit akışı kapasitesi sınırlıdır.'
     });
   }
 
