@@ -96,6 +96,7 @@ export interface SimplyViewProps {
   latestData: any;
   chartData: any[];
   quarterlyChartData: any[];
+  ttmChartData?: any[];
   tickerHistory?: SavedReport[];
   onSwitchToTerminal: () => void;
   onSelectTicker?: (ticker: string) => void;
@@ -489,6 +490,7 @@ export default function SimplyView({
   latestData,
   chartData,
   quarterlyChartData,
+  ttmChartData = [],
   tickerHistory = [],
   onSwitchToTerminal,
   onSelectTicker,
@@ -1364,7 +1366,9 @@ export default function SimplyView({
   };
 
   // Aktif 4 Grafik Verisi (Tüm tarihsel periyotlar kronolojik sırada)
-  const active4ChartsFlowData = chartPeriodMode === 'quarterly' ? quarterlyChartData : chartData;
+  const active4ChartsFlowData = chartPeriodMode === 'quarterly' 
+    ? quarterlyChartData 
+    : (ttmChartData && ttmChartData.length > 0 ? ttmChartData : chartData);
 
   return (
     <div className="space-y-6 font-sans text-slate-100">
@@ -1593,7 +1597,7 @@ export default function SimplyView({
                             <stop offset="95%" stopColor="#f5c242" stopOpacity={0.0} />
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" vertical={false} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #2b313d)" vertical={false} />
                         <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 12, fill: '#9ca3af' }} />
                         <YAxis stroke="#6b7280" tick={{ fontSize: 12, fill: '#9ca3af' }} domain={['auto', 'auto']} />
                         <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
@@ -2157,7 +2161,7 @@ export default function SimplyView({
                 <div className="h-44 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={(quarterlyChartData.length > 0 ? quarterlyChartData : chartData).slice(-5)}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #2b313d)" vertical={false} />
                       <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
                       <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} hide />
                       <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
@@ -2174,7 +2178,7 @@ export default function SimplyView({
                 <div className="h-44 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={(quarterlyChartData.length > 0 ? quarterlyChartData : chartData).slice(-5)}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #2b313d)" vertical={false} />
                       <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
                       <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} hide />
                       <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
@@ -2189,7 +2193,7 @@ export default function SimplyView({
                 <div className="h-44 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={(quarterlyChartData.length > 0 ? quarterlyChartData : chartData).slice(-5)}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #2b313d)" vertical={false} />
                       <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
                       <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} hide />
                       <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
@@ -2219,7 +2223,7 @@ export default function SimplyView({
                     <div className="h-24 w-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={mini.data}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" vertical={false} />
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #2b313d)" vertical={false} />
                           <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 9, fill: '#9ca3af' }} />
                           <YAxis stroke="#6b7280" tick={{ fontSize: 9, fill: '#9ca3af' }} hide domain={['auto', 'auto']} />
                           <Tooltip
@@ -2261,7 +2265,7 @@ export default function SimplyView({
                 <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={active4ChartsFlowData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #2b313d)" vertical={false} />
                       <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
                       <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => formatMrTl(v, true)} />
                       <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
@@ -2284,7 +2288,7 @@ export default function SimplyView({
                 <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={active4ChartsFlowData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #2b313d)" vertical={false} />
                       <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
                       <YAxis yAxisId="left" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => formatMrTl(v, true)} />
                       <YAxis yAxisId="right" orientation="right" stroke="#10b981" tick={{ fontSize: 10, fill: '#34d399' }} tickFormatter={(v) => `${v} TL`} />
@@ -2305,7 +2309,7 @@ export default function SimplyView({
                 <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={active4ChartsFlowData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #2b313d)" vertical={false} />
                       <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
                       <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => formatMrTl(v, true)} />
                       <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
@@ -2326,7 +2330,7 @@ export default function SimplyView({
                 <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #2b313d)" vertical={false} />
                       <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
                       <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => formatMrTl(v, true)} />
                       <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
@@ -2945,7 +2949,7 @@ export default function SimplyView({
                 <div className="h-44 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={peerComparisonData} layout="vertical" margin={{ top: 5, right: 30, left: 15, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" horizontal={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #2b313d)" horizontal={false} />
                       <XAxis type="number" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => `${v}x`} />
                       <YAxis dataKey="name" type="category" stroke="#6b7280" tick={{ fontSize: 11, fill: '#e5e7eb' }} />
                       <Tooltip cursor={false} content={<PeerTooltip />} />
@@ -2972,7 +2976,7 @@ export default function SimplyView({
                 <div className="h-44 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={quarterlyMultiplesData} margin={{ top: 5, right: 15, left: -10, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#2b313d" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #2b313d)" vertical={false} />
                       <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
                       <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => `${v}x`} />
                       <Tooltip content={<MultiplesTrendTooltip />} />

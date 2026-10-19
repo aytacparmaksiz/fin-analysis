@@ -1882,6 +1882,90 @@ export function calculateSectorScore(
     }
     breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
 
+  } else if (sector === 'HEALTHCARE') {
+    // Sağlık Hizmetleri & Medikal Sektör:
+    // 1. Operasyonel Kârlılık & FAVÖK (Max 25)
+    const margin = parseFinancialNumber(latest?.ebitda_margin);
+    let s1 = 18;
+    let r1 = 'Sağlık operasyonel marjı dengeli.';
+    let st1: 'good' | 'warning' | 'danger' = 'good';
+    if (margin !== null) {
+      if (margin >= 24.0) { s1 = 25; r1 = `Yüksek Operasyonel Kârlılık: Sağlık hizmetleri FAVÖK marjı (%${margin.toFixed(1)}) güçlü.`; st1 = 'good'; }
+      else if (margin >= 18.0) { s1 = 20; r1 = `Sağlıklı FAVÖK Marjı: %${margin.toFixed(1)} seviyesinde dengeli.`; st1 = 'good'; }
+      else if (margin >= 12.0) { s1 = 13; r1 = `Ilımlı Marj: Personel ve medikal sarf maliyetleri kârlılığı sınırlıyor (%${margin.toFixed(1)}).`; st1 = 'warning'; }
+      else { s1 = 4; r1 = `Düşük Operasyonel Kârlılık: FAVÖK marjı (%${margin.toFixed(1)}) baskı altında.`; st1 = 'danger'; anomalies.push(`Düşük Sağlık Marjı: %${margin.toFixed(1)}`); }
+    }
+    breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
+
+    // 2. Sermaye Verimliliği (ROIC vs WACC Makası - EVA) (Max 25)
+    const roic = parseFinancialNumber(latest?.roic);
+    const nominalWacc = parseFinancialNumber(latest?.nominal_wacc ?? latest?.wacc);
+    const benchmarkWacc = parseFinancialNumber((latest?.is_tms29 && latest?.real_wacc != null) ? latest.real_wacc : (latest?.wacc ?? nominalWacc));
+    let s2 = 16;
+    let r2 = 'Hastane yatırımlarının sermaye getirisi izleniyor.';
+    let st2: 'good' | 'warning' | 'danger' = 'warning';
+    if (roic !== null && benchmarkWacc !== null) {
+      const spread = roic - benchmarkWacc;
+      const waccLabel = latest?.is_tms29 ? `Reel WACC (%${benchmarkWacc})` : `WACC (%${benchmarkWacc})`;
+      if (spread >= 8.0) { s2 = 25; r2 = `Yüksek Sermaye Katma Değeri: ROIC (%${roic}), ${waccLabel} maliyetinin +${spread.toFixed(1)} puan üzerinde!`; st2 = 'good'; }
+      else if (spread >= 0.0) { s2 = 19; r2 = `Pozitif EVA: Hastane yatırımları sermaye maliyetini karşılıyor (${waccLabel}, Spread: +${spread.toFixed(1)} puan).`; st2 = 'good'; }
+      else if (spread >= -4.0) { s2 = 11; r2 = `Ilımlı Negatif Spread: Sermaye maliyetinin ${Math.abs(spread).toFixed(1)} puan gerisinde.`; st2 = 'warning'; }
+      else { s2 = 3; r2 = `Sermaye Erozyonu: ROIC (%${roic}) << ${waccLabel}, hissedar değeri aşınıyor!`; st2 = 'danger'; anomalies.push(`Sağlık Negatif EVA: ${spread.toFixed(1)} puan`); }
+    }
+    breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+
+    // 3. Bilanço & Borçluluk Güvenliği (Net Borç / TTM FAVÖK & Cari Oran) (Max 25)
+    const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
+    const ebitda = computeTtmEbitdaFromHistory(sortedHistory, latest) ?? parseFinancialNumber(latest?.ebitda) ?? 0;
+    const isEbitdaNegativeWithDebt = ebitda <= 0 && netDebt > 0;
+    const debtRatio = ebitda > 0 ? (netDebt / ebitda) : null;
+    const cr = parseFinancialNumber(latest?.current_ratio);
+    let s3 = 18;
+    let r3 = 'Finansal borçluluk ve likidite dengeli.';
+    let st3: 'good' | 'warning' | 'danger' = 'good';
+    if (isEbitdaNegativeWithDebt) {
+      s3 = 2;
+      r3 = 'Kritik Borç & Operasyonel Zarar Riski: Negatif TTM FAVÖK nedeniyle borç ödeme kapasitesi bulunmamaktadır.';
+      st3 = 'danger';
+      anomalies.push('Sağlık Borç Riski: Negatif TTM FAVÖK.');
+    } else if (debtRatio !== null && debtRatio > 3.5) {
+      s3 = 3;
+      r3 = `Kritik Borç Baskısı: Net Borç / TTM FAVÖK (${debtRatio.toFixed(1)}x) 3.5x tavanını aştı!`;
+      st3 = 'danger';
+      anomalies.push(`Yüksek Borçluluk: Net Borç/FAVÖK ${debtRatio.toFixed(1)}x`);
+    } else if (debtRatio !== null && debtRatio > 2.5) {
+      s3 = 12;
+      r3 = `Net Borç / TTM FAVÖK (${debtRatio.toFixed(1)}x) izlenmeli.`;
+      st3 = 'warning';
+    } else if (latest !== null && debtRatio !== null && debtRatio <= 1.8 && (cr === null || cr >= 1.0)) {
+      s3 = 25;
+      r3 = `Düşük borçluluk (Net Borç/TTM FAVÖK: ${debtRatio.toFixed(1)}x) ve güçlü bilanço tamponu.`;
+      st3 = 'good';
+    }
+    breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+
+    // 4. Hasılat & Medikal Turizm Büyümesi (Max 25)
+    const ocf = parseFinancialNumber(latest?.operating_cash_flow);
+    const netIncome = parseFinancialNumber(latest?.net_income);
+    let s4 = 17;
+    let r4 = 'Ciro ve nakit akışı büyümesi takip ediliyor.';
+    let st4: 'good' | 'warning' | 'danger' = 'good';
+    if (netIncome !== null && netIncome > 0 && ocf !== null && ocf < 0) {
+      s4 = 2;
+      r4 = 'Kârlılık İllüzyonu: Net kâr pozitif olmasına rağmen işletme nakit akışı negatiftir.';
+      st4 = 'danger';
+      anomalies.push('Sağlık Makyajlı Bilanço: OCF negatif.');
+    } else if (ocf !== null && ocf > 0) {
+      s4 = 25;
+      r4 = 'Güçlü Nakit Üretimi: Yurt içi ve medikal turizm hasta trafiği operasyonel nakit akışını güçlü destekliyor.';
+      st4 = 'good';
+    } else {
+      s4 = 14;
+      r4 = 'Sağlık operasyonları nakit üretimi dengeli.';
+      st4 = 'good';
+    }
+    breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
+
   } else {
     // Sanayi / Reel Sektör:
     // 1. Finansal Sağlık & Likidite (Cari Oran & Net Borç / FAVÖK) (Max 25)
@@ -2146,7 +2230,14 @@ export function computeFairValueTrend(
     } else {
       // Reel Sektör / Sanayi / Teknoloji / Enerji / Perakende / Sağlık
       if (eq <= 0) {
-        periodFv = 0.05;
+        if (ebitda > 0 && effectiveShareCount > 0) {
+          const mult = (targetMultiple && targetMultiple > 0) ? targetMultiple : 6.5;
+          const ev = ebitda * mult;
+          const equityVal = ev - netDebt;
+          periodFv = equityVal > 0 ? Number((equityVal / effectiveShareCount).toFixed(2)) : 0.05;
+        } else {
+          periodFv = 0.05;
+        }
       } else if (ebitda <= 0) {
         const bvps = eq / effectiveShareCount;
         periodFv = bvps * 0.35;
@@ -2372,7 +2463,7 @@ export function detectValueTrap(
   // 3. Kriter: Aşırı Borçluluk (Net Borç / TTM FAVÖK > 4.0x)
   const netDebt = parseFinancialNumber(latest?.net_debt);
   const ttmEbitda = computeTtmEbitdaFromHistory(sorted, latest);
-  if (sector === 'INDUSTRIAL' || sector === 'AVIATION' || sector === 'UTILITIES_TELCO') {
+  if (['INDUSTRIAL', 'AVIATION', 'UTILITIES_TELCO', 'HEALTHCARE', 'RETAIL', 'TECH'].includes(sector)) {
     if (netDebt !== null && netDebt > 0) {
       if (ttmEbitda !== null && ttmEbitda > 0) {
         const ndEbitda = netDebt / ttmEbitda;
@@ -2505,7 +2596,8 @@ export function optimizeFinalDecision({
   // kararın "ALMA" olması adil değer ile mantıksal tezat oluşturur (+%77 potansiyel varken ALMA uyarısı).
   // Bu durumda karar en muhafazakar haliyle "NÖTR" (Koşullu İzleme) olarak dengelenir.
   const isFatalInsolvent = equity !== null && equity <= 0;
-  const isIndustrialDistressed = effectiveSector === 'INDUSTRIAL' &&
+  const isOperatingSector = ['INDUSTRIAL', 'HEALTHCARE', 'RETAIL', 'TECH', 'AVIATION', 'UTILITIES_TELCO'].includes(effectiveSector);
+  const isIndustrialDistressed = isOperatingSector &&
     effectiveEbitda !== null &&
     effectiveEbitda <= 0 &&
     parseFinancialNumber(effectiveLatestData?.net_debt) !== null &&
@@ -2530,20 +2622,20 @@ export function optimizeFinalDecision({
 
   // FALSE POSITIVE (HATALI AL) ENGELLEME KURALLARI:
   if (rawDecision === 'AL' && !overrideApplied) {
-    // 2. Kural: Sanayi Sektörü Makyajlı Bilanço Koruması (Net Kâr pozitif ama İşletme Nakit Akışı negatif)
+    // 2. Kural: Reel Sektör Makyajlı Bilanço Koruması (Net Kâr pozitif ama İşletme Nakit Akışı negatif)
     const netIncome = parseFinancialNumber(effectiveLatestData?.net_income);
     const ocf = parseFinancialNumber(effectiveLatestData?.operating_cash_flow);
-    if (!overrideApplied && effectiveSector === 'INDUSTRIAL' && netIncome !== null && netIncome > 0 && ocf !== null && ocf < 0) {
+    if (!overrideApplied && isOperatingSector && netIncome !== null && netIncome > 0 && ocf !== null && ocf < 0) {
       finalDecision = 'ALMA';
       overrideApplied = true;
       overrideReason = 'Makyajlı Bilanço Koruması: Net kâr pozitif olmasına rağmen işletme nakit akışı (OCF) negatiftir. Şirketin kâr kalitesi zayıf ve tahsilat/stok riski bulunduğu için AL kararı engellendi.';
       safetyFlags.push('Bilanço Makyajı: OCF negatif, net kâr pozitif.');
     }
 
-    // 3. Kural: Sanayi Sektörü Borçluluk & Negatif FAVÖK Filtresi
+    // 3. Kural: Reel Sektör Borçluluk & Negatif FAVÖK Filtresi
     const netDebt = parseFinancialNumber(effectiveLatestData?.net_debt);
     const ebitda = effectiveEbitda;
-    if (!overrideApplied && effectiveSector === 'INDUSTRIAL' && netDebt !== null && netDebt > 0) {
+    if (!overrideApplied && isOperatingSector && netDebt !== null && netDebt > 0) {
       if (ebitda !== null && ebitda <= 0) {
         finalDecision = 'ALMA';
         overrideApplied = true;
@@ -3221,9 +3313,7 @@ export function computeSectorValuationAndDrivers(
         finalPb = Number((gordonPb + franchisePremium).toFixed(2));
       }
 
-      if (livePb !== null && livePb >= 0.5 && livePb <= 8.0) {
-        finalPb = Number(((finalPb * 0.55) + (livePb * 0.45)).toFixed(2));
-      }
+      // Pure Gordon model + franchise premium (preserves Layer 1 intrinsic price-independence)
 
       const minPb = sector === 'INSURANCE' ? 1.4 : 0.8;
       const maxPb = sector === 'INSURANCE' ? 4.5 : 2.5;
@@ -3544,7 +3634,6 @@ export function computeSectorValuationAndDrivers(
     // Düz çarpma (3A*4) mevsimselliği bozar. Geçmiş çeyrekler varsa standart TTM hesaplanır.
     const historySeries = Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : [];
     const getTtmOrAnnualized = (field: string, rawLatestVal: number): number => {
-      if (rawLatestVal <= 0 && field === 'ebitda') return rawLatestVal * unitScale;
       const pKey = parsePeriodSortKey(latest?.period);
       const yr = Math.floor(pKey / 100);
       const m = pKey % 100;
@@ -3560,7 +3649,7 @@ export function computeSectorValuationAndDrivers(
         const vMatch = parseFinancialNumber(prevYearMatch?.[field]);
         if (vEnd !== null && vMatch !== null) {
           const ttmVal = rawLatestVal + vEnd - vMatch;
-          if (ttmVal > 0) return ttmVal * unitScale;
+          return ttmVal * unitScale;
         }
       }
       return rawLatestVal * unitScale * periodAnnualFactor;
@@ -4114,11 +4203,11 @@ export function calculateDuPont5Step(item: any, sectorOrPrev?: any, sectorOverri
 
   const taxBurden = (netIncome !== null && ebt !== null && ebt !== 0)
     ? Number((netIncome / ebt).toFixed(3))
-    : 0.75;
+    : null;
 
   const interestBurden = (ebt !== null && ebit !== null && ebit !== 0)
     ? Number((ebt / ebit).toFixed(3))
-    : 0.85;
+    : null;
 
   const ebitMargin = (ebit !== null && revenue !== null && revenue > 0)
     ? Number(((ebit / revenue) * 100).toFixed(2))

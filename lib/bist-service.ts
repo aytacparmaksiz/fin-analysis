@@ -188,8 +188,8 @@ export const KNOWN_BIST_DIRECTORY: Record<string, BistCompanyMetadata> = {
   TCELL: { ticker: 'TCELL', name: 'Turkcell İletişim Hizmetleri A.Ş.', sector: 'UTILITIES_TELCO', financialGroup: 'XI_29', shareCount: 2200000000 },
   TTKOM: { ticker: 'TTKOM', name: 'Türk Telekomünikasyon A.Ş.', sector: 'UTILITIES_TELCO', financialGroup: 'XI_29', shareCount: 3500000000 },
   VESBE: { ticker: 'VESBE', name: 'Vestel Beyaz Eşya Sanayi ve Ticaret A.Ş.', sector: 'INDUSTRIAL', financialGroup: 'XI_29', shareCount: 1600000000 },
-  MPARK: { ticker: 'MPARK', name: 'MLP Sağlık Hizmetleri A.Ş.', sector: 'INDUSTRIAL', financialGroup: 'XI_29', shareCount: 208037202 },
-  GENIL: { ticker: 'GENIL', name: 'Gen İlaç ve Sağlık Ürünleri Sanayi ve Ticaret A.Ş.', sector: 'INDUSTRIAL', financialGroup: 'XI_29', shareCount: 300000000 },
+  MPARK: { ticker: 'MPARK', name: 'MLP Sağlık Hizmetleri A.Ş.', sector: 'HEALTHCARE', financialGroup: 'XI_29', shareCount: 208037202 },
+  GENIL: { ticker: 'GENIL', name: 'Gen İlaç ve Sağlık Ürünleri Sanayi ve Ticaret A.Ş.', sector: 'HEALTHCARE', financialGroup: 'XI_29', shareCount: 300000000 },
 
   // GYO (Gayrimenkul Yatırım Ortaklıkları - KVK md. 5/1-d %0 KV)
   EKGYO: { ticker: 'EKGYO', name: 'Emlak Konut GYO A.Ş.', sector: 'REIT', financialGroup: 'XI_29', shareCount: 3800000000 },
@@ -1097,6 +1097,11 @@ export async function fetchAndAnalyzeBistCompany(
     if (lastCached?.share_price && lastCached.share_price > 0) {
       currentPrice = lastCached.share_price;
     }
+  }
+
+  // Son çeyrek hisse fiyatını kesinleşmiş güncel fiyatla eşitle
+  if (latestItem && currentPrice > 0) {
+    latestItem.share_price = Number(currentPrice.toFixed(2));
   }
 
   // Borsa İstanbul'da 1 TL nominal Ödenmiş Sermaye = 1 Adet Pay (Lot).

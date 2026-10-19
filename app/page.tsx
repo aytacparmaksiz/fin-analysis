@@ -4316,6 +4316,7 @@ export default function ValuationTerminal({
                 latestData={latestData}
                 chartData={chartData}
                 quarterlyChartData={quarterlyChartData}
+                ttmChartData={ttmChartData}
                 tickerHistory={tickerHistory}
                 onSwitchToTerminal={() => {}}
                 onSelectTicker={(tk) => handleBistDirectAnalysis(tk)}

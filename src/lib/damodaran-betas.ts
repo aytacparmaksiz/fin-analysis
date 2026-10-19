@@ -1349,7 +1349,7 @@ export function lookupDamodaranIndustry(
   }
 
   // 11. Sağlık & İlaç
-  if (['MPARK', 'LKMNH', 'TNZTP', 'MEDTR'].includes(t) || /hastane|sağlık/i.test(secName)) {
+  if (['MPARK', 'LKMNH', 'TNZTP', 'MEDTR'].includes(t) || s === 'HEALTHCARE' || /hastane|sağlık/i.test(secName)) {
     return DAMODARAN_INDUSTRY_MAP['hospitals/healthcare facilities'] || DAMODARAN_GLOBAL_BETAS[42];
   }
   if (['GENIL', 'SELEC', 'TRILC', 'DEVA'].includes(t) || /ilaç|ecza/i.test(secName)) {
