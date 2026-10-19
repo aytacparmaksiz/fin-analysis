@@ -143,13 +143,16 @@ RAPOR FORMATI KESİNLİKLE ŞU BAŞLIKLARLA OLMALIDIR:
 | Portföy / Yatırım Getirisi & Nakit Gücü | X | 25 | ... |
 | Sermaye Yeterliliği & ROE Kârlılığı | X | 25 | ... |
 | Prim Büyümesi, Pazar Payı & Fon Genişlemesi | X | 25 | ... |
+| Prim Büyümesi, Pazar Payı & Fon Genişlemesi | X | 25 | ... |
 | **Toplam Puan** | **X** | **100** | ... |
 
-Analist Kararı: [AL / ALMA / NÖTR]
-(NOT: Aşağıdaki 3 satırda KESİNLİKLE '[' veya ']' köşeli parantez KULLANMA. Her başlığı doğrudan duru, akıcı kurumsal Türkçe metinle yaz.)
-Yatırım Tezi: Şirketin operasyonel kârlılığı, sermaye getirisi ve adil değer potansiyelini özetleyen net değerlendirme gerekçesi.
-Kilit Katalizörler: Fiyatı adil değere taşıyacak 2-3 somut şirket ve pazar katalizörü.
-Riskler & Emniyet Marjı: Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek temel riskler.`;
+### Analist Kararı: [AL / ALMA / NÖTR]
+
+**Yatırım Tezi:** Şirketin operasyonel kârlılığı, sermaye getirisi ve adil değer potansiyelini özetleyen net değerlendirme gerekçesi.
+
+**Kilit Katalizörler:** Fiyatı adil değere taşıyacak 2-3 somut şirket ve pazar katalizörü.
+
+**Riskler & Emniyet Marjı:** Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek temel riskler.`;
     } else if (sector === 'BANKING') {
       systemInstruction = `Sen Türkiye bankacılık ve finans sektöründe uzmanlaşmış, akademik düzeyde berrak ve objektif yazan kurumsal bir fon yöneticisisin.
 ${universalSafetyRules}
@@ -177,11 +180,13 @@ RAPOR FORMATI KESİNLİKLE ŞU BAŞLIKLARLA OLMALIDIR:
 ## V. DEĞER SÜRÜCÜLERİ VE DUYARLILIK ANALİZİ
 ## VI. YATIRIM RİSKLERİ, KATALİZÖRLER VE NİHAİ KARAR
 
-Analist Kararı: [AL / ALMA / NÖTR]
-(NOT: Aşağıdaki 3 satırda KESİNLİKLE '[' veya ']' köşeli parantez KULLANMA. Her başlığı doğrudan duru, akıcı kurumsal Türkçe metinle yaz.)
-Yatırım Tezi: Şirketin operasyonel kârlılığı, sermaye getirisi ve adil değer potansiyelini özetleyen net değerlendirme gerekçesi.
-Kilit Katalizörler: Fiyatı adil değere taşıyacak 2-3 somut şirket ve pazar katalizörü.
-Riskler & Emniyet Marjı: Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek temel riskler.`;
+### Analist Kararı: [AL / ALMA / NÖTR]
+
+**Yatırım Tezi:** Şirketin operasyonel kârlılığı, sermaye getirisi ve adil değer potansiyelini özetleyen net değerlendirme gerekçesi.
+
+**Kilit Katalizörler:** Fiyatı adil değere taşıyacak 2-3 somut şirket ve pazar katalizörü.
+
+**Riskler & Emniyet Marjı:** Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek temel riskler.`;
     } else if (sector === 'HOLDING') {
       systemInstruction = `Sen Holding ve Yatırım Şirketleri alanında uzmanlaşmış, akademik düzeyde berrak ve objektif yazan kurumsal bir fon yöneticisisin.
 ${universalSafetyRules}
@@ -204,11 +209,13 @@ RAPOR FORMATI KESİNLİKLE ŞU BAŞLIKLARLA OLMALIDIR:
 ## V. DEĞER SÜRÜCÜLERİ VE DUYARLILIK ANALİZİ
 ## VI. YATIRIM RİSKLERİ, KATALİZÖRLER VE NİHAİ KARAR
 
-Analist Kararı: [AL / ALMA / NÖTR]
-(NOT: Aşağıdaki 3 satırda KESİNLİKLE '[' veya ']' köşeli parantez KULLANMA. Her başlığı doğrudan duru, akıcı kurumsal Türkçe metinle yaz.)
-Yatırım Tezi: Şirketin operasyonel kârlılığı, sermaye getirisi ve adil değer potansiyelini özetleyen net değerlendirme gerekçesi.
-Kilit Katalizörler: Fiyatı adil değere taşıyacak 2-3 somut şirket ve pazar katalizörü.
-Riskler & Emniyet Marjı: Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek temel riskler.`;
+### Analist Kararı: [AL / ALMA / NÖTR]
+
+**Yatırım Tezi:** Şirketin operasyonel kârlılığı, sermaye getirisi ve adil değer potansiyelini özetleyen net değerlendirme gerekçesi.
+
+**Kilit Katalizörler:** Fiyatı adil değere taşıyacak 2-3 somut şirket ve pazar katalizörü.
+
+**Riskler & Emniyet Marjı:** Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek temel riskler.`;
     } else {
       // Standart Sanayi / Reel Sektör Promptu
       systemInstruction = `Sen Goldman Sachs, Morgan Stanley ve İş Yatırım Araştırma standardında akademik düzeyde yetkin, berrak ve objektif yazan kurumsal bir hisse senedi araştırma analistisin.
@@ -247,11 +254,13 @@ RAPOR FORMATI KESİNLİKLE ŞU BAŞLIKLARLA VE YAPIDA OLMALIDIR:
 | Gelecek Hedefleri, Katalizör ve Büyüme | X | 25 | ... |
 | **Toplam Puan** | **X** | **100** | ... |
 
-Analist Kararı: [AL / ALMA / NÖTR]
-(NOT: Aşağıdaki 3 satırda KESİNLİKLE '[' veya ']' köşeli parantez KULLANMA. Her başlığı doğrudan duru, akıcı kurumsal Türkçe metinle yaz.)
-Yatırım Tezi: Şirketin operasyonel kârlılığı, sermaye getirisi ve adil değer potansiyelini özetleyen net değerlendirme gerekçesi.
-Kilit Katalizörler: Fiyatı adil değere taşıyacak 2-3 somut şirket ve pazar katalizörü.
-Riskler & Emniyet Marjı: Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek temel riskler.`;
+### Analist Kararı: [AL / ALMA / NÖTR]
+
+**Yatırım Tezi:** Şirketin operasyonel kârlılığı, sermaye getirisi ve adil değer potansiyelini özetleyen net değerlendirme gerekçesi.
+
+**Kilit Katalizörler:** Fiyatı adil değere taşıyacak 2-3 somut şirket ve pazar katalizörü.
+
+**Riskler & Emniyet Marjı:** Ayı senaryosu taban fiyatı, emniyet marjı ve izlenecek temel riskler.`;
     }
 
     const rawHistory = Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : [];
@@ -560,8 +569,11 @@ $$
 ${(scoreResult.breakdown || []).map((b: any) => `| ${b.category} | ${b.score} | ${b.maxScore} | ${b.reason} |`).join('\n')}
 | **Toplam Puan** | **${scoreResult.totalScore}** | **100** | ${scoreResult.totalScore >= 75 ? 'Güçlü operasyonel performans ve yüksek iskonto.' : 'Sektörel standartlara uyum.'} |
 
-Analist Kararı: [${optimization.finalDecision}]
-Yatırım Tezi: ${ticker} hissesi için hesaplanan adil değer ${valuation.fair_value} TL olup, güncel ${price} TL fiyatına kıyasla %${valuation.discount_pct} potansiyel barındırmaktadır.
-Kilit Katalizörler: Operasyonel kârlılık artışı, ${drivers.revenue_growth?.label || 'gelir büyümesi'} performansı ve sektörel talep dinamikleri.
-Riskler & Emniyet Marjı: Ayı senaryosu taban hedefi ${valuation.bear_price} TL seviyesindedir. ${optimization.conditionalWarnings?.length > 0 ? optimization.conditionalWarnings.join('. ') : 'Makro oynaklık ve faiz seviyeleri izlenmelidir.'}`;
+### Analist Kararı: [${optimization.finalDecision}]
+
+**Yatırım Tezi:** ${ticker} hissesi için hesaplanan adil değer ${valuation.fair_value} TL olup, güncel ${price} TL fiyatına kıyasla %${valuation.discount_pct} potansiyel barındırmaktadır.
+
+**Kilit Katalizörler:** Operasyonel kârlılık artışı, ${drivers.revenue_growth?.label || 'gelir büyümesi'} performansı ve sektörel talep dinamikleri.
+
+**Riskler & Emniyet Marjı:** Ayı senaryosu taban hedefi ${valuation.bear_price} TL seviyesindedir. ${optimization.conditionalWarnings?.length > 0 ? optimization.conditionalWarnings.join('. ') : 'Makro oynaklık ve faiz seviyeleri izlenmelidir.'}`;
 }

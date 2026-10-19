@@ -6881,8 +6881,8 @@ export default function ValuationTerminal({
                           },
                           p: ({ children, ...props }) => {
                             const text = extractTextFromChildren(children);
-                            if (/^\s*(?:#{1,4}\s*)?\*{0,2}Analist\s+Karar[ıi]\s*[:=-]/i.test(text)) {
-                              const verdictMatch = text.match(/Analist\s+Karar[ıi]\s*[:=-]?\s*\[?\s*\*?\*?\s*(ALMA|SAT|AL|NÖTR|NOTR|TUT)\s*\*?\*?\s*\]?/i);
+                            if (/^\s*(?:#{1,4}\s*)?\*{0,2}Analist\s+Karar[ıi]\s*[:=-]/i.test(text) || (text.includes('Yatırım Tezi:') && (text.includes('Katalizör') || text.includes('Risk')))) {
+                              const verdictMatch = text.match(/Analist\s+Karar[ıi]\s*[:=-]?\s*\[?\s*\*?\*?\s*(ALMA|SAT|AL|NÖTR|NOTR|TUT)\s*(?:\([^\)]*\))?\s*\*?\*?\s*\]?/i);
                               const matchedVerdict = verdictMatch ? verdictMatch[1].toUpperCase() : '';
                               const isAlma = ['ALMA', 'SAT'].includes(matchedVerdict) || (/\b(ALMA|SAT)\b/i.test(text) && !/\b(AL)\b/i.test(text.replace(/\b(ALMA)\b/gi, '')));
                               const isAl = ['AL'].includes(matchedVerdict) || (/\b(AL)\b/i.test(text) && !isAlma);
@@ -6896,7 +6896,7 @@ export default function ValuationTerminal({
                                 ? 'Riskli / Sermaye Kaybı Riski (Yatırım Önerilmez)' 
                                 : 'Bekle-Gör / Nötr (İskonto Marjı Sınırlı)';
 
-                              const cleanBody = text.replace(/^(?:#{1,3}\s*)?\*{0,2}Analist\s+Karar[ıi]\s*[:=-]?\s*\[?\s*\*?\*?\s*(?:ALMA|SAT|AL|NÖTR|NOTR|TUT)?\s*\*?\*?\]?\*{0,2}\s*/i, '').trim();
+                              const cleanBody = text.replace(/^(?:#{1,4}\s*)?\*{0,2}Analist\s+Karar[ıi]\s*[:=-]?\s*\[?\s*\*?\*?\s*(?:ALMA|SAT|AL|NÖTR|NOTR|TUT)?\s*(?:\([^\)]*\))?\s*\*?\*?\]?\*{0,2}\s*/i, '').trim();
 
                               return (
                                 <div className={`my-8 rounded-2xl border p-6 md:p-8 shadow-sm transition-all ${
