@@ -90,7 +90,7 @@ test('Phases P1-P2-P3-P4 Comprehensive Verification Suite', async (t) => {
     assert.ok(combinedContent.includes('fallbackTitle="Özet Panosu Hatası"'), 'Özet tab must be wrapped with ErrorBoundary');
     assert.ok(combinedContent.includes('fallbackTitle="Grafik Terminali Hatası"'), 'Overview tab must be wrapped with ErrorBoundary');
     assert.ok(combinedContent.includes('fallbackTitle="Finansal Tablolar Hatası"'), 'Tables tab must be wrapped with ErrorBoundary');
-    assert.ok(combinedContent.includes('fallbackTitle="Adil Değer Panosu Hatası"'), 'Fairvalue tab must be wrapped with ErrorBoundary');
+    assert.ok(combinedContent.includes('fallbackTitle="Adil Değer Panosu Hatası"') || combinedContent.includes('fallbackTitle="Değerleme Panosu Hatası"'), 'Fairvalue tab must be wrapped with ErrorBoundary');
     assert.ok(combinedContent.includes('fallbackTitle="Çarpan Analizi Hatası"'), 'Multiples tab must be wrapped with ErrorBoundary');
     assert.ok(combinedContent.includes('fallbackTitle="Güçlü/Zayıf Yönler Hatası"'), 'Proscons tab must be wrapped with ErrorBoundary');
     assert.ok(combinedContent.includes('fallbackTitle="Yönetim Hedefleri Hatası"'), 'Guidance tab must be wrapped with ErrorBoundary');
