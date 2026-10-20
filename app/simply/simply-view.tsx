@@ -102,6 +102,10 @@ export interface SimplyViewProps {
   quarterlyChartData: any[];
   ttmChartData?: any[];
   tickerHistory?: SavedReport[];
+  portfolioTickers?: string[];
+  favoriteTickers?: string[];
+  onTogglePortfolio?: (ticker: string) => void;
+  onToggleFavorite?: (ticker: string) => void;
   onSwitchToTerminal: () => void;
   onSelectTicker?: (ticker: string) => void;
   onAnalyzeTicker?: (ticker: string) => void;
@@ -549,6 +553,10 @@ export default function SimplyView({
   quarterlyChartData,
   ttmChartData = [],
   tickerHistory = [],
+  portfolioTickers = [],
+  favoriteTickers = [],
+  onTogglePortfolio,
+  onToggleFavorite,
   onSwitchToTerminal,
   onSelectTicker,
   onAnalyzeTicker,
@@ -564,6 +572,14 @@ export default function SimplyView({
   const [showBrokerBreakdown, setShowBrokerBreakdown] = useState(false);
   const [showSnowflakeChecklist, setShowSnowflakeChecklist] = useState(false);
   const [selectedSnowflakeFilter, setSelectedSnowflakeFilter] = useState<'all' | 'value' | 'future' | 'past' | 'health' | 'dividend'>('all');
+
+  const isInPortfolio = useMemo(() => {
+    return portfolioTickers.includes(report.ticker?.toUpperCase() || '');
+  }, [portfolioTickers, report.ticker]);
+
+  const isFavorite = useMemo(() => {
+    return favoriteTickers.includes(report.ticker?.toUpperCase() || '');
+  }, [favoriteTickers, report.ticker]);
 
   // Şirket Kartı: Temettü Geçmişi, Analist Konsensüs Hedef Fiyat ve MKK Yabancı Oranı
   const [liveCompanyDetails, setLiveCompanyDetails] = useState<{
@@ -1149,20 +1165,25 @@ export default function SimplyView({
 
   // Sektör Çarpanları Kıyaslama Çizelgesi
   const peerComparisonData = useMemo(() => {
-    const data: Array<{ name: string; pe: number; isMain?: boolean }> = [];
+    const data: Array<{ name: string; pe: number; isMain?: boolean; reportId?: string; ticker?: string }> = [];
     const mainPE = marketMultiples?.pe || companyMultiplesData?.multiples?.pe?.companyValue || 8.5;
-    data.push({ name: report.ticker, pe: Number(mainPE.toFixed(1)), isMain: true });
+    data.push({ name: report.ticker, pe: Number(mainPE.toFixed(1)), isMain: true, reportId: report.id, ticker: report.ticker });
 
     analyzedCompetitors.slice(0, 4).forEach(comp => {
-      const pe = comp.extractedData?.valuation?.pe_ratio || comp.extractedData?.pe || 9.2;
-      data.push({ name: comp.ticker, pe: Number(Number(pe).toFixed(1)) });
+      const pe = comp.extractedData?.valuation?.pe_ratio || comp.extractedData?.pe || comp.extractedData?.market_multiples?.pe || 9.2;
+      data.push({ 
+        name: comp.ticker, 
+        pe: Number(Number(pe).toFixed(1)),
+        reportId: comp.id,
+        ticker: comp.ticker
+      });
     });
 
     const bench = marketMultiples?.sector_averages?.pe ?? companyMultiplesData?.benchmark?.peMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pe ?? 9.0;
     data.push({ name: 'Sektör Ort.', pe: Number(Number(bench).toFixed(1)) });
 
     return data;
-  }, [report.ticker, marketMultiples, companyMultiplesData, analyzedCompetitors, currentSector]);
+  }, [report.ticker, report.id, marketMultiples, companyMultiplesData, analyzedCompetitors, currentSector]);
 
   // Navigasyon Elemanları (10 Sekme)
   const NAVIGATION_ITEMS: Array<{ id: SimplySectionId; num?: string; label: string; icon: any }> = [
@@ -1601,22 +1622,36 @@ export default function SimplyView({
               </div>
             </div>
 
-            {/* Butonlar: + Portfolio, Watch (Terminal butonu kaldırıldı, 2 eşit buton) */}
+            {/* Butonlar: + Portföy, ★ (İzleme / Favori) */}
             <div className="grid grid-cols-2 gap-2 pt-0.5 w-full">
               <button
                 type="button"
-                className="py-2 px-2 bg-[#f5c242] hover:bg-[#e5b332] text-slate-950 text-sm font-bold rounded-lg transition flex items-center justify-center gap-1 cursor-pointer shadow-sm"
+                onClick={() => {
+                  if (onTogglePortfolio) onTogglePortfolio(report.ticker);
+                }}
+                className={`py-2 px-2 text-sm font-bold rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm ${
+                  isInPortfolio
+                    ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold'
+                    : 'bg-[#f5c242] hover:bg-[#e5b332] text-slate-950 font-bold'
+                }`}
+                title={isInPortfolio ? 'Portföyden Çıkar' : 'Portföye Ekle'}
               >
-                <span>+</span>
-                <span>Portfolio</span>
+                <span>{isInPortfolio ? '✓' : '+'}</span>
+                <span>Portföy</span>
               </button>
               <button
                 type="button"
-                className="py-2 px-2 bg-[#21262d] hover:bg-[#2b313d] text-slate-200 hover:text-white text-sm font-semibold rounded-lg border border-[#2e3440] transition cursor-pointer flex items-center justify-center gap-1"
-                title="İzleme Listesi"
+                onClick={() => {
+                  if (onToggleFavorite) onToggleFavorite(report.ticker);
+                }}
+                className={`py-2 px-2 text-sm font-semibold rounded-lg border transition cursor-pointer flex items-center justify-center gap-1 ${
+                  isFavorite
+                    ? 'bg-amber-400/20 text-amber-300 border-amber-400/50 hover:bg-amber-400/30'
+                    : 'bg-[#21262d] hover:bg-[#2b313d] text-slate-400 hover:text-white border-[#2e3440]'
+                }`}
+                title={isFavorite ? 'Favorilerden Çıkar' : 'Favorilere Ekle'}
               >
-                <span>★</span>
-                <span>Watch</span>
+                <span className={`text-base leading-none ${isFavorite ? 'text-amber-400 font-bold' : ''}`}>★</span>
               </button>
             </div>
 
@@ -2334,8 +2369,15 @@ export default function SimplyView({
                     {analyzedCompetitors.map((comp) => (
                       <div
                         key={comp.id}
-                        onClick={() => onSelectTicker ? onSelectTicker(comp.ticker) : (onSelectReport && onSelectReport(comp.id))}
-                        className="bg-[#21262d] hover:bg-[#2b313d] border border-[#2e3440] rounded-xl p-4 transition cursor-pointer flex items-center justify-between group shadow-sm"
+                        onClick={() => {
+                          if (onSelectReport) {
+                            onSelectReport(comp.id);
+                          } else if (onSelectTicker) {
+                            onSelectTicker(comp.ticker);
+                          }
+                        }}
+                        className="bg-[#21262d] hover:bg-[#2b313d] border border-[#2e3440] hover:border-[#f5c242]/50 rounded-xl p-4 transition cursor-pointer flex items-center justify-between group shadow-sm"
+                        title={`${comp.ticker} analizini aç`}
                       >
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 rounded-lg bg-[#181b20] border border-[#2e3440] flex items-center justify-center font-black font-mono text-sm text-[#f5c242]">
@@ -3244,7 +3286,18 @@ export default function SimplyView({
                       <Tooltip cursor={false} content={<PeerTooltip />} />
                       <Bar dataKey="pe" name="F/K Oranı" maxBarSize={20} radius={[0, 4, 4, 0]}>
                         {peerComparisonData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.isMain ? '#f5c242' : '#38bdf8'} />
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={entry.isMain ? '#f5c242' : '#38bdf8'} 
+                            className={entry.reportId && !entry.isMain ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}
+                            onClick={() => {
+                              if (!entry.isMain && entry.reportId && onSelectReport) {
+                                onSelectReport(entry.reportId);
+                              } else if (!entry.isMain && entry.ticker && onSelectTicker) {
+                                onSelectTicker(entry.ticker);
+                              }
+                            }}
+                          />
                         ))}
                       </Bar>
                     </BarChart>

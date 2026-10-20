@@ -13,7 +13,8 @@ import {
   DollarSign, ShieldCheck, ShieldAlert, Activity, Layers, Download, Upload,
   Trophy, Award, Trash2, ArrowUpDown, Filter, Copy, Percent, PieChart, Info,
   PanelLeftClose, PanelLeftOpen, Pin, PinOff, Bookmark, Building2,
-  Check, Rocket, Gem, Shield, Sun, Moon, Compass, SlidersHorizontal, Scale, ArrowRight, ArrowLeft, Sparkles
+  Check, Rocket, Gem, Shield, Sun, Moon, Compass, SlidersHorizontal, Scale, ArrowRight, ArrowLeft, Sparkles,
+  Briefcase, Star
 } from 'lucide-react';
 
 import SimplyView from './simply/simply-view';
@@ -1296,8 +1297,86 @@ export default function ValuationTerminal({
   }, [savedReports, activeReportId, ticker, initialTicker, defaultReport]);
 
   // Analiz Edilen Şirketler Sekme & Filtre Durumu
-  const [analyzedTab, setAnalyzedTab] = useState<'ALL' | 'AL' | 'NÖTR' | 'ALMA'>('ALL');
+  const [analyzedTab, setAnalyzedTab] = useState<'ALL' | 'PORTFOLIO' | 'FAVORITES' | 'AL' | 'NÖTR' | 'ALMA'>('ALL');
   const [analyzedSearch, setAnalyzedSearch] = useState('');
+
+  // Portföy ve Favoriler Listeleri (localStorage'a kalıcı kaydedilir)
+  const [portfolioTickers, setPortfolioTickers] = useState<string[]>([]);
+  const [favoriteTickers, setFavoriteTickers] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedPort = localStorage.getItem('fair_value_portfolio');
+        if (savedPort) setPortfolioTickers(JSON.parse(savedPort));
+        const savedFavs = localStorage.getItem('fair_value_favorites');
+        if (savedFavs) setFavoriteTickers(JSON.parse(savedFavs));
+      } catch (e) {
+        console.warn('Portföy/Favori okuma hatası:', e);
+      }
+    }
+  }, []);
+
+  const togglePortfolio = useCallback((tickerToToggle: string) => {
+    const sym = (tickerToToggle || '').trim().toUpperCase();
+    if (!sym) return;
+    setPortfolioTickers(prev => {
+      const next = prev.includes(sym) ? prev.filter(t => t !== sym) : [...prev, sym];
+      try { localStorage.setItem('fair_value_portfolio', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
+
+  const toggleFavorite = useCallback((tickerToToggle: string) => {
+    const sym = (tickerToToggle || '').trim().toUpperCase();
+    if (!sym) return;
+    setFavoriteTickers(prev => {
+      const next = prev.includes(sym) ? prev.filter(t => t !== sym) : [...prev, sym];
+      try { localStorage.setItem('fair_value_favorites', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
+
+  // Tarayıcı Yolu & Sayfa Geçiş Yöneticisi (URL Navigation)
+  const navigateTo = useCallback((targetStep: 'input' | 'saved' | 'themes' | 'leaderboard' | 'portfolio' | 'favorites') => {
+    setError(null);
+    const basePath = typeof window !== 'undefined' && window.location.pathname.startsWith('/simply') ? '/simply' : '';
+
+    if (targetStep === 'portfolio') {
+      setStep('saved');
+      setAnalyzedTab('PORTFOLIO');
+      if (typeof window !== 'undefined') window.history.pushState(null, '', `${basePath}/?view=portfolio`);
+    } else if (targetStep === 'favorites') {
+      setStep('saved');
+      setAnalyzedTab('FAVORITES');
+      if (typeof window !== 'undefined') window.history.pushState(null, '', `${basePath}/?view=favorites`);
+    } else if (targetStep === 'saved') {
+      setStep('saved');
+      setAnalyzedTab('ALL');
+      if (typeof window !== 'undefined') window.history.pushState(null, '', `${basePath}/?view=saved`);
+    } else if (targetStep === 'themes') {
+      setStep('themes');
+      if (typeof window !== 'undefined') window.history.pushState(null, '', `${basePath}/?view=themes`);
+    } else if (targetStep === 'leaderboard') {
+      setStep('leaderboard');
+      if (typeof window !== 'undefined') window.history.pushState(null, '', `${basePath}/?view=leaderboard`);
+    } else if (targetStep === 'input') {
+      setStep('input');
+      setActiveReportId(null);
+      if (typeof window !== 'undefined') window.history.pushState(null, '', `${basePath || '/'}`);
+    }
+  }, []);
+
+  const openReport = useCallback((reportId: string, tickerName?: string) => {
+    setActiveReportId(reportId);
+    setStep('report');
+    const sym = tickerName || savedReports.find(r => r.id === reportId)?.ticker || '';
+    if (sym && typeof window !== 'undefined') {
+      const isSimply = window.location.pathname.startsWith('/simply');
+      const targetPath = isSimply ? `/simply/${sym.toUpperCase()}` : `/analysis/${sym.toUpperCase()}`;
+      window.history.pushState(null, '', targetPath);
+    }
+  }, [savedReports]);
 
   const toggleSection = (sectionKey: string) => {
     setCollapsedSections(prev => ({
@@ -1499,15 +1578,20 @@ export default function ValuationTerminal({
 
     setSavedReports(localData);
 
-    // Doğrudan URL veya initialTicker kontrolü (/analysis/VESBE veya /report/VESBE)
+    // Doğrudan URL veya initialTicker kontrolü (/analysis/VESBE veya query params)
     let pathTicker = '';
+    let queryView = '';
+    let queryTicker = '';
     if (typeof window !== 'undefined') {
       const match = window.location.pathname.match(/\/(?:analysis|report|simply)\/([A-Za-z0-9_]+)/i);
       if (match && match[1]) {
         pathTicker = match[1].toUpperCase();
       }
+      const sParams = new URLSearchParams(window.location.search);
+      queryView = sParams.get('view') || '';
+      queryTicker = (sParams.get('ticker') || '').toUpperCase();
     }
-    const targetTicker = (initialTicker || pathTicker || '').trim().toUpperCase();
+    const targetTicker = (initialTicker || pathTicker || queryTicker || '').trim().toUpperCase();
 
     if (targetTicker) {
       const matched = localData.find(r => r.ticker?.toUpperCase() === targetTicker) || (defaultReport?.ticker?.toUpperCase() === targetTicker ? defaultReport : null);
@@ -1523,10 +1607,26 @@ export default function ValuationTerminal({
         // Yerel depoda yoksa buluttan kontrol et. Bulutta da yoksa loadTickerDirect step='input' yapacaktır.
         loadTickerDirect(targetTicker, localData);
       }
+    } else if (queryView === 'portfolio') {
+      setStep('saved');
+      setAnalyzedTab('PORTFOLIO');
+      setLoading(false);
+    } else if (queryView === 'favorites') {
+      setStep('saved');
+      setAnalyzedTab('FAVORITES');
+      setLoading(false);
+    } else if (queryView === 'saved') {
+      setStep('saved');
+      setAnalyzedTab('ALL');
+      setLoading(false);
+    } else if (queryView === 'themes') {
+      setStep('themes');
+      setLoading(false);
+    } else if (queryView === 'leaderboard') {
+      setStep('leaderboard');
+      setLoading(false);
     } else {
       // Hedef bir hisse belirtilmemişse (ana sayfa / veya /simply):
-      // ASLA otomatik olarak kaydedilmiş bir şirketi açıp /analysis/XXX adresine yönlendirme yapma.
-      // Kullanıcıyı her zaman doğrudan YENİ ANALİZ paneli ('input') karşılasın.
       setActiveReportId(null);
       setTicker('');
       setStep('input');
@@ -1574,29 +1674,95 @@ export default function ValuationTerminal({
     syncWithCloud();
   }, []);
 
-  // Adres Çubuğu Senkronizasyonu (Shareable URL: /analysis/HISSE_KODU veya /simply/HISSE_KODU)
+  // Adres Çubuğu Senkronizasyonu & Tarayıcı Geri/İleri Geçmiş Desteği
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handlePopState = () => {
+      const sParams = new URLSearchParams(window.location.search);
+      const view = sParams.get('view');
+      const qTicker = sParams.get('ticker');
+      const match = window.location.pathname.match(/\/(?:analysis|report|simply)\/([A-Za-z0-9_]+)/i);
+      const urlTicker = (match ? match[1] : qTicker || '').toUpperCase();
+
+      if (urlTicker) {
+        const found = savedReports.find(r => r.ticker?.toUpperCase() === urlTicker);
+        if (found) {
+          setActiveReportId(found.id);
+          setStep('report');
+          return;
+        }
+      }
+
+      if (view === 'portfolio') {
+        setStep('saved');
+        setAnalyzedTab('PORTFOLIO');
+      } else if (view === 'favorites') {
+        setStep('saved');
+        setAnalyzedTab('FAVORITES');
+      } else if (view === 'saved') {
+        setStep('saved');
+        setAnalyzedTab('ALL');
+      } else if (view === 'themes') {
+        setStep('themes');
+      } else if (view === 'leaderboard') {
+        setStep('leaderboard');
+      } else if (view === 'new' || (!view && !urlTicker)) {
+        setStep('input');
+        setActiveReportId(null);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [savedReports]);
+
+  // URL Senkronizasyonu (URL'yi sekmeler ve raporlarla senkronize tut)
   useEffect(() => {
     if (typeof window !== 'undefined' && mounted) {
+      const isSimply = window.location.pathname.startsWith('/simply');
+      const basePath = isSimply ? '/simply' : '';
+
       if (step === 'report' && activeReport?.ticker) {
-        const isSimply = window.location.pathname.startsWith('/simply');
         const targetPath = isSimply
           ? `/simply/${activeReport.ticker.toUpperCase()}`
           : `/analysis/${activeReport.ticker.toUpperCase()}`;
         if (window.location.pathname !== targetPath && !window.location.pathname.startsWith('/report/')) {
-          window.history.replaceState(null, '', targetPath);
+          window.history.pushState(null, '', targetPath);
+        }
+      } else if (step === 'saved') {
+        const targetSearch = analyzedTab === 'PORTFOLIO' 
+          ? '?view=portfolio' 
+          : analyzedTab === 'FAVORITES' 
+          ? '?view=favorites' 
+          : '?view=saved';
+        const targetFull = `${basePath}/${targetSearch}`;
+        if (window.location.search !== targetSearch) {
+          window.history.pushState(null, '', targetFull);
+        }
+      } else if (step === 'themes') {
+        const targetFull = `${basePath}/?view=themes`;
+        if (window.location.search !== '?view=themes') {
+          window.history.pushState(null, '', targetFull);
+        }
+      } else if (step === 'leaderboard') {
+        const targetFull = `${basePath}/?view=leaderboard`;
+        if (window.location.search !== '?view=leaderboard') {
+          window.history.pushState(null, '', targetFull);
         }
       } else if (step === 'input') {
         if (
           window.location.pathname.startsWith('/analysis/') ||
           window.location.pathname.startsWith('/report/') ||
-          window.location.pathname.startsWith('/simply/')
+          window.location.pathname.startsWith('/simply/') ||
+          window.location.search.includes('view=')
         ) {
-          const rootTarget = window.location.pathname.startsWith('/simply') ? '/simply' : '/';
-          window.history.replaceState(null, '', rootTarget);
+          const rootTarget = isSimply ? '/simply' : '/';
+          window.history.pushState(null, '', rootTarget);
         }
       }
     }
-  }, [step, activeReport?.ticker, mounted]);
+  }, [step, activeReport?.ticker, analyzedTab, mounted]);
 
   const saveReport = async (newReport: SavedReport) => {
     // Aynı hissenin aynı çeyreklik dönem raporu varsa güncelle; farklı çeyrekse (örn: 2026/06 ve 2026/09) hafızada birlikte sakla
@@ -3738,7 +3904,7 @@ export default function ValuationTerminal({
         <header className="h-12 border-b border-slate-800 px-5 flex items-center justify-between bg-slate-900/95 backdrop-blur-md sticky top-0 z-30 print:hidden">
           <div className="flex items-center gap-3">
             <div 
-              onClick={() => { setStep('input'); setActiveReportId(null); setError(null); }}
+              onClick={() => navigateTo('input')}
               role="button"
               tabIndex={0}
               title="Yeni Analiz Ekranına Dön"
@@ -3749,8 +3915,6 @@ export default function ValuationTerminal({
                 <span className="text-sm font-bold text-white tracking-tight">
                   FAIR <span className="text-emerald-400">VALUE</span>
                 </span>
-                <span className="text-slate-700 hidden sm:inline">/</span>
-                <span className="text-slate-400 font-medium text-xs hidden sm:inline">BIST Araştırma Terminali</span>
                 {isCloudConfigured && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-full">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Bulut
@@ -3762,22 +3926,63 @@ export default function ValuationTerminal({
             {/* Ayrıcı Çizgi */}
             <div className="h-4 w-px bg-slate-800 hidden md:block" />
 
-            {/* Analiz Edilen Şirketler (Header Sol Bölümü) */}
+            {/* Analiz Edilen Şirketler */}
             <button
               type="button"
-              onClick={() => setStep('saved')}
+              onClick={() => navigateTo('saved')}
               className={`flex items-center gap-2 text-sm py-1.5 px-3 rounded-xl border font-semibold transition cursor-pointer ${
-                step === 'saved'
+                step === 'saved' && analyzedTab !== 'PORTFOLIO' && analyzedTab !== 'FAVORITES'
                   ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
                   : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800'
               }`}
               title="Analiz Edilen Şirketler Portföyü (AL, NÖTR, ALMA)"
             >
               <Building2 className="w-4 h-4 text-emerald-400" />
-              <span>Analiz Edilen Şirketler</span>
+              <span className="hidden md:inline">Analiz Edilen Şirketler</span>
+              <span className="md:hidden">Analizler</span>
               {savedReports.length > 0 && (
                 <span className="px-2 py-0.5 rounded-full text-xs font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold">
                   {savedReports.length}
+                </span>
+              )}
+            </button>
+
+            {/* Portföy */}
+            <button
+              type="button"
+              onClick={() => navigateTo('portfolio')}
+              className={`flex items-center gap-1.5 text-sm py-1.5 px-3 rounded-xl border font-semibold transition cursor-pointer ${
+                step === 'saved' && analyzedTab === 'PORTFOLIO'
+                  ? 'bg-[#f5c242]/20 text-[#f5c242] border-[#f5c242]/50 shadow-sm font-bold'
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800'
+              }`}
+              title="Portföyümdeki Hisseler"
+            >
+              <Briefcase className="w-4 h-4 text-[#f5c242]" />
+              <span>Portföy</span>
+              {portfolioTickers.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-mono bg-[#f5c242]/20 text-[#f5c242] border border-[#f5c242]/40 font-bold">
+                  {portfolioTickers.length}
+                </span>
+              )}
+            </button>
+
+            {/* Favoriler */}
+            <button
+              type="button"
+              onClick={() => navigateTo('favorites')}
+              className={`flex items-center gap-1.5 text-sm py-1.5 px-3 rounded-xl border font-semibold transition cursor-pointer ${
+                step === 'saved' && analyzedTab === 'FAVORITES'
+                  ? 'bg-amber-400/20 text-amber-300 border-amber-400/50 shadow-sm font-bold'
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800'
+              }`}
+              title="Favori & İzleme Listesi"
+            >
+              <Star className="w-4 h-4 text-amber-400 fill-amber-400/20" />
+              <span>Favoriler</span>
+              {favoriteTickers.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-mono bg-amber-400/20 text-amber-300 border border-amber-400/40 font-bold">
+                  {favoriteTickers.length}
                 </span>
               )}
             </button>
@@ -3786,7 +3991,7 @@ export default function ValuationTerminal({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setStep('themes')}
+              onClick={() => navigateTo('themes')}
               className={`flex items-center gap-2 text-sm py-2 px-3 rounded-xl border font-medium transition cursor-pointer ${
                 step === 'themes'
                   ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm font-semibold'
@@ -3799,7 +4004,7 @@ export default function ValuationTerminal({
 
             <button
               type="button"
-              onClick={() => setStep('leaderboard')}
+              onClick={() => navigateTo('leaderboard')}
               className={`flex items-center gap-2 text-sm py-2 px-3 rounded-xl border font-medium transition cursor-pointer ${
                 step === 'leaderboard'
                   ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-sm font-semibold'
@@ -3826,7 +4031,7 @@ export default function ValuationTerminal({
 
             <button
               type="button"
-              onClick={() => { setStep('input'); setActiveReportId(null); }}
+              onClick={() => navigateTo('input')}
               className={`flex items-center gap-2 text-sm py-2 px-3.5 rounded-xl border font-semibold transition cursor-pointer ${
                 step === 'input'
                   ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
@@ -4322,6 +4527,10 @@ export default function ValuationTerminal({
                 quarterlyChartData={quarterlyChartData}
                 ttmChartData={ttmChartData}
                 tickerHistory={tickerHistory}
+                portfolioTickers={portfolioTickers}
+                favoriteTickers={favoriteTickers}
+                onTogglePortfolio={togglePortfolio}
+                onToggleFavorite={toggleFavorite}
                 onSwitchToTerminal={() => {}}
                 onSelectTicker={(tk) => handleBistDirectAnalysis(tk)}
                 onAnalyzeTicker={(tk) => {
@@ -4329,7 +4538,7 @@ export default function ValuationTerminal({
                   setStep('input');
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                onSelectReport={(id: string) => { setActiveReportId(id); setStep('report'); }}
+                onSelectReport={(id: string) => openReport(id)}
               />
             </div>
           )}
@@ -4729,8 +4938,14 @@ export default function ValuationTerminal({
               return d === 'NÖTR' || d === 'NOTR';
             });
             const almaReports = savedReports.filter(r => (r.decision || '').trim().toUpperCase() === 'ALMA');
+            const portReports = savedReports.filter(r => portfolioTickers.includes((r.ticker || '').toUpperCase()));
+            const favReports = savedReports.filter(r => favoriteTickers.includes((r.ticker || '').toUpperCase()));
 
-            let currentList = analyzedTab === 'AL' 
+            let currentList = analyzedTab === 'PORTFOLIO'
+              ? portReports
+              : analyzedTab === 'FAVORITES'
+              ? favReports
+              : analyzedTab === 'AL' 
               ? alReports 
               : analyzedTab === 'NÖTR' 
               ? notrReports 
@@ -4750,25 +4965,49 @@ export default function ValuationTerminal({
               ? sortReportsByScoreDesc(currentList) 
               : sortReportsByDate(currentList);
 
+            const bannerTitle = analyzedTab === 'PORTFOLIO'
+              ? 'Portföyüm'
+              : analyzedTab === 'FAVORITES'
+              ? 'Favoriler & İzleme Listesi'
+              : 'Analiz Edilen Şirketler Portföyü';
+
+            const bannerDesc = analyzedTab === 'PORTFOLIO'
+              ? 'Portföyünüze eklediğiniz hisselerin güncel değerleme modelleri, adil değer ve getiri takibi.'
+              : analyzedTab === 'FAVORITES'
+              ? 'Takip listenize aldığınız şirketler, potansiyel fırsatlar ve güncel rasyolar.'
+              : 'Daha önce analiz edilmiş BIST şirketlerinin değerleme modelleri, skorları ve yatırım kararları.';
+
+            const bannerIcon = analyzedTab === 'PORTFOLIO'
+              ? <Briefcase className="w-7 h-7 text-[#f5c242]" />
+              : analyzedTab === 'FAVORITES'
+              ? <Star className="w-7 h-7 text-amber-400 fill-amber-400/20" />
+              : <Building2 className="w-7 h-7 text-emerald-400" />;
+
+            const bannerCount = analyzedTab === 'PORTFOLIO'
+              ? `${portReports.length} Şirket Portföyde`
+              : analyzedTab === 'FAVORITES'
+              ? `${favReports.length} Şirket İzleniyor`
+              : `${savedReports.length} Şirket Kayıtlı`;
+
             return (
               <div className="space-y-6">
                 {/* Üst Banner */}
                 <div className="bg-[#1a1e26] border border-[#2e3440] p-6 rounded-2xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
-                    <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-                      <Building2 className="w-7 h-7" />
+                    <div className="p-3.5 rounded-2xl bg-[#21262d] border border-[#2e3440]">
+                      {bannerIcon}
                     </div>
                     <div>
                       <div className="flex items-center gap-2.5 flex-wrap">
                         <h2 className="text-xl font-bold font-serif text-white tracking-tight">
-                          Analiz Edilen Şirketler Portföyü
+                          {bannerTitle}
                         </h2>
                         <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-[#21262d] text-emerald-400 border border-[#2e3440]">
-                          {savedReports.length} Şirket Kayıtlı
+                          {bannerCount}
                         </span>
                       </div>
                       <p className="text-sm text-slate-300 mt-1">
-                        Daha önce analiz edilmiş BIST şirketlerinin değerleme modelleri, skorları ve yatırım kararları.
+                        {bannerDesc}
                       </p>
                     </div>
                   </div>
@@ -4795,7 +5034,7 @@ export default function ValuationTerminal({
                     </label>
                     <button
                       type="button"
-                      onClick={() => setStep('input')}
+                      onClick={() => navigateTo('input')}
                       className="flex items-center gap-2 text-sm font-bold text-slate-950 bg-emerald-500 hover:bg-emerald-400 py-2 px-4 rounded-xl shadow-md transition cursor-pointer"
                     >
                       <PlusCircle className="w-4 h-4" />
@@ -4810,6 +5049,8 @@ export default function ValuationTerminal({
                   <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
                     {[
                       { key: 'ALL', label: 'TÜMÜ', count: savedReports.length, dot: 'bg-slate-400' },
+                      { key: 'PORTFOLIO', label: 'PORTFÖY', count: portReports.length, dot: 'bg-[#f5c242]', activeCls: 'border-[#f5c242]/50 bg-[#f5c242]/10 text-[#f5c242]' },
+                      { key: 'FAVORITES', label: 'FAVORİLER', count: favReports.length, dot: 'bg-amber-400', activeCls: 'border-amber-400/50 bg-amber-400/10 text-amber-300' },
                       { key: 'AL', label: 'AL', count: alReports.length, dot: 'bg-emerald-400', activeCls: 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300' },
                       { key: 'NÖTR', label: 'NÖTR', count: notrReports.length, dot: 'bg-amber-400', activeCls: 'border-amber-500/50 bg-amber-500/10 text-amber-300' },
                       { key: 'ALMA', label: 'ALMA', count: almaReports.length, dot: 'bg-rose-400', activeCls: 'border-rose-500/50 bg-rose-500/10 text-rose-300' },
@@ -4819,7 +5060,17 @@ export default function ValuationTerminal({
                         <button
                           key={tab.key}
                           type="button"
-                          onClick={() => setAnalyzedTab(tab.key as any)}
+                          onClick={() => {
+                            if (tab.key === 'PORTFOLIO') navigateTo('portfolio');
+                            else if (tab.key === 'FAVORITES') navigateTo('favorites');
+                            else {
+                              setAnalyzedTab(tab.key as any);
+                              if (typeof window !== 'undefined') {
+                                const basePath = window.location.pathname.startsWith('/simply') ? '/simply' : '';
+                                window.history.pushState(null, '', `${basePath}/?view=saved`);
+                              }
+                            }
+                          }}
                           className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-bold transition cursor-pointer border ${
                             isSelected
                               ? tab.activeCls || 'border-slate-700 bg-slate-800 text-white'
@@ -4881,14 +5132,22 @@ export default function ValuationTerminal({
                   <div className="bg-[#1a1e26] border border-[#2e3440] rounded-2xl p-12 text-center text-slate-400 space-y-3">
                     <Building2 className="w-12 h-12 mx-auto text-slate-600 opacity-60" />
                     <h4 className="text-base font-bold text-slate-200">
-                      Kayıtlı Şirket Analizi Bulunamadı
+                      {analyzedTab === 'PORTFOLIO' 
+                        ? 'Portföyünüzde Henüz Şirket Yok'
+                        : analyzedTab === 'FAVORITES'
+                        ? 'Favori Listenizde Henüz Şirket Yok'
+                        : 'Kayıtlı Şirket Analizi Bulunamadı'}
                     </h4>
                     <p className="text-sm text-slate-400 max-w-md mx-auto">
-                      Arama kriterlerinize uyan şirket bulunamadı veya henüz hiçbir hisse senedi analiz edilmedi.
+                      {analyzedTab === 'PORTFOLIO'
+                        ? 'Şirket analiz ekranında sol menüdeki "+ Portföy" butonuna tıklayarak hisseleri portföyünüze ekleyebilirsiniz.'
+                        : analyzedTab === 'FAVORITES'
+                        ? 'Şirket analiz ekranında sol menüdeki "★" butonuna tıklayarak hisseleri favori listenize alabilirsiniz.'
+                        : 'Arama kriterlerinize uyan şirket bulunamadı veya henüz hiçbir hisse senedi analiz edilmedi.'}
                     </p>
                     <button
                       type="button"
-                      onClick={() => setStep('input')}
+                      onClick={() => navigateTo('input')}
                       className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-bold transition cursor-pointer"
                     >
                       <PlusCircle className="w-4 h-4" />
@@ -4913,18 +5172,17 @@ export default function ValuationTerminal({
                         ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))
                         : null;
                       const companyName = (item as any).companyName || item.extractedData?.company_name || '';
+                      const inPort = portfolioTickers.includes((item.ticker || '').toUpperCase());
+                      const inFav = favoriteTickers.includes((item.ticker || '').toUpperCase());
 
                       return (
                         <div
                           key={item.id}
-                          onClick={() => {
-                            setActiveReportId(item.id);
-                            setStep('report');
-                          }}
+                          onClick={() => openReport(item.id, item.ticker)}
                           className="bg-[#1a1e26] hover:bg-[#21262d] border border-[#2e3440] hover:border-emerald-500/50 rounded-2xl p-5 transition cursor-pointer flex flex-col justify-between space-y-4 group shadow-lg"
                         >
                           <div className="space-y-3">
-                            {/* Başlık: Ticker, Şirket Adı, Karar Rozeti */}
+                            {/* Başlık: Ticker, Şirket Adı, Karar Rozeti ve Hızlı Butonlar */}
                             <div className="flex items-start justify-between gap-2">
                               <div>
                                 <div className="flex items-center gap-2">
@@ -4947,7 +5205,39 @@ export default function ValuationTerminal({
                                 )}
                               </div>
 
-                              <div className="flex items-center gap-2 flex-shrink-0">
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleFavorite(item.ticker);
+                                  }}
+                                  title={inFav ? 'Favorilerden Çıkar' : 'Favorilere Ekle'}
+                                  className={`p-1.5 rounded-lg border transition cursor-pointer ${
+                                    inFav
+                                      ? 'bg-amber-400/20 text-amber-300 border-amber-400/50 hover:bg-amber-400/30'
+                                      : 'bg-[#12151c] text-slate-400 hover:text-white border-[#2e3440] hover:bg-[#21262d]'
+                                  }`}
+                                >
+                                  <Star className={`w-3.5 h-3.5 ${inFav ? 'fill-amber-400 text-amber-400' : ''}`} />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    togglePortfolio(item.ticker);
+                                  }}
+                                  title={inPort ? 'Portföyden Çıkar' : 'Portföye Ekle'}
+                                  className={`p-1.5 rounded-lg border transition cursor-pointer ${
+                                    inPort
+                                      ? 'bg-[#f5c242]/20 text-[#f5c242] border-[#f5c242]/50 hover:bg-[#f5c242]/30 font-bold'
+                                      : 'bg-[#12151c] text-slate-400 hover:text-white border-[#2e3440] hover:bg-[#21262d]'
+                                  }`}
+                                >
+                                  <Briefcase className="w-3.5 h-3.5" />
+                                </button>
+
                                 <div className={`px-2.5 py-1 rounded-xl border text-xs font-mono font-bold flex items-center gap-2 ${badgeCls}`}>
                                   <span>{item.decision || 'NÖTR'}</span>
                                   <span className="w-1 h-3 bg-current opacity-30" />
@@ -4989,8 +5279,7 @@ export default function ValuationTerminal({
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setActiveReportId(item.id);
-                                setStep('report');
+                                openReport(item.id, item.ticker);
                               }}
                               className="flex-1 py-2 bg-[#21262d] group-hover:bg-emerald-600 group-hover:text-white text-slate-200 rounded-xl text-sm font-bold transition flex items-center justify-center gap-2 border border-[#2e3440] group-hover:border-emerald-500 cursor-pointer"
                             >
