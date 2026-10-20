@@ -1502,14 +1502,16 @@ export default function SimplyView({
     return (
       <td
         key={c.period}
-        className={`py-2 px-3 text-right font-mono text-sm ${textStyle} whitespace-nowrap overflow-hidden`}
+        className={`py-2 px-2 text-right font-mono text-sm ${textStyle} whitespace-nowrap`}
       >
-        <div className="flex items-center justify-end whitespace-nowrap">
-          <span>{currentVal != null ? formatTableNumber(currentVal) : '—'}</span>
-          <span className="w-12 flex-shrink-0 text-left pl-1.5 inline-block">
+        <div className="flex items-center justify-end whitespace-nowrap gap-1">
+          <span className="tabular-nums tracking-tight font-medium">
+            {currentVal != null ? formatTableNumber(currentVal) : '—'}
+          </span>
+          <span className="w-8 flex-shrink-0 text-left pl-0.5 inline-block">
             {isRowHovered && diffPct != null && (
               <span
-                className={`text-xs font-bold ${
+                className={`text-[10px] sm:text-xs font-bold ${
                   isGood ? 'text-emerald-400' : 'text-rose-400'
                 } transition-opacity duration-150 inline-block`}
               >
@@ -2770,11 +2772,11 @@ export default function SimplyView({
               </div>
 
               {/* Finansal Tablo Grid */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs text-left border-collapse font-mono table-fixed">
+              <div className="overflow-x-auto border border-[#282d37]/50 rounded-xl">
+                <table className="w-full min-w-[1060px] text-xs text-left border-collapse font-mono">
                   <thead>
                     <tr className="border-b border-[#282d37] text-slate-400 bg-[#21262d]/90">
-                      <th className="p-3 text-white font-sans font-bold text-xs sm:text-sm w-[34%] min-w-[200px]">
+                      <th className="p-3 text-white font-sans font-bold text-xs sm:text-sm min-w-[240px]">
                         {selectedTableTab === 'bs' && 'Bilanço Kalemleri'}
                         {selectedTableTab === 'is' && 'Gelir Tablosu Kalemleri'}
                         {selectedTableTab === 'cf' && 'Nakit Akışı Kalemleri'}
@@ -2787,8 +2789,8 @@ export default function SimplyView({
                         const canGoRight = safePeriodOffset < maxPeriodOffset;
 
                         return (
-                          <th key={c.period} className="p-3 text-right text-slate-300 font-mono text-xs w-[11%] min-w-[105px]">
-                            <div className="flex items-center justify-end whitespace-nowrap">
+                          <th key={c.period} className="py-3 px-2 text-right text-slate-300 font-mono text-xs min-w-[125px] sm:min-w-[136px]">
+                            <div className="flex items-center justify-end whitespace-nowrap gap-1">
                               {isFirst && (
                                 <button
                                   type="button"
@@ -2805,7 +2807,7 @@ export default function SimplyView({
                                 </button>
                               )}
                               <span className="text-white font-bold">{c.period}</span>
-                              <span className="w-12 flex-shrink-0 text-left pl-1.5 inline-block">
+                              <span className="w-8 flex-shrink-0 text-left pl-0.5 inline-block">
                                 {isLast && (
                                   <button
                                     type="button"
@@ -3024,13 +3026,13 @@ export default function SimplyView({
                               return (
                                 <td
                                   key={c.period}
-                                  className={`py-2.5 px-3 text-right font-mono text-sm font-bold transition-colors whitespace-nowrap overflow-hidden ${
+                                  className={`py-2.5 px-2 text-right font-mono text-sm font-bold transition-colors whitespace-nowrap ${
                                     hmClass ? hmClass : (row.isHighlight ? 'text-[#f5c242]' : 'text-slate-200')
                                   }`}
                                 >
-                                  <div className="flex items-center justify-end whitespace-nowrap">
-                                    <span>{row.calc(c)}</span>
-                                    <span className="w-12 flex-shrink-0" />
+                                  <div className="flex items-center justify-end whitespace-nowrap gap-1">
+                                    <span className="tabular-nums tracking-tight">{row.calc(c)}</span>
+                                    <span className="w-8 flex-shrink-0" />
                                   </div>
                                 </td>
                               );
