@@ -72,7 +72,8 @@ import {
   computeSnowflakeAnalysis,
   getSnowflakeCoordinates,
   generateSmoothSnowflakePath,
-  type SnowflakeAnalysisResult
+  type SnowflakeAnalysisResult,
+  type SnowflakeCheck
 } from '@/lib/snowflake';
 import { calculateDuPont5Step, calculateEarningsQuality, parseFinancialNumber } from '@/lib/valuation';
 
@@ -561,6 +562,8 @@ export default function SimplyView({
   const [hoveredRowKey, setHoveredRowKey] = useState<string | null>(null);
   const [showAllDividends, setShowAllDividends] = useState(false);
   const [showBrokerBreakdown, setShowBrokerBreakdown] = useState(false);
+  const [showSnowflakeChecklist, setShowSnowflakeChecklist] = useState(false);
+  const [selectedSnowflakeFilter, setSelectedSnowflakeFilter] = useState<'all' | 'value' | 'future' | 'past' | 'health' | 'dividend'>('all');
 
   // Şirket Kartı: Temettü Geçmişi, Analist Konsensüs Hedef Fiyat ve MKK Yabancı Oranı
   const [liveCompanyDetails, setLiveCompanyDetails] = useState<{
@@ -720,81 +723,6 @@ export default function SimplyView({
     });
   }, [chartData, report.extractedData, currentPriceNum, currentSector]);
 
-  // Kar Tanesi (Snowflake) Analizi Hesabı (5 Eksen, 0-6 Puan)
-  const snowflake: SnowflakeAnalysisResult = useMemo(() => {
-    return computeSnowflakeAnalysis({
-      ticker: report.ticker,
-      sector: currentSector,
-      currentPrice: currentPriceNum,
-      fairValue: fairValueNum,
-      discountPct: discountPctNum,
-      marketMultiples,
-      companyMultiples: companyMultiplesData,
-      financialHistory: report.extractedData?.financial_history,
-      valuationDrivers: valuationInfo?.drivers,
-      evaSpread: evaSpreadNum,
-      roic: roicNum,
-      wacc: waccNum,
-      latestData
-    });
-  }, [
-    report.ticker,
-    currentSector,
-    currentPriceNum,
-    fairValueNum,
-    discountPctNum,
-    marketMultiples,
-    companyMultiplesData,
-    report.extractedData?.financial_history,
-    valuationInfo?.drivers,
-    evaSpreadNum,
-    roicNum,
-    waccNum,
-    latestData
-  ]);
-
-  // Kar Tanesi SVG Koordinatları (280x280 viewBox, cx=140, cy=140, maxRadius=95)
-  const radarPoints = useMemo(() => {
-    return getSnowflakeCoordinates(snowflake.axes, 140, 140, 95);
-  }, [snowflake.axes]);
-
-  const smoothRadarPath = useMemo(() => {
-    return generateSmoothSnowflakePath(radarPoints);
-  }, [radarPoints]);
-
-  // Kar Tanesi Dinamik Renk & Tonlama (İyi durumda yeşil, dengeliyse sarı/amber, kötüyse turuncu/kırmızı)
-  const snowflakeTheme = useMemo(() => {
-    const score = snowflake.totalScore;
-    if (score >= 20) {
-      return {
-        status: 'Çok Güçlü',
-        statusColor: '#10b981',
-        stroke: '#10b981',
-        glow: 'rgba(16, 185, 129, 0.45)',
-        gradId: 'snowflakeGradGreen',
-        badgeClass: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-      };
-    } else if (score >= 13) {
-      return {
-        status: 'Dengeli',
-        statusColor: '#f5c242',
-        stroke: '#f5c242',
-        glow: 'rgba(245, 194, 66, 0.45)',
-        gradId: 'snowflakeGradAmber',
-        badgeClass: 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-      };
-    } else {
-      return {
-        status: 'Riskli',
-        statusColor: '#ef4444',
-        stroke: '#ef4444',
-        glow: 'rgba(239, 68, 68, 0.45)',
-        gradId: 'snowflakeGradRed',
-        badgeClass: 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-      };
-    }
-  }, [snowflake.totalScore]);
-
   // Rasyolar Ekranı Isı Haritası (Heatmap) Durumu ve Hesaplayıcı
   const [isHeatmapActive, setIsHeatmapActive] = useState(true);
 
@@ -945,6 +873,125 @@ export default function SimplyView({
   const dupontResult = useMemo(() => {
     return calculateDuPont5Step(latestData, currentSector);
   }, [latestData, currentSector]);
+
+  // 12A Konsensüs Analist Hedef Fiyatı
+  const consensusTargetPrice = useMemo(() => {
+    const isy = liveCompanyDetails?.consensus || report.consensusTarget || report.extractedData?.consensus_target;
+    const tv = liveCompanyDetails?.tvConsensus;
+    const isyTarget = isy?.targetPrice ? Number(isy.targetPrice) : null;
+    const tvAvg = tv?.targetPriceAverage ? Number(tv.targetPriceAverage) : null;
+    return isyTarget || tvAvg || undefined;
+  }, [liveCompanyDetails, report.consensusTarget, report.extractedData]);
+
+  // Kar Tanesi (Snowflake) Analizi Hesabı (5 Eksen, 30 Deterministik Kriter, 0-6 Puan)
+  const snowflake: SnowflakeAnalysisResult = useMemo(() => {
+    return computeSnowflakeAnalysis({
+      ticker: report.ticker,
+      sector: currentSector,
+      currentPrice: currentPriceNum,
+      fairValue: fairValueNum,
+      discountPct: discountPctNum,
+      marketMultiples,
+      companyMultiples: companyMultiplesData,
+      financialHistory: report.extractedData?.financial_history,
+      valuationDrivers: valuationInfo?.drivers,
+      evaSpread: evaSpreadNum,
+      roic: roicNum,
+      wacc: waccNum,
+      latestData,
+      consensusTarget: consensusTargetPrice,
+      peers: analyzedCompetitors,
+      earningsQuality
+    });
+  }, [
+    report.ticker,
+    currentSector,
+    currentPriceNum,
+    fairValueNum,
+    discountPctNum,
+    marketMultiples,
+    companyMultiplesData,
+    report.extractedData?.financial_history,
+    valuationInfo?.drivers,
+    evaSpreadNum,
+    roicNum,
+    waccNum,
+    latestData,
+    consensusTargetPrice,
+    analyzedCompetitors,
+    earningsQuality
+  ]);
+
+  // Kar Tanesi SVG Koordinatları (280x280 viewBox, cx=140, cy=140, maxRadius=95)
+  const radarPoints = useMemo(() => {
+    return getSnowflakeCoordinates(snowflake.axes, 140, 140, 95);
+  }, [snowflake.axes]);
+
+  const smoothRadarPath = useMemo(() => {
+    return generateSmoothSnowflakePath(radarPoints);
+  }, [radarPoints]);
+
+  // Kar Tanesi Dinamik Renk & Tonlama
+  const snowflakeTheme = useMemo(() => {
+    const score = snowflake.totalScore;
+    if (score >= 20) {
+      return {
+        status: 'Çok Güçlü',
+        statusColor: '#10b981',
+        stroke: '#10b981',
+        glow: 'rgba(16, 185, 129, 0.45)',
+        gradId: 'snowflakeGradGreen',
+        badgeClass: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+      };
+    } else if (score >= 13) {
+      return {
+        status: 'Dengeli',
+        statusColor: '#f5c242',
+        stroke: '#f5c242',
+        glow: 'rgba(245, 194, 66, 0.45)',
+        gradId: 'snowflakeGradAmber',
+        badgeClass: 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+      };
+    } else {
+      return {
+        status: 'Riskli',
+        statusColor: '#ef4444',
+        stroke: '#ef4444',
+        glow: 'rgba(239, 68, 68, 0.45)',
+        gradId: 'snowflakeGradRed',
+        badgeClass: 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+      };
+    }
+  }, [snowflake.totalScore]);
+
+  // Snowflake 30 Kriter Listesi (Tüm Eksenlerin Birleşik Dizisi)
+  const allSnowflakeChecks = useMemo(() => {
+    const list: Array<{
+      axisKey: 'value' | 'future' | 'past' | 'health' | 'dividend';
+      axisLabel: string;
+      check: SnowflakeCheck;
+    }> = [];
+    const axes = [
+      snowflake.axes.value,
+      snowflake.axes.future,
+      snowflake.axes.past,
+      snowflake.axes.health,
+      snowflake.axes.dividend
+    ];
+    axes.forEach(axis => {
+      if (axis && Array.isArray(axis.checks)) {
+        axis.checks.forEach(check => {
+          list.push({ axisKey: axis.key, axisLabel: axis.label, check });
+        });
+      }
+    });
+    return list;
+  }, [snowflake.axes]);
+
+  const filteredSnowflakeChecks = useMemo(() => {
+    if (selectedSnowflakeFilter === 'all') return allSnowflakeChecks;
+    return allSnowflakeChecks.filter(item => item.axisKey === selectedSnowflakeFilter);
+  }, [allSnowflakeChecks, selectedSnowflakeFilter]);
 
   // Scrollspy: window ve main-scroll-container dinlenir
   useEffect(() => {
@@ -1785,7 +1832,7 @@ export default function SimplyView({
               </div>
             </div>
 
-            {/* Sub-Card 2: Snowflake (Kar Tanesi) Analiz Kartı (SVG Radar + 5 Eksen + Ödüller) */}
+            {/* Sub-Card 2: Snowflake Analiz Kartı (SVG Radar + 5 Eksen + 30 Kriter Listesi) */}
             <div className="bg-[#181b20] border border-[#2b313d] rounded-xl p-5 sm:p-7 shadow-md space-y-6">
               <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#282d37] pb-4">
                 <div>
@@ -1794,7 +1841,25 @@ export default function SimplyView({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowSnowflakeChecklist(prev => !prev)}
+                    className="px-3.5 py-1.5 rounded-xl border border-[#3b4354] hover:border-amber-500/50 bg-[#1f242e] hover:bg-[#252c38] text-xs sm:text-sm font-medium text-slate-200 transition-colors flex items-center gap-1.5 shadow-sm"
+                  >
+                    {showSnowflakeChecklist ? (
+                      <>
+                        <ChevronUp className="w-4 h-4 text-amber-400" />
+                        <span>Kriter Kontrol Listesini Gizle</span>
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="w-4 h-4 text-amber-400" />
+                        <span>Kriter Kontrol Listesini Göster</span>
+                      </>
+                    )}
+                  </button>
+
                   <div className={`px-4 py-2 rounded-xl border text-sm font-mono font-bold flex items-center gap-2 shadow-sm ${snowflakeTheme.badgeClass}`}>
                     <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: snowflakeTheme.statusColor }} />
                     <span>{snowflakeTheme.status}</span>
@@ -1810,6 +1875,104 @@ export default function SimplyView({
                   </div>
                 </div>
               </div>
+
+              {/* 30 Kriter Kontrol Paneli (Açılır - Kapanır Liste) */}
+              {showSnowflakeChecklist && (
+                <div className="p-4 sm:p-5 bg-[#14171e] rounded-xl border border-[#2b3240] space-y-4 animate-in fade-in duration-300">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#242a36] pb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+                        Kriter Kontrol Listesi
+                      </span>
+                      <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono border border-slate-700">
+                        {snowflake.totalScore} Başarılı / 30 Kriter
+                      </span>
+                    </div>
+
+                    {/* Filtre Butonları */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {[
+                        { id: 'all', label: 'Tüm Kriterler' },
+                        { id: 'value', label: 'Değerleme' },
+                        { id: 'future', label: 'Gelecek Büyüme' },
+                        { id: 'past', label: 'Geçmiş Performans' },
+                        { id: 'health', label: 'Finansal Sağlık' },
+                        { id: 'dividend', label: 'Temettü' },
+                      ].map(btn => (
+                        <button
+                          key={btn.id}
+                          type="button"
+                          onClick={() => setSelectedSnowflakeFilter(btn.id as any)}
+                          className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors font-mono ${
+                            selectedSnowflakeFilter === btn.id
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                              : 'bg-[#1b2029] text-slate-400 hover:text-slate-200 border border-[#2a313d]'
+                          }`}
+                        >
+                          {btn.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Kriter Kartları Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {filteredSnowflakeChecks.map(({ axisKey, axisLabel, check }) => {
+                      const isPassed = check.passed;
+                      return (
+                        <div
+                          key={check.id}
+                          className={`p-3.5 rounded-xl border transition-all ${
+                            isPassed
+                              ? 'bg-[#121c17] border-emerald-900/40 hover:border-emerald-700/60'
+                              : 'bg-[#1c1517] border-rose-950/40 hover:border-rose-800/50'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider">
+                              {axisLabel}
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 rounded text-[11px] font-bold font-mono inline-flex items-center gap-1 ${
+                                isPassed
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                  : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                              }`}
+                            >
+                              {isPassed ? '✓ Geçti' : '✗ Geçmedi'}
+                            </span>
+                          </div>
+
+                          <h4 className="text-sm font-bold text-white mb-2 leading-snug">
+                            {check.title}
+                          </h4>
+
+                          {(check.metricValue || check.threshold) && (
+                            <div className="p-2 rounded bg-[#0d1015]/80 border border-white/5 text-xs font-mono space-y-1 mb-2.5">
+                              {check.metricValue && (
+                                <div className="flex items-center justify-between text-slate-300">
+                                  <span className="text-slate-500">Gerçekleşen</span>
+                                  <span className="font-semibold text-slate-200">{check.metricValue}</span>
+                                </div>
+                              )}
+                              {check.threshold && (
+                                <div className="flex items-center justify-between text-slate-400">
+                                  <span className="text-slate-500">Eşik</span>
+                                  <span className="text-slate-400">{check.threshold}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                            {check.detail}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* SVG Radar Görseli & 5 Eksen Kartları */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
@@ -1924,21 +2087,21 @@ export default function SimplyView({
                       {report.ticker.slice(0, 4)}
                     </text>
 
-                    {/* 5 Eksen Dış Etiketleri */}
+                    {/* 5 Eksen Dış Etiketleri (Parantez olmadan temiz metin) */}
                     <text x="140" y="24" textAnchor="middle" fill="#ffffff" fontSize="10" fontWeight="bold" fontFamily="monospace">
-                      DEĞER ({snowflake.axes.value.score}/6)
+                      Değerleme {snowflake.axes.value.score}/6
                     </text>
                     <text x="242" y="98" textAnchor="start" fill="#ffffff" fontSize="10" fontWeight="bold" fontFamily="monospace">
-                      GELECEK ({snowflake.axes.future.score}/6)
+                      Gelecek {snowflake.axes.future.score}/6
                     </text>
                     <text x="210" y="246" textAnchor="start" fill="#ffffff" fontSize="10" fontWeight="bold" fontFamily="monospace">
-                      GEÇMİŞ ({snowflake.axes.past.score}/6)
+                      Geçmiş {snowflake.axes.past.score}/6
                     </text>
                     <text x="70" y="246" textAnchor="end" fill="#ffffff" fontSize="10" fontWeight="bold" fontFamily="monospace">
-                      SAĞLIK ({snowflake.axes.health.score}/6)
+                      Sağlık {snowflake.axes.health.score}/6
                     </text>
                     <text x="38" y="98" textAnchor="end" fill="#ffffff" fontSize="10" fontWeight="bold" fontFamily="monospace">
-                      TEMETTÜ ({snowflake.axes.dividend.score}/6)
+                      Temettü {snowflake.axes.dividend.score}/6
                     </text>
                   </svg>
                 </div>
@@ -1987,11 +2150,11 @@ export default function SimplyView({
                 </div>
               </div>
 
-              {/* Alt Kısım: Öne Çıkan Güçlü Yönler (Rewards) ve Riskler (Risks) */}
+              {/* Alt Kısım: Öne Çıkan Güçlü Yönler ve Riskler */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                 <div className="bg-[#151821] border border-emerald-900/30 rounded-xl p-4 sm:p-5 space-y-2.5">
                   <div className="text-[15px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
-                    <Sparkles className="w-4 h-4" /> Öne Çıkan Güçlü Yönler (Rewards)
+                    <Sparkles className="w-4 h-4" /> Öne Çıkan Güçlü Yönler
                   </div>
                   <div className="space-y-2 text-sm text-slate-200">
                     {snowflake.rewards.slice(0, 3).map((r, i) => (
