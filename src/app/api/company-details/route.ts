@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchIsYatirimCompanyDetails } from '@/lib/isyatirim-service';
+import { fetchTradingViewConsensus } from '@/lib/tradingview-service';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -19,11 +20,18 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const details = await fetchIsYatirimCompanyDetails(cleanTicker);
+    const [detailsResult, tvResult] = await Promise.allSettled([
+      fetchIsYatirimCompanyDetails(cleanTicker),
+      fetchTradingViewConsensus(cleanTicker)
+    ]);
+
+    const details = detailsResult.status === 'fulfilled' ? detailsResult.value : null;
+    const tvConsensus = tvResult.status === 'fulfilled' ? tvResult.value : null;
 
     return NextResponse.json({
       success: true,
-      ...details
+      ...(details || { ticker: cleanTicker, dividends: [], consensus: null, foreignShare: null }),
+      tvConsensus
     }, {
       headers: {
         'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400'
