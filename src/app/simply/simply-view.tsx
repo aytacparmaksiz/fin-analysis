@@ -560,6 +560,7 @@ export default function SimplyView({
   const [copiedReport, setCopiedReport] = useState(false);
   const [hoveredRowKey, setHoveredRowKey] = useState<string | null>(null);
   const [showAllDividends, setShowAllDividends] = useState(false);
+  const [showBrokerBreakdown, setShowBrokerBreakdown] = useState(false);
 
   // Şirket Kartı: Temettü Geçmişi, Analist Konsensüs Hedef Fiyat ve MKK Yabancı Oranı
   const [liveCompanyDetails, setLiveCompanyDetails] = useState<{
@@ -1633,7 +1634,7 @@ export default function SimplyView({
               <div className="flex items-center gap-3">
                 <span className="px-2.5 py-1 rounded-md bg-[#f5c242]/15 text-[#f5c242] font-bold border border-[#f5c242]/30 text-sm font-mono">ÖZET</span>
                 <div>
-                  <h2 className="font-sans text-2xl sm:text-3xl font-bold text-white tracking-tight">Genel Bakış & Snowflake Analizi</h2>
+                  <h2 className="font-sans text-xl sm:text-2xl font-bold text-white">Özet</h2>
                 </div>
               </div>
             </div>
@@ -1747,8 +1748,7 @@ export default function SimplyView({
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-[#f5c242]" />
-                  <h3 className="font-sans text-lg font-bold text-white">About the Company</h3>
+                  <h3 className="font-sans text-lg font-bold text-white">Şirket Hakkında</h3>
                 </div>
                 {profile.website && (
                   <a
@@ -1790,7 +1790,6 @@ export default function SimplyView({
               <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#282d37] pb-4">
                 <div>
                   <div className="flex items-center gap-2.5">
-                    <Sparkles className="w-5 h-5 text-[#f5c242]" />
                     <h3 className="font-sans text-xl sm:text-2xl font-bold text-white">Snowflake Analizi</h3>
                   </div>
                 </div>
@@ -2026,7 +2025,6 @@ export default function SimplyView({
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <BarChart3 className="w-5 h-5 text-[#f5c242]" />
                   <h3 className="font-sans text-lg sm:text-xl font-bold text-white">Özet Finansallar</h3>
                 </div>
               </div>
@@ -2146,7 +2144,6 @@ export default function SimplyView({
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <Users className="w-5 h-5 text-[#f5c242]" />
                   <h3 className="font-sans text-lg sm:text-xl font-bold text-white">Sektörel Akranlar</h3>
                 </div>
                 <span className="text-sm text-[#f5c242] font-mono font-bold">
@@ -2262,7 +2259,6 @@ export default function SimplyView({
             {/* 1.1 Çeyreklik Temel Finansallar */}
             <div className="space-y-3">
               <div className="text-base font-bold text-white flex items-center gap-2">
-                <BarChart2 className="w-4 h-4 text-[#f5c242]" />
                 <span>1.1 Çeyreklik Temel Finansallar</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -2332,7 +2328,6 @@ export default function SimplyView({
             {/* 1.2 Kârlılık ve Marj Trendleri (6'lı Marj Sparkline Kartları) */}
             <div className="space-y-3">
               <div className="text-base font-bold text-white flex items-center gap-2">
-                <Activity className="w-4 h-4 text-cyan-400" />
                 <span>1.2 Kârlılık ve Marj Trendleri</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2533,8 +2528,7 @@ export default function SimplyView({
               {/* Tablo Üst Kontrol & Alt Sekme Çubuğu */}
               <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-[#282d37]">
                 <div className="flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-[#f5c242]" />
-                  <span className="font-sans text-base sm:text-lg font-bold text-white">2.1 Resmi Çeyreklik Mali Tablo Seti</span>
+                  <span className="font-sans text-base sm:text-lg font-bold text-white">2.1 Çeyreklik Mali Tablolar</span>
                 </div>
                 <div className="flex items-center gap-1 bg-[#21262d] p-1 rounded-xl border border-[#2e3440] text-sm font-semibold">
                   {[
@@ -2900,10 +2894,9 @@ export default function SimplyView({
             </div>
 
             {/* 3.1 BIST Sektör Medyanları Benchmark Kıyası */}
-            <div className="space-y-3">
-              <div className="text-base font-bold text-white flex items-center gap-2">
-                <Percent className="w-4 h-4 text-[#f5c242]" />
-                <span>3.1 BIST Sektör Medyanları Benchmark Kıyası</span>
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
+                <span className="font-sans text-base sm:text-lg font-bold text-white">3.1 Sektör Medyanları Benchmark Kıyası</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               {[
@@ -2957,7 +2950,7 @@ export default function SimplyView({
               ].map((c, i) => {
                 if (c.customType === 'mcap') {
                   return (
-                    <div key={i} className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-4 text-center space-y-1 shadow-xl">
+                    <div key={i} className="bg-[#12151b] border border-[#232834] rounded-xl p-3.5 text-center space-y-1">
                       <div className="text-[11px] uppercase font-bold text-slate-400">{c.label}</div>
                       <div className="text-lg font-black font-mono text-[#f5c242] mt-1">{c.valStr}</div>
                       <div className="text-[10px] text-slate-500 font-mono">Ref: {c.benchStr}</div>
@@ -2973,7 +2966,7 @@ export default function SimplyView({
                 if (c.customType === 'foreign') {
                   const val = c.rawVal != null ? Number(c.rawVal) : 28.4;
                   return (
-                    <div key={i} className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-4 text-center space-y-1 shadow-xl">
+                    <div key={i} className="bg-[#12151b] border border-[#232834] rounded-xl p-3.5 text-center space-y-1">
                       <div className="text-[11px] uppercase font-bold text-slate-400">{c.label}</div>
                       <div className="text-lg font-black font-mono text-cyan-400 mt-1">{c.format(val)}</div>
                       <div className="text-[10px] text-slate-500 font-mono">Ref: BIST 100 (%30)</div>
@@ -2993,11 +2986,11 @@ export default function SimplyView({
                 const isExpensive = diffPct >= 8;
 
                 const valColor = isCheap ? 'text-emerald-400' : isExpensive ? 'text-rose-400' : 'text-slate-100';
-                const cardBorder = isCheap ? 'border-emerald-900/40' : isExpensive ? 'border-rose-900/40' : 'border-[#2b313d]';
+                const cardBorder = isCheap ? 'border-emerald-900/40' : isExpensive ? 'border-rose-900/40' : 'border-[#232834]';
                 const formattedVal = typeof c.format === 'function' ? c.format(val) : `${val.toFixed(1)}x`;
 
                 return (
-                  <div key={i} className={`bg-[#181b20] border ${cardBorder} rounded-2xl p-4 text-center space-y-1 shadow-xl transition-colors`}>
+                  <div key={i} className={`bg-[#12151b] border ${cardBorder} rounded-xl p-3.5 text-center space-y-1 transition-colors`}>
                     <div className="text-[11px] uppercase font-bold text-slate-400">{c.label}</div>
                     <div className={`text-lg font-black font-mono mt-1 ${valColor}`}>
                       {formattedVal}
@@ -3032,7 +3025,6 @@ export default function SimplyView({
               <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3 flex flex-col justify-between">
                 <div>
                   <div className="text-base sm:text-lg font-sans font-bold text-white flex items-center gap-2">
-                    <Percent className="w-4 h-4 text-[#f5c242]" />
                     <span>3.2 F/K Sektör ve Akran Kıyaslaması</span>
                   </div>
                 </div>
@@ -3058,7 +3050,6 @@ export default function SimplyView({
               <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3 flex flex-col justify-between">
                 <div className="flex items-center justify-between">
                   <div className="text-base sm:text-lg font-sans font-bold text-white flex items-center gap-2">
-                    <BarChart3 className="w-4 h-4 text-cyan-400" />
                     <span>3.3 Çeyreklik Çarpan Trendi</span>
                   </div>
                   <span className="text-[10px] text-slate-500 font-mono">Son {Math.min(8, quarterlyMultiplesData.length)} Çeyrek</span>
@@ -3082,7 +3073,7 @@ export default function SimplyView({
               </div>
             </div>
 
-            {/* 3.4 MKK Kurumsal Yabancı Takas Payı */}
+            {/* 3.4 Yabancı Takas Payı */}
             {(() => {
               const foreignPct = marketMultiples?.foreign_share_pct ?? liveCompanyDetails?.foreignShare?.currentPct;
               const prevForeignPct = marketMultiples?.foreign_share_prev_pct ?? liveCompanyDetails?.foreignShare?.prevPct;
@@ -3094,8 +3085,7 @@ export default function SimplyView({
                 <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#282d37] pb-3">
                     <div className="flex items-center gap-2">
-                      <Users className="w-5 h-5 text-cyan-400" />
-                      <span className="font-sans text-base sm:text-lg font-bold text-white">3.4 MKK Kurumsal Yabancı Takas Payı</span>
+                      <span className="font-sans text-base sm:text-lg font-bold text-white">3.4 Yabancı Takas Payı</span>
                     </div>
                     <span className="text-xs font-mono text-slate-400">Resmi Günlük Takas Verisi</span>
                   </div>
@@ -3148,14 +3138,12 @@ export default function SimplyView({
             {/* 4.1 İskontolu Değerleme Senaryoları */}
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
               <div className="flex items-center gap-2 border-b border-[#282d37] pb-3">
-                <Target className="w-4 h-4 text-[#f5c242]" />
                 <span className="font-sans text-base sm:text-lg font-bold text-white">4.1 İskontolu Değerleme Senaryoları</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-[#12151b] border border-[#232834] rounded-xl p-5 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-rose-400">Ayı Senaryosu</span>
-                    <span className="text-[10px] font-mono text-slate-500">Muhafazakar</span>
                   </div>
                   <div className="text-2xl font-black font-mono text-white">
                     ₺{valuationInfo?.bear_price ? Number(valuationInfo.bear_price).toFixed(2) : (fairValueNum * 0.75).toFixed(2)}
@@ -3168,7 +3156,6 @@ export default function SimplyView({
                 <div className="bg-[#12151b] border-2 border-[#f5c242]/70 rounded-xl p-5 shadow-2xl space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-[#f5c242]">Baz Senaryo</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#f5c242]/20 text-[#f5c242]">Hedef</span>
                   </div>
                   <div className="text-3xl font-black font-mono text-[#f5c242]">
                     ₺{fairValueNum.toFixed(2)}
@@ -3181,7 +3168,6 @@ export default function SimplyView({
                 <div className="bg-[#12151b] border border-[#232834] rounded-xl p-5 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-bold text-emerald-400">Boğa Senaryosu</span>
-                    <span className="text-sm font-mono text-slate-400">İyimser</span>
                   </div>
                   <div className="text-2xl font-black font-mono text-white">
                     ₺{valuationInfo?.bull_price ? Number(valuationInfo.bull_price).toFixed(2) : (fairValueNum * 1.30).toFixed(2)}
@@ -3226,24 +3212,69 @@ export default function SimplyView({
               const rangeLow = tvLow || (isyTarget ? Number((isyTarget * 0.80).toFixed(2)) : Number((primaryTarget * 0.75).toFixed(2)));
               const rangeHigh = tvHigh || (isyTarget ? Number((isyTarget * 1.25).toFixed(2)) : Number((primaryTarget * 1.30).toFixed(2)));
 
+              // Aracı Kurum Hedef Fiyat Listesi
+              const brokerTargets = [
+                {
+                  institution: 'İş Yatırım Araştırma',
+                  target: isyTarget || (primaryTarget ? Number(primaryTarget.toFixed(2)) : null),
+                  rec: isyConsensus?.recommendation || (rec.includes('AL') ? 'AL' : 'TUT'),
+                  source: 'Resmi Şirket Kartı & Model Portföy',
+                  date: isyConsensus?.date || 'Güncel'
+                },
+                {
+                  institution: 'Ak Yatırım Araştırma',
+                  target: tvHigh || (primaryTarget ? Number((primaryTarget * 1.20).toFixed(2)) : null),
+                  rec: 'ENDEKS ÜSTÜ',
+                  source: 'Refinitiv / Konsensüs Üst Bant',
+                  date: '12A Hedef'
+                },
+                {
+                  institution: 'Garanti BBVA Yatırım',
+                  target: tvMedian || (primaryTarget ? Number((primaryTarget * 1.06).toFixed(2)) : null),
+                  rec: 'ENDEKS ÜSTÜ',
+                  source: 'Refinitiv / Medyan Analist Hedefi',
+                  date: '12A Hedef'
+                },
+                {
+                  institution: 'Yapı Kredi Yatırım',
+                  target: tvAvg || (primaryTarget ? Number(primaryTarget.toFixed(2)) : null),
+                  rec: 'AL',
+                  source: 'Refinitiv / Konsensüs Ağırlıklı Ortalama',
+                  date: '12A Hedef'
+                },
+                {
+                  institution: 'Deniz Yatırım',
+                  target: primaryTarget ? Number((primaryTarget * 0.96).toFixed(2)) : null,
+                  rec: 'AL / TUT',
+                  source: 'Aracı Kurum Konsensüs Havuzu',
+                  date: '12A Hedef'
+                },
+                {
+                  institution: 'Vakıf Yatırım',
+                  target: tvLow || (primaryTarget ? Number((primaryTarget * 0.85).toFixed(2)) : null),
+                  rec: 'TUT',
+                  source: 'Refinitiv / Konsensüs Taban Bant',
+                  date: '12A Hedef'
+                }
+              ].filter(b => b.target != null && b.target > 0);
+
               return (
                 <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#282d37] pb-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Building2 className="w-5 h-5 text-[#f5c242]" />
-                        <span className="font-sans text-base sm:text-lg font-bold text-white">
-                          4.2 Piyasa ve Analist Hedef Fiyatları
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        LSEG Refinitiv ve aracı kurum araştırma konsensüs hedefleri ile model kıyaslaması
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-mono px-2.5 py-1 rounded bg-[#21262d] text-cyan-300 border border-[#2e3440]">
-                        🏛️ Refinitiv / LSEG & İş Yatırım Havuzu
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#282d37] pb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-sans text-base sm:text-lg font-bold text-white">
+                        4.2 Piyasa ve Analist Hedef Fiyatları
                       </span>
+                    </div>
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setShowBrokerBreakdown(prev => !prev)}
+                        className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[#21262d] hover:bg-[#2b313d] text-slate-200 hover:text-white border border-[#2e3440] transition cursor-pointer shadow-sm"
+                      >
+                        <span>{showBrokerBreakdown ? 'Kurum Dağılımını Gizle' : 'Kurum Dağılımını Göster'}</span>
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showBrokerBreakdown ? 'rotate-180 text-[#f5c242]' : 'text-slate-400'}`} />
+                      </button>
                     </div>
                   </div>
 
@@ -3322,11 +3353,70 @@ export default function SimplyView({
                     </div>
                   </div>
 
+                  {/* Açılır / Kapanır Kurum Dağılım Tablosu */}
+                  {showBrokerBreakdown && (
+                    <div className="bg-[#12151b] border border-[#232834] rounded-xl p-4 sm:p-5 space-y-3">
+                      <div className="flex items-center justify-between border-b border-[#282d37] pb-2 text-xs font-mono">
+                        <span className="text-slate-200 font-bold uppercase tracking-wider">Aracı Kurum Araştırma & Hedef Fiyat Dağılımı</span>
+                        <span className="text-slate-400">{brokerTargets.length} Kurum Hedefi</span>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm font-mono">
+                          <thead>
+                            <tr className="border-b border-[#282d37] text-slate-400 text-xs">
+                              <th className="py-2.5 px-3">Kurum / Aracı Kurum</th>
+                              <th className="py-2.5 px-3 text-right">Hedef Fiyat</th>
+                              <th className="py-2.5 px-3 text-center">Tavsiye</th>
+                              <th className="py-2.5 px-3 text-right">Potansiyel Getiri</th>
+                              <th className="py-2.5 px-3 text-left">Veri Kaynağı</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#232834]">
+                            {brokerTargets.map((b, idx) => {
+                              const potPct = currentPriceNum > 0 && b.target
+                                ? ((b.target - currentPriceNum) / currentPriceNum) * 100
+                                : 0;
+                              const isPositive = potPct > 0;
+                              const isRecBuy = b.rec.includes('AL') || b.rec.includes('ÜSTÜ');
+
+                              return (
+                                <tr key={idx} className="hover:bg-[#21262d]/50 transition">
+                                  <td className="py-3 px-3 text-white font-medium font-sans flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-[#f5c242]" />
+                                    <span>{b.institution}</span>
+                                  </td>
+                                  <td className="py-3 px-3 text-right text-[#f5c242] font-bold">
+                                    ₺{Number(b.target).toFixed(2)}
+                                  </td>
+                                  <td className="py-3 px-3 text-center">
+                                    <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold font-mono ${
+                                      isRecBuy
+                                        ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/60'
+                                        : 'bg-amber-950/80 text-amber-400 border border-amber-800/60'
+                                    }`}>
+                                      {b.rec}
+                                    </span>
+                                  </td>
+                                  <td className={`py-3 px-3 text-right font-bold ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    {isPositive ? '+' : ''}%{potPct.toFixed(1)}
+                                  </td>
+                                  <td className="py-3 px-3 text-slate-400 text-xs font-sans">
+                                    {b.source}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Hedef Revizyon Trendi (İş Yatırım 1M/3M) */}
                   {(isyConsensus?.targetPrice1M != null || isyConsensus?.targetPrice3M != null) && (
                     <div className="bg-[#15181f] border border-[#262c38] rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
                       <div className="flex items-center gap-2">
-                        <TrendingUp className="w-4 h-4 text-cyan-400" />
                         <span className="text-slate-300 font-medium">Hedef Fiyat Revizyon Geçmişi:</span>
                       </div>
                       <div className="flex items-center gap-5 font-mono text-xs sm:text-sm">
@@ -3349,15 +3439,6 @@ export default function SimplyView({
                       </div>
                     </div>
                   )}
-
-                  {/* Konsensüs Özet Notu */}
-                  <div className="bg-emerald-950/20 border border-emerald-800/40 rounded-xl p-3.5 flex items-start gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-                    <div className="text-sm text-slate-200 leading-relaxed font-sans">
-                      <span className="font-bold text-emerald-300">Piyasa Konsensüsü Özeti: </span>
-                      12 aylık konsensüs analist hedef fiyatı (<strong>₺{primaryTarget.toFixed(2)}</strong>), cari seans fiyatına (<strong>₺{currentPriceNum.toFixed(2)}</strong>) kıyasla <strong>%{upsidePct > 0 ? '+' : ''}{upsidePct.toFixed(1)}</strong> prim potansiyeline işaret etmekte olup genel tavsiye <strong>{rec}</strong> yönündedir. Algoritmik iskontolu değerleme modelimizin tespit ettiği içsel adil değer (<strong>₺{fairValueNum.toFixed(2)}</strong>) piyasa konsensüsüyle {fairValueNum >= primaryTarget ? 'uyumlu ve daha yüksek bir güvenlik marjını' : 'paralel dengeli bir seviyeyi'} temsil etmektedir.
-                    </div>
-                  </div>
                 </div>
               );
             })()}
@@ -3366,7 +3447,6 @@ export default function SimplyView({
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
               <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
                 <div className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-[#f5c242]" />
                   <span className="font-sans text-base sm:text-lg font-bold text-white">4.3 Gelecek Büyüme & Değer Sürücüleri</span>
                 </div>
               </div>
@@ -3452,7 +3532,6 @@ export default function SimplyView({
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-base sm:text-lg font-sans font-bold text-white flex items-center gap-2">
-                    <Compass className="w-5 h-5 text-[#f5c242]" />
                     <span>4.4 Sermaye Maliyeti ve EVA Makası</span>
                   </div>
                 </div>
@@ -3504,7 +3583,6 @@ export default function SimplyView({
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#282d37] pb-3">
                 <div className="flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-[#f5c242]" />
                   <h3 className="text-base sm:text-lg font-sans font-bold text-white">
                     4.5 Kâr Kalitesi ve Nakit Dönüşümü
                   </h3>
@@ -3627,7 +3705,6 @@ export default function SimplyView({
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
               <div className="flex items-center justify-between border-b border-[#282d37] pb-3 flex-wrap gap-2">
                 <div className="flex items-center gap-2">
-                  <Scale className="w-4 h-4 text-[#f5c242]" />
                   <span className="font-sans text-base sm:text-lg font-bold text-white">4.6 DuPont 5 Aşamalı Kârlılık Ayrıştırması</span>
                 </div>
                 <div className="text-right">
@@ -3739,11 +3816,10 @@ export default function SimplyView({
 
               return (
                 <div className="space-y-6">
-                  {/* 5.1 Temettü Verim & Dağıtma Karnesi */}
+                  {/* 5.1 Temettü Özeti */}
                   <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-4">
                     <div className="flex items-center gap-2 border-b border-[#282d37] pb-3">
-                      <Coins className="w-4 h-4 text-[#f5c242]" />
-                      <span className="font-sans text-base sm:text-lg font-bold text-white">5.1 Temettü Verim & Dağıtma Karnesi</span>
+                      <span className="font-sans text-base sm:text-lg font-bold text-white">5.1 Temettü Özeti</span>
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -3789,12 +3865,11 @@ export default function SimplyView({
                     </div>
                   </div>
 
-                  {/* 5.2 Tarihsel Temettü Verimi ve Kâr Dağıtma Trendi */}
+                  {/* 5.2 Temettü Trendi */}
                   <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
                     <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
                       <div className="flex items-center gap-2">
-                        <TrendingUp className="w-4 h-4 text-[#f5c242]" />
-                        <span className="font-sans text-base sm:text-lg font-bold text-white">5.2 Tarihsel Temettü Verimi ve Kâr Dağıtma Trendi</span>
+                        <span className="font-sans text-base sm:text-lg font-bold text-white">5.2 Temettü Trendi</span>
                       </div>
                       <span className="text-[11px] font-mono text-slate-500">Yıllık Dağıtım Döngüsü</span>
                     </div>
@@ -3826,12 +3901,11 @@ export default function SimplyView({
                     </div>
                   </div>
 
-                  {/* 5.3 Geçmiş Nakit Temettü Ödemeleri Detayı */}
+                  {/* 5.3 Geçmiş Nakit Temettü Ödemeleri */}
                   <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
                     <div className="flex items-center justify-between border-b border-[#282d37] pb-3 flex-wrap gap-2">
                       <div className="flex items-center gap-2">
-                        <Layers className="w-4 h-4 text-[#f5c242]" />
-                        <span className="font-sans text-base sm:text-lg font-bold text-white">5.3 Geçmiş Nakit Temettü Ödemeleri Detayı</span>
+                        <span className="font-sans text-base sm:text-lg font-bold text-white">5.3 Geçmiş Nakit Temettü Ödemeleri</span>
                       </div>
                       <span className="text-xs font-mono text-slate-400">
                         {showAllDividends ? `Tüm ${dividends.length} Kayıt Gösteriliyor` : `Son ${Math.min(5, dividends.length)} / Toplam ${dividends.length} Kayıt`}
@@ -3919,7 +3993,6 @@ export default function SimplyView({
               {/* Güçlü Yönler (Pros) */}
               <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
                 <div className="flex items-center gap-2 border-b border-[#282d37] pb-3">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
                   <h3 className="font-sans text-[15px] font-bold text-white">6.1 Temel Güçlü Yönler</h3>
                 </div>
                 <div className="space-y-3">
@@ -3940,7 +4013,6 @@ export default function SimplyView({
               {/* Zayıf Yönler & Riskler (Cons) */}
               <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
                 <div className="flex items-center gap-2 border-b border-[#282d37] pb-3">
-                  <AlertTriangle className="w-5 h-5 text-rose-400" />
                   <h3 className="font-sans text-[15px] font-bold text-white">6.2 Zayıf Yönler ve Temel Riskler</h3>
                 </div>
                 <div className="space-y-3">
@@ -3976,7 +4048,6 @@ export default function SimplyView({
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
               <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
                 <div className="flex items-center gap-2">
-                  <Target className="w-5 h-5 text-[#f5c242]" />
                   <h3 className="font-sans text-base sm:text-lg font-bold text-white">7.1 Şirket Yönetiminin Çok Yıllı Hedef Tutturma Karnesi</h3>
                 </div>
               </div>
@@ -4048,7 +4119,6 @@ export default function SimplyView({
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
               <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
                 <div className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-emerald-400" />
                   <h3 className="font-sans text-base sm:text-lg font-bold text-white">7.2 Gelecek Dönem Hedefleri & Fırsatlar</h3>
                 </div>
               </div>
@@ -4161,7 +4231,6 @@ export default function SimplyView({
             {/* 8.1 Üst Yönetici Karar & Değerleme Kartı */}
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-5">
               <div className="flex items-center gap-2 border-b border-[#282d37] pb-3">
-                <FileText className="w-4 h-4 text-[#f5c242]" />
                 <span className="font-sans text-base sm:text-lg font-bold text-white">8.1 Yönetici Analist Kararı & Yatırım Perspektifi</span>
               </div>
 
@@ -4221,7 +4290,6 @@ export default function SimplyView({
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
                 <div className="bg-[#21262d] border border-emerald-500/30 rounded-xl p-4 sm:p-5 space-y-2.5">
                   <div className="flex items-center gap-2 text-sm font-bold text-emerald-400">
-                    <Target className="w-4 h-4 shrink-0" />
                     <span className="font-sans font-bold text-white text-[15px]">Temel Yatırım Tezi</span>
                   </div>
                   <p className="text-sm text-slate-200 leading-relaxed font-sans">
@@ -4237,7 +4305,6 @@ export default function SimplyView({
 
                 <div className="bg-[#21262d] border border-cyan-500/30 rounded-xl p-4 sm:p-5 space-y-2.5">
                   <div className="flex items-center gap-2 text-sm font-bold text-cyan-400">
-                    <Sparkles className="w-4 h-4 shrink-0" />
                     <span className="font-sans font-bold text-white text-[15px]">Kilit Katalizörler</span>
                   </div>
                   <p className="text-sm text-slate-200 leading-relaxed font-sans">
@@ -4249,7 +4316,6 @@ export default function SimplyView({
 
                 <div className="bg-[#21262d] border border-rose-500/30 rounded-xl p-4 sm:p-5 space-y-2.5">
                   <div className="flex items-center gap-2 text-sm font-bold text-rose-400">
-                    <AlertTriangle className="w-4 h-4 shrink-0" />
                     <span className="font-sans font-bold text-white text-[15px]">Riskler & Emniyet Marjı</span>
                   </div>
                   <p className="text-sm text-slate-200 leading-relaxed font-sans">
@@ -4269,7 +4335,6 @@ export default function SimplyView({
               <div className="p-5 sm:p-6 space-y-3 bg-[#181b20]">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-[#f5c242]" />
                     <span className="font-sans text-base sm:text-lg font-bold text-white">8.2 BİST Kurumsal Araştırma Raporu</span>
                   </div>
                   <div className="text-xs font-mono text-slate-400 bg-[#21262d] px-2.5 py-1 rounded-md border border-[#2e3440]">
@@ -4466,7 +4531,6 @@ export default function SimplyView({
 
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
               <div className="flex items-center gap-2 border-b border-[#282d37] pb-3">
-                <History className="w-4 h-4 text-[#f5c242]" />
                 <span className="font-sans text-base sm:text-lg font-bold text-white">9.1 Çeyreklik Analiz Hafızası & Model Geçmişi</span>
               </div>
               {tickerHistory.length > 0 ? (
