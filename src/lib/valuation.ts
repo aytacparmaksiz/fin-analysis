@@ -522,18 +522,24 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
 
     // OCR & Sayısal Temizlik: Eksi bakiyeler, tireli ve parantezli sayılar, binlik/ondalık ayraçları
     const numericFields = [
-      'revenue', 'ebitda', 'net_income', 'gross_profit', 'operating_profit', 'operating_income',
-      'operating_cash_flow', 'capex', 'free_cash_flow', 'net_debt',
-      'short_term_debt', 'long_term_debt', 'financial_debt',
-      'interest_expenses', 'interest_expense', 'financial_expenses', 'financial_expense', 'financing_costs', 'finance_cost',
-      'ebt', 'ebit', 'fx_assets', 'fx_liabilities', 'net_fx_position',
-      'equity', 'paid_in_capital', 'total_assets', 'current_assets', 'non_current_assets',
-      'current_liabilities', 'long_term_liabilities', 'total_liabilities', 'inventories',
-      'cash_and_equivalents', 'financial_assets_insured', 'trade_receivables',
+      'revenue', 'cost_of_sales', 'gross_profit', 'marketing_expenses', 'administrative_expenses', 'rd_expenses',
+      'operating_expenses', 'other_operating_income', 'other_operating_expense', 'other_operating_income_net',
+      'operating_profit', 'operating_income', 'ebit', 'ebitda',
+      'financing_income', 'financing_expenses', 'interest_expenses', 'interest_expense', 'financial_expenses', 'financial_expense', 'financing_costs', 'finance_cost',
+      'ebt', 'profit_before_tax', 'tax_expense', 'net_income',
+      'operating_cash_flow', 'depreciation', 'working_capital_change', 'capex', 'tangible_capex', 'investing_cash_flow', 'free_cash_flow', 'financing_cash_flow', 'dividends_paid', 'net_change_in_cash',
+      'net_debt', 'short_term_debt', 'long_term_debt', 'financial_debt',
+      'fx_assets', 'fx_liabilities', 'net_fx_position',
+      'equity', 'paid_in_capital', 'retained_earnings',
+      'total_assets', 'current_assets', 'cash_and_equivalents', 'cash', 'financial_investments', 'financial_assets_insured',
+      'trade_receivables', 'other_receivables', 'derivative_instruments', 'inventories', 'prepaid_expenses', 'other_current_assets',
+      'non_current_assets', 'non_current_financial_investments', 'non_current_trade_receivables', 'tangible_assets', 'intangible_assets', 'right_of_use_assets', 'deferred_tax_assets', 'other_non_current_assets',
+      'current_liabilities', 'trade_payables', 'employee_benefit_obligations', 'other_current_liabilities',
+      'long_term_liabilities', 'other_long_term_liabilities', 'total_liabilities',
       'written_premiums', 'gross_written_premiums', 'earned_premiums', 'technical_profit', 'technical_balance', 'investment_income', 'pension_aum',
       'loss_ratio', 'expense_ratio', 'combined_ratio',
       'npl_ratio', 'car_ratio', 'nim', 'net_interest_income', 'loan_to_deposit',
-      'nav', 'holding_discount', 'dividends_paid',
+      'nav', 'holding_discount',
       'current_ratio', 'quick_ratio', 'cash_ratio', 'leverage_ratio',
       'asset_turnover', 'equity_turnover', 'roa', 'roe', 'roic', 'wacc', 'share_price'
     ];
@@ -662,12 +668,18 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
 
     // Otomatik Çift Yönlü Birim / Ölçek Öz-İyileştirme (Bidirectional Self-Healing Scale Normalizer):
     const monetaryFields = [
-      'revenue', 'ebitda', 'net_income', 'gross_profit', 'operating_profit', 'operating_income',
-      'operating_cash_flow', 'capex', 'free_cash_flow', 'net_debt',
-      'short_term_debt', 'long_term_debt', 'financial_debt',
-      'equity', 'paid_in_capital', 'total_assets', 'current_assets', 'non_current_assets',
-      'current_liabilities', 'long_term_liabilities', 'total_liabilities', 'inventories',
-      'cash_and_equivalents', 'financial_assets_insured', 'trade_receivables',
+      'revenue', 'cost_of_sales', 'gross_profit', 'marketing_expenses', 'administrative_expenses', 'rd_expenses',
+      'operating_expenses', 'other_operating_income', 'other_operating_expense', 'other_operating_income_net',
+      'operating_profit', 'operating_income', 'ebit', 'ebitda',
+      'financing_income', 'financing_expenses', 'interest_expenses', 'ebt', 'profit_before_tax', 'tax_expense', 'net_income',
+      'operating_cash_flow', 'depreciation', 'working_capital_change', 'capex', 'tangible_capex', 'investing_cash_flow', 'free_cash_flow', 'financing_cash_flow', 'dividends_paid', 'net_change_in_cash',
+      'short_term_debt', 'long_term_debt', 'financial_debt', 'net_debt',
+      'equity', 'paid_in_capital', 'retained_earnings',
+      'total_assets', 'current_assets', 'cash_and_equivalents', 'cash', 'financial_investments', 'financial_assets_insured',
+      'trade_receivables', 'other_receivables', 'derivative_instruments', 'inventories', 'prepaid_expenses', 'other_current_assets',
+      'non_current_assets', 'non_current_financial_investments', 'non_current_trade_receivables', 'tangible_assets', 'intangible_assets', 'right_of_use_assets', 'deferred_tax_assets', 'other_non_current_assets',
+      'current_liabilities', 'trade_payables', 'employee_benefit_obligations', 'other_current_liabilities',
+      'long_term_liabilities', 'other_long_term_liabilities', 'total_liabilities',
       'written_premiums', 'gross_written_premiums', 'earned_premiums', 'technical_profit', 'technical_balance',
       'investment_income', 'pension_aum', 'net_interest_income'
     ];

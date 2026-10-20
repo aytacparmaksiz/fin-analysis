@@ -87,42 +87,85 @@ async function fetchResilientJson(urlStr: string, timeoutMs = 25000): Promise<an
 
 export interface FinancialHistoryItem {
   period: string;
+  // Gelir Tablosu
   revenue: number | null;
-  gross_profit: number | null;
   cost_of_sales?: number | null;
+  gross_profit: number | null;
+  marketing_expenses?: number | null;
+  administrative_expenses?: number | null;
+  rd_expenses?: number | null;
   operating_expenses?: number | null;
+  other_operating_income_net?: number | null;
+  other_operating_income?: number | null;
+  other_operating_expense?: number | null;
   operating_profit: number | null;
-  financing_expenses?: number | null;
-  financing_income?: number | null;
-  tax_expense?: number | null;
+  operating_income?: number | null;
+  ebit?: number | null;
   ebitda: number | null;
-  net_income: number | null;
+  financing_income?: number | null;
+  financing_expenses?: number | null;
   ebt?: number | null;
+  profit_before_tax?: number | null;
+  tax_expense?: number | null;
+  net_income: number | null;
+
+  // Bilanço - Varlıklar
   current_assets: number | null;
+  cash_and_equivalents: number | null;
+  cash?: number | null;
+  financial_investments?: number | null;
+  financial_assets_insured?: number | null;
+  trade_receivables: number | null;
+  other_receivables?: number | null;
+  derivative_instruments?: number | null;
+  inventories: number | null;
+  prepaid_expenses?: number | null;
+  other_current_assets?: number | null;
   non_current_assets: number | null;
-  total_assets: number | null;
+  non_current_financial_investments?: number | null;
+  non_current_trade_receivables?: number | null;
   tangible_assets?: number | null;
   intangible_assets?: number | null;
-  trade_payables?: number | null;
+  right_of_use_assets?: number | null;
+  deferred_tax_assets?: number | null;
+  other_non_current_assets?: number | null;
+  total_assets: number | null;
+
+  // Bilanço - Yükümlülükler ve Özkaynaklar
   current_liabilities: number | null;
+  short_term_debt: number | null;
+  trade_payables?: number | null;
+  employee_benefit_obligations?: number | null;
+  other_current_liabilities?: number | null;
   long_term_liabilities: number | null;
+  long_term_debt: number | null;
+  other_long_term_liabilities?: number | null;
   total_liabilities: number | null;
+  financial_debt?: number | null;
+  net_debt: number | null;
   equity: number | null;
   paid_in_capital: number | null;
-  cash_and_equivalents: number | null;
-  short_term_debt: number | null;
-  long_term_debt: number | null;
+  retained_earnings?: number | null;
+
+  // Nakit Akışı
   operating_cash_flow: number | null;
+  depreciation?: number | null;
+  working_capital_change?: number | null;
   capex: number | null;
+  tangible_capex?: number | null;
   investing_cash_flow?: number | null;
-  financing_cash_flow?: number | null;
-  net_change_in_cash?: number | null;
   free_cash_flow: number | null;
+  financing_cash_flow?: number | null;
+  dividends_paid?: number | null;
+  net_change_in_cash?: number | null;
+
+  // Sektörel / Sigorta / Bankacılık
   written_premiums?: number | null;
+  gross_written_premiums?: number | null;
   earned_premiums?: number | null;
   technical_profit?: number | null;
+  technical_balance?: number | null;
   investment_income?: number | null;
-  financial_assets_insured?: number | null;
   pension_aum?: number | null;
   loss_ratio?: number | null;
   expense_ratio?: number | null;

@@ -1317,7 +1317,7 @@ export default function SimplyView({
         { label: 'Pazarlama, Satış ve Dağıtım Giderleri (-)', key: 'marketing_expenses' },
         { label: 'Genel Yönetim Giderleri (-)', key: 'administrative_expenses' },
         { label: 'Araştırma ve Geliştirme Giderleri (-)', key: 'rd_expenses' },
-        { label: 'Esas Faaliyetlerden Diğer Gelirler / (Giderler)', key: 'other_operating_income_net' }
+        { label: 'Esas Faaliyetlerden Diğer Gelirler / (Giderler)', key: 'other_operating_income_net', fallbackKey: 'other_operating_income' }
       ],
       grandTotalLabel: '+ FAVÖK (EBITDA)',
       grandTotalKey: 'ebitda'
@@ -1330,7 +1330,7 @@ export default function SimplyView({
       rows: [
         { label: 'Finansman Gelirleri', key: 'financing_income' },
         { label: 'Finansman Giderleri (-)', key: 'financing_expenses' },
-        { label: 'Vergi Öncesi Kâr', key: 'profit_before_tax' },
+        { label: 'Vergi Öncesi Kâr', key: 'profit_before_tax', fallbackKey: 'ebt' },
         { label: 'Dönem Vergi Gideri / (Geliri) (-)', key: 'tax_expense' }
       ]
     }
@@ -1345,7 +1345,7 @@ export default function SimplyView({
       totalKey: 'operating_cash_flow',
       rows: [
         { label: 'Dönem Kârı / (Zararı)', key: 'net_income' },
-        { label: 'Amortisman ve İtfa Düzeltmeleri', key: 'depreciation' },
+        { label: 'Amortisman ve İtfa Düzeltmeleri', key: 'depreciation', fallbackKey: 'amortization' },
         { label: 'İşletme Sermayesindeki Net Değişimler', key: 'working_capital_change' }
       ]
     },
@@ -1355,7 +1355,8 @@ export default function SimplyView({
       totalLabel: '+ Serbest Nakit Akışı (FCF = OCF - CapEx)',
       totalKey: 'free_cash_flow',
       rows: [
-        { label: 'Maddi & Maddi Olmayan Duran Varlık Alımları (CapEx) (-)', key: 'capex' }
+        { label: 'Maddi & Maddi Olmayan Duran Varlık Alımları (CapEx) (-)', key: 'capex', fallbackKey: 'tangible_capex' },
+        { label: 'Yatırım Faaliyetlerinden Nakit Akışları', key: 'investing_cash_flow' }
       ]
     },
     {
@@ -1429,33 +1430,33 @@ export default function SimplyView({
         {
           key: 'gross_margin',
           label: 'Brüt Kâr Marjı',
-          calc: (c: any) => c.revenue ? ((c.gross_profit || (c.revenue * 0.4)) / c.revenue * 100).toFixed(1) + '%' : '—',
-          raw: (c: any) => c.revenue ? ((c.gross_profit || (c.revenue * 0.4)) / c.revenue * 100) : null
+          calc: (c: any) => c.revenue && c.gross_profit != null ? ((c.gross_profit / c.revenue) * 100).toFixed(1) + '%' : '—',
+          raw: (c: any) => c.revenue && c.gross_profit != null ? ((c.gross_profit / c.revenue) * 100) : null
         },
         {
           key: 'ebitda_margin',
           label: 'FAVÖK Marjı',
-          calc: (c: any) => c.revenue ? ((c.ebitda || (c.revenue * 0.25)) / c.revenue * 100).toFixed(1) + '%' : '—',
-          raw: (c: any) => c.revenue ? ((c.ebitda || (c.revenue * 0.25)) / c.revenue * 100) : null
+          calc: (c: any) => c.revenue && c.ebitda != null ? ((c.ebitda / c.revenue) * 100).toFixed(1) + '%' : '—',
+          raw: (c: any) => c.revenue && c.ebitda != null ? ((c.ebitda / c.revenue) * 100) : null
         },
         {
           key: 'net_margin',
           label: 'Net Kâr Marjı',
-          calc: (c: any) => c.revenue ? ((c.net_income || (c.revenue * 0.15)) / c.revenue * 100).toFixed(1) + '%' : '—',
-          raw: (c: any) => c.revenue ? ((c.net_income || (c.revenue * 0.15)) / c.revenue * 100) : null
+          calc: (c: any) => c.revenue && c.net_income != null ? ((c.net_income / c.revenue) * 100).toFixed(1) + '%' : '—',
+          raw: (c: any) => c.revenue && c.net_income != null ? ((c.net_income / c.revenue) * 100) : null
         },
         {
           key: 'roe',
           label: 'Özkaynak Kârlılığı',
-          calc: (c: any) => c.equity ? (c.net_income / c.equity * 100).toFixed(1) + '%' : '—',
-          raw: (c: any) => c.equity ? (c.net_income / c.equity * 100) : null,
+          calc: (c: any) => c.equity && c.net_income != null ? ((c.net_income / c.equity) * 100).toFixed(1) + '%' : '—',
+          raw: (c: any) => c.equity && c.net_income != null ? ((c.net_income / c.equity) * 100) : null,
           isHighlight: true
         },
         {
           key: 'roa',
           label: 'Aktif Kârlılığı',
-          calc: (c: any) => c.total_assets ? (c.net_income / c.total_assets * 100).toFixed(1) + '%' : '—',
-          raw: (c: any) => c.total_assets ? (c.net_income / c.total_assets * 100) : null
+          calc: (c: any) => c.total_assets && c.net_income != null ? ((c.net_income / c.total_assets) * 100).toFixed(1) + '%' : '—',
+          raw: (c: any) => c.total_assets && c.net_income != null ? ((c.net_income / c.total_assets) * 100) : null
         }
       ]
     }
@@ -1490,12 +1491,13 @@ export default function SimplyView({
 
     const isRowHovered = hoveredRowKey != null && hoveredRowKey === rowKey;
     const isGood = invert ? (diffPct != null && diffPct <= 0) : (diffPct != null && diffPct >= 0);
+    const isNegative = currentVal != null && !isNaN(Number(currentVal)) && Number(currentVal) < 0;
 
     const textStyle = isGrandTotal
-      ? 'font-black text-[#f5c242]'
+      ? (isNegative ? 'font-black text-rose-400' : 'font-black text-[#f5c242]')
       : isBold
-      ? 'font-bold text-white'
-      : 'text-slate-200';
+      ? (isNegative ? 'font-bold text-rose-400' : 'font-bold text-white')
+      : (isNegative ? 'text-rose-400 font-medium' : 'text-slate-200');
 
     return (
       <td
