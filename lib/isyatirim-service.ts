@@ -47,9 +47,9 @@ export type { IsYatirimSectorAverage } from './isyatirim-sector-averages-cache.t
 
 let cachedMultiples: Record<string, IsYatirimStockMultiples> = { ...OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE };
 let cachedSectorAverages: Record<string, IsYatirimSectorAverage> = { ...OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE };
-let lastFetchTimestamp = Date.now();
+let lastFetchTimestamp = 0;
 let isFetchingInProgress = false;
-const CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 saat önbellek
+const CACHE_TTL_MS = 20 * 60 * 1000; // 20 dakika önbellek
 
 /**
  * Türkçe ondalık/binlik formatlı sayı stringini float'a çevirir (örn: '402.960,0' -> 402960.0)
@@ -254,25 +254,29 @@ async function doFetchAllIsYatirimMultiples(): Promise<Record<string, IsYatirimS
 }
 
 /**
- * İş Yatırım Temel Değerler ve Oranlar tablosunu Stale-While-Revalidate ile anında getirir (0ms)
+ * İş Yatırım Temel Değerler ve Oranlar tablosunu Stale-While-Revalidate ile anında getirir
  */
 export async function fetchAllIsYatirimMultiples(): Promise<Record<string, IsYatirimStockMultiples>> {
   const now = Date.now();
 
-  // 1. Resmi çarpan önbelleğinde 630 hissenin verisi anında mevcuttur (0ms)
-  if (cachedMultiples && Object.keys(cachedMultiples).length > 0) {
-    // 2 saatlik TTL dolmuşsa arka planda sessizce güncelle (kullanıcıyı asla bloklamaz)
-    if (now - lastFetchTimestamp >= CACHE_TTL_MS && !isFetchingInProgress) {
+  // 1. İlk çalıştırmada veya 20 dakikalık TTL dolduğunda canlı çekimi dene
+  if (lastFetchTimestamp === 0 || now - lastFetchTimestamp >= CACHE_TTL_MS) {
+    if (!isFetchingInProgress) {
       isFetchingInProgress = true;
-      doFetchAllIsYatirimMultiples().finally(() => {
+      try {
+        await Promise.race([
+          doFetchAllIsYatirimMultiples(),
+          new Promise((r) => setTimeout(r, 6000))
+        ]);
+      } catch (err: any) {
+        console.warn('[IsYatirim] Canlı çarpan çekiminde gecikme, önbellek kullanılıyor:', err?.message || err);
+      } finally {
         isFetchingInProgress = false;
-      });
+      }
     }
-    return cachedMultiples;
   }
 
-  // 2. İstisnai durumda doğrudan çekimi bekle
-  return await doFetchAllIsYatirimMultiples();
+  return cachedMultiples || {};
 }
 
 /**
@@ -318,35 +322,47 @@ export async function getIsYatirimSectorAverages(sectorNameOrCode: string): Prom
 
   if (!code && !sectorName) return null;
 
-  // 1. Önbellekte mevcutsa hemen dön ve gerekirse arka planda tazele
-  if (code && cachedSectorAverages[code]) {
-    return cachedSectorAverages[code];
+  // 1. Canlı İş Yatırım sektör sayfasından çekmeyi dene (4s tavan koruması)
+  if (code) {
+    const existing = cachedSectorAverages[code];
+    const isStale = !existing || !existing.updatedAt || (Date.now() - new Date(existing.updatedAt).getTime() > CACHE_TTL_MS);
+
+    if (isStale) {
+      try {
+        const url = `https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/Temel-Degerler-Ve-Oranlar.aspx?sektor=${code}`;
+        const html = await fetchHttpsText(url, 4500);
+        if (html) {
+          const ortMatch = html.match(/Sektör Ortalamaları[\s\S]*?<div class="second-item[^>]*>([\s\S]*?)<\/div>[\s\S]*?<div class="third-item[^>]*>([\s\S]*?)<\/div>[\s\S]*?<div class="fourth-item[^>]*>([\s\S]*?)<\/div>[\s\S]*?<div class="fifth-item[^>]*>([\s\S]*?)<\/div>/i);
+          if (ortMatch) {
+            const rawPe = parseTrFloat(ortMatch[1]);
+            const rawEvEbitda = parseTrFloat(ortMatch[2]);
+            const rawEvSales = parseTrFloat(ortMatch[3]);
+            const rawPb = parseTrFloat(ortMatch[4]);
+
+            const parsed: IsYatirimSectorAverage = {
+              sectorCode: code,
+              sectorName: sectorName || OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE[code]?.sectorName || code,
+              pe: (rawPe !== null && rawPe > 0) ? rawPe : null,
+              evEbitda: (rawEvEbitda !== null && rawEvEbitda > 0) ? rawEvEbitda : null,
+              evSales: (rawEvSales !== null && rawEvSales > 0) ? rawEvSales : null,
+              pb: (rawPb !== null && rawPb > 0) ? rawPb : null,
+              updatedAt: new Date().toISOString()
+            };
+            cachedSectorAverages[code] = parsed;
+            return parsed;
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[IsYatirim] Canlı sektör ortalaması çekilemedi (${code}):`, err?.message || err);
+      }
+    } else if (existing) {
+      return existing;
+    }
   }
 
-  // 2. Canlı İş Yatırım sektör sayfasından çekmeyi dene
-  if (code) {
-    try {
-      const url = `https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/Temel-Degerler-Ve-Oranlar.aspx?sektor=${code}`;
-      const html = await fetchHttpsText(url, 15000);
-      if (html) {
-        const ortMatch = html.match(/Sektör Ortalamaları[\s\S]*?<div class="second-item[^>]*>([\s\S]*?)<\/div>[\s\S]*?<div class="third-item[^>]*>([\s\S]*?)<\/div>[\s\S]*?<div class="fourth-item[^>]*>([\s\S]*?)<\/div>[\s\S]*?<div class="fifth-item[^>]*>([\s\S]*?)<\/div>/i);
-        if (ortMatch) {
-          const parsed: IsYatirimSectorAverage = {
-            sectorCode: code,
-            sectorName: sectorName || OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE[code]?.sectorName || code,
-            pe: parseTrFloat(ortMatch[1]),
-            evEbitda: parseTrFloat(ortMatch[2]),
-            evSales: parseTrFloat(ortMatch[3]),
-            pb: parseTrFloat(ortMatch[4]),
-            updatedAt: new Date().toISOString()
-          };
-          cachedSectorAverages[code] = parsed;
-          return parsed;
-        }
-      }
-    } catch (err: any) {
-      console.warn(`[IsYatirim] Canlı sektör ortalaması çekilemedi (${code}):`, err?.message || err);
-    }
+  // 2. Önbellekte mevcutsa dön
+  if (code && cachedSectorAverages[code]) {
+    return cachedSectorAverages[code];
   }
 
   // 3. Fallback: Canlı 630 hisse havuzundan bu sektörün medyanlarını dinamik hesapla

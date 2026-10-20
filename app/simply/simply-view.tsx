@@ -108,9 +108,9 @@ export interface SimplyViewProps {
   onSelectReport?: (id: string) => void;
 }
 
-const SECTOR_MEDIAN_BENCHMARKS: Record<string, { pe: number; pb: number; evEbitda: number; evSales: number }> = {
-  INSURANCE: { pe: 8.5, pb: 2.1, evEbitda: 7.2, evSales: 1.8 },
-  BANKING: { pe: 5.5, pb: 1.2, evEbitda: 4.8, evSales: 1.4 },
+const SECTOR_MEDIAN_BENCHMARKS: Record<string, { pe: number; pb: number; evEbitda: number | null; evSales: number | null }> = {
+  INSURANCE: { pe: 4.59, pb: 1.78, evEbitda: null, evSales: null },
+  BANKING: { pe: 5.17, pb: 1.03, evEbitda: null, evSales: null },
   HOLDING: { pe: 6.8, pb: 1.5, evEbitda: 6.0, evSales: 1.6 },
   REIT: { pe: 7.2, pb: 1.1, evEbitda: 8.5, evSales: 4.2 },
   TECH: { pe: 16.5, pb: 4.8, evEbitda: 14.0, evSales: 5.5 },
@@ -3102,16 +3102,16 @@ export default function SimplyView({
                 },
                 {
                   label: 'FD/FAVÖK',
-                  rawVal: marketMultiples?.ev_ebitda ?? companyMultiplesData?.multiples?.evEbitda?.companyValue,
-                  benchNum: marketMultiples?.sector_averages?.ev_ebitda ?? companyMultiplesData?.benchmark?.evEbitdaMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.evEbitda ?? 7.2,
+                  rawVal: isMetricDisabled('ev_ebitda', currentSector) ? null : (marketMultiples?.ev_ebitda ?? companyMultiplesData?.multiples?.evEbitda?.companyValue),
+                  benchNum: isMetricDisabled('ev_ebitda', currentSector) ? null : (marketMultiples?.sector_averages?.ev_ebitda ?? companyMultiplesData?.benchmark?.evEbitdaMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.evEbitda ?? 7.2),
                   format: (v: number) => `${v.toFixed(1)}x`,
                   isMultiple: true,
                   customType: 'multiple' as const
                 },
                 {
                   label: 'FD/Satışlar',
-                  rawVal: marketMultiples?.ev_sales ?? companyMultiplesData?.multiples?.evSales?.companyValue,
-                  benchNum: marketMultiples?.sector_averages?.ev_sales ?? companyMultiplesData?.benchmark?.evSalesMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.evSales ?? 1.8,
+                  rawVal: isMetricDisabled('ev_sales', currentSector) ? null : (marketMultiples?.ev_sales ?? companyMultiplesData?.multiples?.evSales?.companyValue),
+                  benchNum: isMetricDisabled('ev_sales', currentSector) ? null : (marketMultiples?.sector_averages?.ev_sales ?? companyMultiplesData?.benchmark?.evSalesMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.evSales ?? 1.8),
                   format: (v: number) => `${v.toFixed(1)}x`,
                   isMultiple: true,
                   customType: 'multiple' as const
@@ -3163,8 +3163,30 @@ export default function SimplyView({
                   );
                 }
 
+                // Eğer metrik A/D (Anlamsız Değer / Sektörel Kapsam Dışı) ise
+                if (c.rawVal == null) {
+                  const isSectorExempt = isMetricDisabled(c.label === 'FD/FAVÖK' ? 'ev_ebitda' : (c.label === 'FD/Satışlar' ? 'ev_sales' : ''), currentSector);
+                  const benchText = c.benchNum != null && c.benchNum > 0 ? `Ref: ${c.benchNum.toFixed(c.label === 'PD/DD' ? 2 : 1)}x` : 'Ref: A/D';
+                  return (
+                    <div key={i} className="bg-[#12151b] border border-[#232834] rounded-xl p-3.5 text-center space-y-1 transition-colors">
+                      <div className="text-[11px] uppercase font-bold text-slate-400">{c.label}</div>
+                      <div className="text-lg font-black font-mono mt-1 text-slate-400">
+                        A/D
+                      </div>
+                      <div className="text-[10px] text-slate-500 font-mono">
+                        {benchText}
+                      </div>
+                      <div className="pt-1">
+                        <span className="inline-block text-[9.5px] font-mono font-medium px-2 py-0.5 rounded-md bg-[#21262d] text-slate-400 border border-[#2e3440]">
+                          {isSectorExempt ? 'Sektörel Kapsam Dışı' : 'Anlamsız Değer (A/D)'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+
                 const bench = c.benchNum ?? 1.0;
-                const val = c.rawVal != null ? Number(c.rawVal) : bench;
+                const val = Number(c.rawVal);
                 const diffPct = ((val - bench) / bench) * 100;
                 const isCheap = diffPct <= -8;
                 const isExpensive = diffPct >= 8;

@@ -378,11 +378,11 @@ export const OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE: Record<string, IsYatir
   "0040": {
     "sectorCode": "0040",
     "sectorName": "Sigorta",
-    "pe": 4.97,
+    "pe": 4.59,
     "evEbitda": null,
     "evSales": null,
-    "pb": 1.93,
-    "updatedAt": "2026-10-15T13:02:26.055Z"
+    "pb": 1.78,
+    "updatedAt": "2026-10-20T21:00:00.000Z"
   },
   "0039": {
     "sectorCode": "0039",

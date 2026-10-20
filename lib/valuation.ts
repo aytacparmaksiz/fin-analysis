@@ -4502,8 +4502,8 @@ export const SECTOR_MULTIPLE_BENCHMARKS: Record<SectorType, SectorMultipleBenchm
   INSURANCE: {
     sector: 'INSURANCE',
     sectorName: 'Sigortacılık & Bireysel Emeklilik',
-    peMedian: 4.97,
-    pbMedian: 1.93,
+    peMedian: 4.59,
+    pbMedian: 1.78,
     evEbitdaMedian: null,
     evSalesMedian: null,
     description: 'İş Yatırım Sigorta sektörü resmi piyasa çarpan ortalamaları'

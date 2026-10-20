@@ -120,7 +120,7 @@ export const SECTOR_ARCHETYPE_CONFIGS: Record<FinancialArchetype, SectorArchetyp
     name: 'Sigortacılık & Bireysel Emeklilik',
     badge: 'Sigorta / Teknik Denge & Float Modu',
     description: 'Sigorta şirketlerinde klasik hasılat ve FAVÖK bulunmaz. Prim üretimi, teknik denge, hasar/prim ve masraf oranı, kombine oran ve ROE esastır.',
-    disabledMetrics: ['ebitda', 'ev_ebitda', 'net_debt', 'stock_turnover', 'ebitda_margin'],
+    disabledMetrics: ['ebitda', 'ev_ebitda', 'ev_sales', 'net_debt', 'stock_turnover', 'ebitda_margin'],
     featuredMetrics: [
       { key: 'gross_written_premiums', name: 'Yazılan Net / Brüt Prim', unit: 'TL', description: 'Poliçe üretimi ve pazar payı genişlemesi' },
       { key: 'loss_ratio', name: 'Hasar / Prim Oranı', unit: '%', description: 'Ödenen/tahakkuk eden hasar maliyeti (<%75 olumlu)' },
