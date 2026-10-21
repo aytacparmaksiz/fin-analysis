@@ -68,6 +68,7 @@ import {
 } from '@/lib/sectors';
 import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from '@/lib/isyatirim-multiples-cache';
 import { getCompanyProfile } from '@/lib/company-profiles';
+import SnowflakeRadar from './snowflake-radar';
 import {
   computeSnowflakeAnalysis,
   getSnowflakeCoordinates,
@@ -1571,45 +1572,18 @@ export default function SimplyView({
         {/* ========================================================================= */}
         <aside className="w-64 flex-shrink-0 hidden lg:block sticky top-16 self-start z-20">
           <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-4 shadow-2xl space-y-3">
-            {/* Mini Kar Tanesi Radarı */}
+            {/* Kar Tanesi Radarı (Freeze Pane Sabit Menü) */}
             <div className="flex flex-col items-center justify-center pt-0.5">
-              <div className="relative w-28 h-28 flex items-center justify-center">
-                <svg width="112" height="112" viewBox="0 0 240 240" className="overflow-visible">
-                  {[28, 56, 85].map((r, i) => (
-                    <circle
-                      key={i}
-                      cx="120"
-                      cy="120"
-                      r={r}
-                      fill="none"
-                      stroke="#272b35"
-                      strokeWidth="1.5"
-                      strokeDasharray={i === 2 ? 'none' : '3 3'}
-                    />
-                  ))}
-                  {radarPoints.map((pt, i) => (
-                    <line
-                      key={i}
-                      x1="120"
-                      y1="120"
-                      x2={pt.x}
-                      y2={pt.y}
-                      stroke="#383e4d"
-                      strokeWidth="1"
-                    />
-                  ))}
-                  <path
-                    d={smoothRadarPath}
-                    fill="rgba(245, 194, 66, 0.65)"
-                    stroke="#f5c242"
-                    strokeWidth="2.5"
-                    className="transition-all duration-700 drop-shadow-[0_0_10px_rgba(245,194,66,0.4)]"
-                  />
-                </svg>
-              </div>
+              <SnowflakeRadar
+                axes={snowflake.axes}
+                ticker={report.ticker}
+                size={195}
+                onSelectSection={(secId) => scrollToSection(secId as any)}
+                showLabels={true}
+              />
 
               {/* Ticker & Şirket Bilgisi */}
-              <div className="text-center mt-2 space-y-1">
+              <div className="text-center mt-1 space-y-0.5">
                 <h3 className="font-sans text-[15px] font-bold text-white tracking-tight line-clamp-1" title={profile.fullName}>
                   {getCleanCompanyName(profile.fullName, report.ticker)}
                 </h3>
@@ -2027,132 +2001,13 @@ export default function SimplyView({
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
                 {/* Sol: Dinamik Renkli Organik SVG Snowflake Radarı (5 Kolon) */}
                 <div className="lg:col-span-5 flex flex-col items-center justify-center p-3 bg-[#14171d] rounded-2xl border border-[#262c37] relative">
-                  <svg
-                    viewBox="0 0 280 280"
-                    className="w-full max-w-[280px] h-auto overflow-visible select-none"
-                  >
-                    <defs>
-                      <linearGradient id="snowflakeGradGreen" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#10b981" stopOpacity="0.75" />
-                        <stop offset="100%" stopColor="#047857" stopOpacity="0.35" />
-                      </linearGradient>
-                      <linearGradient id="snowflakeGradAmber" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#f5c242" stopOpacity="0.75" />
-                        <stop offset="100%" stopColor="#b45309" stopOpacity="0.35" />
-                      </linearGradient>
-                      <linearGradient id="snowflakeGradRed" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#f97316" stopOpacity="0.75" />
-                        <stop offset="100%" stopColor="#b91c1c" stopOpacity="0.35" />
-                      </linearGradient>
-
-                      <filter id="snowflakeGlow" x="-20%" y="-20%" width="140%" height="140%">
-                        <feGaussianBlur stdDeviation="3.5" result="blur" />
-                        <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                      </filter>
-                    </defs>
-
-                    {/* 6 Kademeli Konsantrik Poligon Kılavuz Halkaları */}
-                    {[1, 2, 3, 4, 5, 6].map((level) => {
-                      const r = (level / 6) * 95;
-                      const pts = [0, 1, 2, 3, 4].map((idx) => {
-                        const angle = -Math.PI / 2 + (idx * 2 * Math.PI) / 5;
-                        return `${(140 + r * Math.cos(angle)).toFixed(1)},${(140 + r * Math.sin(angle)).toFixed(1)}`;
-                      }).join(' ');
-                      return (
-                        <polygon
-                          key={level}
-                          points={pts}
-                          fill={level === 6 ? '#181c24' : 'none'}
-                          stroke="#2e3440"
-                          strokeWidth={level === 6 ? '1.5' : '1'}
-                          strokeDasharray={level === 6 ? 'none' : '2,3'}
-                          opacity={level === 6 ? '0.7' : '0.5'}
-                        />
-                      );
-                    })}
-
-                    {/* Merkezden Dışarı 5 Eksen İskelet Çizgileri */}
-                    {[0, 1, 2, 3, 4].map((idx) => {
-                      const angle = -Math.PI / 2 + (idx * 2 * Math.PI) / 5;
-                      const x2 = 140 + 95 * Math.cos(angle);
-                      const y2 = 140 + 95 * Math.sin(angle);
-                      return (
-                        <line
-                          key={idx}
-                          x1="140"
-                          y1="140"
-                          x2={x2.toFixed(1)}
-                          y2={y2.toFixed(1)}
-                          stroke="#2e3440"
-                          strokeWidth="1.2"
-                        />
-                      );
-                    })}
-
-                    {/* Dinamik Organik Snowflake Veri Poligonu */}
-                    {smoothRadarPath && (
-                      <path
-                        d={smoothRadarPath}
-                        fill={`url(#${snowflakeTheme.gradId})`}
-                        stroke={snowflakeTheme.stroke}
-                        strokeWidth="2.5"
-                        strokeLinejoin="round"
-                        filter="url(#snowflakeGlow)"
-                        className="transition-all duration-700"
-                      />
-                    )}
-
-                    {/* Eksen Tepe Noktaları */}
-                    {radarPoints.map((pt) => (
-                      <g key={pt.axis} className="transition-all duration-700">
-                        <circle
-                          cx={pt.x}
-                          cy={pt.y}
-                          r="5.5"
-                          fill="#12151b"
-                          stroke={snowflakeTheme.stroke}
-                          strokeWidth="2"
-                        />
-                        <circle
-                          cx={pt.x}
-                          cy={pt.y}
-                          r="2.5"
-                          fill={snowflakeTheme.stroke}
-                        />
-                      </g>
-                    ))}
-
-                    {/* Merkez Ticker Rozeti */}
-                    <circle cx="140" cy="140" r="14" fill="#181c24" stroke="#2e3440" strokeWidth="1.2" />
-                    <text
-                      x="140"
-                      y="144"
-                      textAnchor="middle"
-                      fill="#f5c242"
-                      fontSize="9"
-                      fontWeight="bold"
-                      fontFamily="monospace"
-                    >
-                      {report.ticker.slice(0, 4)}
-                    </text>
-
-                    {/* 5 Eksen Dış Etiketleri (Parantez olmadan temiz metin) */}
-                    <text x="140" y="24" textAnchor="middle" fill="#ffffff" fontSize="10" fontWeight="bold" fontFamily="monospace">
-                      Değerleme {snowflake.axes.value.score}/6
-                    </text>
-                    <text x="242" y="98" textAnchor="start" fill="#ffffff" fontSize="10" fontWeight="bold" fontFamily="monospace">
-                      Gelecek {snowflake.axes.future.score}/6
-                    </text>
-                    <text x="210" y="246" textAnchor="start" fill="#ffffff" fontSize="10" fontWeight="bold" fontFamily="monospace">
-                      Geçmiş {snowflake.axes.past.score}/6
-                    </text>
-                    <text x="70" y="246" textAnchor="end" fill="#ffffff" fontSize="10" fontWeight="bold" fontFamily="monospace">
-                      Sağlık {snowflake.axes.health.score}/6
-                    </text>
-                    <text x="38" y="98" textAnchor="end" fill="#ffffff" fontSize="10" fontWeight="bold" fontFamily="monospace">
-                      Temettü {snowflake.axes.dividend.score}/6
-                    </text>
-                  </svg>
+                  <SnowflakeRadar
+                    axes={snowflake.axes}
+                    ticker={report.ticker}
+                    size={280}
+                    onSelectSection={(secId) => scrollToSection(secId as any)}
+                    showLabels={true}
+                  />
                 </div>
 
                 {/* Sağ: 5 Eksen Puan Detayı ve İlerleme Barları (7 Kolon) */}

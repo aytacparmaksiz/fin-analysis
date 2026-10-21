@@ -14,8 +14,11 @@ import {
   Trophy, Award, Trash2, ArrowUpDown, Filter, Copy, Percent, PieChart, Info,
   PanelLeftClose, PanelLeftOpen, Pin, PinOff, Bookmark, Building2,
   Check, Rocket, Gem, Shield, Sun, Moon, Compass, SlidersHorizontal, Scale, ArrowRight, ArrowLeft, Sparkles,
-  Briefcase, Star
+  Briefcase, Star, Bell, User, LogOut
 } from 'lucide-react';
+
+import LoginModal, { type UserSession } from './components/login-modal';
+import SpotlightSearch from './components/spotlight-search';
 
 import SimplyView from './simply/simply-view';
 
@@ -223,7 +226,7 @@ async function fetchWithClientRetry(
 }
 
 // Fair Value Kurumsal Vektör Logosu
-function FairValueLogo({ className = "w-7 h-7" }: { className?: string }) {
+export function FairValueLogo({ className = "w-7 h-7" }: { className?: string }) {
   return (
     <div className={`relative flex items-center justify-center rounded-lg bg-slate-950 border border-slate-800 flex-shrink-0 p-1.5 ${className}`}>
       <svg viewBox="0 0 32 32" fill="none" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
@@ -1299,6 +1302,44 @@ export default function ValuationTerminal({
   // Analiz Edilen Şirketler Sekme & Filtre Durumu
   const [analyzedTab, setAnalyzedTab] = useState<'ALL' | 'PORTFOLIO' | 'FAVORITES' | 'AL' | 'NÖTR' | 'ALMA'>('ALL');
   const [analyzedSearch, setAnalyzedSearch] = useState('');
+
+  // Kullanıcı Oturum Durumu & Modallar
+  const [userSession, setUserSession] = useState<UserSession | null>(null);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [isSpotlightOpen, setIsSpotlightOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedUser = localStorage.getItem('fair_value_user');
+        if (savedUser) setUserSession(JSON.parse(savedUser));
+      } catch (e) {
+        console.warn('User session okuma hatası:', e);
+      }
+    }
+  }, []);
+
+  // Global Ctrl + K / Cmd + K Kısayolu
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsSpotlightOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    setUserSession(null);
+    setIsUserMenuOpen(false);
+    try {
+      localStorage.removeItem('fair_value_user');
+    } catch {}
+  }, []);
 
   // Portföy ve Favoriler Listeleri (localStorage'a kalıcı kaydedilir)
   const [portfolioTickers, setPortfolioTickers] = useState<string[]>([]);
@@ -3901,124 +3942,155 @@ export default function ValuationTerminal({
       
       {/* Ana Bölüm */}
       <main id="main-scroll-container" className="theme-canvas flex-1 flex flex-col min-w-0 bg-slate-950">
-        <header className="h-12 border-b border-slate-800 px-5 flex items-center justify-between bg-slate-900/95 backdrop-blur-md sticky top-0 z-30 print:hidden">
-          <div className="flex items-center gap-3">
+        <header className="h-14 border-b border-[#21262d] px-4 sm:px-6 flex items-center justify-between bg-[#111418] sticky top-0 z-40 print:hidden">
+          {/* Sol: Logo + SimplyWallSt tarzı Navigasyon Menüsü */}
+          <div className="flex items-center gap-2 sm:gap-6 min-w-0">
             <div 
               onClick={() => navigateTo('input')}
               role="button"
               tabIndex={0}
               title="Yeni Analiz Ekranına Dön"
-              className="flex items-center gap-2.5 cursor-pointer hover:opacity-85 transition select-none"
+              className="flex items-center gap-2 cursor-pointer hover:opacity-90 transition select-none shrink-0"
             >
               <FairValueLogo className="w-6 h-6" />
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-white tracking-tight">
-                  FAIR <span className="text-emerald-400">VALUE</span>
-                </span>
-                {isCloudConfigured && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-full">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Bulut
-                  </span>
-                )}
-              </div>
+              <span className="text-sm font-black text-white tracking-tight font-sans">
+                FAIR <span className="text-emerald-400">VALUE</span>
+              </span>
             </div>
 
-            {/* Ayrıcı Çizgi */}
-            <div className="h-4 w-px bg-slate-800 hidden md:block" />
+            {/* Yatay Navigasyon Linkleri (Dashboard, Portfolios, Watchlist, Community, Screener) */}
+            <nav className="hidden md:flex items-center gap-1 text-sm font-medium">
+              <button
+                type="button"
+                onClick={() => navigateTo('saved')}
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                  step === 'saved' && analyzedTab !== 'PORTFOLIO' && analyzedTab !== 'FAVORITES'
+                    ? 'text-white font-bold bg-[#1e232d]'
+                    : 'text-slate-400 hover:text-white hover:bg-[#181c24]'
+                }`}
+              >
+                <span>Dashboard</span>
+                {savedReports.length > 0 && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-[#21262d] text-emerald-400 font-bold">
+                    {savedReports.length}
+                  </span>
+                )}
+              </button>
 
-            {/* Analiz Edilen Şirketler */}
-            <button
-              type="button"
-              onClick={() => navigateTo('saved')}
-              className={`flex items-center gap-2 text-sm py-1.5 px-3 rounded-xl border font-semibold transition cursor-pointer ${
-                step === 'saved' && analyzedTab !== 'PORTFOLIO' && analyzedTab !== 'FAVORITES'
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
-                  : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800'
-              }`}
-              title="Analiz Edilen Şirketler Portföyü (AL, NÖTR, ALMA)"
-            >
-              <Building2 className="w-4 h-4 text-emerald-400" />
-              <span className="hidden md:inline">Analiz Edilen Şirketler</span>
-              <span className="md:hidden">Analizler</span>
-              {savedReports.length > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-xs font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold">
-                  {savedReports.length}
-                </span>
-              )}
-            </button>
+              <button
+                type="button"
+                onClick={() => navigateTo('portfolio')}
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                  step === 'saved' && analyzedTab === 'PORTFOLIO'
+                    ? 'text-[#f5c242] font-bold bg-[#1e232d]'
+                    : 'text-slate-400 hover:text-white hover:bg-[#181c24]'
+                }`}
+              >
+                <span>Portfolios</span>
+                {portfolioTickers.length > 0 && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-[#21262d] text-[#f5c242] font-bold">
+                    {portfolioTickers.length}
+                  </span>
+                )}
+              </button>
 
-            {/* Portföy */}
-            <button
-              type="button"
-              onClick={() => navigateTo('portfolio')}
-              className={`flex items-center gap-1.5 text-sm py-1.5 px-3 rounded-xl border font-semibold transition cursor-pointer ${
-                step === 'saved' && analyzedTab === 'PORTFOLIO'
-                  ? 'bg-[#f5c242]/20 text-[#f5c242] border-[#f5c242]/50 shadow-sm font-bold'
-                  : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800'
-              }`}
-              title="Portföyümdeki Hisseler"
-            >
-              <Briefcase className="w-4 h-4 text-[#f5c242]" />
-              <span>Portföy</span>
-              {portfolioTickers.length > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-xs font-mono bg-[#f5c242]/20 text-[#f5c242] border border-[#f5c242]/40 font-bold">
-                  {portfolioTickers.length}
-                </span>
-              )}
-            </button>
+              <button
+                type="button"
+                onClick={() => navigateTo('favorites')}
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                  step === 'saved' && analyzedTab === 'FAVORITES'
+                    ? 'text-amber-400 font-bold bg-[#1e232d]'
+                    : 'text-slate-400 hover:text-white hover:bg-[#181c24]'
+                }`}
+              >
+                <span>Watchlist</span>
+                {favoriteTickers.length > 0 && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-[#21262d] text-amber-400 font-bold">
+                    {favoriteTickers.length}
+                  </span>
+                )}
+              </button>
 
-            {/* Favoriler */}
-            <button
-              type="button"
-              onClick={() => navigateTo('favorites')}
-              className={`flex items-center gap-1.5 text-sm py-1.5 px-3 rounded-xl border font-semibold transition cursor-pointer ${
-                step === 'saved' && analyzedTab === 'FAVORITES'
-                  ? 'bg-amber-400/20 text-amber-300 border-amber-400/50 shadow-sm font-bold'
-                  : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800'
-              }`}
-              title="Favori & İzleme Listesi"
-            >
-              <Star className="w-4 h-4 text-amber-400 fill-amber-400/20" />
-              <span>Favoriler</span>
-              {favoriteTickers.length > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-xs font-mono bg-amber-400/20 text-amber-300 border border-amber-400/40 font-bold">
-                  {favoriteTickers.length}
-                </span>
-              )}
-            </button>
+              <button
+                type="button"
+                onClick={() => navigateTo('themes')}
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                  step === 'themes'
+                    ? 'text-cyan-400 font-bold bg-[#1e232d]'
+                    : 'text-slate-400 hover:text-white hover:bg-[#181c24]'
+                }`}
+              >
+                <span>Discover</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigateTo('leaderboard')}
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                  step === 'leaderboard'
+                    ? 'text-amber-400 font-bold bg-[#1e232d]'
+                    : 'text-slate-400 hover:text-white hover:bg-[#181c24]'
+                }`}
+              >
+                <span>Screener</span>
+              </button>
+            </nav>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Sağ: Arama Hapı (Ctrl K) + Bildirim + Tema + Kullanıcı Avatar / Giriş */}
+          <div className="flex items-center gap-2.5">
+            {/* Spotlight Arama Butonu (Ctrl + K) */}
             <button
               type="button"
-              onClick={() => navigateTo('themes')}
-              className={`flex items-center gap-2 text-sm py-2 px-3 rounded-xl border font-medium transition cursor-pointer ${
-                step === 'themes'
-                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm font-semibold'
-                  : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800'
-              }`}
+              onClick={() => setIsSpotlightOpen(true)}
+              className="flex items-center justify-between gap-3 bg-[#181b20] hover:bg-[#1f242c] border border-[#2b313d] hover:border-slate-500 py-1.5 px-3 rounded-full text-xs text-slate-400 transition cursor-pointer w-36 sm:w-52"
+              title="Hızlı Şirket Arama (Ctrl + K)"
             >
-              <Compass className="w-4 h-4 text-cyan-400" />
-              <span className="hidden sm:inline">Temalar</span>
+              <span className="flex items-center gap-2 truncate">
+                <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span className="text-slate-400 truncate">Search</span>
+              </span>
+              <kbd className="hidden sm:inline text-[10px] font-mono bg-[#21262d] px-1.5 py-0.5 rounded border border-[#2e3440] text-slate-400">
+                Ctrl K
+              </kbd>
             </button>
 
-            <button
-              type="button"
-              onClick={() => navigateTo('leaderboard')}
-              className={`flex items-center gap-2 text-sm py-2 px-3 rounded-xl border font-medium transition cursor-pointer ${
-                step === 'leaderboard'
-                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-sm font-semibold'
-                  : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800'
-              }`}
-            >
-              <Trophy className="w-4 h-4 text-amber-400" />
-              <span className="hidden sm:inline">Sıralama</span>
-            </button>
+            {/* Bildirim Çanı */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsNotificationOpen(prev => !prev)}
+                className="p-2 rounded-full hover:bg-[#1c2027] text-slate-400 hover:text-white transition cursor-pointer relative"
+                title="Bildirimler"
+              >
+                <Bell className="w-4 h-4" />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-[#111418]" />
+              </button>
 
+              {isNotificationOpen && (
+                <div 
+                  className="absolute right-0 mt-2 w-72 bg-[#161a22] border border-[#2e3440] rounded-xl shadow-2xl p-3 z-50 text-xs space-y-2 animate-in fade-in zoom-in-95 duration-150"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between font-bold text-white border-b border-[#282d37] pb-2">
+                    <span>Sistem Bildirimleri</span>
+                    <span className="text-[10px] font-mono text-emerald-400">Aktif</span>
+                  </div>
+                  <div className="space-y-2 text-slate-300">
+                    <div className="p-2 rounded-lg bg-[#12151b] border border-[#282d37] space-y-1">
+                      <div className="font-semibold text-white">BIST Resmi Çarpanları Senkronize</div>
+                      <p className="text-[11px] text-slate-400">İş Yatırım 630 BIST şirketinin günlük çarpanları ve sektör ortalamaları günceldir.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Tema Butonu */}
             <button
               type="button"
               onClick={toggleThemeMode}
-              className="flex items-center gap-2 text-sm py-2 px-3 rounded-xl border font-medium transition cursor-pointer bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800"
+              className="p-2 rounded-full hover:bg-[#1c2027] text-slate-400 hover:text-white transition cursor-pointer"
               title={themeMode === 'dark' ? 'Açık Temaya Geç' : 'Koyu Temaya Geç'}
             >
               {themeMode === 'dark' ? (
@@ -4026,19 +4098,80 @@ export default function ValuationTerminal({
               ) : (
                 <Moon className="w-4 h-4 text-slate-400" />
               )}
-              <span className="hidden lg:inline">{themeMode === 'dark' ? 'Açık' : 'Koyu'}</span>
             </button>
 
+            {/* Kullanıcı Avatarı & Giriş Menüsü */}
+            <div className="relative">
+              {userSession ? (
+                <button
+                  type="button"
+                  onClick={() => setIsUserMenuOpen(prev => !prev)}
+                  className="w-8 h-8 rounded-full bg-[#21262d] border border-[#383e4d] hover:border-emerald-400 text-xs font-bold text-white flex items-center justify-center transition cursor-pointer shadow-sm"
+                  title={userSession.name}
+                >
+                  {userSession.initials}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsLoginModalOpen(true)}
+                  className="w-8 h-8 rounded-full bg-[#21262d] border border-[#383e4d] hover:border-emerald-400 text-xs font-bold text-slate-200 hover:text-white flex items-center justify-center transition cursor-pointer"
+                  title="Giriş Yap"
+                >
+                  SE
+                </button>
+              )}
+
+              {/* Kullanıcı Profil Menüsü Dropdown */}
+              {isUserMenuOpen && userSession && (
+                <div 
+                  className="absolute right-0 mt-2 w-56 bg-[#161a22] border border-[#2e3440] rounded-xl shadow-2xl p-2 z-50 text-xs divide-y divide-[#282d37] animate-in fade-in zoom-in-95 duration-150"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="p-2.5">
+                    <div className="font-bold text-white truncate">{userSession.name}</div>
+                    <div className="text-[11px] text-slate-400 font-mono truncate">{userSession.email}</div>
+                    <div className="text-[10px] text-emerald-400 font-mono mt-1">{userSession.role}</div>
+                  </div>
+                  <div className="py-1">
+                    <button
+                      type="button"
+                      onClick={() => { navigateTo('portfolio'); setIsUserMenuOpen(false); }}
+                      className="w-full flex items-center gap-2 p-2 rounded-lg text-slate-300 hover:text-white hover:bg-[#21262d] text-left cursor-pointer"
+                    >
+                      <Briefcase className="w-3.5 h-3.5 text-[#f5c242]" />
+                      <span>Portföyüm ({portfolioTickers.length})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { navigateTo('favorites'); setIsUserMenuOpen(false); }}
+                      className="w-full flex items-center gap-2 p-2 rounded-lg text-slate-300 hover:text-white hover:bg-[#21262d] text-left cursor-pointer"
+                    >
+                      <Star className="w-3.5 h-3.5 text-amber-400" />
+                      <span>İzleme Listem ({favoriteTickers.length})</span>
+                    </button>
+                  </div>
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-2 p-2 rounded-lg text-rose-400 hover:bg-rose-500/10 text-left cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Çıkış Yap</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Yeni Analiz Butonu */}
             <button
               type="button"
               onClick={() => navigateTo('input')}
-              className={`flex items-center gap-2 text-sm py-2 px-3.5 rounded-xl border font-semibold transition cursor-pointer ${
-                step === 'input'
-                  ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
-                  : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800'
-              }`}
+              className="hidden lg:flex items-center gap-1.5 py-1.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition shadow-sm cursor-pointer ml-1"
             >
-              <PlusCircle className="w-4 h-4" />
+              <PlusCircle className="w-3.5 h-3.5" />
               <span>Yeni Analiz</span>
             </button>
           </div>
@@ -5316,6 +5449,24 @@ export default function ValuationTerminal({
 
         </div>
       </main>
+
+      {/* Yatırımcı Giriş & Kayıt Modalı */}
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onLoginSuccess={(session) => {
+          setUserSession(session);
+        }}
+      />
+
+      {/* Global Spotlight Arama (Ctrl + K) */}
+      <SpotlightSearch
+        isOpen={isSpotlightOpen}
+        onClose={() => setIsSpotlightOpen(false)}
+        savedReports={savedReports}
+        onSelectReport={(reportId, tickerSym) => openReport(reportId, tickerSym)}
+        onAnalyzeTicker={(tickerSym) => handleBistDirectAnalysis(tickerSym)}
+      />
 
     </div>
   );

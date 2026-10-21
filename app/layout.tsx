@@ -18,7 +18,7 @@ const ibmPlexSans = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Fair Value | Kurumsal Temel Değerleme Terminali",
+  title: "Fair Value",
   description: "Fair Value AI Destekli Temel Değerleme, Finansal Tablolar ve Liderlik Sıralama Terminali",
   icons: {
     icon: "/icon.svg",
