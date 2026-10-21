@@ -4165,7 +4165,7 @@ export default function ValuationTerminal({
               </span>
             </div>
 
-            {/* Yatay Navigasyon Linkleri (Feed, Portföy, Favoriler, Discover, Screener) */}
+            {/* Yatay Navigasyon Linkleri (Akış, Portföy, Favoriler, Yatırım Temaları, Hisse Tarama) */}
             <nav className="hidden md:flex items-center gap-1 text-sm font-medium">
               <button
                 type="button"
@@ -4176,7 +4176,7 @@ export default function ValuationTerminal({
                     : 'text-slate-400 hover:text-white hover:bg-[#181c24]'
                 }`}
               >
-                <span>Feed</span>
+                <span>Akış</span>
               </button>
 
               <button
@@ -4222,7 +4222,7 @@ export default function ValuationTerminal({
                     : 'text-slate-400 hover:text-white hover:bg-[#181c24]'
                 }`}
               >
-                <span>Discover</span>
+                <span>Yatırım Temaları</span>
               </button>
 
               <button
@@ -4234,7 +4234,7 @@ export default function ValuationTerminal({
                     : 'text-slate-400 hover:text-white hover:bg-[#181c24]'
                 }`}
               >
-                <span>Screener</span>
+                <span>Hisse Tarama</span>
               </button>
             </nav>
           </div>
@@ -4882,10 +4882,10 @@ export default function ValuationTerminal({
             </div>
           )}
 
-          {/* LİDERLİK & HİSSE SIRALAMA PANELİ (SCREENER) */}
+          {/* HİSSE TARAMA & LİDERLİK SIRALAMA PANELİ */}
           {step === 'leaderboard' && (() => {
             if (!userSession?.isLoggedIn) {
-              return renderAuthGate('Hisse Sıralama Paneli');
+              return renderAuthGate('Hisse Tarama');
             }
 
             const ranked = sortReportsByRank(savedReports);
@@ -4901,7 +4901,7 @@ export default function ValuationTerminal({
                 <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <h2 className="text-xl font-bold text-white tracking-tight font-sans">
-                      Hisse Sıralama Paneli
+                      Hisse Tarama ve Sıralama
                     </h2>
                   </div>
                   <div className="flex items-center gap-2">
@@ -5514,16 +5514,16 @@ export default function ValuationTerminal({
           {step === 'saved' && (() => {
             const isWatchlist = analyzedTab === 'FAVORITES';
             const isPortfolio = analyzedTab === 'PORTFOLIO';
-            const isDashboard = !isWatchlist && !isPortfolio; // FEED PANELİ
+            const isDashboard = !isWatchlist && !isPortfolio; // AKIŞ PANELİ
 
             if (!userSession?.isLoggedIn) {
               if (isWatchlist) return renderAuthGate('Favoriler');
               if (isPortfolio) return renderAuthGate('Portföy');
-              return renderAuthGate('Feed');
+              return renderAuthGate('Akış');
             }
 
             // ==========================================
-            // 1. FEED PANELİ (KAP & BİST HABER AKIŞI)
+            // 1. AKIŞ PANELİ (KAP & BİST HABER AKIŞI)
             // ==========================================
             if (isDashboard) {
               const baseFeed = liveNewsFeed.length > 0 ? liveNewsFeed : getCompanyNewsFeed();
@@ -5546,12 +5546,12 @@ export default function ValuationTerminal({
 
               return (
                 <div className="space-y-6">
-                  {/* Feed Başlık Barı */}
+                  {/* Akış Başlık Barı */}
                   <div className="bg-[#1a1e26] border border-[#2e3440] p-6 rounded-2xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-3">
                         <h2 className="text-xl font-bold font-sans text-white tracking-tight">
-                          Feed
+                          Akış
                         </h2>
                         {lastFeedSync && (
                           <span className="text-[11px] text-slate-500 font-mono hidden sm:inline">
@@ -5622,7 +5622,7 @@ export default function ValuationTerminal({
                           Henüz Analiz Edilmiş Şirket Bulunmuyor
                         </h4>
                         <p className="text-xs text-slate-400 max-w-md mx-auto font-sans leading-relaxed">
-                          Feed panelinde yalnızca analiz ettiğiniz şirketlerin resmi KAP bildirimleri ve fiyat-duyarlı finansal gelişmeleri listelenir.
+                          Akış panelinde yalnızca analiz ettiğiniz şirketlerin resmi KAP bildirimleri ve fiyat-duyarlı finansal gelişmeleri listelenir.
                         </p>
                       </div>
                       <button
