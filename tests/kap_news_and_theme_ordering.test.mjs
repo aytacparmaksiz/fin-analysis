@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import { getKapCompanyDisclosuresUrl, getKapCompanySummaryUrl, getKapOid } from '../lib/kap-mapping.ts';
-import { OFFICIAL_BIST_NEWS_FEED, getCompanyNewsFeed } from '../lib/news-service.ts';
+import { OFFICIAL_BIST_NEWS_FEED, getCompanyNewsFeed, fetchLiveBistNewsFeed } from '../lib/news-service.ts';
 import { categorizeCompany, THEME_CANONICAL_ORDER } from '../lib/company-categorizer.ts';
 import { getCompanySectorDisplayName } from '../lib/sectors.ts';
 
-test('1. KAP URL and Official News Feed Integrity', () => {
+test('1. KAP URL and Official News Feed Integrity', async () => {
   // Test THYAO KAP OID
   const thyaoOid = getKapOid('THYAO');
   assert.equal(thyaoOid, '4028e4a140f2ed720140f376bebb01a7', 'THYAO must map to official KAP member OID');
@@ -26,6 +26,15 @@ test('1. KAP URL and Official News Feed Integrity', () => {
       `News item ${item.ticker} url must point to KAP disclosures: ${item.url}`
     );
     assert.ok(!item.url.includes('/ozet/thyao'), 'Must never have invalid /ozet/ticker url');
+  });
+
+  // Verify live feed parser works
+  const liveFeed = await fetchLiveBistNewsFeed();
+  assert.ok(liveFeed.length >= 10, 'Live feed must return real BIST KAP items');
+  liveFeed.forEach(item => {
+    assert.ok(item.ticker, 'Live item must have ticker');
+    assert.ok(item.title, 'Live item must have title');
+    assert.ok(item.url.startsWith('https://www.kap.org.tr/'), 'Live item must have valid KAP URL');
   });
 });
 

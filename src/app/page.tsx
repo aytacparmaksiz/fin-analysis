@@ -20,6 +20,7 @@ import {
 import LoginModal, { type UserSession } from './components/login-modal';
 import SpotlightSearch from './components/spotlight-search';
 import { getCompanyNewsFeed, getNewsCategories, type CompanyNewsItem } from '@/lib/news-service';
+import { getKapCompanyDisclosuresUrl } from '@/lib/kap-mapping';
 
 import SimplyView from './simply/simply-view';
 
@@ -1319,6 +1320,31 @@ export default function ValuationTerminal({
   const [portfolioDecisionFilter, setPortfolioDecisionFilter] = useState<'ALL' | 'AL' | 'NÖTR' | 'ALMA'>('ALL');
   const [newsCategoryFilter, setNewsCategoryFilter] = useState<string>('ALL');
   const [newsSearchTerm, setNewsSearchTerm] = useState<string>('');
+  const [liveNewsFeed, setLiveNewsFeed] = useState<CompanyNewsItem[]>([]);
+  const [isFeedLoading, setIsFeedLoading] = useState<boolean>(false);
+  const [lastFeedSync, setLastFeedSync] = useState<Date | null>(null);
+
+  const refreshLiveFeed = useCallback(async () => {
+    setIsFeedLoading(true);
+    try {
+      const res = await fetch('/api/feed');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data?.feed) && data.feed.length > 0) {
+          setLiveNewsFeed(data.feed);
+          setLastFeedSync(new Date());
+        }
+      }
+    } catch (e) {
+      console.error('KAP canlı akış çekilemedi:', e);
+    } finally {
+      setIsFeedLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshLiveFeed();
+  }, [refreshLiveFeed]);
 
   const handleDemoLogin = useCallback(() => {
     const demoSession: UserSession = {
@@ -5406,9 +5432,11 @@ export default function ValuationTerminal({
             // 1. FEED PANELİ (KAP & BİST HABER AKIŞI)
             // ==========================================
             if (isDashboard) {
-              const newsCategories = getNewsCategories();
-              let newsFeed = getCompanyNewsFeed({
-                category: newsCategoryFilter
+              const baseFeed = liveNewsFeed.length > 0 ? liveNewsFeed : getCompanyNewsFeed();
+              const newsCategories = getNewsCategories(baseFeed);
+              let newsFeed = baseFeed.filter(item => {
+                if (newsCategoryFilter !== 'ALL' && item.category !== newsCategoryFilter) return false;
+                return true;
               });
 
               if (newsSearchTerm.trim()) {
@@ -5427,24 +5455,48 @@ export default function ValuationTerminal({
                   {/* Feed Başlık Barı */}
                   <div className="bg-[#1a1e26] border border-[#2e3440] p-6 rounded-2xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
-                      <h2 className="text-xl font-bold font-sans text-white tracking-tight">
-                        Feed
-                      </h2>
+                      <div className="flex items-center gap-3">
+                        <h2 className="text-xl font-bold font-sans text-white tracking-tight">
+                          Feed
+                        </h2>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                          Canlı KAP Akışı
+                        </span>
+                        {lastFeedSync && (
+                          <span className="text-[11px] text-slate-500 font-mono hidden sm:inline">
+                            Son Güncelleme: {lastFeedSync.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm text-slate-300 mt-1 font-sans">
                         Borsa İstanbul ve KAP resmi şirket bildirimleri, finansal gelişmeler ve önemli şirket olayları akışı.
                       </p>
                     </div>
 
-                    {/* Arama */}
-                    <div className="relative min-w-[240px]">
-                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        value={newsSearchTerm}
-                        onChange={(e) => setNewsSearchTerm(e.target.value)}
-                        placeholder="Haber veya hisse ara (Örn: THYAO)..."
-                        className="w-full bg-[#12151c] border border-[#2e3440] rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 transition font-sans"
-                      />
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={refreshLiveFeed}
+                        disabled={isFeedLoading}
+                        className="px-3 py-2 rounded-xl bg-[#12151c] hover:bg-[#21262d] border border-[#2e3440] text-xs font-sans text-slate-300 hover:text-white flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                        title="KAP Bildirimlerini Yenile"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isFeedLoading ? 'animate-spin text-sky-400' : ''}`} />
+                        <span>{isFeedLoading ? 'Yenileniyor...' : 'Yenile'}</span>
+                      </button>
+
+                      {/* Arama */}
+                      <div className="relative min-w-[220px]">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={newsSearchTerm}
+                          onChange={(e) => setNewsSearchTerm(e.target.value)}
+                          placeholder="Haber veya hisse ara (Örn: THYAO)..."
+                          className="w-full bg-[#12151c] border border-[#2e3440] rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 transition font-sans"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -5532,6 +5584,11 @@ export default function ValuationTerminal({
                                   <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-[#12151c] text-sky-400 border border-[#2e3440]">
                                     {item.source}
                                   </span>
+                                  {item.isLive && (
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-800/80">
+                                      CANLI
+                                    </span>
+                                  )}
                                   <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold border ${impactBadge}`}>
                                     {impactLabel}
                                   </span>
@@ -5560,7 +5617,7 @@ export default function ValuationTerminal({
                               </div>
 
                               <a
-                                href={item.url || `https://www.kap.org.tr/tr/sirket-bilgileri/ozet/${item.ticker.toLowerCase()}`}
+                                href={item.url || getKapCompanyDisclosuresUrl(item.ticker)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="flex items-center gap-1.5 text-xs font-bold text-sky-400 hover:text-white transition cursor-pointer font-sans"

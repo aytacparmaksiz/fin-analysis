@@ -13,6 +13,7 @@ export interface CompanyNewsItem {
   timeAgo: string;
   impact: 'POSITIVE' | 'NEUTRAL' | 'HIGH_IMPACT';
   url: string;
+  isLive?: boolean;
 }
 
 export const OFFICIAL_BIST_NEWS_FEED: CompanyNewsItem[] = [
@@ -228,40 +229,186 @@ export const OFFICIAL_BIST_NEWS_FEED: CompanyNewsItem[] = [
   }
 ];
 
+// In-memory cache for live KAP disclosures (TTL: 60 seconds)
+let liveFeedCache: { timestamp: number; items: CompanyNewsItem[] } | null = null;
+const CACHE_TTL_MS = 60 * 1000;
+
+/**
+ * Borsa İstanbul şirketlerinin Kamuyu Aydınlatma Platformu'na (KAP)
+ * gönderdiği anlık ve gerçek bildirimleri canlı olarak çeker.
+ */
+export async function fetchLiveBistNewsFeed(options?: {
+  tickers?: string[];
+  category?: string;
+  limit?: number;
+}): Promise<CompanyNewsItem[]> {
+  const now = Date.now();
+  if (liveFeedCache && (now - liveFeedCache.timestamp) < CACHE_TTL_MS) {
+    return filterFeed(liveFeedCache.items, options);
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    const res = await fetch('https://bigpara.hurriyet.com.tr/haberler/kap-haberleri/', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
+      },
+      signal: controller.signal,
+      next: { revalidate: 60 }
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      throw new Error(`KAP live feed HTTP ${res.status}`);
+    }
+
+    const html = await res.text();
+    const cardRegex = /<div class="news-card">([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/gi;
+    let match;
+    const liveItems: CompanyNewsItem[] = [];
+
+    while ((match = cardRegex.exec(html)) !== null) {
+      const cardHtml = match[1];
+
+      const symbolMatch = cardHtml.match(/data-symbol-id="([A-Z0-9]+)"/i);
+      const ticker = symbolMatch ? symbolMatch[1].toUpperCase() : null;
+
+      const titleMatch = cardHtml.match(/class="news-card__title"[^>]*>([\s\S]*?)<\/a>/i);
+      const rawTitle = titleMatch ? titleMatch[1].trim() : '';
+
+      const timeMatch = cardHtml.match(/class="news-card__category-dot">･<\/span>\s*([^<]+)<\/span>/i);
+      const timeAgo = timeMatch ? timeMatch[1].trim() : 'Yeni';
+
+      const linkMatch = cardHtml.match(/href="(\/haberler\/kap-haberleri\/[^"]+_ID([0-9]+)\/)"/i);
+      const articleId = linkMatch ? linkMatch[2] : null;
+
+      if (rawTitle) {
+        let parsedTicker = ticker;
+        let companyName = '';
+        let topic = rawTitle;
+
+        const titleRegex = /\*\*\*([A-Z0-9]+)\*\*\*\s*([^(]+)(?:\(([^)]+)\))?/i;
+        const parsedMatch = rawTitle.match(titleRegex);
+
+        if (parsedMatch) {
+          parsedTicker = parsedMatch[1].trim().toUpperCase();
+          companyName = parsedMatch[2].trim();
+          topic = parsedMatch[3] ? parsedMatch[3].trim() : parsedMatch[2].trim();
+        }
+
+        let category: CompanyNewsItem['category'] = 'GENERAL';
+        let categoryLabel = 'Genel Bildirim';
+        const lowerTopic = (topic + ' ' + rawTitle).toLowerCase();
+
+        if (lowerTopic.includes('geri al') || lowerTopic.includes('pay alım') || lowerTopic.includes('pay satım')) {
+          category = 'BUYBACK';
+          categoryLabel = 'Pay Geri Alımı';
+        } else if (lowerTopic.includes('kâr pay') || lowerTopic.includes('temettü') || lowerTopic.includes('kar pay')) {
+          category = 'DIVIDEND';
+          categoryLabel = 'Temettü';
+        } else if (lowerTopic.includes('finansal rapor') || lowerTopic.includes('bilanço') || lowerTopic.includes('faaliyet rapor') || lowerTopic.includes('faaliyet sonuç')) {
+          category = 'FINANCIALS';
+          categoryLabel = 'Finansal Rapor';
+        } else if (lowerTopic.includes('sözleşme') || lowerTopic.includes('yeni iş') || lowerTopic.includes('ihale') || lowerTopic.includes('sipariş')) {
+          category = 'CONTRACT';
+          categoryLabel = 'Yeni Sözleşme / İş';
+        } else if (lowerTopic.includes('yatırım') || lowerTopic.includes('kapasite') || lowerTopic.includes('tesis') || lowerTopic.includes('ruhsat') || lowerTopic.includes('satın alma')) {
+          category = 'INVESTMENT';
+          categoryLabel = 'Yatırım & Kapasite';
+        }
+
+        let impact: CompanyNewsItem['impact'] = 'NEUTRAL';
+        if (category === 'FINANCIALS' || category === 'DIVIDEND' || category === 'CONTRACT') {
+          impact = 'HIGH_IMPACT';
+        } else if (category === 'BUYBACK' || category === 'INVESTMENT') {
+          impact = 'POSITIVE';
+        }
+
+        const kapUrl = getKapCompanyDisclosuresUrl(parsedTicker || 'THYAO');
+
+        liveItems.push({
+          id: articleId ? `kap-live-${articleId}` : `kap-live-${liveItems.length + 1}`,
+          ticker: parsedTicker || 'BIST',
+          companyName: companyName || parsedTicker || 'Borsa İstanbul Şirketi',
+          title: topic,
+          summary: rawTitle.replace(/\*\*\*([A-Z0-9]+)\*\*\*\s*/i, ''),
+          category,
+          categoryLabel,
+          source: 'KAP',
+          publishDate: new Date().toISOString(),
+          timeAgo,
+          impact,
+          url: kapUrl,
+          isLive: true,
+        });
+      }
+    }
+
+    if (liveItems.length > 0) {
+      // Canlı bildirimleri üstte, arkasına büyük BİST lokomotif şirket duyurularını ekleyip birleştir
+      const liveTickers = new Set(liveItems.map(i => i.ticker.toUpperCase()));
+      const remainingCurated = OFFICIAL_BIST_NEWS_FEED.filter(i => !liveTickers.has(i.ticker.toUpperCase()));
+      const merged = [...liveItems, ...remainingCurated];
+
+      liveFeedCache = {
+        timestamp: Date.now(),
+        items: merged
+      };
+
+      return filterFeed(merged, options);
+    }
+  } catch (err) {
+    // Ağ veya zaman aşımı durumunda güvenli yedek akış
+  }
+
+  // Fallback: Çevrimdışı / hazır akış
+  return filterFeed(OFFICIAL_BIST_NEWS_FEED, options);
+}
+
+function filterFeed(
+  feed: CompanyNewsItem[],
+  options?: { tickers?: string[]; category?: string; limit?: number }
+): CompanyNewsItem[] {
+  let result = [...feed];
+
+  if (options?.tickers && options.tickers.length > 0) {
+    const uppercaseTickers = options.tickers.map(t => t.toUpperCase().trim());
+    result = result.filter(item => uppercaseTickers.includes(item.ticker.toUpperCase()));
+  }
+
+  if (options?.category && options.category !== 'ALL') {
+    result = result.filter(item => item.category === options.category);
+  }
+
+  if (options?.limit && options.limit > 0) {
+    result = result.slice(0, options.limit);
+  }
+
+  return result;
+}
+
 export function getCompanyNewsFeed(options?: {
   tickers?: string[];
   category?: string;
   limit?: number;
 }): CompanyNewsItem[] {
-  let feed = OFFICIAL_BIST_NEWS_FEED.map(item => ({
-    ...item,
-    url: item.url || getKapCompanyDisclosuresUrl(item.ticker),
-  }));
-
-  if (options?.tickers && options.tickers.length > 0) {
-    const uppercaseTickers = options.tickers.map(t => t.toUpperCase().trim());
-    feed = feed.filter(item => uppercaseTickers.includes(item.ticker.toUpperCase()));
-  }
-
-  if (options?.category && options.category !== 'ALL') {
-    feed = feed.filter(item => item.category === options.category);
-  }
-
-  if (options?.limit && options.limit > 0) {
-    feed = feed.slice(0, options.limit);
-  }
-
-  return feed;
+  return filterFeed(OFFICIAL_BIST_NEWS_FEED, options);
 }
 
-export function getNewsCategories(): Array<{ id: string; label: string; count: number }> {
+export function getNewsCategories(feed?: CompanyNewsItem[]): Array<{ id: string; label: string; count: number }> {
+  const activeFeed = feed && feed.length > 0 ? feed : OFFICIAL_BIST_NEWS_FEED;
   const counts: Record<string, number> = {};
-  OFFICIAL_BIST_NEWS_FEED.forEach(item => {
+  activeFeed.forEach(item => {
     counts[item.category] = (counts[item.category] || 0) + 1;
   });
 
   return [
-    { id: 'ALL', label: 'Tüm Bildirimler', count: OFFICIAL_BIST_NEWS_FEED.length },
+    { id: 'ALL', label: 'Tüm Bildirimler', count: activeFeed.length },
     { id: 'FINANCIALS', label: 'Bilanço & Finansallar', count: counts['FINANCIALS'] || 0 },
     { id: 'DIVIDEND', label: 'Temettü', count: counts['DIVIDEND'] || 0 },
     { id: 'CONTRACT', label: 'Yeni Sözleşme', count: counts['CONTRACT'] || 0 },
