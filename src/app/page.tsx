@@ -86,6 +86,7 @@ import {
   cleanAndParseJson,
   syncReportTextWithValuation
 } from '@/lib/valuation';
+import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from '@/lib/isyatirim-multiples-cache';
 import { OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE } from '@/lib/isyatirim-sector-averages-cache';
 import { 
   FinancialRatioEngine, 
@@ -1468,6 +1469,29 @@ export default function ValuationTerminal({
     });
   }, []);
 
+  // Yeni Analiz Ekranını Sıfırlama (Temiz, ham başlangıç durumu)
+  const resetToNewAnalysis = useCallback(() => {
+    setTicker('');
+    setPrice('');
+    setConsensus('');
+    setPeerMultiples('');
+    setSelectedSector('AUTO');
+    setFinancialFiles([]);
+    setActivityFiles([]);
+    setPresentationFiles([]);
+    setPipelineStep(null);
+    setPipelineProgress(0);
+    setExtractedData(null);
+    setActiveReportId(null);
+    setError(null);
+    setStep('input');
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      const basePath = window.location.pathname.startsWith('/simply') ? '/simply' : '';
+      window.history.pushState(null, '', `${basePath || '/'}`);
+    }
+  }, []);
+
   // Tarayıcı Yolu & Sayfa Geçiş Yöneticisi (URL Navigation)
   const navigateTo = useCallback((targetStep: 'input' | 'saved' | 'themes' | 'leaderboard' | 'portfolio' | 'favorites') => {
     setError(null);
@@ -1492,13 +1516,14 @@ export default function ValuationTerminal({
       setStep('leaderboard');
       if (typeof window !== 'undefined') window.history.pushState(null, '', `${basePath}/?view=leaderboard`);
     } else if (targetStep === 'input') {
-      setStep('input');
-      setActiveReportId(null);
-      if (typeof window !== 'undefined') window.history.pushState(null, '', `${basePath || '/'}`);
+      resetToNewAnalysis();
     }
-  }, []);
+  }, [resetToNewAnalysis]);
 
   const openReport = useCallback((reportId: string, tickerName?: string) => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
     setStep((currentStep) => {
       if (currentStep !== 'report') {
         setPreviousNavState({ step: currentStep, analyzedTab });
@@ -2896,6 +2921,9 @@ export default function ValuationTerminal({
 
       saveReport(newEntry);
       setActiveReportId(newEntry.id);
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'instant' });
+      }
       setStep('report');
       setActiveTab('ozet');
     } catch (err: any) {
@@ -2922,8 +2950,14 @@ export default function ValuationTerminal({
 
   const currentSector: SectorType = (() => {
     if (selectedSector !== 'AUTO') return selectedSector;
-    const detected = detectSector(activeReport?.ticker || ticker, (activeReport as any)?.companyName || currentExtractedData?.company_name);
+    const sym = (activeReport?.ticker || ticker || '').trim().toUpperCase();
+    const isy = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[sym];
+    const detected = detectSector(sym, (activeReport as any)?.companyName || currentExtractedData?.company_name);
     if (detected && detected !== 'INDUSTRIAL') return detected;
+    // Eğer İş Yatırım resmi sektör adı holding değilse (örn. SISE -> Cam), eski rapordaki 'HOLDING' atamasını düzelt
+    if (isy && isy.sectorName && isy.sectorName.toLowerCase() !== 'holdingler' && activeReport?.sector === 'HOLDING') {
+      return detected || 'INDUSTRIAL';
+    }
     return activeReport?.sector || currentExtractedData?.sector || detected || 'INDUSTRIAL';
   })();
 
@@ -4838,9 +4872,10 @@ export default function ValuationTerminal({
                 onSwitchToTerminal={() => {}}
                 onSelectTicker={(tk) => handleBistDirectAnalysis(tk)}
                 onAnalyzeTicker={(tk) => {
+                  resetToNewAnalysis();
                   setTicker(tk);
                   setStep('input');
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                  if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'instant' });
                 }}
                 onSelectReport={(id: string) => openReport(id)}
               />
@@ -4872,7 +4907,7 @@ export default function ValuationTerminal({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setStep('input')}
+                      onClick={resetToNewAnalysis}
                       className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-md font-sans"
                     >
                       <PlusCircle className="w-3.5 h-3.5" />
@@ -5592,7 +5627,7 @@ export default function ValuationTerminal({
                       </div>
                       <button
                         type="button"
-                        onClick={() => { setStep('input'); setActiveReportId(null); }}
+                        onClick={resetToNewAnalysis}
                         className="inline-flex items-center gap-2 px-4 py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition cursor-pointer font-sans shadow-lg shadow-sky-600/20"
                       >
                         <Plus className="w-4 h-4" />

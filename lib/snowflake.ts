@@ -77,6 +77,8 @@ export function computeSnowflakeAnalysis(params: {
   consensusTarget?: number;
   peers?: any[];
   earningsQuality?: any;
+  dividends?: any[];
+  dividendHistory?: any[];
 }): SnowflakeAnalysisResult {
   const {
     sector,
@@ -522,47 +524,69 @@ export function computeSnowflakeAnalysis(params: {
   // =========================================================================
   // 5. EKSEN: TEMETTÜ & SERMAYE DÖNÜŞÜMÜ (0 - 6 PUAN)
   // =========================================================================
-  const divYield = Number(marketMultiples?.dividend_yield ?? latestData?.dividend_yield ?? 0);
-  const payoutRatio = Number(latestData?.payout_ratio ?? 0);
+  const rawDividends: any[] = params.dividends || params.dividendHistory || params.latestData?.dividends || [];
+  const latestDiv = rawDividends.length > 0 ? rawDividends[0] : null;
+
+  const divYield = Number(
+    latestDiv?.yieldPct ??
+    marketMultiples?.dividend_yield ??
+    latestData?.dividend_yield ??
+    0
+  );
+  const payoutRatio = Number(
+    latestDiv?.payoutRatioPct ??
+    latestData?.payout_ratio ??
+    0
+  );
+  const perShareTl = Number(
+    latestDiv?.perShareTl ??
+    latestData?.dividends?.[0]?.perShareTl ??
+    0
+  );
+  const payoutCount = rawDividends.length > 0
+    ? rawDividends.length
+    : (Array.isArray(params.latestData?.dividends) ? params.latestData.dividends.length : (divYield > 0 ? 3 : 0));
   const fcf = Number(latestData?.free_cash_flow ?? (ocf > 0 ? ocf - Number(latestData?.capex ?? 0) : 0));
   const isCompounder = currentRoe >= 25.0 && evaSpread > 0;
-  const payoutCount = Array.isArray(params.latestData?.dividends) ? params.latestData.dividends.length : (divYield > 0 ? 3 : 0);
-  const perShareTl = Number(latestData?.dividends?.[0]?.perShareTl ?? 0);
 
   const dividendChecks: SnowflakeCheck[] = [
     // 5.1 Notable Dividend
     {
       id: 'notable_dividend',
       title: 'Dikkate Değer Temettü Getirisi',
-      passed: divYield >= 2.0 || isCompounder,
-      metricValue: divYield >= 2.0 ? `Verim: %${divYield.toFixed(1)}` : `Bileşik ROE: %${currentRoe.toFixed(1)}`,
-      threshold: '>= %2.0 veya Bileşik Büyüme',
-      detail: divYield >= 2.0
-        ? `Yıllık %${divYield.toFixed(1)} temettü verimi ile yatırımcısına düzenli nakit akışı sağlamaktadır.`
-        : (isCompounder
-            ? `Şirket kârını dağıtmak yerine %${currentRoe.toFixed(1)} ROE ile şirkette tutarak özkaynak değerini katlayan bileşik büyüme modelini uygulamaktadır.`
-            : 'Güncel dönemde temettü ödemesi bulunmamaktadır.')
+      passed: divYield >= 1.0 || isCompounder || payoutCount >= 3,
+      metricValue: divYield > 0 ? `Verim: %${divYield.toFixed(2)}` : (payoutCount > 0 ? `${payoutCount} Dağıtım` : `Bileşik ROE: %${currentRoe.toFixed(1)}`),
+      threshold: '>= %1.0 veya Düzenli Ödeme',
+      detail: divYield > 0
+        ? `Yıllık %${divYield.toFixed(2)} temettü verimi ile yatırımcısına düzenli nakit akışı sağlamaktadır.`
+        : (payoutCount > 0
+            ? `Şirket ${payoutCount} dönem boyunca düzenli nakit temettü dağıtımı gerçekleştirmiştir.`
+            : (isCompounder
+                ? `Şirket kârını dağıtmak yerine %${currentRoe.toFixed(1)} ROE ile şirkette tutarak özkaynak değerini katlayan bileşik büyüme modelini uygulamaktadır.`
+                : 'Güncel dönemde temettü ödemesi bulunmamaktadır.'))
     },
     // 5.2 High Dividend
     {
       id: 'high_dividend',
       title: 'Piyasa Üzerinde Yüksek Temettü Verimi',
-      passed: divYield >= 4.0,
-      metricValue: `Verim: %${divYield.toFixed(1)}`,
-      threshold: '>= %4.0 Piyasa Üstü',
-      detail: divYield >= 4.0
-        ? `Yıllık %${divYield.toFixed(1)} temettü verimi Borsa İstanbul genel piyasa ortalamasının üzerindedir.`
-        : `Temettü verimi (%${divYield.toFixed(1)}), yüksek temettü eşiğinin (%4.0) altındadır.`
+      passed: divYield >= 3.0 || (divYield >= 1.5 && payoutRatio >= 30.0),
+      metricValue: `Verim: %${divYield.toFixed(2)}`,
+      threshold: '>= %3.0 Piyasa Üstü',
+      detail: divYield >= 3.0
+        ? `Yıllık %${divYield.toFixed(2)} temettü verimi Borsa İstanbul genel piyasa ortalamasının üzerindedir.`
+        : (divYield > 0
+            ? `Temettü verimi (%${divYield.toFixed(2)}) BİST ortalamasında olup düzenli kâr dağıtım politikası izlenmektedir.`
+            : `Temettü verimi (%${divYield.toFixed(2)}), yüksek temettü eşiğinin (%3.0) altındadır.`)
     },
     // 5.3 Stable Dividend
     {
       id: 'stable_dividend',
       title: 'Geçmiş Temettü Ödeme Sürekliliği',
-      passed: payoutCount >= 3 || (divYield > 0 && currentRoe >= 18.0),
-      metricValue: `${payoutCount > 0 ? payoutCount : (divYield > 0 ? 3 : 0)} Dağıtım Kaydı`,
+      passed: payoutCount >= 3 || (divYield > 0 && currentRoe >= 18.0) || payoutCount > 0,
+      metricValue: `${payoutCount} Dağıtım Kaydı`,
       threshold: 'Düzenli Temettü Dağıtımı',
       detail: payoutCount >= 3 || divYield > 0
-        ? 'Şirket geçmiş yıllarda düzenli temettü dağıtımı gerçekleştirerek hissedar dostu bir kâr dağıtım politikası izlemiştir.'
+        ? `Şirket ${payoutCount > 0 ? `${payoutCount} dağıtım kaydı ile` : ''} geçmiş yıllarda temettü dağıtımı gerçekleştirerek hissedar dostu bir kâr dağıtım politikası izlemiştir.`
         : 'Geçmiş temettü dağıtım kayıtları sınırlıdır veya düzenli temettü ödenmemiştir.'
     },
     // 5.4 Growing Dividend

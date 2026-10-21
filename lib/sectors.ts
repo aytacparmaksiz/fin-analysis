@@ -787,7 +787,6 @@ export const BIST_HOLDING_TICKERS = [
   'DOHOL',
   'ALARK',
   'TKFEN',
-  'SISE',
   'BERA',
   'GLYHO',
   'VERUS',

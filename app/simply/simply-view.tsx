@@ -343,7 +343,7 @@ function extractTextFromChildren(children: any): string {
 }
 
 interface ParsedVerdictNarrative {
-  verdict: 'AL' | 'ALMA' | 'TUT';
+  verdict: 'AL' | 'ALMA' | 'NÖTR';
   verdictTitle: string;
   thesis: string;
   catalysts: string;
@@ -395,7 +395,7 @@ function parseVerdictNarrative(
 
   if (!rawText) {
     return {
-      verdict: fallbackDecision === 'AL' ? 'AL' : fallbackDecision === 'ALMA' ? 'ALMA' : 'TUT',
+      verdict: fallbackDecision === 'AL' ? 'AL' : fallbackDecision === 'ALMA' ? 'ALMA' : 'NÖTR',
       verdictTitle: fallbackDecision === 'AL'
         ? 'Kurumsal Alım & Portföy Ağırlığı Artır'
         : fallbackDecision === 'ALMA'
@@ -415,14 +415,14 @@ function parseVerdictNarrative(
   let cleaned = rawText.replace(/\*\*(Yatırım\s+Tezi|Temel\s+Yatırım\s+Tezi|Gerekçe|Kilit\s+Katalizörler|Katalizörler|Riskler\s*(?:&|ve)\s*Emniyet\s*Marjı|Riskler\s*ve\s*Belirsizlikler|Temel\s*Riskler)\s*:\*\*/gi, '$1:');
   cleaned = cleaned.replace(/\[\s*([^\]]+?)\s*\]/g, '$1').trim();
 
-  // Detect verdict
-  let verdict: 'AL' | 'ALMA' | 'TUT' = 'TUT';
+  // Detect verdict: AL, ALMA, NÖTR
+  let verdict: 'AL' | 'ALMA' | 'NÖTR' = 'NÖTR';
   const verdictMatch = rawText.match(/Analist\s+Karar[ıi]\s*[:=-]?\s*\[?\s*\*?\*?\s*(ALMA|SAT|AL|NÖTR|NOTR|TUT)\s*\*?\*?\s*\]?/i);
   if (verdictMatch) {
     const val = verdictMatch[1].toUpperCase();
     if (['ALMA', 'SAT'].includes(val)) verdict = 'ALMA';
     else if (val === 'AL') verdict = 'AL';
-    else verdict = 'TUT';
+    else verdict = 'NÖTR';
   } else if (/\b(ALMA|SAT)\b/i.test(rawText)) {
     verdict = 'ALMA';
   } else if (/\bAL\b/i.test(rawText)) {
@@ -431,6 +431,8 @@ function parseVerdictNarrative(
     verdict = 'ALMA';
   } else if (fallbackDecision === 'AL') {
     verdict = 'AL';
+  } else {
+    verdict = 'NÖTR';
   }
 
   const verdictTitle = verdict === 'AL'
@@ -476,10 +478,12 @@ function cleanMarkdown(text: string): string {
 
   cleaned = cleaned.replace(/\*\*\[AL\]\*\*/gi, '**AL**');
   cleaned = cleaned.replace(/\*\*\[ALMA\]\*\*/gi, '**ALMA**');
-  cleaned = cleaned.replace(/\*\*\[TUT\]\*\*/gi, '**TUT**');
+  cleaned = cleaned.replace(/\*\*\[TUT\]\*\*/gi, '**NÖTR**');
+  cleaned = cleaned.replace(/\*\*\[NÖTR\]\*\*/gi, '**NÖTR**');
   cleaned = cleaned.replace(/\[AL\]/g, 'AL');
   cleaned = cleaned.replace(/\[ALMA\]/g, 'ALMA');
-  cleaned = cleaned.replace(/\[TUT\]/g, 'TUT');
+  cleaned = cleaned.replace(/\[TUT\]/g, 'NÖTR');
+  cleaned = cleaned.replace(/\[NÖTR\]/g, 'NÖTR');
   cleaned = cleaned.replace(/🚨\s*\[KIRMIZI BAYRAK\]\s*ve\s*Yatırım Tezi\s*\(Storytelling\)/gi, '## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ');
   cleaned = cleaned.replace(/🚨\s*\[KIRMIZI BAYRAK\]\s*ve\s*Yatırım Tezi/gi, '## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ');
   cleaned = cleaned.replace(/\[KIRMIZI BAYRAK\]/gi, 'Kritik Tespit:');
@@ -828,21 +832,17 @@ export default function SimplyView({
   // İş Yatırım Resmi Sektör Tanımı ve Sektörel Akranlar
   const isYatirimEntry = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[report.ticker.toUpperCase()];
   const rawOfficialSector = isYatirimEntry?.sectorName || marketMultiples?.sectorName;
-  const officialSectorName = (currentSector === 'INSURANCE' ? 'Sigorta' : (currentSector === 'BANKING' ? 'Bankacılık' : (currentSector === 'REIT' ? 'GYO' : rawOfficialSector))) || sectorMeta?.title || 'Sanayi';
+  const officialSectorName = rawOfficialSector || (currentSector === 'INSURANCE' ? 'Sigorta' : (currentSector === 'BANKING' ? 'Bankacılık' : (currentSector === 'REIT' ? 'GYO' : (currentSector === 'HOLDING' ? 'Holdingler' : sectorMeta?.title || 'Sanayi'))));
 
   // Aynı Sektördeki Resmi BİST Şirketleri (İş Yatırım Sektör Dağılımı ve Akıllı Eşleşme)
   const sameSectorPeers = useMemo(() => {
     const targetTicker = report.ticker.toUpperCase();
     const currentEntry = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[targetTicker];
-    const isTargetHolding = currentSector === 'HOLDING' || targetTicker.includes('HOL') || (currentEntry?.name || '').toLowerCase().includes('holding');
+    const rawTargetSector = (currentEntry?.sectorName || rawOfficialSector || '').trim();
 
-    // 1. Hedef sektör anahtar kelimelerini normalize et
-    let targetSector = (currentEntry?.sectorName || officialSectorName || '').trim().toLowerCase();
-    if (currentSector === 'INSURANCE' || targetSector.includes('sigorta')) targetSector = 'sigorta';
-    else if (currentSector === 'BANKING' || targetSector.includes('banka')) targetSector = 'bankacılık';
-    else if (currentSector === 'REIT' || targetSector.includes('gyo') || targetSector.includes('gayrimenkul')) targetSector = 'gyo';
-    else if (currentSector === 'HOLDING' || targetSector.includes('holding')) targetSector = 'holdingler';
-    else if (currentSector === 'AVIATION' || targetSector.includes('hava')) targetSector = 'havayolları ve hizm.';
+    // Doğrudan İş Yatırım resmi sektör adı üzerinden çalış
+    let targetSector = rawTargetSector.toLowerCase();
+    const isTargetHolding = targetSector === 'holdingler' || currentSector === 'HOLDING';
 
     const allInSector: Array<{ ticker: string; name: string; marketCapMnTl: number | null }> = [];
 
@@ -851,24 +851,32 @@ export default function SimplyView({
       const itemSec = (item.sectorName || '').trim().toLowerCase();
       const itemName = (item.name || '').toLowerCase();
 
-      // Holding filtresi: Eğer ana şirket bir holding değilse, akran olarak holdingleri ele (Örn: RALYH)
-      if (!isTargetHolding && (itemSec === 'holdingler' || itemName.includes('yatırım holding'))) {
+      // Holding filtresi: Eğer ana şirket bir holding değilse, akran olarak holdingleri ele
+      if (!isTargetHolding && (itemSec === 'holdingler' || itemName.includes('yatırım holding') || itemName.includes(' holding'))) {
         continue;
       }
 
       let matches = false;
-      if (targetSector === 'sigorta') {
-        matches = itemSec.includes('sigorta');
-      } else if (targetSector === 'bankacılık') {
-        matches = itemSec.includes('banka');
-      } else if (targetSector === 'gyo') {
-        matches = itemSec === 'gyo' || itemSec.includes('gayrimenkul');
-      } else if (targetSector === 'holdingler') {
-        matches = itemSec === 'holdingler' || itemName.includes('holding');
-      } else if (targetSector === 'havayolları ve hizm.') {
-        matches = itemSec.includes('hava');
+      if (targetSector) {
+        if (targetSector === 'holdingler') {
+          matches = itemSec === 'holdingler';
+        } else if (targetSector === 'sigorta') {
+          matches = itemSec.includes('sigorta');
+        } else if (targetSector === 'bankacılık') {
+          matches = itemSec.includes('banka');
+        } else if (targetSector === 'gyo') {
+          matches = itemSec === 'gyo' || itemSec.includes('gayrimenkul');
+        } else if (targetSector.includes('hava')) {
+          matches = itemSec.includes('hava');
+        } else {
+          matches = itemSec === targetSector || itemSec.includes(targetSector) || targetSector.includes(itemSec);
+        }
       } else {
-        matches = itemSec === targetSector;
+        if (currentSector === 'INSURANCE') matches = itemSec.includes('sigorta');
+        else if (currentSector === 'BANKING') matches = itemSec.includes('banka');
+        else if (currentSector === 'REIT') matches = itemSec === 'gyo' || itemSec.includes('gayrimenkul');
+        else if (currentSector === 'HOLDING') matches = itemSec === 'holdingler';
+        else if (currentSector === 'AVIATION') matches = itemSec.includes('hava');
       }
 
       // MAVI ve giyim perakendesi özel eşleşmesi (KOTON, VAKKO, SUWEN vb.)
@@ -887,7 +895,7 @@ export default function SimplyView({
     // Piyasa değerine göre büyükten küçüğe sırala
     allInSector.sort((a, b) => (b.marketCapMnTl || 0) - (a.marketCapMnTl || 0));
     return allInSector;
-  }, [officialSectorName, currentSector, report.ticker]);
+  }, [rawOfficialSector, currentSector, report.ticker]);
 
   // Kullanıcının daha önce analiz ettiği akran şirketler
   const analyzedCompetitors = useMemo(() => {
@@ -939,13 +947,20 @@ export default function SimplyView({
       latestData,
       consensusTarget: consensusTargetPrice,
       peers: analyzedCompetitors,
-      earningsQuality
+      earningsQuality,
+      dividends: liveCompanyDetails?.dividends || report.dividendHistory || report.extractedData?.dividend_history || []
     });
   }, [
     report.ticker,
     currentSector,
     currentPriceNum,
     fairValueNum,
+    discountPctNum,
+    marketMultiples,
+    companyMultiplesData,
+    report.extractedData,
+    report.dividendHistory,
+    liveCompanyDetails?.dividends,
     discountPctNum,
     marketMultiples,
     companyMultiplesData,
@@ -1072,6 +1087,18 @@ export default function SimplyView({
       }
     };
   }, []);
+
+  // Rapor açıldığında veya değiştiğinde sayfa daima en baştan (sec-ozet) başlasın
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      const container = document.getElementById('main-scroll-container');
+      if (container) {
+        container.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      }
+    }
+    setActiveSection('sec-ozet');
+  }, [report.id, report.ticker]);
 
   const scrollToSection = (id: SimplySectionId) => {
     const el = document.getElementById(id);
@@ -1598,8 +1625,8 @@ export default function SimplyView({
                 <h3 className="font-sans text-[15px] font-bold text-white tracking-tight line-clamp-1" title={profile.fullName}>
                   {getCleanCompanyName(profile.fullName, report.ticker)}
                 </h3>
-                <div className="text-xs text-slate-400 font-sans">
-                  BIST:{report.ticker.toUpperCase()} Hisse Raporu
+                <div className="text-xs text-slate-300 font-mono font-bold tracking-wider">
+                  {report.ticker.toUpperCase()}
                 </div>
                 <div className="text-xs text-slate-400 font-sans">
                   Piyasa Değeri: {formattedMarketCap}
@@ -1682,19 +1709,19 @@ export default function SimplyView({
           <section id="sec-ozet" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             {/* Sub-Card 1: Üst Şirket Bilgi ve Fiyat Özeti Kartı */}
             <div className="bg-[#181b20] border border-[#2b313d] rounded-xl p-6 sm:p-7 shadow-md space-y-6">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-[#282d37]">
-                <div className="space-y-1.5">
+              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-6 border-b border-[#282d37]">
+                <div className="space-y-1.5 min-w-0 max-w-full xl:max-w-[48%]">
                   <div className="flex items-center gap-2 text-sm font-mono text-slate-300">
                     <span className="text-[#f5c242] font-bold">IBSE:{report.ticker}</span>
                     <span>•</span>
                     <span>{report.period || '2025/12'} Bilanço Dönemi</span>
                   </div>
-                  <h1 className="font-sans text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  <h1 className="font-sans text-2xl sm:text-3xl font-black text-white tracking-tight truncate line-clamp-1" title={profile.fullName}>
                     {profile.fullName}
                   </h1>
                   <div className="flex items-center gap-2.5 pt-1">
                     <span className="px-3 py-1 rounded-full text-sm font-semibold bg-[#21262d] text-slate-200 border border-[#2e3440]">
-                      {sectorMeta?.title || 'Borsa İstanbul'}
+                      {officialSectorName ? `${officialSectorName} Sektörü` : sectorMeta?.title || 'Borsa İstanbul'}
                     </span>
                     <span className="text-sm text-slate-400">
                       İstanbul, Türkiye
@@ -1702,28 +1729,28 @@ export default function SimplyView({
                   </div>
                 </div>
 
-                <div className="flex items-baseline gap-4 sm:gap-6 flex-wrap">
+                <div className="flex items-center gap-3 sm:gap-5 shrink-0 flex-nowrap">
                   <div>
-                    <div className="text-sm text-slate-400 uppercase font-semibold">Piyasa Fiyatı</div>
-                    <div className="text-2xl sm:text-3xl font-black font-mono text-white mt-0.5">
+                    <div className="text-xs sm:text-sm text-slate-400 uppercase font-semibold">Piyasa Fiyatı</div>
+                    <div className="text-2xl sm:text-3xl font-black font-mono text-white mt-0.5 whitespace-nowrap">
                       ₺{currentPriceNum.toFixed(2)}
                     </div>
                   </div>
 
                   <div>
-                    <div className="text-sm text-slate-400 uppercase font-semibold">Hesaplanan Adil Değer</div>
-                    <div className="text-2xl sm:text-3xl font-black font-mono text-[#f5c242] mt-0.5">
+                    <div className="text-xs sm:text-sm text-slate-400 uppercase font-semibold">Hesaplanan Adil Değer</div>
+                    <div className="text-2xl sm:text-3xl font-black font-mono text-[#f5c242] mt-0.5 whitespace-nowrap">
                       ₺{fairValueNum.toFixed(2)}
                     </div>
                   </div>
 
-                  <div className="self-center">
-                    <span className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl font-mono text-sm font-bold border ${
+                  <div className="shrink-0">
+                    <span className={`inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2 rounded-xl font-mono text-xs sm:text-sm font-bold border whitespace-nowrap ${
                       discountPctNum > 0
                         ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
                         : 'bg-rose-500/15 border-rose-500/40 text-rose-400'
                     }`}>
-                      {discountPctNum > 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                      {discountPctNum > 0 ? <TrendingUp className="w-4 h-4 shrink-0" /> : <TrendingDown className="w-4 h-4 shrink-0" />}
                       <span>%{Math.abs(discountPctNum).toFixed(1)} {discountPctNum > 0 ? 'İskontolu / Potansiyel' : 'Primli'}</span>
                     </span>
                   </div>
@@ -4358,7 +4385,7 @@ export default function SimplyView({
             {/* 8.1 Üst Yönetici Karar & Değerleme Kartı */}
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-5">
               <div className="flex items-center gap-2 border-b border-[#282d37] pb-3">
-                <span className="font-sans text-base sm:text-lg font-bold text-white">8.1 Yönetici Analist Kararı & Yatırım Perspektifi</span>
+                <span className="font-sans text-base sm:text-lg font-bold text-white">8.1 Yönetici Analiz Sonucu & Yatırım Perspektifi</span>
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#282d37] pb-4">
@@ -4370,11 +4397,11 @@ export default function SimplyView({
                       ? 'bg-rose-950/80 border-rose-500/50 text-rose-400 shadow-rose-950/50'
                       : 'bg-amber-950/80 border-amber-500/50 text-amber-400 shadow-amber-950/50'
                   }`}>
-                    {report.decision === 'AL' ? 'AL' : report.decision === 'ALMA' ? 'SAT' : 'TUT'}
+                    {report.decision === 'AL' ? 'AL' : report.decision === 'ALMA' ? 'ALMA' : 'NÖTR'}
                   </div>
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm uppercase font-mono font-bold tracking-wider text-slate-300">Resmi Analist Kararı</span>
+                      <span className="text-sm uppercase font-mono font-bold tracking-wider text-slate-300">Analiz Sonucu</span>
                       <span className={`px-3 py-1 rounded-full text-sm font-mono font-bold border ${
                         report.decision === 'AL'
                           ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
