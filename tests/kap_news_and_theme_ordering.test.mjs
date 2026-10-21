@@ -25,7 +25,11 @@ test('1. KAP URL and Official News Feed Integrity', async () => {
   liveFeed.forEach(item => {
     assert.ok(item.ticker, 'Live item must have ticker');
     assert.ok(item.title, 'Live item must have title');
-    assert.ok(item.url.startsWith('https://www.kap.org.tr/tr/sirket-bildirimleri/'), 'Live item must have valid KAP URL');
+    assert.ok(
+      item.url.startsWith('https://www.kap.org.tr/tr/sirket-bildirimleri/') ||
+      item.url.startsWith('https://www.kap.org.tr/tr/Bildirim/'),
+      'Live item must have valid KAP URL'
+    );
     assert.ok(!item.url.includes('/ozet/thyao'), 'Must never have invalid /ozet/ticker url');
   });
 });

@@ -5607,7 +5607,7 @@ export default function ValuationTerminal({
 
                             {/* Sağ İçerik Alanı */}
                             <div className="flex-1 min-w-0 space-y-1.5">
-                              {/* Üst Satır: Ticker • Kategori • Zaman (Image 2) */}
+                              {/* Üst Satır: Ticker • Kategori • Zaman • Etki Rozeti (Image 2) */}
                               <div className="flex items-center gap-2 flex-wrap text-xs">
                                 <span className="font-mono font-black text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
                                   {item.ticker}
@@ -5620,6 +5620,26 @@ export default function ValuationTerminal({
                                 <span className="font-sans text-slate-400 text-xs">
                                   {item.timeAgo}
                                 </span>
+                                {item.impact === 'HIGH_IMPACT' && (
+                                  <span className="px-2 py-0.5 rounded text-[11px] font-sans font-bold bg-purple-500/10 text-purple-400 border border-purple-500/30">
+                                    ⚡ Yüksek Etki
+                                  </span>
+                                )}
+                                {item.impact === 'POSITIVE' && (
+                                  <span className="px-2 py-0.5 rounded text-[11px] font-sans font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                                    ▲ Olumlu
+                                  </span>
+                                )}
+                                {item.impact === 'NEGATIVE' && (
+                                  <span className="px-2 py-0.5 rounded text-[11px] font-sans font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30">
+                                    ▼ Olumsuz
+                                  </span>
+                                )}
+                                {item.impact === 'NEUTRAL' && (
+                                  <span className="px-2 py-0.5 rounded text-[11px] font-sans font-medium bg-slate-800 text-slate-400 border border-slate-700/60">
+                                    ● Nötr
+                                  </span>
+                                )}
                               </div>
 
                               {/* Başlık (Temiz, net, kurumsal başlık) */}
@@ -5645,21 +5665,36 @@ export default function ValuationTerminal({
                                 })()}
                               </p>
 
-                              {/* Alt Bar: Doğrudan KAP Bildirimi Yönlendirmesi */}
-                              <div className="flex items-center justify-between pt-2 border-t border-[#2e3440]/50 mt-1">
+                              {/* Alt Bar: Doğrudan KAP & Bigpara Bildirimi Yönlendirmesi */}
+                              <div className="flex items-center justify-between pt-2 border-t border-[#2e3440]/50 mt-1 flex-wrap gap-2">
                                 <span className="text-[11px] font-mono text-slate-500 flex items-center gap-1">
                                   <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                                  <span>Resmi KAP Bildirimi</span>
+                                  <span>Resmi Bildirim</span>
                                 </span>
-                                <a
-                                  href={item.url || getKapCompanyDisclosuresUrl(item.ticker)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="inline-flex items-center gap-1 text-xs font-bold text-sky-400 hover:text-sky-300 font-sans hover:underline"
-                                >
-                                  <span>{item.kapId ? `Bildirim #${item.kapId} ->` : 'Bildirim ->'}</span>
-                                </a>
+                                <div className="flex items-center gap-3">
+                                  {item.bigparaUrl && (
+                                    <a
+                                      href={item.bigparaUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300 font-sans hover:underline"
+                                      title="Bigpara üzerinde KAP tam metnini görüntüle"
+                                    >
+                                      <span>Bigpara Metni -&gt;</span>
+                                    </a>
+                                  )}
+                                  <a
+                                    href={item.kapUrl || item.url || getKapCompanyDisclosuresUrl(item.ticker)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="inline-flex items-center gap-1 text-xs font-bold text-sky-400 hover:text-sky-300 font-sans hover:underline"
+                                    title="Doğrudan KAP resmi bildirim sayfası"
+                                  >
+                                    <span>{item.kapId ? `KAP Bildirim #${item.kapId} ->` : 'KAP Bildirim ->'}</span>
+                                  </a>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -5703,6 +5738,26 @@ export default function ValuationTerminal({
                                 <span className="font-mono text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
                                   BIST:{selectedDisclosure.ticker}
                                 </span>
+                                {selectedDisclosure.impact === 'HIGH_IMPACT' && (
+                                  <span className="px-2 py-0.5 rounded text-[11px] font-sans font-bold bg-purple-500/10 text-purple-400 border border-purple-500/30">
+                                    ⚡ Yüksek Etki
+                                  </span>
+                                )}
+                                {selectedDisclosure.impact === 'POSITIVE' && (
+                                  <span className="px-2 py-0.5 rounded text-[11px] font-sans font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                                    ▲ Olumlu
+                                  </span>
+                                )}
+                                {selectedDisclosure.impact === 'NEGATIVE' && (
+                                  <span className="px-2 py-0.5 rounded text-[11px] font-sans font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30">
+                                    ▼ Olumsuz
+                                  </span>
+                                )}
+                                {selectedDisclosure.impact === 'NEUTRAL' && (
+                                  <span className="px-2 py-0.5 rounded text-[11px] font-sans font-medium bg-slate-800 text-slate-400 border border-slate-700/60">
+                                    ● Nötr
+                                  </span>
+                                )}
                               </div>
                               <p className="text-xs text-slate-400 font-sans mt-0.5">
                                 {selectedDisclosure.categoryLabel} • {selectedDisclosure.timeAgo}
@@ -5769,10 +5824,10 @@ export default function ValuationTerminal({
                             })()}
                           </div>
 
-                          {/* Alt Butonlar */}
+                          {/* Alt Butonlar: Doğrudan KAP & Bigpara Bağlantıları */}
                           <div className="pt-3 border-t border-[#2e3440] flex items-center gap-3 flex-wrap">
                             <a
-                              href={selectedDisclosure.url || getKapCompanyDisclosuresUrl(selectedDisclosure.ticker)}
+                              href={selectedDisclosure.kapUrl || selectedDisclosure.url || getKapCompanyDisclosuresUrl(selectedDisclosure.ticker)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-sans font-bold text-xs transition cursor-pointer shadow-lg shadow-sky-600/20"
@@ -5782,6 +5837,19 @@ export default function ValuationTerminal({
                               </span>
                               <ExternalLink className="w-3.5 h-3.5" />
                             </a>
+
+                            {selectedDisclosure.bigparaUrl && (
+                              <a
+                                href={selectedDisclosure.bigparaUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-sans font-bold text-xs transition cursor-pointer shadow-lg shadow-emerald-600/20"
+                              >
+                                <span>Bigpara KAP Tam Metnini Oku</span>
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+
                             <button
                               type="button"
                               onClick={() => {
