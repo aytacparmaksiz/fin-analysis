@@ -1327,20 +1327,35 @@ export default function ValuationTerminal({
   const refreshLiveFeed = useCallback(async () => {
     setIsFeedLoading(true);
     try {
-      const res = await fetch('/api/feed');
+      const analyzedTickers = savedReports
+        .map(r => r.ticker)
+        .filter((t): t is string => Boolean(t && t.trim()));
+
+      if (analyzedTickers.length === 0) {
+        setLiveNewsFeed([]);
+        setLastFeedSync(new Date());
+        setIsFeedLoading(false);
+        return;
+      }
+
+      const params = new URLSearchParams({
+        tickers: [...new Set(analyzedTickers)].join(','),
+      });
+
+      const res = await fetch(`/api/feed?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data?.feed) && data.feed.length > 0) {
+        if (Array.isArray(data?.feed)) {
           setLiveNewsFeed(data.feed);
           setLastFeedSync(new Date());
         }
       }
     } catch (e) {
-      console.error('KAP canlı akış çekilemedi:', e);
+      console.error('KAP akışı çekilemedi:', e);
     } finally {
       setIsFeedLoading(false);
     }
-  }, []);
+  }, [savedReports]);
 
   useEffect(() => {
     refreshLiveFeed();
@@ -5459,10 +5474,6 @@ export default function ValuationTerminal({
                         <h2 className="text-xl font-bold font-sans text-white tracking-tight">
                           Feed
                         </h2>
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-sans font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                          Canlı KAP Akışı
-                        </span>
                         {lastFeedSync && (
                           <span className="text-[11px] text-slate-500 font-mono hidden sm:inline">
                             Son Güncelleme: {lastFeedSync.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
@@ -5470,7 +5481,7 @@ export default function ValuationTerminal({
                         )}
                       </div>
                       <p className="text-sm text-slate-300 mt-1 font-sans">
-                        Borsa İstanbul ve KAP resmi şirket bildirimleri, finansal gelişmeler ve önemli şirket olayları akışı.
+                        Analiz ettiğiniz şirketlerin resmi KAP bildirimleri ve fiyat-duyarlı finansal haber akışı.
                       </p>
                     </div>
 
@@ -5522,19 +5533,41 @@ export default function ValuationTerminal({
                   </div>
 
                   {/* Haber Kartları Akışı */}
-                  {newsFeed.length === 0 ? (
+                  {savedReports.length === 0 ? (
+                    <div className="bg-[#1a1e26] border border-[#2e3440] rounded-2xl p-12 text-center text-slate-400 space-y-4">
+                      <div className="w-14 h-14 mx-auto rounded-2xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                        <Newspaper className="w-7 h-7" />
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="text-base font-bold text-white font-sans">
+                          Henüz Analiz Edilmiş Şirket Bulunmuyor
+                        </h4>
+                        <p className="text-xs text-slate-400 max-w-md mx-auto font-sans leading-relaxed">
+                          Feed panelinde yalnızca analiz ettiğiniz şirketlerin resmi KAP bildirimleri ve fiyat-duyarlı finansal gelişmeleri listelenir.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setStep('input'); setActiveReportId(null); }}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition cursor-pointer font-sans shadow-lg shadow-sky-600/20"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Yeni Şirket Analiz Et</span>
+                      </button>
+                    </div>
+                  ) : newsFeed.length === 0 ? (
                     <div className="bg-[#1a1e26] border border-[#2e3440] rounded-2xl p-12 text-center text-slate-400 space-y-3">
                       <Newspaper className="w-12 h-12 mx-auto text-slate-600 opacity-60" />
                       <h4 className="text-base font-bold text-slate-200 font-sans">
-                        Aramaya Uygun Haber Bildirimi Bulunamadı
+                        Yeni Bildirim Bulunmuyor
                       </h4>
                       <p className="text-sm text-slate-400 max-w-md mx-auto font-sans">
-                        Filtreleri sıfırlayarak tüm BİST ve KAP şirket bildirimlerini görüntüleyebilirsiniz.
+                        Analiz ettiğiniz şirketlere ait seçilen filtrede yeni bir KAP bildirimi bulunamadı.
                       </p>
                       <button
                         type="button"
                         onClick={() => { setNewsCategoryFilter('ALL'); setNewsSearchTerm(''); }}
-                        className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition cursor-pointer font-sans"
+                        className="px-4 py-2 bg-[#21262d] hover:bg-[#2e3440] text-slate-200 rounded-xl text-xs font-bold transition cursor-pointer font-sans border border-[#2e3440]"
                       >
                         Filtreleri Sıfırla
                       </button>
@@ -5584,11 +5617,6 @@ export default function ValuationTerminal({
                                   <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-[#12151c] text-sky-400 border border-[#2e3440]">
                                     {item.source}
                                   </span>
-                                  {item.isLive && (
-                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-800/80">
-                                      CANLI
-                                    </span>
-                                  )}
                                   <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold border ${impactBadge}`}>
                                     {impactLabel}
                                   </span>
@@ -5600,9 +5628,22 @@ export default function ValuationTerminal({
                                 {item.title}
                               </h3>
 
-                              {/* Haber Özeti */}
+                              {/* Haber Özeti (Fiyat-Duyarlı Metrik Vurgulu) */}
                               <p className="text-xs text-slate-300 font-sans leading-relaxed">
-                                {item.summary}
+                                {(() => {
+                                  if (!item.summary) return null;
+                                  const parts = item.summary.split(/(\*\*[^*]+\*\*)/g);
+                                  return parts.map((part, idx) => {
+                                    if (part.startsWith('**') && part.endsWith('**')) {
+                                      return (
+                                        <strong key={idx} className="font-bold text-white bg-slate-800/90 px-1 py-0.5 rounded border border-slate-700/60 inline-block my-0.5">
+                                          {part.slice(2, -2)}
+                                        </strong>
+                                      );
+                                    }
+                                    return part;
+                                  });
+                                })()}
                               </p>
                             </div>
 

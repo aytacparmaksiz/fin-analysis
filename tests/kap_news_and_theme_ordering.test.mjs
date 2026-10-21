@@ -15,26 +15,18 @@ test('1. KAP URL and Official News Feed Integrity', async () => {
   const thyaoUrl = getKapCompanyDisclosuresUrl('THYAO');
   assert.equal(thyaoUrl, 'https://www.kap.org.tr/tr/sirket-bildirimleri/4028e4a140f2ed720140f376bebb01a7');
 
-  // Verify all feed items
-  const feed = getCompanyNewsFeed();
-  assert.ok(feed.length >= 12, 'Feed must contain all official notifications');
+  // Verify zero mock data rule
+  const emptyFeed = await fetchLiveBistNewsFeed();
+  assert.equal(emptyFeed.length, 0, 'Must return empty array when no analyzed tickers provided (Zero Mock Data)');
 
-  feed.forEach(item => {
-    assert.ok(item.url, `News item ${item.id} must have a url`);
-    assert.ok(
-      item.url.startsWith('https://www.kap.org.tr/tr/sirket-bildirimleri/'),
-      `News item ${item.ticker} url must point to KAP disclosures: ${item.url}`
-    );
-    assert.ok(!item.url.includes('/ozet/thyao'), 'Must never have invalid /ozet/ticker url');
-  });
-
-  // Verify live feed parser works
-  const liveFeed = await fetchLiveBistNewsFeed();
-  assert.ok(liveFeed.length >= 10, 'Live feed must return real BIST KAP items');
+  // Verify live feed parser works for analyzed companies
+  const liveFeed = await fetchLiveBistNewsFeed({ tickers: ['THYAO', 'ASELS'] });
+  assert.ok(liveFeed.length >= 1, 'Live feed must return real BIST KAP items for analyzed tickers');
   liveFeed.forEach(item => {
     assert.ok(item.ticker, 'Live item must have ticker');
     assert.ok(item.title, 'Live item must have title');
-    assert.ok(item.url.startsWith('https://www.kap.org.tr/'), 'Live item must have valid KAP URL');
+    assert.ok(item.url.startsWith('https://www.kap.org.tr/tr/sirket-bildirimleri/'), 'Live item must have valid KAP URL');
+    assert.ok(!item.url.includes('/ozet/thyao'), 'Must never have invalid /ozet/ticker url');
   });
 });
 

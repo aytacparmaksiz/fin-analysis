@@ -1,4 +1,5 @@
 import { getKapCompanyDisclosuresUrl } from './kap-mapping.ts';
+import { COMPANY_PROFILES } from './company-profiles.ts';
 
 export interface CompanyNewsItem {
   id: string;
@@ -16,358 +17,393 @@ export interface CompanyNewsItem {
   isLive?: boolean;
 }
 
-export const OFFICIAL_BIST_NEWS_FEED: CompanyNewsItem[] = [
-  {
-    id: 'news-kap-01',
-    ticker: 'THYAO',
-    companyName: 'Türk Hava Yolları A.O.',
-    title: 'Yeni Uçak Alımı ve Filo Genişleme Stratejisi Hakkında',
-    summary: 'Yönetim Kurulu, filo kapasitesini artırmak üzere Airbus ve Boeing ile yeni nesil geniş gövdeli uçak siparişlerinin teslimat takvimi ve motor bakım anlaşmalarını Kamuyu Aydınlatma Platformu\'nda duyurdu.',
-    category: 'INVESTMENT',
-    categoryLabel: 'Yatırım & Filo',
-    source: 'KAP',
-    publishDate: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
-    timeAgo: '18 dk önce',
-    impact: 'POSITIVE',
-    url: getKapCompanyDisclosuresUrl('THYAO'),
-  },
-  {
-    id: 'news-kap-02',
-    ticker: 'FROTO',
-    companyName: 'Ford Otomotiv Sanayi A.Ş.',
-    title: 'Yurt Dışı Batarya ve Elektrikli Ticari Araç İhracat Sözleşmesi',
-    summary: 'Craiova ve Kocaeli fabrikalarında üretilen yeni nesil Ford Transit Courier ve batarya montaj hattı ihracat teslimatlarının Avrupa pazarına başladığı KAP\'a bildirildi.',
-    category: 'CONTRACT',
-    categoryLabel: 'Yeni Sözleşme & İhracat',
-    source: 'KAP',
-    publishDate: new Date(Date.now() - 42 * 60 * 1000).toISOString(),
-    timeAgo: '42 dk önce',
-    impact: 'POSITIVE',
-    url: getKapCompanyDisclosuresUrl('FROTO'),
-  },
-  {
-    id: 'news-kap-03',
-    ticker: 'TUPRS',
-    companyName: 'Tüpraş Türkiye Petrol Rafinerileri A.Ş.',
-    title: 'Nakit Kâr Payı (Temettü) Dağıtım Tarihi ve Ödeme Süreci',
-    summary: 'Genel Kurul onayıyla pay başına brüt 11,85 TL nakit temettü dağıtımının hak kullanım tarihi ve MKK takas süreci Kamuyu Aydınlatma Platformu\'nda teyit edildi.',
-    category: 'DIVIDEND',
-    categoryLabel: 'Temettü',
-    source: 'KAP',
-    publishDate: new Date(Date.now() - 75 * 60 * 1000).toISOString(),
-    timeAgo: '1 saat önce',
-    impact: 'HIGH_IMPACT',
-    url: getKapCompanyDisclosuresUrl('TUPRS'),
-  },
-  {
-    id: 'news-kap-04',
-    ticker: 'ASELS',
-    companyName: 'Aselsan Elektronik Sanayi ve Ticaret A.Ş.',
-    title: 'Savunma Sanayii Başkanlığı ile 120 Milyon Dolarlık Yeni Sözleşme',
-    summary: 'Milli Savunma Bakanlığı ihtiyaçları kapsamında radar, elektronik harp ve elektro-optik sistemleri teslimatına yönelik toplam 120.400.000 USD bedelli sözleşme imzalandı.',
-    category: 'CONTRACT',
-    categoryLabel: 'Yeni İş İlişkisi',
-    source: 'KAP',
-    publishDate: new Date(Date.now() - 110 * 60 * 1000).toISOString(),
-    timeAgo: '2 saat önce',
-    impact: 'HIGH_IMPACT',
-    url: getKapCompanyDisclosuresUrl('ASELS'),
-  },
-  {
-    id: 'news-kap-05',
-    ticker: 'AGESA',
-    companyName: 'AgeSA Hayat ve Emeklilik A.Ş.',
-    title: 'Bireysel Emeklilik (BES) Fon Büyüklüğü ve Prim Üretimi Bildirimi',
-    summary: 'Şirketin toplam BES ve OKS fon büyüklüğü yıllık bazda reel büyüme kaydederek liderliğini korudu; hayat branşı prim üretimi hedeflerin üzerinde gerçekleşti.',
-    category: 'FINANCIALS',
-    categoryLabel: 'Mali Göstergeler',
-    source: 'KAP',
-    publishDate: new Date(Date.now() - 150 * 60 * 1000).toISOString(),
-    timeAgo: '2.5 saat önce',
-    impact: 'POSITIVE',
-    url: getKapCompanyDisclosuresUrl('AGESA'),
-  },
-  {
-    id: 'news-kap-06',
-    ticker: 'SISE',
-    companyName: 'Türkiye Şişe ve Cam Fabrikaları A.Ş.',
-    title: 'Pay Geri Alım Programı Kapsamında İşlemler Bildirimi',
-    summary: 'Yönetim Kurulu kararı uyarınca Borsa İstanbul\'da pay geri alım programı dahilinde sürdürülen alım işlemlerine ilişkin detaylı bildirim KAP\'a iletildi.',
-    category: 'BUYBACK',
-    categoryLabel: 'Pay Geri Alımı',
-    source: 'KAP',
-    publishDate: new Date(Date.now() - 210 * 60 * 1000).toISOString(),
-    timeAgo: '3.5 saat önce',
-    impact: 'POSITIVE',
-    url: getKapCompanyDisclosuresUrl('SISE'),
-  },
-  {
-    id: 'news-kap-07',
-    ticker: 'BIMAS',
-    companyName: 'BİM Birleşik Mağazalar A.Ş.',
-    title: 'Yeni Mağaza Açılışları ve Bağlı Ortaklık Sermaye Payı Bilgilendirmesi',
-    summary: 'Perakende mağaza ağı yurt içi ve yurt dışı lokasyonlarda planlanan büyüme hedeflerine paralel olarak genişlemeye devam etmekte ve yeni şube açılışları sürmektedir.',
-    category: 'GENERAL',
-    categoryLabel: 'Operasyonel Duyuru',
-    source: 'KAP',
-    publishDate: new Date(Date.now() - 290 * 60 * 1000).toISOString(),
-    timeAgo: '5 saat önce',
-    impact: 'NEUTRAL',
-    url: getKapCompanyDisclosuresUrl('BIMAS'),
-  },
-  {
-    id: 'news-kap-08',
-    ticker: 'EREGL',
-    companyName: 'Ereğli Demir ve Çelik Fabrikaları T.A.Ş.',
-    title: 'Peletleme Tesisi Yatırımı ve Yeşil Dönüşüm Teşvik Bildirimi',
-    summary: 'Ereğli tesislerinde hayata geçirilen yeşil çelik dönüşümü ve peletleme yatırımı projesine ilişkin ÇED süreci ve yatırım teşvik belgesi tamamlandı.',
-    category: 'INVESTMENT',
-    categoryLabel: 'Yeşil Dönüşüm & Yatırım',
-    source: 'KAP',
-    publishDate: new Date(Date.now() - 360 * 60 * 1000).toISOString(),
-    timeAgo: '6 saat önce',
-    impact: 'POSITIVE',
-    url: getKapCompanyDisclosuresUrl('EREGL'),
-  },
-  {
-    id: 'news-kap-09',
-    ticker: 'KCHOL',
-    companyName: 'Koç Holding A.Ş.',
-    title: 'İştirak Portföyü Net Aktif Değer (NAD) ve Finansal Rapor Açıklaması',
-    summary: 'Holding konsolide net nakit pozisyonu güçlü seyrini korumakta olup iştiraklerden sağlanan nakit temettü girişleri ve solo likidite tablosu kamuya açıklandı.',
-    category: 'FINANCIALS',
-    categoryLabel: 'Finansal Performans',
-    source: 'KAP',
-    publishDate: new Date(Date.now() - 440 * 60 * 1000).toISOString(),
-    timeAgo: '7 saat önce',
-    impact: 'NEUTRAL',
-    url: getKapCompanyDisclosuresUrl('KCHOL'),
-  },
-  {
-    id: 'news-kap-10',
-    ticker: 'EKGYO',
-    companyName: 'Emlak Konut Gayrimenkul Yatırım Ortaklığı A.Ş.',
-    title: 'Gelir Paylaşımı Projeleri İhale ve Bağımsız Bölüm Satış Bildirimi',
-    summary: 'İstanbul ve Ankara projelerinde yürütülen gayrimenkul geliştirme ve bağımsız bölüm ön satışlarında dönemsel hedefler aşılmış olup hasılat payı sözleşmesi tamamlandı.',
-    category: 'CONTRACT',
-    categoryLabel: 'Gayrimenkul & Satış',
-    source: 'KAP',
-    publishDate: new Date(Date.now() - 520 * 60 * 1000).toISOString(),
-    timeAgo: '8 saat önce',
-    impact: 'POSITIVE',
-    url: getKapCompanyDisclosuresUrl('EKGYO'),
-  },
-  {
-    id: 'news-kap-11',
-    ticker: 'MPARK',
-    companyName: 'MLP Sağlık Hizmetleri A.Ş.',
-    title: 'Yeni Hastane Ruhsatı ve Yurt Dışı Sağlık Turizmi Operasyonları',
-    summary: 'Özel hastane zincirine dahil edilen yeni şube ruhsatı faaliyete geçmiş olup yurt dışı hasta operasyonlarının konsolide ciro içindeki payı artışını sürdürdü.',
-    category: 'INVESTMENT',
-    categoryLabel: 'Sağlık Turizmi & Büyüme',
-    source: 'KAP',
-    publishDate: new Date(Date.now() - 600 * 60 * 1000).toISOString(),
-    timeAgo: '10 saat önce',
-    impact: 'POSITIVE',
-    url: getKapCompanyDisclosuresUrl('MPARK'),
-  },
-  {
-    id: 'news-kap-12',
-    ticker: 'LOGO',
-    companyName: 'Logo Yazılım Sanayi ve Ticaret A.Ş.',
-    title: 'Bulut SaaS Tekrarlayan Gelirleri ve Pay Geri Alımı Bildirimi',
-    summary: 'Yıllık tekrarlayan gelirler (ARR) ve bulut abonelik faturalamaları büyüme kaydederken şirket pay geri alım sürecine ilişkin işlemler KAP\'ta duyuruldu.',
-    category: 'FINANCIALS',
-    categoryLabel: 'Teknoloji & SaaS',
-    source: 'KAP',
-    publishDate: new Date(Date.now() - 720 * 60 * 1000).toISOString(),
-    timeAgo: '12 saat önce',
-    impact: 'POSITIVE',
-    url: getKapCompanyDisclosuresUrl('LOGO'),
-  },
-  {
-    id: 'news-kap-13',
-    ticker: 'GARAN',
-    companyName: 'Türkiye Garanti Bankası A.Ş.',
-    title: 'Yurt Dışı Borçlanma Aracı (Tahvil/Eurobond) İhracı Bildirimi',
-    summary: 'Nitelikli yatırımcılara yönelik 500 milyon ABD Doları tutarındaki sürdürülebilir tahvil ihracı başarıyla tamamlanmış olup MKK ve takas süreçleri teyit edildi.',
-    category: 'FINANCIALS',
-    categoryLabel: 'Sermaye Piyasası İhracı',
-    source: 'KAP',
-    publishDate: new Date(Date.now() - 800 * 60 * 1000).toISOString(),
-    timeAgo: '13 saat önce',
-    impact: 'POSITIVE',
-    url: getKapCompanyDisclosuresUrl('GARAN'),
-  },
-  {
-    id: 'news-kap-14',
-    ticker: 'TOASO',
-    companyName: 'Tofaş Türk Otomobil Fabrikası A.Ş.',
-    title: 'Stellantis Türkiye Dağıtım Hakları ve Yeni Üretim Hattı Sözleşmesi',
-    summary: 'Bursa fabrikasında yeni hafif ticari araç model üretimi ve Stellantis markalarının Türkiye dağıtım haklarının devralınmasına ilişkin süreç tamamlandı.',
-    category: 'CONTRACT',
-    categoryLabel: 'Üretim & Dağıtım',
-    source: 'KAP',
-    publishDate: new Date(Date.now() - 900 * 60 * 1000).toISOString(),
-    timeAgo: '15 saat önce',
-    impact: 'HIGH_IMPACT',
-    url: getKapCompanyDisclosuresUrl('TOASO'),
-  },
-  {
-    id: 'news-kap-15',
-    ticker: 'TCELL',
-    companyName: 'Turkcell İletişim Hizmetleri A.Ş.',
-    title: '5G Altyapı Yatırımı ve Spektrum Tahsisi Bilgilendirmesi',
-    summary: 'Fiber altyapı şebekesi ve yeni nesil 5G baz istasyonları modernizasyonuna yönelik yurt dışı tedarikçi sözleşmesi ve CapEx planı kamuoyu ile paylaşıldı.',
-    category: 'INVESTMENT',
-    categoryLabel: 'Altyapı & 5G',
-    source: 'KAP',
-    publishDate: new Date(Date.now() - 1000 * 60 * 1000).toISOString(),
-    timeAgo: '16 saat önce',
-    impact: 'POSITIVE',
-    url: getKapCompanyDisclosuresUrl('TCELL'),
-  }
-];
+/**
+ * Sıfır Mock Veri Kuralı:
+ * Sistemde sahte, varsayımsal veya hardcoded bildirimler bulunmaz.
+ * Feed yalnızca kullanıcının analiz ettiği BİST şirketlerinin gerçek KAP bildirimlerini içerir.
+ */
+export const OFFICIAL_BIST_NEWS_FEED: CompanyNewsItem[] = [];
 
-// In-memory cache for live KAP disclosures (TTL: 60 seconds)
-let liveFeedCache: { timestamp: number; items: CompanyNewsItem[] } | null = null;
+// Bellek içi canlı bildirim önbelleği (Key: tickers_category, TTL: 60 saniye)
+const liveFeedCache = new Map<string, { timestamp: number; items: CompanyNewsItem[] }>();
 const CACHE_TTL_MS = 60 * 1000;
+
+const KNOWN_COMPANY_NAMES: Record<string, string> = {
+  THYAO: 'Türk Hava Yolları A.O.',
+  ASELS: 'Aselsan Elektronik Sanayi ve Ticaret A.Ş.',
+  FROTO: 'Ford Otomotiv Sanayi A.Ş.',
+  TUPRS: 'Tüpraş Türkiye Petrol Rafinerileri A.Ş.',
+  SISE: 'Türkiye Şişe ve Cam Fabrikaları A.Ş.',
+  BIMAS: 'BİM Birleşik Mağazalar A.Ş.',
+  EREGL: 'Ereğli Demir ve Çelik Fabrikaları T.A.Ş.',
+  AGESA: 'AgeSA Hayat ve Emeklilik A.Ş.',
+  GARAN: 'Türkiye Garanti Bankası A.Ş.',
+  AKBNK: 'Akbank T.A.Ş.',
+  ISCTR: 'Türkiye İş Bankası A.Ş.',
+  YKBNK: 'Yapı ve Kredi Bankası A.Ş.',
+  VAKBN: 'Türkiye Vakıflar Bankası T.A.O.',
+  EKGYO: 'Emlak Konut Gayrimenkul Yatırım Ortaklığı A.Ş.',
+  KCHOL: 'Koç Holding A.Ş.',
+  SAHOL: 'Hacı Ömer Sabancı Holding A.Ş.',
+  LOGO: 'Logo Yazılım Sanayi ve Ticaret A.Ş.',
+  MPARK: 'MLP Sağlık Hizmetleri A.Ş.',
+  TCELL: 'Turkcell İletişim Hizmetleri A.Ş.',
+  TTKOM: 'Türk Telekomünikasyon A.Ş.',
+  TOASO: 'Tofaş Türk Otomobil Fabrikası A.Ş.',
+  PGSUS: 'Pegasus Hava Taşımacılığı A.Ş.',
+  TAVHL: 'TAV Havalimanları Holding A.Ş.',
+  MGROS: 'Migros Ticaret A.Ş.',
+  SOKM: 'Şok Marketler Ticaret A.Ş.',
+  KRDMD: 'Kardemir Karabük Demir Çelik Sanayi ve Ticaret A.Ş.',
+  KOZAL: 'Koza Altın İşletmeleri A.Ş.',
+  PETKM: 'Petkim Petrokimya Holding A.Ş.',
+  ENJSA: 'Enerjisa Enerji A.Ş.',
+  AKSEN: 'Aksen Enerji Üretim A.Ş.',
+  ARCLK: 'Arçelik A.Ş.',
+  VESBE: 'Vestel Beyaz Eşya Sanayi ve Ticaret A.Ş.',
+  TRGYO: 'Torunlar GYO A.Ş.',
+  ISGYO: 'İş GYO A.Ş.',
+  ALARK: 'Alarko Holding A.Ş.',
+  AGHOL: 'AG Anadolu Grubu Holding A.Ş.'
+};
+
+export function getCompanyName(ticker: string): string {
+  const norm = ticker.toUpperCase().trim();
+  if (KNOWN_COMPANY_NAMES[norm]) return KNOWN_COMPANY_NAMES[norm];
+  if (COMPANY_PROFILES[norm]?.fullName) return COMPANY_PROFILES[norm].fullName;
+  return `${norm} Borsa İstanbul`;
+}
+
+export function cleanHtmlText(html: string): string {
+  if (!html) return '';
+  return html
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<\/p>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Fiyat-duyarlı (price-sensitive) metrikleri kalın (**...**) vurgular:
+ * - Parasal tutarlar: 120 milyon dolar, 34,50 TL, 150.000.000 USD, 2,4 milyar euro
+ * - Oranlar: %15,4, %0,81, %25
+ * - Pay ve lot: 36.532 adet, 3.469.200 nominal lot
+ */
+export function formatPriceSensitiveText(text: string): string {
+  if (!text) return '';
+  let res = text;
+  // Parasal ve adet metrikleri
+  res = res.replace(/(\b\d+([.,]\d+)?\s*(milyon|milyar|bin)?\s*(TL|TRY|USD|EUR|dolar|avro|euro|adet|lot|nominal)\b)/gi, '**$1**');
+  // Yüzdeler
+  res = res.replace(/(%\s*\d+([.,]\d+)?)/g, '**$1**');
+  return res;
+}
+
+export function calculateTimeAgo(pubDate: string | Date): string {
+  try {
+    const pubTime = new Date(pubDate).getTime();
+    if (isNaN(pubTime)) return 'Yeni';
+    const diffMs = Math.max(0, Date.now() - pubTime);
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    const diffHrs = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHrs / 24);
+
+    if (diffMinutes < 60) {
+      return diffMinutes <= 1 ? 'Az önce' : `${diffMinutes} dk önce`;
+    }
+    if (diffHrs < 24) {
+      return `${diffHrs} saat önce`;
+    }
+    if (diffDays === 1) {
+      return 'Dün';
+    }
+    if (diffDays < 30) {
+      return `${diffDays} gün önce`;
+    }
+    const diffMonths = Math.floor(diffDays / 30);
+    return `${diffMonths} ay önce`;
+  } catch {
+    return 'Yeni';
+  }
+}
+
+export function categorizeDisclosure(title: string, bodyText: string = ''): {
+  category: CompanyNewsItem['category'];
+  categoryLabel: string;
+  impact: CompanyNewsItem['impact'];
+} {
+  const combined = (title + ' ' + bodyText).toLowerCase();
+
+  if (combined.includes('geri al') || combined.includes('pay alım') || combined.includes('pay satım') || combined.includes('hisse alım')) {
+    return { category: 'BUYBACK', categoryLabel: 'Pay Geri Alımı', impact: 'POSITIVE' };
+  }
+  if (combined.includes('kâr payı') || combined.includes('temettü') || combined.includes('sermaye artırım') || combined.includes('bedelli') || combined.includes('bedelsiz')) {
+    return { category: 'DIVIDEND', categoryLabel: 'Temettü & Sermaye', impact: 'HIGH_IMPACT' };
+  }
+  if (combined.includes('finansal') || combined.includes('bilanço') || combined.includes('net kâr') || combined.includes('faaliyet sonuç') || combined.includes('hasılat')) {
+    return { category: 'FINANCIALS', categoryLabel: 'Finansal Tablolar', impact: 'HIGH_IMPACT' };
+  }
+  if (combined.includes('iş ilişkisi') || combined.includes('sözleşme') || combined.includes('ihale') || combined.includes('sipariş') || combined.includes('ihracat')) {
+    return { category: 'CONTRACT', categoryLabel: 'Yeni Sözleşme / İhale', impact: 'HIGH_IMPACT' };
+  }
+  if (combined.includes('yatırım') || combined.includes('fabrika') || combined.includes('kapasite') || combined.includes('filo') || combined.includes('satın alma') || combined.includes('tesis')) {
+    return { category: 'INVESTMENT', categoryLabel: 'Yatırım & Kapasite', impact: 'POSITIVE' };
+  }
+
+  return { category: 'GENERAL', categoryLabel: 'Özel Durum Açıklaması', impact: 'NEUTRAL' };
+}
+
+/**
+ * Bigpara KAP haber detay sayfasından resmi Ek Açıklamalar metnini çeker.
+ */
+async function fetchBigparaArticleBody(url: string): Promise<string> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+      },
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) return '';
+    const html = await res.text();
+
+    // 1. Ek Açıklamalar alanı (KAP resmi açıklama metni)
+    const ekIdx = html.indexOf('Ek Açıklamalar');
+    if (ekIdx !== -1) {
+      const rawChunk = html.slice(ekIdx, ekIdx + 1200);
+      return cleanHtmlText(rawChunk.replace(/^Ek Açıklamalar\s*(?:<br\s*\/?>)*/i, '')).slice(0, 450);
+    }
+
+    // 2. Özet Bilgi alanı
+    const ozetIdx = html.indexOf('Özet Bilgi');
+    if (ozetIdx !== -1) {
+      const rawChunk = html.slice(ozetIdx, ozetIdx + 800);
+      return cleanHtmlText(rawChunk.replace(/^Özet Bilgi\s*(?:<br\s*\/?>)*/i, '')).slice(0, 350);
+    }
+
+    return '';
+  } catch {
+    return '';
+  }
+}
 
 /**
  * Borsa İstanbul şirketlerinin Kamuyu Aydınlatma Platformu'na (KAP)
- * gönderdiği anlık ve gerçek bildirimleri canlı olarak çeker.
+ * gönderdiği anlık ve gerçek bildirimleri yalnızca analiz edilen şirketler için canlı olarak çeker.
  */
 export async function fetchLiveBistNewsFeed(options?: {
   tickers?: string[];
   category?: string;
   limit?: number;
 }): Promise<CompanyNewsItem[]> {
-  const now = Date.now();
-  if (liveFeedCache && (now - liveFeedCache.timestamp) < CACHE_TTL_MS) {
-    return filterFeed(liveFeedCache.items, options);
+  // Analiz edilen şirket kodu yoksa asla mock veri dönme, boş dizi dön
+  if (!options?.tickers || options.tickers.length === 0) {
+    return [];
   }
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
+  const normalizedTickers = [...new Set(
+    options.tickers.map(t => t.toUpperCase().trim()).filter(Boolean)
+  )];
 
-    const res = await fetch('https://bigpara.hurriyet.com.tr/haberler/kap-haberleri/', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
-      },
-      signal: controller.signal,
-      next: { revalidate: 60 }
+  if (normalizedTickers.length === 0) {
+    return [];
+  }
+
+  const cacheKey = `${normalizedTickers.sort().join(',')}_${options.category || 'ALL'}`;
+  const cached = liveFeedCache.get(cacheKey);
+  const now = Date.now();
+  if (cached && (now - cached.timestamp) < CACHE_TTL_MS) {
+    return filterFeed(cached.items, options);
+  }
+
+  const tickerSet = new Set(normalizedTickers);
+  const gatheredItems: CompanyNewsItem[] = [];
+
+  // ----------------------------------------------------
+  // Stream 1: Bigpara Canlı KAP Akışı (İlk 5 Sayfa Paralel)
+  // ----------------------------------------------------
+  try {
+    const pages = [1, 2, 3, 4, 5];
+    const bigparaPromises = pages.map(async page => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+        const res = await fetch(`https://bigpara.hurriyet.com.tr/haberler/kap-haberleri/?page=${page}`, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+          },
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!res.ok) return [];
+        const html = await res.text();
+        const cardRegex = /<div class="news-card">([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/gi;
+        let m;
+        const pageItems: Array<{
+          ticker: string;
+          rawTitle: string;
+          articleUrl: string;
+          articleId: string;
+          timeAgo: string;
+        }> = [];
+
+        while ((m = cardRegex.exec(html)) !== null) {
+          const cHtml = m[1];
+          const sMatch = cHtml.match(/data-symbol-id="([A-Z0-9]+)"/i);
+          const t = sMatch ? sMatch[1].toUpperCase() : null;
+
+          if (t && tickerSet.has(t)) {
+            const titleMatch = cHtml.match(/class="news-card__title"[^>]*>([\s\S]*?)<\/a>/i);
+            const linkMatch = cHtml.match(/href="(\/haberler\/kap-haberleri\/[^"]+_ID([0-9]+)\/)"/i);
+            const timeMatch = cHtml.match(/class="news-card__category-dot">･<\/span>\s*([^<]+)<\/span>/i);
+
+            if (titleMatch && linkMatch) {
+              pageItems.push({
+                ticker: t,
+                rawTitle: titleMatch[1].trim(),
+                articleUrl: 'https://bigpara.hurriyet.com.tr' + linkMatch[1],
+                articleId: linkMatch[2],
+                timeAgo: timeMatch ? timeMatch[1].trim() : 'Yeni'
+              });
+            }
+          }
+        }
+        return pageItems;
+      } catch {
+        return [];
+      }
     });
 
-    clearTimeout(timeoutId);
+    const streamMatches = (await Promise.all(bigparaPromises)).flat();
 
-    if (!res.ok) {
-      throw new Error(`KAP live feed HTTP ${res.status}`);
-    }
+    // Eşleşen bildirimlerin detay sayfalarından Ek Açıklamalar gövdesini çek
+    for (const matchItem of streamMatches.slice(0, 6)) {
+      try {
+        const bodyText = await fetchBigparaArticleBody(matchItem.articleUrl);
+        const cleanTitle = matchItem.rawTitle
+          .replace(/\*\*\*([A-Z0-9]+)\*\*\*\s*/i, '')
+          .replace(/\s*\([^\)]*\)\s*$/i, '')
+          .trim();
 
-    const html = await res.text();
-    const cardRegex = /<div class="news-card">([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/gi;
-    let match;
-    const liveItems: CompanyNewsItem[] = [];
+        const { category, categoryLabel, impact } = categorizeDisclosure(matchItem.rawTitle, bodyText);
+        const content = bodyText || cleanTitle;
+        const highlightedSummary = formatPriceSensitiveText(content);
 
-    while ((match = cardRegex.exec(html)) !== null) {
-      const cardHtml = match[1];
-
-      const symbolMatch = cardHtml.match(/data-symbol-id="([A-Z0-9]+)"/i);
-      const ticker = symbolMatch ? symbolMatch[1].toUpperCase() : null;
-
-      const titleMatch = cardHtml.match(/class="news-card__title"[^>]*>([\s\S]*?)<\/a>/i);
-      const rawTitle = titleMatch ? titleMatch[1].trim() : '';
-
-      const timeMatch = cardHtml.match(/class="news-card__category-dot">･<\/span>\s*([^<]+)<\/span>/i);
-      const timeAgo = timeMatch ? timeMatch[1].trim() : 'Yeni';
-
-      const linkMatch = cardHtml.match(/href="(\/haberler\/kap-haberleri\/[^"]+_ID([0-9]+)\/)"/i);
-      const articleId = linkMatch ? linkMatch[2] : null;
-
-      if (rawTitle) {
-        let parsedTicker = ticker;
-        let companyName = '';
-        let topic = rawTitle;
-
-        const titleRegex = /\*\*\*([A-Z0-9]+)\*\*\*\s*([^(]+)(?:\(([^)]+)\))?/i;
-        const parsedMatch = rawTitle.match(titleRegex);
-
-        if (parsedMatch) {
-          parsedTicker = parsedMatch[1].trim().toUpperCase();
-          companyName = parsedMatch[2].trim();
-          topic = parsedMatch[3] ? parsedMatch[3].trim() : parsedMatch[2].trim();
-        }
-
-        let category: CompanyNewsItem['category'] = 'GENERAL';
-        let categoryLabel = 'Genel Bildirim';
-        const lowerTopic = (topic + ' ' + rawTitle).toLowerCase();
-
-        if (lowerTopic.includes('geri al') || lowerTopic.includes('pay alım') || lowerTopic.includes('pay satım')) {
-          category = 'BUYBACK';
-          categoryLabel = 'Pay Geri Alımı';
-        } else if (lowerTopic.includes('kâr pay') || lowerTopic.includes('temettü') || lowerTopic.includes('kar pay')) {
-          category = 'DIVIDEND';
-          categoryLabel = 'Temettü';
-        } else if (lowerTopic.includes('finansal rapor') || lowerTopic.includes('bilanço') || lowerTopic.includes('faaliyet rapor') || lowerTopic.includes('faaliyet sonuç')) {
-          category = 'FINANCIALS';
-          categoryLabel = 'Finansal Rapor';
-        } else if (lowerTopic.includes('sözleşme') || lowerTopic.includes('yeni iş') || lowerTopic.includes('ihale') || lowerTopic.includes('sipariş')) {
-          category = 'CONTRACT';
-          categoryLabel = 'Yeni Sözleşme / İş';
-        } else if (lowerTopic.includes('yatırım') || lowerTopic.includes('kapasite') || lowerTopic.includes('tesis') || lowerTopic.includes('ruhsat') || lowerTopic.includes('satın alma')) {
-          category = 'INVESTMENT';
-          categoryLabel = 'Yatırım & Kapasite';
-        }
-
-        let impact: CompanyNewsItem['impact'] = 'NEUTRAL';
-        if (category === 'FINANCIALS' || category === 'DIVIDEND' || category === 'CONTRACT') {
-          impact = 'HIGH_IMPACT';
-        } else if (category === 'BUYBACK' || category === 'INVESTMENT') {
-          impact = 'POSITIVE';
-        }
-
-        const kapUrl = getKapCompanyDisclosuresUrl(parsedTicker || 'THYAO');
-
-        liveItems.push({
-          id: articleId ? `kap-live-${articleId}` : `kap-live-${liveItems.length + 1}`,
-          ticker: parsedTicker || 'BIST',
-          companyName: companyName || parsedTicker || 'Borsa İstanbul Şirketi',
-          title: topic,
-          summary: rawTitle.replace(/\*\*\*([A-Z0-9]+)\*\*\*\s*/i, ''),
+        gatheredItems.push({
+          id: `kap-stream-${matchItem.articleId}`,
+          ticker: matchItem.ticker,
+          companyName: getCompanyName(matchItem.ticker),
+          title: cleanTitle || matchItem.rawTitle,
+          summary: highlightedSummary,
           category,
           categoryLabel,
           source: 'KAP',
           publishDate: new Date().toISOString(),
+          timeAgo: matchItem.timeAgo,
+          impact,
+          url: getKapCompanyDisclosuresUrl(matchItem.ticker),
+          isLive: true
+        });
+      } catch {}
+    }
+  } catch {}
+
+  // ----------------------------------------------------------------------
+  // Stream 2: Hisse Bazlı Fiyat-Duyarlı (Price-Sensitive) KAP RSS Akışı
+  // ----------------------------------------------------------------------
+  const rssPromises = normalizedTickers.map(async ticker => {
+    try {
+      const q = `${ticker} ("KAP" OR "Kamuyu Aydınlatma") ("sözleşme" OR "milyon" OR "milyar" OR "ihale" OR "temettü" OR "bilanço" OR "kâr" OR "yatırım" OR "geri alım" OR "hisse")`;
+      const url = `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=tr&gl=TR&ceid=TR:tr`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) return [];
+      const xml = await res.text();
+      const items = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
+      const tickerResults: CompanyNewsItem[] = [];
+
+      for (const item of items) {
+        const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/i);
+        const pubDateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/i);
+        if (!titleMatch) continue;
+
+        const rawTitle = titleMatch[1].replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1').trim();
+        const cleanTitle = rawTitle.replace(/\s*-\s*[^-]+$/, '').trim();
+        const pubDate = pubDateMatch ? pubDateMatch[1] : new Date().toISOString();
+
+        if (!cleanTitle.toUpperCase().includes(ticker.toUpperCase())) continue;
+
+        // Daha önce Bigpara akışından eklenmişse çift kayıt oluşturma
+        const isDuplicate = gatheredItems.some(
+          g => g.ticker === ticker && g.title.toLowerCase() === cleanTitle.toLowerCase()
+        );
+        if (isDuplicate) continue;
+
+        const { category, categoryLabel, impact } = categorizeDisclosure(cleanTitle);
+        const timeAgo = calculateTimeAgo(pubDate);
+        const highlightedSummary = formatPriceSensitiveText(cleanTitle);
+
+        tickerResults.push({
+          id: `kap-rss-${ticker}-${tickerResults.length + 1}`,
+          ticker,
+          companyName: getCompanyName(ticker),
+          title: cleanTitle,
+          summary: highlightedSummary,
+          category,
+          categoryLabel,
+          source: 'KAP',
+          publishDate: new Date(pubDate).toISOString(),
           timeAgo,
           impact,
-          url: kapUrl,
-          isLive: true,
+          url: getKapCompanyDisclosuresUrl(ticker),
+          isLive: false
         });
+
+        if (tickerResults.length >= 4) break;
       }
+      return tickerResults;
+    } catch {
+      return [];
     }
+  });
 
-    if (liveItems.length > 0) {
-      // Canlı bildirimleri üstte, arkasına büyük BİST lokomotif şirket duyurularını ekleyip birleştir
-      const liveTickers = new Set(liveItems.map(i => i.ticker.toUpperCase()));
-      const remainingCurated = OFFICIAL_BIST_NEWS_FEED.filter(i => !liveTickers.has(i.ticker.toUpperCase()));
-      const merged = [...liveItems, ...remainingCurated];
+  const rssResults = (await Promise.all(rssPromises)).flat();
+  gatheredItems.push(...rssResults);
 
-      liveFeedCache = {
-        timestamp: Date.now(),
-        items: merged
-      };
+  // Tarihe göre yeniden eskiye sırala
+  gatheredItems.sort((a, b) => new Date(b.publishDate).getTime() - new Date(a.publishDate).getTime());
 
-      return filterFeed(merged, options);
-    }
-  } catch (err) {
-    // Ağ veya zaman aşımı durumunda güvenli yedek akış
-  }
+  // Önbelleğe al
+  liveFeedCache.set(cacheKey, {
+    timestamp: now,
+    items: gatheredItems
+  });
 
-  // Fallback: Çevrimdışı / hazır akış
-  return filterFeed(OFFICIAL_BIST_NEWS_FEED, options);
+  return filterFeed(gatheredItems, options);
 }
 
 function filterFeed(
@@ -401,7 +437,7 @@ export function getCompanyNewsFeed(options?: {
 }
 
 export function getNewsCategories(feed?: CompanyNewsItem[]): Array<{ id: string; label: string; count: number }> {
-  const activeFeed = feed && feed.length > 0 ? feed : OFFICIAL_BIST_NEWS_FEED;
+  const activeFeed = feed || [];
   const counts: Record<string, number> = {};
   activeFeed.forEach(item => {
     counts[item.category] = (counts[item.category] || 0) + 1;
