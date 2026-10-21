@@ -10,8 +10,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const resolved = await params;
   const cleanTicker = (resolved?.ticker || '').toUpperCase().trim();
   return {
-    title: `${cleanTicker} Simply Wall St Görünümü | Fair Value Terminal`,
-    description: `${cleanTicker} hissesi için Simply Wall St tarzı kar tanesi analizi ve görsel değerleme raporu.`,
+    title: `${cleanTicker} Radar Analizi | Fair Value Terminal`,
+    description: `${cleanTicker} hissesi için 360° radar analizi ve görsel değerleme raporu.`,
   };
 }
 

@@ -10,7 +10,7 @@ export interface CompanyNewsItem {
   publishDate: string;
   timeAgo: string;
   impact: 'POSITIVE' | 'NEUTRAL' | 'HIGH_IMPACT';
-  url?: string;
+  url: string;
 }
 
 export const OFFICIAL_BIST_NEWS_FEED: CompanyNewsItem[] = [
@@ -26,6 +26,7 @@ export const OFFICIAL_BIST_NEWS_FEED: CompanyNewsItem[] = [
     publishDate: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
     timeAgo: '18 dk önce',
     impact: 'POSITIVE',
+    url: 'https://www.kap.org.tr/tr/sirket-bilgileri/ozet/thyao',
   },
   {
     id: 'news-kap-02',
@@ -39,6 +40,7 @@ export const OFFICIAL_BIST_NEWS_FEED: CompanyNewsItem[] = [
     publishDate: new Date(Date.now() - 42 * 60 * 1000).toISOString(),
     timeAgo: '42 dk önce',
     impact: 'POSITIVE',
+    url: 'https://www.kap.org.tr/tr/sirket-bilgileri/ozet/froto',
   },
   {
     id: 'news-kap-03',
@@ -52,6 +54,7 @@ export const OFFICIAL_BIST_NEWS_FEED: CompanyNewsItem[] = [
     publishDate: new Date(Date.now() - 75 * 60 * 1000).toISOString(),
     timeAgo: '1 saat önce',
     impact: 'HIGH_IMPACT',
+    url: 'https://www.kap.org.tr/tr/sirket-bilgileri/ozet/tuprs',
   },
   {
     id: 'news-kap-04',
@@ -65,6 +68,7 @@ export const OFFICIAL_BIST_NEWS_FEED: CompanyNewsItem[] = [
     publishDate: new Date(Date.now() - 110 * 60 * 1000).toISOString(),
     timeAgo: '2 saat önce',
     impact: 'HIGH_IMPACT',
+    url: 'https://www.kap.org.tr/tr/sirket-bilgileri/ozet/asels',
   },
   {
     id: 'news-kap-05',
@@ -78,6 +82,7 @@ export const OFFICIAL_BIST_NEWS_FEED: CompanyNewsItem[] = [
     publishDate: new Date(Date.now() - 150 * 60 * 1000).toISOString(),
     timeAgo: '2.5 saat önce',
     impact: 'POSITIVE',
+    url: 'https://www.kap.org.tr/tr/sirket-bilgileri/ozet/agesa',
   },
   {
     id: 'news-kap-06',
@@ -91,6 +96,7 @@ export const OFFICIAL_BIST_NEWS_FEED: CompanyNewsItem[] = [
     publishDate: new Date(Date.now() - 210 * 60 * 1000).toISOString(),
     timeAgo: '3.5 saat önce',
     impact: 'POSITIVE',
+    url: 'https://www.kap.org.tr/tr/sirket-bilgileri/ozet/sise',
   },
   {
     id: 'news-kap-07',
@@ -104,6 +110,7 @@ export const OFFICIAL_BIST_NEWS_FEED: CompanyNewsItem[] = [
     publishDate: new Date(Date.now() - 290 * 60 * 1000).toISOString(),
     timeAgo: '5 saat önce',
     impact: 'NEUTRAL',
+    url: 'https://www.kap.org.tr/tr/sirket-bilgileri/ozet/bimas',
   },
   {
     id: 'news-kap-08',
@@ -117,6 +124,7 @@ export const OFFICIAL_BIST_NEWS_FEED: CompanyNewsItem[] = [
     publishDate: new Date(Date.now() - 360 * 60 * 1000).toISOString(),
     timeAgo: '6 saat önce',
     impact: 'POSITIVE',
+    url: 'https://www.kap.org.tr/tr/sirket-bilgileri/ozet/eregl',
   },
   {
     id: 'news-kap-09',
@@ -130,6 +138,7 @@ export const OFFICIAL_BIST_NEWS_FEED: CompanyNewsItem[] = [
     publishDate: new Date(Date.now() - 440 * 60 * 1000).toISOString(),
     timeAgo: '7 saat önce',
     impact: 'NEUTRAL',
+    url: 'https://www.kap.org.tr/tr/sirket-bilgileri/ozet/kchol',
   },
   {
     id: 'news-kap-10',
@@ -143,6 +152,7 @@ export const OFFICIAL_BIST_NEWS_FEED: CompanyNewsItem[] = [
     publishDate: new Date(Date.now() - 520 * 60 * 1000).toISOString(),
     timeAgo: '8 saat önce',
     impact: 'POSITIVE',
+    url: 'https://www.kap.org.tr/tr/sirket-bilgileri/ozet/ekgyo',
   },
   {
     id: 'news-kap-11',
@@ -156,6 +166,7 @@ export const OFFICIAL_BIST_NEWS_FEED: CompanyNewsItem[] = [
     publishDate: new Date(Date.now() - 600 * 60 * 1000).toISOString(),
     timeAgo: '10 saat önce',
     impact: 'POSITIVE',
+    url: 'https://www.kap.org.tr/tr/sirket-bilgileri/ozet/mpark',
   },
   {
     id: 'news-kap-12',
@@ -169,6 +180,7 @@ export const OFFICIAL_BIST_NEWS_FEED: CompanyNewsItem[] = [
     publishDate: new Date(Date.now() - 720 * 60 * 1000).toISOString(),
     timeAgo: '12 saat önce',
     impact: 'POSITIVE',
+    url: 'https://www.kap.org.tr/tr/sirket-bilgileri/ozet/logo',
   }
 ];
 
