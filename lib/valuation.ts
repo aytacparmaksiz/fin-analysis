@@ -1343,7 +1343,18 @@ export function calculateSectorScore(
   const anomalies: string[] = [];
   const conditionalWarnings: string[] = [];
 
-  const config = SECTOR_SCORING_CONFIG[sector];
+  const config = (SECTOR_SCORING_CONFIG && SECTOR_SCORING_CONFIG[sector])
+    ? SECTOR_SCORING_CONFIG[sector]
+    : (SECTOR_SCORING_CONFIG?.INDUSTRIAL || {
+        sector: 'INDUSTRIAL' as SectorType,
+        categories: [
+          { key: 'financial_health', name: 'Finansal Sağlık & Likidite', maxScore: 25, description: '' },
+          { key: 'capital_efficiency', name: 'Sermaye Verimliliği (ROIC > WACC)', maxScore: 25, description: '' },
+          { key: 'cash_flow_quality', name: 'Nakit Akış Kalitesi (OCF & FCF)', maxScore: 25, description: '' },
+          { key: 'growth_moat', name: 'Reel Büyüme & Rekabet Kalkanı (Moat)', maxScore: 25, description: '' }
+        ],
+        riskThresholds: { criticalDebtRatio: 4, minLiquidityRatio: 1, minMarginOfSafety: 20, idealMarginOfSafety: 30 }
+      });
 
   if (sector === 'INSURANCE') {
     // 1. Teknik Kârlılık & Kombine Oran (Max 25)
