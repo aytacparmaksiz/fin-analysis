@@ -1306,6 +1306,12 @@ export default function ValuationTerminal({
   const [analyzedTab, setAnalyzedTab] = useState<'ALL' | 'PORTFOLIO' | 'FAVORITES' | 'AL' | 'NÖTR' | 'ALMA'>('ALL');
   const [analyzedSearch, setAnalyzedSearch] = useState('');
 
+  // Rapor öncesi gezinti durumu (Geri butonuna basıldığında gelinen ekrana dönebilmek için)
+  const [previousNavState, setPreviousNavState] = useState<{
+    step: 'input' | 'review' | 'report' | 'leaderboard' | 'themes' | 'saved';
+    analyzedTab: 'ALL' | 'PORTFOLIO' | 'FAVORITES' | 'AL' | 'NÖTR' | 'ALMA';
+  }>({ step: 'saved', analyzedTab: 'ALL' });
+
   // Kullanıcı Oturum Durumu & Modallar
   const [userSession, setUserSession] = useState<UserSession | null>(null);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
@@ -1476,15 +1482,32 @@ export default function ValuationTerminal({
   }, []);
 
   const openReport = useCallback((reportId: string, tickerName?: string) => {
+    setStep((currentStep) => {
+      if (currentStep !== 'report') {
+        setPreviousNavState({ step: currentStep, analyzedTab });
+      }
+      return 'report';
+    });
     setActiveReportId(reportId);
-    setStep('report');
     const sym = tickerName || savedReports.find(r => r.id === reportId)?.ticker || '';
     if (sym && typeof window !== 'undefined') {
       const isSimply = window.location.pathname.startsWith('/simply');
       const targetPath = isSimply ? `/simply/${sym.toUpperCase()}` : `/analysis/${sym.toUpperCase()}`;
       window.history.pushState(null, '', targetPath);
     }
-  }, [savedReports]);
+  }, [savedReports, analyzedTab]);
+
+  const handleGoBack = useCallback(() => {
+    if (previousNavState && previousNavState.step !== 'report') {
+      setStep(previousNavState.step);
+      setAnalyzedTab(previousNavState.analyzedTab);
+      setActiveReportId(null);
+    } else {
+      setStep('saved');
+      setAnalyzedTab('ALL');
+      setActiveReportId(null);
+    }
+  }, [previousNavState]);
 
   const toggleSection = (sectionKey: string) => {
     setCollapsedSections(prev => ({
@@ -2109,6 +2132,13 @@ export default function ValuationTerminal({
       setError('Lütfen analiz etmek istediğiniz hisse kodunu yazın (Örn: AGESA, THYAO, EREGL).');
       return;
     }
+
+    setStep((currentStep) => {
+      if (currentStep !== 'report') {
+        setPreviousNavState({ step: currentStep, analyzedTab });
+      }
+      return currentStep;
+    });
 
     setLoading(true);
     setError(null);
@@ -4726,11 +4756,12 @@ export default function ValuationTerminal({
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
-                    onClick={() => { setStep('input'); setActiveReportId(null); }}
+                    onClick={handleGoBack}
                     className="px-3 py-1.5 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg border border-slate-800 text-sm font-semibold transition flex items-center gap-2 cursor-pointer"
+                    title="Geri Dön"
                   >
                     <ArrowLeft className="w-4 h-4" />
-                    <span>Yeni Analiz</span>
+                    <span>Geri</span>
                   </button>
                   <div className="h-5 w-px bg-slate-800" />
                   <span className="text-base font-black font-mono text-white">{activeReport.ticker}</span>
@@ -4748,19 +4779,14 @@ export default function ValuationTerminal({
                   <button
                     type="button"
                     onClick={handleCopyNotebookLM}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg border border-slate-800 transition cursor-pointer text-sm font-medium"
-                    title="Tüm Finansal Tabloları ve Raporu Markdown Olarak Kopyala"
+                    className="p-2 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg border border-slate-800 transition cursor-pointer flex items-center justify-center"
+                    title={copiedNotebookLM ? "Kopyalandı" : "Verileri Kopyala"}
+                    aria-label="Verileri Kopyala"
                   >
                     {copiedNotebookLM ? (
-                      <>
-                        <Check className="w-4 h-4 text-emerald-400" />
-                        <span className="text-emerald-400 font-semibold">Kopyalandı</span>
-                      </>
+                      <Check className="w-4 h-4 text-emerald-400" />
                     ) : (
-                      <>
-                        <Copy className="w-4 h-4 text-cyan-400" />
-                        <span className="hidden sm:inline">Verileri Kopyala (NotebookLM)</span>
-                      </>
+                      <Copy className="w-4 h-4 text-cyan-400" />
                     )}
                   </button>
 
@@ -4891,7 +4917,7 @@ export default function ValuationTerminal({
                           filtered.map((item, index) => (
                             <tr
                               key={item.id}
-                              onClick={() => { setActiveReportId(item.id); setStep('report'); }}
+                              onClick={() => openReport(item.id, item.ticker)}
                               className="hover:bg-slate-800/50 transition cursor-pointer"
                             >
                               <td className="p-3.5 pl-5 font-mono font-bold text-slate-400">
