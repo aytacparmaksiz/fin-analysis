@@ -11,6 +11,197 @@ export type SectorType =
   | 'HEALTHCARE'
   | 'TECH';
 
+export const SECTOR_TYPE_NAMES: Record<string, string> = {
+  AVIATION: 'Havacılık',
+  BANKING: 'Bankacılık',
+  INSURANCE: 'Sigortacılık',
+  HOLDING: 'Holding',
+  REIT: 'Gayrimenkul (GYO)',
+  RETAIL: 'Perakende',
+  UTILITIES_TELCO: 'Enerji & Telekom',
+  HEALTHCARE: 'Sağlık & İlaç',
+  TECH: 'Teknoloji & Yazılım',
+  FINANCIAL_SERVICES: 'Finansal Hizmetler',
+  INDUSTRIAL: 'Sanayi & İmalat',
+};
+
+export const BIST_COMPANY_SPECIFIC_SECTOR: Record<string, string> = {
+  // Havacılık
+  THYAO: 'Havacılık',
+  PGSUS: 'Havacılık',
+  TAVHL: 'Havalimanı & Hizmet',
+  CLEBI: 'Yer Hizmetleri',
+  
+  // Otomotiv
+  FROTO: 'Otomotiv Sanayii',
+  TOASO: 'Otomotiv Sanayii',
+  TTRAK: 'Traktör & Ziraat Mak.',
+  DOAS: 'Otomotiv Distribütörlük',
+  OTKAR: 'Ticari & Zırhlı Araç',
+  BFREN: 'Fren & Parça Sanayii',
+  BRISA: 'Lastik Sanayii',
+  GOODY: 'Lastik Sanayii',
+  TMSN: 'Motor & Traktör',
+
+  // Savunma
+  ASELS: 'Savunma Sanayii',
+  SDTTR: 'Savunma Teknolojileri',
+  ALTNY: 'Savunma Teknolojileri',
+  PAPIL: 'Güvenlik & Biyometri',
+
+  // Rafineri & Kimya
+  TUPRS: 'Petrol & Rafineri',
+  PETKM: 'Petrokimya',
+  AYGAZ: 'LPG Dağıtım',
+  SASA: 'Polyester & Elyaf',
+  HEKTS: 'Tarım Kimyasalları',
+  BAGFS: 'Gübre Sanayii',
+  GUBRF: 'Gübre Sanayii',
+  EGPRO: 'Plastik Profil',
+  ALKIM: 'Kimya Sanayii',
+
+  // Demir-Çelik & Metal
+  EREGL: 'Demir-Çelik',
+  KRDMD: 'Demir-Çelik',
+  KRDMA: 'Demir-Çelik',
+  KRDMB: 'Demir-Çelik',
+  ISDMR: 'Demir-Çelik',
+  CEMTS: 'Vasıflı Çelik',
+  BUCIM: 'Çimento & Çelik',
+
+  // Cam
+  SISE: 'Cam Sanayii',
+
+  // Perakende & Tüketim
+  BIMAS: 'Gıda Perakende',
+  MGROS: 'Gıda Perakende',
+  SOKM: 'Gıda Perakende',
+  BIZIM: 'Toptan & Perakende',
+
+  // Dayanıklı Tüketim
+  ARCLK: 'Beyaz Eşya & Elektronik',
+  VESBE: 'Beyaz Eşya Sanayii',
+  VESTL: 'Tüketici Elektroniği',
+
+  // Sağlık & İlaç
+  MPARK: 'Sağlık & Hastanecilik',
+  GENIL: 'İlaç & Sağlık',
+  SELEC: 'İlaç Dağıtım',
+  TRILC: 'İlaç Sanayii',
+  DEVA: 'İlaç Sanayii',
+  ECZYT: 'Sağlık & İlaç Yatırım',
+
+  // GYO
+  EKGYO: 'Gayrimenkul (GYO)',
+  TRGYO: 'Gayrimenkul (GYO)',
+  ISGYO: 'Gayrimenkul (GYO)',
+  OZKGY: 'Gayrimenkul (GYO)',
+  SNGYO: 'Gayrimenkul (GYO)',
+  VKGYO: 'Gayrimenkul (GYO)',
+  ALGYO: 'Gayrimenkul (GYO)',
+  KLGYO: 'Gayrimenkul (GYO)',
+  RYGYO: 'Gayrimenkul (GYO)',
+  KZGYO: 'Gayrimenkul (GYO)',
+
+  // Sigorta
+  AGESA: 'Sigortacılık & BES',
+  ANHYT: 'Sigortacılık & BES',
+  TURSG: 'Sigortacılık',
+  ANSGR: 'Sigortacılık',
+  AKGRT: 'Sigortacılık',
+  RAYSG: 'Sigortacılık',
+
+  // Banka
+  GARAN: 'Bankacılık',
+  AKBNK: 'Bankacılık',
+  ISCTR: 'Bankacılık',
+  YKBNK: 'Bankacılık',
+  VAKBN: 'Bankacılık',
+  HALKB: 'Bankacılık',
+  ALBRK: 'Katılım Bankacılığı',
+  SKBNK: 'Bankacılık',
+  TSKB: 'Kalkınma Bankacılığı',
+
+  // Holding
+  KCHOL: 'Holding',
+  SAHOL: 'Holding',
+  AGHOL: 'Holding',
+  DOHOL: 'Holding',
+  ALARK: 'Holding',
+  ENKAI: 'İnşaat & Taahhüt',
+  TKFEN: 'Taahhüt & Tarım',
+
+  // Telekomünikasyon
+  TCELL: 'Telekomünikasyon',
+  TTKOM: 'Telekomünikasyon',
+
+  // Enerji & Elektrik
+  AKSEN: 'Enerji Üretim',
+  ENJSA: 'Elektrik Dağıtım',
+  ASTOR: 'Trafo & Elektrik Ekipman',
+  CWENE: 'Güneş Enerjisi',
+  EUPWR: 'Elektrik Sistemleri',
+  GESAN: 'Elektrik & Mühendislik',
+  KONTR: 'Kontrol & Otomasyon',
+  GWIND: 'Rüzgar & Yenilenebilir',
+  CANTE: 'Termik Enerji',
+  ZOREN: 'Enerji',
+
+  // Teknoloji & Yazılım
+  LOGO: 'Yazılım & Bilişim',
+  MIATK: 'Bilişim & Savunma Yazılım',
+  VBTYZ: 'Kurumsal Yazılım',
+  ARDYZ: 'Bilişim Teknolojileri',
+  FONET: 'Sağlık Bilişim',
+  SMART: 'Yazılım Teknolojileri',
+  KFEIN: 'Bilişim Hizmetleri',
+  REEDR: 'Mobil Teknoloji',
+
+  // Çimento
+  OYAKC: 'Çimento Sanayii',
+  CIMSA: 'Çimento Sanayii',
+  AKCNS: 'Çimento Sanayii',
+  NUHCM: 'Çimento Sanayii',
+
+  // Gıda & İçecek
+  CCOLA: 'Meşrubat & İçecek',
+  AEFES: 'İçecek Sanayii',
+  ULKER: 'Gıda & Bisküvi',
+  TATGD: 'Konserve & Gıda',
+  PNSUT: 'Süt Ürünleri',
+
+  // Madencilik
+  KOZAL: 'Altın Madenciliği',
+  KOZAA: 'Madencilik',
+  IPEKE: 'Doğal Kaynaklar',
+};
+
+/**
+ * Şirketin Borsa İstanbul'daki resmi sektör adını kullanıcı dostu Türkçe olarak döndürür.
+ * Asla jenerik 'BIST' döndürmez.
+ */
+export function getCompanySectorDisplayName(ticker?: string, rawSector?: string): string {
+  if (ticker) {
+    const cleanTicker = ticker.trim().toUpperCase();
+    if (BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker]) {
+      return BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker];
+    }
+  }
+
+  if (rawSector) {
+    const cleanSector = rawSector.trim();
+    const upperSector = cleanSector.toUpperCase();
+    if (SECTOR_TYPE_NAMES[upperSector]) {
+      return SECTOR_TYPE_NAMES[upperSector];
+    }
+    if (cleanSector !== 'BIST' && upperSector !== 'INDUSTRIAL' && cleanSector.length > 2) {
+      return cleanSector;
+    }
+  }
+
+  return 'Sanayi & İmalat';
+}
+
 export type FinancialArchetype =
   | 'INDUSTRIAL'          // A) REEL SEKTÖR & SANAYİ (Otomotiv, Kimya, Çimento, Demir-Çelik, Teknoloji, Sağlık)
   | 'AVIATION'            // B) HAVACILIK & ULAŞTIRMA (TAVHL, THYAO, PGSUS)

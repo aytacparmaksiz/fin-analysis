@@ -10,6 +10,20 @@ export type InvestmentThemeId =
   | 'CASH_COW'
   | 'AVOID';
 
+/**
+ * Eşleşen temaların arayüzde her zaman sabit ve tutarlı bir hiyerarşik sırada listelenmesini sağlayan kanonik sıra:
+ * Nakit Kalesi (Defansif) -> Nakit Akışı -> Hızlı Büyüme -> Yüksek ROIC -> Varlık Zengini -> Toparlanma -> Uzak Dur / Riskli
+ */
+export const THEME_CANONICAL_ORDER: InvestmentThemeId[] = [
+  'DEFENSIVE',   // Nakit Kalesi
+  'CASH_COW',    // Nakit Akışı
+  'GROWTH',      // Hızlı Büyüme
+  'HIGH_ROIC',   // Yüksek ROIC
+  'DEEP_VALUE',  // Varlık Zengini
+  'TURNAROUND',  // Toparlanma
+  'AVOID',       // Uzak Dur / Riskli
+];
+
 export interface InvestmentThemeDefinition {
   id: InvestmentThemeId;
   name: string;
@@ -295,6 +309,13 @@ export function categorizeCompany(report: SavedReport): CompanyThemeMatch[] {
       metricValue: isValueTrap ? 'Değer Tuzağı' : isAlma ? 'ALMA Kararı' : 'Yüksek Risk',
     });
   }
+
+  // Tüm eşleşen temaları kanonik hiyerarşik sıraya göre sırala (tüm analizlerde her zaman aynı tutarlı sırada gösterilir)
+  matches.sort((a, b) => {
+    const idxA = THEME_CANONICAL_ORDER.indexOf(a.themeId);
+    const idxB = THEME_CANONICAL_ORDER.indexOf(b.themeId);
+    return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+  });
 
   return matches;
 }

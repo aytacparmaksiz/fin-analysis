@@ -44,7 +44,8 @@ import {
   SECTOR_DEFINITIONS,
   isMetricDisabled,
   getFinancialArchetype,
-  SECTOR_ARCHETYPE_CONFIGS
+  SECTOR_ARCHETYPE_CONFIGS,
+  getCompanySectorDisplayName
 } from '@/lib/sectors';
 
 import { SavedReport } from '@/lib/report-resolver';
@@ -4930,7 +4931,7 @@ export default function ValuationTerminal({
               const q = themeSearchTerm.trim().toUpperCase();
               displayedItems = displayedItems.filter(({ report, matches }) => 
                 report.ticker.toUpperCase().includes(q) ||
-                (report.sector || '').toUpperCase().includes(q) ||
+                getCompanySectorDisplayName(report.ticker, report.sector).toUpperCase().includes(q) ||
                 ((report as any).companyName || report.extractedData?.company_name || '').toUpperCase().includes(q) ||
                 matches.some(m => m.reason.toUpperCase().includes(q) || m.themeName.toUpperCase().includes(q))
               );
@@ -5052,9 +5053,6 @@ export default function ValuationTerminal({
                       <span className="text-slate-400 font-medium">Seçili Kapsam:</span>
                       <span className="text-white font-bold">Tüm Analiz Edilmiş Şirketler ({savedReports.length})</span>
                     </div>
-                    <span className="text-slate-400 text-xs hidden sm:inline">
-                      Birden fazla temaya tıklayarak kesişim (AND) filtrelemesi uygulayabilirsiniz.
-                    </span>
                   </div>
                 ) : (
                   <div className="p-4 rounded-2xl bg-[#1a1e26] border border-[#2e3440] flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shadow-md">
@@ -5158,7 +5156,7 @@ export default function ValuationTerminal({
                                   </div>
                                 </td>
                                 <td className="py-3 px-3 font-mono text-xs text-slate-300">
-                                  {report.sector || 'BIST'}
+                                  {getCompanySectorDisplayName(report.ticker, report.sector)}
                                 </td>
                                 <td className="py-3 px-3 text-right font-mono font-bold text-white">
                                   {priceNum > 0 ? `₺${priceNum.toFixed(2)}` : '—'}
@@ -5252,8 +5250,8 @@ export default function ValuationTerminal({
                           </div>
 
                           <div className="flex items-center justify-between text-xs font-mono">
-                            <span className="text-slate-400 text-[11px] truncate max-w-[75px]">
-                              {report.sector || 'BIST'}
+                            <span className="text-slate-400 text-[11px] truncate max-w-[120px]">
+                              {getCompanySectorDisplayName(report.ticker, report.sector)}
                             </span>
                             {discount !== null ? (
                               <span className={`font-bold ${discount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -5304,7 +5302,7 @@ export default function ValuationTerminal({
                                     {report.ticker}
                                   </span>
                                   <span className="text-xs text-slate-300 font-mono px-2 py-0.5 rounded bg-[#12151c] border border-[#2e3440]">
-                                    {report.sector || 'BIST'}
+                                    {getCompanySectorDisplayName(report.ticker, report.sector)}
                                   </span>
                                 </div>
                                 {companyName && (
@@ -5827,7 +5825,7 @@ export default function ValuationTerminal({
                                   </div>
                                 </td>
                                 <td className="py-3 px-3 font-mono text-xs text-slate-300">
-                                  {item.sector || 'BIST'}
+                                  {getCompanySectorDisplayName(item.ticker, item.sector)}
                                 </td>
                                 <td className="py-3 px-3 text-right font-mono font-bold text-white">
                                   {priceNum > 0 ? `₺${priceNum.toFixed(2)}` : '—'}
@@ -5932,8 +5930,8 @@ export default function ValuationTerminal({
                           </div>
 
                           <div className="flex items-center justify-between text-xs font-mono">
-                            <span className="text-slate-400 text-[11px] truncate max-w-[75px]">
-                              {item.sector || 'BIST'}
+                            <span className="text-slate-400 text-[11px] truncate max-w-[120px]">
+                              {getCompanySectorDisplayName(item.ticker, item.sector)}
                             </span>
                             {discount !== null ? (
                               <span className={`font-bold ${discount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -5998,7 +5996,7 @@ export default function ValuationTerminal({
                                     </span>
                                   )}
                                   <span className="text-xs font-mono text-slate-400 bg-[#12151c] px-2 py-0.5 rounded-md border border-[#2e3440]">
-                                    {item.sector || 'BIST'}
+                                    {getCompanySectorDisplayName(item.ticker, item.sector)}
                                   </span>
                                 </div>
                                 {companyName && (
