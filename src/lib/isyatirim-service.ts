@@ -469,10 +469,15 @@ export async function fetchIsYatirimCompanyDetails(rawTicker: string): Promise<I
     const divMatch = html.match(/<table[^>]*data-csvname=["']temettugercek["'][^>]*>([\s\S]*?)<\/table>/i);
     if (divMatch) {
       const rows = divMatch[1].match(/<tr[\s\S]*?<\/tr>/gi) || [];
+      const seenRowKey = new Set<string>();
       for (const row of rows) {
         const cells = (row.match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi) || []).map(c => c.replace(/<[^>]+>/g, '').trim());
         if (cells.length >= 8 && cells[0].toUpperCase() === ticker) {
           const dateStr = cells[1];
+          const rowKey = `${dateStr}_${cells[3]}`;
+          if (seenRowKey.has(rowKey)) continue;
+          seenRowKey.add(rowKey);
+
           const year = parseInt(dateStr.slice(-4), 10) || new Date().getFullYear();
           dividends.push({
             date: dateStr,

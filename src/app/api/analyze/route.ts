@@ -91,7 +91,8 @@ $$
 5. TEKİL NİHAİ KARAR KURALI:
    'Analist Kararı:' satırını SADECE raporun en sonunda (Bölüm VI altında) 1 kez yaz. Bölüm I (Yönetici Özeti) içinde 'Analist Kararı:' ifadesini tekrarlama.
 6. TİPOGRAFİK VE DİL YASAĞI:
-   'adil değer' (fair value) yerine asla 'adli değer' (adli tıp / adliye) YAZMA! Değerleme metinlerinde her zaman 'adil değer' kelimesini doğru yaz.
+   - 'adil değer' (fair value) yerine asla 'adli değer' (adli tıp / adliye) YAZMA! Değerleme metinlerinde her zaman 'adil değer' kelimesini doğru yaz.
+   - ASLA 'Temel Yatırım Tezi:' satırının hemen altına tek başına '|' veya boş tablo çizgisi YAZMA. 'Temel Yatırım Tezi:' her zaman en az 2-3 cümlelik tam ve analitik bir gerekçe paragrafı ile devam etmelidir.
 `;
 
     const universalSafetyRules = `

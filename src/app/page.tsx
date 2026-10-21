@@ -994,9 +994,23 @@ function parseVerdictNarrative(rawBody: string): ParsedVerdictNarrative {
   let catalysts = (catalystMatch ? catalystMatch[1] : '').trim();
   let risks = (riskMatch ? riskMatch[1] : '').trim();
 
-  thesis = thesis.replace(/^(?:Yatırım\s+Tezi|Gerekçe)\s*:\s*/i, '').trim();
-  catalysts = catalysts.replace(/^(?:Kilit\s+Katalizörler|Katalizörler)\s*:\s*/i, '').trim();
-  risks = risks.replace(/^(?:Riskler\s*(?:&|ve)\s*Emniyet\s*Marjı|Temel\s*Riskler)\s*:\s*/i, '').trim();
+  thesis = thesis.replace(/^(?:Yatırım\s+Tezi|Temel\s+Yatırım\s+Tezi|Gerekçe)\s*[:=-|]\s*/i, '').trim();
+  thesis = thesis.replace(/^[:=| \t]+/, '').trim();
+  if (thesis.replace(/[^a-zA-ZçğıöşüÇĞİÖŞÜ]/g, '').length < 8) {
+    thesis = '';
+  }
+
+  catalysts = catalysts.replace(/^(?:Kilit\s+Katalizörler|Katalizörler)\s*[:=-|]\s*/i, '').trim();
+  catalysts = catalysts.replace(/^[:=| \t]+/, '').trim();
+  if (catalysts.replace(/[^a-zA-ZçğıöşüÇĞİÖŞÜ]/g, '').length < 8) {
+    catalysts = '';
+  }
+
+  risks = risks.replace(/^(?:Riskler\s*(?:&|ve)\s*Emniyet\s*Marjı|Temel\s*Riskler)\s*[:=-|]\s*/i, '').trim();
+  risks = risks.replace(/^[:=| \t]+/, '').trim();
+  if (risks.replace(/[^a-zA-ZçğıöşüÇĞİÖŞÜ]/g, '').length < 8) {
+    risks = '';
+  }
 
   const isStructured = Boolean((thesisMatch && catalystMatch) || (thesisMatch && riskMatch) || (catalystMatch && riskMatch));
 
@@ -1019,6 +1033,9 @@ function preprocessReportMarkdown(text: string, valuation?: any): string {
   cleaned = cleaned.replace(/\[KIRMIZI BAYRAK\]/gi, 'Kritik Tespit:');
   cleaned = cleaned.replace(/\(\s*Storytelling\s*\)/gi, '');
   cleaned = cleaned.replace(/\bStorytelling\b/gi, 'Temel Yatırım Tezi');
+  // Bozuk / tek başına kalmış tablo çizgilerini ve "Temel Yatırım Tezi\n|" kalıntılarını temizle
+  cleaned = cleaned.replace(/(?:^|\n)\s*(?:Temel\s+Yatırım\s+Tezi|Yatırım\s+Tezi)\s*[:=-]?\s*\n\s*\|[ \t]*(?:\n|$)/gi, '\n');
+  cleaned = cleaned.replace(/^\s*\|\s*$/gm, '');
   cleaned = cleaned.replace(/\(\s*Filme Bakış\s*:?\s*[^)]*\)/gi, '(Çok Yıllı Dönemsel Eğilim)');
   cleaned = cleaned.replace(/\bbancassurance\b/gi, 'banka sigortacılığı');
   cleaned = cleaned.replace(/\bVAFÖK\b/g, 'FAVÖK');

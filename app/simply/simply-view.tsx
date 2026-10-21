@@ -354,18 +354,26 @@ interface ParsedVerdictNarrative {
 function cleanSnippet(text: string, maxLen = 260): string {
   if (!text) return '';
   let s = text
-    .replace(/^[\s\*\#\-\>:]+/, '')
+    .replace(/^[\s\*\#\-\>:|]+/, '')
+    .replace(/[\s\*\#\-\>:|]+$/, '')
     .replace(/###?\s+[^\n]+/g, ' ')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*([^*]+)\*/g, '$1')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/\|[^\n]+\|/g, ' ')
+    .replace(/\|/g, ' ')
     .replace(/\$\$[\s\S]*?\$\$/g, ' ')
     .replace(/\\\([\s\S]*?\\\)/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
-  s = s.replace(/^(?:Bölüm Özeti|Yatırım Tezi|Temel Yatırım Tezi|Kilit Katalizörler|Riskler)\s*[:=-]\s*/i, '').trim();
+  s = s.replace(/^(?:Bölüm Özeti|Yatırım Tezi|Temel Yatırım Tezi|Kilit Katalizörler|Riskler)\s*[:=-|]\s*/i, '').trim();
+  s = s.replace(/^[:=| \t]+/, '').trim();
+
+  // Yeterli harf veya anlamlı kelime yoksa (örn. sadece '|' veya '---'), geçersiz sayıp boşa çıkar
+  if (s.replace(/[^a-zA-ZçğıöşüÇĞİÖŞÜ]/g, '').length < 8) {
+    return '';
+  }
 
   if (s.length > maxLen) {
     const dotIdx = s.indexOf('.', maxLen - 60);
@@ -477,6 +485,9 @@ function cleanMarkdown(text: string): string {
   cleaned = cleaned.replace(/\[KIRMIZI BAYRAK\]/gi, 'Kritik Tespit:');
   cleaned = cleaned.replace(/\(\s*Storytelling\s*\)/gi, '');
   cleaned = cleaned.replace(/\bStorytelling\b/gi, 'Temel Yatırım Tezi');
+  // Bozuk / tek başına kalmış tablo çizgilerini ve "Temel Yatırım Tezi\n|" kalıntılarını temizle
+  cleaned = cleaned.replace(/(?:^|\n)\s*(?:Temel\s+Yatırım\s+Tezi|Yatırım\s+Tezi)\s*[:=-]?\s*\n\s*\|[ \t]*(?:\n|$)/gi, '\n');
+  cleaned = cleaned.replace(/^\s*\|\s*$/gm, '');
   cleaned = cleaned.replace(/^(?:###|\#)\s*(I{1,3}|IV|V|VI{1,3}|IX|X)[\.\:\s\-]+(.*)$/gim, '## $1. $2');
   cleaned = cleaned.replace(/\\\\\[([\s\S]*?)\\\\\]/g, (_m, g1) => `\n\n$$\n${g1.trim()}\n$$\n\n`);
   cleaned = cleaned.replace(/\$\$([\s\S]*?)\$\$/g, (_match: string, inner: string) => {
@@ -1570,10 +1581,10 @@ export default function SimplyView({
         {/* ========================================================================= */}
         {/* SOL YÖNLENDİRİCİ PANEL (AUTHENTIC SIMPLY WALL ST FREEZE PANE SIDEBAR)       */}
         {/* ========================================================================= */}
-        <aside className="w-56 xl:w-60 flex-shrink-0 hidden lg:block sticky top-16 self-start z-20">
-          <div className="flex flex-col space-y-3.5 select-none pr-1">
+        <aside className="w-60 xl:w-64 flex-shrink-0 hidden lg:block sticky top-16 self-start z-20 pl-2 lg:pl-4">
+          <div className="flex flex-col space-y-3.5 select-none px-1">
             {/* Kar Tanesi Radarı (Freeze Pane Sabit Menü) */}
-            <div className="flex flex-col items-start pt-0.5">
+            <div className="flex flex-col items-center justify-center pt-0.5 w-full">
               <SnowflakeRadar
                 axes={snowflake.axes}
                 ticker={report.ticker}
@@ -1583,7 +1594,7 @@ export default function SimplyView({
               />
 
               {/* Ticker & Şirket Bilgisi */}
-              <div className="text-left mt-2 space-y-0.5 w-full">
+              <div className="text-center mt-2 space-y-0.5 w-full">
                 <h3 className="font-sans text-[15px] font-bold text-white tracking-tight line-clamp-1" title={profile.fullName}>
                   {getCleanCompanyName(profile.fullName, report.ticker)}
                 </h3>
@@ -1597,13 +1608,13 @@ export default function SimplyView({
             </div>
 
             {/* Butonlar: + Portföy, ★ (İzleme / Favori) */}
-            <div className="flex items-center gap-2 pt-1 pb-1 w-full">
+            <div className="grid grid-cols-2 gap-2 pt-1 pb-1 w-full">
               <button
                 type="button"
                 onClick={() => {
                   if (onTogglePortfolio) onTogglePortfolio(report.ticker);
                 }}
-                className={`py-1.5 px-3 text-xs font-bold rounded-md transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm ${
+                className={`py-1.5 px-2 text-xs font-bold rounded-md transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm w-full ${
                   isInPortfolio
                     ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold'
                     : 'bg-[#f5c242] hover:bg-[#e5b332] text-slate-950 font-bold'
@@ -1618,7 +1629,7 @@ export default function SimplyView({
                 onClick={() => {
                   if (onToggleFavorite) onToggleFavorite(report.ticker);
                 }}
-                className={`p-1.5 text-xs font-semibold rounded-md border transition cursor-pointer flex items-center justify-center ${
+                className={`py-1.5 px-2 text-xs font-semibold rounded-md border transition cursor-pointer flex items-center justify-center gap-1.5 w-full ${
                   isFavorite
                     ? 'bg-amber-400/20 text-amber-300 border-amber-400/50 hover:bg-amber-400/30'
                     : 'bg-[#1e2229] hover:bg-[#282e38] text-slate-400 hover:text-white border-[#2e3440]'
@@ -1626,11 +1637,12 @@ export default function SimplyView({
                 title={isFavorite ? 'Favorilerden Çıkar' : 'Favorilere Ekle'}
               >
                 <span className={`text-sm leading-none ${isFavorite ? 'text-amber-400 font-bold' : ''}`}>★</span>
+                <span className="text-xs">{isFavorite ? 'İzleniyor' : 'İzle'}</span>
               </button>
             </div>
 
-            {/* 10 Sekme Listesi (Arkası Kartsız, Sade ve Ekrana Tam Sığan Menü) */}
-            <nav className="space-y-1 pt-1 border-t border-[#282d37]/40">
+            {/* 10 Sekme Listesi (Arkası Kartsız, Dengeli ve Sıkışmayan Menü) */}
+            <nav className="space-y-1 pt-1 border-t border-[#282d37]/40 w-full">
               {NAVIGATION_ITEMS.map((item) => {
                 const isActive = activeSection === item.id;
 
@@ -1639,14 +1651,14 @@ export default function SimplyView({
                     key={item.id}
                     type="button"
                     onClick={() => scrollToSection(item.id)}
-                    className={`w-full flex items-center gap-2 py-1.5 px-2 rounded-md text-[13.5px] transition cursor-pointer text-left ${
+                    className={`w-full flex items-center gap-2.5 py-1.5 px-3 rounded-md text-[13.5px] transition cursor-pointer text-left ${
                       isActive
-                        ? 'text-white font-bold border-l-2 border-[#f5c242] pl-2 -ml-[2px]'
+                        ? 'bg-white/[0.06] text-white font-bold border-l-2 border-[#f5c242] pl-2.5 shadow-sm'
                         : 'text-slate-400 hover:text-white hover:bg-white/[0.04] font-medium'
                     }`}
                   >
                     {item.num && (
-                      <span className="font-mono text-xs text-slate-400 w-3 text-left">
+                      <span className="font-mono text-xs text-slate-400 w-3.5 text-left">
                         {item.num}
                       </span>
                     )}
@@ -3869,22 +3881,64 @@ export default function SimplyView({
                 );
               }
 
-              const latestDiv = dividends[0];
+              // Çift kayıtları (HTML kazıma tekrarları) temizle
+              const uniqueDividends: any[] = [];
+              const seenDivKey = new Set<string>();
+              for (const d of dividends) {
+                const key = `${d.date || ''}_${d.perShareTl ?? d.hisseBasi ?? ''}`;
+                if (!seenDivKey.has(key)) {
+                  seenDivKey.add(key);
+                  uniqueDividends.push(d);
+                }
+              }
+
+              const latestDiv = uniqueDividends[0] || dividends[0];
               const latestYield = latestDiv.yieldPct ?? 0;
               const latestPerShare = latestDiv.perShareTl ?? 0;
               const latestPayout = latestDiv.payoutRatioPct ?? 0;
-              const totalPayoutCount = dividends.length;
+              const totalPayoutCount = uniqueDividends.length;
 
-              // Grafik verisi (kronolojik, eskiden yeniye)
-              const chartDataChronological = [...dividends].reverse().map(d => ({
-                tarih: d.date ? d.date.slice(-4) : String(d.year || ''),
-                fullDate: d.date,
-                verim: d.yieldPct ?? 0,
-                hisseBasi: d.perShareTl ?? 0,
-                dagitmaOrani: Math.min(200, d.payoutRatioPct ?? 0)
-              }));
+              // Yıllık Dağıtım Döngüsü (Aynı yıl içindeki taksitleri topla ve yılı tekilleştir)
+              const yearlyAggMap = new Map<string, {
+                tarih: string;
+                fullDate: string;
+                verim: number;
+                hisseBasi: number;
+                dagitmaOrani: number;
+                count: number;
+              }>();
 
-              const displayedDividends = showAllDividends ? dividends : dividends.slice(0, 5);
+              // Eskiden yeniye kronolojik sırayla grupla
+              const reversedDivs = [...uniqueDividends].reverse();
+              for (const d of reversedDivs) {
+                const yr = d.year ? String(d.year) : (d.date ? d.date.slice(-4) : '');
+                if (!yr || yr.length !== 4) continue;
+
+                const itemYield = Number(d.yieldPct ?? 0);
+                const itemPerShare = Number(d.perShareTl ?? 0);
+                const itemPayout = Number(d.payoutRatioPct ?? 0);
+
+                const existing = yearlyAggMap.get(yr);
+                if (!existing) {
+                  yearlyAggMap.set(yr, {
+                    tarih: yr,
+                    fullDate: d.date ? `${yr} (${d.date})` : yr,
+                    verim: itemYield,
+                    hisseBasi: itemPerShare,
+                    dagitmaOrani: Math.min(200, itemPayout),
+                    count: 1
+                  });
+                } else {
+                  existing.count += 1;
+                  existing.verim += itemYield;
+                  existing.hisseBasi += itemPerShare;
+                  existing.dagitmaOrani = Math.min(200, Math.max(existing.dagitmaOrani, itemPayout));
+                  existing.fullDate = `${yr} (${existing.count} Dağıtım Toplamı)`;
+                }
+              }
+
+              const chartDataChronological = Array.from(yearlyAggMap.values());
+              const displayedDividends = showAllDividends ? uniqueDividends : uniqueDividends.slice(0, 5);
 
               return (
                 <div className="space-y-6">
@@ -4293,10 +4347,11 @@ export default function SimplyView({
               <button
                 type="button"
                 onClick={handleCopyReportText}
-                className="px-3.5 py-1.5 bg-[#21262d] hover:bg-[#2b313d] text-slate-200 hover:text-white rounded-lg border border-[#2e3440] text-sm font-semibold flex items-center gap-2 transition cursor-pointer"
+                className="p-2 bg-[#21262d] hover:bg-[#2b313d] text-slate-200 hover:text-white rounded-lg border border-[#2e3440] transition cursor-pointer flex items-center justify-center"
+                title={copiedReport ? "Kopyalandı" : "Raporu Kopyala"}
+                aria-label="Raporu Kopyala"
               >
                 {copiedReport ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-cyan-400" />}
-                <span>{copiedReport ? 'Kopyalandı' : 'Raporu Kopyala'}</span>
               </button>
             </div>
 
