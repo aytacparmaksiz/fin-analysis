@@ -14,7 +14,7 @@ import {
   Trophy, Award, Trash2, ArrowUpDown, Filter, Copy, Percent, PieChart, Info,
   PanelLeftClose, PanelLeftOpen, Pin, PinOff, Bookmark, Building2,
   Check, Rocket, Gem, Shield, Sun, Moon, Compass, SlidersHorizontal, Scale, ArrowRight, ArrowLeft, Sparkles,
-  Briefcase, Star, Bell, User, LogOut, LayoutGrid, List, Grid, Lock, Newspaper, Radio, ExternalLink
+  Briefcase, Star, Bell, User, LogOut, LayoutGrid, List, Grid, Lock, Newspaper, Radio, ExternalLink, Coins, Megaphone
 } from 'lucide-react';
 
 import LoginModal, { type UserSession } from './components/login-modal';
@@ -1321,6 +1321,7 @@ export default function ValuationTerminal({
   const [newsCategoryFilter, setNewsCategoryFilter] = useState<string>('ALL');
   const [newsSearchTerm, setNewsSearchTerm] = useState<string>('');
   const [liveNewsFeed, setLiveNewsFeed] = useState<CompanyNewsItem[]>([]);
+  const [selectedDisclosure, setSelectedDisclosure] = useState<CompanyNewsItem | null>(null);
   const [isFeedLoading, setIsFeedLoading] = useState<boolean>(false);
   const [lastFeedSync, setLastFeedSync] = useState<Date | null>(null);
 
@@ -5575,61 +5576,59 @@ export default function ValuationTerminal({
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {newsFeed.map((item) => {
-                        const impactBadge = item.impact === 'POSITIVE'
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                          : item.impact === 'HIGH_IMPACT'
-                          ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                          : 'bg-slate-500/10 text-slate-300 border-slate-500/30';
+                        const iconEl = item.category === 'FINANCIALS' ? (
+                          <FileText className="w-4 h-4 text-emerald-400" />
+                        ) : item.category === 'DIVIDEND' ? (
+                          <Coins className="w-4 h-4 text-emerald-400" />
+                        ) : item.category === 'CONTRACT' ? (
+                          <Briefcase className="w-4 h-4 text-emerald-400" />
+                        ) : item.category === 'BUYBACK' ? (
+                          <RefreshCw className="w-4 h-4 text-emerald-400" />
+                        ) : item.category === 'INVESTMENT' ? (
+                          <Building2 className="w-4 h-4 text-emerald-400" />
+                        ) : (
+                          <Megaphone className="w-4 h-4 text-slate-400" />
+                        );
 
-                        const impactLabel = item.impact === 'POSITIVE'
-                          ? 'Pozitif'
-                          : item.impact === 'HIGH_IMPACT'
-                          ? 'Önemli'
-                          : 'Nötr';
+                        const iconBg = item.category === 'GENERAL'
+                          ? 'bg-slate-800/60 border-slate-700/60'
+                          : 'bg-emerald-500/10 border-emerald-500/30';
 
                         return (
                           <div
                             key={item.id}
-                            className="bg-[#1a1e26] hover:bg-[#21262d] border border-[#2e3440] hover:border-sky-500/40 rounded-2xl p-5 transition flex flex-col justify-between space-y-3.5 shadow-lg group"
+                            onClick={() => setSelectedDisclosure(item)}
+                            className="bg-[#181c24] hover:bg-[#1f242e] border border-[#2e3440] hover:border-emerald-500/40 rounded-2xl p-4 transition cursor-pointer flex items-start gap-3.5 group shadow-md"
                           >
-                            <div className="space-y-2.5">
-                              {/* Üst Bilgi Satırı: Ticker, Şirket Adı, Kaynak & Zaman */}
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenOrAnalyzeTicker(item.ticker)}
-                                    className="font-mono font-black text-base text-white group-hover:text-sky-400 transition hover:underline cursor-pointer"
-                                    title={`${item.ticker} Analiz Raporunu Aç`}
-                                  >
-                                    {item.ticker}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenOrAnalyzeTicker(item.ticker)}
-                                    className="text-xs text-slate-400 hover:text-white font-sans truncate max-w-[170px] cursor-pointer text-left"
-                                  >
-                                    {item.companyName}
-                                  </button>
-                                </div>
+                            {/* Sol Dairesel İkon (Image 2) */}
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 border ${iconBg}`}>
+                              {iconEl}
+                            </div>
 
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-[#12151c] text-sky-400 border border-[#2e3440]">
-                                    {item.source}
-                                  </span>
-                                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold border ${impactBadge}`}>
-                                    {impactLabel}
-                                  </span>
-                                </div>
+                            {/* Sağ İçerik Alanı */}
+                            <div className="flex-1 min-w-0 space-y-1.5">
+                              {/* Üst Satır: Ticker • Kategori • Zaman (Image 2) */}
+                              <div className="flex items-center gap-2 flex-wrap text-xs">
+                                <span className="font-mono font-black text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                                  {item.ticker}
+                                </span>
+                                <span className="text-slate-500 text-xs">•</span>
+                                <span className="font-sans font-medium text-slate-300 text-xs">
+                                  {item.categoryLabel}
+                                </span>
+                                <span className="text-slate-500 text-xs">•</span>
+                                <span className="font-sans text-slate-400 text-xs">
+                                  {item.timeAgo}
+                                </span>
                               </div>
 
-                              {/* Haber Başlığı */}
-                              <h3 className="text-sm font-bold text-white font-sans group-hover:text-sky-200 transition leading-snug">
+                              {/* Başlık (Temiz, net, kurumsal başlık) */}
+                              <h3 className="text-sm font-bold text-white font-sans group-hover:text-emerald-300 transition leading-snug">
                                 {item.title}
                               </h3>
 
-                              {/* Haber Özeti (Fiyat-Duyarlı Metrik Vurgulu) */}
-                              <p className="text-xs text-slate-300 font-sans leading-relaxed">
+                              {/* Kilit Özet (Fiyat-Duyarlı Metrik Vurgulu, Başlığın Tekrarı ASLA Değil) */}
+                              <p className="text-xs text-slate-400 font-sans leading-relaxed line-clamp-3">
                                 {(() => {
                                   if (!item.summary) return null;
                                   const parts = item.summary.split(/(\*\*[^*]+\*\*)/g);
@@ -5646,29 +5645,265 @@ export default function ValuationTerminal({
                                 })()}
                               </p>
                             </div>
-
-                            {/* Alt Bilgi & Aksiyon */}
-                            <div className="pt-3 border-t border-[#2e3440]/60 flex items-center justify-between text-xs">
-                              <div className="flex items-center gap-2 text-slate-400 font-mono text-[11px]">
-                                <span className="px-2 py-0.5 rounded bg-[#12151c] border border-[#2e3440] text-slate-300">
-                                  {item.categoryLabel}
-                                </span>
-                                <span>•</span>
-                                <span>{item.timeAgo}</span>
-                              </div>
-
-                              <a
-                                href={item.url || getKapCompanyDisclosuresUrl(item.ticker)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-1.5 text-xs font-bold text-sky-400 hover:text-white transition cursor-pointer font-sans"
-                              >
-                                <span>Bildirim →</span>
-                              </a>
-                            </div>
                           </div>
                         );
                       })}
+                    </div>
+                  )}
+
+                  {/* Detay Pop-Up Modal (Image 3) */}
+                  {selectedDisclosure && (
+                    <div
+                      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+                      onClick={() => setSelectedDisclosure(null)}
+                    >
+                      <div
+                        className="bg-[#12151c] border border-[#2e3440] rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl relative flex flex-col md:flex-row gap-6 p-6 sm:p-8"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {/* Kapat Butonu */}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDisclosure(null)}
+                          className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-white bg-[#1a1e26] border border-[#2e3440] hover:bg-[#252b36] transition cursor-pointer z-10"
+                          title="Kapat"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+
+                        {/* Sol / Ana Kolon (%65) */}
+                        <div className="flex-1 space-y-5">
+                          {/* Şirket Başlığı ve Üst Bilgi */}
+                          <div className="flex items-center gap-3">
+                            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500 to-sky-600 flex items-center justify-center font-black font-mono text-white text-sm shadow-md">
+                              {selectedDisclosure.ticker.slice(0, 2)}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-base font-bold text-white font-sans">
+                                  {selectedDisclosure.companyName}
+                                </h4>
+                                <span className="font-mono text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                                  BIST:{selectedDisclosure.ticker}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-400 font-sans mt-0.5">
+                                {selectedDisclosure.categoryLabel} • {selectedDisclosure.timeAgo}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Büyük Başlık */}
+                          <h2 className="text-xl sm:text-2xl font-bold font-sans text-white tracking-tight leading-tight">
+                            {selectedDisclosure.title}
+                          </h2>
+
+                          {/* Kilit Çıkarımlar & Yapılandırılmış Maddeler (Image 3 tarzı) */}
+                          <div className="space-y-3 pt-2">
+                            <h5 className="text-xs font-bold font-mono uppercase tracking-wider text-slate-400">
+                              Kilit Noktalar & Finansal Etki
+                            </h5>
+                            <div className="space-y-2.5">
+                              {selectedDisclosure.keyTakeaways && selectedDisclosure.keyTakeaways.length > 0 ? (
+                                selectedDisclosure.keyTakeaways.map((bullet, idx) => (
+                                  <div key={idx} className="flex items-start gap-2.5 text-sm text-slate-300 leading-relaxed font-sans bg-[#181c24] p-3 rounded-xl border border-[#2e3440]/80">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400 mt-2 shrink-0" />
+                                    <span>
+                                      {(() => {
+                                        const parts = bullet.split(/(\*\*[^*]+\*\*)/g);
+                                        return parts.map((part, pIdx) => {
+                                          if (part.startsWith('**') && part.endsWith('**')) {
+                                            return (
+                                              <strong key={pIdx} className="font-bold text-white bg-slate-800/90 px-1 py-0.5 rounded border border-slate-700/60 inline-block my-0.5">
+                                                {part.slice(2, -2)}
+                                              </strong>
+                                            );
+                                          }
+                                          return part;
+                                        });
+                                      })()}
+                                    </span>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="flex items-start gap-2.5 text-sm text-slate-300 leading-relaxed font-sans bg-[#181c24] p-3 rounded-xl border border-[#2e3440]/80">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-400 mt-2 shrink-0" />
+                                  <span>{selectedDisclosure.summary}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Açıklama / Özet Kartı */}
+                          <div className="p-4 rounded-xl bg-[#181c24] border border-[#2e3440] text-xs text-slate-300 font-sans leading-relaxed">
+                            <p className="text-slate-400 text-[11px] font-mono mb-1.5 uppercase font-bold">KAP Açıklama Özeti:</p>
+                            {(() => {
+                              const parts = selectedDisclosure.summary.split(/(\*\*[^*]+\*\*)/g);
+                              return parts.map((part, pIdx) => {
+                                if (part.startsWith('**') && part.endsWith('**')) {
+                                  return (
+                                    <strong key={pIdx} className="font-bold text-white bg-slate-800/90 px-1 py-0.5 rounded border border-slate-700/60 inline-block my-0.5">
+                                      {part.slice(2, -2)}
+                                    </strong>
+                                  );
+                                }
+                                return part;
+                              });
+                            })()}
+                          </div>
+
+                          {/* Alt Butonlar */}
+                          <div className="pt-3 border-t border-[#2e3440] flex items-center gap-3 flex-wrap">
+                            <a
+                              href={selectedDisclosure.url || getKapCompanyDisclosuresUrl(selectedDisclosure.ticker)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-sans font-bold text-xs transition cursor-pointer shadow-lg shadow-sky-600/20"
+                            >
+                              <span>KAP Resmi Bildirimi Aç</span>
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const t = selectedDisclosure.ticker;
+                                setSelectedDisclosure(null);
+                                handleOpenOrAnalyzeTicker(t);
+                              }}
+                              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#1a1e26] hover:bg-[#252b36] border border-[#2e3440] text-slate-200 hover:text-white font-sans font-bold text-xs transition cursor-pointer"
+                            >
+                              <span>{selectedDisclosure.ticker} Şirket Raporuna Git</span>
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Sağ Yan Kolon (%35) - Şirket Kartı & İlgili Gelişmeler (Image 3) */}
+                        <div className="w-full md:w-80 shrink-0 space-y-4 pt-4 md:pt-0 md:border-l md:border-[#2e3440] md:pl-6">
+                          {/* Şirket Mini Değerleme Kartı */}
+                          {(() => {
+                            const report = savedReports.find(r => (r.ticker || '').toUpperCase() === selectedDisclosure.ticker.toUpperCase());
+                            const priceNum = report ? parseFloat(report.price || '0') || 0 : 0;
+                            const fairVal = report ? parseFloat(report.fairValue || '0') || 0 : 0;
+                            const discount = (fairVal > 0 && priceNum > 0)
+                              ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))
+                              : null;
+                            return (
+                              <div className="p-4 rounded-xl bg-[#181c24] border border-[#2e3440] space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <span className="font-mono font-black text-sm text-white">
+                                      {selectedDisclosure.ticker}
+                                    </span>
+                                    <p className="text-[11px] text-slate-400 font-sans truncate max-w-[160px]">
+                                      {selectedDisclosure.companyName}
+                                    </p>
+                                  </div>
+                                  {report?.decision && (
+                                    <span className={`px-2.5 py-1 rounded-md text-xs font-mono font-bold border ${
+                                      report.decision === 'AL'
+                                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                        : report.decision === 'ALMA'
+                                        ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                                        : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                                    }`}>
+                                      {report.decision}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {report ? (
+                                  <div className="space-y-2 pt-2 border-t border-[#2e3440]/60 text-xs">
+                                    <div className="flex items-center justify-between text-slate-400">
+                                      <span>Güncel Fiyat:</span>
+                                      <span className="font-mono font-bold text-white">₺{report.price ?? '—'}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-slate-400">
+                                      <span>Adil Değer:</span>
+                                      <span className="font-mono font-bold text-emerald-400">₺{report.fairValue ?? '—'}</span>
+                                    </div>
+                                    {discount != null && (
+                                      <div className="flex items-center justify-between text-slate-400">
+                                        <span>Potansiyel:</span>
+                                        <span className={`font-mono font-bold ${discount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                          {discount >= 0 ? `+%${discount}` : `-%${Math.abs(discount)}`}
+                                        </span>
+                                      </div>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const t = selectedDisclosure.ticker;
+                                        setSelectedDisclosure(null);
+                                        handleOpenOrAnalyzeTicker(t);
+                                      }}
+                                      className="w-full mt-2 py-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold font-sans transition cursor-pointer flex items-center justify-center gap-1.5"
+                                    >
+                                      <span>Şirket Analizine Git</span>
+                                      <ChevronRight className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="pt-2 border-t border-[#2e3440]/60 space-y-2">
+                                    <p className="text-xs text-slate-400 font-sans">
+                                      Bu hisse henüz detaylı finansal analize alınmadı.
+                                    </p>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const t = selectedDisclosure.ticker;
+                                        setSelectedDisclosure(null);
+                                        handleOpenOrAnalyzeTicker(t);
+                                      }}
+                                      className="w-full py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold font-sans transition cursor-pointer"
+                                    >
+                                      Analiz Başlat
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+                          {/* Son Bildirimler / İlgili Gelişmeler Listesi */}
+                          <div className="space-y-2.5">
+                            <h5 className="text-xs font-bold font-mono uppercase tracking-wider text-slate-400">
+                              Diğer Şirket Bildirimleri
+                            </h5>
+                            {(() => {
+                              const otherUpdates = newsFeed.filter(n => n.id !== selectedDisclosure.id);
+                              if (otherUpdates.length === 0) {
+                                return (
+                                  <p className="text-xs text-slate-500 font-sans">Başka bildirim bulunmuyor.</p>
+                                );
+                              }
+                              return (
+                                <div className="space-y-2">
+                                  {otherUpdates.slice(0, 4).map(other => (
+                                    <div
+                                      key={other.id}
+                                      onClick={() => setSelectedDisclosure(other)}
+                                      className="p-3 rounded-xl bg-[#181c24] hover:bg-[#1f242e] border border-[#2e3440] hover:border-slate-500/50 transition cursor-pointer space-y-1 group"
+                                    >
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="font-mono font-bold text-emerald-400">
+                                          {other.ticker}
+                                        </span>
+                                        <span className="text-slate-500 font-sans">
+                                          {other.timeAgo}
+                                        </span>
+                                      </div>
+                                      <p className="text-xs font-bold text-slate-200 group-hover:text-white font-sans line-clamp-2 leading-snug">
+                                        {other.title}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
