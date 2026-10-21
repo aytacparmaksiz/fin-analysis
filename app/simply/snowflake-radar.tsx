@@ -35,7 +35,7 @@ const SECTOR_METAS: SectorMeta[] = [
     sectionId: 'sec-adildeger',
     centerDeg: -90,
     labelX: 140,
-    labelY: 30,
+    labelY: 26,
     textAnchor: 'middle'
   },
   {
@@ -330,7 +330,7 @@ export default function SnowflakeRadar({
               onMouseLeave={() => setHoveredAxis(null)}
               onClick={() => handleSectorClick(meta.sectionId)}
             >
-              {/* Ana İngilizce / Standart Başlık (VALUE, FUTURE...) */}
+              {/* Ana Türkçe Başlık (DEĞERLEME, GELECEK, GEÇMİŞ, SAĞLIK, TEMETTÜ) */}
               <text
                 x={meta.labelX}
                 y={meta.labelY}
@@ -342,7 +342,7 @@ export default function SnowflakeRadar({
                 letterSpacing="0.06em"
                 className="transition-colors duration-200"
               >
-                {meta.labelEn}
+                {meta.labelTr}
               </text>
 
               {/* Puan ve Türkçe Açıklama Rozeti */}

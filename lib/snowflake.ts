@@ -9,7 +9,7 @@
  * ASLA STATİK VEYA YAPAY VERİ KULLANILMAZ.
  */
 
-import type { SectorType } from './sectors.ts';
+import { getCompanySectorDisplayName, type SectorType } from './sectors.ts';
 
 export interface SnowflakeCheck {
   id: string;
@@ -659,7 +659,7 @@ export function computeSnowflakeAnalysis(params: {
 
   // Minimum 1 Güçlü Yön ve 1 Risk
   if (rewards.length === 0) {
-    rewards.push(`Sektörel Varlık: ${sector} sektöründe kurumsal operasyonlarını sürdürmektedir.`);
+    rewards.push(`Sektörel Varlık: ${getCompanySectorDisplayName(params.ticker, sector)} sektöründe kurumsal operasyonlarını sürdürmektedir.`);
   }
   if (risks.length === 0) {
     risks.push('Makroekonomik faiz oynaklığı ve genel hisse senedi piyasası riskleri izlenmelidir.');
