@@ -1,5 +1,58 @@
+import https from 'node:https';
 import { getKapCompanyDisclosuresUrl } from './kap-mapping.ts';
 import { COMPANY_PROFILES } from './company-profiles.ts';
+
+const isProduction = process.env.NODE_ENV === 'production';
+const newsHttpsAgent = new https.Agent({
+  rejectUnauthorized: isProduction,
+  keepAlive: true,
+  timeout: 10000
+});
+
+async function fetchResilientText(urlStr: string, timeoutMs = 8000): Promise<string> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve('');
+      }
+    }, timeoutMs);
+
+    try {
+      const req = https.get(urlStr, {
+        agent: newsHttpsAgent,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': '*/*'
+        }
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => { data += chunk; });
+        res.on('end', () => {
+          if (!settled) {
+            settled = true;
+            clearTimeout(timer);
+            resolve(data);
+          }
+        });
+      });
+      req.on('error', () => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve('');
+        }
+      });
+    } catch {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve('');
+      }
+    }
+  });
+}
 
 export interface CompanyNewsItem {
   id: string;
@@ -15,6 +68,7 @@ export interface CompanyNewsItem {
   timeAgo: string;
   impact: 'POSITIVE' | 'NEUTRAL' | 'HIGH_IMPACT';
   url: string;
+  kapId?: string;
   isLive?: boolean;
 }
 
@@ -107,8 +161,10 @@ export function cleanHtmlText(html: string): string {
 export function sanitizeDisclosureTitle(rawTitle: string, ticker: string, companyName?: string): string {
   if (!rawTitle) return '';
   let title = rawTitle.replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1').trim();
-  // Kaynak son eki temizliği: " - Yeni Şafak", " - Bloomberght", " - CNBC-e", " - Paratic Haber" vb.
+  // Kaynak son eki temizliği: " - Yeni Şafak", " - Bloomberght", " - CNBC-e", " - Paratic Haber", "-KAP" vb.
+  title = title.replace(/\s*[-–/]\s*KAP\b/gi, '').trim();
   title = title.replace(/\s*-\s*[^-]+$/, '').trim();
+  title = title.replace(/^KAP\s*[-:–]\s*/i, '').trim();
 
   // Desen 1: KAP *** COMPANY *** TICKER *** SUBJECT
   const kapPattern = /KAP\s*\*\*\*\s*.*?\s*\*\*\*\s*[A-Z0-9]+\s*\*\*\*\s*(.*)/i;
@@ -346,42 +402,76 @@ export function buildDisclosureKeyTakeaways(
   return takeaways;
 }
 
+interface BigparaArticleDetail {
+  bodyText: string;
+  directKapUrl?: string;
+  kapId?: string;
+}
+
 /**
- * Bigpara KAP haber detay sayfasından resmi Ek Açıklamalar metnini çeker.
+ * Bigpara KAP haber detay sayfasından resmi KAP bildirim bağlantısını ve Ek Açıklamalar metnini çeker.
  */
-async function fetchBigparaArticleBody(url: string): Promise<string> {
+async function fetchBigparaArticleDetail(url: string): Promise<BigparaArticleDetail> {
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const html = await fetchResilientText(url, 3500);
+    if (!html) return { bodyText: '' };
 
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-      },
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
+    let directKapUrl: string | undefined;
+    let kapId: string | undefined;
 
-    if (!res.ok) return '';
-    const html = await res.text();
+    const kapMatch = html.match(/https?:\/\/(?:www\.)?kap\.org\.tr\/Bildirim\/([0-9]+)/i);
+    if (kapMatch) {
+      kapId = kapMatch[1];
+      directKapUrl = `https://www.kap.org.tr/tr/Bildirim/${kapId}`;
+    }
 
+    let bodyText = '';
     const ekIdx = html.indexOf('Ek Açıklamalar');
     if (ekIdx !== -1) {
       const rawChunk = html.slice(ekIdx, ekIdx + 1200);
-      return cleanHtmlText(rawChunk.replace(/^Ek Açıklamalar\s*(?:<br\s*\/?>)*/i, '')).slice(0, 450);
+      bodyText = cleanHtmlText(rawChunk.replace(/^Ek Açıklamalar\s*(?:<br\s*\/?>)*/i, '')).slice(0, 450);
+    } else {
+      const ozetIdx = html.indexOf('Özet Bilgi');
+      if (ozetIdx !== -1) {
+        const rawChunk = html.slice(ozetIdx, ozetIdx + 800);
+        bodyText = cleanHtmlText(rawChunk.replace(/^Özet Bilgi\s*(?:<br\s*\/?>)*/i, '')).slice(0, 350);
+      }
     }
 
-    const ozetIdx = html.indexOf('Özet Bilgi');
-    if (ozetIdx !== -1) {
-      const rawChunk = html.slice(ozetIdx, ozetIdx + 800);
-      return cleanHtmlText(rawChunk.replace(/^Özet Bilgi\s*(?:<br\s*\/?>)*/i, '')).slice(0, 350);
-    }
-
-    return '';
+    return { bodyText, directKapUrl, kapId };
   } catch {
-    return '';
+    return { bodyText: '' };
   }
+}
+
+/**
+ * Aracı kurum araştırma notlarını, hedef fiyat revizyonlarını, sabah bültenlerini ve
+ * SEO içeriklerini eleyerek YALNIZCA şirketin resmi fiyat-duyarlı açıklamalarını onaylar.
+ */
+export function isStrictCorporateAnnouncement(title: string, _source?: string): boolean {
+  if (!title) return false;
+  const t = title.trim();
+  const tLower = t.toLowerCase();
+
+  // Negatif Filtre 1: Aracı kurum ve banka isimleri (araştırma / model portföy / bülten)
+  const brokerRegex = /(?:-|–|\()\s*(?:HSBC|İş Yatırım|Garanti|Ak Yatırım|Yapı Kredi|Ziraat|Vakıf|Deniz|QNB|Oyak|Gedik|Tacirler|Alnus|Ahlatcı|Trive|İnfo|A1 Capital|Marbas|Piramit|Osmanlı|PhillipCapital|Global Menkul|Ünlü|ICBC|Teb|Yatırım Finansman|Halk Yatırım)\b/i;
+  if (brokerRegex.test(t)) return false;
+
+  // Negatif Filtre 2: Piyasa yorumu, hedef fiyat, anket, bülten, teknik sinyal, canlı grafik
+  const noiseRegex = /\b(menkul|yatırım|portföy|değerler|bülten|analizi|notu|ziyaretleri|özel haber|bekliyor|sinyalleri|realizasyonu|hedef fiyat|tavsiye|anket|beklenti|model portföy|günlük|haftalık|şirket rapor|yorum|teknik görünüm|sektör rapor|hisse senedi|canlı grafik|grafik|röportaj|söyleşi|cnbc-e|bloomberg)\b/i;
+  if (noiseRegex.test(t)) return false;
+
+  // Pozitif Filtre: Doğrudan fiyat-duyarlı şirket açıklaması anahtar kelimeleri
+  const corporateKeywords = [
+    'sözleşme', 'ihale', 'iş ilişkisi', 'sipariş', 'satış sözleşme',
+    'geri al', 'pay alım', 'pay satım', 'hisse alım',
+    'temettü', 'kâr payı', 'sermaye artırım', 'sermaye azaltım', 'bedelli', 'bedelsiz',
+    'mali tablo', 'finansal sonuç', 'ertelendi', 'erteleme', 'bilanço', 'net kâr', 'hasılat',
+    'yatırım', 'kapasite', 'tesis', 'fabrika', 'satın alma',
+    'kap\'a bildirdi', '-kap', 'kap:'
+  ];
+
+  return corporateKeywords.some(k => tLower.includes(k));
 }
 
 /**
@@ -414,30 +504,18 @@ export async function fetchLiveBistNewsFeed(options?: {
 
   const tickerSet = new Set(normalizedTickers);
   const gatheredItems: CompanyNewsItem[] = [];
+  const seenTitles = new Set<string>();
 
   // ----------------------------------------------------
-  // Stream 1: Bigpara Canlı KAP Akışı (İlk 5 Sayfa Paralel)
+  // Stream 1: Bigpara Resmi KAP Akışı (İlk 6 Sayfa Paralel)
   // ----------------------------------------------------
   try {
-    const pages = [1, 2, 3, 4, 5];
+    const pages = [1, 2, 3, 4, 5, 6];
     const bigparaPromises = pages.map(async page => {
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
-
-        const res = await fetch(`https://bigpara.hurriyet.com.tr/haberler/kap-haberleri/?page=${page}`, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-          },
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-
-        if (!res.ok) return [];
-        const html = await res.text();
-        const cardRegex = /<div class="news-card">([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/gi;
-        let m;
+        const html = await fetchResilientText(`https://bigpara.hurriyet.com.tr/haberler/kap-haberleri/?page=${page}`, 3500);
+        if (!html) return [];
+        const cardChunks = html.split(/class="news-card\b/);
         const pageItems: Array<{
           ticker: string;
           rawTitle: string;
@@ -446,20 +524,24 @@ export async function fetchLiveBistNewsFeed(options?: {
           timeAgo: string;
         }> = [];
 
-        while ((m = cardRegex.exec(html)) !== null) {
-          const cHtml = m[1];
-          const sMatch = cHtml.match(/data-symbol-id="([A-Z0-9]+)"/i);
-          const t = sMatch ? sMatch[1].toUpperCase() : null;
+        for (const c of cardChunks.slice(1)) {
+          const symbolMatch = c.match(/data-symbol-id="([A-Z0-9]+)"/i);
+          const titleMatch = c.match(/class="news-card__title"[^>]*>([\s\S]*?)<\/a>/i);
+          const linkMatch = c.match(/href="(\/haberler\/kap-haberleri\/[^"]+_ID([0-9]+)\/)"/i);
+          const timeMatch = c.match(/class="news-card__category-dot">･<\/span>\s*([^<]+)<\/span>/i);
 
-          if (t && tickerSet.has(t)) {
-            const titleMatch = cHtml.match(/class="news-card__title"[^>]*>([\s\S]*?)<\/a>/i);
-            const linkMatch = cHtml.match(/href="(\/haberler\/kap-haberleri\/[^"]+_ID([0-9]+)\/)"/i);
-            const timeMatch = cHtml.match(/class="news-card__category-dot">･<\/span>\s*([^<]+)<\/span>/i);
+          if (titleMatch && linkMatch) {
+            let sym = symbolMatch ? symbolMatch[1].toUpperCase() : '';
+            const rawTitle = titleMatch[1].trim();
+            if (!sym || sym === 'XU100' || sym === 'N/A') {
+              const tMatch = rawTitle.match(/\*\*\*([A-Z0-9]+)\*\*\*/);
+              if (tMatch) sym = tMatch[1].toUpperCase();
+            }
 
-            if (titleMatch && linkMatch) {
+            if (sym && tickerSet.has(sym)) {
               pageItems.push({
-                ticker: t,
-                rawTitle: titleMatch[1].trim(),
+                ticker: sym,
+                rawTitle,
                 articleUrl: 'https://bigpara.hurriyet.com.tr' + linkMatch[1],
                 articleId: linkMatch[2],
                 timeAgo: timeMatch ? timeMatch[1].trim() : 'Yeni'
@@ -475,14 +557,17 @@ export async function fetchLiveBistNewsFeed(options?: {
 
     const streamMatches = (await Promise.all(bigparaPromises)).flat();
 
-    for (const matchItem of streamMatches.slice(0, 6)) {
+    for (const matchItem of streamMatches.slice(0, 10)) {
       try {
-        const bodyText = await fetchBigparaArticleBody(matchItem.articleUrl);
+        const detail = await fetchBigparaArticleDetail(matchItem.articleUrl);
         const meta = getCompanyMeta(matchItem.ticker);
         const cleanTitle = sanitizeDisclosureTitle(matchItem.rawTitle, matchItem.ticker, meta.cleanName);
-        const { category, categoryLabel, impact } = categorizeDisclosure(matchItem.rawTitle, bodyText);
-        const summary = buildDisclosureKeySummary(cleanTitle, matchItem.ticker, meta.cleanName, category, bodyText);
-        const keyTakeaways = buildDisclosureKeyTakeaways(cleanTitle, matchItem.ticker, meta.cleanName, category, bodyText);
+        const { category, categoryLabel, impact } = categorizeDisclosure(matchItem.rawTitle, detail.bodyText);
+        const summary = buildDisclosureKeySummary(cleanTitle, matchItem.ticker, meta.cleanName, category, detail.bodyText);
+        const keyTakeaways = buildDisclosureKeyTakeaways(cleanTitle, matchItem.ticker, meta.cleanName, category, detail.bodyText);
+
+        const dedupeKey = cleanTitle.slice(0, 32).toLowerCase();
+        seenTitles.add(dedupeKey);
 
         gatheredItems.push({
           id: `kap-stream-${matchItem.articleId}`,
@@ -497,7 +582,8 @@ export async function fetchLiveBistNewsFeed(options?: {
           publishDate: new Date().toISOString(),
           timeAgo: matchItem.timeAgo,
           impact,
-          url: getKapCompanyDisclosuresUrl(matchItem.ticker),
+          url: detail.directKapUrl || getKapCompanyDisclosuresUrl(matchItem.ticker),
+          kapId: detail.kapId,
           isLive: true
         });
       } catch {}
@@ -505,63 +591,62 @@ export async function fetchLiveBistNewsFeed(options?: {
   } catch {}
 
   // ----------------------------------------------------------------------
-  // Stream 2: Hisse Bazlı Fiyat-Duyarlı (Price-Sensitive) KAP RSS Akışı
+  // Stream 2: Hisse Bazlı Doğrudan Resmi BİST & KAP Terminal Tel Akışı (Matriks / Reuters)
   // ----------------------------------------------------------------------
-  const rssPromises = normalizedTickers.map(async ticker => {
+  const wirePromises = normalizedTickers.map(async ticker => {
     try {
       const meta = getCompanyMeta(ticker);
-      const q = `("${ticker}" OR "${meta.cleanName}") ("KAP" OR "bilanço" OR "kâr" OR "temettü" OR "sözleşme" OR "geri alım" OR "yatırım" OR "ihale" OR "prim")`;
-      const url = `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=tr&gl=TR&ceid=TR:tr`;
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        },
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-
-      if (!res.ok) return [];
-      const xml = await res.text();
-      const items = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
+      const jsonStr = await fetchResilientText(
+        `https://news-headlines.tradingview.com/v2/headlines?category=base&lang=tr&client=web&symbol=BIST%3A${ticker}`,
+        4000
+      );
+      if (!jsonStr) return [];
+      let data: any;
+      try {
+        data = JSON.parse(jsonStr);
+      } catch {
+        return [];
+      }
+      const items = data?.items || [];
       const tickerResults: CompanyNewsItem[] = [];
-      const seenTitles = new Set<string>();
 
       for (const item of items) {
-        const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/i);
-        const pubDateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/i);
-        if (!titleMatch) continue;
+        const rawTitle = (item.title || '').trim();
+        if (!isStrictCorporateAnnouncement(rawTitle, item.source)) continue;
 
-        const rawTitle = titleMatch[1].replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1').trim();
         const cleanTitle = sanitizeDisclosureTitle(rawTitle, ticker, meta.cleanName);
-        const pubDate = pubDateMatch ? pubDateMatch[1] : new Date().toISOString();
-
-        // Alakasız fon, canlı grafik veya boş başlıkları ele
         if (!cleanTitle || cleanTitle.length < 5) continue;
-        const upper = cleanTitle.toUpperCase();
-        if (upper.includes('PORTFÖY') || upper.includes('FONU') || upper.includes('CANLI GRAFİK')) continue;
 
-        // Çift başlıkları filtrele
+        // Çift başlık filtreleme
         const dedupeKey = cleanTitle.slice(0, 32).toLowerCase();
         if (seenTitles.has(dedupeKey)) continue;
         seenTitles.add(dedupeKey);
 
-        // Bigpara'dan gelenlerle çakışmayı önle
-        const isDuplicateWithStream = gatheredItems.some(
+        // Stream 1 ile çakışmayı önle
+        const isDupe = gatheredItems.some(
           g => g.ticker === ticker && g.title.toLowerCase().slice(0, 25) === cleanTitle.toLowerCase().slice(0, 25)
         );
-        if (isDuplicateWithStream) continue;
+        if (isDupe) continue;
+
+        const pubTime = item.published ? item.published * 1000 : Date.now();
+        const pubDate = new Date(pubTime).toISOString();
+        const timeAgo = calculateTimeAgo(pubDate);
 
         const { category, categoryLabel, impact } = categorizeDisclosure(cleanTitle);
-        const timeAgo = calculateTimeAgo(pubDate);
         const summary = buildDisclosureKeySummary(cleanTitle, ticker, meta.cleanName, category);
         const keyTakeaways = buildDisclosureKeyTakeaways(cleanTitle, ticker, meta.cleanName, category);
 
+        // KAP Bildirim ID var mı kontrolü
+        let kapId: string | undefined;
+        let url = getKapCompanyDisclosuresUrl(ticker);
+        const idMatch = rawTitle.match(/KAP:?\s*([0-9]{6,8})/i) || rawTitle.match(/Bildirim\/([0-9]{6,8})/i);
+        if (idMatch) {
+          kapId = idMatch[1];
+          url = `https://www.kap.org.tr/tr/Bildirim/${kapId}`;
+        }
+
         tickerResults.push({
-          id: `kap-rss-${ticker}-${tickerResults.length + 1}`,
+          id: `kap-wire-${ticker}-${item.published || tickerResults.length + 1}`,
           ticker,
           companyName: meta.fullName,
           title: cleanTitle,
@@ -570,23 +655,25 @@ export async function fetchLiveBistNewsFeed(options?: {
           category,
           categoryLabel,
           source: 'KAP',
-          publishDate: new Date(pubDate).toISOString(),
+          publishDate: pubDate,
           timeAgo,
           impact,
-          url: getKapCompanyDisclosuresUrl(ticker),
-          isLive: false
+          url,
+          kapId,
+          isLive: true
         });
 
-        if (tickerResults.length >= 4) break;
+        if (tickerResults.length >= 8) break;
       }
+
       return tickerResults;
     } catch {
       return [];
     }
   });
 
-  const rssResults = (await Promise.all(rssPromises)).flat();
-  gatheredItems.push(...rssResults);
+  const wireResults = (await Promise.all(wirePromises)).flat();
+  gatheredItems.push(...wireResults);
 
   // Tarihe göre yeniden eskiye sırala
   gatheredItems.sort((a, b) => new Date(b.publishDate).getTime() - new Date(a.publishDate).getTime());

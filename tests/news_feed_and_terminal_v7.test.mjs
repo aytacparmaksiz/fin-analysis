@@ -29,7 +29,7 @@ test('Company News Feed and Terminal V7 Enhancements Test Suite', async (t) => {
     assert.ok(liveItems.length >= 1, 'Expected at least 1 real disclosure for THYAO');
     assert.ok(liveItems.every(item => item.ticker === 'THYAO'), 'All items must belong to THYAO');
     assert.ok(
-      liveItems[0].url.startsWith('https://www.kap.org.tr/tr/sirket-bildirimleri/'),
+      liveItems[0].url.startsWith('https://www.kap.org.tr/'),
       'Must point to official KAP disclosures URL'
     );
   });
