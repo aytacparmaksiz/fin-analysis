@@ -3302,14 +3302,48 @@ export default function SimplyView({
               const tvHigh = tvConsensus?.targetPriceHigh ? Number(tvConsensus.targetPriceHigh) : null;
               const tvLow = tvConsensus?.targetPriceLow ? Number(tvConsensus.targetPriceLow) : null;
 
-              const primaryTarget = tvAvg || isyTarget || fairValueNum;
-              if (!primaryTarget || primaryTarget <= 0) return null;
+              const hasOfficialConsensus = Boolean((tvAvg && tvAvg > 0) || (isyTarget && isyTarget > 0));
 
+              // Gerçek aracı kurum hedefi bulunmuyorsa kesinlikle sahte/yapay kurum veya model fallback'i üretilmez
+              if (!hasOfficialConsensus) {
+                return (
+                  <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
+                    <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
+                      <span className="font-sans text-base sm:text-lg font-bold text-white">
+                        4.2 Piyasa ve Analist Hedef Fiyatları
+                      </span>
+                      <span className="text-xs font-mono text-slate-400">Aracı Kurum Konsensüsü</span>
+                    </div>
+
+                    <div className="bg-[#12151b] border border-[#232834] rounded-xl p-6 text-center space-y-2.5">
+                      <div className="w-10 h-10 rounded-full bg-slate-800/80 border border-slate-700/60 flex items-center justify-center mx-auto text-slate-400">
+                        <Building2 className="w-5 h-5 text-slate-400" />
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-200 font-sans">
+                        Aktif Aracı Kurum Konsensüs Hedefi Bulunmuyor
+                      </h4>
+                      <p className="text-xs text-slate-400 max-w-lg mx-auto font-sans leading-relaxed">
+                        {report.ticker} için Borsa İstanbul aracı kurumları veya Refinitiv/LSEG konsensüs havuzunda henüz aktif bir 12 aylık analist konsensüs hedef fiyatı yayımlanmamıştır. Değerleme için yukarıdaki model içsel değerimiz (₺{fairValueNum.toFixed(2)}) ve senaryo analizleri baz alınmalıdır.
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
+
+              const primaryTarget = tvAvg || isyTarget || 0;
               const upsidePct = currentPriceNum > 0
                 ? ((primaryTarget - currentPriceNum) / currentPriceNum) * 100
                 : 0;
 
-              const rawRec = tvConsensus?.recommendationLabel || isyConsensus?.recommendation || (upsidePct > 20 ? 'AL' : upsidePct < -5 ? 'SAT' : 'TUT');
+              let rawRec = tvConsensus?.recommendationLabel || isyConsensus?.recommendation || '';
+              if (!rawRec) {
+                rawRec = upsidePct >= 20 ? 'AL' : upsidePct <= -10 ? 'SAT' : 'TUT';
+              }
+              // Potansiyel aşırı negatifken (< -15%) asla "AL" veya "ENDEKS ÜSTÜ" kalmamalı (mantık ve tezatlık koruması):
+              if (upsidePct < -15.0 && (rawRec.includes('AL') || rawRec.includes('BUY') || rawRec.includes('ÜSTÜ'))) {
+                rawRec = 'ENDEKS ALTI / SAT';
+              }
+
               const rec = String(rawRec).toUpperCase().trim();
               const isBuy = rec.includes('AL') || rec.includes('BUY') || rec.includes('GÜÇLÜ');
               const isSell = rec.includes('SAT') || rec.includes('SELL');
@@ -3320,55 +3354,68 @@ export default function SimplyView({
                 ? 'Temkinli / Riskli Görünüm (Satış Konsensüsü)'
                 : 'Endekse Paralel / Dengeli Beklenti';
 
-              // Görsel Aralık Bandı
-              const rangeLow = tvLow || (isyTarget ? Number((isyTarget * 0.80).toFixed(2)) : Number((primaryTarget * 0.75).toFixed(2)));
-              const rangeHigh = tvHigh || (isyTarget ? Number((isyTarget * 1.25).toFixed(2)) : Number((primaryTarget * 1.30).toFixed(2)));
+              // Görsel Aralık Bandı (Gerçek TV Tavan/Taban verisi veya İş Yatırım)
+              const rangeLow = tvLow || (isyTarget ? Number((isyTarget * 0.85).toFixed(2)) : Number((primaryTarget * 0.85).toFixed(2)));
+              const rangeHigh = tvHigh || (isyTarget ? Number((isyTarget * 1.15).toFixed(2)) : Number((primaryTarget * 1.15).toFixed(2)));
 
-              // Aracı Kurum Hedef Fiyat Listesi
-              const brokerTargets = [
-                {
+              // Yalnızca GERÇEK veri kaynakları listelenir (Asla sahte kurum ismi veya yapay hedef türetilmez)
+              const brokerTargets: Array<{ institution: string; target: number; rec: string; source: string; date: string }> = [];
+
+              if (isyTarget && isyTarget > 0) {
+                const isyUpside = currentPriceNum > 0 ? ((isyTarget - currentPriceNum) / currentPriceNum) * 100 : 0;
+                let isyRec = isyConsensus?.recommendation || (isyUpside >= 20 ? 'AL' : isyUpside <= -10 ? 'SAT' : 'TUT');
+                if (isyUpside < -15 && isyRec.includes('AL')) isyRec = 'SAT';
+                brokerTargets.push({
                   institution: 'İş Yatırım Araştırma',
-                  target: isyTarget || (primaryTarget ? Number(primaryTarget.toFixed(2)) : null),
-                  rec: isyConsensus?.recommendation || (rec.includes('AL') ? 'AL' : 'TUT'),
+                  target: isyTarget,
+                  rec: isyRec,
                   source: 'Resmi Şirket Kartı & Model Portföy',
                   date: isyConsensus?.date || 'Güncel'
-                },
-                {
-                  institution: 'Ak Yatırım Araştırma',
-                  target: tvHigh || (primaryTarget ? Number((primaryTarget * 1.20).toFixed(2)) : null),
-                  rec: 'ENDEKS ÜSTÜ',
-                  source: 'Refinitiv / Konsensüs Üst Bant',
+                });
+              }
+
+              if (tvAvg && tvAvg > 0) {
+                brokerTargets.push({
+                  institution: 'Refinitiv / LSEG Konsensüs Ortalama',
+                  target: tvAvg,
+                  rec: rec,
+                  source: 'Yerli & Yabancı Kurumlar Ağırlıklı Ortalaması',
+                  date: tvConsensus?.fetchedAt ? 'Güncel' : '12A Hedef'
+                });
+              }
+
+              if (tvMedian && tvMedian > 0 && Math.abs(tvMedian - (tvAvg || 0)) > 0.05) {
+                const medUpside = currentPriceNum > 0 ? ((tvMedian - currentPriceNum) / currentPriceNum) * 100 : 0;
+                brokerTargets.push({
+                  institution: 'Refinitiv / LSEG Medyan Analist Hedefi',
+                  target: tvMedian,
+                  rec: medUpside >= 15 ? 'ENDEKS ÜSTÜ' : medUpside <= -10 ? 'ENDEKS ALTI' : 'ENDEKSE PARALEL',
+                  source: 'Refinitiv Analist Medyanı',
                   date: '12A Hedef'
-                },
-                {
-                  institution: 'Garanti BBVA Yatırım',
-                  target: tvMedian || (primaryTarget ? Number((primaryTarget * 1.06).toFixed(2)) : null),
-                  rec: 'ENDEKS ÜSTÜ',
-                  source: 'Refinitiv / Medyan Analist Hedefi',
+                });
+              }
+
+              if (tvHigh && tvHigh > 0 && tvHigh !== tvAvg) {
+                const highUpside = currentPriceNum > 0 ? ((tvHigh - currentPriceNum) / currentPriceNum) * 100 : 0;
+                brokerTargets.push({
+                  institution: 'Konsensüs En Yüksek Analist Hedefi (Tavan)',
+                  target: tvHigh,
+                  rec: highUpside > 15 ? 'ENDEKS ÜSTÜ' : (highUpside < -10 ? 'SAT' : 'TUT'),
+                  source: 'Konsensüs Üst Bant',
                   date: '12A Hedef'
-                },
-                {
-                  institution: 'Yapı Kredi Yatırım',
-                  target: tvAvg || (primaryTarget ? Number(primaryTarget.toFixed(2)) : null),
-                  rec: 'AL',
-                  source: 'Refinitiv / Konsensüs Ağırlıklı Ortalama',
+                });
+              }
+
+              if (tvLow && tvLow > 0 && tvLow !== tvAvg) {
+                const lowUpside = currentPriceNum > 0 ? ((tvLow - currentPriceNum) / currentPriceNum) * 100 : 0;
+                brokerTargets.push({
+                  institution: 'Konsensüs En Düşük Analist Hedefi (Taban)',
+                  target: tvLow,
+                  rec: lowUpside < -10 ? 'ENDEKS ALTI / SAT' : 'TUT',
+                  source: 'Konsensüs Taban Bant',
                   date: '12A Hedef'
-                },
-                {
-                  institution: 'Deniz Yatırım',
-                  target: primaryTarget ? Number((primaryTarget * 0.96).toFixed(2)) : null,
-                  rec: 'AL / TUT',
-                  source: 'Aracı Kurum Konsensüs Havuzu',
-                  date: '12A Hedef'
-                },
-                {
-                  institution: 'Vakıf Yatırım',
-                  target: tvLow || (primaryTarget ? Number((primaryTarget * 0.85).toFixed(2)) : null),
-                  rec: 'TUT',
-                  source: 'Refinitiv / Konsensüs Taban Bant',
-                  date: '12A Hedef'
-                }
-              ].filter(b => b.target != null && b.target > 0);
+                });
+              }
 
               return (
                 <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-5">
@@ -3490,6 +3537,7 @@ export default function SimplyView({
                                 : 0;
                               const isPositive = potPct > 0;
                               const isRecBuy = b.rec.includes('AL') || b.rec.includes('ÜSTÜ');
+                              const isRecSell = b.rec.includes('SAT') || b.rec.includes('ALTI');
 
                               return (
                                 <tr key={idx} className="hover:bg-[#21262d]/50 transition">
@@ -3504,6 +3552,8 @@ export default function SimplyView({
                                     <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold font-mono ${
                                       isRecBuy
                                         ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/60'
+                                        : isRecSell
+                                        ? 'bg-rose-950/80 text-rose-400 border border-rose-800/60'
                                         : 'bg-amber-950/80 text-amber-400 border border-amber-800/60'
                                     }`}>
                                       {b.rec}
