@@ -1779,7 +1779,7 @@ export default function SimplyView({
                     </div>
                   </div>
 
-                  <div className="shrink-0">
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
                     <span className={`inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2 rounded-xl font-mono text-xs sm:text-sm font-bold border whitespace-nowrap ${
                       discountPctNum > 0
                         ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
@@ -1788,6 +1788,18 @@ export default function SimplyView({
                       {discountPctNum > 0 ? <TrendingUp className="w-4 h-4 shrink-0" /> : <TrendingDown className="w-4 h-4 shrink-0" />}
                       <span>%{Math.abs(discountPctNum).toFixed(1)} {discountPctNum > 0 ? 'İskontolu / Potansiyel' : 'Primli'}</span>
                     </span>
+                    {(() => {
+                      const rawScore = report?.score || valuationInfo?.score || (report as any)?.scoreResult?.totalScore;
+                      const cleanNum = rawScore ? parseInt(String(rawScore).split('/')[0].replace(/[^0-9]/g, ''), 10) : null;
+                      if (cleanNum === null || isNaN(cleanNum)) return null;
+                      return (
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950/90 border border-[#2b313d] text-xs font-mono font-bold text-slate-300 shadow-sm">
+                          <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                          <span className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider">Skor:</span>
+                          <span className="text-emerald-400 font-bold">{cleanNum}/100</span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>

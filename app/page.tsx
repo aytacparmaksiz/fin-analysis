@@ -1224,6 +1224,16 @@ function getSpreadInfo(spread: number | null) {
   }
 }
 
+function formatScore(score: any): string {
+  if (score === null || score === undefined || score === '') return '—';
+  const str = String(score).trim();
+  const match = str.match(/\d+/);
+  if (!match) return '—';
+  const num = parseInt(match[0], 10);
+  if (isNaN(num)) return '—';
+  return `${num}/100`;
+}
+
 export default function ValuationTerminal({
   initialTicker,
   initialReport,
@@ -1295,7 +1305,7 @@ export default function ValuationTerminal({
   };
 
   // Aşama durumu: Yalnızca kayıtlı rapor varsa 'report', aksi halde doğrudan 'input' (Arama ve analiz formu)
-  const [step, setStep] = useState<'input' | 'review' | 'report' | 'leaderboard' | 'themes' | 'saved'>(
+  const [step, setStep] = useState<'input' | 'review' | 'report' | 'leaderboard' | 'themes' | 'saved' | 'sectors'>(
     defaultReport ? 'report' : 'input'
   );
   const [extractedData, setExtractedData] = useState<any>(defaultReport?.extractedData || null);
@@ -1348,6 +1358,9 @@ export default function ValuationTerminal({
   const [themeSearchTerm, setThemeSearchTerm] = useState<string>('');
   const [leaderboardSearch, setLeaderboardSearch] = useState('');
   const [leaderboardFilter, setLeaderboardFilter] = useState<'ALL' | 'AL' | 'NÖTR' | 'ALMA'>('ALL');
+  const [leaderboardSort, setLeaderboardSort] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'score', direction: 'desc' });
+  const [themesSort, setThemesSort] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'score', direction: 'desc' });
+  const [expandedSectors, setExpandedSectors] = useState<Record<string, boolean>>({});
   const [sectorSearchTerm, setSectorSearchTerm] = useState<string>('');
 
   const [loading, setLoading] = useState<boolean>(false);
@@ -1382,7 +1395,7 @@ export default function ValuationTerminal({
 
   // Rapor öncesi gezinti durumu (Geri butonuna basıldığında gelinen ekrana dönebilmek için)
   const [previousNavState, setPreviousNavState] = useState<{
-    step: 'input' | 'review' | 'report' | 'leaderboard' | 'themes' | 'saved';
+    step: 'input' | 'review' | 'report' | 'leaderboard' | 'themes' | 'saved' | 'sectors';
     analyzedTab: 'ALL' | 'PORTFOLIO' | 'FAVORITES' | 'AL' | 'NÖTR' | 'ALMA';
   }>({ step: 'saved', analyzedTab: 'ALL' });
 
@@ -1549,7 +1562,7 @@ export default function ValuationTerminal({
   }, []);
 
   // Tarayıcı Yolu & Sayfa Geçiş Yöneticisi (URL Navigation)
-  const navigateTo = useCallback((targetStep: 'input' | 'saved' | 'themes' | 'leaderboard' | 'portfolio' | 'favorites') => {
+  const navigateTo = useCallback((targetStep: 'input' | 'saved' | 'themes' | 'leaderboard' | 'portfolio' | 'favorites' | 'sectors') => {
     setError(null);
     const basePath = typeof window !== 'undefined' && window.location.pathname.startsWith('/simply') ? '/simply' : '';
 
@@ -1571,6 +1584,9 @@ export default function ValuationTerminal({
     } else if (targetStep === 'leaderboard') {
       setStep('leaderboard');
       if (typeof window !== 'undefined') window.history.pushState(null, '', `${basePath}/?view=leaderboard`);
+    } else if (targetStep === 'sectors') {
+      setStep('sectors');
+      if (typeof window !== 'undefined') window.history.pushState(null, '', `${basePath}/?view=sectors`);
     } else if (targetStep === 'input') {
       resetToNewAnalysis();
     }
@@ -1941,6 +1957,8 @@ export default function ValuationTerminal({
         setStep('themes');
       } else if (view === 'leaderboard') {
         setStep('leaderboard');
+      } else if (view === 'sectors') {
+        setStep('sectors');
       } else if (view === 'new' || (!view && !urlTicker)) {
         setStep('input');
         setActiveReportId(null);
@@ -4294,6 +4312,18 @@ export default function ValuationTerminal({
               >
                 <span>Hisse Tarama</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => navigateTo('sectors')}
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                  step === 'sectors'
+                    ? 'text-emerald-400 font-bold bg-[#1e232d]'
+                    : 'text-slate-400 hover:text-white hover:bg-[#181c24]'
+                }`}
+              >
+                <span>Sektörler</span>
+              </button>
             </nav>
           </div>
 
@@ -4875,7 +4905,7 @@ export default function ValuationTerminal({
                   <div className="h-5 w-px bg-slate-800" />
                   <span className="text-base font-black font-mono text-white">{activeReport.ticker}</span>
                   <span className="text-sm font-mono px-2.5 py-0.5 rounded bg-slate-950 text-slate-300 border border-slate-800">
-                    {sectorMeta.badge}
+                    {getCompanySectorDisplayName(activeReport.ticker, activeReport.sector)}
                   </span>
                   {(valuationInfo.is_value_trap || activeReport.isValueTrap) && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded border border-rose-500/40 bg-rose-500/10 text-rose-400 text-xs font-bold font-mono">
@@ -4954,6 +4984,45 @@ export default function ValuationTerminal({
               return matchesSearch && matchesFilter;
             });
 
+            const sortedLeaderboard = [...filtered].sort((a, b) => {
+              const { key, direction } = leaderboardSort;
+              let valA: any = null;
+              let valB: any = null;
+              if (key === 'ticker') { valA = a.ticker || ''; valB = b.ticker || ''; }
+              else if (key === 'decision') { valA = a.decision || ''; valB = b.decision || ''; }
+              else if (key === 'period') { valA = a.period || a.createdAt || ''; valB = b.period || b.createdAt || ''; }
+              else if (key === 'price') { valA = parseFloat(a.price || '0') || 0; valB = parseFloat(b.price || '0') || 0; }
+              else if (key === 'fairValue') { valA = parseFloat(a.fairValue || '0') || 0; valB = parseFloat(b.fairValue || '0') || 0; }
+              else if (key === 'score') {
+                valA = parseInt(String(a.score || 0).split('/')[0].replace(/[^0-9]/g, ''), 10) || 0;
+                valB = parseInt(String(b.score || 0).split('/')[0].replace(/[^0-9]/g, ''), 10) || 0;
+              }
+              else if (key === 'discount') {
+                const fvA = parseFloat(a.fairValue || '0') || 0;
+                const pA = parseFloat(a.price || '0') || 0;
+                valA = (fvA > 0 && pA > 0) ? ((fvA - pA) / pA) * 100 : -999;
+                const fvB = parseFloat(b.fairValue || '0') || 0;
+                const pB = parseFloat(b.price || '0') || 0;
+                valB = (fvB > 0 && pB > 0) ? ((fvB - pB) / pB) * 100 : -999;
+              }
+
+              if (typeof valA === 'string') {
+                const cmp = valA.localeCompare(valB, 'tr');
+                return direction === 'asc' ? cmp : -cmp;
+              } else {
+                return direction === 'asc' ? (valA ?? 0) - (valB ?? 0) : (valB ?? 0) - (valA ?? 0);
+              }
+            });
+
+            const handleLeaderboardSortClick = (colKey: string, isNumeric: boolean) => {
+              setLeaderboardSort(prev => {
+                if (prev.key === colKey) {
+                  return { key: colKey, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+                }
+                return { key: colKey, direction: isNumeric ? 'desc' : 'asc' };
+              });
+            };
+
             return (
               <div className="space-y-6">
                 <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -5008,23 +5077,107 @@ export default function ValuationTerminal({
                       <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[11px]">
                         <tr>
                           <th className="p-3.5 pl-5">Sıra</th>
-                          <th className="p-3.5">Hisse</th>
-                          <th className="p-3.5">Karar</th>
-                          <th className="p-3.5 text-right">Skor</th>
-                          <th className="p-3.5 text-right">Fiyat</th>
-                          <th className="p-3.5">Dönem / Kayıt</th>
+                          <th 
+                            onClick={() => handleLeaderboardSortClick('ticker', false)}
+                            className="p-3.5 cursor-pointer select-none hover:text-white transition group"
+                            title="Hisse Koduna Göre Sırala"
+                          >
+                            <span className="inline-flex items-center gap-1.5">
+                              <span>Hisse</span>
+                              {leaderboardSort.key === 'ticker' && (
+                                <span className="text-[#f5c242] font-mono text-xs">{leaderboardSort.direction === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </span>
+                          </th>
+                          <th 
+                            onClick={() => handleLeaderboardSortClick('price', true)}
+                            className="p-3.5 text-right cursor-pointer select-none hover:text-white transition group"
+                            title="Fiyata Göre Sırala"
+                          >
+                            <span className="inline-flex items-center justify-end gap-1.5 w-full">
+                              <span>Fiyat</span>
+                              {leaderboardSort.key === 'price' && (
+                                <span className="text-[#f5c242] font-mono text-xs">{leaderboardSort.direction === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </span>
+                          </th>
+                          <th 
+                            onClick={() => handleLeaderboardSortClick('fairValue', true)}
+                            className="p-3.5 text-right cursor-pointer select-none hover:text-white transition group"
+                            title="Adil Değere Göre Sırala"
+                          >
+                            <span className="inline-flex items-center justify-end gap-1.5 w-full">
+                              <span>Adil Değer</span>
+                              {leaderboardSort.key === 'fairValue' && (
+                                <span className="text-[#f5c242] font-mono text-xs">{leaderboardSort.direction === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </span>
+                          </th>
+                          <th 
+                            onClick={() => handleLeaderboardSortClick('discount', true)}
+                            className="p-3.5 text-center cursor-pointer select-none hover:text-white transition group"
+                            title="İskonto / Prim Oranına Göre Sırala"
+                          >
+                            <span className="inline-flex items-center justify-center gap-1.5 w-full">
+                              <span>İskonto / Prim</span>
+                              {leaderboardSort.key === 'discount' && (
+                                <span className="text-[#f5c242] font-mono text-xs">{leaderboardSort.direction === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </span>
+                          </th>
+                          <th 
+                            onClick={() => handleLeaderboardSortClick('score', true)}
+                            className="p-3.5 text-right cursor-pointer select-none hover:text-white transition group"
+                            title="Skora Göre Sırala"
+                          >
+                            <span className="inline-flex items-center justify-end gap-1.5 w-full">
+                              <span>Skor</span>
+                              {leaderboardSort.key === 'score' && (
+                                <span className="text-[#f5c242] font-mono text-xs">{leaderboardSort.direction === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </span>
+                          </th>
+                          <th 
+                            onClick={() => handleLeaderboardSortClick('decision', false)}
+                            className="p-3.5 text-center cursor-pointer select-none hover:text-white transition group"
+                            title="Karara Göre Sırala"
+                          >
+                            <span className="inline-flex items-center justify-center gap-1.5 w-full">
+                              <span>Karar</span>
+                              {leaderboardSort.key === 'decision' && (
+                                <span className="text-[#f5c242] font-mono text-xs">{leaderboardSort.direction === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </span>
+                          </th>
+                          <th 
+                            onClick={() => handleLeaderboardSortClick('period', false)}
+                            className="p-3.5 cursor-pointer select-none hover:text-white transition group"
+                            title="Döneme Göre Sırala"
+                          >
+                            <span className="inline-flex items-center gap-1.5">
+                              <span>Dönem / Kayıt</span>
+                              {leaderboardSort.key === 'period' && (
+                                <span className="text-[#f5c242] font-mono text-xs">{leaderboardSort.direction === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </span>
+                          </th>
                           <th className="p-3.5 text-right">İşlem</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800">
-                        {filtered.length === 0 ? (
+                        {sortedLeaderboard.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="p-8 text-center text-slate-500 text-xs">
+                            <td colSpan={9} className="p-8 text-center text-slate-500 text-xs">
                               Kriterlere uygun rapor bulunamadı.
                             </td>
                           </tr>
                         ) : (
-                          filtered.map((item, index) => (
+                          sortedLeaderboard.map((item, index) => {
+                            const fvNum = parseFloat(item.fairValue || '0') || 0;
+                            const prNum = parseFloat(item.price || '0') || 0;
+                            const discNum = (fvNum > 0 && prNum > 0) ? Number((((fvNum - prNum) / prNum) * 100).toFixed(1)) : null;
+
+                            return (
                             <tr
                               key={item.id}
                               onClick={() => openReport(item.id, item.ticker)}
@@ -5034,9 +5187,27 @@ export default function ValuationTerminal({
                                 #{index + 1}
                               </td>
                               <td className="p-3.5">
-                                <span className="font-bold text-sm text-white font-mono">{item.ticker}</span>
+                                <span className="font-bold text-sm text-white font-mono hover:text-[#f5c242] transition">{item.ticker}</span>
                               </td>
-                              <td className="p-3.5">
+                              <td className="p-3.5 text-right font-mono font-semibold text-slate-200">
+                                {prNum > 0 ? `₺${prNum.toFixed(2)}` : '—'}
+                              </td>
+                              <td className="p-3.5 text-right font-mono font-bold text-[#f5c242]">
+                                {fvNum > 0 ? `₺${fvNum.toFixed(2)}` : '—'}
+                              </td>
+                              <td className="p-3.5 text-center font-mono">
+                                {discNum !== null ? (
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                                    discNum >= 0 ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                                  }`}>
+                                    {discNum >= 0 ? `+${discNum}%` : `${discNum}%`}
+                                  </span>
+                                ) : <span className="text-slate-500">—</span>}
+                              </td>
+                              <td className="p-3.5 text-right font-mono font-bold text-sm text-emerald-400">
+                                {formatScore(item.score)}
+                              </td>
+                              <td className="p-3.5 text-center">
                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
                                   item.decision === 'AL' ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/80' :
                                   item.decision === 'ALMA' ? 'bg-rose-950/80 text-rose-400 border border-rose-800/80' :
@@ -5044,12 +5215,6 @@ export default function ValuationTerminal({
                                 }`}>
                                   {item.decision}
                                 </span>
-                              </td>
-                              <td className="p-3.5 text-right font-mono font-bold text-sm text-emerald-400">
-                                {item.score ? `${item.score}/100` : '—'}
-                              </td>
-                              <td className="p-3.5 text-right font-mono font-semibold text-slate-200">
-                                {item.price} TL
                               </td>
                               <td className="p-3.5 text-slate-400 font-mono text-[11px]">
                                 {item.period || item.createdAt}
@@ -5064,8 +5229,9 @@ export default function ValuationTerminal({
                                   <Trash2 className="w-4 h-4" />
                                 </button>
                               </td>
-                            </tr>
-                          ))
+                              </tr>
+                            );
+                          })
                         )}
                       </tbody>
                     </table>
@@ -5292,19 +5458,134 @@ export default function ValuationTerminal({
                       <table className="w-full text-left text-sm border-collapse font-sans">
                         <thead>
                           <tr className="border-b border-[#2e3440] bg-[#12151c]/80 text-[11px] font-mono text-slate-400 uppercase tracking-wider">
-                            <th className="py-3.5 px-4">Şirket</th>
-                            <th className="py-3.5 px-3">Sektör</th>
-                            <th className="py-3.5 px-3 text-right">Fiyat</th>
-                            <th className="py-3.5 px-3 text-right">Adil Değer</th>
-                            <th className="py-3.5 px-3 text-center">Potansiyel</th>
-                            <th className="py-3.5 px-3 text-center">Skor</th>
-                            <th className="py-3.5 px-3 text-center">Karar</th>
+                            <th 
+                              onClick={() => setThemesSort(p => ({ key: 'ticker', direction: p.key === 'ticker' && p.direction === 'asc' ? 'desc' : 'asc' }))}
+                              className="py-3.5 px-4 cursor-pointer select-none hover:text-white transition group"
+                              title="Şirkete Göre Sırala"
+                            >
+                              <span className="inline-flex items-center gap-1.5">
+                                <span>Şirket</span>
+                                {themesSort.key === 'ticker' && (
+                                  <span className="text-[#f5c242] font-mono text-xs">{themesSort.direction === 'asc' ? '↑' : '↓'}</span>
+                                )}
+                              </span>
+                            </th>
+                            <th 
+                              onClick={() => setThemesSort(p => ({ key: 'sector', direction: p.key === 'sector' && p.direction === 'asc' ? 'desc' : 'asc' }))}
+                              className="py-3.5 px-3 cursor-pointer select-none hover:text-white transition group"
+                              title="Sektöre Göre Sırala"
+                            >
+                              <span className="inline-flex items-center gap-1.5">
+                                <span>Sektör</span>
+                                {themesSort.key === 'sector' && (
+                                  <span className="text-[#f5c242] font-mono text-xs">{themesSort.direction === 'asc' ? '↑' : '↓'}</span>
+                                )}
+                              </span>
+                            </th>
+                            <th 
+                              onClick={() => setThemesSort(p => ({ key: 'price', direction: p.key === 'price' && p.direction === 'desc' ? 'asc' : 'desc' }))}
+                              className="py-3.5 px-3 text-right cursor-pointer select-none hover:text-white transition group"
+                              title="Fiyata Göre Sırala"
+                            >
+                              <span className="inline-flex items-center justify-end gap-1.5 w-full">
+                                <span>Fiyat</span>
+                                {themesSort.key === 'price' && (
+                                  <span className="text-[#f5c242] font-mono text-xs">{themesSort.direction === 'asc' ? '↑' : '↓'}</span>
+                                )}
+                              </span>
+                            </th>
+                            <th 
+                              onClick={() => setThemesSort(p => ({ key: 'fairValue', direction: p.key === 'fairValue' && p.direction === 'desc' ? 'asc' : 'desc' }))}
+                              className="py-3.5 px-3 text-right cursor-pointer select-none hover:text-white transition group"
+                              title="Adil Değere Göre Sırala"
+                            >
+                              <span className="inline-flex items-center justify-end gap-1.5 w-full">
+                                <span>Adil Değer</span>
+                                {themesSort.key === 'fairValue' && (
+                                  <span className="text-[#f5c242] font-mono text-xs">{themesSort.direction === 'asc' ? '↑' : '↓'}</span>
+                                )}
+                              </span>
+                            </th>
+                            <th 
+                              onClick={() => setThemesSort(p => ({ key: 'discount', direction: p.key === 'discount' && p.direction === 'desc' ? 'asc' : 'desc' }))}
+                              className="py-3.5 px-3 text-center cursor-pointer select-none hover:text-white transition group"
+                              title="Potansiyele Göre Sırala"
+                            >
+                              <span className="inline-flex items-center justify-center gap-1.5 w-full">
+                                <span>Potansiyel</span>
+                                {themesSort.key === 'discount' && (
+                                  <span className="text-[#f5c242] font-mono text-xs">{themesSort.direction === 'asc' ? '↑' : '↓'}</span>
+                                )}
+                              </span>
+                            </th>
+                            <th 
+                              onClick={() => setThemesSort(p => ({ key: 'score', direction: p.key === 'score' && p.direction === 'desc' ? 'asc' : 'desc' }))}
+                              className="py-3.5 px-3 text-center cursor-pointer select-none hover:text-white transition group"
+                              title="Skora Göre Sırala"
+                            >
+                              <span className="inline-flex items-center justify-center gap-1.5 w-full">
+                                <span>Skor</span>
+                                {themesSort.key === 'score' && (
+                                  <span className="text-[#f5c242] font-mono text-xs">{themesSort.direction === 'asc' ? '↑' : '↓'}</span>
+                                )}
+                              </span>
+                            </th>
+                            <th 
+                              onClick={() => setThemesSort(p => ({ key: 'decision', direction: p.key === 'decision' && p.direction === 'asc' ? 'desc' : 'asc' }))}
+                              className="py-3.5 px-3 text-center cursor-pointer select-none hover:text-white transition group"
+                              title="Karara Göre Sırala"
+                            >
+                              <span className="inline-flex items-center justify-center gap-1.5 w-full">
+                                <span>Karar</span>
+                                {themesSort.key === 'decision' && (
+                                  <span className="text-[#f5c242] font-mono text-xs">{themesSort.direction === 'asc' ? '↑' : '↓'}</span>
+                                )}
+                              </span>
+                            </th>
                             <th className="py-3.5 px-4">Eşleşen Temalar</th>
                             <th className="py-3.5 px-4 text-center">İşlem</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#2e3440]/60 text-slate-300">
-                          {displayedItems.map(({ report, matches }, idx) => {
+                          {(() => {
+                            const sortedList = [...displayedItems].sort((a, b) => {
+                              const { key, direction } = themesSort;
+                              let valA: any = null;
+                              let valB: any = null;
+                              if (key === 'ticker') { valA = a.report.ticker || ''; valB = b.report.ticker || ''; }
+                              else if (key === 'sector') {
+                                valA = getCompanySectorDisplayName(a.report.ticker, a.report.sector);
+                                valB = getCompanySectorDisplayName(b.report.ticker, b.report.sector);
+                              }
+                              else if (key === 'price') { valA = parseFloat(a.report.price || '0') || 0; valB = parseFloat(b.report.price || '0') || 0; }
+                              else if (key === 'fairValue') {
+                                const fvA = (a.report as any).valuation?.fair_value || a.report.extractedData?.valuation?.fair_value || parseFloat(a.report.fairValue || '0') || 0;
+                                const fvB = (b.report as any).valuation?.fair_value || b.report.extractedData?.valuation?.fair_value || parseFloat(b.report.fairValue || '0') || 0;
+                                valA = fvA; valB = fvB;
+                              }
+                              else if (key === 'discount') {
+                                const fvA = (a.report as any).valuation?.fair_value || a.report.extractedData?.valuation?.fair_value || parseFloat(a.report.fairValue || '0') || 0;
+                                const pA = parseFloat(a.report.price || '0') || 0;
+                                valA = (fvA > 0 && pA > 0) ? ((fvA - pA) / pA) * 100 : -999;
+                                const fvB = (b.report as any).valuation?.fair_value || b.report.extractedData?.valuation?.fair_value || parseFloat(b.report.fairValue || '0') || 0;
+                                const pB = parseFloat(b.report.price || '0') || 0;
+                                valB = (fvB > 0 && pB > 0) ? ((fvB - pB) / pB) * 100 : -999;
+                              }
+                              else if (key === 'score') {
+                                valA = parseInt(String(a.report.score || 0).split('/')[0].replace(/[^0-9]/g, ''), 10) || 0;
+                                valB = parseInt(String(b.report.score || 0).split('/')[0].replace(/[^0-9]/g, ''), 10) || 0;
+                              }
+                              else if (key === 'decision') { valA = a.report.decision || ''; valB = b.report.decision || ''; }
+
+                              if (typeof valA === 'string') {
+                                const cmp = valA.localeCompare(valB, 'tr');
+                                return direction === 'asc' ? cmp : -cmp;
+                              } else {
+                                return direction === 'asc' ? (valA ?? 0) - (valB ?? 0) : (valB ?? 0) - (valA ?? 0);
+                              }
+                            });
+
+                            return sortedList.map(({ report, matches }, idx) => {
                             const repVal = (report as any).valuation || report.extractedData?.valuation;
                             const fairVal = repVal?.fair_value || 0;
                             const priceNum = parseFloat(report.price || '0') || 0;
@@ -5352,7 +5633,7 @@ export default function ValuationTerminal({
                                   ) : <span className="text-slate-500">—</span>}
                                 </td>
                                 <td className="py-3 px-3 text-center font-mono font-bold text-xs text-slate-200">
-                                  {report.score ? `${report.score}/100` : '—'}
+                                  {formatScore(report.score)}
                                 </td>
                                 <td className="py-3 px-3 text-center">
                                   <span className={`px-2 py-0.5 rounded-md text-xs font-mono font-bold border ${
@@ -5394,7 +5675,8 @@ export default function ValuationTerminal({
                                 </td>
                               </tr>
                             );
-                          })}
+                          });
+                          })()}
                         </tbody>
                       </table>
                     </div>
@@ -6399,7 +6681,7 @@ export default function ValuationTerminal({
                                   ) : <span className="text-slate-500">—</span>}
                                 </td>
                                 <td className="py-3 px-3 text-center font-mono font-bold text-xs text-slate-200">
-                                  {item.score ? `${item.score}/100` : '—'}
+                                  {formatScore(item.score)}
                                 </td>
                                 <td className="py-3 px-3 text-center">
                                   <span className={`px-2 py-0.5 rounded-md text-xs font-mono font-bold border ${
@@ -6598,7 +6880,7 @@ export default function ValuationTerminal({
                                 <div className={`px-2.5 py-1 rounded-xl border text-xs font-mono font-bold flex items-center gap-2 ${badgeCls}`}>
                                   <span>{item.decision || 'NÖTR'}</span>
                                   <span className="w-1 h-3 bg-current opacity-30" />
-                                  <span>{item.score ? `${item.score}/100` : '—'}</span>
+                                  <span>{formatScore(item.score)}</span>
                                 </div>
                               </div>
                             </div>

@@ -191,7 +191,7 @@ describe('Comprehensive Financial Terminal Stress Test Suite', () => {
     it('detects Retail tickers and keywords', () => {
       assert.equal(detectSector('BIMAS'), 'RETAIL');
       assert.equal(detectSector('MGROS'), 'RETAIL');
-      assert.equal(detectSector('CCOLA'), 'RETAIL');
+      assert.equal(detectSector('SOKM'), 'RETAIL');
     });
 
     it('detects Utilities & Telco tickers and keywords', () => {
@@ -202,7 +202,7 @@ describe('Comprehensive Financial Terminal Stress Test Suite', () => {
 
     it('detects Financial Services (Factoring/Leasing) tickers and keywords', () => {
       assert.equal(detectSector('VAKFN'), 'FINANCIAL_SERVICES');
-      assert.equal(detectSector('GSDHO'), 'FINANCIAL_SERVICES');
+      assert.equal(detectSector('ISFIN'), 'FINANCIAL_SERVICES');
     });
   });
 

@@ -76,20 +76,20 @@ test('2. Theme Canonical Ordering Consistency', () => {
 test('3. Sector Display Resolution (Never bare BIST)', () => {
   assert.equal(getCompanySectorDisplayName('THYAO'), 'Havacılık');
   assert.equal(getCompanySectorDisplayName('PGSUS'), 'Havacılık');
-  assert.equal(getCompanySectorDisplayName('FROTO'), 'Otomotiv Sanayii');
-  assert.equal(getCompanySectorDisplayName('TOASO'), 'Otomotiv Sanayii');
-  assert.equal(getCompanySectorDisplayName('ASELS'), 'Savunma Sanayii');
-  assert.equal(getCompanySectorDisplayName('TUPRS'), 'Petrol & Rafineri');
-  assert.equal(getCompanySectorDisplayName('EREGL'), 'Demir-Çelik');
+  assert.equal(getCompanySectorDisplayName('FROTO'), 'Otomotiv');
+  assert.equal(getCompanySectorDisplayName('TOASO'), 'Otomotiv');
+  assert.equal(getCompanySectorDisplayName('ASELS'), 'Savunma');
+  assert.equal(getCompanySectorDisplayName('TUPRS'), 'Petrol');
+  assert.equal(getCompanySectorDisplayName('EREGL'), 'Demir-Çelik Temel');
   assert.equal(getCompanySectorDisplayName('SISE'), 'Cam Sanayii');
-  assert.equal(getCompanySectorDisplayName('BIMAS'), 'Gıda Perakende');
-  assert.equal(getCompanySectorDisplayName('AGESA'), 'Sigortacılık & BES');
+  assert.equal(getCompanySectorDisplayName('BIMAS'), 'Gıda & Ticaret Perakende');
+  assert.equal(getCompanySectorDisplayName('AGESA'), 'Sigortacılık');
   assert.equal(getCompanySectorDisplayName('GARAN'), 'Bankacılık');
-  assert.equal(getCompanySectorDisplayName('EKGYO'), 'Gayrimenkul (GYO)');
+  assert.equal(getCompanySectorDisplayName('EKGYO'), 'GYO');
   assert.equal(getCompanySectorDisplayName('KCHOL'), 'Holding');
-  assert.equal(getCompanySectorDisplayName('TCELL'), 'Telekomünikasyon');
-  assert.equal(getCompanySectorDisplayName('LOGO'), 'Yazılım & Bilişim');
-  assert.equal(getCompanySectorDisplayName('MPARK'), 'Sağlık & Hastanecilik');
+  assert.equal(getCompanySectorDisplayName('TCELL'), 'İletişim');
+  assert.equal(getCompanySectorDisplayName('LOGO'), 'Teknoloji');
+  assert.equal(getCompanySectorDisplayName('MPARK'), 'Sağlık ve İlaç');
 
   // Generic fallback tests
   assert.equal(getCompanySectorDisplayName('UNKNOWN', 'TECH'), 'Teknoloji & Yazılım');

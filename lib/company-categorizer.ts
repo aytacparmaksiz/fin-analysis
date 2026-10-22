@@ -284,30 +284,36 @@ export function categorizeCompany(report: SavedReport): CompanyThemeMatch[] {
   }
 
   // 7. UZAK DURULMASI GEREKENLER & YÜKSEK RİSK (AVOID)
-  const isAlma = (report.decision || '').trim().toUpperCase() === 'ALMA';
-  const isValueTrap = Boolean(report.isValueTrap || data?.valuation?.is_value_trap);
-  const isSevereDebt = netDebt !== null && latestEbitda !== null && latestEbitda > 0 && (netDebt / (latestEbitda * 4)) > 4.5;
-  const isDestroyingCapital = roic !== null && roic < 0;
+  // Temel Kural: Nihai analist kararı 'AL' veya 'GÜÇLÜ AL' olan bir hisse ASLA 'Uzak Dur / Riskli' sepetine atanamaz!
+  const normDecision = (report.decision || '').trim().toUpperCase();
+  const isPositiveDecision = normDecision.includes('AL') && !normDecision.includes('ALMA');
 
-  if (isAlma || isValueTrap || isSevereDebt || isDestroyingCapital) {
-    const riskReason = isValueTrap
-      ? 'Değer Tuzağı Riski: Kağıt üzerinde ucuz görünse de kâr marjları ve operasyonel getiri hızla erozyona uğruyor.'
-      : isAlma
-      ? 'Resmi Analist Kararı: ALMA (Yatırım Önerilmez, model portföy güvenlik sınırlarını aşan risk faktörleri).'
-      : isSevereDebt
-      ? `Kritik Borçluluk Baskısı: Net Borç / FAVÖK çarpanı (${(netDebt! / ((latestEbitda || 1) * 4)).toFixed(1)}x) emniyet tavanını aşmış durumda.`
-      : 'Sermaye Değer Yıkımı: Şirketin getirisi (ROIC negatif) sermaye maliyetini karşılayamıyor.';
+  if (!isPositiveDecision) {
+    const isAlma = normDecision === 'ALMA';
+    const isValueTrap = Boolean(report.isValueTrap || data?.valuation?.is_value_trap);
+    const isSevereDebt = netDebt !== null && latestEbitda !== null && latestEbitda > 0 && (netDebt / (latestEbitda * 4)) > 4.5;
+    const isDestroyingCapital = roic !== null && roic < 0;
 
-    matches.push({
-      themeId: 'AVOID',
-      themeName: INVESTMENT_THEMES.AVOID.name,
-      shortLabel: INVESTMENT_THEMES.AVOID.shortLabel,
-      iconTag: INVESTMENT_THEMES.AVOID.iconTag,
-      badgeClass: INVESTMENT_THEMES.AVOID.badgeClass,
-      reason: riskReason,
-      metricLabel: 'Risk Durumu',
-      metricValue: isValueTrap ? 'Değer Tuzağı' : isAlma ? 'ALMA Kararı' : 'Yüksek Risk',
-    });
+    if (isAlma || isValueTrap || isSevereDebt || isDestroyingCapital) {
+      const riskReason = isValueTrap
+        ? 'Değer Tuzağı Riski: Kağıt üzerinde ucuz görünse de kâr marjları ve operasyonel getiri hızla erozyona uğruyor.'
+        : isAlma
+        ? 'Resmi Analist Kararı: ALMA (Yatırım Önerilmez, model portföy güvenlik sınırlarını aşan risk faktörleri).'
+        : isSevereDebt
+        ? `Kritik Borçluluk Baskısı: Net Borç / FAVÖK çarpanı (${(netDebt! / ((latestEbitda || 1) * 4)).toFixed(1)}x) emniyet tavanını aşmış durumda.`
+        : 'Sermaye Değer Yıkımı: Şirketin getirisi (ROIC negatif) sermaye maliyetini karşılayamıyor.';
+
+      matches.push({
+        themeId: 'AVOID',
+        themeName: INVESTMENT_THEMES.AVOID.name,
+        shortLabel: INVESTMENT_THEMES.AVOID.shortLabel,
+        iconTag: INVESTMENT_THEMES.AVOID.iconTag,
+        badgeClass: INVESTMENT_THEMES.AVOID.badgeClass,
+        reason: riskReason,
+        metricLabel: 'Risk Durumu',
+        metricValue: isValueTrap ? 'Değer Tuzağı' : isAlma ? 'ALMA Kararı' : 'Yüksek Risk',
+      });
+    }
   }
 
   // Tüm eşleşen temaları kanonik hiyerarşik sıraya göre sırala (tüm analizlerde her zaman aynı tutarlı sırada gösterilir)
