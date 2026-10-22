@@ -304,20 +304,26 @@ test('Financial Pipeline & Ratio Engine Architecture Test Suite', async (t) => {
   });
 
   await t.test('10. computeFairValueTrend: Calculates chronological quarterly fair values without NaN or null', () => {
+    const full = { roe: 15, roic: 20, wacc: 28, current_ratio: 1.4 };
     const history = [
-      { period: '2025/06', revenue: 80_000, ebitda: 16_000, net_income: 9_000, equity: 60_000, net_debt: 20_000 },
-      { period: '2025/09', revenue: 88_000, ebitda: 17_000, net_income: 10_000, equity: 68_000, net_debt: 22_000 },
-      { period: '2025/12', revenue: 95_000, ebitda: 18_000, net_income: 11_000, equity: 75_000, net_debt: 24_000 },
-      { period: '2026/03', revenue: 100_000, ebitda: 19_000, net_income: 12_000, equity: 82_000, net_debt: 25_000 }
+      { period: '2025/06', revenue: 80_000, ebitda: 16_000, net_income: 9_000, equity: 60_000, net_debt: 20_000, ...full },
+      { period: '2025/09', revenue: 88_000, ebitda: 17_000, net_income: 10_000, equity: 68_000, net_debt: 22_000, ...full },
+      { period: '2025/12', revenue: 95_000, ebitda: 18_000, net_income: 11_000, equity: 75_000, net_debt: 24_000, ...full },
+      { period: '2026/03', revenue: 100_000, ebitda: 19_000, net_income: 12_000, equity: 82_000, net_debt: 25_000, ...full }
     ];
 
-    const trend = computeFairValueTrend(history, 'INDUSTRIAL', 10_000);
+    const trend = computeFairValueTrend(history, 'INDUSTRIAL', 10_000, undefined, undefined, 6.0);
     assert.ok(trend.length >= 2, 'Should compute trend points');
     for (const pt of trend) {
       assert.ok(pt.fairValue > 0, `fairValue must be positive, got ${pt.fairValue}`);
       assert.ok(!isNaN(pt.fairValue), 'fairValue must not be NaN');
       assert.ok(pt.period.length > 0, 'period must be non-empty');
     }
+
+    // Sıfır sentetik veri: ROIC/WACC/ROE ve hedef çarpan yoksa dönem için değer UYDURULMAZ.
+    const bare = history.map(({ period, revenue, ebitda, net_income, equity, net_debt }) => ({ period, revenue, ebitda, net_income, equity, net_debt }));
+    const bareTrend = computeFairValueTrend(bare, 'INDUSTRIAL', 10_000);
+    assert.equal(bareTrend.length, 0, 'Eksik girdide adil değer noktası üretilmemeli');
   });
 
   await t.test('11. computeSectorValuationAndDrivers: Applies EVA haircut and debt distress penalty on distressed value-destroying companies', () => {

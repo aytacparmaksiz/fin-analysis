@@ -1,4 +1,4 @@
-import test from 'node:test';
+﻿import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   enrichAndSanitizeFinancialHistory,
@@ -92,13 +92,13 @@ test('TTM & Foreign WACC Architecture Comprehensive Test Suite', async (t) => {
 
   await t.test('5. computeFairValueTrend does not unfairly apply debt haircut in interim quarters', () => {
     const history = [
-      { period: '2024/12', revenue: 1_000_000_000, ebitda: 200_000_000, equity: 500_000_000, net_debt: 400_000_000, share_price: 50, roe: 20, roic: 18 },
-      { period: '2025/06', revenue: 600_000_000, ebitda: 110_000_000, equity: 550_000_000, net_debt: 420_000_000, share_price: 55, roe: 22, roic: 19 },
-      { period: '2025/12', revenue: 1_200_000_000, ebitda: 240_000_000, equity: 600_000_000, net_debt: 450_000_000, share_price: 60, roe: 24, roic: 20 },
-      { period: '2026/06', revenue: 700_000_000, ebitda: 130_000_000, equity: 660_000_000, net_debt: 480_000_000, share_price: 65, roe: 25, roic: 21 }
+      { period: '2024/12', revenue: 1_000_000_000, ebitda: 200_000_000, equity: 500_000_000, net_debt: 400_000_000, share_price: 50, roe: 20, roic: 18, wacc: 28, current_ratio: 1.3, net_income: 100_000_000 },
+      { period: '2025/06', revenue: 600_000_000, ebitda: 110_000_000, equity: 550_000_000, net_debt: 420_000_000, share_price: 55, roe: 22, roic: 19, wacc: 28, current_ratio: 1.3, net_income: 100_000_000 },
+      { period: '2025/12', revenue: 1_200_000_000, ebitda: 240_000_000, equity: 600_000_000, net_debt: 450_000_000, share_price: 60, roe: 24, roic: 20, wacc: 28, current_ratio: 1.3, net_income: 100_000_000 },
+      { period: '2026/06', revenue: 700_000_000, ebitda: 130_000_000, equity: 660_000_000, net_debt: 480_000_000, share_price: 65, roe: 25, roic: 21, wacc: 28, current_ratio: 1.3, net_income: 100_000_000 }
     ];
 
-    const trend = computeFairValueTrend(history, 'INDUSTRIAL', 100_000_000, 65, 80);
+    const trend = computeFairValueTrend(history, 'INDUSTRIAL', 100_000_000, 65, 80, 6.0);
     assert.equal(trend.length, 4, 'Son 4 çeyrek trend noktası hesaplanmalıdır');
     // Her çeyrekte adil değer pozitif ve stabil seyretmeli, yapay erozyon (isEroding) olmamalıdır
     const hasErosion = trend.some(p => p.isEroding === true);

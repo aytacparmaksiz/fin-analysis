@@ -155,8 +155,6 @@ export class IsYatirimApiAdapter {
     let minority_interests: number | null = null;
     let total_equity: number | null = null;
     let lease_liabilities: number | null = null;
-    let short_term_lease_liabilities: number | null = null;
-    let long_term_lease_liabilities: number | null = null;
     let paid_in_capital: number | null = null;
     let retained_earnings: number | null = null;
     let net_debt: number | null = null;
@@ -354,12 +352,10 @@ export class IsYatirimApiAdapter {
       other_long_term_liabilities = getVal(['2BH', '2BBB', '2BG', '2BE'], ['diğer uzun vadeli yükümlülükler', 'diğer borçlar', 'ertelenmiş vergi yükümlülüğü']);
       total_liabilities = (current_liabilities || 0) + (long_term_liabilities || 0);
 
-      // Kiralama Yükümlülükleri (TFRS 16)
-      short_term_lease_liabilities = getVal(['2AAB', '2AABA'], ['kiralama sözleşmelerinden borçlar', 'faaliyet kiralaması borçları', 'kısa vadeli kiralama borçları']);
-      long_term_lease_liabilities = getVal(['2BAB', '2BABA'], ['kiralama sözleşmelerinden borçlar', 'faaliyet kiralaması borçları', 'uzun vadeli kiralama borçları']);
-      if (short_term_lease_liabilities !== null || long_term_lease_liabilities !== null) {
-        lease_liabilities = (short_term_lease_liabilities || 0) + (long_term_lease_liabilities || 0);
-      }
+      // Kiralama Yükümlülükleri (TFRS 16): İş Yatırım XI_29 formatında ayrı bir kalem YOKTUR;
+      // kiralama borçları 2AA / 2BA "Finansal Borçlar" içinde yer alır (THYAO, BIMAS yanıtlarıyla doğrulandı).
+      // Bu yüzden net_debt zaten kiralamayı içerir; ayrıca eklemek çifte sayım yaratır.
+      lease_liabilities = null;
 
       // Özkaynaklar ve Azınlık Payları Ayrıştırması:
       // İş Yatırım XI_29 standardı:

@@ -2341,31 +2341,25 @@ export function computeFairValueTrend(
     const ebitda = computePointTtm('ebitda');
     const netInc = computePointTtm('net_income');
 
-    let periodFv = 0;
+    // Sıfır sentetik veri: Girdi eksikse dönem için adil değer UYDURULMAZ, nokta atlanır.
+    let periodFv: number | null = 0;
+    const hasTargetMult = !!(targetMultiple && targetMultiple > 0);
 
-    if (sector === 'INSURANCE') {
-      const roe = parseFinancialNumber(item?.roe) ?? (eq > 0 ? (netInc / eq) * 100 : 25);
-      const targetPb = (targetMultiple && targetMultiple > 0) ? targetMultiple : (roe > 45 ? 2.3 : (roe > 30 ? 1.8 : 1.35));
-      const bvps = eq > 0 ? (eq / activeShareCount) : 1;
-      periodFv = bvps * targetPb;
-    } else if (sector === 'BANKING') {
-      const roe = parseFinancialNumber(item?.roe) ?? (eq > 0 ? (netInc / eq) * 100 : 25);
-      const spreadBonus = (typeof item?.credit_deposit_spread === 'number' && item.credit_deposit_spread > 15) ? 0.10 : 0;
-      const targetPb = (targetMultiple && targetMultiple > 0) ? targetMultiple : (roe > 35 ? (1.4 + spreadBonus) : (roe > 20 ? (1.05 + spreadBonus) : 0.85));
-      const bvps = eq > 0 ? (eq / activeShareCount) : 1;
-      periodFv = bvps * targetPb;
+    if (sector === 'INSURANCE' || sector === 'BANKING') {
+      const bvps = eq > 0 ? (eq / activeShareCount) : null;
+      periodFv = (bvps !== null && hasTargetMult) ? bvps * (targetMultiple as number) : null;
     } else if (sector === 'REIT') {
       const housingFactor = (typeof item?.housing_price_annual_change === 'number' && item.housing_price_annual_change > 0)
         ? (1 + (item.housing_price_annual_change / 200))
         : 1.0;
-      const navPerShare = (eq > 0 ? (eq / activeShareCount) : 1) * housingFactor;
-      periodFv = navPerShare * 0.75;
+      periodFv = eq > 0 ? (eq / activeShareCount) * housingFactor * 0.75 : null;
     } else if (sector === 'HOLDING') {
-      const navPerShare = eq > 0 ? (eq / activeShareCount) : 1;
-      periodFv = navPerShare * 0.70;
+      periodFv = eq > 0 ? (eq / activeShareCount) * 0.70 : null;
+    } else if (!hasTargetMult) {
+      periodFv = null;
     } else if (sector === 'AVIATION') {
       // Havacılık & Ulaştırma (THYAO, PGSUS, TAVHL): Yüksek filo borçluluğu ve IFRS 16 leasing
-      const mult = (targetMultiple && targetMultiple > 0) ? targetMultiple : 5.2;
+      const mult = targetMultiple as number;
       const evEq = Math.max(0, ebitda * mult - netDebt);
       const evPerShare = evEq > 0 ? (evEq / activeShareCount) : 0;
       const pePerShare = netInc > 0 ? ((netInc * 6.5) / activeShareCount) : 0;
@@ -2380,38 +2374,39 @@ export function computeFairValueTrend(
         const totalW = validComponents.reduce((acc, c) => acc + c.weight, 0);
         periodFv = validComponents.reduce((acc, c) => acc + (c.val * (c.weight / totalW)), 0);
       } else {
-        periodFv = pbPerShare || 1.0;
+        periodFv = pbPerShare > 0 ? pbPerShare : null;
       }
     } else {
       // Reel Sektör / Sanayi / Teknoloji / Enerji / Perakende / Sağlık
-      const roe = parseFinancialNumber(item?.roe) ?? (eq > 0 ? (netInc / eq) * 100 : 15);
-      const roic = parseFinancialNumber(item?.roic) ?? 15;
-      const wacc = parseFinancialNumber(item?.benchmark_wacc ?? item?.real_wacc ?? item?.wacc ?? 28) ?? 28;
-
-      const mult = (targetMultiple && targetMultiple > 0)
-        ? targetMultiple
-        : (sector === 'TECH' ? 8.5 : (sector === 'RETAIL' ? 5.6 : 6.0));
+      const roe = parseFinancialNumber(item?.roe) ?? (eq > 0 ? (netInc / eq) * 100 : null);
+      const roic = parseFinancialNumber(item?.roic);
+      const wacc = parseFinancialNumber(item?.benchmark_wacc ?? item?.real_wacc ?? item?.wacc);
+      const curRatio = parseFinancialNumber(item?.current_ratio);
+      const mult = targetMultiple as number;
       const lLi = (parseFinancialNumber(item?.lease_liabilities ?? item?.kiralama_borclari) ?? 0) * unitScale;
-      const mIn = (parseFinancialNumber(item?.non_controlling_interests ?? item?.azinlik_paylari) ?? 0) * unitScale;
+      const mIn = (parseFinancialNumber(item?.minority_interests ?? item?.non_controlling_interests ?? item?.azinlik_paylari) ?? 0) * unitScale;
 
-      const trendIndRes = computeIndustrialFairValue({
-        ebitdaFull: ebitda,
-        netFull: netInc,
-        totalEquityFull: eq,
-        netDebt,
-        leaseLiabilities: lLi,
-        minorityInterests: mIn,
-        effectiveShareCount: activeShareCount,
-        targetMultipleNum: mult,
-        clampedRevGrowth: 0.15,
-        clampedNetGrowth: 0.15,
-        currentRoic: roic,
-        currentWacc: wacc,
-        roe,
-        currentRatio: parseFinancialNumber(item?.current_ratio) ?? 1.0
-      });
-
-      periodFv = trendIndRes.fairValue != null ? trendIndRes.fairValue : 0.05;
+      if (roe === null || roic === null || wacc === null || curRatio === null) {
+        periodFv = null;
+      } else {
+        const trendIndRes = computeIndustrialFairValue({
+          ebitdaFull: ebitda,
+          netFull: netInc,
+          totalEquityFull: eq,
+          netDebt,
+          leaseLiabilities: lLi,
+          minorityInterests: mIn,
+          effectiveShareCount: activeShareCount,
+          targetMultipleNum: mult,
+          clampedRevGrowth: 0,
+          clampedNetGrowth: 0,
+          currentRoic: roic,
+          currentWacc: wacc,
+          roe,
+          currentRatio: curRatio
+        });
+        periodFv = trendIndRes.fairValue != null ? trendIndRes.fairValue : null;
+      }
     }
 
     // SON DÖNEM BİREBİR KİLİTLENMESİ (Point-in-Time Parity):
@@ -2420,6 +2415,7 @@ export function computeFairValueTrend(
       periodFv = masterFairValue;
     }
 
+    if (periodFv === null || !Number.isFinite(periodFv)) continue;
     periodFv = Number(Math.max(0.05, periodFv).toFixed(2));
     const discPct = (pSharePrice && pSharePrice > 0)
       ? Number((((periodFv - pSharePrice) / pSharePrice) * 100).toFixed(1))
@@ -2497,7 +2493,7 @@ export function detectValueTrap(
   // Holdinglerde iştirak portföyü ve NAD iskontosu, bankacılıkta ise ROE vs Ke esastır.
   if (sector !== 'HOLDING' && sector !== 'BANKING') {
     const roic = parseFinancialNumber(latest?.roic);
-    const wacc = parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc ?? 28.0);
+    const wacc = parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc);
     if (roic !== null && wacc !== null && (roic < 0 || (roic - wacc) < -3.0)) {
       reasons.push(`Sermaye Değer Yıkımı: Şirketin getirisi (ROIC %${roic.toFixed(1)}) sermaye maliyetinin (%${wacc.toFixed(1)}) gerisindedir.`);
     }
@@ -3152,9 +3148,9 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
     clampedRevGrowth,
     clampedNetGrowth,
     currentRoic,
-    currentWacc = 28.0,
+    currentWacc,
     roe,
-    currentRatio = 1.0
+    currentRatio
   } = inputs;
 
   // 1. Pay Adedi Kontrolü: Pay adedi yoksa hisse başı değer uydurulamaz!
@@ -3253,12 +3249,16 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
       fairValue = Number(Math.max(0.5, forwardBvps * justifiedPb).toFixed(2));
       formulaStr = `İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL) × Hak Edilen Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
     } else {
-      const activeRoe = roe != null ? roe : 15;
-      const forwardEquityGrowth = activeRoe > 0 ? Math.min(0.75, Math.max(0.10, (activeRoe / 100) * 0.85)) : 0;
+      const activeRoe = roe != null ? roe : null;
+      const forwardEquityGrowth = (activeRoe !== null && activeRoe > 0) ? Math.min(0.75, Math.max(0.10, (activeRoe / 100) * 0.85)) : 0;
       const forwardBvps = Math.max(0, bvps * (1 + forwardEquityGrowth));
       let justifiedPb = 1.0;
-      if (evaHaircutApplied || activeRoe < 8) {
-        justifiedPb = Math.max(0.32, Math.min(0.85, (Math.max(0, activeRoe) / Math.max(15, currentWacc ?? 28)) * 0.85));
+      if (activeRoe === null) {
+        justifiedPb = 0; // ROE verisi yok: P/B bileşeni hesaplanamaz, uydurma değer kullanılmaz.
+      } else if ((evaHaircutApplied || activeRoe < 8) && currentWacc != null) {
+        justifiedPb = Math.max(0.32, Math.min(0.85, (Math.max(0, activeRoe) / Math.max(15, currentWacc)) * 0.85));
+      } else if (activeRoe < 8) {
+        justifiedPb = Math.max(0.32, Math.min(0.85, Math.max(0, activeRoe) / 15));
       } else if (activeRoe > 25) {
         justifiedPb = Math.min(3.2, Math.max(1.3, activeRoe / 22));
       } else if (activeRoe > 12) {
@@ -4026,7 +4026,7 @@ export function computeSectorValuationAndDrivers(
 
       const bvps = totalEquityFull > 0 ? (totalEquityFull / effectiveShareCount) : 0;
       const forwardBvps = bvps * (1 + ((roe !== null && roe > 0) ? (roe / 100) * 0.85 : 0));
-      const pbPerShare = forwardBvps * Math.max(1.5, Math.min(6.0, (roe ?? 15) / 15));
+      const pbPerShare = roe !== null ? forwardBvps * Math.max(1.5, Math.min(6.0, roe / 15)) : 0;
 
       const weights = { sales: 0.50, pe: 0.35, pb: 0.15 };
       let combinedPerShare = 0;
@@ -4064,8 +4064,8 @@ export function computeSectorValuationAndDrivers(
     const clampedNetGrowth = Math.min(0.80, Math.max(-0.50, rawNetG));
 
     const currentRoic = parseFinancialNumber(latest?.roic);
-    const currentWacc = parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc ?? 28.0);
-    const latestCr = parseFinancialNumber(latest?.current_ratio) ?? 1.0;
+    const currentWacc = parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc);
+    const latestCr = parseFinancialNumber(latest?.current_ratio);
 
     const indResult = computeIndustrialFairValue({
       ebitdaFull,
@@ -4115,7 +4115,7 @@ export function computeSectorValuationAndDrivers(
       const lLi = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
       const mIn = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
       const cRoic = parseFinancialNumber(latest?.roic);
-      const cWacc = parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc ?? 28.0);
+      const cWacc = parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc);
       const rG = revGrowth / 100;
       const nG = netGrowth / 100;
 
@@ -4139,7 +4139,7 @@ export function computeSectorValuationAndDrivers(
         currentRoic: cRoic,
         currentWacc: cWacc,
         roe,
-        currentRatio: parseFinancialNumber(latest?.current_ratio) ?? 1.0
+        currentRatio: parseFinancialNumber(latest?.current_ratio)
       });
       bearPrice = bearRes.fairValue != null ? bearRes.fairValue : Number((fairValue * 0.70).toFixed(2));
 
@@ -4158,7 +4158,7 @@ export function computeSectorValuationAndDrivers(
         currentRoic: cRoic,
         currentWacc: cWacc,
         roe,
-        currentRatio: parseFinancialNumber(latest?.current_ratio) ?? 1.0
+        currentRatio: parseFinancialNumber(latest?.current_ratio)
       });
       bullPrice = bullRes.fairValue != null ? bullRes.fairValue : Number((fairValue * 1.30).toFixed(2));
       }
