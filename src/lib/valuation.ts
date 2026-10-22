@@ -43,6 +43,30 @@ export interface ValueTrapAnalysis {
   description: string;
 }
 
+export interface ValuationSensitivityCell {
+  wacc: number;
+  growth: number;
+  fairValue: number | null;
+  discountPct: number | null;
+  isValid: boolean;
+  isSingularity: boolean;
+  status: 'VALID' | 'WACC_LE_G_SINGULARITY' | 'DISTRESSED' | 'INSOLVENT';
+  statusLabel: string;
+}
+
+export interface ValuationSensitivityMatrixResult {
+  baseWacc: number;
+  baseGrowth: number;
+  currentPrice: number;
+  baseFairValue: number;
+  waccRange: number[];
+  growthRange: number[];
+  matrix: ValuationSensitivityCell[][];
+  hasSingularity: boolean;
+  singularityCount: number;
+  summary: string;
+}
+
 export interface ValuationMetrics {
   current_price: number;
   fair_value: number;
@@ -70,6 +94,7 @@ export interface ValuationMetrics {
   debt_distress_discount_pct?: number;
   final_decision?: 'AL' | 'ALMA' | 'NÖTR';
   decision?: 'AL' | 'ALMA' | 'NÖTR';
+  sensitivity_matrix?: ValuationSensitivityMatrixResult;
 }
 
 export interface SectorScoreBreakdown {
@@ -1034,9 +1059,11 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     // 3. Hamade Formülü ile Kaldıraçlı Beta ve CAPM Özsermaye Maliyeti (Ke = Rf + Beta * ERP)
     const unleveredBeta = getDamodaranUnleveredBeta(detectedSector, tickerStr, item.sector);
     const debtToEquityRatio = eqVal > 0 ? Math.min(2.5, effectiveDebt / eqVal) : 0;
-    const leveredBeta = (detectedSector === 'INSURANCE' || detectedSector === 'BANKING' || detectedSector === 'FINANCIAL_SERVICES')
+    const rawLeveredBeta = (detectedSector === 'INSURANCE' || detectedSector === 'BANKING' || detectedSector === 'FINANCIAL_SERVICES')
       ? unleveredBeta
       : Number((unleveredBeta * (1 + (1 - taxRate) * debtToEquityRatio)).toFixed(2));
+    // Finansal sınır kontrolü (IVS 105 / CAPM Invariant): Faal bir şirketin sistematik riski sıfır veya negatif olamaz (Ke > Rf zorunluluğu)
+    const leveredBeta = Math.max(0.25, rawLeveredBeta);
 
     const costOfEquity = Number((rf + leveredBeta * erp).toFixed(2)); // Ke (%)
     const afterTaxCostOfDebt = Number((preTaxKd * (1 - taxRate)).toFixed(2)); // Kd * (1 - T) (%)
@@ -3424,6 +3451,8 @@ export function computeSectorValuationAndDrivers(
   const rawRoe = parseFinancialNumber(latest?.roe) ?? parseFinancialNumber(latest?.return_on_equity);
   const roe = rawRoe !== null ? rawRoe : (sector === 'INSURANCE' ? 70.45 : 35.0);
 
+  let gordonGrowthWarning: string | undefined = undefined;
+
   if (!hasPresentationMultiple) {
     const ke = parseFinancialNumber(latest?.wacc) ?? 44.0;
 
@@ -3434,6 +3463,9 @@ export function computeSectorValuationAndDrivers(
 
       const safeKe = Math.max(10.0, ke);
       const gordonGrowth = sector === 'INSURANCE' ? 18.0 : 20.0; // Uzun vadeli sürdürülebilir büyüme (g)
+      if (safeKe <= gordonGrowth) {
+        gordonGrowthWarning = `Sermaye maliyeti (Ke %${safeKe.toFixed(1)}) uzun vadeli büyüme oranına (g %${gordonGrowth.toFixed(1)}) eşit veya küçüktür (Ke <= g). Gordon modeli sınır şartı ihlali için asgari marj tamponu uygulandı.`;
+      }
       const gordonDenominator = Math.max(4.0, safeKe - gordonGrowth);
       const gordonPbRaw = (roe - gordonGrowth) / gordonDenominator;
       const gordonPb = Number(Math.max(1.0, Math.min(5.0, gordonPbRaw)).toFixed(2));
@@ -3598,7 +3630,7 @@ export function computeSectorValuationAndDrivers(
   let formulaStr = '';
   let modelName = '';
   let isInsolvent = false;
-  let boundaryWarning: string | undefined = undefined;
+  let boundaryWarning: string | undefined = gordonGrowthWarning;
   let evaDiscountPct = 0;
   let debtDiscountPct = 0;
   let evaHaircutApplied = false;
@@ -3805,7 +3837,8 @@ export function computeSectorValuationAndDrivers(
     // 1. Sütun: 12A İleriye Dönük FD/FAVÖK Operasyonel Değeri
     const baseForwardEbitda = ebitdaFull > 0 ? ebitdaFull * (1 + clampedRevGrowth) : 0;
     const forwardEbitda = evaHaircutApplied ? baseForwardEbitda * (1 - evaDiscountPct) : baseForwardEbitda;
-    const evEbitdaEquity = forwardEbitda > 0 ? (forwardEbitda * targetMultipleNum - netDebt) : 0;
+    const enterpriseVal = forwardEbitda * targetMultipleNum;
+    const evEbitdaEquity = forwardEbitda > 0 ? (enterpriseVal - netDebt) : 0;
     const evEbitdaPerShare = evEbitdaEquity > 0 ? (evEbitdaEquity / effectiveShareCount) : 0;
 
     if (totalEquityFull <= 0) {
@@ -3817,15 +3850,20 @@ export function computeSectorValuationAndDrivers(
         isInsolvent = true;
         boundaryWarning = 'Firma Değeri Net Borcu karşılayamamaktadır (Özkaynak Değeri <= 0). İçsel hisse değeri uygulanamaz (N/A).';
         fairValue = null as any;
-        formulaStr = `Firma Değeri (${(forwardEbitda * targetMultipleNum).toLocaleString('tr-TR')} TL) <= Net Borç (${netDebt.toLocaleString('tr-TR')} TL) -> İçsel Değer: N/A`;
+        formulaStr = `Firma Değeri (${enterpriseVal.toLocaleString('tr-TR')} TL) <= Net Borç (${netDebt.toLocaleString('tr-TR')} TL) -> İçsel Değer: N/A`;
       } else {
         // Turnaround: EV net borçtan büyük, pozitif operasyonel özkaynak değeri üretildi!
         fairValue = Number(evEbitdaPerShare.toFixed(2));
         modelName = 'İleriye Dönük İskontolu FAVÖK Operasyonel Değeri Modeli (Negatif Özkaynak Düzeltmeli)';
-        formulaStr = `Firma Değeri: ${(forwardEbitda * targetMultipleNum).toLocaleString('tr-TR')} TL - Net Borç: ${netDebt.toLocaleString('tr-TR')} TL = Özkaynak Değeri: ${evEbitdaEquity.toLocaleString('tr-TR')} TL -> Hisse Başı Değer: ${fairValue.toFixed(2).replace('.', ',')} TL`;
+        formulaStr = `Firma Değeri: ${enterpriseVal.toLocaleString('tr-TR')} TL - Net Borç: ${netDebt.toLocaleString('tr-TR')} TL = Özkaynak Değeri: ${evEbitdaEquity.toLocaleString('tr-TR')} TL -> Hisse Başı Değer: ${fairValue.toFixed(2).replace('.', ',')} TL`;
         boundaryWarning = 'Şirket muhasebesel özkaynakları negatiftir. PD/DD ve Gordon modelleri uygulanamaz (N/A); adil değer yalnızca operasyonel nakit üretim gücü (FD/FAVÖK) ve borç köprüsü üzerinden türetilmiştir.';
       }
     } else {
+      if (forwardEbitda > 0 && enterpriseVal <= netDebt) {
+        boundaryWarning = boundaryWarning
+          ? `${boundaryWarning} | Firma Değeri Net Borcu karşılamakta yetersizdir (EV <= Net Borç).`
+          : 'Firma Değeri Net Borcu karşılamakta yetersizdir (EV <= Net Borç). Borç yükü özkaynak değerini aşındırmaktadır.';
+      }
       // 2. Sütun: 12A İleriye Dönük F/K (Net Kâr) Değeri
       const baseForwardNet = netFull > 0 ? netFull * (1 + clampedNetGrowth) : 0;
       const forwardNet = evaHaircutApplied ? baseForwardNet * (1 - evaDiscountPct * 0.8) : baseForwardNet;
@@ -3949,6 +3987,15 @@ export function computeSectorValuationAndDrivers(
     targetMultipleNum
   );
 
+  const sensitivityMatrix = (fairValue !== null && fairValue > 0)
+    ? calculateValuationSensitivityMatrix({
+        baseWacc: parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc) ?? (sector === 'INSURANCE' ? 35.1 : 28.0),
+        baseGrowth: sector === 'INSURANCE' ? 18.0 : (sector === 'BANKING' ? 20.0 : 15.0),
+        currentPrice: safeCurrentPrice,
+        baseFairValue: fairValue
+      })
+    : undefined;
+
   const valuation: ValuationMetrics = {
     current_price: currentPrice,
     fair_value: fairValue,
@@ -3971,6 +4018,7 @@ export function computeSectorValuationAndDrivers(
     eva_haircut_applied: evaHaircutApplied,
     eva_discount_pct: evaDiscountPct > 0 ? Number((evaDiscountPct * 100).toFixed(1)) : undefined,
     debt_distress_discount_pct: debtDiscountPct > 0 ? Number((debtDiscountPct * 100).toFixed(1)) : undefined,
+    sensitivity_matrix: sensitivityMatrix,
   };
 
   // Sektörel Puanlama ve Karar Optimizasyonu
@@ -4495,6 +4543,109 @@ export function calculateFxSensitivity(item: any, extractedData?: any): FxSensit
     positionLabel,
     summaryNote,
     matrix
+  };
+}
+
+// ============================================================================
+// 8.5. DİNAMİK DEĞERLEME DUYARLILIK & STRES MATRİSİ (SENSITIVITY ENGINE - IVS 105)
+// ============================================================================
+
+export function calculateValuationSensitivityMatrix({
+  baseWacc,
+  baseGrowth = 15.0,
+  currentPrice,
+  baseFairValue,
+  waccDeltas = [-3.0, -1.5, 0, 1.5, 3.0],
+  growthDeltas = [-2.0, -1.0, 0, 1.0, 2.0]
+}: {
+  baseWacc: number;
+  baseGrowth?: number;
+  currentPrice: number;
+  baseFairValue: number;
+  waccDeltas?: number[];
+  growthDeltas?: number[];
+}): ValuationSensitivityMatrixResult {
+  const safeBaseWacc = Math.max(5.0, baseWacc);
+  const safePrice = (currentPrice && currentPrice > 0) ? currentPrice : 1.0;
+  const safeBaseFair = (baseFairValue && baseFairValue > 0) ? baseFairValue : 0;
+
+  const waccRange = waccDeltas.map(d => Number((safeBaseWacc + d).toFixed(1)));
+  const growthRange = growthDeltas.map(d => Number((baseGrowth + d).toFixed(1)));
+
+  const baseDenom = safeBaseWacc - baseGrowth;
+  const baseCapFactor = baseDenom > 0 ? (1 + baseGrowth / 100) / (baseDenom / 100) : 10.0;
+
+  let hasSingularity = false;
+  let singularityCount = 0;
+
+  const matrix: ValuationSensitivityCell[][] = waccRange.map(w => {
+    return growthRange.map(g => {
+      // Finansal sınır kontrolü (IVS 105 Invariant): WACC <= g durumunda terminal değer matematiksel olarak ıraksar (sonsuz veya negatif)
+      if (w <= g) {
+        hasSingularity = true;
+        singularityCount++;
+        return {
+          wacc: w,
+          growth: g,
+          fairValue: null,
+          discountPct: null,
+          isValid: false,
+          isSingularity: true,
+          status: 'WACC_LE_G_SINGULARITY',
+          statusLabel: 'Matematiksel Tekillik (WACC <= g hatası)'
+        };
+      }
+
+      if (safeBaseFair <= 0) {
+        return {
+          wacc: w,
+          growth: g,
+          fairValue: 0,
+          discountPct: -100,
+          isValid: true,
+          isSingularity: false,
+          status: 'INSOLVENT',
+          statusLabel: 'İflas / Özkaynak <= 0'
+        };
+      }
+
+      const cellDenom = (w - g) / 100;
+      const cellCapFactor = (1 + g / 100) / cellDenom;
+      const sensitivityRatio = baseCapFactor > 0 ? cellCapFactor / baseCapFactor : 1.0;
+
+      // Model: Adil değerin %40'ı açık tahmin dönemi / defter değeri, %60'ı uç değer duyarlılığına tabidir
+      const adjustedFair = Number((safeBaseFair * (0.40 + 0.60 * sensitivityRatio)).toFixed(2));
+      const clampedFair = Math.max(0.5, adjustedFair);
+      const discount = Number((((clampedFair - safePrice) / safePrice) * 100).toFixed(1));
+
+      return {
+        wacc: w,
+        growth: g,
+        fairValue: clampedFair,
+        discountPct: discount,
+        isValid: true,
+        isSingularity: false,
+        status: 'VALID',
+        statusLabel: 'Geçerli Değerleme'
+      };
+    });
+  });
+
+  const summary = hasSingularity
+    ? `Duyarlılık matrisinde ${singularityCount} adet hücrede WACC <= g tekillik sınırı (ıraksak büyüme) tespit edilmiş ve matematiksel olarak elenmiştir.`
+    : `Duyarlılık matrisi WACC (%${waccRange[0]} - %${waccRange[waccRange.length - 1]}) ve Büyüme (%${growthRange[0]} - %${growthRange[growthRange.length - 1]}) eksenlerinde kararlı ve geçerlidir.`;
+
+  return {
+    baseWacc: safeBaseWacc,
+    baseGrowth,
+    currentPrice: safePrice,
+    baseFairValue: safeBaseFair,
+    waccRange,
+    growthRange,
+    matrix,
+    hasSingularity,
+    singularityCount,
+    summary
   };
 }
 
