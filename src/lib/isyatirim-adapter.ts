@@ -449,7 +449,8 @@ export class IsYatirimApiAdapter {
       if (officialFcf !== null) {
         free_cash_flow = officialFcf;
         if (operating_cash_flow !== null) {
-          capex = Math.abs(operating_cash_flow - officialFcf);
+          const derivedCapex = operating_cash_flow - officialFcf;
+          capex = derivedCapex >= 0 ? derivedCapex : 0;
         } else {
           capex = tangibleCapex !== null ? Math.abs(tangibleCapex) : (totalCapex !== null ? Math.abs(totalCapex) : null);
         }

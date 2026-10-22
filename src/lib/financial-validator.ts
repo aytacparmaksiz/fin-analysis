@@ -106,7 +106,10 @@ export class FinancialDataValidator {
     // 4. NAKİT AKIŞ VE FCF KONTROLÜ
     if (copy.operating_cash_flow !== null && copy.free_cash_flow !== null) {
       if (copy.capex === null || copy.capex === undefined) {
-        copy.capex = Math.abs(copy.operating_cash_flow - copy.free_cash_flow);
+        // IVS 105 / Finansal Muhasebe: FCF = OCF - CapEx => CapEx = OCF - FCF
+        // Eğer FCF > OCF ise şirket net duran varlık satışı / elden çıkarma (disinvestment) yapmıştır.
+        // Math.abs kullanmak elden çıkarmayı pozitif yatırım nakit çıkışına dönüştüreceğinden Math.max(0, ...) uygulanır.
+        copy.capex = Math.max(0, copy.operating_cash_flow - copy.free_cash_flow);
       }
     }
 

@@ -574,7 +574,8 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
       'npl_ratio', 'car_ratio', 'nim', 'net_interest_income', 'loan_to_deposit',
       'nav', 'holding_discount',
       'current_ratio', 'quick_ratio', 'cash_ratio', 'leverage_ratio',
-      'asset_turnover', 'equity_turnover', 'roa', 'roe', 'roic', 'wacc', 'share_price'
+      'asset_turnover', 'equity_turnover', 'roa', 'roe', 'roic', 'wacc', 'share_price',
+      'beta', 'unlevered_beta'
     ];
     for (const f of numericFields) {
       if (item[f] !== undefined && item[f] !== null) {
@@ -1057,12 +1058,30 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     const equityWeight = Number((1.0 - debtWeight).toFixed(4));
 
     // 3. Hamade Formülü ile Kaldıraçlı Beta ve CAPM Özsermaye Maliyeti (Ke = Rf + Beta * ERP)
-    const unleveredBeta = getDamodaranUnleveredBeta(detectedSector, tickerStr, item.sector);
+    const customUnlevered = parseFinancialNumber(item.unlevered_beta ?? item.custom_beta ?? container.unlevered_beta);
+    let unleveredBeta: number;
+    if (customUnlevered !== null && !isNaN(customUnlevered)) {
+      unleveredBeta = customUnlevered;
+    } else if (item._input_unlevered_beta !== undefined) {
+      unleveredBeta = item._input_unlevered_beta;
+    } else if (item.beta !== undefined && item._levered_computed === undefined && typeof item.beta === 'number') {
+      item._input_unlevered_beta = item.beta;
+      unleveredBeta = item.beta;
+    } else if (item._levered_computed) {
+      unleveredBeta = item._input_unlevered_beta ?? getDamodaranUnleveredBeta(detectedSector, tickerStr, item.sector);
+    } else {
+      unleveredBeta = getDamodaranUnleveredBeta(detectedSector, tickerStr, item.sector);
+    }
+    // Finansal sınır kontrolü (IVS 105 / CAPM Invariant):
+    // Faal bir şirketin sistematik riski sıfır veya negatif olamaz (Ke > Rf zorunluluğu).
+    // Negatif veya aşırı düşük unlevered beta için operasyonel taban (asgari 0.20) uygulanır.
+    const safeUnleveredBeta = Math.max(0.20, unleveredBeta);
+
     const debtToEquityRatio = eqVal > 0 ? Math.min(2.5, effectiveDebt / eqVal) : 0;
     const rawLeveredBeta = (detectedSector === 'INSURANCE' || detectedSector === 'BANKING' || detectedSector === 'FINANCIAL_SERVICES')
-      ? unleveredBeta
-      : Number((unleveredBeta * (1 + (1 - taxRate) * debtToEquityRatio)).toFixed(2));
-    // Finansal sınır kontrolü (IVS 105 / CAPM Invariant): Faal bir şirketin sistematik riski sıfır veya negatif olamaz (Ke > Rf zorunluluğu)
+      ? safeUnleveredBeta
+      : Number((safeUnleveredBeta * (1 + (1 - taxRate) * debtToEquityRatio)).toFixed(2));
+    // Nihai kaldıraçlı beta asgari operasyonel taban 0.25'e kenetlenir
     const leveredBeta = Math.max(0.25, rawLeveredBeta);
 
     const costOfEquity = Number((rf + leveredBeta * erp).toFixed(2)); // Ke (%)
@@ -1110,6 +1129,7 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     item.equity_weight = Number((equityWeight * 100).toFixed(1));
     item.debt_weight = Number((debtWeight * 100).toFixed(1));
     item.beta = leveredBeta;
+    item._levered_computed = true;
     item.risk_free_rate = rf;
     item.erp = erp;
 
@@ -3462,26 +3482,43 @@ export function computeSectorValuationAndDrivers(
       const sectorPbBase = sector === 'INSURANCE' ? 2.4 : 1.25;
 
       const safeKe = Math.max(10.0, ke);
-      const gordonGrowth = sector === 'INSURANCE' ? 18.0 : 20.0; // Uzun vadeli sürdürülebilir büyüme (g)
+      const macroGrowth = sector === 'INSURANCE' ? 18.0 : 20.0; // Uzun vadeli sürdürülebilir büyüme (g)
+      // Kurumsal Finans & IVS 105 Kuralı: Şirketin uzun vadeli sürdürülebilir büyümesi g,
+      // sürekli dış sermaye enjeksiyonu olmaksızın özkaynak kârlılığını (ROE) aşamaz (g = b * ROE <= ROE).
+      // Negatif veya sıfır ROE durumunda Gordon büyüme modeli matematiksel ve ekonomik olarak uygulanamaz.
+      let gordonGrowth = macroGrowth;
+      let isDistressedFinancial = false;
+
+      if (roe <= 0) {
+        isDistressedFinancial = true;
+        gordonGrowthWarning = `Negatif veya sıfır ROE (%${roe.toFixed(1)}) nedeniyle Gordon Büyüme Modeli uygulanamaz (N/A). Varlık değer düşüklüğü / sıkıntılı P/B tabanı uygulandı.`;
+      } else if (roe < macroGrowth) {
+        // Pozitif düşük kârlılık: ROE macro büyümeden düşükse g oranı iç kârlılıkla sınırlandırılır
+        gordonGrowth = Number((roe * 0.70).toFixed(1));
+      }
+
       if (safeKe <= gordonGrowth) {
-        gordonGrowthWarning = `Sermaye maliyeti (Ke %${safeKe.toFixed(1)}) uzun vadeli büyüme oranına (g %${gordonGrowth.toFixed(1)}) eşit veya küçüktür (Ke <= g). Gordon modeli sınır şartı ihlali için asgari marj tamponu uygulandı.`;
+        gordonGrowthWarning = gordonGrowthWarning
+          ? `${gordonGrowthWarning} | Sermaye maliyeti (Ke %${safeKe.toFixed(1)}) uzun vadeli büyüme oranına (g %${gordonGrowth.toFixed(1)}) eşit veya küçüktür (Ke <= g). Gordon modeli sınır şartı ihlali için asgari marj tamponu uygulandı.`
+          : `Sermaye maliyeti (Ke %${safeKe.toFixed(1)}) uzun vadeli büyüme oranına (g %${gordonGrowth.toFixed(1)}) eşit veya küçüktür (Ke <= g). Gordon modeli sınır şartı ihlali için asgari marj tamponu uygulandı.`;
       }
       const gordonDenominator = Math.max(4.0, safeKe - gordonGrowth);
-      const gordonPbRaw = (roe - gordonGrowth) / gordonDenominator;
-      const gordonPb = Number(Math.max(1.0, Math.min(5.0, gordonPbRaw)).toFixed(2));
+      const gordonPbRaw = isDistressedFinancial ? 0.35 : (roe - gordonGrowth) / gordonDenominator;
+      const gordonPbFloor = isDistressedFinancial ? 0.30 : (roe < safeKe ? 0.40 : 1.0);
+      const gordonPb = Number(Math.max(gordonPbFloor, Math.min(5.0, gordonPbRaw)).toFixed(2));
 
       // Sektör liderliği, BES fon büyüklüğü (AUM) ve dağıtım kanalı primi
       let franchisePremium = 0;
       let finalPb = gordonPb;
 
-      if (sector === 'INSURANCE') {
+      if (sector === 'INSURANCE' && !isDistressedFinancial) {
         franchisePremium = Number(Math.max(0, (sectorPbBase * 0.20)).toFixed(2));
         finalPb = Number((gordonPb + franchisePremium).toFixed(2));
       }
 
       // Pure Gordon model + franchise premium (preserves Layer 1 intrinsic price-independence)
 
-      const minPb = sector === 'INSURANCE' ? 1.4 : 0.8;
+      const minPb = isDistressedFinancial ? 0.30 : (sector === 'INSURANCE' ? 1.0 : 0.6);
       const maxPb = sector === 'INSURANCE' ? 4.5 : 2.5;
       targetMultipleNum = Number(Math.max(minPb, Math.min(maxPb, finalPb)).toFixed(1));
       targetMultipleStr = `PD/DD ${targetMultipleNum.toString().replace('.', ',')}x`;
@@ -3928,7 +3965,12 @@ export function computeSectorValuationAndDrivers(
 
         // Hibrit Ağırlıklandırma
         const validComponents: { val: number; weight: number }[] = [];
-        if (evEbitdaPerShare > 0) validComponents.push({ val: evEbitdaPerShare, weight: 0.45 });
+        if (forwardEbitda > 0) {
+          // EV/EBITDA: forwardEbitda pozitifse model devrededir. EV <= NetDebt durumunda hisse başına operasyonel özkaynak
+          // değeri 0 TL'dir (evEbitdaPerShare = 0). Bu 0 değeri bileşen dışı bırakılmamalı (%45 ağırlıkla ortalamaya katılmalı),
+          // aksi takdirde borcun özkaynak üzerindeki aşındırıcı etkisi yutulur (survivorship bias).
+          validComponents.push({ val: evEbitdaPerShare, weight: 0.45 });
+        }
         if (pePerShare > 0) validComponents.push({ val: pePerShare, weight: 0.25 });
         if (pbPerShare > 0) validComponents.push({ val: pbPerShare, weight: 0.30 });
 
@@ -3936,9 +3978,12 @@ export function computeSectorValuationAndDrivers(
         if (validComponents.length > 0) {
           const totalW = validComponents.reduce((acc, c) => acc + c.weight, 0);
           hybridFair = validComponents.reduce((acc, c) => acc + (c.val * (c.weight / totalW)), 0);
-          if (!evaHaircutApplied && pbPerShare > 0 && hybridFair < pbPerShare * 0.75) {
+          if (!evaHaircutApplied && !(enterpriseVal <= netDebt) && pbPerShare > 0 && hybridFair < pbPerShare * 0.75) {
             hybridFair = (hybridFair * 0.4) + (pbPerShare * 0.6);
           }
+        }
+        if (debtDiscountPct > 0 && enterpriseVal <= netDebt) {
+          hybridFair = hybridFair * (1 - debtDiscountPct);
         }
 
         // Katman 1 Prensibi: Net borç zaten EV'den nominal olarak düşülmüştür (EV - NetDebt).

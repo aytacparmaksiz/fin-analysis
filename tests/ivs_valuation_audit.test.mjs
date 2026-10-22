@@ -9,6 +9,7 @@ import {
   enrichAndSanitizeFinancialHistory
 } from '../lib/valuation.ts';
 import { isMetricDisabled } from '../lib/sectors.ts';
+import { FinancialDataValidator } from '../lib/financial-validator.ts';
 
 test('IVS & IFRS 13 VALUATION ENGINE AUDIT & INVARIANT TEST SUITE', async (t) => {
 
@@ -108,6 +109,9 @@ test('IVS & IFRS 13 VALUATION ENGINE AUDIT & INVARIANT TEST SUITE', async (t) =>
       underwaterRes.valuation.boundary_warning?.includes('EV <= Net Borç') || underwaterRes.valuation.debt_distress_discount_pct !== undefined,
       `EV <= Net Borç durumunda model borç sıkıntısı uyarısı veya indirimi uygulamalıdır (Mevcut: ${underwaterRes.valuation.boundary_warning})`
     );
+    // Borç aşınması ve 0 TL operasyonel özkaynak payı yansıtılmış olmalıdır:
+    // Model 0 TL EV/EBITDA payını %45 ağırlıkla dahil ettiği için hisse başı adil değer baskılanmalıdır (<= 0.50 TL)
+    assert.ok(underwaterRes.valuation.fair_value <= 0.50, `EV <= Net Borç durumunda adil değer borç yükünü yansıtmalıdır (Mevcut: ${underwaterRes.valuation.fair_value})`);
 
     // Durum B: Tamamen batık şirket (Özkaynak <= 0 VE EV <= Net Borç)
     const insolventHistory = [
@@ -156,7 +160,7 @@ test('IVS & IFRS 13 VALUATION ENGINE AUDIT & INVARIANT TEST SUITE', async (t) =>
     enrichAndSanitizeFinancialHistory([testItem], 'INDUSTRIAL');
 
     // leveredBeta asgari operasyonel taban olan 0.25'e kenetlenmelidir
-    assert.ok(testItem.beta >= 0.25, `Beta <= 0 girildiğinde asgari taban (>=0.25) uygulanmalıdır (Mevcut: ${testItem.beta})`);
+    assert.equal(testItem.beta, 0.25, `Beta <= 0 (-0.40) girildiğinde asgari taban 0.25'e kenetlenmelidir (Mevcut: ${testItem.beta})`);
     assert.ok(testItem.cost_of_equity > testItem.risk_free_rate, `CAPM gereği Ke (${testItem.cost_of_equity}) > Rf (${testItem.risk_free_rate}) olmalıdır`);
   });
 
@@ -206,6 +210,76 @@ test('IVS & IFRS 13 VALUATION ENGINE AUDIT & INVARIANT TEST SUITE', async (t) =>
       `Bankacılık modeli Gordon / Defter Değeri olmalıdır: ${bankVal.valuation.valuation_model_name}`
     );
     assert.ok(bankVal.valuation.fair_value > 0, 'Bankacılık adil değeri pozitif olmalıdır');
+  });
+
+  await t.test('SECTOR RULE 1B: Banking & Insurance Gordon Growth Bounded by Internal ROE (g <= ROE) and Distressed Floor', () => {
+    // 1. Durum: Negatif ROE (Operasyonel Zarar Eden Banka)
+    // Bankanın ROE'si -15.0%. Gordon modeli g = %20 büyüme varsayamaz; boundary_warning üretilmeli ve sıkıntılı P/B tabanı (<=0.40x) uygulanmalıdır.
+    const lossBankHistory = [
+      {
+        period: '2025/12',
+        revenue: 50_000_000_000,
+        net_income: -15_000_000_000,
+        equity: 100_000_000_000,
+        total_assets: 800_000_000_000,
+        paid_in_capital: 4_000_000_000,
+        roe: -15.0,
+        wacc: 35.0
+      }
+    ];
+
+    const lossBankVal = computeSectorValuationAndDrivers({
+      extractedData: {
+        ticker: 'ZARARBANK',
+        sector: 'BANKING',
+        currency: 'TRY',
+        share_count: 4_000_000_000,
+        financial_history: lossBankHistory
+      },
+      sector: 'BANKING',
+      marketPrice: 15.0
+    });
+
+    assert.ok(
+      lossBankVal.valuation.boundary_warning?.includes('Gordon Büyüme Modeli uygulanamaz') || lossBankVal.valuation.boundary_warning?.includes('ROE'),
+      `Negatif ROE bankası için Gordon uyarı mekanizması çalışmalıdır (Mevcut: ${lossBankVal.valuation.boundary_warning})`
+    );
+    assert.ok(
+      lossBankVal.drivers.target_multiple.numericValue <= 0.40,
+      `Zarar eden bankanın hak edilen PD/DD çarpanı sıkıntılı tabanında (<= 0.40x) olmalıdır (Mevcut: ${lossBankVal.drivers.target_multiple.numericValue})`
+    );
+
+    // 2. Durum: Düşük Kârlı Banka (ROE = 10.0% < Macro g = 20.0%)
+    // Sürekli sermaye enjeksiyonu olmaksızın g, ROE'yi aşamaz. Model g'yi <= 7.0%'ye bağlamalı ve hak edilen P/B < 1.0x olmalıdır.
+    const lowRoeBankHistory = [
+      {
+        period: '2025/12',
+        revenue: 60_000_000_000,
+        net_income: 10_000_000_000,
+        equity: 100_000_000_000,
+        total_assets: 800_000_000_000,
+        paid_in_capital: 4_000_000_000,
+        roe: 10.0,
+        wacc: 35.0
+      }
+    ];
+
+    const lowRoeBankVal = computeSectorValuationAndDrivers({
+      extractedData: {
+        ticker: 'DUSUKBANK',
+        sector: 'BANKING',
+        currency: 'TRY',
+        share_count: 4_000_000_000,
+        financial_history: lowRoeBankHistory
+      },
+      sector: 'BANKING',
+      marketPrice: 20.0
+    });
+
+    assert.ok(
+      lowRoeBankVal.drivers.target_multiple.numericValue < 1.0,
+      `Sermaye maliyetinin altında getiri üreten bankanın hak edilen PD/DD çarpanı < 1.0x iskonto olmalıdır (Mevcut: ${lowRoeBankVal.drivers.target_multiple.numericValue})`
+    );
   });
 
   await t.test('SECTOR RULE 2: Distressed Turnaround with Negative EBITDA (Vestel/Sanayi)', () => {
@@ -376,6 +450,32 @@ test('IVS & IFRS 13 VALUATION ENGINE AUDIT & INVARIANT TEST SUITE', async (t) =>
     assert.equal(res.valuation.sensitivity_matrix.growthRange.length, 5, 'Büyüme ekseni 5 nokta içermelidir');
     assert.equal(res.valuation.sensitivity_matrix.matrix.length, 5, 'Matris 5 satır içermelidir');
     assert.equal(res.valuation.sensitivity_matrix.matrix[0].length, 5, 'Matris her satırda 5 sütun içermelidir');
+  });
+
+  // ============================================================================
+  // BÖLÜM 6: NAKİT AKIŞ & CAPEX YÖNÜ VE ELDEN ÇIKARMA (DISINVESTMENT) DOĞRULAMASI
+  // ============================================================================
+
+  await t.test('INVARIANT 4: CapEx & Cash Flow Disinvestment Direction Guard', () => {
+    // Şirket varlık satışı yaparak FCF > OCF üretmiştir:
+    // OCF = 100M TL, FCF = 150M TL (50M TL net varlık elden çıkarma / disinvestment).
+    // Finansal muhasebede CapEx = OCF - FCF = -50M TL (net elden çıkarma).
+    // Math.abs kullanılması bu satışı +50M TL CapEx harcaması olarak yanlış gösterir.
+    // Düzeltilmiş model CapEx'i 0 (veya net satış) olarak almalı, hayali nakit çıkışı üretmemelidir.
+    const validationResult = FinancialDataValidator.validateItem({
+      period: '2025/12',
+      revenue: 500_000_000,
+      cost_of_sales: -300_000_000,
+      gross_profit: 200_000_000,
+      operating_cash_flow: 100_000_000,
+      free_cash_flow: 150_000_000 // FCF > OCF
+    }, 'INDUSTRIAL');
+
+    assert.equal(
+      validationResult.reconciledItem.capex,
+      0,
+      `FCF > OCF olduğunda şirket net varlık elden çıkarmıştır; CapEx harcaması 0 TL olmalıdır (Mevcut: ${validationResult.reconciledItem.capex})`
+    );
   });
 
 });

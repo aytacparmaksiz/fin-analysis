@@ -242,10 +242,21 @@ async function doFetchAllIsYatirimMultiples(): Promise<Record<string, IsYatirimS
     }
 
     if (Object.keys(result).length > 50) {
-      cachedMultiples = result;
+      const merged: Record<string, IsYatirimStockMultiples> = { ...OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE };
+      for (const [k, v] of Object.entries(result)) {
+        merged[k] = {
+          ...(merged[k] || {}),
+          ...v,
+          foreignSharePct: (v.foreignSharePct !== undefined && v.foreignSharePct !== null) ? v.foreignSharePct : (merged[k]?.foreignSharePct ?? null),
+          foreignSharePrevPct: (v.foreignSharePrevPct !== undefined && v.foreignSharePrevPct !== null) ? v.foreignSharePrevPct : (merged[k]?.foreignSharePrevPct ?? null),
+          foreignShareChangeBps: (v.foreignShareChangeBps !== undefined && v.foreignShareChangeBps !== null) ? v.foreignShareChangeBps : (merged[k]?.foreignShareChangeBps ?? null),
+          historicalEstimates: (v.historicalEstimates !== undefined && v.historicalEstimates !== null) ? v.historicalEstimates : (merged[k]?.historicalEstimates ?? null),
+        };
+      }
+      cachedMultiples = merged;
       lastFetchTimestamp = Date.now();
       console.log(`[IsYatirim] Başarıyla ${Object.keys(result).length} BIST şirketinin çarpanları, yabancı oranları ve konsensüs tahminleri yüklendi.`);
-      return result;
+      return merged;
     }
   } catch (err: any) {
     console.warn('[IsYatirim] Canlı veri çekme hatası (zaman aşımı veya ağ engeli):', err?.message || err);
