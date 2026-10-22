@@ -8,7 +8,7 @@ import rehypeKatex from 'rehype-katex';
 import { 
   Send, FileText, FileSpreadsheet, Presentation, AlertTriangle, Database, 
   RefreshCw, Printer, PlusCircle, Plus, History, Clock,
-  ChevronRight, ChevronDown, UploadCloud, X, CheckCircle2, Search,
+  ChevronRight, ChevronDown, ChevronUp, UploadCloud, X, CheckCircle2, Search,
   TrendingUp, BarChart3, Target, Calendar, ArrowUpRight, ArrowDownRight, Minus,
   DollarSign, ShieldCheck, ShieldAlert, Activity, Layers, Download, Upload,
   Trophy, Award, Trash2, ArrowUpDown, Filter, Copy, Percent, PieChart, Info,
@@ -46,7 +46,8 @@ import {
   isMetricDisabled,
   getFinancialArchetype,
   SECTOR_ARCHETYPE_CONFIGS,
-  getCompanySectorDisplayName
+  getCompanySectorDisplayName,
+  ISYATIRIM_53_OFFICIAL_SECTOR_NAMES
 } from '@/lib/sectors';
 
 import { SavedReport } from '@/lib/report-resolver';
@@ -1362,6 +1363,7 @@ export default function ValuationTerminal({
   const [themesSort, setThemesSort] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'score', direction: 'desc' });
   const [expandedSectors, setExpandedSectors] = useState<Record<string, boolean>>({});
   const [sectorSearchTerm, setSectorSearchTerm] = useState<string>('');
+  const [sectorFilterTab, setSectorFilterTab] = useState<'ACTIVE' | 'ALL'>('ACTIVE');
 
   const [loading, setLoading] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
@@ -5242,6 +5244,329 @@ export default function ValuationTerminal({
           })()}
 
           
+          {/* BIST 53 RESMİ İŞ YATIRIM SEKTÖR VE ŞİRKET LİSTESİ PANELİ */}
+          {step === 'sectors' && (() => {
+            // Analiz edilmiş şirketleri 53 İş Yatırım resmi sektörüne göre eşleştir
+            const sectorReportsMap: Record<string, SavedReport[]> = {};
+
+            // 53 sektörün tamamını ilklendir
+            ISYATIRIM_53_OFFICIAL_SECTOR_NAMES.forEach(sec => {
+              sectorReportsMap[sec] = [];
+            });
+
+            // Analiz edilmiş raporları sektörlere ata
+            savedReports.forEach(rep => {
+              const secName = getCompanySectorDisplayName(rep.ticker, rep.sector);
+              if (!sectorReportsMap[secName]) {
+                sectorReportsMap[secName] = [];
+              }
+              sectorReportsMap[secName].push(rep);
+            });
+
+            const allSectorEntries = Object.entries(sectorReportsMap);
+            const activeSectorCount = allSectorEntries.filter(([_, reps]) => reps.length > 0).length;
+
+            // Filtreleme (Arama ve Aktif/Tümü sekmesi)
+            const filteredSectorEntries = allSectorEntries.filter(([secName, reps]) => {
+              // Sekme filtresi
+              if (sectorFilterTab === 'ACTIVE' && reps.length === 0) return false;
+
+              // Arama filtresi
+              if (sectorSearchTerm.trim()) {
+                const q = sectorSearchTerm.toLowerCase().trim();
+                const matchesSector = secName.toLowerCase().includes(q);
+                const matchesCompany = reps.some(r => 
+                  r.ticker.toLowerCase().includes(q) ||
+                  ((r as any).companyName || r.extractedData?.company_name || '').toLowerCase().includes(q)
+                );
+                return matchesSector || matchesCompany;
+              }
+              return true;
+            });
+
+            // Sıralama: Şirketi olanlar önce (çoktan aza), sonra alfabetik
+            const sortedSectorEntries = filteredSectorEntries.sort((a, b) => {
+              if (b[1].length !== a[1].length) return b[1].length - a[1].length;
+              return a[0].localeCompare(b[0], 'tr');
+            });
+
+            const toggleSector = (sec: string) => {
+              setExpandedSectors(prev => ({
+                ...prev,
+                [sec]: prev[sec] === undefined ? false : !prev[sec]
+              }));
+            };
+
+            const toggleAll = (expand: boolean) => {
+              const next: Record<string, boolean> = {};
+              sortedSectorEntries.forEach(([sec]) => {
+                next[sec] = expand;
+              });
+              setExpandedSectors(next);
+            };
+
+            return (
+              <div className="space-y-6">
+                {/* ÜST BAŞLIK VE KONTROL KARTI */}
+                <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 sm:p-7 shadow-xl space-y-5">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 text-xs font-mono text-emerald-400 uppercase tracking-wider font-semibold">
+                        <Building2 className="w-4 h-4" />
+                        <span>Borsa İstanbul Resmi Sektör Portföyü</span>
+                      </div>
+                      <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight mt-1 font-sans">
+                        Sektörler ve Şirket Dağılımı
+                      </h2>
+                      <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl font-sans">
+                        Borsa İstanbul'daki tüm hisseler İş Yatırım'ın 53 resmi sektör sınıflandırmasına göre eşleştirilmiştir. İlgili sektöre tıklayarak bünyesindeki analiz edilen şirketleri, adil değerleri ve skorları inceleyebilirsiniz.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => toggleAll(true)}
+                        className="px-3 py-1.5 bg-[#21262d] hover:bg-[#2b313d] text-slate-300 text-xs font-semibold rounded-lg transition"
+                      >
+                        Tümünü Genişlet
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleAll(false)}
+                        className="px-3 py-1.5 bg-[#21262d] hover:bg-[#2b313d] text-slate-300 text-xs font-semibold rounded-lg transition"
+                      >
+                        Tümünü Daralt
+                      </button>
+                      <button
+                        type="button"
+                        onClick={resetToNewAnalysis}
+                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 shadow-md"
+                      >
+                        <PlusCircle className="w-3.5 h-3.5" />
+                        <span>Yeni Analiz Ekle</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* İSTATİSTİK PİLLERİ & ARAMA & FİLTRE ÇUBUĞU */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-[#2b313d]/60">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSectorFilterTab('ACTIVE')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                          sectorFilterTab === 'ACTIVE'
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'bg-[#21262d] text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        Analiz Edilmiş Sektörler ({activeSectorCount})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSectorFilterTab('ALL')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                          sectorFilterTab === 'ALL'
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'bg-[#21262d] text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        Tüm Resmi Sektörler (53)
+                      </button>
+                    </div>
+
+                    <div className="relative w-full sm:w-72">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={sectorSearchTerm}
+                        onChange={(e) => setSectorSearchTerm(e.target.value)}
+                        placeholder="Sektör veya hisse ara..."
+                        className="w-full bg-[#12151c] border border-[#2b313d] rounded-lg pl-9 pr-8 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+                      />
+                      {sectorSearchTerm && (
+                        <button
+                          type="button"
+                          onClick={() => setSectorSearchTerm('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* SEKTÖR LİSTESİ (ACCORDION TABLER) */}
+                {sortedSectorEntries.length === 0 ? (
+                  <div className="p-12 text-center rounded-2xl border border-[#2e3440] bg-[#1a1e26] space-y-3">
+                    <Building2 className="w-12 h-12 mx-auto text-slate-600 opacity-60" />
+                    <h4 className="text-base font-bold text-slate-200">Kriterlere Uygun Sektör Bulunamadı</h4>
+                    <p className="text-xs text-slate-400 max-w-md mx-auto">
+                      Arama kriterinizi temizleyebilir veya "Tüm Resmi Sektörler" sekmesine geçerek 53 sektörü görüntüleyebilirsiniz.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {sortedSectorEntries.map(([secName, reports]) => {
+                      // Eğer şirket varsa varsayılan açık gelsin, yoksa kullanıcı tıklarsa açılsın
+                      const isExpanded = expandedSectors[secName] !== undefined 
+                        ? expandedSectors[secName] 
+                        : (reports.length > 0);
+
+                      return (
+                        <div key={secName} className="bg-[#1a1e26] border border-[#2e3440] rounded-2xl overflow-hidden shadow-lg transition">
+                          {/* Sektör Başlık / Accordion Tıklanabilir Bar */}
+                          <div
+                            onClick={() => toggleSector(secName)}
+                            className="p-4 sm:px-6 bg-[#161a22] hover:bg-[#1c222c] border-b border-[#2e3440] flex items-center justify-between gap-4 cursor-pointer select-none transition group"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition ${
+                                reports.length > 0
+                                  ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
+                                  : 'bg-slate-800/40 border border-slate-700/50 text-slate-500'
+                              }`}>
+                                <Building2 className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <h3 className="text-base font-black text-white group-hover:text-emerald-400 transition font-sans flex items-center gap-2">
+                                  <span>{secName}</span>
+                                </h3>
+                                <span className="text-[11px] text-slate-400 font-mono">
+                                  İş Yatırım 53 Resmi Sektör Portföyü
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                              <span className={`text-xs font-mono font-bold px-3 py-1 rounded-full border transition ${
+                                reports.length > 0
+                                  ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800/80'
+                                  : 'bg-slate-900 border-slate-700 text-slate-500'
+                              }`}>
+                                {reports.length} Şirket
+                              </span>
+                              <div className="text-slate-400 group-hover:text-white transition">
+                                {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Sektöre Ait Şirket Tablosu veya Boş Durum */}
+                          {isExpanded && (
+                            <div>
+                              {reports.length === 0 ? (
+                                <div className="p-6 text-center bg-[#13161c]/50 space-y-2">
+                                  <p className="text-xs text-slate-400">
+                                    Bu sektörde henüz analiz edilmiş hisse bulunmuyor.
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={resetToNewAnalysis}
+                                    className="px-3 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-xs font-semibold border border-emerald-500/30 transition cursor-pointer"
+                                  >
+                                    + {secName} Sektöründe Şirket Analiz Et
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-left text-sm border-collapse font-sans">
+                                    <thead>
+                                      <tr className="border-b border-[#2e3440] bg-[#12151c]/80 text-[11px] font-mono text-slate-400 uppercase tracking-wider">
+                                        <th className="py-3 px-5">Sıra</th>
+                                        <th className="py-3 px-4">Hisse</th>
+                                        <th className="py-3 px-4">Şirket Ünvanı</th>
+                                        <th className="py-3 px-4 text-right">Piyasa Fiyatı</th>
+                                        <th className="py-3 px-4 text-right">Adil Değer</th>
+                                        <th className="py-3 px-4 text-center">İskonto / Prim</th>
+                                        <th className="py-3 px-4 text-center">Skor</th>
+                                        <th className="py-3 px-4 text-center">Karar</th>
+                                        <th className="py-3 px-5 text-right">İşlem</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-[#2e3440]/60 text-slate-300">
+                                      {reports.map((rep, idx) => {
+                                        const fv = parseFloat(rep.fairValue || '0') || 0;
+                                        const pr = parseFloat(rep.price || '0') || 0;
+                                        const disc = (fv > 0 && pr > 0) ? Number((((fv - pr) / pr) * 100).toFixed(1)) : null;
+                                        const compName = (rep as any).companyName || rep.extractedData?.company_name || '';
+
+                                        return (
+                                          <tr
+                                            key={rep.id}
+                                            onClick={() => openReport(rep.id, rep.ticker)}
+                                            className="hover:bg-[#21262d] transition cursor-pointer group"
+                                          >
+                                            <td className="py-3 px-5 font-mono text-xs text-slate-500">
+                                              #{idx + 1}
+                                            </td>
+                                            <td className="py-3 px-4">
+                                              <span className="font-mono font-bold text-white text-base group-hover:text-[#f5c242] transition">
+                                                {rep.ticker}
+                                              </span>
+                                            </td>
+                                            <td className="py-3 px-4 text-xs text-slate-300 font-sans truncate max-w-[200px]">
+                                              {compName || '—'}
+                                            </td>
+                                            <td className="py-3 px-4 text-right font-mono font-bold text-white">
+                                              {pr > 0 ? `₺${pr.toFixed(2)}` : '—'}
+                                            </td>
+                                            <td className="py-3 px-4 text-right font-mono font-bold text-[#f5c242]">
+                                              {fv > 0 ? `₺${fv.toFixed(2)}` : '—'}
+                                            </td>
+                                            <td className="py-3 px-4 text-center font-mono">
+                                              {disc !== null ? (
+                                                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                                                  disc >= 0 ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                                                }`}>
+                                                  {disc >= 0 ? `+${disc}%` : `${disc}%`}
+                                                </span>
+                                              ) : <span className="text-slate-500">—</span>}
+                                            </td>
+                                            <td className="py-3 px-4 text-center font-mono font-bold text-xs text-emerald-400">
+                                              {formatScore(rep.score)}
+                                            </td>
+                                            <td className="py-3 px-4 text-center font-mono">
+                                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                                                rep.decision === 'AL' ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/80' :
+                                                rep.decision === 'ALMA' ? 'bg-rose-950/80 text-rose-400 border border-rose-800/80' :
+                                                'bg-amber-950/80 text-amber-400 border border-amber-800/80'
+                                              }`}>
+                                                {rep.decision || 'N/A'}
+                                              </span>
+                                            </td>
+                                            <td className="py-3 px-5 text-right font-sans">
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  openReport(rep.id, rep.ticker);
+                                                }}
+                                                className="px-3 py-1 rounded-lg bg-[#21262d] hover:bg-[#2b313d] text-slate-200 text-xs font-semibold transition cursor-pointer"
+                                              >
+                                                Raporu İncele
+                                              </button>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {/* YATIRIM TEMALARI & ŞİRKET RADAR PANELİ (DISCOVER) */}
           {step === 'themes' && (() => {
             if (!userSession?.isLoggedIn) {
