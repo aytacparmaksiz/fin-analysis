@@ -53,8 +53,181 @@ export interface SnowflakeRadarPoint {
 function formatCurrency(val: number | null | undefined): string {
   if (val == null || isNaN(val)) return '—';
   if (Math.abs(val) >= 1_000_000_000) return `${(val / 1_000_000_000).toFixed(1)} Mr TL`;
-  if (Math.abs(val) >= 1_000_000) return `${(val / 1_000_000).toFixed(1)} Mn TL`;
+  if (Math.abs(val) >= 1_000_000) return `${(val / 1_000_000_000 >= 0.1 ? (val / 1_000_000_000).toFixed(1) + ' Mr' : (val / 1_000_000).toFixed(1) + ' Mn')} TL`;
   return `${val.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} TL`;
+}
+
+export interface AnnualDividendSummary {
+  date: string;
+  year: number;
+  yieldPct: number;
+  perShareTl: number;
+  grossRatePct: number;
+  netRatePct: number;
+  totalAmountTl: number;
+  payoutRatioPct: number;
+  installmentCount: number;
+}
+
+/**
+ * Aynı yıl içinde birden fazla taksitle ödenen temettüleri (ör. MGROS, TUPRS, BIMAS, FROTO)
+ * yıl bazında konsolide eder. Yıl içinde bedelsiz sermaye artırımı / bölünme gerçekleşmişse
+ * (ör. FROTO 2025 %900 bedelsiz), bölünme öncesi taksitlerin hisse başı TL tutarını yıl sonu
+ * pay sayısına normalize ederek toplar.
+ */
+export function aggregateDividendsByYear(rawDividends: any[] | undefined | null): AnnualDividendSummary[] {
+  if (!Array.isArray(rawDividends) || rawDividends.length === 0) return [];
+  const byYear = new Map<number, any[]>();
+
+  for (const item of rawDividends) {
+    if (!item || typeof item !== 'object') continue;
+    const dateStr = String(item.date ?? item.tarih ?? '');
+    const yr = Number(item.year ?? item.yil) || parseInt(dateStr.slice(-4), 10);
+    if (!yr || isNaN(yr)) continue;
+    const arr = byYear.get(yr) || [];
+    arr.push(item);
+    byYear.set(yr, arr);
+  }
+
+  const parseDateMs = (dStr: string, fallbackYr: number): number => {
+    const parts = (dStr || '').split('.').map(Number);
+    if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+      return new Date(parts[2], parts[1] - 1, parts[0]).getTime();
+    }
+    return new Date(fallbackYr, 5, 1).getTime();
+  };
+
+  const results: AnnualDividendSummary[] = [];
+  for (const [yr, installments] of byYear.entries()) {
+    // Kronolojik sırala (eskiden yeniye)
+    const sorted = [...installments].sort((a, b) => {
+      return parseDateMs(String(a.date ?? a.tarih ?? ''), yr) - parseDateMs(String(b.date ?? b.tarih ?? ''), yr);
+    });
+    const latestInst = sorted[sorted.length - 1];
+    const latestPerShare = Number(latestInst?.perShareTl ?? latestInst?.hisseBasiBrut ?? 0);
+    const latestTotalTl = Number(latestInst?.totalAmountTl ?? latestInst?.toplamTemettuTl ?? 0);
+    const refShares = (latestTotalTl > 0 && latestPerShare > 0) ? (latestTotalTl / latestPerShare) : 0;
+
+    let sumYield = 0;
+    let sumPerShare = 0;
+    let sumTotalTl = 0;
+    let sumPayout = 0;
+    let sumGrossRate = 0;
+    let sumNetRate = 0;
+
+    for (const inst of sorted) {
+      const yld = Number(inst.yieldPct ?? inst.temettuVerimi ?? 0);
+      const ps = Number(inst.perShareTl ?? inst.hisseBasiBrut ?? 0);
+      const tot = Number(inst.totalAmountTl ?? inst.toplamTemettuTl ?? 0);
+      const pay = Number(inst.payoutRatioPct ?? inst.dagitmaOrani ?? 0);
+      const gr = Number(inst.grossRatePct ?? inst.brutOran ?? (ps * 100));
+      const nr = Number(inst.netRatePct ?? inst.netOran ?? (gr * 0.9));
+
+      let normalizedPs = ps;
+      let normalizedGr = gr;
+      let normalizedNr = nr;
+
+      if (refShares > 0 && tot > 0 && ps > 0) {
+        const instShares = tot / ps;
+        const shareRatio = refShares / instShares;
+        if (shareRatio > 1.25 || shareRatio < 0.8) {
+          normalizedPs = tot / refShares;
+          normalizedGr = normalizedPs * 100;
+          normalizedNr = normalizedGr * 0.9;
+        }
+      }
+
+      if (yld > 0) sumYield += yld;
+      if (normalizedPs > 0) sumPerShare += normalizedPs;
+      if (tot > 0) sumTotalTl += tot;
+      if (pay > 0) sumPayout += pay;
+      if (normalizedGr > 0) sumGrossRate += normalizedGr;
+      if (normalizedNr > 0) sumNetRate += normalizedNr;
+    }
+
+    results.push({
+      date: String(latestInst?.date ?? latestInst?.tarih ?? `31.05.${yr}`),
+      year: yr,
+      yieldPct: Number(sumYield.toFixed(2)),
+      perShareTl: Number(sumPerShare.toFixed(4)),
+      grossRatePct: Number(sumGrossRate.toFixed(2)),
+      netRatePct: Number(sumNetRate.toFixed(2)),
+      totalAmountTl: Math.round(sumTotalTl),
+      payoutRatioPct: Number(Math.min(200, sumPayout).toFixed(2)),
+      installmentCount: sorted.length
+    });
+  }
+
+  results.sort((a, b) => b.year - a.year);
+  return results;
+}
+
+/**
+ * Tarayıcı ve sunucu uyumlu: Finansal tablo geçmişindeki Nakit Akışı 'Ödenen Temettüler' (dividends_paid)
+ * kalemlerinden yıllık temettü dağıtım kayıtları üretir.
+ */
+export function synthesizeDividendsFromHistoryBrowserSafe(
+  history: any[] | undefined | null,
+  shareCount?: number | null,
+  currentPrice?: number | null
+): AnnualDividendSummary[] {
+  if (!Array.isArray(history) || history.length === 0) return [];
+  const byYear = new Map<number, { period: string; divPaid: number; netIncome: number | null; paidInCap: number | null }>();
+
+  for (const item of history) {
+    if (!item || typeof item !== 'object') continue;
+    const rawDiv = Number(item.dividends_paid);
+    if (!rawDiv || isNaN(rawDiv) || Math.abs(rawDiv) <= 0) continue;
+    const divPaid = Math.abs(rawDiv);
+    const periodStr = String(item.period || '');
+    const m = periodStr.match(/(20\d{2})/);
+    const year = m ? parseInt(m[1], 10) : new Date().getFullYear();
+    const isYearEnd = periodStr.endsWith('/12') || periodStr.endsWith('-12') || periodStr === String(year);
+    const prev = byYear.get(year);
+    if (!prev || isYearEnd || divPaid > prev.divPaid) {
+      const ni = Number(item.net_income);
+      const pc = Number(item.paid_in_capital);
+      byYear.set(year, {
+        period: periodStr,
+        divPaid,
+        netIncome: !isNaN(ni) ? ni : null,
+        paidInCap: !isNaN(pc) && pc > 0 ? pc : null
+      });
+    }
+  }
+
+  const records: AnnualDividendSummary[] = [];
+  for (const [year, info] of byYear.entries()) {
+    const effectiveShares = (typeof shareCount === 'number' && shareCount > 0)
+      ? shareCount
+      : (info.paidInCap && info.paidInCap > 0 ? info.paidInCap : null);
+    const perShareTl = effectiveShares && effectiveShares > 0
+      ? Number((info.divPaid / effectiveShares).toFixed(4))
+      : 0;
+    const yieldPct = (perShareTl > 0 && typeof currentPrice === 'number' && currentPrice > 0)
+      ? Number(((perShareTl / currentPrice) * 100).toFixed(2))
+      : 0;
+    const grossRatePct = perShareTl > 0 ? Number((perShareTl * 100).toFixed(2)) : 0;
+    const netRatePct = grossRatePct > 0 ? Number((grossRatePct * 0.9).toFixed(2)) : 0;
+    const payoutRatioPct = (info.netIncome && info.netIncome > 0)
+      ? Number(Math.min(200, (info.divPaid / info.netIncome) * 100).toFixed(2))
+      : 0;
+
+    records.push({
+      date: `31.05.${year}`,
+      year,
+      yieldPct,
+      perShareTl,
+      grossRatePct,
+      netRatePct,
+      totalAmountTl: Math.round(info.divPaid),
+      payoutRatioPct,
+      installmentCount: 1
+    });
+  }
+
+  records.sort((a, b) => b.year - a.year);
+  return records;
 }
 
 /**
@@ -549,14 +722,22 @@ export function computeSnowflakeAnalysis(params: {
   // =========================================================================
   // 5. EKSEN: TEMETTÜ & SERMAYE DÖNÜŞÜMÜ (0 - 6 PUAN)
   // =========================================================================
-  const rawDividends: any[] = (Array.isArray(params.dividends) && params.dividends.length > 0)
+  const explicitDividends: any[] = (Array.isArray(params.dividends) && params.dividends.length > 0)
     ? params.dividends
     : (Array.isArray(params.dividendHistory) && params.dividendHistory.length > 0)
       ? params.dividendHistory
       : (Array.isArray(params.latestData?.dividends) && params.latestData.dividends.length > 0)
         ? params.latestData.dividends
         : [];
-  const latestDiv = rawDividends.length > 0 ? rawDividends[0] : null;
+  const rawDividends: any[] = explicitDividends.length > 0
+    ? explicitDividends
+    : synthesizeDividendsFromHistoryBrowserSafe(
+        financialHistory,
+        Number(latestData?.share_count ?? latestData?.paid_in_capital ?? 0) || null,
+        currentPrice
+      );
+  const annualDividends = aggregateDividendsByYear(rawDividends);
+  const latestDiv = annualDividends.length > 0 ? annualDividends[0] : (rawDividends.length > 0 ? rawDividends[0] : null);
 
   const divYield = Number(
     latestDiv?.yieldPct ??

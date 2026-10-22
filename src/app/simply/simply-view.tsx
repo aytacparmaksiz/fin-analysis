@@ -74,6 +74,8 @@ import {
   computeSnowflakeAnalysis,
   getSnowflakeCoordinates,
   generateSmoothSnowflakePath,
+  aggregateDividendsByYear,
+  synthesizeDividendsFromHistoryBrowserSafe,
   type SnowflakeAnalysisResult,
   type SnowflakeCheck
 } from '@/lib/snowflake';
@@ -600,6 +602,7 @@ export default function SimplyView({
 
   // Şirket Kartı: Temettü Geçmişi, Analist Konsensüs Hedef Fiyat ve MKK Yabancı Oranı
   const [liveCompanyDetails, setLiveCompanyDetails] = useState<{
+    ticker?: string;
     dividends: any[];
     consensus: any;
     foreignShare: any;
@@ -608,7 +611,8 @@ export default function SimplyView({
 
   useEffect(() => {
     let isMounted = true;
-    const baselineDetails = report.ticker ? OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE[report.ticker.toUpperCase()] : null;
+    const upperTicker = report.ticker ? report.ticker.toUpperCase() : '';
+    const baselineDetails = upperTicker ? OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE[upperTicker] : null;
     const rawInitialDivs = (Array.isArray(report.dividendHistory) && report.dividendHistory.length > 0)
       ? report.dividendHistory
       : (Array.isArray(report.extractedData?.dividend_history) && report.extractedData.dividend_history.length > 0)
@@ -621,14 +625,13 @@ export default function SimplyView({
       changeBps: marketMultiples.foreign_share_change_bps
     } : (baselineDetails?.foreignShare || null));
 
-    if (rawInitialDivs.length > 0 || initialConsensus || initialForeign) {
-      setLiveCompanyDetails({
-        dividends: rawInitialDivs,
-        consensus: initialConsensus,
-        foreignShare: initialForeign,
-        tvConsensus: (report as any).tvConsensus || null
-      });
-    }
+    setLiveCompanyDetails({
+      ticker: upperTicker,
+      dividends: rawInitialDivs,
+      consensus: initialConsensus,
+      foreignShare: initialForeign,
+      tvConsensus: (report as any).tvConsensus || null
+    });
 
     if (report.ticker) {
       fetch(`/api/company-details?ticker=${encodeURIComponent(report.ticker)}`)
@@ -636,6 +639,7 @@ export default function SimplyView({
         .then(data => {
           if (isMounted && data.success) {
             setLiveCompanyDetails({
+              ticker: upperTicker,
               dividends: (Array.isArray(data.dividends) && data.dividends.length > 0) ? data.dividends : rawInitialDivs,
               consensus: data.consensus || initialConsensus,
               foreignShare: data.foreignShare || initialForeign,
@@ -936,7 +940,12 @@ export default function SimplyView({
   }, [liveCompanyDetails, report.consensusTarget, report.extractedData]);
 
   const resolvedDividends = useMemo(() => {
-    if (Array.isArray(liveCompanyDetails?.dividends) && liveCompanyDetails.dividends.length > 0) {
+    const upperTicker = report.ticker ? report.ticker.toUpperCase() : '';
+    if (
+      (!liveCompanyDetails?.ticker || liveCompanyDetails.ticker === upperTicker) &&
+      Array.isArray(liveCompanyDetails?.dividends) &&
+      liveCompanyDetails.dividends.length > 0
+    ) {
       return liveCompanyDetails.dividends;
     }
     if (Array.isArray(report.dividendHistory) && report.dividendHistory.length > 0) {
@@ -945,12 +954,20 @@ export default function SimplyView({
     if (Array.isArray(report.extractedData?.dividend_history) && report.extractedData.dividend_history.length > 0) {
       return report.extractedData.dividend_history;
     }
-    const baselineDivs = report.ticker ? OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE[report.ticker.toUpperCase()]?.dividends : null;
+    const baselineDivs = upperTicker ? OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE[upperTicker]?.dividends : null;
     if (Array.isArray(baselineDivs) && baselineDivs.length > 0) {
       return baselineDivs;
     }
+    const synthesized = synthesizeDividendsFromHistoryBrowserSafe(
+      report.extractedData?.financial_history || chartData,
+      Number(report.extractedData?.share_count ?? report.extractedData?.shares_outstanding ?? latestData?.paid_in_capital ?? 0) || null,
+      currentPriceNum
+    );
+    if (synthesized.length > 0) {
+      return synthesized;
+    }
     return [];
-  }, [liveCompanyDetails?.dividends, report.dividendHistory, report.extractedData?.dividend_history, report.ticker]);
+  }, [liveCompanyDetails, report.dividendHistory, report.extractedData, report.ticker, chartData, latestData, currentPriceNum]);
 
   // Kar Tanesi (Snowflake) Analizi Hesabı (5 Eksen, 30 Deterministik Kriter, 0-6 Puan)
   const snowflake: SnowflakeAnalysisResult = useMemo(() => {

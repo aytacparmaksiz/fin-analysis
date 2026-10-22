@@ -1193,6 +1193,9 @@ export async function fetchAndAnalyzeBistCompany(
     }
   }
 
+  // 5.5. TCMB EVDS3 Canlı Makro Verilerini Çek (PKA Enflasyon Beklentisi ve Ticari Kredi Faizi)
+  const macroSnapshot = await fetchLiveTcmbMacroData();
+
   // 5. Ham Veri Paketini Oluştur
   const rawDataPayload = {
     ticker,
@@ -1203,13 +1206,11 @@ export async function fetchAndAnalyzeBistCompany(
     share_count: effectiveShareCount,
     current_price: currentPrice,
     financial_history: sortedHistory,
+    macro: macroSnapshot,
     valuation: {
       current_price: currentPrice
     }
   };
-
-  // 5.5. TCMB EVDS3 Canlı Makro Verilerini Çek (PKA Enflasyon Beklentisi ve Ticari Kredi Faizi)
-  const macroSnapshot = await fetchLiveTcmbMacroData();
 
   // 6. Sıfır Halüsinasyonlu Zenginleştirme ve Rasyo Motorunu Çalıştır
   const sanitized = enrichAndSanitizeFinancialHistory(rawDataPayload, undefined, macroSnapshot);
@@ -1218,7 +1219,8 @@ export async function fetchAndAnalyzeBistCompany(
   const valuationEngineResult = computeSectorValuationAndDrivers(
     sanitized,
     currentPrice.toString(),
-    meta.sector
+    meta.sector,
+    macroSnapshot
   );
 
   // 8. İş Yatırım Resmi Sektör Ortalamalarını Çözümle

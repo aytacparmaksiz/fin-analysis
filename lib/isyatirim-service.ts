@@ -445,8 +445,8 @@ const DETAILS_CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 saat önbellek
 async function fetchYahooFinanceDividendRecords(ticker: string): Promise<IsYatirimDividendRecord[]> {
   const cleanTicker = ticker.toUpperCase().replace(/\.IS$/, '').trim();
   const urls = [
-    `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}.IS?interval=1mo&range=10y&events=div`,
-    `https://query2.finance.yahoo.com/v8/finance/chart/${cleanTicker}.IS?interval=1mo&range=10y&events=div`
+    `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}.IS?interval=1mo&range=10y&events=div,split`,
+    `https://query2.finance.yahoo.com/v8/finance/chart/${cleanTicker}.IS?interval=1mo&range=10y&events=div,split`
   ];
   for (const url of urls) {
     try {
@@ -456,6 +456,9 @@ async function fetchYahooFinanceDividendRecords(ticker: string): Promise<IsYatir
       const result = json?.chart?.result?.[0];
       const divEvents = result?.events?.dividends;
       if (!divEvents || typeof divEvents !== 'object') continue;
+      const splitEvents = result?.events?.splits && typeof result.events.splits === 'object'
+        ? (Object.values(result.events.splits) as Array<{ date?: number; numerator?: number; denominator?: number }>)
+        : [];
 
       const timestamps: number[] = Array.isArray(result?.timestamp) ? result.timestamp : [];
       const closes: Array<number | null> = result?.indicators?.quote?.[0]?.close || [];
@@ -465,9 +468,19 @@ async function fetchYahooFinanceDividendRecords(ticker: string): Promise<IsYatir
 
       const records: IsYatirimDividendRecord[] = [];
       for (const ev of Object.values(divEvents) as Array<{ amount?: number; date?: number }>) {
-        const perShareTl = typeof ev?.amount === 'number' && ev.amount > 0 ? Number(ev.amount.toFixed(4)) : null;
+        const adjPerShareTl = typeof ev?.amount === 'number' && ev.amount > 0 ? ev.amount : null;
         const ts = typeof ev?.date === 'number' ? ev.date : null;
-        if (!perShareTl || !ts) continue;
+        if (!adjPerShareTl || !ts) continue;
+
+        // Temettü tarihinden sonra gerçekleşen bedelsiz/bölünme çarpanlarını geri sararak tarihsel nominal pay başı TL tutarını elde et
+        let cumulativeSplitFactorAfter = 1;
+        for (const sp of splitEvents) {
+          if (typeof sp?.date === 'number' && sp.date > ts && typeof sp.numerator === 'number' && typeof sp.denominator === 'number' && sp.denominator > 0) {
+            const ratio = sp.numerator / sp.denominator;
+            if (ratio > 0) cumulativeSplitFactorAfter *= ratio;
+          }
+        }
+        const perShareTl = Number((adjPerShareTl * cumulativeSplitFactorAfter).toFixed(4));
 
         const dt = new Date(ts * 1000);
         const dd = String(dt.getUTCDate()).padStart(2, '0');
@@ -475,7 +488,7 @@ async function fetchYahooFinanceDividendRecords(ticker: string): Promise<IsYatir
         const yyyy = dt.getUTCFullYear();
         const dateStr = `${dd}.${mm}.${yyyy}`;
 
-        // O tarihe en yakın kapanış fiyatını bul
+        // O tarihe en yakın bölünme-düzeltmeli kapanış fiyatını bul
         let refPrice: number | null = fallbackPrice;
         if (timestamps.length > 0 && closes.length === timestamps.length) {
           let bestDiff = Infinity;
@@ -491,10 +504,11 @@ async function fetchYahooFinanceDividendRecords(ticker: string): Promise<IsYatir
           }
         }
 
-        const yieldPct = refPrice && refPrice > 0 ? Number(((perShareTl / refPrice) * 100).toFixed(2)) : null;
+        // Hem adjPerShareTl hem refPrice ve güncel paidInCapitalTl bölünme sonrası bazda olduğundan verim ve toplam TL tutarı bölünmeden etkilenmez
+        const yieldPct = refPrice && refPrice > 0 ? Number(((adjPerShareTl / refPrice) * 100).toFixed(2)) : null;
         const grossRatePct = Number((perShareTl * 100).toFixed(2));
         const netRatePct = Number((grossRatePct * 0.9).toFixed(2));
-        const totalAmountTl = paidInCapitalTl ? Math.round(perShareTl * paidInCapitalTl) : null;
+        const totalAmountTl = paidInCapitalTl ? Math.round(adjPerShareTl * paidInCapitalTl) : null;
 
         records.push({
           date: dateStr,

@@ -286,12 +286,16 @@ export class FinancialRatioEngine {
       : parseFinancialNumber(latest?.roa);
 
     const taxRate = sector === 'REIT' ? 0 : (sector === 'INSURANCE' || sector === 'BANKING' || sector === 'FINANCIAL_SERVICES' ? 0.30 : 0.25);
+    const sanitizedRoic = parseFinancialNumber(latest?.roic);
     let roic: number | null = null;
-    if (ttm.operatingProfit !== null && investedCapital !== null && investedCapital > 0 && !isMetricDisabled('ebitda', sector)) {
+    if (ttm.operatingProfit !== null && ttm.operatingProfit > 0 && investedCapital !== null && investedCapital > 0 && !isMetricDisabled('ebitda', sector)) {
       const nopat = ttm.operatingProfit * (1 - taxRate);
       roic = Number(((nopat / investedCapital) * 100).toFixed(1));
-    } else {
-      roic = parseFinancialNumber(latest?.roic);
+    } else if (sanitizedRoic !== null) {
+      roic = Number(sanitizedRoic.toFixed(1));
+    } else if (ttm.operatingProfit !== null && investedCapital !== null && investedCapital > 0 && !isMetricDisabled('ebitda', sector)) {
+      const nopat = ttm.operatingProfit * (1 - taxRate);
+      roic = Number(((nopat / investedCapital) * 100).toFixed(1));
     }
 
     const wacc = parseFinancialNumber((latest as any)?.benchmark_wacc ?? ((latest as any)?.is_tms29 ? (latest as any)?.real_wacc : null) ?? latest?.wacc) ?? (sector === 'INSURANCE' ? 35.1 : 29.6);

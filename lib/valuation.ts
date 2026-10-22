@@ -965,7 +965,12 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     }
 
     // Şirkete Özel Canlı Efektif Borçlanma Maliyeti (Item 2: Company-Specific Kd & WACC)
-    const intExpense = item.interest_expenses ?? item.financial_expenses ?? item.interest_expense ?? item.financial_expense ?? item.financing_costs ?? item.finance_cost ?? debtInfo.interest_expenses ?? debtInfo.financial_expenses ?? null;
+    const rawIntExpense = parseFinancialNumber(
+      item.interest_expenses ?? item.financial_expenses ?? item.financing_expenses ??
+      item.interest_expense ?? item.financial_expense ?? item.financing_costs ?? item.finance_cost ??
+      debtInfo.interest_expenses ?? debtInfo.financial_expenses ?? debtInfo.financing_expenses ?? null
+    );
+    const intExpense = rawIntExpense !== null ? Math.abs(rawIntExpense) : null;
     const prevItem = i > 0 ? history[i - 1] : null;
     const currentFinDebt = item.financial_debt != null
       ? Math.max(0, item.financial_debt)
@@ -1153,10 +1158,13 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
 
       // Çekirdek faaliyet kârı (Core Operating Profit = Brüt Kâr - |Faaliyet Giderleri|)
       const grossProfit = typeof item.gross_profit === 'number' ? item.gross_profit : null;
+      const gAndAVal = item.general_administrative_expenses ?? item.administrative_expenses;
+      const mktVal = item.marketing_sales_distribution_expenses ?? item.marketing_expenses;
+      const rdVal = item.research_development_expenses ?? item.rd_expenses;
       const opex = typeof item.operating_expenses === 'number'
         ? Math.abs(item.operating_expenses)
-        : ((typeof item.general_administrative_expenses === 'number' || typeof item.marketing_sales_distribution_expenses === 'number' || typeof item.research_development_expenses === 'number')
-          ? (Math.abs(Number(item.general_administrative_expenses || 0)) + Math.abs(Number(item.marketing_sales_distribution_expenses || 0)) + Math.abs(Number(item.research_development_expenses || 0)))
+        : ((typeof gAndAVal === 'number' || typeof mktVal === 'number' || typeof rdVal === 'number')
+          ? (Math.abs(Number(gAndAVal || 0)) + Math.abs(Number(mktVal || 0)) + Math.abs(Number(rdVal || 0)))
           : null);
       const coreOperatingProfit = (grossProfit !== null && opex !== null && (grossProfit - opex) > 0)
         ? (grossProfit - opex)
@@ -1196,35 +1204,44 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
         const prevYearEnd = history.find((h: any) => parsePeriodSortKey(h.period) === (itemYr - 1) * 100 + 12);
         const prevYearMatch = history.find((h: any) => parsePeriodSortKey(h.period) === (itemYr - 1) * 100 + itemM);
         if (prevYearEnd && prevYearMatch) {
-          const getCleanNopat = (h: any): number | null => {
-            let hOp = parseFinancialNumber(h.operating_profit ?? h.operating_income);
-            if (hOp === null || hOp === 0) {
-              const hEb = parseFinancialNumber(h.ebitda);
-              if (hEb !== null && hEb !== 0) hOp = hEb;
+          const endRawOp = parseFinancialNumber(prevYearEnd.operating_profit ?? prevYearEnd.operating_income);
+          const matchRawOp = parseFinancialNumber(prevYearMatch.operating_profit ?? prevYearMatch.operating_income);
+          if (typeof opIncomeVal === 'number' && opIncomeVal > 0 && endRawOp !== null && endRawOp > 0 && matchRawOp !== null) {
+            const sameBasisTtmOp = opIncomeVal + endRawOp - matchRawOp;
+            if (sameBasisTtmOp > 0) {
+              annualizedNopat = sameBasisTtmOp * (1 - taxRate);
             }
-            const hGross = parseFinancialNumber(h.gross_profit);
-            const hGAndA = parseFinancialNumber(h.general_administrative_expenses);
-            const hMkt = parseFinancialNumber(h.marketing_sales_distribution_expenses);
-            const hRd = parseFinancialNumber(h.research_development_expenses);
-            const rawHOpex = parseFinancialNumber(h.operating_expenses);
-            const hOpex = rawHOpex !== null
-              ? Math.abs(rawHOpex)
-              : ((hGAndA !== null || hMkt !== null || hRd !== null) ? (Math.abs(hGAndA || 0) + Math.abs(hMkt || 0) + Math.abs(hRd || 0)) : null);
-            const hCore = (hGross !== null && hOpex !== null) ? hGross - hOpex : null;
-            const hNet = parseFinancialNumber(h.net_income);
-            if ((hOp === null || hOp <= 0) && ((hNet !== null && hNet > 0) || (hCore !== null && hCore > 0))) {
-              hOp = (hCore !== null && hCore > 0) ? hCore : (hNet !== null ? hNet / (1 - taxRate) : null);
-            }
-            if (hOp !== null) return hOp * (1 - taxRate);
-            if (hNet !== null && hNet > 0) return hNet;
-            return null;
-          };
-          const endNopat = getCleanNopat(prevYearEnd);
-          const matchNopat = getCleanNopat(prevYearMatch);
-          if (endNopat !== null && matchNopat !== null) {
-            const ttmNopat = rawNopat + endNopat - matchNopat;
-            if (ttmNopat > 0) {
-              annualizedNopat = ttmNopat;
+          } else {
+            const getCleanNopat = (h: any): number | null => {
+              let hOp = parseFinancialNumber(h.operating_profit ?? h.operating_income);
+              if (hOp === null || hOp === 0) {
+                const hEb = parseFinancialNumber(h.ebitda);
+                if (hEb !== null && hEb !== 0) hOp = hEb;
+              }
+              const hGross = parseFinancialNumber(h.gross_profit);
+              const hGAndA = parseFinancialNumber(h.general_administrative_expenses ?? h.administrative_expenses);
+              const hMkt = parseFinancialNumber(h.marketing_sales_distribution_expenses ?? h.marketing_expenses);
+              const hRd = parseFinancialNumber(h.research_development_expenses ?? h.rd_expenses);
+              const rawHOpex = parseFinancialNumber(h.operating_expenses);
+              const hOpex = rawHOpex !== null
+                ? Math.abs(rawHOpex)
+                : ((hGAndA !== null || hMkt !== null || hRd !== null) ? (Math.abs(hGAndA || 0) + Math.abs(hMkt || 0) + Math.abs(hRd || 0)) : null);
+              const hCore = (hGross !== null && hOpex !== null) ? hGross - hOpex : null;
+              const hNet = parseFinancialNumber(h.net_income);
+              if ((hOp === null || hOp <= 0) && ((hNet !== null && hNet > 0) || (hCore !== null && hCore > 0))) {
+                hOp = (hCore !== null && hCore > 0) ? hCore : (hNet !== null ? hNet / (1 - taxRate) : null);
+              }
+              if (hOp !== null) return hOp * (1 - taxRate);
+              if (hNet !== null && hNet > 0) return hNet;
+              return null;
+            };
+            const endNopat = getCleanNopat(prevYearEnd);
+            const matchNopat = getCleanNopat(prevYearMatch);
+            if (endNopat !== null && matchNopat !== null) {
+              const ttmNopat = rawNopat + endNopat - matchNopat;
+              if (ttmNopat > 0) {
+                annualizedNopat = ttmNopat;
+              }
             }
           }
         }
@@ -1382,6 +1399,29 @@ export function calculateSectorScore(
   const sortedHistory = [...history].sort((a, b) => parsePeriodSortKey(a?.period) - parsePeriodSortKey(b?.period));
   const latest = sortedHistory.length > 0 ? sortedHistory[sortedHistory.length - 1] : null;
 
+  // Kümülatif gelir tablosu kalemlerinde çeyrekler arası (ör. Q1 3M vs Q4 12M veya Q2 6M vs Q1 3M) yapay distorsiyonu önleyen YoY / yıllıklandırılmış büyüme hesaplayıcısı
+  const computeComparableIncomeGrowth = (getter: (item: any) => any): number | null => {
+    if (!latest || sortedHistory.length < 2) return null;
+    const latestVal = parseFinancialNumber(getter(latest));
+    if (latestVal === null) return null;
+    const latestKey = parsePeriodSortKey(latest.period);
+    if (latestKey > 200000) {
+      const yoyItem = sortedHistory.find((h) => parsePeriodSortKey(h?.period) === latestKey - 100);
+      if (yoyItem) {
+        const yoyVal = parseFinancialNumber(getter(yoyItem));
+        if (yoyVal !== null && yoyVal > 0) {
+          return safeGrowthRate(latestVal, yoyVal);
+        }
+      }
+    }
+    const prev = sortedHistory[sortedHistory.length - 2];
+    const prevVal = parseFinancialNumber(getter(prev));
+    if (prevVal === null || prevVal <= 0) return null;
+    const latestFactor = getAnnualizationFactor(latest.period);
+    const prevFactor = getAnnualizationFactor(prev?.period);
+    return safeGrowthRate(latestVal * latestFactor, prevVal * prevFactor);
+  };
+
   const breakdown: SectorScoreBreakdown[] = [];
   const anomalies: string[] = [];
   const conditionalWarnings: string[] = [];
@@ -1462,7 +1502,7 @@ export function calculateSectorScore(
     let r4 = 'Prim üretimi reel olarak büyüyor';
     let st4: 'good' | 'warning' | 'danger' = 'good';
     if (sortedHistory.length >= 2) {
-      const g = safeGrowthRate(latest?.revenue ?? latest?.written_premiums, sortedHistory[sortedHistory.length - 2]?.revenue ?? sortedHistory[sortedHistory.length - 2]?.written_premiums);
+      const g = computeComparableIncomeGrowth((h) => h?.revenue ?? h?.written_premiums);
       if (g !== null) {
         if (g >= 60) { s4 = 25; r4 = `Prim büyümesi (%${g}) enflasyonun üzerinde güçlü genişleme gösteriyor.`; st4 = 'good'; }
         else if (g >= 40) { s4 = 18; r4 = `Prim büyümesi (%${g}) sektör ortalamasında.`; st4 = 'good'; }
@@ -1525,11 +1565,7 @@ export function calculateSectorScore(
     let r4 = 'Net ücret ve komisyon gelirleri operasyonel giderleri karşılıyor.';
     let st4: 'good' | 'warning' | 'danger' = 'good';
     if (sortedHistory.length >= 2) {
-      const prev = sortedHistory[sortedHistory.length - 2];
-      const feeGrowth = safeGrowthRate(
-        latest?.net_interest_income ?? latest?.revenue,
-        prev?.net_interest_income ?? prev?.revenue
-      );
+      const feeGrowth = computeComparableIncomeGrowth((h) => h?.net_interest_income ?? h?.revenue);
       if (feeGrowth !== null) {
         if (feeGrowth >= 50.0) { s4 = 25; r4 = `Faiz dışı gelirler ve operasyonel büyüme (%${feeGrowth}) güçlü.`; st4 = 'good'; }
         else if (feeGrowth >= 25.0) { s4 = 19; r4 = `Gelir üretimi (%${feeGrowth}) sektör ortalamasında.`; st4 = 'good'; }
@@ -1679,7 +1715,7 @@ export function calculateSectorScore(
     // 1. Rule of 40 (Büyüme + FCF Marjı) (Max 25)
     let revG = 40.0;
     if (sortedHistory.length >= 2) {
-      const calcG = safeGrowthRate(latest?.revenue, sortedHistory[sortedHistory.length - 2]?.revenue);
+      const calcG = computeComparableIncomeGrowth((h) => h?.revenue);
       if (calcG !== null) revG = calcG;
     }
     const fcfM = parseFinancialNumber(latest?.fcf_margin ?? latest?.ebitda_margin) ?? 15.0;
@@ -1740,7 +1776,7 @@ export function calculateSectorScore(
     let r1 = 'Kapasite ve yolcu doluluk oranları dengeli.';
     let st1: 'good' | 'warning' | 'danger' = 'good';
     if (sortedHistory.length >= 2) {
-      const g = safeGrowthRate(latest?.revenue, sortedHistory[sortedHistory.length - 2]?.revenue);
+      const g = computeComparableIncomeGrowth((h) => h?.revenue);
       if (g !== null) {
         if (g >= 50) { s1 = 25; r1 = `Güçlü Yolcu & Hasılat Büyümesi (%${g}): Filo genişlemesi ve AKK/ASK doluluğu yüksek.`; st1 = 'good'; }
         else if (g >= 30) { s1 = 20; r1 = `Yolcu ve ciro artışı (%${g}) sektör normlarında.`; st1 = 'good'; }
@@ -1820,7 +1856,7 @@ export function calculateSectorScore(
     let r2 = 'Mağaza ve sepet hacim büyümesi takip ediliyor.';
     let st2: 'good' | 'warning' | 'danger' = 'good';
     if (sortedHistory.length >= 2) {
-      const revG = safeGrowthRate(latest?.revenue, sortedHistory[sortedHistory.length - 2]?.revenue);
+      const revG = computeComparableIncomeGrowth((h) => h?.revenue);
       if (revG !== null) {
         if (revG >= 55.0) { s2 = 25; r2 = `Güçlü SSS Genişlemesi: Ciro artışı (%${revG.toFixed(1)}) enflasyonun üzerinde reel sepet büyümesi sağlıyor.`; st2 = 'good'; }
         else if (revG >= 35.0) { s2 = 19; r2 = `Sağlıklı Ciro Büyümesi (%${revG.toFixed(1)}) sektör ortalamasında.`; st2 = 'good'; }
@@ -3064,7 +3100,8 @@ export function extractValuationFromReportText(
 export function computeSectorValuationAndDrivers(
   extractedDataOrOpts: any,
   inputPriceStr?: string,
-  sectorOverride?: SectorType
+  sectorOverride?: SectorType,
+  macroSnapshot?: MacroDataSnapshot | null
 ): {
   drivers: FairValueDrivers;
   valuation: ValuationMetrics;
@@ -3079,9 +3116,12 @@ export function computeSectorValuationAndDrivers(
   const sector: SectorType = isOptsObj
     ? (extractedDataOrOpts.sector ?? extractedDataOrOpts.sectorOverride ?? sectorOverride ?? extractedData?.sector ?? 'INDUSTRIAL')
     : (sectorOverride || extractedData?.sector || 'INDUSTRIAL');
+  const resolvedMacro = isOptsObj
+    ? (extractedDataOrOpts.macroSnapshot ?? extractedDataOrOpts.macro ?? macroSnapshot ?? extractedData?.macro ?? extractedData?.macro_snapshot)
+    : (macroSnapshot ?? extractedData?.macro ?? extractedData?.macro_snapshot);
 
   // Güvenlik ve Tutarlılık: Finansal geçmişi TMS 29, Fisher Reel WACC ve sektörel rasyolarla zenginleştir ve doğrula
-  enrichAndSanitizeFinancialHistory(extractedData, sector);
+  enrichAndSanitizeFinancialHistory(extractedData, sector, resolvedMacro);
   const history: any[] = Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : [];
 
   const rawPrice = parseFinancialNumber(effectivePriceStr || extractedData?.valuation?.current_price || '118.50');
@@ -4267,8 +4307,9 @@ export function calculateDuPont5Step(item: any, sectorOrPrev?: any, sectorOverri
     ebit = item.ebitda;
   }
 
-  const interestExp = parseFinancialNumber(item.interest_expenses ?? item.financial_expenses ?? item.interest_expense ?? item.financial_expense);
-  let ebt = parseFinancialNumber(item.ebt);
+  const rawInterestExp = parseFinancialNumber(item.interest_expenses ?? item.financial_expenses ?? item.financing_expenses ?? item.interest_expense ?? item.financial_expense);
+  const interestExp = rawInterestExp !== null ? Math.abs(rawInterestExp) : null;
+  let ebt = parseFinancialNumber(item.ebt ?? item.profit_before_tax);
   if (ebt === null && ebit !== null && interestExp !== null && resolvedSector !== 'INSURANCE') {
     ebt = ebit - interestExp;
   } else if (ebt === null && netIncome !== null) {
