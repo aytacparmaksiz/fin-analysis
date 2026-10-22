@@ -549,7 +549,13 @@ export function computeSnowflakeAnalysis(params: {
   // =========================================================================
   // 5. EKSEN: TEMETTÜ & SERMAYE DÖNÜŞÜMÜ (0 - 6 PUAN)
   // =========================================================================
-  const rawDividends: any[] = params.dividends || params.dividendHistory || params.latestData?.dividends || [];
+  const rawDividends: any[] = (Array.isArray(params.dividends) && params.dividends.length > 0)
+    ? params.dividends
+    : (Array.isArray(params.dividendHistory) && params.dividendHistory.length > 0)
+      ? params.dividendHistory
+      : (Array.isArray(params.latestData?.dividends) && params.latestData.dividends.length > 0)
+        ? params.latestData.dividends
+        : [];
   const latestDiv = rawDividends.length > 0 ? rawDividends[0] : null;
 
   const divYield = Number(

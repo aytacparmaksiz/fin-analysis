@@ -374,10 +374,9 @@ export class IsYatirimApiAdapter {
         ? ((other_operating_income || 0) - Math.abs(other_operating_expense || 0))
         : null;
 
-      operating_expenses = getVal(['3DA', '3DB', '3DC', '3E'], ['faaliyet giderleri']) ??
-        ((marketing_expenses !== null || administrative_expenses !== null || rd_expenses !== null)
-          ? ((marketing_expenses || 0) + (administrative_expenses || 0) + (rd_expenses || 0))
-          : null);
+      operating_expenses = ((marketing_expenses !== null || administrative_expenses !== null || rd_expenses !== null)
+        ? ((marketing_expenses || 0) + (administrative_expenses || 0) + (rd_expenses || 0))
+        : null) ?? getVal(['3E', '3DA', '3DB', '3DC'], ['faaliyet giderleri']);
 
       const tfrsOperatingProfit = getVal(
         ['3DF', '3EA', '3HACA', '3DEA'],
@@ -391,7 +390,7 @@ export class IsYatirimApiAdapter {
         ]
       );
 
-      const netOperatingProfitRaw = getVal(['3H'], ['net faaliyet kar/zararı', 'net faaliyet karı']);
+      const netOperatingProfitRaw = getVal(['4BA', '3H'], ['net faaliyet kar/zararı', 'net faaliyet karı']);
 
       if (tfrsOperatingProfit !== null) {
         operating_profit = tfrsOperatingProfit;
@@ -404,7 +403,7 @@ export class IsYatirimApiAdapter {
       }
 
       financing_income = getVal(['3GA', '3HB', '3FA'], ['finansman gelirleri', '(esas faaliyet dışı) finansal gelirler', 'finansal gelirler']);
-      financing_expenses = getVal(['3H', '3HC', '3FB', '3G', '3F'], ['finansman giderleri (-)', '(esas faaliyet dışı) finansal giderler (-)', 'finansman giderleri']);
+      financing_expenses = getVal(['3HC', '4BB', '3FB', '3G', '3F'], ['finansman giderleri (-)', '(esas faaliyet dışı) finansal giderler (-)', 'finansman giderleri']);
 
       profit_before_tax = getVal(['3I', '3M', '3N'], ['sürdürülen faaliyetler vergi öncesi karı', 'vergi öncesi karı', 'vergi öncesi kar']);
       ebt = profit_before_tax;
@@ -413,24 +412,37 @@ export class IsYatirimApiAdapter {
       net_income = getVal(['2OCF', '3Z', '3K', '3L', '3U', '2MEZ'], ['ana ortaklık payları', 'dönem net karı veya zararı', 'dönem karı (zararı)', 'dönem net kar']);
 
       depreciation = getVal(['4CAAA', '4B', '4CAB'], ['amortisman giderleri', 'amortisman & itfa payları', 'amortisman ve itfa gideri ile ilgili düzeltmeler', 'amortisman']);
-      if (operating_profit !== null) {
-        ebitda = operating_profit + (depreciation !== null ? Math.abs(depreciation) : 0);
+      const coreEbitForEbitda = (
+        (gross_profit !== null && operating_expenses !== null)
+          ? (gross_profit - Math.abs(operating_expenses))
+          : null
+      ) ?? netOperatingProfitRaw;
+      const ebitBaseForEbitda = (
+        other_operating_income_net !== null &&
+        other_operating_income_net < 0 &&
+        coreEbitForEbitda !== null &&
+        (operating_profit === null || coreEbitForEbitda > operating_profit)
+      )
+        ? coreEbitForEbitda
+        : operating_profit;
+      if (ebitBaseForEbitda !== null) {
+        ebitda = ebitBaseForEbitda + (depreciation !== null ? Math.abs(depreciation) : 0);
       }
 
       // 6. NAKİT AKIŞI:
       const officialOcf = getVal(['4C'], ['işletme faaliyetlerinden kaynaklanan net nakit', 'işletme faaliyetlerinden net nakit']);
       const officialFcf = getVal(['4CB'], ['serbest nakit akım', 'serbest nakit akışı']);
 
-      grossOcf = getVal(['4A'], ['işletme sermayesinde gerçekleşen değişimler öncesi', 'faaliyetlerden kaynaklanan nakit akışları']);
-      netOcf = officialOcf ?? getVal(['4CAE', '4A_NET'], ['işletme faaliyetlerinden net nakit']);
+      grossOcf = getVal(['4CAE', '4A'], ['işletme sermayesinde gerçekleşen değişimler öncesi', 'işletme sermayesinde değişik', 'faaliyetlerden kaynaklanan nakit akışları']);
+      netOcf = officialOcf ?? getVal(['4A_NET'], ['işletme faaliyetlerinden net nakit']);
       operating_cash_flow = netOcf ?? grossOcf ?? net_income;
 
       working_capital_change = getVal(['4CAF'], ['işletme sermayesindeki değişiklikler']);
-      tangibleCapex = getVal(['4CAI', '4CBD', '4CBDA'], ['sabit sermaye yatırımları', 'maddi ve maddi olmayan duran varlıkların alımından kaynaklanan nakit çıkışları', 'maddi duran varlık alım']);
+      tangibleCapex = getVal(['4CAI', '4CBDA'], ['sabit sermaye yatırımları', 'maddi ve maddi olmayan duran varlıkların alımından kaynaklanan nakit çıkışları', 'maddi duran varlık alım']);
       totalCapex = getVal(['4CAK'], ['yatırım faaliyetlerinden kaynaklanan nakit']);
 
       investing_cash_flow = totalCapex ?? getVal(['4B', '4CAK'], ['yatırım faaliyetlerinden kaynaklanan nakit']);
-      financing_cash_flow = getVal(['4CBE', '4CBK', '4C'], ['finansman faaliyetlerden kaynaklanan nakit', 'finansman faaliyetlerinden kaynaklanan nakit']);
+      financing_cash_flow = getVal(['4CBE'], ['finansman faaliyetlerden kaynaklanan nakit', 'finansman faaliyetlerinden kaynaklanan nakit']);
       dividends_paid = getVal(['4CBB'], ['temettü ödemeleri']);
       net_change_in_cash = getVal(['4D', '4CC', '4CBI'], ['nakit ve nakit benzerlerindeki net artış', 'nakit ve benzerlerindeki değişim']);
 
@@ -543,7 +555,8 @@ export class IsYatirimApiAdapter {
       expense_ratio,
       ga_ratio,
       commission_ratio,
-      combined_ratio
+      combined_ratio,
+      net_fx_position: getVal(['4BE', '4BEA', '4BEB'], ['net yabancı para pozisyonu', 'net ypp'])
     };
   }
 

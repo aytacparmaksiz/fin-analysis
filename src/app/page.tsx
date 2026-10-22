@@ -2886,7 +2886,11 @@ export default function ValuationTerminal({
 
       const finalExtracted = {
         ...enrichedExtractedData,
-        dividend_history: data.dividend_history || enrichedExtractedData?.dividend_history || currentExtractedData?.dividend_history,
+        dividend_history: (Array.isArray(data.dividend_history) && data.dividend_history.length > 0)
+          ? data.dividend_history
+          : (Array.isArray(enrichedExtractedData?.dividend_history) && enrichedExtractedData.dividend_history.length > 0)
+            ? enrichedExtractedData.dividend_history
+            : (currentExtractedData?.dividend_history || []),
         consensus_target: data.consensus_target || enrichedExtractedData?.consensus_target || currentExtractedData?.consensus_target,
         valuation: data.valuation || enrichedExtractedData?.valuation,
         fair_value_drivers: data.drivers || enrichedExtractedData?.fair_value_drivers,

@@ -67,6 +67,7 @@ import {
   isMetricDisabled
 } from '@/lib/sectors';
 import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from '@/lib/isyatirim-multiples-cache';
+import { OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE } from '@/lib/isyatirim-company-details-cache';
 import { getCompanyProfile } from '@/lib/company-profiles';
 import SnowflakeRadar from './snowflake-radar';
 import {
@@ -607,18 +608,23 @@ export default function SimplyView({
 
   useEffect(() => {
     let isMounted = true;
-    const initialDividends = report.dividendHistory || report.extractedData?.dividend_history;
-    const initialConsensus = report.consensusTarget || report.extractedData?.consensus_target;
+    const baselineDetails = report.ticker ? OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE[report.ticker.toUpperCase()] : null;
+    const rawInitialDivs = (Array.isArray(report.dividendHistory) && report.dividendHistory.length > 0)
+      ? report.dividendHistory
+      : (Array.isArray(report.extractedData?.dividend_history) && report.extractedData.dividend_history.length > 0)
+        ? report.extractedData.dividend_history
+        : (baselineDetails?.dividends || []);
+    const initialConsensus = report.consensusTarget || report.extractedData?.consensus_target || baselineDetails?.consensus || null;
     const initialForeign = report.extractedData?.foreign_share || (marketMultiples?.foreign_share_pct != null ? {
       currentPct: marketMultiples.foreign_share_pct,
       prevPct: marketMultiples.foreign_share_prev_pct,
       changeBps: marketMultiples.foreign_share_change_bps
-    } : null);
+    } : (baselineDetails?.foreignShare || null));
 
-    if (initialDividends && initialDividends.length > 0) {
+    if (rawInitialDivs.length > 0 || initialConsensus || initialForeign) {
       setLiveCompanyDetails({
-        dividends: initialDividends,
-        consensus: initialConsensus || null,
+        dividends: rawInitialDivs,
+        consensus: initialConsensus,
         foreignShare: initialForeign,
         tvConsensus: (report as any).tvConsensus || null
       });
@@ -630,8 +636,8 @@ export default function SimplyView({
         .then(data => {
           if (isMounted && data.success) {
             setLiveCompanyDetails({
-              dividends: data.dividends || initialDividends || [],
-              consensus: data.consensus || initialConsensus || null,
+              dividends: (Array.isArray(data.dividends) && data.dividends.length > 0) ? data.dividends : rawInitialDivs,
+              consensus: data.consensus || initialConsensus,
               foreignShare: data.foreignShare || initialForeign,
               tvConsensus: data.tvConsensus || null
             });
@@ -929,6 +935,23 @@ export default function SimplyView({
     return isyTarget || tvAvg || undefined;
   }, [liveCompanyDetails, report.consensusTarget, report.extractedData]);
 
+  const resolvedDividends = useMemo(() => {
+    if (Array.isArray(liveCompanyDetails?.dividends) && liveCompanyDetails.dividends.length > 0) {
+      return liveCompanyDetails.dividends;
+    }
+    if (Array.isArray(report.dividendHistory) && report.dividendHistory.length > 0) {
+      return report.dividendHistory;
+    }
+    if (Array.isArray(report.extractedData?.dividend_history) && report.extractedData.dividend_history.length > 0) {
+      return report.extractedData.dividend_history;
+    }
+    const baselineDivs = report.ticker ? OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE[report.ticker.toUpperCase()]?.dividends : null;
+    if (Array.isArray(baselineDivs) && baselineDivs.length > 0) {
+      return baselineDivs;
+    }
+    return [];
+  }, [liveCompanyDetails?.dividends, report.dividendHistory, report.extractedData?.dividend_history, report.ticker]);
+
   // Kar Tanesi (Snowflake) Analizi Hesabı (5 Eksen, 30 Deterministik Kriter, 0-6 Puan)
   const snowflake: SnowflakeAnalysisResult = useMemo(() => {
     return computeSnowflakeAnalysis({
@@ -948,7 +971,7 @@ export default function SimplyView({
       consensusTarget: consensusTargetPrice,
       peers: analyzedCompetitors,
       earningsQuality,
-      dividends: liveCompanyDetails?.dividends || report.dividendHistory || report.extractedData?.dividend_history || []
+      dividends: resolvedDividends
     });
   }, [
     report.ticker,
@@ -959,12 +982,7 @@ export default function SimplyView({
     marketMultiples,
     companyMultiplesData,
     report.extractedData,
-    report.dividendHistory,
-    liveCompanyDetails?.dividends,
-    discountPctNum,
-    marketMultiples,
-    companyMultiplesData,
-    report.extractedData?.financial_history,
+    resolvedDividends,
     valuationInfo?.drivers,
     evaSpreadNum,
     roicNum,
@@ -3943,7 +3961,7 @@ export default function SimplyView({
             </div>
 
             {(() => {
-              const dividends: any[] = liveCompanyDetails?.dividends || report.dividendHistory || report.extractedData?.dividend_history || [];
+              const dividends: any[] = resolvedDividends;
               const hasDividends = Array.isArray(dividends) && dividends.length > 0;
 
               if (!hasDividends) {

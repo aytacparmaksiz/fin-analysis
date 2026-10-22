@@ -9,6 +9,7 @@ import {
   getIsYatirimMultiplesForTicker,
   getIsYatirimSectorAverages,
   fetchIsYatirimCompanyDetails,
+  synthesizeDividendsFromFinancialHistory,
   type IsYatirimStockMultiples,
   type IsYatirimSectorAverage
 } from './isyatirim-service.ts';
@@ -1158,6 +1159,40 @@ export async function fetchAndAnalyzeBistCompany(
     ? latestPaidCapital
     : (isYatirimShares || meta.shareCount || 500000000);
 
+  // 4.8. İş Yatırım Resmi Temettü Geçmişi ve Konsensüs Hedef Fiyat Verilerini Çözümle
+  const companyDetails = await fetchIsYatirimCompanyDetails(ticker);
+
+  // Eğer finansal geçmişteki dönemlerde dividends_paid eksikse (ör. statik önbellek veya ara dönem),
+  // resmi temettü kayıtlarından ilgili kümülatif dönem için ödenen nakit temettüyü tamamla:
+  if (companyDetails.dividends && companyDetails.dividends.length > 0) {
+    for (const item of sortedHistory) {
+      if (item.dividends_paid == null || item.dividends_paid === 0) {
+        const pKey = parsePeriodSortKey(item.period);
+        const pYear = Math.floor(pKey / 100);
+        const pMonth = pKey % 100;
+        if (pYear > 2000 && pMonth > 0) {
+          let cumDivTl = 0;
+          for (const d of companyDetails.dividends) {
+            const parts = String(d.date || '').split('.').map(Number);
+            const dMonth = parts.length >= 2 && parts[1] >= 1 && parts[1] <= 12 ? parts[1] : 5;
+            const dYear = d.year || (parts.length >= 3 ? parts[2] : 0);
+            if (dYear === pYear && dMonth <= pMonth) {
+              const amt = (typeof d.totalAmountTl === 'number' && d.totalAmountTl > 0)
+                ? d.totalAmountTl
+                : ((typeof d.perShareTl === 'number' && d.perShareTl > 0 && effectiveShareCount > 0)
+                  ? Math.round(d.perShareTl * effectiveShareCount)
+                  : 0);
+              cumDivTl += amt;
+            }
+          }
+          if (cumDivTl > 0) {
+            item.dividends_paid = cumDivTl;
+          }
+        }
+      }
+    }
+  }
+
   // 5. Ham Veri Paketini Oluştur
   const rawDataPayload = {
     ticker,
@@ -1189,8 +1224,9 @@ export async function fetchAndAnalyzeBistCompany(
   // 8. İş Yatırım Resmi Sektör Ortalamalarını Çözümle
   const sectorAverages = await getIsYatirimSectorAverages(finalMultiples?.sectorName || meta.sector);
 
-  // 8.5. İş Yatırım Resmi Temettü Geçmişi ve Konsensüs Hedef Fiyat Verilerini Çözümle
-  const companyDetails = await fetchIsYatirimCompanyDetails(ticker);
+  const resolvedDividendHistory = (companyDetails.dividends && companyDetails.dividends.length > 0)
+    ? companyDetails.dividends
+    : synthesizeDividendsFromFinancialHistory(sanitized.financial_history, effectiveShareCount, currentPrice);
 
   // 9. Tek Doğruluk Kaynağı: Merkezi Rasyo ve Metrik Motorunu Çalıştır
   const unifiedMetrics = FinancialRatioEngine.computeMetrics({
@@ -1260,7 +1296,7 @@ export async function fetchAndAnalyzeBistCompany(
       } : null,
       source: 'İş Yatırım Resmi Çarpanları'
     } : null,
-    dividend_history: companyDetails.dividends,
+    dividend_history: resolvedDividendHistory,
     consensus_target: companyDetails.consensus,
     macro: macroSnapshot,
     generatedAt: new Date().toISOString()

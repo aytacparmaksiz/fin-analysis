@@ -38,6 +38,7 @@ export interface IsYatirimStockMultiples {
 }
 
 import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from './isyatirim-multiples-cache.ts';
+import { OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE } from './isyatirim-company-details-cache.ts';
 import {
   OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE,
   ISYATIRIM_SECTOR_NAME_TO_CODE,
@@ -438,8 +439,160 @@ const companyDetailsCache = new Map<string, { data: IsYatirimCompanyDetails; tim
 const DETAILS_CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 saat önbellek
 
 /**
+ * Yahoo Finance ?events=div uç noktasından BIST hissesi için tarihsel nakit temettü ödemelerini çeker.
+ * İş Yatırım sirket-karti.aspx sayfasına yurt dışı / bulut IP erişim engeli olduğunda yedek kaynak olarak çalışır.
+ */
+async function fetchYahooFinanceDividendRecords(ticker: string): Promise<IsYatirimDividendRecord[]> {
+  const cleanTicker = ticker.toUpperCase().replace(/\.IS$/, '').trim();
+  const urls = [
+    `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}.IS?interval=1mo&range=10y&events=div`,
+    `https://query2.finance.yahoo.com/v8/finance/chart/${cleanTicker}.IS?interval=1mo&range=10y&events=div`
+  ];
+  for (const url of urls) {
+    try {
+      const text = await fetchHttpsText(url, 8000);
+      if (!text) continue;
+      const json = JSON.parse(text);
+      const result = json?.chart?.result?.[0];
+      const divEvents = result?.events?.dividends;
+      if (!divEvents || typeof divEvents !== 'object') continue;
+
+      const timestamps: number[] = Array.isArray(result?.timestamp) ? result.timestamp : [];
+      const closes: Array<number | null> = result?.indicators?.quote?.[0]?.close || [];
+      const stockMeta = cachedMultiples[cleanTicker];
+      const paidInCapitalTl = stockMeta?.paidInCapitalMnTl ? stockMeta.paidInCapitalMnTl * 1_000_000 : null;
+      const fallbackPrice = stockMeta?.lastPrice ?? result?.meta?.regularMarketPrice ?? null;
+
+      const records: IsYatirimDividendRecord[] = [];
+      for (const ev of Object.values(divEvents) as Array<{ amount?: number; date?: number }>) {
+        const perShareTl = typeof ev?.amount === 'number' && ev.amount > 0 ? Number(ev.amount.toFixed(4)) : null;
+        const ts = typeof ev?.date === 'number' ? ev.date : null;
+        if (!perShareTl || !ts) continue;
+
+        const dt = new Date(ts * 1000);
+        const dd = String(dt.getUTCDate()).padStart(2, '0');
+        const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+        const yyyy = dt.getUTCFullYear();
+        const dateStr = `${dd}.${mm}.${yyyy}`;
+
+        // O tarihe en yakın kapanış fiyatını bul
+        let refPrice: number | null = fallbackPrice;
+        if (timestamps.length > 0 && closes.length === timestamps.length) {
+          let bestDiff = Infinity;
+          for (let i = 0; i < timestamps.length; i++) {
+            const c = closes[i];
+            if (typeof c === 'number' && c > 0) {
+              const diff = Math.abs(timestamps[i] - ts);
+              if (diff < bestDiff) {
+                bestDiff = diff;
+                refPrice = c;
+              }
+            }
+          }
+        }
+
+        const yieldPct = refPrice && refPrice > 0 ? Number(((perShareTl / refPrice) * 100).toFixed(2)) : null;
+        const grossRatePct = Number((perShareTl * 100).toFixed(2));
+        const netRatePct = Number((grossRatePct * 0.9).toFixed(2));
+        const totalAmountTl = paidInCapitalTl ? Math.round(perShareTl * paidInCapitalTl) : null;
+
+        records.push({
+          date: dateStr,
+          year: yyyy,
+          yieldPct,
+          perShareTl,
+          grossRatePct,
+          netRatePct,
+          totalAmountTl,
+          payoutRatioPct: null
+        });
+      }
+
+      if (records.length > 0) {
+        records.sort((a, b) => {
+          const [da, ma, ya] = (a.date || '').split('.').map(Number);
+          const [db, mb, yb] = (b.date || '').split('.').map(Number);
+          return new Date(yb || 2000, (mb || 1) - 1, db || 1).getTime() - new Date(ya || 2000, (ma || 1) - 1, da || 1).getTime();
+        });
+        return records;
+      }
+    } catch {
+      // Sonraki yedek URL'yi dene
+    }
+  }
+  return [];
+}
+
+/**
+ * Finansal tablo geçmişindeki Nakit Akışı 'Ödenen Temettüler' (dividends_paid / 4CBB) kalemlerinden
+ * yapılandırılmış temettü dağıtım kayıtları üretir (PDF yüklemeleri veya harici servis kesintileri için).
+ */
+export function synthesizeDividendsFromFinancialHistory(
+  history: any[] | undefined | null,
+  shareCount?: number | null,
+  currentPrice?: number | null
+): IsYatirimDividendRecord[] {
+  if (!Array.isArray(history) || history.length === 0) return [];
+  const byYear = new Map<number, { period: string; divPaid: number; netIncome: number | null; paidInCap: number | null }>();
+
+  for (const item of history) {
+    if (!item || typeof item !== 'object') continue;
+    const rawDiv = parseFinancialNumber(item.dividends_paid);
+    if (rawDiv === null || Math.abs(rawDiv) <= 0) continue;
+    const divPaid = Math.abs(rawDiv);
+    const periodStr = String(item.period || '');
+    const m = periodStr.match(/(20\d{2})/);
+    const year = m ? parseInt(m[1], 10) : new Date().getFullYear();
+    const isYearEnd = periodStr.endsWith('/12') || periodStr.endsWith('-12') || periodStr === String(year);
+    const prev = byYear.get(year);
+    if (!prev || isYearEnd || divPaid > prev.divPaid) {
+      byYear.set(year, {
+        period: periodStr,
+        divPaid,
+        netIncome: parseFinancialNumber(item.net_income),
+        paidInCap: parseFinancialNumber(item.paid_in_capital)
+      });
+    }
+  }
+
+  const records: IsYatirimDividendRecord[] = [];
+  for (const [year, info] of byYear.entries()) {
+    const effectiveShares = (typeof shareCount === 'number' && shareCount > 0)
+      ? shareCount
+      : (info.paidInCap && info.paidInCap > 0 ? info.paidInCap : null);
+    const perShareTl = effectiveShares && effectiveShares > 0
+      ? Number((info.divPaid / effectiveShares).toFixed(4))
+      : null;
+    const yieldPct = (perShareTl !== null && typeof currentPrice === 'number' && currentPrice > 0)
+      ? Number(((perShareTl / currentPrice) * 100).toFixed(2))
+      : null;
+    const grossRatePct = perShareTl !== null ? Number((perShareTl * 100).toFixed(2)) : null;
+    const netRatePct = grossRatePct !== null ? Number((grossRatePct * 0.9).toFixed(2)) : null;
+    const payoutRatioPct = (info.netIncome && info.netIncome > 0)
+      ? Number(Math.min(200, (info.divPaid / info.netIncome) * 100).toFixed(2))
+      : null;
+
+    records.push({
+      date: `31.05.${year}`,
+      year,
+      yieldPct,
+      perShareTl,
+      grossRatePct,
+      netRatePct,
+      totalAmountTl: Math.round(info.divPaid),
+      payoutRatioPct
+    });
+  }
+
+  records.sort((a, b) => b.year - a.year);
+  return records;
+}
+
+/**
  * İş Yatırım resmi şirket kartından (sirket-karti.aspx) gerçekleşen temettü geçmişini,
  * analist konsensüs hedef fiyatını ve yabancı saklama oranını çeker.
+ * Canlı HTML erişilemezse veya boş dönerse sırasıyla Resmi İş Yatırım Önbelleği ve Yahoo Finance
+ * temettü servisine başvurur.
  */
 export async function fetchIsYatirimCompanyDetails(rawTicker: string): Promise<IsYatirimCompanyDetails> {
   const ticker = rawTicker.toUpperCase().replace(/\.IS$/, '').trim();
@@ -448,109 +601,127 @@ export async function fetchIsYatirimCompanyDetails(rawTicker: string): Promise<I
     return cached.data;
   }
 
+  const baseline = OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE[ticker] || null;
+  const cachedStock = cachedMultiples[ticker];
+  const defaultForeignShare = cachedStock && cachedStock.foreignSharePct != null
+    ? {
+        currentPct: cachedStock.foreignSharePct,
+        prevPct: cachedStock.foreignSharePrevPct ?? null,
+        changeBps: cachedStock.foreignShareChangeBps ?? null
+      }
+    : (baseline?.foreignShare ?? null);
+
   const defaultDetails: IsYatirimCompanyDetails = {
     ticker,
-    dividends: [],
-    consensus: null,
-    foreignShare: null,
-    fetchedAt: new Date().toISOString()
+    dividends: baseline?.dividends ? [...baseline.dividends] : [],
+    consensus: baseline?.consensus ? { ...baseline.consensus } : null,
+    foreignShare: defaultForeignShare,
+    fetchedAt: baseline?.fetchedAt || new Date().toISOString()
   };
 
   try {
     const url = `https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/sirket-karti.aspx?hisse=${ticker}`;
-    const html = await fetchHttpsText(url, 20000);
+    const html = await fetchHttpsText(url, baseline ? 4000 : 7000);
 
-    if (!html) {
-      return defaultDetails;
-    }
-
-    // 1. Temettü Gerçekleşen Tablosu (temettugercek)
-    const dividends: IsYatirimDividendRecord[] = [];
-    const divMatch = html.match(/<table[^>]*data-csvname=["']temettugercek["'][^>]*>([\s\S]*?)<\/table>/i);
-    if (divMatch) {
-      const rows = divMatch[1].match(/<tr[\s\S]*?<\/tr>/gi) || [];
-      const seenRowKey = new Set<string>();
-      for (const row of rows) {
-        const cells = (row.match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi) || []).map(c => c.replace(/<[^>]+>/g, '').trim());
-        if (cells.length >= 8 && cells[0].toUpperCase() === ticker) {
-          const dateStr = cells[1];
-          const rowKey = `${dateStr}_${cells[3]}`;
-          if (seenRowKey.has(rowKey)) continue;
-          seenRowKey.add(rowKey);
-
-          const year = parseInt(dateStr.slice(-4), 10) || new Date().getFullYear();
-          dividends.push({
-            date: dateStr,
-            year,
-            yieldPct: parseTrFloat(cells[2]),
-            perShareTl: parseTrFloat(cells[3]),
-            grossRatePct: parseTrFloat(cells[4]),
-            netRatePct: parseTrFloat(cells[5]),
-            totalAmountTl: parseTrFloat(cells[6]),
-            payoutRatioPct: parseTrFloat(cells[7])
-          });
-        }
-      }
-    }
-
-    // Tarihe göre en yeniden en eskiye sırala
-    dividends.sort((a, b) => {
-      const [da, ma, ya] = (a.date || '').split('.').map(Number);
-      const [db, mb, yb] = (b.date || '').split('.').map(Number);
-      const timeA = new Date(ya || 2000, (ma || 1) - 1, da || 1).getTime();
-      const timeB = new Date(yb || 2000, (mb || 1) - 1, db || 1).getTime();
-      return timeB - timeA;
-    });
-
-    // 2. Hedef Fiyat & Konsensüs Öneri Tablosu (hedeffiyat)
+    let dividends: IsYatirimDividendRecord[] = [];
     let consensus: IsYatirimConsensusTarget | null = null;
-    const hedefMatch = html.match(/<table[^>]*data-csvname=["']hedeffiyat["'][^>]*>([\s\S]*?)<\/table>/i);
-    if (hedefMatch) {
-      const rows = hedefMatch[1].match(/<tr[\s\S]*?<\/tr>/gi) || [];
-      for (const row of rows) {
-        const cells = (row.match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi) || []).map(c => c.replace(/<[^>]+>/g, '').trim());
-        if (cells.length >= 4 && cells[0].toUpperCase() === ticker) {
-          const rec = cells[2].toUpperCase().trim();
-          const target = parseTrFloat(cells[3]);
-          if (target !== null && target > 0) {
-            consensus = {
-              date: cells[1] || '',
-              recommendation: rec || 'TUT',
-              targetPrice: target,
-              targetPrice1M: cells.length >= 7 ? parseTrFloat(cells[6]) : null,
-              targetPrice3M: cells.length >= 10 ? parseTrFloat(cells[9]) : null,
-              source: 'İş Yatırım Araştırma'
-            };
-            break;
-          }
-        }
-      }
-    }
+    let foreignShare = defaultForeignShare;
 
-    // 3. Yabancı Oranı
-    let foreignShare: { currentPct: number | null; prevPct: number | null; changeBps: number | null } | null = null;
-    const cachedStock = cachedMultiples[ticker];
-    if (cachedStock && cachedStock.foreignSharePct != null) {
-      foreignShare = {
-        currentPct: cachedStock.foreignSharePct,
-        prevPct: cachedStock.foreignSharePrevPct ?? null,
-        changeBps: cachedStock.foreignShareChangeBps ?? null
-      };
-    } else {
-      const yabanciMatch = html.match(/<table[^>]*data-csvname=["']yabancioranlar["'][^>]*>([\s\S]*?)<\/table>/i);
-      if (yabanciMatch) {
-        const rows = yabanciMatch[1].match(/<tr[\s\S]*?<\/tr>/gi) || [];
+    if (html) {
+      // 1. Temettü Gerçekleşen Tablosu (temettugercek)
+      const divMatch = html.match(/<table[^>]*data-csvname=["']temettugercek["'][^>]*>([\s\S]*?)<\/table>/i);
+      if (divMatch) {
+        const rows = divMatch[1].match(/<tr[\s\S]*?<\/tr>/gi) || [];
+        const seenRowKey = new Set<string>();
         for (const row of rows) {
           const cells = (row.match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi) || []).map(c => c.replace(/<[^>]+>/g, '').trim());
-          if (cells.length >= 5 && cells[0].toUpperCase() === ticker) {
-            foreignShare = {
-              currentPct: parseTrFloat(cells[3]),
-              prevPct: parseTrFloat(cells[2]),
-              changeBps: parseTrFloat(cells[4])
-            };
-            break;
+          if (cells.length >= 8 && cells[0].toUpperCase() === ticker) {
+            const dateStr = cells[1];
+            const rowKey = `${dateStr}_${cells[3]}`;
+            if (seenRowKey.has(rowKey)) continue;
+            seenRowKey.add(rowKey);
+
+            const year = parseInt(dateStr.slice(-4), 10) || new Date().getFullYear();
+            dividends.push({
+              date: dateStr,
+              year,
+              yieldPct: parseTrFloat(cells[2]),
+              perShareTl: parseTrFloat(cells[3]),
+              grossRatePct: parseTrFloat(cells[4]),
+              netRatePct: parseTrFloat(cells[5]),
+              totalAmountTl: parseTrFloat(cells[6]),
+              payoutRatioPct: parseTrFloat(cells[7])
+            });
           }
         }
+      }
+
+      // Tarihe göre en yeniden en eskiye sırala
+      dividends.sort((a, b) => {
+        const [da, ma, ya] = (a.date || '').split('.').map(Number);
+        const [db, mb, yb] = (b.date || '').split('.').map(Number);
+        const timeA = new Date(ya || 2000, (ma || 1) - 1, da || 1).getTime();
+        const timeB = new Date(yb || 2000, (mb || 1) - 1, db || 1).getTime();
+        return timeB - timeA;
+      });
+
+      // 2. Hedef Fiyat & Konsensüs Öneri Tablosu (hedeffiyat)
+      const hedefMatch = html.match(/<table[^>]*data-csvname=["']hedeffiyat["'][^>]*>([\s\S]*?)<\/table>/i);
+      if (hedefMatch) {
+        const rows = hedefMatch[1].match(/<tr[\s\S]*?<\/tr>/gi) || [];
+        for (const row of rows) {
+          const cells = (row.match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi) || []).map(c => c.replace(/<[^>]+>/g, '').trim());
+          if (cells.length >= 4 && cells[0].toUpperCase() === ticker) {
+            const rec = cells[2].toUpperCase().trim();
+            const target = parseTrFloat(cells[3]);
+            if (target !== null && target > 0) {
+              consensus = {
+                date: cells[1] || '',
+                recommendation: rec || 'TUT',
+                targetPrice: target,
+                targetPrice1M: cells.length >= 7 ? parseTrFloat(cells[6]) : null,
+                targetPrice3M: cells.length >= 10 ? parseTrFloat(cells[9]) : null,
+                source: 'İş Yatırım Araştırma'
+              };
+              break;
+            }
+          }
+        }
+      }
+
+      // 3. Yabancı Oranı
+      if (!foreignShare) {
+        const yabanciMatch = html.match(/<table[^>]*data-csvname=["']yabancioranlar["'][^>]*>([\s\S]*?)<\/table>/i);
+        if (yabanciMatch) {
+          const rows = yabanciMatch[1].match(/<tr[\s\S]*?<\/tr>/gi) || [];
+          for (const row of rows) {
+            const cells = (row.match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi) || []).map(c => c.replace(/<[^>]+>/g, '').trim());
+            if (cells.length >= 5 && cells[0].toUpperCase() === ticker) {
+              foreignShare = {
+                currentPct: parseTrFloat(cells[3]),
+                prevPct: parseTrFloat(cells[2]),
+                changeBps: parseTrFloat(cells[4])
+              };
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // Yedekleme Katmanı 1: Resmi İş Yatırım Önbelleği
+    if (dividends.length === 0 && baseline?.dividends && baseline.dividends.length > 0) {
+      dividends = [...baseline.dividends];
+    }
+    if (!consensus && baseline?.consensus) {
+      consensus = { ...baseline.consensus };
+    }
+
+    // Yedekleme Katmanı 2: Yahoo Finance ?events=div Servisi
+    if (dividends.length === 0) {
+      const yfDividends = await fetchYahooFinanceDividendRecords(ticker);
+      if (yfDividends.length > 0) {
+        dividends = yfDividends;
       }
     }
 
@@ -562,10 +733,18 @@ export async function fetchIsYatirimCompanyDetails(rawTicker: string): Promise<I
       fetchedAt: new Date().toISOString()
     };
 
-    companyDetailsCache.set(ticker, { data: result, timestamp: Date.now() });
+    if (result.dividends.length > 0 || result.consensus !== null) {
+      companyDetailsCache.set(ticker, { data: result, timestamp: Date.now() });
+    }
     return result;
   } catch (err: any) {
     console.warn(`[IsYatirim] Şirket kartı ayrıştırılamadı (${ticker}):`, err?.message || err);
+    if (defaultDetails.dividends.length === 0) {
+      const yfDividends = await fetchYahooFinanceDividendRecords(ticker).catch(() => []);
+      if (yfDividends.length > 0) {
+        defaultDetails.dividends = yfDividends;
+      }
+    }
     return defaultDetails;
   }
 }

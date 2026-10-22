@@ -7,6 +7,7 @@ import {
 } from '@/lib/gemini';
 import { computeSectorValuationAndDrivers, syncReportTextWithValuation } from '@/lib/valuation';
 import { fetchLiveBistPrice } from '@/lib/bist-service';
+import { fetchIsYatirimCompanyDetails, synthesizeDividendsFromFinancialHistory } from '@/lib/isyatirim-service';
 import { FinancialRatioEngine } from '@/lib/ratio-engine';
 
 export const runtime = 'nodejs';
@@ -466,13 +467,40 @@ ZORUNLU TALİMAT (Önceki Raporla Karşılaştırma & Çeyreklik Hafıza):
     // Rapor metnindeki tüm hedef fiyat ve senaryo sayılarını hesaplanan model çıktılarıyla %100 senkronize et
     reportText = syncReportTextWithValuation(reportText, valuation);
 
+    let dividendHistory = Array.isArray(extractedData?.dividend_history) && extractedData.dividend_history.length > 0
+      ? extractedData.dividend_history
+      : [];
+    let consensusTarget = extractedData?.consensus_target || null;
+
+    if (dividendHistory.length === 0 || !consensusTarget) {
+      try {
+        const companyDetails = await fetchIsYatirimCompanyDetails(resolvedTicker);
+        if (dividendHistory.length === 0 && companyDetails.dividends && companyDetails.dividends.length > 0) {
+          dividendHistory = companyDetails.dividends;
+        }
+        if (!consensusTarget && companyDetails.consensus) {
+          consensusTarget = companyDetails.consensus;
+        }
+      } catch {}
+    }
+
+    if (dividendHistory.length === 0) {
+      dividendHistory = synthesizeDividendsFromFinancialHistory(
+        extractedData?.financial_history,
+        extractedData?.share_count,
+        Number(activePrice) || null
+      );
+    }
+
     return NextResponse.json({ 
       report: reportText, 
       sector, 
       valuation, 
       drivers,
       scoreResult,
-      optimization
+      optimization,
+      dividend_history: dividendHistory,
+      consensus_target: consensusTarget
     });
   } catch (error: any) {
     console.error('Analyze Error:', error);

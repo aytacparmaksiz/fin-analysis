@@ -9,12 +9,16 @@ import {
   calculateDuPont5Step,
   detectValueTrap,
   optimizeFinalDecision,
-  calculateSectorScore
+  calculateSectorScore,
+  enrichAndSanitizeFinancialHistory
 } from '../lib/valuation.ts';
 import { FinancialRatioEngine } from '../lib/ratio-engine.ts';
 import { computeSnowflakeAnalysis as calculateSnowflake } from '../lib/snowflake.ts';
 import { FinancialDataValidator } from '../lib/financial-validator.ts';
 import { isMetricDisabled } from '../lib/sectors.ts';
+import { IsYatirimApiAdapter } from '../lib/isyatirim-adapter.ts';
+import { synthesizeDividendsFromFinancialHistory } from '../lib/isyatirim-service.ts';
+import { OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE } from '../lib/isyatirim-company-details-cache.ts';
 
 // Deterministik PRNG (Property-Based / Fuzzing Testleri için)
 function mulberry32(seed) {
@@ -611,4 +615,90 @@ test('RED TEAM MATHEMATICAL AUDIT & INVARIANT TEST SUITE', async (t) => {
       assert.ok(Number.isFinite(snow.totalScore) && snow.totalScore >= 0 && snow.totalScore <= 30, `Snowflake totalScore [0, 30] aralığında sonlu olmalıdır: ${snow.totalScore}`);
     }
   });
+
+  await t.test('REGRESYON 12: MGROS ve Tüm BIST Sektörleri İçin Temettü Kayıtları, Adapter Kod Eşleştirmesi ve WACC/ROIC Bütünlüğü', () => {
+    // 1. MGROS ve büyük BIST temettü hisselerinin resmi önbellekte varlığı
+    for (const tk of ['MGROS', 'THYAO', 'TUPRS', 'BIMAS', 'FROTO', 'KCHOL', 'GARAN', 'TURSG', 'ASELS', 'EREGL']) {
+      const entry = OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE[tk];
+      assert.ok(entry && Array.isArray(entry.dividends) && entry.dividends.length > 0, `${tk} için resmi temettü kaydı boş olmamalıdır`);
+      assert.ok(entry.dividends[0].perShareTl > 0, `${tk} son temettü hisse başı TL > 0 olmalıdır`);
+    }
+
+    // 2. Nakit akışı tablosundaki dividends_paid (4CBB) kaleminden temettü sentezi
+    const synthDivs = synthesizeDividendsFromFinancialHistory([
+      { period: '2025/12', dividends_paid: -1_900_000_000, net_income: 8_500_000_000, paid_in_capital: 181_054_000 },
+      { period: '2026/06', dividends_paid: -825_000_000, net_income: 2_100_000_000, paid_in_capital: 181_054_000 }
+    ], 181_054_000, 457.0);
+    assert.equal(synthDivs.length, 2, '2 ayrı yıl için sentezlenmiş temettü kaydı üretilmelidir');
+    assert.equal(synthDivs[0].year, 2026);
+    assert.ok(synthDivs[0].perShareTl > 4.5 && synthDivs[0].perShareTl < 4.6, `2026 HB temettü ~4.5566 TL olmalıdır (${synthDivs[0].perShareTl})`);
+
+    // 3. Snowflake: boş dividends=[] dizisi verildiğinde dividendHistory yedeklemesini ezmemelidir
+    const snowWithEmptyPrimary = calculateSnowflake({
+      ticker: 'MGROS',
+      sector: 'RETAIL',
+      currentPrice: 457.0,
+      fairValue: 550.0,
+      dividends: [],
+      dividendHistory: OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE['MGROS'].dividends
+    });
+    const notableCheck = snowWithEmptyPrimary.axes.dividend.checks.find(c => c.id === 'notable_dividend');
+    assert.equal(notableCheck?.passed, true, 'MGROS düzenli temettü geçmişiyle notable_dividend kriterini geçmelidir');
+
+    // 4. IsYatirimApiAdapter: Perakende/Sanayi gelir tablosu ve nakit akışı eşleştirmesi
+    const mappedRetail = IsYatirimApiAdapter.mapPeriodDictionary('2025/12', {
+      code_3C: 240_000_000_000,
+      code_3D: 55_000_000_000,
+      code_3DA: -40_000_000_000, // Pazarlama
+      code_3DB: -6_000_000_000,  // Genel Yönetim
+      code_3DC: -500_000_000,    // Ar-Ge
+      code_3DD: 2_000_000_000,   // Diğer faaliyet gelirleri
+      code_3DE: -12_000_000_000, // Diğer faaliyet giderleri (vadeli alım vade farkı)
+      code_3DF: -1_500_000_000,  // TFRS Esas Faaliyet Kârı (negatif)
+      code_3H: -8_000_000_000,   // Net finansman toplamı
+      code_3HB: 3_000_000_000,   // Finansman geliri
+      code_3HC: -11_000_000_000, // Finansman gideri
+      code_2OCF: 4_200_000_000,
+      code_4B: 6_500_000_000,    // Amortisman
+      code_4C: 26_000_000_000,   // İşletme nakit akışı
+      code_4CAE: 18_000_000_000, // İşletme sermayesi öncesi brüt nakit
+      code_4CAI: -5_400_000_000, // Sabit sermaye yatırımı (CAPEX)
+      code_4CBB: -1_900_000_000, // Ödenen temettüler
+      code_4BE: -2_100_000_000,  // Net YPP
+      code_1A: 88_000_000_000,
+      code_1B: 250_000_000_000,
+      code_2A: 110_000_000_000,
+      code_2B: 45_000_000_000,
+      code_2N: 93_000_000_000,
+      code_2NA: 181_054_000
+    }, { ticker: 'MGROS', sector: 'RETAIL' });
+
+    // operating_expenses 3DA + 3DB + 3DC toplamı olmalı (-46.5 Milyar), tek başına 3DA (-40 Milyar) olmamalı
+    assert.equal(Math.abs(mappedRetail.operating_expenses), 46_500_000_000);
+    // financing_expenses 3H (-8 Milyar) yerine 3HC (-11 Milyar) olmalı
+    assert.equal(Math.abs(mappedRetail.financing_expenses), 11_000_000_000);
+    // Çekirdek EBIT = 55 - 46.5 = +8.5 Milyar; FAVÖK = 8.5 + 6.5 = +15.0 Milyar olmalı (-1.5 + 6.5 = 5.0 Milyar değil!)
+    assert.equal(mappedRetail.ebitda, 15_000_000_000);
+    assert.equal(mappedRetail.gross_operating_cash_flow, 18_000_000_000);
+    assert.equal(Math.abs(mappedRetail.dividends_paid), 1_900_000_000);
+    assert.equal(mappedRetail.net_fx_position, -2_100_000_000);
+
+    // 5. enrichAndSanitizeFinancialHistory: negatif işaretli operating_expenses ROIC'i şişirmemeli ve eski önbellek wacc güncellenmeli
+    const sanitized = enrichAndSanitizeFinancialHistory({
+      ticker: 'MGROS',
+      sector: 'RETAIL',
+      currency: 'TRY',
+      financial_history: [{
+        ...mappedRetail,
+        nominal_wacc: 33.7,
+        real_wacc: 33.7,
+        wacc: 33.7
+      }]
+    });
+    const sanItem = sanitized.financial_history[0];
+    assert.ok(sanItem.real_wacc < sanItem.nominal_wacc, `TMS 29 altında Reel WACC (${sanItem.real_wacc}) < Nominal WACC (${sanItem.nominal_wacc}) olmalıdır`);
+    assert.equal(sanItem.wacc, sanItem.nominal_wacc, 'Güncellenen WACC eski önbellek değerini ezmelidir');
+    assert.ok(sanItem.roic > 5 && sanItem.roic < 20, `MGROS çekirdek ROIC makul aralıkta (~%7-%12) olmalıdır (Hesaplanan: %${sanItem.roic})`);
+  });
 });
+

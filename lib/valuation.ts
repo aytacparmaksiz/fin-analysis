@@ -560,9 +560,14 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
       }
     }
 
-    const yrMatch = String(item.period || '').match(/(20\d{2})/);
+    const periodStr = String(item.period || '');
+    const yrMatch = periodStr.match(/(20\d{2})/);
     const yr = yrMatch ? parseInt(yrMatch[1], 10) : 2024;
     const annualFactor = getAnnualizationFactor(item.period);
+    if (item.is_tms29 === undefined) {
+      const isFinSec = detectedSector === 'BANKING' || detectedSector === 'INSURANCE';
+      item.is_tms29 = isFinSec ? false : (yr >= 2024 || (yr === 2023 && (periodStr.includes('12') || periodStr.includes('Q4'))));
+    }
 
     const containerCurr = String(container.currency || '').trim().toLowerCase();
     const isContainerBin = containerCurr.includes('bin') || containerCurr.includes('thousand');
@@ -1060,6 +1065,7 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
       ? Number((((1 + nominalWacc / 100) / (1 + expectedInflation / 100) - 1) * 100).toFixed(1))
       : nominalWacc;
 
+    const priorNominalWacc = item.nominal_wacc;
     item.nominal_wacc = nominalWacc;
     item.real_wacc = realWacc;
     item.expected_inflation = expectedInflation;
@@ -1092,7 +1098,14 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
       item.macro_source = macroSnapshot.source;
     }
 
-    if (item.wacc == null || item.wacc === 0 || isNaN(Number(item.wacc)) || item.wacc === 44.0 || item.wacc === 45.0) {
+    if (
+      item.wacc == null ||
+      item.wacc === 0 ||
+      isNaN(Number(item.wacc)) ||
+      item.wacc === 44.0 ||
+      item.wacc === 45.0 ||
+      (priorNominalWacc != null && Number(item.wacc) === Number(priorNominalWacc))
+    ) {
       item.wacc = computedWacc;
     } else {
       item.wacc = Number(Number(item.wacc).toFixed(1));
@@ -1138,12 +1151,12 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
         }
       }
 
-      // Çekirdek faaliyet kârı (Core Operating Profit = Brüt Kâr - Faaliyet Giderleri)
+      // Çekirdek faaliyet kârı (Core Operating Profit = Brüt Kâr - |Faaliyet Giderleri|)
       const grossProfit = typeof item.gross_profit === 'number' ? item.gross_profit : null;
       const opex = typeof item.operating_expenses === 'number'
-        ? item.operating_expenses
+        ? Math.abs(item.operating_expenses)
         : ((typeof item.general_administrative_expenses === 'number' || typeof item.marketing_sales_distribution_expenses === 'number' || typeof item.research_development_expenses === 'number')
-          ? (Number(item.general_administrative_expenses || 0) + Number(item.marketing_sales_distribution_expenses || 0) + Number(item.research_development_expenses || 0))
+          ? (Math.abs(Number(item.general_administrative_expenses || 0)) + Math.abs(Number(item.marketing_sales_distribution_expenses || 0)) + Math.abs(Number(item.research_development_expenses || 0)))
           : null);
       const coreOperatingProfit = (grossProfit !== null && opex !== null && (grossProfit - opex) > 0)
         ? (grossProfit - opex)
@@ -1193,7 +1206,10 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
             const hGAndA = parseFinancialNumber(h.general_administrative_expenses);
             const hMkt = parseFinancialNumber(h.marketing_sales_distribution_expenses);
             const hRd = parseFinancialNumber(h.research_development_expenses);
-            const hOpex = parseFinancialNumber(h.operating_expenses) ?? ((hGAndA !== null || hMkt !== null || hRd !== null) ? ((hGAndA || 0) + (hMkt || 0) + (hRd || 0)) : null);
+            const rawHOpex = parseFinancialNumber(h.operating_expenses);
+            const hOpex = rawHOpex !== null
+              ? Math.abs(rawHOpex)
+              : ((hGAndA !== null || hMkt !== null || hRd !== null) ? (Math.abs(hGAndA || 0) + Math.abs(hMkt || 0) + Math.abs(hRd || 0)) : null);
             const hCore = (hGross !== null && hOpex !== null) ? hGross - hOpex : null;
             const hNet = parseFinancialNumber(h.net_income);
             if ((hOp === null || hOp <= 0) && ((hNet !== null && hNet > 0) || (hCore !== null && hCore > 0))) {
