@@ -1,4 +1,4 @@
-import { SECTOR_SCORING_CONFIG, detectSector, type SectorType, isMetricDisabled } from './sectors.ts';
+import { SECTOR_SCORING_CONFIG, detectSector, type SectorType, isMetricDisabled, getCompanySectorDisplayName } from './sectors.ts';
 import { getExpectedInflationForPeriod, type MacroDataSnapshot } from './macro-service.ts';
 
 export interface DriverDetail {
@@ -635,32 +635,7 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
         }
       }
 
-      // AGESA Mükerrer Prim Toplama (3DAAB + 3AAAA) Kendini İyileştirme (Self-Healing) Kalkanı:
-      if (String(container.ticker || '').toUpperCase() === 'AGESA') {
-        const agPeriod = String(item.period || '');
-        const currentPrem = item.written_premiums ?? item.revenue;
-        if (agPeriod.endsWith('06') && currentPrem != null && currentPrem > 18_000_000_000 && currentPrem < 22_000_000_000) {
-          const cleanPrem = 15_448_697_576;
-          item.written_premiums = cleanPrem;
-          item.gross_written_premiums = cleanPrem;
-          item.revenue = cleanPrem;
-        } else if (agPeriod.endsWith('03') && currentPrem != null && currentPrem > 9_500_000_000 && currentPrem < 11_500_000_000) {
-          const cleanPrem = 7_051_153_447;
-          item.written_premiums = cleanPrem;
-          item.gross_written_premiums = cleanPrem;
-          item.revenue = cleanPrem;
-        } else if (agPeriod.endsWith('12') && currentPrem != null && currentPrem > 28_000_000_000 && currentPrem < 31_500_000_000) {
-          const cleanPrem = 24_073_963_541;
-          item.written_premiums = cleanPrem;
-          item.gross_written_premiums = cleanPrem;
-          item.revenue = cleanPrem;
-        } else if (agPeriod.endsWith('09') && currentPrem != null && currentPrem > 20_000_000_000 && currentPrem < 22_500_000_000) {
-          const cleanPrem = 17_196_901_939;
-          item.written_premiums = cleanPrem;
-          item.gross_written_premiums = cleanPrem;
-          item.revenue = cleanPrem;
-        }
-      }
+// AGESA ve tüm sigorta şirketleri için resmi denetlenmiş veriler kullanılır; kod içinde hisse bazlı sabit sayı barındırılmaz.
 
       const resolvedPrem = item.gross_written_premiums ?? item.written_premiums ?? item.revenue ?? item.earned_premiums ?? null;
       if (resolvedPrem != null && resolvedPrem !== 0) {
@@ -727,14 +702,19 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     // Asla var olan Tam TL tutarları 1000'e bölünmez!
     const itemEqAbs = typeof item.equity === 'number' ? Math.abs(item.equity) : 0;
     const itemRevAbs = typeof item.revenue === 'number' ? Math.abs(item.revenue) : (typeof item.written_premiums === 'number' ? Math.abs(item.written_premiums) : 0);
-    const isPeriodInThousands = (isContainerBin && itemEqAbs < 250_000_000) ||
-                                (hasFullTlPeriodInSeries && itemEqAbs > 0 && itemEqAbs < 250_000_000 && (itemRevAbs === 0 || itemRevAbs < 250_000_000));
-    if (isPeriodInThousands) {
-      for (const mf of monetaryFields) {
-        if (typeof item[mf] === 'number' && item[mf] !== 0) {
-          item[mf] = Math.round(item[mf] * 1000);
+    
+    // İdempotent Ölçekleme: Bir dönem zaten Tam TL olarak normalize edilmişse ikinci çağrıda ASLA tekrar x1000 çarpılamaz.
+    if (!item._scaleNormalized) {
+      const isPeriodInThousands = (isContainerBin && itemEqAbs < 250_000_000) ||
+                                  (hasFullTlPeriodInSeries && itemEqAbs > 0 && itemEqAbs < 250_000_000 && (itemRevAbs === 0 || itemRevAbs < 250_000_000));
+      if (isPeriodInThousands) {
+        for (const mf of monetaryFields) {
+          if (typeof item[mf] === 'number' && item[mf] !== 0) {
+            item[mf] = Math.round(item[mf] * 1000);
+          }
         }
       }
+      item._scaleNormalized = true;
     }
     // Eğer geçmişte total_assets yanlışlıkla özkaynaktan küçük kalmışsa (örn. 1000'e bölünme anomalisi), bilanço denkliğinden onar:
     if (item.total_assets != null && item.equity != null && item.equity > 0 && item.total_assets < item.equity) {
@@ -1096,9 +1076,6 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     const reportedWacc = parseFinancialNumber(item.reported_wacc ?? item.discount_rate ?? item.impairment_wacc);
     if (reportedWacc !== null && reportedWacc >= 15 && reportedWacc <= 60) {
       computedWacc = Number(reportedWacc.toFixed(1));
-    } else if (tickerStr === 'MPARK' && computedWacc > 30.0) {
-      // MLP Care için Deloitte resmi bağımsız denetim tavanı (%29.6)
-      computedWacc = 29.6;
     }
 
     // Fisher Denklemi ile Reel WACC ve Nominal WACC Ayrımı:
@@ -1110,7 +1087,7 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     const tcmbPeriodInflation = getExpectedInflationForPeriod(item.period, macroSnapshot);
     const expectedInflation = isForeignCurrency
       ? (reportCurrency === 'EUR' ? 2.2 : 2.5)
-      : (yr <= 2023 ? 0.0 : tcmbPeriodInflation);
+      : tcmbPeriodInflation;
     const nominalWacc = computedWacc;
     const realWacc = ((item.is_tms29 || isForeignCurrency) && expectedInflation > 0)
       ? Number((((1 + nominalWacc / 100) / (1 + expectedInflation / 100) - 1) * 100).toFixed(1))
@@ -2281,9 +2258,9 @@ export function calculateSectorScore(
 export function computeFairValueTrend(
   financialHistory: any[],
   sector: SectorType = 'INDUSTRIAL',
-  effectiveShareCount: number = 180000000,
-  currentPrice?: number,
-  masterFairValue?: number,
+  effectiveShareCount: number | null = null,
+  currentPrice?: number | null,
+  masterFairValue?: number | null,
   targetMultiple?: number
 ): FairValueTrendPoint[] {
   const history = Array.isArray(financialHistory) ? financialHistory : [];
@@ -2293,6 +2270,11 @@ export function computeFairValueTrend(
   const targetPeriods = sorted.slice(-4);
   const latestHistoryItem = sorted[sorted.length - 1];
   const latestPaidCap = Math.abs(parseFinancialNumber(latestHistoryItem?.paid_in_capital) ?? 0);
+  const activeShareCount: number = (effectiveShareCount && effectiveShareCount > 0)
+    ? effectiveShareCount
+    : (latestPaidCap >= 1000000 ? latestPaidCap : 0);
+
+  if (activeShareCount <= 0) return [];
   const trendPoints: FairValueTrendPoint[] = [];
 
   for (let i = 0; i < targetPeriods.length; i++) {
@@ -2306,19 +2288,19 @@ export function computeFairValueTrend(
     const itemCurr = String(item?.currency || '').trim().toLowerCase();
     const itemPaidCap = Math.abs(parseFinancialNumber(item?.paid_in_capital) ?? 0);
     const refPaidCap = latestPaidCap > 0 ? latestPaidCap : itemPaidCap;
-    const isRefTam = refPaidCap > 0 && effectiveShareCount > 0 && Math.abs((refPaidCap / effectiveShareCount) - 1.0) < 0.25;
-    const isRefBin = refPaidCap > 0 && effectiveShareCount > 0 && Math.abs((refPaidCap * 1000) / effectiveShareCount - 1.0) < 0.25;
+    const isRefTam = refPaidCap > 0 && activeShareCount > 0 && Math.abs((refPaidCap / activeShareCount) - 1.0) < 0.25;
+    const isRefBin = refPaidCap > 0 && activeShareCount > 0 && Math.abs((refPaidCap * 1000) / activeShareCount - 1.0) < 0.25;
     const isItemExplicitTam = item?.is_thousands === false ||
       itemCurr.includes('tam') ||
       itemCurr.includes('birim') ||
-      (itemPaidCap > 0 && effectiveShareCount > 0 && Math.abs((itemPaidCap / effectiveShareCount) - 1.0) < 0.25) ||
-      (isRefTam && itemPaidCap >= effectiveShareCount * 0.02);
+      (itemPaidCap > 0 && activeShareCount > 0 && Math.abs((itemPaidCap / activeShareCount) - 1.0) < 0.25) ||
+      (isRefTam && itemPaidCap >= activeShareCount * 0.02);
     const unitScale = !isItemExplicitTam && (
       item?.is_thousands === true ||
       itemCurr.includes('bin') ||
       itemCurr.includes('thousand') ||
-      (isRefBin && itemPaidCap > 0 && itemPaidCap < effectiveShareCount * 0.02) ||
-      (item?.total_assets && Math.abs(item.total_assets) < 500_000_000 && (itemPaidCap === 0 || Math.abs((itemPaidCap / effectiveShareCount) - 0.001) < 0.0005))
+      (isRefBin && itemPaidCap > 0 && itemPaidCap < activeShareCount * 0.02) ||
+      (item?.total_assets && Math.abs(item.total_assets) < 500_000_000 && (itemPaidCap === 0 || Math.abs((itemPaidCap / activeShareCount) - 0.001) < 0.0005))
     ) ? 1000 : 1;
 
     // TTM (Son 12 Ay) Hesabı: Düz çarpma (3A*4, 6A*2) KESİNLİKLE yasaktır, mevsimselliği bozar!
@@ -2358,30 +2340,30 @@ export function computeFairValueTrend(
     if (sector === 'INSURANCE') {
       const roe = parseFinancialNumber(item?.roe) ?? (eq > 0 ? (netInc / eq) * 100 : 25);
       const targetPb = (targetMultiple && targetMultiple > 0) ? targetMultiple : (roe > 45 ? 2.3 : (roe > 30 ? 1.8 : 1.35));
-      const bvps = eq > 0 ? (eq / effectiveShareCount) : 1;
+      const bvps = eq > 0 ? (eq / activeShareCount) : 1;
       periodFv = bvps * targetPb;
     } else if (sector === 'BANKING') {
       const roe = parseFinancialNumber(item?.roe) ?? (eq > 0 ? (netInc / eq) * 100 : 25);
       const spreadBonus = (typeof item?.credit_deposit_spread === 'number' && item.credit_deposit_spread > 15) ? 0.10 : 0;
       const targetPb = (targetMultiple && targetMultiple > 0) ? targetMultiple : (roe > 35 ? (1.4 + spreadBonus) : (roe > 20 ? (1.05 + spreadBonus) : 0.85));
-      const bvps = eq > 0 ? (eq / effectiveShareCount) : 1;
+      const bvps = eq > 0 ? (eq / activeShareCount) : 1;
       periodFv = bvps * targetPb;
     } else if (sector === 'REIT') {
       const housingFactor = (typeof item?.housing_price_annual_change === 'number' && item.housing_price_annual_change > 0)
         ? (1 + (item.housing_price_annual_change / 200))
         : 1.0;
-      const navPerShare = (eq > 0 ? (eq / effectiveShareCount) : 1) * housingFactor;
+      const navPerShare = (eq > 0 ? (eq / activeShareCount) : 1) * housingFactor;
       periodFv = navPerShare * 0.75;
     } else if (sector === 'HOLDING') {
-      const navPerShare = eq > 0 ? (eq / effectiveShareCount) : 1;
+      const navPerShare = eq > 0 ? (eq / activeShareCount) : 1;
       periodFv = navPerShare * 0.70;
     } else if (sector === 'AVIATION') {
       // Havacılık & Ulaştırma (THYAO, PGSUS, TAVHL): Yüksek filo borçluluğu ve IFRS 16 leasing
       const mult = (targetMultiple && targetMultiple > 0) ? targetMultiple : 5.2;
       const evEq = Math.max(0, ebitda * mult - netDebt);
-      const evPerShare = evEq > 0 ? (evEq / effectiveShareCount) : 0;
-      const pePerShare = netInc > 0 ? ((netInc * 6.5) / effectiveShareCount) : 0;
-      const pbPerShare = (eq / effectiveShareCount) * 0.82;
+      const evPerShare = evEq > 0 ? (evEq / activeShareCount) : 0;
+      const pePerShare = netInc > 0 ? ((netInc * 6.5) / activeShareCount) : 0;
+      const pbPerShare = (eq / activeShareCount) * 0.82;
 
       const validComponents: { val: number; weight: number }[] = [];
       if (evPerShare > 0) validComponents.push({ val: evPerShare, weight: 0.45 });
@@ -2396,66 +2378,34 @@ export function computeFairValueTrend(
       }
     } else {
       // Reel Sektör / Sanayi / Teknoloji / Enerji / Perakende / Sağlık
-      if (eq <= 0) {
-        if (ebitda > 0 && effectiveShareCount > 0) {
-          const mult = (targetMultiple && targetMultiple > 0) ? targetMultiple : 6.5;
-          const ev = ebitda * mult;
-          const equityVal = ev - netDebt;
-          periodFv = equityVal > 0 ? Number((equityVal / effectiveShareCount).toFixed(2)) : 0.05;
-        } else {
-          periodFv = 0.05;
-        }
-      } else if (ebitda <= 0) {
-        const bvps = eq / effectiveShareCount;
-        periodFv = bvps * 0.35;
-      } else {
-        const roe = parseFinancialNumber(item?.roe) ?? (eq > 0 ? (netInc / eq) * 100 : 15);
-        const roic = parseFinancialNumber(item?.roic) ?? 15;
-        const wacc = parseFinancialNumber(item?.benchmark_wacc ?? item?.real_wacc ?? item?.wacc ?? 28) ?? 28;
-        const evaSpread = roic - wacc;
+      const roe = parseFinancialNumber(item?.roe) ?? (eq > 0 ? (netInc / eq) * 100 : 15);
+      const roic = parseFinancialNumber(item?.roic) ?? 15;
+      const wacc = parseFinancialNumber(item?.benchmark_wacc ?? item?.real_wacc ?? item?.wacc ?? 28) ?? 28;
 
-        const mult = (targetMultiple && targetMultiple > 0)
-          ? targetMultiple
-          : (sector === 'TECH' ? 8.5 : (sector === 'RETAIL' ? 6.2 : 7.0));
-        let justifiedPb = roe > 25 ? 1.8 : (roe > 12 ? 1.2 : 0.85);
-        let evaDiscount = 0;
+      const mult = (targetMultiple && targetMultiple > 0)
+        ? targetMultiple
+        : (sector === 'TECH' ? 8.5 : (sector === 'RETAIL' ? 5.6 : 6.0));
+      const lLi = (parseFinancialNumber(item?.lease_liabilities ?? item?.kiralama_borclari) ?? 0) * unitScale;
+      const mIn = (parseFinancialNumber(item?.non_controlling_interests ?? item?.azinlik_paylari) ?? 0) * unitScale;
 
-        if (evaSpread < 0 || roic <= 0) {
-          evaDiscount = Math.min(0.40, Math.max(0.10, (Math.abs(evaSpread) / 100) * 1.2));
-          justifiedPb = Math.max(0.32, Math.min(0.80, (Math.max(0, roe) / Math.max(15, wacc)) * 0.85));
-        }
+      const trendIndRes = computeIndustrialFairValue({
+        ebitdaFull: ebitda,
+        netFull: netInc,
+        totalEquityFull: eq,
+        netDebt,
+        leaseLiabilities: lLi,
+        minorityInterests: mIn,
+        effectiveShareCount: activeShareCount,
+        targetMultipleNum: mult,
+        clampedRevGrowth: 0.15,
+        clampedNetGrowth: 0.15,
+        currentRoic: roic,
+        currentWacc: wacc,
+        roe,
+        currentRatio: parseFinancialNumber(item?.current_ratio) ?? 1.0
+      });
 
-        const forwardEquityGrowth = roe > 0 ? Math.min(0.75, Math.max(0.10, (roe / 100) * 0.85)) : 0;
-        const forwardBvps = Math.max(0, (eq / effectiveShareCount) * (1 + forwardEquityGrowth));
-        const pbPerShare = forwardBvps * justifiedPb;
-
-        const fwdEbitda = ebitda * (1 - evaDiscount);
-        const evEq = Math.max(0, fwdEbitda * mult - netDebt);
-        const evPerShare = evEq / effectiveShareCount;
-        const pePerShare = netInc > 0 ? ((netInc * 8.5) / effectiveShareCount) : 0;
-
-        // Hibrit Ağırlıklandırma: EV/EBITDA %45, P/E %25, P/B %30
-        const validComponents: { val: number; weight: number }[] = [];
-        if (evPerShare > 0) validComponents.push({ val: evPerShare, weight: 0.45 });
-        if (pePerShare > 0) validComponents.push({ val: pePerShare, weight: 0.25 });
-        if (pbPerShare > 0) validComponents.push({ val: pbPerShare, weight: 0.30 });
-
-        if (validComponents.length > 0) {
-          const totalW = validComponents.reduce((acc, c) => acc + c.weight, 0);
-          periodFv = validComponents.reduce((acc, c) => acc + (c.val * (c.weight / totalW)), 0);
-          if (!evaDiscount && pbPerShare > 0 && periodFv < pbPerShare * 0.75) {
-            periodFv = (periodFv * 0.4) + (pbPerShare * 0.6);
-          }
-        } else {
-          periodFv = pbPerShare || 1.0;
-        }
-
-        const ndEbitda = netDebt > 0 && ebitda > 0 ? (netDebt / ebitda) : 0;
-        if (ndEbitda > 4.0) {
-          const debtDisc = Math.min(0.30, (ndEbitda - 4.0) * 0.07);
-          periodFv = periodFv * (1 - debtDisc);
-        }
-      }
+      periodFv = trendIndRes.fairValue != null ? trendIndRes.fairValue : 0.05;
     }
 
     // SON DÖNEM BİREBİR KİLİTLENMESİ (Point-in-Time Parity):
@@ -2501,8 +2451,8 @@ export function computeFairValueTrend(
  */
 export function detectValueTrap(
   financialHistory: any[],
-  currentPrice: number,
-  fairValue: number,
+  currentPrice: number | null | undefined,
+  fairValue: number | null | undefined,
   sector: SectorType = 'INDUSTRIAL',
   effectiveLatestData?: any
 ): ValueTrapAnalysis {
@@ -3056,13 +3006,13 @@ export function optimizeFinalDecision({
 // 5. ADİL DEĞER VE RAPOR ÇIKARIM FONKSİYONLARI
 // ============================================================================
 
-function parseShareCountNumber(raw: any): number {
+function parseShareCountNumber(raw: any): number | null {
   const num = parseFinancialNumber(raw);
   if (num && num > 0) return num;
-  if (!raw) return 180000000;
+  if (!raw) return null;
   const str = String(raw).replace(/[^0-9]/g, '');
   const parsed = parseInt(str, 10);
-  return parsed > 0 ? parsed : 180000000;
+  return parsed > 0 ? parsed : null;
 }
 
 /**
@@ -3144,6 +3094,235 @@ export function extractValuationFromReportText(
  * Finansal tablolardan (financial_history) dinamik değer sürücülerini, adil değeri,
  * sektörel puanlamayı ve emniyet marjı optimizasyonunu hesaplar.
  */
+export interface IndustrialFairValueInputs {
+  ebitdaFull: number;
+  netFull: number;
+  totalEquityFull: number;
+  netDebt: number;
+  leaseLiabilities?: number;
+  minorityInterests?: number;
+  effectiveShareCount: number | null;
+  targetMultipleNum: number;
+  clampedRevGrowth: number;
+  clampedNetGrowth: number;
+  currentRoic?: number | null;
+  currentWacc?: number | null;
+  roe?: number | null;
+  currentRatio?: number | null;
+}
+
+export interface IndustrialFairValueResult {
+  fairValue: number | null;
+  evEbitdaPerShare: number;
+  pePerShare: number;
+  pbPerShare: number;
+  enterpriseVal: number;
+  totalDebtBridge: number;
+  evEbitdaEquity: number;
+  evaDiscountPct: number;
+  debtDiscountPct: number;
+  evaHaircutApplied: boolean;
+  isInsolvent: boolean;
+  boundaryWarning?: string;
+  formulaStr: string;
+  modelName: string;
+}
+
+/**
+ * Tek Kaynaklı Saf Sanayi / Reel Sektör Değerleme Fonksiyonu (Single Source of Truth)
+ * Hem ana adil değer hesabında, hem Ayı/Boğa senaryolarında, hem de tarihsel trendde
+ * birebir aynı formül ve TFRS 16 kiralama borç köprüsü işletilir.
+ */
+export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): IndustrialFairValueResult {
+  const {
+    ebitdaFull,
+    netFull,
+    totalEquityFull,
+    netDebt,
+    leaseLiabilities = 0,
+    minorityInterests = 0,
+    effectiveShareCount,
+    targetMultipleNum,
+    clampedRevGrowth,
+    clampedNetGrowth,
+    currentRoic,
+    currentWacc = 28.0,
+    roe,
+    currentRatio = 1.0
+  } = inputs;
+
+  // 1. Pay Adedi Kontrolü: Pay adedi yoksa hisse başı değer uydurulamaz!
+  if (!effectiveShareCount || effectiveShareCount <= 0) {
+    return {
+      fairValue: null,
+      evEbitdaPerShare: 0,
+      pePerShare: 0,
+      pbPerShare: 0,
+      enterpriseVal: 0,
+      totalDebtBridge: netDebt + leaseLiabilities + minorityInterests,
+      evEbitdaEquity: 0,
+      evaDiscountPct: 0,
+      debtDiscountPct: 0,
+      evaHaircutApplied: false,
+      isInsolvent: false,
+      boundaryWarning: 'Resmi pay adedi (ödenmiş sermaye) eksik olduğundan hisse başı içsel değer hesaplanamamıştır.',
+      formulaStr: 'Ödenmiş sermaye / pay adedi resmi verilerde tespit edilemediği için hisse başı içsel değer hesaplanamaz (N/A).',
+      modelName: 'İleriye Dönük İskontolu FAVÖK, F/K & Özkaynak Hibrit Modeli (TFRS 16 Borç Köprülü)'
+    };
+  }
+
+  // 2. TFRS 16 ve Azınlık Payı Dahil Tam Borç Köprüsü (Full Debt Bridge)
+  const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+
+  let evaDiscountPct = 0;
+  let debtDiscountPct = 0;
+  let evaHaircutApplied = false;
+
+  const evaSpread = (currentRoic != null && currentWacc != null) ? (currentRoic - currentWacc) : null;
+  const netDebtToEbitda = (ebitdaFull > 0 && totalDebtBridge > 0) ? (totalDebtBridge / ebitdaFull) : 0;
+
+  // Sermaye Verimliliği Kesintisi (EVA Destruction Haircut)
+  if (evaSpread !== null && (evaSpread < 0 || (currentRoic != null && currentRoic <= 0))) {
+    evaHaircutApplied = true;
+    evaDiscountPct = Math.min(0.45, Math.max(0.12, (Math.abs(evaSpread) / 100) * 1.35));
+  }
+
+  // Finansal Kaldıraç Takibi (Net Borç + TFRS 16 / FAVÖK > 4.0x)
+  if (netDebtToEbitda > 4.0) {
+    debtDiscountPct = Math.min(0.35, Number(((netDebtToEbitda - 4.0) * 0.08).toFixed(3)));
+  }
+
+  // 12A İleriye Dönük FD/FAVÖK
+  const baseForwardEbitda = ebitdaFull > 0 ? ebitdaFull * (1 + clampedRevGrowth) : 0;
+  const forwardEbitda = evaHaircutApplied ? baseForwardEbitda * (1 - evaDiscountPct) : baseForwardEbitda;
+  const enterpriseVal = forwardEbitda * targetMultipleNum;
+  const evEbitdaEquity = forwardEbitda > 0 ? Math.max(0, enterpriseVal - totalDebtBridge) : 0;
+  const evEbitdaPerShare = evEbitdaEquity > 0 ? (evEbitdaEquity / effectiveShareCount) : 0;
+
+  let isInsolvent = false;
+  let boundaryWarning: string | undefined = undefined;
+  let fairValue: number | null = null;
+  let formulaStr = '';
+  let modelName = ebitdaFull <= 0 ? 'Sıkıntılı Şirket / Varlık Tabanı İskonto Modeli (Distressed Turnaround Model)' : 'İleriye Dönük İskontolu FAVÖK, F/K & Özkaynak Hibrit Modeli (TFRS 16 Borç Köprülü)';
+
+  if (totalEquityFull <= 0) {
+    // Negatif Özkaynak
+    if (evEbitdaEquity <= 0) {
+      isInsolvent = true;
+      boundaryWarning = 'Firma Değeri Borç Köprüsünü (Net Borç + TFRS 16) karşılayamamaktadır (Özkaynak Değeri <= 0).';
+      fairValue = null;
+      formulaStr = `Firma Değeri (${enterpriseVal.toLocaleString('tr-TR')} TL) <= Borç Köprüsü (${totalDebtBridge.toLocaleString('tr-TR')} TL) -> İçsel Değer: N/A`;
+    } else {
+      fairValue = Number(evEbitdaPerShare.toFixed(2));
+      formulaStr = `Firma Değeri: ${enterpriseVal.toLocaleString('tr-TR')} TL - Borç Köprüsü: ${totalDebtBridge.toLocaleString('tr-TR')} TL = Özkaynak: ${evEbitdaEquity.toLocaleString('tr-TR')} TL -> Hisse Başı: ${fairValue.toFixed(2).replace('.', ',')} TL`;
+      boundaryWarning = 'Şirket muhasebesel özkaynakları negatiftir. Değerleme operasyonel nakit üretim gücü ve borç köprüsü üzerinden türetilmiştir.';
+    }
+  } else {
+    if (forwardEbitda > 0 && enterpriseVal <= totalDebtBridge) {
+      boundaryWarning = 'Firma Değeri Borç Köprüsünü (Net Borç + TFRS 16) karşılamakta yetersizdir. Borç yükü özkaynak değerini aşındırmaktadır.';
+    }
+
+    // 12A İleri F/K
+    const baseForwardNet = netFull > 0 ? netFull * (1 + clampedNetGrowth) : 0;
+    const forwardNet = evaHaircutApplied ? baseForwardNet * (1 - evaDiscountPct * 0.8) : baseForwardNet;
+    const baseTargetPe = Math.max(7.5, targetMultipleNum * 1.35);
+    const targetPe = evaHaircutApplied ? Math.max(4.0, baseTargetPe * (1 - evaDiscountPct * 0.7)) : baseTargetPe;
+    const pePerShare = forwardNet > 0 ? ((forwardNet * targetPe) / effectiveShareCount) : 0;
+
+    // 12A İleri PD/DD
+    const bvps = totalEquityFull > 0 ? (totalEquityFull / effectiveShareCount) : 0;
+
+    if (ebitdaFull <= 0) {
+      // Sıkıntılı Şirket Varlık Tabanı Modeli
+      const forwardEquity = totalEquityFull + netFull;
+      const forwardBvps = totalEquityFull > 0 ? Math.max(0, forwardEquity / effectiveShareCount) : 0;
+      const erosionRate = totalEquityFull > 0 ? Math.min(0.90, Math.abs(netFull) / totalEquityFull) : 0.90;
+      const capitalRetentionFactor = Math.max(0.10, 1.0 - erosionRate);
+      const safeDebt = Math.max(0, totalDebtBridge);
+      const totalCapital = totalEquityFull + safeDebt;
+      const equityWeight = totalCapital > 0 ? (totalEquityFull / totalCapital) : 0.20;
+      const liquidityBuffer = Math.min(1.0, Math.max(0.35, (currentRatio ?? 1.0) / 1.5));
+      const baseMultiple = 0.378;
+      const justifiedPb = Number((baseMultiple * capitalRetentionFactor * equityWeight * liquidityBuffer).toFixed(3));
+      fairValue = Number(Math.max(0.5, forwardBvps * justifiedPb).toFixed(2));
+      formulaStr = `İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL) × Hak Edilen Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+    } else {
+      const activeRoe = roe != null ? roe : 15;
+      const forwardEquityGrowth = activeRoe > 0 ? Math.min(0.75, Math.max(0.10, (activeRoe / 100) * 0.85)) : 0;
+      const forwardBvps = Math.max(0, bvps * (1 + forwardEquityGrowth));
+      let justifiedPb = 1.0;
+      if (evaHaircutApplied || activeRoe < 8) {
+        justifiedPb = Math.max(0.32, Math.min(0.85, (Math.max(0, activeRoe) / Math.max(15, currentWacc ?? 28)) * 0.85));
+      } else if (activeRoe > 25) {
+        justifiedPb = Math.min(3.2, Math.max(1.3, activeRoe / 22));
+      } else if (activeRoe > 12) {
+        justifiedPb = Math.max(1.0, Math.min(1.4, activeRoe / 18));
+      } else {
+        justifiedPb = Math.max(0.60, Math.min(1.0, activeRoe / 15));
+      }
+      const pbPerShare = forwardBvps * justifiedPb;
+
+      const validComponents: { val: number; weight: number }[] = [];
+      if (forwardEbitda > 0) validComponents.push({ val: evEbitdaPerShare, weight: 0.45 });
+      if (pePerShare > 0) validComponents.push({ val: pePerShare, weight: 0.25 });
+      if (pbPerShare > 0) validComponents.push({ val: pbPerShare, weight: 0.30 });
+
+      let hybridFair = 0;
+      if (validComponents.length > 0) {
+        const totalW = validComponents.reduce((acc, c) => acc + c.weight, 0);
+        hybridFair = validComponents.reduce((acc, c) => acc + (c.val * (c.weight / totalW)), 0);
+        if (!evaHaircutApplied && !(enterpriseVal <= totalDebtBridge) && pbPerShare > 0 && hybridFair < pbPerShare * 0.75) {
+          hybridFair = (hybridFair * 0.4) + (pbPerShare * 0.6);
+        }
+      }
+      if (debtDiscountPct > 0 && enterpriseVal <= totalDebtBridge) {
+        hybridFair = hybridFair * (1 - debtDiscountPct);
+      }
+
+      fairValue = Number(Math.max(0.5, hybridFair).toFixed(2));
+      const haircutNote = evaHaircutApplied ? ` [EVA İndirimi: -%${(evaDiscountPct * 100).toFixed(0)}]` : '';
+      const debtNote = debtDiscountPct > 0 ? ` [Kaldıraç Takibi: Net Borç/FAVÖK ${(netDebtToEbitda).toFixed(1)}x]` : '';
+      const leaseNote = leaseLiabilities > 0 ? ` [TFRS 16 Kiralama Borcu Düşüldü]` : '';
+      formulaStr = `12A İleri FAVÖK: ${evEbitdaPerShare.toFixed(2).replace('.', ',')} TL | 12A İleri PD/DD: ${pbPerShare.toFixed(2).replace('.', ',')} TL ➔ Hibrit Adil Değer = ${fairValue.toFixed(2).replace('.', ',')} TL${haircutNote}${debtNote}${leaseNote}`;
+
+      return {
+        fairValue,
+        evEbitdaPerShare,
+        pePerShare,
+        pbPerShare,
+        enterpriseVal,
+        totalDebtBridge,
+        evEbitdaEquity,
+        evaDiscountPct,
+        debtDiscountPct,
+        evaHaircutApplied,
+        isInsolvent,
+        boundaryWarning,
+        formulaStr,
+        modelName
+      };
+    }
+  }
+
+  return {
+    fairValue,
+    evEbitdaPerShare,
+    pePerShare: 0,
+    pbPerShare: 0,
+    enterpriseVal,
+    totalDebtBridge,
+    evEbitdaEquity,
+    evaDiscountPct,
+    debtDiscountPct,
+    evaHaircutApplied,
+    isInsolvent,
+    boundaryWarning,
+    formulaStr,
+    modelName
+  };
+}
+
+
 export function computeSectorValuationAndDrivers(
   extractedDataOrOpts: any,
   inputPriceStr?: string,
@@ -3171,9 +3350,8 @@ export function computeSectorValuationAndDrivers(
   enrichAndSanitizeFinancialHistory(extractedData, sector, resolvedMacro);
   const history: any[] = Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : [];
 
-  const rawPrice = parseFinancialNumber(effectivePriceStr || extractedData?.valuation?.current_price || '118.50');
-  const currentPrice = (rawPrice !== null && rawPrice > 0) ? rawPrice : 118.50;
-  const shareCount = parseShareCountNumber(extractedData?.share_count ?? extractedData?.shares_outstanding);
+  const rawPrice = parseFinancialNumber(effectivePriceStr || extractedData?.valuation?.current_price);
+  const currentPrice = (rawPrice !== null && rawPrice > 0) ? rawPrice : null;
 
   // TMS 29 Homojenizasyonunu çalıştır
   const { homogenizedHistory } = homogenizeTms29Series(history, sector);
@@ -3184,6 +3362,7 @@ export function computeSectorValuationAndDrivers(
   });
 
   const latest = sortedHistory.length > 0 ? sortedHistory[sortedHistory.length - 1] : null;
+  const shareCount = parseShareCountNumber(extractedData?.share_count ?? extractedData?.shares_outstanding ?? extractedData?.shares_count ?? latest?.shares_count ?? latest?.share_count ?? latest?.shares_outstanding);
   const periodAnnualFactor = getAnnualizationFactor(latest?.period);
 
   // 1 yıl önceki dönemi akıllı ara (örn 2026/Q2 -> 2025/Q2)
@@ -3469,7 +3648,14 @@ export function computeSectorValuationAndDrivers(
   }
 
   const rawRoe = parseFinancialNumber(latest?.roe) ?? parseFinancialNumber(latest?.return_on_equity);
-  const roe = rawRoe !== null ? rawRoe : (sector === 'INSURANCE' ? 70.45 : 35.0);
+  let roe: number | null = rawRoe;
+  if (roe === null) {
+    const rawNet = parseFinancialNumber(latest?.net_income);
+    const rawEq = parseFinancialNumber(latest?.equity);
+    if (rawNet !== null && rawEq !== null && rawEq > 0) {
+      roe = Number(((rawNet / rawEq) * 100 * periodAnnualFactor).toFixed(1));
+    }
+  }
 
   let gordonGrowthWarning: string | undefined = undefined;
 
@@ -3489,9 +3675,12 @@ export function computeSectorValuationAndDrivers(
       let gordonGrowth = macroGrowth;
       let isDistressedFinancial = false;
 
-      if (roe <= 0) {
+      const safeRoeVal = (roe !== null && !isNaN(roe)) ? roe : 0;
+      const roeDisplay = roe !== null ? `%${roe.toFixed(1)}` : 'N/A';
+
+      if (roe === null || roe <= 0) {
         isDistressedFinancial = true;
-        gordonGrowthWarning = `Negatif veya sıfır ROE (%${roe.toFixed(1)}) nedeniyle Gordon Büyüme Modeli uygulanamaz (N/A). Varlık değer düşüklüğü / sıkıntılı P/B tabanı uygulandı.`;
+        gordonGrowthWarning = `Negatif veya tespit edilemeyen ROE (${roeDisplay}) nedeniyle Gordon Büyüme Modeli uygulanamaz (N/A). Varlık değer düşüklüğü / sıkıntılı P/B tabanı uygulandı.`;
       } else if (roe < macroGrowth) {
         // Pozitif düşük kârlılık: ROE macro büyümeden düşükse g oranı iç kârlılıkla sınırlandırılır
         gordonGrowth = Number((roe * 0.70).toFixed(1));
@@ -3503,8 +3692,8 @@ export function computeSectorValuationAndDrivers(
           : `Sermaye maliyeti (Ke %${safeKe.toFixed(1)}) uzun vadeli büyüme oranına (g %${gordonGrowth.toFixed(1)}) eşit veya küçüktür (Ke <= g). Gordon modeli sınır şartı ihlali için asgari marj tamponu uygulandı.`;
       }
       const gordonDenominator = Math.max(4.0, safeKe - gordonGrowth);
-      const gordonPbRaw = isDistressedFinancial ? 0.35 : (roe - gordonGrowth) / gordonDenominator;
-      const gordonPbFloor = isDistressedFinancial ? 0.30 : (roe < safeKe ? 0.40 : 1.0);
+      const gordonPbRaw = isDistressedFinancial ? 0.35 : ((roe ?? 0) - gordonGrowth) / gordonDenominator;
+      const gordonPbFloor = isDistressedFinancial ? 0.30 : ((roe ?? 0) < safeKe ? 0.40 : 1.0);
       const gordonPb = Number(Math.max(gordonPbFloor, Math.min(5.0, gordonPbRaw)).toFixed(2));
 
       // Sektör liderliği, BES fon büyüklüğü (AUM) ve dağıtım kanalı primi
@@ -3523,9 +3712,9 @@ export function computeSectorValuationAndDrivers(
       targetMultipleNum = Number(Math.max(minPb, Math.min(maxPb, finalPb)).toFixed(1));
       targetMultipleStr = `PD/DD ${targetMultipleNum.toString().replace('.', ',')}x`;
 
-      const numSpread = (roe - gordonGrowth).toFixed(1);
+      const numSpread = ((roe ?? 0) - gordonGrowth).toFixed(1);
       const denSpread = gordonDenominator.toFixed(1);
-      const gordonCalcStr = `(%${roe.toFixed(1)} − %${gordonGrowth.toFixed(1)}) / (%${safeKe.toFixed(1)} − %${gordonGrowth.toFixed(1)}) = %${numSpread} / %${denSpread} = ${gordonPb.toFixed(2).replace('.', ',')}x`;
+      const gordonCalcStr = `(${roeDisplay} − %${gordonGrowth.toFixed(1)}) / (%${safeKe.toFixed(1)} − %${gordonGrowth.toFixed(1)}) = %${numSpread} / %${denSpread} = ${gordonPb.toFixed(2).replace('.', ',')}x`;
 
       const diffPrem = Number((targetMultipleNum - gordonPb).toFixed(2));
       const premStr = diffPrem > 0.05
@@ -3534,10 +3723,10 @@ export function computeSectorValuationAndDrivers(
 
       if (sector === 'INSURANCE') {
         const premLabel = diffPrem > 0.01 ? ` (+${diffPrem.toFixed(2).replace('.', ',')}x Liderlik Primi)` : '';
-        targetMultipleExpl = `Saf Gordon (${gordonPb.toFixed(2).replace('.', ',')}x)${premLabel} = ${targetMultipleNum.toFixed(2).replace('.', ',')}x | Formül: (ROE %${roe.toFixed(1)} − g %${gordonGrowth.toFixed(1)}) / (Ke %${safeKe.toFixed(1)} − g %${gordonGrowth.toFixed(1)})`;
-        gordonFormulaText = `Hedef PD/DD = Saf Gordon (${gordonPb.toFixed(2).replace('.', ',')}x)${premLabel} = ${targetMultipleNum.toFixed(2).replace('.', ',')}x (ROE %${roe.toFixed(1)} / Ke %${safeKe.toFixed(1)})`;
+        targetMultipleExpl = `Saf Gordon (${gordonPb.toFixed(2).replace('.', ',')}x)${premLabel} = ${targetMultipleNum.toFixed(2).replace('.', ',')}x | Formül: (ROE ${roeDisplay} − g %${gordonGrowth.toFixed(1)}) / (Ke %${safeKe.toFixed(1)} − g %${gordonGrowth.toFixed(1)})`;
+        gordonFormulaText = `Hedef PD/DD = Saf Gordon (${gordonPb.toFixed(2).replace('.', ',')}x)${premLabel} = ${targetMultipleNum.toFixed(2).replace('.', ',')}x (ROE ${roeDisplay} / Ke %${safeKe.toFixed(1)})`;
       } else {
-        targetMultipleExpl = `Gordon Modeli: ${gordonPb.toFixed(2).replace('.', ',')}x = (ROE %${roe.toFixed(1)} − g %${gordonGrowth.toFixed(1)}) / (Ke %${safeKe.toFixed(1)} − g %${gordonGrowth.toFixed(1)})`;
+        targetMultipleExpl = `Gordon Modeli: ${gordonPb.toFixed(2).replace('.', ',')}x = (ROE ${roeDisplay} − g %${gordonGrowth.toFixed(1)}) / (Ke %${safeKe.toFixed(1)} − g %${gordonGrowth.toFixed(1)})`;
         gordonFormulaText = `Hedef PD/DD = (ROE − Uzun Vadeli Büyüme) / (Sermaye Maliyeti − Uzun Vadeli Büyüme) = ${gordonCalcStr}${premStr}`;
       }
     } else if (sector === 'HOLDING') {
@@ -3558,36 +3747,38 @@ export function computeSectorValuationAndDrivers(
       let baseMultiple = 6.0;
       let sectorName = 'Sanayi ve Hizmet';
 
-      if (['MGROS', 'BIMAS', 'SOKM', 'BIZIM', 'CRFSA'].includes(tickerUpper)) {
+      // Dinamik Sektör Taban Çarpanı: Hisse kodu listeleri yerine doğrudan İş Yatırım 53 resmi sektör adına göre belirlenir.
+      const officialSecName = getCompanySectorDisplayName(tickerUpper, sector);
+      sectorName = officialSecName;
+
+      if (officialSecName === 'Gıda & Ticaret Perakende' || officialSecName === 'Perakande - Ticaret' || sector === 'RETAIL') {
         baseMultiple = 5.6;
-        sectorName = 'Gıda Perakendesi';
-      } else if (['THYAO', 'PGSUS', 'TAVHL', 'CLEBI'].includes(tickerUpper)) {
+      } else if (officialSecName === 'Havacılık' || sector === 'AVIATION') {
         baseMultiple = 6.8;
-        sectorName = 'Havacılık ve Lojistik';
-      } else if (['ASELS', 'SDTTR', 'MIATK', 'OTKAR'].includes(tickerUpper)) {
+      } else if (officialSecName === 'Savunma') {
         baseMultiple = 7.5;
-        sectorName = 'Savunma ve İleri Teknoloji';
-      } else if (['FROTO', 'TOASO', 'TTRAK', 'DOAS', 'TMSN'].includes(tickerUpper)) {
+      } else if (officialSecName === 'Otomotiv' || officialSecName === 'Otomotiv Parçası') {
         baseMultiple = 6.5;
-        sectorName = 'Otomotiv ve Yan Sanayi';
-      } else if (['EREGL', 'KRDMD', 'KOZAL', 'KOZAA', 'IPEKE'].includes(tickerUpper)) {
+      } else if (officialSecName === 'Demir-Çelik Temel' || officialSecName === 'Demir-Çelik Döküm' || officialSecName === 'Madencilik') {
         baseMultiple = 5.0;
-        sectorName = 'Demir Çelik ve Madencilik';
-      } else if (['TUPRS', 'PETKM', 'AYGAZ', 'AKSEN', 'ENJSA'].includes(tickerUpper)) {
+      } else if (officialSecName === 'Petrol' || officialSecName.includes('Elektrik') || sector === 'UTILITIES_TELCO') {
         baseMultiple = 5.5;
-        sectorName = 'Enerji ve Rafineri';
-      } else if (['TCELL', 'TTKOM'].includes(tickerUpper)) {
+      } else if (officialSecName === 'İletişim') {
         baseMultiple = 5.4;
-        sectorName = 'Telekomünikasyon';
-      } else if (['ARCLK', 'VESBE', 'VESTL'].includes(tickerUpper)) {
+      } else if (officialSecName === 'Dayanıklı Tüketim') {
         baseMultiple = 5.8;
-        sectorName = 'Dayanıklı Tüketim';
-      } else if (['MPARK', 'GENIL', 'SELEC', 'TRILC', 'MEDTR'].includes(tickerUpper)) {
+      } else if (officialSecName === 'Sağlık ve İlaç' || sector === 'HEALTHCARE') {
         baseMultiple = 7.0;
-        sectorName = 'Sağlık ve İlaç';
-      } else if (['SASA', 'HEKTS', 'GUBRF', 'BAGFS'].includes(tickerUpper)) {
+      } else if (officialSecName === 'Kimyasal Ürün' || officialSecName === 'Tarım Kimyasalları') {
         baseMultiple = 6.2;
-        sectorName = 'Kimya ve Gübre';
+      } else if (officialSecName === 'Cam Sanayii') {
+        baseMultiple = 6.2;
+      } else if (officialSecName === 'Teknoloji' || (sector as string) === 'TECH') {
+        baseMultiple = 8.5;
+      } else if (officialSecName === 'Çimento' || officialSecName === 'İnşaat Malzemeleri') {
+        baseMultiple = 5.2;
+      } else {
+        baseMultiple = 6.0; // Genel Sanayi tabanı
       }
 
       // EVA Spread (ROIC vs WACC) etkisi:
@@ -3609,8 +3800,8 @@ export function computeSectorValuationAndDrivers(
         // Negatif FAVÖK: FD/FAVÖK çarpanı matematiksel ve finansal olarak uygulanamaz (N/A).
         // Varlık tabanlı sıkıntılı şirket çarpanı (İskontolu Sıkıntılı PD/DD) devreye girer.
         targetMultipleNum = 0.146;
-        targetMultipleStr = `İskontolu Sıkıntılı PD/DD 0,146x`;
-        targetMultipleExpl = `Negatif FAVÖK (${currentEbitda.toLocaleString('tr-TR')} Bin TL) nedeniyle FD/FAVÖK çarpanı uygulanamaz (N/A). Değerleme, sermaye erozyonu ve yüksek borç yükü bazlı İskontolu Sıkıntılı Defter Değeri (0,146x PD/DD) ile yapılmıştır.`;
+        targetMultipleStr = `Hak Edilen Sıkıntılı PD/DD 0,146x`;
+        targetMultipleExpl = `Negatif FAVÖK ve operasyonel zarar nedeniyle FD/FAVÖK çarpanı uygulanamaz (N/A). Değerleme, sermaye erozyonu ve yüksek borç yükü bazlı Hak Edilen Sıkıntılı Defter Değeri (0,146x PD/DD) ile yapılmıştır.`;
       } else {
         // Katman 1 Saf İçsel Değerleme: Canlı piyasa fiyatından ve piyasa çarpanından %100 BAĞIMSIZDIR (Invariance).
         // liveEvEbitda içsel hedef çarpanı belirlemez; piyasa kıyaslaması Katman 3'te bağımsız olarak yapılır.
@@ -3684,7 +3875,7 @@ export function computeSectorValuationAndDrivers(
     unitScale = 1000;
   } else if (normCurr.includes('tam') || normCurr.includes('birim')) {
     unitScale = 1;
-  } else if (paidCapSample > 0 && shareCount > 0) {
+  } else if (paidCapSample > 0 && shareCount !== null && shareCount > 0) {
     // Çapraz tutarlılık kontrolü: Nominal lot denkliği (BIST: 1 TL nominal = 1 lot)
     const lotRatio = paidCapSample / shareCount;
     if (Math.abs(lotRatio - 1.0) < 0.20) {
@@ -3697,7 +3888,7 @@ export function computeSectorValuationAndDrivers(
       // Nominal sermaye ile pay adedi arasında standart dışı oran -> belirsiz
       unitScaleUncertain = true;
     }
-  } else if (eqScaleSample > 0 && eqScaleSample < 50_000_000 && revScaleSample < 50_000_000 && shareCount > 100_000_000) {
+  } else if (eqScaleSample > 0 && eqScaleSample < 50_000_000 && revScaleSample < 50_000_000 && shareCount !== null && shareCount > 100_000_000) {
     // Aşırı bariz Bin TL durumu (örneğin 500M hissesi olan şirketin özkaynağı 30 bin görünüyorsa)
     unitScale = 1000;
   }
@@ -3705,12 +3896,17 @@ export function computeSectorValuationAndDrivers(
   // Borsa İstanbul'da 1 TL nominal Ödenmiş Sermaye = 1 Adet Pay (Lot).
   const rawPaidCap = parseFinancialNumber(latest?.paid_in_capital);
   const paidCapShares = rawPaidCap !== null && rawPaidCap > 0 ? Math.abs(rawPaidCap) * unitScale : null;
-  const rawEffectiveShareCount = (paidCapShares && paidCapShares >= 1000000) ? paidCapShares : shareCount;
-  const effectiveShareCount = (rawEffectiveShareCount && rawEffectiveShareCount > 0) ? rawEffectiveShareCount : 180000000;
+  const rawEffectiveShareCount = (paidCapShares && paidCapShares >= 1000000) ? paidCapShares : (shareCount && shareCount > 0 ? shareCount : null);
+  const effectiveShareCount = (rawEffectiveShareCount && rawEffectiveShareCount > 0) ? rawEffectiveShareCount : null;
 
-  if (sector === 'INSURANCE' || sector === 'BANKING') {
+  // Pay adedi (ödenmiş sermaye) doğrulaması: Pay adedi yoksa hisse başı içsel değer uydurulamaz!
+  if (!effectiveShareCount || effectiveShareCount <= 0) {
+    fairValue = null as any;
+    boundaryWarning = 'Resmi pay adedi (ödenmiş sermaye) eksik olduğundan hisse başı içsel değer hesaplanamamıştır.';
+    formulaStr = 'Ödenmiş sermaye / pay adedi resmi verilerde tespit edilemediği için hisse başı içsel değer hesaplanamaz (N/A).';
+  } else if (sector === 'INSURANCE' || sector === 'BANKING') {
     modelName = 'Gordon Büyüme & 12 Aylık İleriye Dönük Defter Değeri Modeli';
-    const totalEquity = parseFinancialNumber(latest?.equity) ?? 12720000;
+    const totalEquity = parseFinancialNumber(latest?.equity) ?? 0;
     const totalEquityFull = totalEquity * unitScale;
 
     if (totalEquityFull <= 0) {
@@ -3722,7 +3918,7 @@ export function computeSectorValuationAndDrivers(
       const bookValuePerShare = totalEquityFull / effectiveShareCount;
       // 12 Aylık İleriye Dönük Defter Değeri (Forward BVPS = BVPS_0 * (1 + Sürdürülebilir Özkaynak Büyümesi))
       const retentionRate = 0.85;
-      const forwardEquityGrowth = roe > 0 ? (roe / 100) * retentionRate : Math.max(-0.50, (roe / 100) * periodAnnualFactor);
+      const forwardEquityGrowth = (roe !== null && roe > 0) ? (roe / 100) * retentionRate : (roe !== null ? Math.max(-0.50, (roe / 100) * periodAnnualFactor) : 0);
       const forwardBvps = Math.max(0, bookValuePerShare * (1 + forwardEquityGrowth));
       const rawFair = forwardBvps * targetMultipleNum;
       fairValue = Number(Math.max(0.5, rawFair).toFixed(2));
@@ -3734,7 +3930,7 @@ export function computeSectorValuationAndDrivers(
     }
   } else if (sector === 'HOLDING') {
     modelName = '12 Aylık İleriye Dönük Net Aktif Değeri (NAD / SOTP) Modeli';
-    const totalEquity = parseFinancialNumber(latest?.equity) ?? 25000000;
+    const totalEquity = parseFinancialNumber(latest?.equity) ?? 0;
     const totalEquityFull = totalEquity * unitScale;
 
     if (totalEquityFull <= 0) {
@@ -3744,7 +3940,7 @@ export function computeSectorValuationAndDrivers(
       formulaStr = `Özkaynaklar Negatif = ${totalEquityFull.toLocaleString('tr-TR')} TL (NAD: N/A)`;
     } else {
       const navPerShare = totalEquityFull / effectiveShareCount;
-      const forwardEquityGrowth = roe > 0 ? (roe / 100) * 0.85 : Math.max(-0.50, (roe / 100) * periodAnnualFactor);
+      const forwardEquityGrowth = (roe !== null && roe > 0) ? (roe / 100) * 0.85 : (roe !== null ? Math.max(-0.50, (roe / 100) * periodAnnualFactor) : 0);
       const forwardNavPerShare = Math.max(0, navPerShare * (1 + forwardEquityGrowth));
       const clampedMultiple = Math.max(0.40, Math.min(1.0, targetMultipleNum));
       const rawFair = forwardNavPerShare * clampedMultiple;
@@ -3753,7 +3949,7 @@ export function computeSectorValuationAndDrivers(
     }
   } else if (sector === 'REIT') {
     modelName = '12 Aylık İleriye Dönük Net Aktif Değeri (NAD) & Portföy Ekspertiz İskonto Modeli';
-    const totalEquity = parseFinancialNumber(latest?.equity) ?? 20000000;
+    const totalEquity = parseFinancialNumber(latest?.equity) ?? 0;
     const totalEquityFull = totalEquity * unitScale;
 
     if (totalEquityFull <= 0) {
@@ -3811,8 +4007,8 @@ export function computeSectorValuationAndDrivers(
       const pePerShare = forwardNet > 0 ? ((forwardNet * targetPe) / effectiveShareCount) : 0;
 
       const bvps = totalEquityFull > 0 ? (totalEquityFull / effectiveShareCount) : 0;
-      const forwardBvps = bvps * (1 + (roe > 0 ? (roe / 100) * 0.85 : 0));
-      const pbPerShare = forwardBvps * Math.max(1.5, Math.min(6.0, roe / 15));
+      const forwardBvps = bvps * (1 + ((roe !== null && roe > 0) ? (roe / 100) * 0.85 : 0));
+      const pbPerShare = forwardBvps * Math.max(1.5, Math.min(6.0, (roe ?? 15) / 15));
 
       const weights = { sales: 0.50, pe: 0.35, pb: 0.15 };
       let combinedPerShare = 0;
@@ -3827,14 +4023,12 @@ export function computeSectorValuationAndDrivers(
       formulaStr = `12A İleri FD/Satışlar: ${salesPerShare.toFixed(2).replace('.', ',')} TL (%50) + F/K: ${pePerShare.toFixed(2).replace('.', ',')} TL (%35) + PD/DD: ${pbPerShare.toFixed(2).replace('.', ',')} TL (%15) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
     }
   } else {
-    modelName = 'İleriye Dönük İskontolu FAVÖK, F/K & Özkaynak Hibrit Modeli';
+    modelName = 'İleriye Dönük İskontolu FAVÖK, F/K & Özkaynak Hibrit Modeli (TFRS 16 Borç Köprülü)';
     const latestEbitda = parseFinancialNumber(latest?.ebitda) ?? 0;
     const latestRev = parseFinancialNumber(latest?.revenue) ?? 0;
     const latestNet = parseFinancialNumber(latest?.net_income) ?? 0;
     const latestEq = parseFinancialNumber(latest?.equity) ?? 0;
 
-    // TTM (Son 12 Ay) Standartlaştırması:
-    // Düz çarpma (3A*4) mevsimselliği bozar. Geçmiş çeyrekler varsa standart TTM hesaplanır.
     const getTtmOrAnnualized = (field: string, rawLatestVal: number): number => {
       return computeTtmField(field, rawLatestVal) * unitScale;
     };
@@ -3843,192 +4037,134 @@ export function computeSectorValuationAndDrivers(
     const netFull = getTtmOrAnnualized('net_income', latestNet);
     const totalEquityFull = latestEq * unitScale;
     const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
+    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
 
-    evaDiscountPct = 0;
-    debtDiscountPct = 0;
-    evaHaircutApplied = false;
-
-    // Dinamik Büyüme & Çeyreksel Tahmin Revizyonu:
     const rawRevG = revGrowth / 100;
     const rawNetG = netGrowth / 100;
     const clampedRevGrowth = Math.min(0.75, Math.max(-0.40, rawRevG));
     const clampedNetGrowth = Math.min(0.80, Math.max(-0.50, rawNetG));
 
-    // Sermaye Verimliliği ve Borçluluk Dinamikleri
     const currentRoic = parseFinancialNumber(latest?.roic);
     const currentWacc = parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc ?? 28.0);
-    const evaSpread = (currentRoic !== null && currentWacc !== null) ? (currentRoic - currentWacc) : null;
-    const netDebtToEbitda = (ebitdaFull > 0 && netDebt > 0) ? (netDebt / ebitdaFull) : 0;
+    const latestCr = parseFinancialNumber(latest?.current_ratio) ?? 1.0;
 
-    // 1. Sermaye Verimliliği Cezası (EVA Destruction Haircut): ROIC < WACC veya ROIC <= 0
-    if (evaSpread !== null && (evaSpread < 0 || (currentRoic !== null && currentRoic <= 0))) {
-      evaHaircutApplied = true;
-      evaDiscountPct = Math.min(0.45, Math.max(0.12, (Math.abs(evaSpread) / 100) * 1.35));
+    const indResult = computeIndustrialFairValue({
+      ebitdaFull,
+      netFull,
+      totalEquityFull,
+      netDebt,
+      leaseLiabilities,
+      minorityInterests,
+      effectiveShareCount,
+      targetMultipleNum,
+      clampedRevGrowth,
+      clampedNetGrowth,
+      currentRoic,
+      currentWacc,
+      roe,
+      currentRatio: latestCr
+    });
+
+    fairValue = indResult.fairValue as any;
+    formulaStr = indResult.formulaStr;
+    modelName = indResult.modelName;
+    isInsolvent = indResult.isInsolvent;
+    if (indResult.boundaryWarning) {
+      boundaryWarning = boundaryWarning ? `${boundaryWarning} | ${indResult.boundaryWarning}` : indResult.boundaryWarning;
     }
-
-    // 2. Finansal Borç Sıkıntısı Kaldıraç Takibi (Net Borç / FAVÖK > 4.0x)
-    if (netDebtToEbitda > 4.0) {
-      debtDiscountPct = Math.min(0.35, Number(((netDebtToEbitda - 4.0) * 0.08).toFixed(3)));
-    }
-
-    // 1. Sütun: 12A İleriye Dönük FD/FAVÖK Operasyonel Değeri
-    const baseForwardEbitda = ebitdaFull > 0 ? ebitdaFull * (1 + clampedRevGrowth) : 0;
-    const forwardEbitda = evaHaircutApplied ? baseForwardEbitda * (1 - evaDiscountPct) : baseForwardEbitda;
-    const enterpriseVal = forwardEbitda * targetMultipleNum;
-    const evEbitdaEquity = forwardEbitda > 0 ? (enterpriseVal - netDebt) : 0;
-    const evEbitdaPerShare = evEbitdaEquity > 0 ? (evEbitdaEquity / effectiveShareCount) : 0;
-
-    if (totalEquityFull <= 0) {
-      // NEGATİF ÖZKAYNAK DURUMU:
-      // Defter değeri negatiftir (HBDD < 0). Gordon ve PD/DD uygulanamaz.
-      // Ancak operasyonel Firma Değeri (EV) nakit akışlarından üretilebilir.
-      if (evEbitdaEquity <= 0) {
-        // Firma Değeri net borcu dahi karşılayamıyor (Equity Value <= 0)
-        isInsolvent = true;
-        boundaryWarning = 'Firma Değeri Net Borcu karşılayamamaktadır (Özkaynak Değeri <= 0). İçsel hisse değeri uygulanamaz (N/A).';
-        fairValue = null as any;
-        formulaStr = `Firma Değeri (${enterpriseVal.toLocaleString('tr-TR')} TL) <= Net Borç (${netDebt.toLocaleString('tr-TR')} TL) -> İçsel Değer: N/A`;
-      } else {
-        // Turnaround: EV net borçtan büyük, pozitif operasyonel özkaynak değeri üretildi!
-        fairValue = Number(evEbitdaPerShare.toFixed(2));
-        modelName = 'İleriye Dönük İskontolu FAVÖK Operasyonel Değeri Modeli (Negatif Özkaynak Düzeltmeli)';
-        formulaStr = `Firma Değeri: ${enterpriseVal.toLocaleString('tr-TR')} TL - Net Borç: ${netDebt.toLocaleString('tr-TR')} TL = Özkaynak Değeri: ${evEbitdaEquity.toLocaleString('tr-TR')} TL -> Hisse Başı Değer: ${fairValue.toFixed(2).replace('.', ',')} TL`;
-        boundaryWarning = 'Şirket muhasebesel özkaynakları negatiftir. PD/DD ve Gordon modelleri uygulanamaz (N/A); adil değer yalnızca operasyonel nakit üretim gücü (FD/FAVÖK) ve borç köprüsü üzerinden türetilmiştir.';
-      }
-    } else {
-      if (forwardEbitda > 0 && enterpriseVal <= netDebt) {
-        boundaryWarning = boundaryWarning
-          ? `${boundaryWarning} | Firma Değeri Net Borcu karşılamakta yetersizdir (EV <= Net Borç).`
-          : 'Firma Değeri Net Borcu karşılamakta yetersizdir (EV <= Net Borç). Borç yükü özkaynak değerini aşındırmaktadır.';
-      }
-      // 2. Sütun: 12A İleriye Dönük F/K (Net Kâr) Değeri
-      const baseForwardNet = netFull > 0 ? netFull * (1 + clampedNetGrowth) : 0;
-      const forwardNet = evaHaircutApplied ? baseForwardNet * (1 - evaDiscountPct * 0.8) : baseForwardNet;
-      const baseTargetPe = Math.max(7.5, targetMultipleNum * 1.35);
-      const targetPe = evaHaircutApplied ? Math.max(4.0, baseTargetPe * (1 - evaDiscountPct * 0.7)) : baseTargetPe;
-      const pePerShare = forwardNet > 0 ? ((forwardNet * targetPe) / effectiveShareCount) : 0;
-
-      // 3. Sütun: 12A İleriye Dönük Defter Değeri (PD/DD & Varlık Tabanı)
-      const bvps = totalEquityFull > 0 ? (totalEquityFull / effectiveShareCount) : 0;
-
-      if (ebitdaFull <= 0) {
-        // OPERASYONEL ZARAR & SIKINTILI ŞİRKET VARLIK TABANI MODELİ (DISTRESSED TURNAROUND):
-        // PURE FUNDAMENTAL VALUATION: Hisse fiyatından (currentPrice) KESİNLİKLE bağımsızdır!
-        const forwardEquity = totalEquityFull + netFull;
-        const forwardBvps = totalEquityFull > 0 ? Math.max(0, forwardEquity / effectiveShareCount) : 0;
-
-        // 1. Sermaye Erozyon Oranı (Capital Burn Rate)
-        const erosionRate = totalEquityFull > 0 ? Math.min(0.90, Math.abs(netFull) / totalEquityFull) : 0.90;
-        const capitalRetentionFactor = Math.max(0.10, 1.0 - erosionRate);
-
-        // 2. Sermaye Yapısı Güvencesi (Equity Cushion / Solvency Factor)
-        const safeNetDebt = Math.max(0, netDebt);
-        const totalCapital = totalEquityFull + safeNetDebt;
-        const equityWeight = totalCapital > 0 ? (totalEquityFull / totalCapital) : 0.20;
-
-        // 3. Kısa Vadeli Likidite Güvencesi (Working Capital Buffer)
-        const latestCr = parseFinancialNumber(latest?.current_ratio);
-        const latestCa = parseFinancialNumber(latest?.current_assets);
-        const latestCl = parseFinancialNumber(latest?.current_liabilities);
-        const computedCr = (latestCa !== null && latestCl !== null && latestCl > 0) ? (latestCa / latestCl) : (latestCr ?? 1.0);
-        const liquidityBuffer = Math.min(1.0, Math.max(0.35, computedCr / 1.5));
-
-        // 4. Sanayi Varlık Tabanı Çevrim Çarpanı
-        const baseMultiple = 0.378;
-        const justifiedPb = Number((baseMultiple * capitalRetentionFactor * equityWeight * liquidityBuffer).toFixed(3));
-
-        fairValue = Number((forwardBvps * justifiedPb).toFixed(2));
-        fairValue = Number(Math.max(0.5, fairValue).toFixed(2));
-
-        modelName = 'Sıkıntılı Şirket / Varlık Tabanı İskonto Modeli (Distressed Turnaround Model)';
-        formulaStr = `İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL) × Hak Edilen Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
-        gordonFormulaText = `12A İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL [Cari HBDD: ${bvps.toFixed(2).replace('.', ',')} TL eksi 12A net zarar erozyonu]) × Hak Edilen Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x [Taban: ${baseMultiple}x × Sermaye Korunma: %${(capitalRetentionFactor * 100).toFixed(1)} × Özkaynak Ağırlığı: %${(equityWeight * 100).toFixed(1)} × Likidite Tamponu: %${(liquidityBuffer * 100).toFixed(1)}]) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
-
-        drivers.target_multiple.numericValue = justifiedPb;
-        drivers.target_multiple.value = `Hak Edilen Sıkıntılı PD/DD ${justifiedPb.toString().replace('.', ',')}x`;
-        drivers.target_multiple.sourceExplanation = `Negatif FAVÖK ve operasyonel zarar nedeniyle FD/FAVÖK çarpanı uygulanamaz (N/A). Varlık tabanlı Hak Edilen Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) hesaplanmıştır.`;
-      } else {
-        // Standart Kârlı Sanayi Şirketi Defter Değeri
-        const forwardEquityGrowth = roe > 0 ? Math.min(0.75, Math.max(0.10, (roe / 100) * 0.85)) : 0;
-        const forwardBvps = Math.max(0, bvps * (1 + forwardEquityGrowth));
-        let justifiedPb = 1.0;
-        if (evaHaircutApplied || (roe != null && roe < 8)) {
-          justifiedPb = Math.max(0.32, Math.min(0.85, (Math.max(0, roe) / Math.max(15, currentWacc || 25)) * 0.85));
-        } else if (roe > 25) {
-          justifiedPb = Math.min(3.2, Math.max(1.3, roe / 22));
-        } else if (roe > 12) {
-          justifiedPb = Math.max(1.0, Math.min(1.4, roe / 18));
-        } else {
-          justifiedPb = Math.max(0.60, Math.min(1.0, roe / 15));
-        }
-        const pbPerShare = forwardBvps * justifiedPb;
-
-        // Hibrit Ağırlıklandırma
-        const validComponents: { val: number; weight: number }[] = [];
-        if (forwardEbitda > 0) {
-          // EV/EBITDA: forwardEbitda pozitifse model devrededir. EV <= NetDebt durumunda hisse başına operasyonel özkaynak
-          // değeri 0 TL'dir (evEbitdaPerShare = 0). Bu 0 değeri bileşen dışı bırakılmamalı (%45 ağırlıkla ortalamaya katılmalı),
-          // aksi takdirde borcun özkaynak üzerindeki aşındırıcı etkisi yutulur (survivorship bias).
-          validComponents.push({ val: evEbitdaPerShare, weight: 0.45 });
-        }
-        if (pePerShare > 0) validComponents.push({ val: pePerShare, weight: 0.25 });
-        if (pbPerShare > 0) validComponents.push({ val: pbPerShare, weight: 0.30 });
-
-        let hybridFair = 0;
-        if (validComponents.length > 0) {
-          const totalW = validComponents.reduce((acc, c) => acc + c.weight, 0);
-          hybridFair = validComponents.reduce((acc, c) => acc + (c.val * (c.weight / totalW)), 0);
-          if (!evaHaircutApplied && !(enterpriseVal <= netDebt) && pbPerShare > 0 && hybridFair < pbPerShare * 0.75) {
-            hybridFair = (hybridFair * 0.4) + (pbPerShare * 0.6);
-          }
-        }
-        if (debtDiscountPct > 0 && enterpriseVal <= netDebt) {
-          hybridFair = hybridFair * (1 - debtDiscountPct);
-        }
-
-        // Katman 1 Prensibi: Net borç zaten EV'den nominal olarak düşülmüştür (EV - NetDebt).
-        // Equity üzerinden mükerrer borç kesintisi yapılmaz; yüksek kaldıraç Katman 2/3'te rozet ve stres fiyatı olarak sunulur.
-        fairValue = Number(Math.max(0.5, hybridFair).toFixed(2));
-        const haircutNote = evaHaircutApplied ? ` [EVA İndirimi: -%${(evaDiscountPct * 100).toFixed(0)}]` : '';
-        const debtNote = debtDiscountPct > 0 ? ` [Kritik Kaldıraç Takibi: Net Borç/FAVÖK ${(netDebtToEbitda).toFixed(1)}x]` : '';
-        formulaStr = `12A İleri FAVÖK Değeri: ${evEbitdaPerShare.toFixed(2).replace('.', ',')} TL | 12A İleri Defter Değeri: ${pbPerShare.toFixed(2).replace('.', ',')} TL ➔ Hibrit Adil Değer = ${fairValue.toFixed(2).replace('.', ',')} TL${haircutNote}${debtNote}`;
-      }
-    }
+    evaDiscountPct = indResult.evaDiscountPct;
+    debtDiscountPct = indResult.debtDiscountPct;
+    evaHaircutApplied = indResult.evaHaircutApplied;
   }
 
   const safeCurrentPrice = (currentPrice && currentPrice > 0) ? currentPrice : 1.0;
   const discountPct = (fairValue !== null && fairValue > 0)
     ? Number((((fairValue - safeCurrentPrice) / safeCurrentPrice) * 100).toFixed(1))
     : 0;
-  // Ayı Senaryosu (Taban): Modelin stres senaryosu hedef fiyatı
-  const latestEbitdaForScenario = computeTtmField('ebitda', parseFinancialNumber(latest?.ebitda) ?? 0);
-  const isDistressedLoss = sector === 'INDUSTRIAL' && latestEbitdaForScenario <= 0;
-  const bearPrice: number = (isInsolvent || fairValue === null || fairValue <= 0)
-    ? 0
-    : isDistressedLoss
-    ? Number((fairValue * 0.64).toFixed(2))
-    : Number((fairValue * 0.70).toFixed(2));
-  // Boğa Senaryosu (Tavan): Modelin katalizör ve büyüme odaklı iyimser senaryo hedef fiyatı
-  const bullPrice: number = (isInsolvent || fairValue === null || fairValue <= 0)
-    ? 0
-    : isDistressedLoss
-    ? Number((fairValue * 1.548).toFixed(2))
-    : Number((fairValue * 1.30).toFixed(2));
+  // Gerçek Ayı / Boğa Senaryoları (Stress-Testing Engine):
+  // Sabit katsayılar (x0,70 / x1,30) kaldırılmıştır. Model ayı ve boğa parametreleriyle yeniden çalıştırılır.
+  let bearPrice: number = 0;
+  let bullPrice: number = 0;
+
+  if (!isInsolvent && fairValue !== null && fairValue > 0) {
+    if (sector === 'INDUSTRIAL' || sector === 'TECH' || sector === 'RETAIL' || sector === 'AVIATION' || sector === 'HEALTHCARE') {
+      const getTtmOrAnn = (field: string, rawVal: number): number => computeTtmField(field, rawVal) * unitScale;
+      const ebF = getTtmOrAnn('ebitda', parseFinancialNumber(latest?.ebitda) ?? 0);
+      const ntF = getTtmOrAnn('net_income', parseFinancialNumber(latest?.net_income) ?? 0);
+      const eqF = (parseFinancialNumber(latest?.equity) ?? 0) * unitScale;
+      const nDb = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+      const lLi = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
+      const mIn = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+      const cRoic = parseFinancialNumber(latest?.roic);
+      const cWacc = parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc ?? 28.0);
+      const rG = revGrowth / 100;
+      const nG = netGrowth / 100;
+
+      if (ebF <= 0) {
+        // Operasyonel zarardaki sıkıntılı şirketlerde (Distressed Turnaround) tasfiye/erozyon stres katsayıları
+        bearPrice = Number((fairValue * 0.64).toFixed(2));
+        bullPrice = Number((fairValue * 1.548).toFixed(2));
+      } else {
+        // Ayı Senaryosu: Hedef Çarpan -%15, Ciro Büyümesi -8 puan
+        const bearRes = computeIndustrialFairValue({
+        ebitdaFull: ebF,
+        netFull: ntF,
+        totalEquityFull: eqF,
+        netDebt: nDb,
+        leaseLiabilities: lLi,
+        minorityInterests: mIn,
+        effectiveShareCount,
+        targetMultipleNum: Math.max(3.0, targetMultipleNum * 0.85),
+        clampedRevGrowth: Math.max(-0.50, rG - 0.08),
+        clampedNetGrowth: Math.max(-0.60, nG - 0.10),
+        currentRoic: cRoic,
+        currentWacc: cWacc,
+        roe,
+        currentRatio: parseFinancialNumber(latest?.current_ratio) ?? 1.0
+      });
+      bearPrice = bearRes.fairValue != null ? bearRes.fairValue : Number((fairValue * 0.70).toFixed(2));
+
+      // Boğa Senaryosu: Hedef Çarpan +%15, Ciro Büyümesi +8 puan
+      const bullRes = computeIndustrialFairValue({
+        ebitdaFull: ebF,
+        netFull: ntF,
+        totalEquityFull: eqF,
+        netDebt: nDb,
+        leaseLiabilities: lLi,
+        minorityInterests: mIn,
+        effectiveShareCount,
+        targetMultipleNum: targetMultipleNum * 1.15,
+        clampedRevGrowth: Math.min(0.85, rG + 0.08),
+        clampedNetGrowth: Math.min(0.90, nG + 0.10),
+        currentRoic: cRoic,
+        currentWacc: cWacc,
+        roe,
+        currentRatio: parseFinancialNumber(latest?.current_ratio) ?? 1.0
+      });
+      bullPrice = bullRes.fairValue != null ? bullRes.fairValue : Number((fairValue * 1.30).toFixed(2));
+      }
+    } else {
+      // Finansal / Holding / GYO Sektörleri için Senaryo
+      bearPrice = Number((fairValue * 0.75).toFixed(2));
+      bullPrice = Number((fairValue * 1.25).toFixed(2));
+    }
+  }
   const marginOfSafety = discountPct > 0 ? discountPct : 0;
 
   // Emniyet marjı durumu
   const marginOfSafetyStatus = discountPct >= 25 ? 'SAFE' : (discountPct >= 15 ? 'BORDERLINE' : 'UNSAFE');
 
   const impliedBvps = (fairValue > 0 && targetMultipleNum > 0) ? (fairValue / targetMultipleNum) : null;
-  const currentPb = (sector === 'INSURANCE' || sector === 'BANKING') && impliedBvps ? Number((currentPrice / impliedBvps).toFixed(1)) : undefined;
+  const currentPb = (sector === 'INSURANCE' || sector === 'BANKING') && impliedBvps && currentPrice ? Number((currentPrice / impliedBvps).toFixed(1)) : undefined;
 
-  const valueTrapResult = detectValueTrap(extractedData?.financial_history, currentPrice, fairValue, sector, latest);
+  const valueTrapResult = detectValueTrap(extractedData?.financial_history, currentPrice ?? 0, fairValue, sector, latest);
   const fairValueTrend = computeFairValueTrend(
     extractedData?.financial_history,
     sector,
     effectiveShareCount,
-    currentPrice,
-    fairValue,
+    currentPrice ?? undefined,
+    fairValue ?? undefined,
     targetMultipleNum
   );
 
@@ -4042,7 +4178,7 @@ export function computeSectorValuationAndDrivers(
     : undefined;
 
   const valuation: ValuationMetrics = {
-    current_price: currentPrice,
+    current_price: currentPrice ?? 0,
     fair_value: fairValue,
     discount_pct: discountPct,
     target_pb: sector === 'INSURANCE' || sector === 'BANKING' ? targetMultipleNum : undefined,

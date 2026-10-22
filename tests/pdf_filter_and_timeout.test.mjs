@@ -541,6 +541,7 @@ describe('PDF Filter & Timeout Resilience', () => {
       const baseData = {
         ticker: 'THYAO',
         sector: 'INDUSTRIAL',
+        share_count: 1380000000,
         financial_history: [
           { period: '2024/12', revenue: 500000000, ebitda: 100000000, net_income: 60000000, equity: 400000000, net_debt: 80000000 },
           { period: '2025/12', revenue: 600000000, ebitda: 120000000, net_income: 75000000, equity: 500000000, net_debt: 70000000 }

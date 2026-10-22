@@ -67,6 +67,20 @@ const evdsHttpsAgent = new https.Agent({
 
 // TCMB EVDS3 Resmi Referans Tabanı (Ağ kesintisi veya EVDS bakım anlarında kesintisiz fall-back)
 export const OFFICIAL_TCMB_INFLATION_BASELINE: Record<string, number> = {
+  // 2023 Yılı Resmi TCMB TÜFE Enflasyon Verileri (%)
+  '2023/01': 57.68,
+  '2023/02': 55.18,
+  '2023/03': 50.51,
+  '2023/04': 43.68,
+  '2023/05': 39.59,
+  '2023/06': 38.21,
+  '2023/07': 47.83,
+  '2023/08': 58.94,
+  '2023/09': 61.53,
+  '2023/10': 61.36,
+  '2023/11': 61.98,
+  '2023/12': 64.77,
+
   // 2024 Anket Serisi (12 Ay Sonrası TÜFE Beklentisi Medyanı %)
   '2024/01': 39.09,
   '2024/02': 37.78,

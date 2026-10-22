@@ -211,6 +211,7 @@ describe('Comprehensive Financial Terminal Stress Test Suite', () => {
       const data = {
         ticker: 'EKGYO',
         sector: 'REIT',
+        share_count: 100000000,
         financial_history: [
           {
             period: '2025/12',
@@ -501,6 +502,7 @@ describe('Comprehensive Financial Terminal Stress Test Suite', () => {
       const data = {
         ticker: 'ROCKET',
         sector: 'TECH',
+        share_count: 1000000,
         financial_history: [
           {
             period: '2024/12',
@@ -777,6 +779,7 @@ describe('Comprehensive Financial Terminal Stress Test Suite', () => {
       const holdingData = {
         ticker: 'SAHOL',
         sector: 'HOLDING',
+        share_count: 100000000,
         financial_history: [
           { period: '2024/12', equity: 100000000, revenue: 50000000, roe: 30 },
           { period: '2025/12', equity: 120000000, revenue: 60000000, roe: 35 }
@@ -793,6 +796,7 @@ describe('Comprehensive Financial Terminal Stress Test Suite', () => {
       const reitData = {
         ticker: 'EKGYO',
         sector: 'REIT',
+        share_count: 100000000,
         financial_history: [
           { period: '2024/12', equity: 50000000, revenue: 20000000 },
           { period: '2025/12', equity: 60000000, revenue: 25000000 }
@@ -809,6 +813,7 @@ describe('Comprehensive Financial Terminal Stress Test Suite', () => {
       const techData = {
         ticker: 'TECHBATIK',
         sector: 'TECH',
+        share_count: 10000000,
         financial_history: [
           { period: '2024/12', equity: -500000, revenue: 10000000 },
           { period: '2025/12', equity: -1000000, revenue: 15000000 }
@@ -825,6 +830,7 @@ describe('Comprehensive Financial Terminal Stress Test Suite', () => {
       const indData = {
         ticker: 'INDBATIK',
         sector: 'INDUSTRIAL',
+        share_count: 10000000,
         financial_history: [
           { period: '2024/12', equity: -500000, revenue: 10000000, ebitda: 2000000 },
           { period: '2025/12', equity: -1000000, revenue: 15000000, ebitda: 3000000 }

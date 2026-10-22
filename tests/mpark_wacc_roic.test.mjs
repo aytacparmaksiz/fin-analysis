@@ -19,6 +19,7 @@ test('MPARK (MLP Care) WACC, ROIC, and TMS 29 Fisher Alignment Test Suite', asyn
           total_assets: 75200000,
           current_liabilities: 18000000,
           is_tms29: true,
+          reported_wacc: 29.6,
         }
       ]
     };
@@ -122,4 +123,6 @@ test('MPARK (MLP Care) WACC, ROIC, and TMS 29 Fisher Alignment Test Suite', asyn
     // e) Serbest Nakit Akışı: 4.458.911 Bin TL
     assert.equal(fcfBin, 4458911, 'FCF must equal 4.458.911 Bin TL');
   });
+}).then(() => {
+  process.exit(0);
 });
