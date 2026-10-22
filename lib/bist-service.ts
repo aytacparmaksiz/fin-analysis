@@ -1,4 +1,5 @@
-import { type SectorType, detectSector } from './sectors.ts';
+import { type SectorType, detectSector, mapIsYatirimSectorToValuationSector } from './sectors.ts';
+import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from './isyatirim-multiples-cache.ts';
 import { 
   enrichAndSanitizeFinancialHistory, 
   computeSectorValuationAndDrivers, 
@@ -298,10 +299,38 @@ export const OFFICIAL_PENSION_AUM_SERIES: Record<string, Record<string, number>>
 };
 
 /**
- * Hisse kodundan şirket profilini ve muhasebe grubunu saptar
+ * Hisse kodundan şirket profilini ve muhasebe grubunu saptar.
+ * 1. Öncelik: İş Yatırım Resmi 630 Şirket Baseline (Yetkili Veritabanı)
+ * 2. Öncelik: KNOWN_BIST_DIRECTORY (Statik Ön Tanımlar)
+ * 3. Öncelik: Heuristik / Sektör Tahmini
  */
 export function resolveBistCompanyMeta(rawTicker: string): BistCompanyMetadata {
   const cleanTicker = (rawTicker || '').toUpperCase().replace(/\.IS$/i, '').trim();
+
+  // 1. İş Yatırım Resmi Veritabanından Dinamik ve Hatasız Çözümleme (Öncelikli Tek Doğruluk Kaynağı)
+  const isy = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[cleanTicker];
+  if (isy && isy.sectorName) {
+    const valuationSector = mapIsYatirimSectorToValuationSector(isy.sectorName);
+    let group: 'XI_29' | 'UFRS' | 'UFRS_K' = 'XI_29';
+    if (valuationSector === 'INSURANCE') {
+      group = 'UFRS_K';
+    } else if (valuationSector === 'BANKING') {
+      group = 'UFRS';
+    }
+
+    const shareCount = (isy.paidInCapitalMnTl && isy.paidInCapitalMnTl > 0)
+      ? Math.round(isy.paidInCapitalMnTl * 1_000_000)
+      : (KNOWN_BIST_DIRECTORY[cleanTicker]?.shareCount || 500000000);
+
+    return {
+      ticker: cleanTicker,
+      name: isy.name ? `${isy.name} A.Ş.` : (KNOWN_BIST_DIRECTORY[cleanTicker]?.name || `${cleanTicker} - Borsa İstanbul Şirketi`),
+      sector: valuationSector,
+      financialGroup: group,
+      shareCount
+    };
+  }
+
   if (KNOWN_BIST_DIRECTORY[cleanTicker]) {
     return KNOWN_BIST_DIRECTORY[cleanTicker];
   }

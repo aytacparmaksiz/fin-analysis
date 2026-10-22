@@ -4,6 +4,8 @@
  * Dosya: Betas.xls / Global Industry Betas & Capital Structure
  */
 
+import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from './isyatirim-multiples-cache.ts';
+
 export interface DamodaranIndustryRecord {
   industryName: string;
   numberOfFirms: number;
@@ -1279,8 +1281,9 @@ export function lookupDamodaranIndustry(
   ticker?: string,
   companySectorName?: string
 ): DamodaranIndustryRecord {
-  const t = String(ticker || '').toUpperCase();
-  const secName = String(companySectorName || '').toLowerCase();
+  const t = String(ticker || '').toUpperCase().replace(/\.IS$/i, '');
+  const isySector = (OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[t]?.sectorName || '').toLowerCase();
+  const secName = isySector || String(companySectorName || '').toLowerCase();
   const s = String(sector || '').toUpperCase();
 
   // 1. Havacılık ve Ulaştırma

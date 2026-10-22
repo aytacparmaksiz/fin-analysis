@@ -1,3 +1,5 @@
+import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from './isyatirim-multiples-cache.ts';
+
 export type SectorType = 
   | 'INDUSTRIAL'
   | 'AVIATION'
@@ -177,12 +179,63 @@ export const BIST_COMPANY_SPECIFIC_SECTOR: Record<string, string> = {
 };
 
 /**
+ * İş Yatırım 53 Resmi Sektör Adını Sistemimizin 11 Temel Değerleme Sektör Tipine Eşler.
+ * Kaynak: İş Yatırım Resmi Temel Değerler ve Oranlar Tablosu (630 BIST Şirketinin Tamamı).
+ */
+export function mapIsYatirimSectorToValuationSector(isySectorName?: string | null): SectorType {
+  if (!isySectorName) return 'INDUSTRIAL';
+  const s = isySectorName.trim();
+  
+  if (s === 'Bankacılık') return 'BANKING';
+  if (s === 'Sigorta') return 'INSURANCE';
+  if (s === 'GYO') return 'REIT';
+  if (s === 'Holdingler') return 'HOLDING';
+  if (s === 'Havayolları ve Hizm.') return 'AVIATION';
+  if (s === 'Perakande - Ticaret' || s === 'Pazarlama') return 'RETAIL';
+  if (s === 'Teknoloji' || s === 'Bilgisayar Toptancılığı' || s === 'İletişim Cihazları') return 'TECH';
+  if (s === 'Sağlık ve İlaç') return 'HEALTHCARE';
+  if (
+    s === 'Elektrik Üretim' || 
+    s === 'Elektrik - Doğalgaz Dağıtım' || 
+    s === 'Elektrik Enerji Ürt.Teçh/Tesis Kurulum' || 
+    s === 'İletişim'
+  ) {
+    return 'UTILITIES_TELCO';
+  }
+  if (
+    s === 'Fin.Kiralama ve Faktoring' || 
+    s === 'Aracı Kurumlar' || 
+    s === 'Varlık Yönetim' || 
+    s === 'Yatırım Ortaklıkları'
+  ) {
+    return 'FINANCIAL_SERVICES';
+  }
+  
+  // Geri kalan tüm reel üretim, imalat ve sanayi sektörleri:
+  // Cam, Çimento, Demir-Çelik Temel, Demir-Çelik Döküm, Otomotiv, Otomotiv Parçası, Otomotiv Lastiği,
+  // Savunma, Kimyasal Ürün, Tarım Kimyasalları, Petrol, Madencilik, Seramik, Boya, Kablo, Kağıt Ürünleri,
+  // Mobilya, Dayanıklı Tüketim, Endüstriyel Makine -Teçhizat Üretim, Endüstriyel Tekstil, Tekstil Entegre,
+  // Deri Giyim, Gıda, Meşrubat / İçecek, Hayvancılık, İnşaat Malzemeleri, İnşaat- Taahhüt, Ulaştırma-Lojistik,
+  // Turizm, Medya, Kırtasiye, Spor, Eğlence Hizmetleri, Diğer
+  return 'INDUSTRIAL';
+}
+
+/**
  * Şirketin Borsa İstanbul'daki resmi sektör adını kullanıcı dostu Türkçe olarak döndürür.
- * Asla jenerik 'BIST' döndürmez.
+ * Asla jenerik 'BIST' döndürmez. Öncelikli olarak İş Yatırım resmi veritabanından çeker.
  */
 export function getCompanySectorDisplayName(ticker?: string, rawSector?: string): string {
   if (ticker) {
-    const cleanTicker = ticker.trim().toUpperCase();
+    const cleanTicker = ticker.trim().toUpperCase().replace(/\.IS$/i, '');
+    const isy = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[cleanTicker];
+    if (isy && isy.sectorName) {
+      if (isy.sectorName === 'Havayolları ve Hizm.') return 'Havacılık';
+      if (isy.sectorName === 'Perakande - Ticaret') return 'Gıda & Ticaret Perakende';
+      if (isy.sectorName === 'Holdingler') return 'Holding';
+      if (isy.sectorName === 'Sigorta') return 'Sigortacılık';
+      if (isy.sectorName === 'Cam') return 'Cam Sanayii';
+      return isy.sectorName;
+    }
     if (BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker]) {
       return BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker];
     }
@@ -933,7 +986,13 @@ export function detectSector(ticker: string, contextText = ''): SectorType {
   const normTicker = (ticker || '').toUpperCase().trim();
   const cleanTicker = normTicker.replace(/\.IS$/i, '').trim();
 
-  // 1. Ticker bazlı kesin eşleştirme
+  // 1. İş Yatırım Resmi 630 Şirket Baseline Kontrolü (Birincil Yetkili Kaynak)
+  const isy = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[cleanTicker];
+  if (isy && isy.sectorName) {
+    return mapIsYatirimSectorToValuationSector(isy.sectorName);
+  }
+
+  // 2. Ticker bazlı kesin eşleştirme (Yeni halka arzlar ve baseline dışı hisseler için)
   if (BIST_HEALTHCARE_TICKERS.includes(cleanTicker)) {
     return 'HEALTHCARE';
   }

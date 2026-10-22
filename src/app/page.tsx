@@ -114,18 +114,8 @@ function reconcileSavedReportWithLatestEngine(rep: SavedReport): SavedReport {
     updatedReport.dividendHistory = baselineDivs;
   }
 
-  // Sektör Düzeltmesi: SISE veya holding olmadığı halde eski raporda HOLDING kalan şirketleri kanonik sektörüne zorla
-  let canonicalSector: SectorType = (rep.sector as SectorType) || 'INDUSTRIAL';
-  if (upperTicker === 'SISE') {
-    canonicalSector = 'INDUSTRIAL';
-  } else {
-    const detected = detectSector(upperTicker, (rep as any)?.companyName || rep.extractedData?.company_name);
-    if (rep.sector === 'HOLDING' && detected === 'INDUSTRIAL') {
-      canonicalSector = 'INDUSTRIAL';
-    } else if (detected && detected !== 'INDUSTRIAL') {
-      canonicalSector = detected;
-    }
-  }
+  // 100% İş Yatırım Resmi Sektör Yetkilendirmesi (Tüm BIST Şirketleri İçin)
+  const canonicalSector: SectorType = detectSector(upperTicker, (rep as any)?.companyName || rep.extractedData?.company_name) || 'INDUSTRIAL';
 
   updatedReport.sector = canonicalSector;
   if (updatedReport.extractedData) {
@@ -3026,19 +3016,7 @@ export default function ValuationTerminal({
   const currentSector: SectorType = (() => {
     if (selectedSector !== 'AUTO') return selectedSector;
     const sym = (activeReport?.ticker || ticker || '').trim().toUpperCase();
-    if (sym === 'SISE') return 'INDUSTRIAL';
-    const isy = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[sym];
-    const detected = detectSector(sym, (activeReport as any)?.companyName || currentExtractedData?.company_name);
-    if (detected && detected !== 'INDUSTRIAL') return detected;
-    // Eğer İş Yatırım resmi sektör adı holding değilse (örn. SISE -> Cam), eski rapordaki 'HOLDING' atamasını düzelt
-    if (isy && isy.sectorName && isy.sectorName.toLowerCase() !== 'holdingler' && activeReport?.sector === 'HOLDING') {
-      return detected || 'INDUSTRIAL';
-    }
-    // Eğer hisse holding listesinde olmadığı halde eski raporda 'HOLDING' kaldıysa kanonik sanayi modeline dön
-    if (activeReport?.sector === 'HOLDING' && detected === 'INDUSTRIAL') {
-      return 'INDUSTRIAL';
-    }
-    return activeReport?.sector || currentExtractedData?.sector || detected || 'INDUSTRIAL';
+    return detectSector(sym, (activeReport as any)?.companyName || currentExtractedData?.company_name) || 'INDUSTRIAL';
   })();
 
   const sectorMeta = SECTOR_DEFINITIONS[currentSector] || SECTOR_DEFINITIONS.INDUSTRIAL;
