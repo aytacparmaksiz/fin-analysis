@@ -204,7 +204,7 @@ export const KNOWN_BIST_DIRECTORY: Record<string, BistCompanyMetadata> = {
 
   KCHOL: { ticker: 'KCHOL', name: 'Koç Holding A.Ş.', sector: 'HOLDING', financialGroup: 'XI_29', shareCount: 2535948050 },
   SAHOL: { ticker: 'SAHOL', name: 'Hacı Ömer Sabancı Holding A.Ş.', sector: 'HOLDING', financialGroup: 'XI_29', shareCount: 2040403931 },
-  SISE:  { ticker: 'SISE',  name: 'Türkiye Şişe ve Cam Fabrikaları A.Ş.', sector: 'HOLDING', financialGroup: 'XI_29', shareCount: 3063214056 },
+  SISE:  { ticker: 'SISE',  name: 'Türkiye Şişe ve Cam Fabrikaları A.Ş.', sector: 'INDUSTRIAL', financialGroup: 'XI_29', shareCount: 3063214056 },
   AGHOL: { ticker: 'AGHOL', name: 'AG Anadolu Grubu Holding A.Ş.', sector: 'HOLDING', financialGroup: 'XI_29', shareCount: 243534518 },
   DOHOL: { ticker: 'DOHOL', name: 'Doğan Şirketler Grubu Holding A.Ş.', sector: 'HOLDING', financialGroup: 'XI_29', shareCount: 2616938288 },
   ALARK: { ticker: 'ALARK', name: 'Alarko Holding A.Ş.', sector: 'HOLDING', financialGroup: 'XI_29', shareCount: 435000000 },

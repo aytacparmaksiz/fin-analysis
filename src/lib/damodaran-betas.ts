@@ -1318,8 +1318,13 @@ export function lookupDamodaranIndustry(
   }
 
   // 6. Holding & Çeşitlendirilmiş Şirketler
-  if (['SAHOL', 'KCHOL', 'SISE', 'AGHOL', 'DOHOL', 'ALARK'].includes(t) || s === 'HOLDING') {
+  if (['SAHOL', 'KCHOL', 'AGHOL', 'DOHOL', 'ALARK'].includes(t) || s === 'HOLDING') {
     return DAMODARAN_INDUSTRY_MAP['diversified'] || DAMODARAN_GLOBAL_BETAS[22];
+  }
+
+  // 6b. Cam Sanayii & Yapı Malzemeleri / Ambalaj
+  if (['SISE'].includes(t) || /cam|yapı malzeme/i.test(secName)) {
+    return DAMODARAN_INDUSTRY_MAP['building materials'] || DAMODARAN_INDUSTRY_MAP['packaging & container'] || DAMODARAN_GLOBAL_BETAS[14];
   }
 
   // 7. GYO (Gayrimenkul Yatırım Ortaklıkları)
