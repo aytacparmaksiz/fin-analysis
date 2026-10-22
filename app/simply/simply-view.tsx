@@ -1794,7 +1794,6 @@ export default function SimplyView({
                       if (cleanNum === null || isNaN(cleanNum)) return null;
                       return (
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950/90 border border-[#2b313d] text-xs font-mono font-bold text-slate-300 shadow-sm">
-                          <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                           <span className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider">Skor:</span>
                           <span className="text-emerald-400 font-bold">{cleanNum}/100</span>
                         </div>
@@ -2108,7 +2107,7 @@ export default function SimplyView({
                   <div className="space-y-2 text-sm text-slate-200">
                     {snowflake.rewards.slice(0, 3).map((r, i) => (
                       <div key={i} className="flex items-start gap-2">
-                        <span className="text-emerald-400 font-bold">★</span>
+                        <span className="text-emerald-400 font-bold">•</span>
                         <span className="leading-relaxed">{r}</span>
                       </div>
                     ))}
@@ -2724,11 +2723,11 @@ export default function SimplyView({
               </div>
 
               {/* Finansal Tablo Grid */}
-              <div className="overflow-x-auto border border-[#282d37]/50 rounded-xl">
-                <table className="w-full min-w-[1060px] text-xs text-left border-collapse font-mono">
+              <div className="w-full overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden border border-[#282d37]/50 rounded-xl">
+                <table className="w-full text-xs text-left border-collapse font-mono">
                   <thead>
                     <tr className="border-b border-[#282d37] text-slate-400 bg-[#21262d]/90">
-                      <th className="p-3 text-white font-sans font-bold text-xs sm:text-sm min-w-[240px]">
+                      <th className="p-3 text-white font-sans font-bold text-xs sm:text-sm min-w-[180px] sm:min-w-[200px]">
                         {selectedTableTab === 'bs' && 'Bilanço Kalemleri'}
                         {selectedTableTab === 'is' && 'Gelir Tablosu Kalemleri'}
                         {selectedTableTab === 'cf' && 'Nakit Akışı Kalemleri'}
@@ -2741,7 +2740,7 @@ export default function SimplyView({
                         const canGoRight = safePeriodOffset < maxPeriodOffset;
 
                         return (
-                          <th key={c.period} className="py-3 px-2 text-right text-slate-300 font-mono text-xs min-w-[125px] sm:min-w-[136px]">
+                          <th key={c.period} className="py-2.5 px-2 text-right text-slate-300 font-mono text-xs min-w-[90px] sm:min-w-[105px]">
                             <div className="flex items-center justify-end whitespace-nowrap gap-1">
                               {isFirst && (
                                 <button

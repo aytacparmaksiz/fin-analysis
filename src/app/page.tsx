@@ -1360,6 +1360,7 @@ export default function ValuationTerminal({
   const [leaderboardSearch, setLeaderboardSearch] = useState('');
   const [leaderboardFilter, setLeaderboardFilter] = useState<'ALL' | 'AL' | 'NÖTR' | 'ALMA'>('ALL');
   const [leaderboardSort, setLeaderboardSort] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'score', direction: 'desc' });
+  const [leaderboardViewMode, setLeaderboardViewMode] = useState<'list' | 'icons'>('list');
   const [themesSort, setThemesSort] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'score', direction: 'desc' });
   const [expandedSectors, setExpandedSectors] = useState<Record<string, boolean>>({});
   const [sectorSearchTerm, setSectorSearchTerm] = useState<string>('');
@@ -4331,20 +4332,15 @@ export default function ValuationTerminal({
 
           {/* Sağ: Arama Hapı (Ctrl K) + Bildirim + Tema + Kullanıcı Avatar / Giriş */}
           <div className="flex items-center gap-2.5">
-            {/* Spotlight Arama Butonu (Ctrl + K) */}
+            {/* Spotlight Arama Butonu */}
             <button
               type="button"
               onClick={() => setIsSpotlightOpen(true)}
-              className="flex items-center justify-between gap-3 bg-[#181b20] hover:bg-[#1f242c] border border-[#2b313d] hover:border-slate-500 py-1.5 px-3 rounded-full text-xs text-slate-400 transition cursor-pointer w-36 sm:w-52"
-              title="Hızlı Şirket Arama (Ctrl + K)"
+              className="flex items-center gap-2 bg-[#181b20] hover:bg-[#1f242c] border border-[#2b313d] hover:border-slate-500 py-1.5 px-3 rounded-full text-xs text-slate-400 transition cursor-pointer w-32 sm:w-44"
+              title="Hızlı Şirket Arama"
             >
-              <span className="flex items-center gap-2 truncate">
-                <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span className="text-slate-400 truncate">Search</span>
-              </span>
-              <kbd className="hidden sm:inline text-[10px] font-mono bg-[#21262d] px-1.5 py-0.5 rounded border border-[#2e3440] text-slate-400">
-                Ctrl K
-              </kbd>
+              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="text-slate-400 truncate">Hisse Ara...</span>
             </button>
 
             {/* Bildirim Çanı */}
@@ -4893,51 +4889,38 @@ export default function ValuationTerminal({
           {/* ADIM 3: KURUMSAL HİSSE ANALİZİ (SIMPLY WALL ST MODU) */}
           {step === 'report' && activeReport && (
             <div className="space-y-4">
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 sm:px-5 flex flex-wrap items-center justify-between gap-3 shadow-md">
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={handleGoBack}
-                    className="px-3 py-1.5 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg border border-slate-800 text-sm font-semibold transition flex items-center gap-2 cursor-pointer"
-                    title="Geri Dön"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                    <span>Geri</span>
-                  </button>
-                  <div className="h-5 w-px bg-slate-800" />
-                  <span className="text-base font-black font-mono text-white">{activeReport.ticker}</span>
-                  <span className="text-sm font-mono px-2.5 py-0.5 rounded bg-slate-950 text-slate-300 border border-slate-800">
-                    {getCompanySectorDisplayName(activeReport.ticker, activeReport.sector)}
-                  </span>
-                  {(valuationInfo.is_value_trap || activeReport.isValueTrap) && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded border border-rose-500/40 bg-rose-500/10 text-rose-400 text-xs font-bold font-mono">
-                      <ShieldAlert className="w-3.5 h-3.5" /> DEĞER TUZAĞI
-                    </span>
-                  )}
-                </div>
+              <div className="flex items-center justify-between pb-1">
+                <button
+                  type="button"
+                  onClick={handleGoBack}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-[#181b20] hover:bg-[#222731] border border-[#2b313d] rounded-lg transition cursor-pointer shadow-sm"
+                  title="Geri Dön"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Geri Dön</span>
+                </button>
 
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-1.5">
                   <button
                     type="button"
                     onClick={handleCopyNotebookLM}
-                    className="p-2 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg border border-slate-800 transition cursor-pointer flex items-center justify-center"
+                    className="p-1.5 text-slate-400 hover:text-white hover:bg-[#21262d] rounded-md transition cursor-pointer"
                     title={copiedNotebookLM ? "Kopyalandı" : "Verileri Kopyala"}
                     aria-label="Verileri Kopyala"
                   >
                     {copiedNotebookLM ? (
-                      <Check className="w-4 h-4 text-emerald-400" />
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
                     ) : (
-                      <Copy className="w-4 h-4 text-cyan-400" />
+                      <Copy className="w-3.5 h-3.5 text-slate-400" />
                     )}
                   </button>
-
                   <button
                     type="button"
                     onClick={() => deleteReport(activeReport.id)}
-                    className="p-2 bg-slate-950 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-800 transition cursor-pointer"
+                    className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition cursor-pointer"
                     title="Raporu Sil"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
@@ -5033,14 +5016,30 @@ export default function ValuationTerminal({
                       Hisse Tarama ve Sıralama
                     </h2>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 bg-[#12151c] p-1 rounded-lg border border-slate-800">
                     <button
                       type="button"
-                      onClick={resetToNewAnalysis}
-                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-md font-sans"
+                      onClick={() => setLeaderboardViewMode('list')}
+                      className={`p-1.5 rounded-md transition cursor-pointer ${
+                        leaderboardViewMode === 'list'
+                          ? 'bg-slate-800 text-white shadow-sm'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                      title="Liste Görünümü"
                     >
-                      <PlusCircle className="w-3.5 h-3.5" />
-                      <span>Yeni Analiz</span>
+                      <List className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLeaderboardViewMode('icons')}
+                      className={`p-1.5 rounded-md transition cursor-pointer ${
+                        leaderboardViewMode === 'icons'
+                          ? 'bg-slate-800 text-white shadow-sm'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                      title="Küçük İkonlar / Kart Görünümü"
+                    >
+                      <LayoutGrid className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -5074,7 +5073,73 @@ export default function ValuationTerminal({
                     </div>
                   </div>
 
-                  <div className="overflow-x-auto">
+                  {leaderboardViewMode === 'icons' ? (
+                    <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                      {sortedLeaderboard.length === 0 ? (
+                        <div className="col-span-full py-12 text-center text-slate-500 text-xs">
+                          Kriterlere uygun kayıtlı hisse bulunamadı.
+                        </div>
+                      ) : (
+                        sortedLeaderboard.map((item) => {
+                          const fvNum = parseFloat(item.fairValue || '0') || 0;
+                          const prNum = parseFloat(item.price || '0') || 0;
+                          const discNum = (fvNum > 0 && prNum > 0) ? Number((((fvNum - prNum) / prNum) * 100).toFixed(1)) : null;
+                          const isCheap = discNum != null && discNum >= 0;
+
+                          return (
+                            <div
+                              key={item.id}
+                              onClick={() => openReport(item.id, item.ticker)}
+                              className="bg-[#12151c] hover:bg-[#1a1f29] border border-[#2b313d] hover:border-emerald-500/50 rounded-xl p-3.5 flex flex-col justify-between gap-3 cursor-pointer transition shadow-sm group select-none"
+                            >
+                              <div className="flex items-start justify-between gap-1.5">
+                                <div>
+                                  <span className="font-mono font-black text-sm text-white group-hover:text-emerald-400 transition tracking-tight">
+                                    {item.ticker}
+                                  </span>
+                                  <div className="text-[10px] text-slate-400 font-sans truncate max-w-[95px]">
+                                    {item.sector ? getCompanySectorDisplayName(item.ticker, item.sector) : 'BIST'}
+                                  </div>
+                                </div>
+                                <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded ${
+                                  item.decision === 'AL' ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/80' :
+                                  item.decision === 'ALMA' ? 'bg-rose-950/80 text-rose-400 border border-rose-800/80' :
+                                  'bg-amber-950/80 text-amber-400 border border-amber-800/80'
+                                }`}>
+                                  {item.decision || '—'}
+                                </span>
+                              </div>
+
+                              <div className="space-y-1.5 pt-2 border-t border-[#232834]">
+                                <div className="flex items-center justify-between text-xs font-mono">
+                                  <span className="text-slate-400 text-[11px]">Fiyat:</span>
+                                  <span className="text-slate-200 font-semibold">{prNum > 0 ? `₺${prNum.toFixed(2)}` : '—'}</span>
+                                </div>
+                                <div className="flex items-center justify-between text-xs font-mono">
+                                  <span className="text-slate-400 text-[11px]">Adil Değer:</span>
+                                  <span className="text-[#f5c242] font-bold">{fvNum > 0 ? `₺${fvNum.toFixed(2)}` : '—'}</span>
+                                </div>
+                                {discNum !== null && (
+                                  <div className="flex items-center justify-between text-[11px] font-mono">
+                                    <span className="text-slate-400">Potansiyel:</span>
+                                    <span className={`font-bold ${isCheap ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                      %{Math.abs(discNum).toFixed(1)} {isCheap ? 'İskonto' : 'Prim'}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex items-center justify-between pt-2 border-t border-[#232834] text-[11px] font-mono">
+                                <span className="text-slate-400">Skor:</span>
+                                <span className="text-emerald-400 font-bold">{formatScore(item.score)}</span>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
                     <table className="w-full text-xs text-left border-collapse">
                       <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[11px]">
                         <tr>
@@ -5238,6 +5303,7 @@ export default function ValuationTerminal({
                       </tbody>
                     </table>
                   </div>
+                  )}
                 </div>
               </div>
             );
@@ -5308,93 +5374,55 @@ export default function ValuationTerminal({
             return (
               <div className="space-y-6">
                 {/* ÜST BAŞLIK VE KONTROL KARTI */}
-                <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 sm:p-7 shadow-xl space-y-5">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2 text-xs font-mono text-emerald-400 uppercase tracking-wider font-semibold">
-                        <Building2 className="w-4 h-4" />
-                        <span>Borsa İstanbul Resmi Sektör Portföyü</span>
-                      </div>
-                      <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight mt-1 font-sans">
-                        Sektörler ve Şirket Dağılımı
-                      </h2>
-                      <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl font-sans">
-                        Borsa İstanbul'daki tüm hisseler İş Yatırım'ın 53 resmi sektör sınıflandırmasına göre eşleştirilmiştir. İlgili sektöre tıklayarak bünyesindeki analiz edilen şirketleri, adil değerleri ve skorları inceleyebilirsiniz.
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => toggleAll(true)}
-                        className="px-3 py-1.5 bg-[#21262d] hover:bg-[#2b313d] text-slate-300 text-xs font-semibold rounded-lg transition"
-                      >
-                        Tümünü Genişlet
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => toggleAll(false)}
-                        className="px-3 py-1.5 bg-[#21262d] hover:bg-[#2b313d] text-slate-300 text-xs font-semibold rounded-lg transition"
-                      >
-                        Tümünü Daralt
-                      </button>
-                      <button
-                        type="button"
-                        onClick={resetToNewAnalysis}
-                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 shadow-md"
-                      >
-                        <PlusCircle className="w-3.5 h-3.5" />
-                        <span>Yeni Analiz Ekle</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* İSTATİSTİK PİLLERİ & ARAMA & FİLTRE ÇUBUĞU */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-[#2b313d]/60">
-                    <div className="flex items-center gap-2">
+                <div className="bg-[#181b20] border border-[#2b313d] rounded-xl p-4 sm:p-5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight font-sans">
+                      Sektörler
+                    </h2>
+                    <div className="flex items-center gap-1.5 bg-[#12151c] p-1 rounded-lg border border-[#2b313d]">
                       <button
                         type="button"
                         onClick={() => setSectorFilterTab('ACTIVE')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                        className={`px-2.5 py-1 rounded-md text-xs font-semibold transition ${
                           sectorFilterTab === 'ACTIVE'
-                            ? 'bg-emerald-600 text-white shadow-sm'
-                            : 'bg-[#21262d] text-slate-400 hover:text-white'
+                            ? 'bg-[#21262d] text-white shadow-sm'
+                            : 'text-slate-400 hover:text-white'
                         }`}
                       >
-                        Analiz Edilmiş Sektörler ({activeSectorCount})
+                        Analiz Edilmiş ({activeSectorCount})
                       </button>
                       <button
                         type="button"
                         onClick={() => setSectorFilterTab('ALL')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                        className={`px-2.5 py-1 rounded-md text-xs font-semibold transition ${
                           sectorFilterTab === 'ALL'
-                            ? 'bg-emerald-600 text-white shadow-sm'
-                            : 'bg-[#21262d] text-slate-400 hover:text-white'
+                            ? 'bg-[#21262d] text-white shadow-sm'
+                            : 'text-slate-400 hover:text-white'
                         }`}
                       >
-                        Tüm Resmi Sektörler (53)
+                        Tümü (53)
                       </button>
                     </div>
+                  </div>
 
-                    <div className="relative w-full sm:w-72">
-                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        value={sectorSearchTerm}
-                        onChange={(e) => setSectorSearchTerm(e.target.value)}
-                        placeholder="Sektör veya hisse ara..."
-                        className="w-full bg-[#12151c] border border-[#2b313d] rounded-lg pl-9 pr-8 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
-                      />
-                      {sectorSearchTerm && (
-                        <button
-                          type="button"
-                          onClick={() => setSectorSearchTerm('')}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
+                  <div className="relative w-full sm:w-64">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={sectorSearchTerm}
+                      onChange={(e) => setSectorSearchTerm(e.target.value)}
+                      placeholder="Sektör veya hisse ara..."
+                      className="w-full bg-[#12151c] border border-[#2b313d] rounded-lg pl-8 pr-7 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+                    />
+                    {sectorSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => setSectorSearchTerm('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -5411,45 +5439,31 @@ export default function ValuationTerminal({
                   <div className="space-y-4">
                     {sortedSectorEntries.map(([secName, reports]) => {
                       // Eğer şirket varsa varsayılan açık gelsin, yoksa kullanıcı tıklarsa açılsın
-                      const isExpanded = expandedSectors[secName] !== undefined 
-                        ? expandedSectors[secName] 
-                        : (reports.length > 0);
+                      const isExpanded = !!expandedSectors[secName];
 
                       return (
-                        <div key={secName} className="bg-[#1a1e26] border border-[#2e3440] rounded-2xl overflow-hidden shadow-lg transition">
-                          {/* Sektör Başlık / Accordion Tıklanabilir Bar */}
+                        <div key={secName} className="bg-[#181b20] border border-[#262c37] rounded-xl overflow-hidden shadow-sm transition hover:border-[#384252]">
+                          {/* Sektör Satırı */}
                           <div
                             onClick={() => toggleSector(secName)}
-                            className="p-4 sm:px-6 bg-[#161a22] hover:bg-[#1c222c] border-b border-[#2e3440] flex items-center justify-between gap-4 cursor-pointer select-none transition group"
+                            className="py-3 px-4 sm:px-5 flex items-center justify-between gap-4 cursor-pointer select-none transition group hover:bg-[#1f2530]"
                           >
                             <div className="flex items-center gap-3">
-                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition ${
-                                reports.length > 0
-                                  ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
-                                  : 'bg-slate-800/40 border border-slate-700/50 text-slate-500'
-                              }`}>
-                                <Building2 className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <h3 className="text-base font-black text-white group-hover:text-emerald-400 transition font-sans flex items-center gap-2">
-                                  <span>{secName}</span>
-                                </h3>
-                                <span className="text-[11px] text-slate-400 font-mono">
-                                  İş Yatırım 53 Resmi Sektör Portföyü
-                                </span>
-                              </div>
+                              <span className="text-sm font-semibold text-slate-200 group-hover:text-emerald-400 transition font-sans">
+                                {secName}
+                              </span>
                             </div>
 
                             <div className="flex items-center gap-3">
-                              <span className={`text-xs font-mono font-bold px-3 py-1 rounded-full border transition ${
+                              <span className={`text-xs font-mono font-medium px-2.5 py-0.5 rounded-full border transition ${
                                 reports.length > 0
-                                  ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800/80'
-                                  : 'bg-slate-900 border-slate-700 text-slate-500'
+                                  ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/50'
+                                  : 'bg-[#21262d] text-slate-400 border-[#2e3440]'
                               }`}>
-                                {reports.length} Şirket
+                                {reports.length} şirket
                               </span>
                               <div className="text-slate-400 group-hover:text-white transition">
-                                {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                               </div>
                             </div>
                           </div>
