@@ -2330,7 +2330,13 @@ export function computeFairValueTrend(
       return currentVal * unitScale * factor;
     };
 
-    const eq = (parseFinancialNumber(item?.equity) ?? 0) * unitScale;
+    const parentEqVal = parseFinancialNumber(item?.parent_equity);
+    const rawEqVal = parseFinancialNumber(item?.equity) ?? 0;
+    const minIntVal = parseFinancialNumber(item?.minority_interests ?? item?.non_controlling_interests ?? item?.azinlik_paylari) ?? 0;
+    const effectiveEqVal = (parentEqVal != null && parentEqVal > 0)
+      ? parentEqVal
+      : (rawEqVal > 0 && minIntVal > 0 ? Math.max(0, rawEqVal - minIntVal) : rawEqVal);
+    const eq = effectiveEqVal * unitScale;
     const netDebt = (parseFinancialNumber(item?.net_debt) ?? 0) * unitScale;
     const ebitda = computePointTtm('ebitda');
     const netInc = computePointTtm('net_income');
@@ -2811,7 +2817,7 @@ export function optimizeFinalDecision({
     // 6. Kural: Holding Sektörü Solo Borç ve İskonto Filtresi
     if (!overrideApplied && effectiveSector === 'HOLDING') {
       const holdingDebt = parseFinancialNumber(effectiveLatestData?.net_debt) ?? 0;
-      const holdingEq = parseFinancialNumber(effectiveLatestData?.equity) ?? 1;
+      const holdingEq = parseFinancialNumber(effectiveLatestData?.parent_equity ?? effectiveLatestData?.equity) ?? 1;
       const disc = parseFinancialNumber(effectiveLatestData?.holding_discount ?? effectiveLatestData?.nav_discount);
 
       if (holdingEq > 0 && holdingDebt > 0 && (holdingDebt / holdingEq) > 0.6) {
@@ -3906,7 +3912,12 @@ export function computeSectorValuationAndDrivers(
     formulaStr = 'Ödenmiş sermaye / pay adedi resmi verilerde tespit edilemediği için hisse başı içsel değer hesaplanamaz (N/A).';
   } else if (sector === 'INSURANCE' || sector === 'BANKING') {
     modelName = 'Gordon Büyüme & 12 Aylık İleriye Dönük Defter Değeri Modeli';
-    const totalEquity = parseFinancialNumber(latest?.equity) ?? 0;
+    const parentEq = parseFinancialNumber(latest?.parent_equity);
+    const rawEq = parseFinancialNumber(latest?.equity) ?? 0;
+    const minInt = parseFinancialNumber(latest?.minority_interests ?? latest?.non_controlling_interests) ?? 0;
+    const totalEquity = (parentEq != null && parentEq > 0)
+      ? parentEq
+      : (rawEq > 0 && minInt > 0 ? Math.max(0, rawEq - minInt) : rawEq);
     const totalEquityFull = totalEquity * unitScale;
 
     if (totalEquityFull <= 0) {
@@ -3930,14 +3941,19 @@ export function computeSectorValuationAndDrivers(
     }
   } else if (sector === 'HOLDING') {
     modelName = '12 Aylık İleriye Dönük Net Aktif Değeri (NAD / SOTP) Modeli';
-    const totalEquity = parseFinancialNumber(latest?.equity) ?? 0;
+    const parentEq = parseFinancialNumber(latest?.parent_equity);
+    const rawEq = parseFinancialNumber(latest?.equity) ?? 0;
+    const minorityInt = parseFinancialNumber(latest?.minority_interests ?? latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0;
+    const totalEquity = (parentEq != null && parentEq > 0)
+      ? parentEq
+      : (rawEq > 0 && minorityInt > 0 ? Math.max(0, rawEq - minorityInt) : rawEq);
     const totalEquityFull = totalEquity * unitScale;
 
     if (totalEquityFull <= 0) {
       isInsolvent = true;
-      boundaryWarning = 'Holding muhasebesel özkaynakları negatiftir. Net Aktif Değeri (NAD) modeli uygulanamaz (N/A).';
+      boundaryWarning = 'Holding muhasebesel ana ortaklık özkaynakları negatiftir. Net Aktif Değeri (NAD) modeli uygulanamaz (N/A).';
       fairValue = null as any;
-      formulaStr = `Özkaynaklar Negatif = ${totalEquityFull.toLocaleString('tr-TR')} TL (NAD: N/A)`;
+      formulaStr = `Ana Ortaklık Özkaynakları Negatif = ${totalEquityFull.toLocaleString('tr-TR')} TL (NAD: N/A)`;
     } else {
       const navPerShare = totalEquityFull / effectiveShareCount;
       const forwardEquityGrowth = (roe !== null && roe > 0) ? (roe / 100) * 0.85 : (roe !== null ? Math.max(-0.50, (roe / 100) * periodAnnualFactor) : 0);
@@ -3949,7 +3965,9 @@ export function computeSectorValuationAndDrivers(
     }
   } else if (sector === 'REIT') {
     modelName = '12 Aylık İleriye Dönük Net Aktif Değeri (NAD) & Portföy Ekspertiz İskonto Modeli';
-    const totalEquity = parseFinancialNumber(latest?.equity) ?? 0;
+    const parentEq = parseFinancialNumber(latest?.parent_equity);
+    const rawEq = parseFinancialNumber(latest?.equity) ?? 0;
+    const totalEquity = (parentEq != null && parentEq > 0) ? parentEq : rawEq;
     const totalEquityFull = totalEquity * unitScale;
 
     if (totalEquityFull <= 0) {

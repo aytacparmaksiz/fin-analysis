@@ -151,6 +151,12 @@ export class IsYatirimApiAdapter {
     let other_long_term_liabilities: number | null = null;
     let total_liabilities: number | null = null;
     let equity: number | null = null;
+    let parent_equity: number | null = null;
+    let minority_interests: number | null = null;
+    let total_equity: number | null = null;
+    let lease_liabilities: number | null = null;
+    let short_term_lease_liabilities: number | null = null;
+    let long_term_lease_liabilities: number | null = null;
     let paid_in_capital: number | null = null;
     let retained_earnings: number | null = null;
     let net_debt: number | null = null;
@@ -200,7 +206,10 @@ export class IsYatirimApiAdapter {
       total_liabilities = (current_liabilities || 0) + (long_term_liabilities || 0);
 
       paid_in_capital = getVal(['2MEA', '2OA'], ['ödenmiş sermaye']);
-      equity = getVal(['2O', '2N'], ['özsermaye toplamı', 'özkaynaklar toplamı', 'özkaynak']);
+      parent_equity = getVal(['2O'], ['ana ortaklığa ait özkaynaklar', 'ana ortaklık payları']);
+      minority_interests = getVal(['2M', '2MA', '2ODA'], ['azınlık payları', 'kontrol gücü olmayan paylar']);
+      total_equity = getVal(['2N', '2O'], ['özsermaye toplamı', 'özkaynaklar toplamı', 'özkaynak']);
+      equity = parent_equity ?? total_equity;
       retained_earnings = getVal(['2OC'], ['geçmiş yıllar karları', 'kar yedekleri']);
 
       const lifeWritten = getVal(['3DAAB'], ['1.1.1- brüt yazılan primler']);
@@ -282,7 +291,10 @@ export class IsYatirimApiAdapter {
 
       current_liabilities = getVal(['2A'], ['mevduat', 'toplanan fonlar']);
       paid_in_capital = getVal(['2OA', '2PA', '2MEA'], ['ödenmiş sermaye']);
-      equity = getVal(['2O', '2P', '2N'], ['özkaynaklar toplamı', 'özsermaye toplamı', 'özkaynaklar']);
+      parent_equity = getVal(['2O', '2PA'], ['ana ortaklığa ait özkaynaklar', 'ana ortaklık payları']);
+      minority_interests = getVal(['2M', '2MA', '2ODA'], ['azınlık payları', 'kontrol gücü olmayan paylar']);
+      total_equity = getVal(['2N', '2P', '2O'], ['özkaynaklar toplamı', 'özsermaye toplamı', 'özkaynaklar']);
+      equity = parent_equity ?? total_equity;
       retained_earnings = getVal(['2OE', '2PE'], ['yedek akçeler', 'geçmiş yıllar karı']);
       total_liabilities = (total_assets && equity) ? Math.max(0, total_assets - equity) : current_liabilities;
       long_term_liabilities = (total_liabilities && current_liabilities) ? Math.max(0, total_liabilities - current_liabilities) : null;
@@ -342,7 +354,30 @@ export class IsYatirimApiAdapter {
       other_long_term_liabilities = getVal(['2BH', '2BBB', '2BG', '2BE'], ['diğer uzun vadeli yükümlülükler', 'diğer borçlar', 'ertelenmiş vergi yükümlülüğü']);
       total_liabilities = (current_liabilities || 0) + (long_term_liabilities || 0);
 
-      equity = getVal(['2N', '2O'], ['ana ortaklığa ait özkaynaklar', 'toplam özkaynaklar', 'özkaynaklar']);
+      // Kiralama Yükümlülükleri (TFRS 16)
+      short_term_lease_liabilities = getVal(['2AAB', '2AABA'], ['kiralama sözleşmelerinden borçlar', 'faaliyet kiralaması borçları', 'kısa vadeli kiralama borçları']);
+      long_term_lease_liabilities = getVal(['2BAB', '2BABA'], ['kiralama sözleşmelerinden borçlar', 'faaliyet kiralaması borçları', 'uzun vadeli kiralama borçları']);
+      if (short_term_lease_liabilities !== null || long_term_lease_liabilities !== null) {
+        lease_liabilities = (short_term_lease_liabilities || 0) + (long_term_lease_liabilities || 0);
+      }
+
+      // Özkaynaklar ve Azınlık Payları Ayrıştırması:
+      // İş Yatırım XI_29 standardı:
+      // '2O': Ana Ortaklığa Ait Özkaynaklar (Parent Equity)
+      // '2ODA' / '2OD': Azınlık Payları (Non-controlling / Minority Interests)
+      // '2N': Toplam Özkaynaklar (Konsolide: 2O + 2ODA)
+      parent_equity = getVal(['2O'], ['ana ortaklığa ait özkaynaklar', 'ana ortaklık payları']);
+      minority_interests = getVal(['2ODA', '2OD', '3LB'], ['azınlık payları', 'kontrol gücü olmayan paylar']);
+      total_equity = getVal(['2N'], ['özkaynaklar', 'toplam özkaynaklar', 'özkaynaklar toplamı']);
+
+      if (parent_equity !== null && parent_equity > 0) {
+        equity = parent_equity;
+      } else if (total_equity !== null && minority_interests !== null && minority_interests > 0) {
+        equity = Math.max(0, total_equity - minority_interests);
+        parent_equity = equity;
+      } else {
+        equity = total_equity ?? getVal(['2N', '2O'], ['özkaynaklar', 'ana ortaklığa ait özkaynaklar']);
+      }
       paid_in_capital = getVal(['2OA', '2NA', '2MEA'], ['ödenmiş sermaye', 'çıkarılmış sermaye']);
       
       const priorYearsProfit = getVal(['2OCE'], ['geçmiş yıllar kar/zararları', 'geçmiş yıllar karları']) || 0;
@@ -526,6 +561,13 @@ export class IsYatirimApiAdapter {
       financial_debt,
       net_debt,
       equity,
+      parent_equity: parent_equity ?? equity,
+      minority_interests,
+      non_controlling_interests: minority_interests,
+      azinlik_paylari: minority_interests,
+      total_equity: total_equity ?? equity,
+      lease_liabilities,
+      kiralama_borclari: lease_liabilities,
       paid_in_capital,
       retained_earnings,
 

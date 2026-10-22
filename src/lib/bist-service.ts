@@ -146,6 +146,13 @@ export interface FinancialHistoryItem {
   financial_debt?: number | null;
   net_debt: number | null;
   equity: number | null;
+  parent_equity?: number | null;
+  minority_interests?: number | null;
+  non_controlling_interests?: number | null;
+  azinlik_paylari?: number | null;
+  total_equity?: number | null;
+  lease_liabilities?: number | null;
+  kiralama_borclari?: number | null;
   paid_in_capital: number | null;
   retained_earnings?: number | null;
 
