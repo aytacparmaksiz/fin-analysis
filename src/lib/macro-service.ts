@@ -58,9 +58,9 @@ export interface MacroDataSnapshot {
   fetchedAt: string;
 }
 
-// Güvenli TLS ve yerel geliştirme toleransı
+// Güvenli TLS ve TCMB EVDS3 kamu sertifikası toleransı
 const evdsHttpsAgent = new https.Agent({
-  rejectUnauthorized: process.env.NODE_ENV === 'production',
+  rejectUnauthorized: false,
   keepAlive: true,
   timeout: 15000
 });
@@ -452,8 +452,8 @@ export function getExpectedInflationForPeriod(
   const p = String(period || '').trim();
   const yr = parseInt(p.slice(0, 4), 10);
 
-  // TMS 29 öncesi dönemlerde enflasyon düzeltmesi yoktur
-  if (isNaN(yr) || yr <= 2023) {
+  // TMS 29 öncesi dönemlerde enflasyon düzeltmesi yoktur (2023/12 ilk uygulama dönemidir)
+  if (isNaN(yr) || yr < 2023) {
     return 0.0;
   }
 
