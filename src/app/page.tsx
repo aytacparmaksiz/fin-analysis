@@ -88,6 +88,7 @@ import {
 } from '@/lib/valuation';
 import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from '@/lib/isyatirim-multiples-cache';
 import { OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE } from '@/lib/isyatirim-sector-averages-cache';
+import { OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE } from '@/lib/isyatirim-company-details-cache';
 import { 
   FinancialRatioEngine, 
   type UnifiedFinancialMetrics,
@@ -96,6 +97,50 @@ import {
   type FinancialChangeResult
 } from '@/lib/ratio-engine';
 import { extractSmartFinancialText, extractSmartDocumentText, splitScannedPdfIntoChunks, DocumentCategory } from '@/lib/pdf-filter';
+
+/**
+ * Kayıtlı analizleri (SavedReport) en son matematiksel değerleme motoru, IVS 105 standartları
+ * ve resmi temettü kütüğüyle otomatik olarak uzlaştırır (reconcile).
+ * Böylece motor veya formüllerde yapılan tüm güncellemeler, kullanıcının daha önce kaydettiği
+ * tüm analizlerin özet kartlarına (Hisse Tarama, Akış vb.) anında ve otomatik olarak yansır.
+ */
+function reconcileSavedReportWithLatestEngine(rep: SavedReport): SavedReport {
+  if (!rep) return rep;
+  const upperTicker = (rep.ticker || '').toUpperCase();
+  const baselineDivs = upperTicker ? OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE[upperTicker]?.dividends : null;
+  const updatedReport: SavedReport = { ...rep };
+
+  if (Array.isArray(baselineDivs) && baselineDivs.length > 0) {
+    updatedReport.dividendHistory = baselineDivs;
+  }
+
+  if (rep.extractedData && Array.isArray(rep.extractedData.financial_history) && rep.extractedData.financial_history.length > 0) {
+    try {
+      const valRes = computeSectorValuationAndDrivers(rep.extractedData, rep.price, rep.sector);
+      if (valRes?.valuation?.fair_value && valRes.valuation.fair_value > 0) {
+        updatedReport.fairValue = `${valRes.valuation.fair_value.toFixed(2)} TL`;
+      }
+      if (valRes?.scoreResult?.totalScore != null) {
+        updatedReport.score = `${valRes.scoreResult.totalScore}/100`;
+      }
+      if (valRes?.optimization?.finalDecision) {
+        updatedReport.decision = valRes.optimization.finalDecision;
+      }
+      if (valRes?.valuation?.is_value_trap !== undefined) {
+        updatedReport.isValueTrap = valRes.valuation.is_value_trap;
+        updatedReport.valueTrapReasons = valRes.valuation.value_trap_reasons;
+        updatedReport.valueTrapSeverity = valRes.valuation.value_trap_severity;
+      }
+      if (valRes?.valuation?.fair_value_trend) {
+        updatedReport.fairValueTrend = valRes.valuation.fair_value_trend;
+      }
+    } catch (err) {
+      console.warn('Reconcile error for', rep.ticker, err);
+    }
+  }
+
+  return updatedReport;
+}
 
 // Yatırım Teması İkonu Render Yardımcısı
 function renderThemeIcon(iconTag: string, className: string = "w-3.5 h-3.5") {
@@ -1678,7 +1723,7 @@ export default function ValuationTerminal({
       if (res.ok) {
         const json = await res.json();
         if (json?.report && json.report.ticker?.toUpperCase() === t) {
-          const apiReport: SavedReport = json.report;
+          const apiReport: SavedReport = reconcileSavedReportWithLatestEngine(json.report);
           setSavedReports(prev => {
             const has = prev.some(r => r.id === apiReport.id || r.ticker?.toUpperCase() === t);
             const next = has ? prev : [apiReport, ...prev];
@@ -1748,6 +1793,11 @@ export default function ValuationTerminal({
         localData[idx] = defaultReport;
       }
     }
+
+    localData = localData.map(reconcileSavedReportWithLatestEngine);
+    try {
+      localStorage.setItem('fin_valuation_reports', JSON.stringify(localData));
+    } catch (e) {}
 
     setSavedReports(localData);
 
@@ -1831,7 +1881,7 @@ export default function ValuationTerminal({
                   tickerMap.set(sym, rep);
                 }
               }
-              const merged = Array.from(tickerMap.values());
+              const merged = Array.from(tickerMap.values()).map(reconcileSavedReportWithLatestEngine);
               setSavedReports(merged);
               localStorage.setItem('fin_valuation_reports', JSON.stringify(merged));
             }
@@ -1992,7 +2042,7 @@ export default function ValuationTerminal({
         if (Array.isArray(parsed)) {
           const existingIds = new Set(savedReports.map(r => r.id));
           const newEntries = parsed.filter((r: any) => r.id && r.ticker);
-          const merged = [...newEntries.filter(r => !existingIds.has(r.id)), ...savedReports];
+          const merged = [...newEntries.filter(r => !existingIds.has(r.id)), ...savedReports].map(reconcileSavedReportWithLatestEngine);
           setSavedReports(merged);
           localStorage.setItem('fin_valuation_reports', JSON.stringify(merged));
           alert(`${newEntries.length} adet rapor başarıyla içeri aktarıldı!`);
