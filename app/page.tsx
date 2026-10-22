@@ -3919,8 +3919,8 @@ export default function ValuationTerminal({
 
   const companyMultiplesData = useMemo(() => {
     const sc = parseFinancialNumber(currentExtractedData?.shares_outstanding ?? currentExtractedData?.share_count) ?? 180000000;
-    return calculateCompanyMultiples(latestPeriodItem, valuationInfo.current_price || currentMarketPrice, sc, currentSector, marketMultiples, currentExtractedData?.currency);
-  }, [latestPeriodItem, valuationInfo.current_price, currentMarketPrice, currentExtractedData?.shares_outstanding, currentExtractedData?.share_count, currentSector, marketMultiples, currentExtractedData?.currency]);
+    return calculateCompanyMultiples(latestPeriodItem, valuationInfo.current_price || currentMarketPrice, sc, currentSector, marketMultiples, currentExtractedData?.currency, null, chartData);
+  }, [latestPeriodItem, valuationInfo.current_price, currentMarketPrice, currentExtractedData?.shares_outstanding, currentExtractedData?.share_count, currentSector, marketMultiples, currentExtractedData?.currency, chartData]);
 
   const previousQuarterComparison = useMemo(() => {
     if (!currentTicker) return null;

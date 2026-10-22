@@ -153,15 +153,21 @@ export class FinancialRatioEngine {
     const revSample = Math.abs(latest?.revenue ?? latest?.gross_written_premiums ?? 0);
     const paidCapSample = Math.abs(latest?.paid_in_capital ?? 0);
 
+    const isExplicitBin = normCurr.includes('bin') || normCurr.includes('thousand') || (latest as any)?.is_thousands === true;
+    const isExplicitTam = normCurr.includes('tam') || normCurr.includes('birim') || (latest as any)?.is_thousands === false;
+    const isLotRatioTam = paidCapSample > 0 && safeShares > 0 && Math.abs((paidCapSample / safeShares) - 1.0) < 0.25;
+    const isLotRatioBin = paidCapSample > 0 && safeShares > 0 && Math.abs((paidCapSample * 1000) / safeShares - 1.0) < 0.25;
+
     const isClearlyThousands =
-      (paidCapSample > 0 && paidCapSample < 10_000_000 && safeShares >= 5_000_000 && Math.abs((paidCapSample * 1000) / safeShares - 1.0) < 0.25) ||
-      (paidCapSample === 0 && eqSample > 0 && eqSample < 50_000_000 && (eqSample / safeShares) < 0.25 && (revSample === 0 || (revSample / safeShares) < 0.50) && safeShares >= 10_000_000);
+      isLotRatioBin ||
+      (!isLotRatioTam && paidCapSample === 0 && eqSample > 0 && eqSample < 50_000_000 && (eqSample / safeShares) < 0.25 && (revSample === 0 || (revSample / safeShares) < 0.50) && safeShares >= 10_000_000);
 
-    const isAlreadyTamTl = (eqSample >= 250_000_000) || 
-                           (revSample >= 250_000_000) ||
-                           ((normCurr === 'tl' || normCurr === 'try' || normCurr.includes('tam')) && !isClearlyThousands);
+    const isAlreadyTamTl =
+      isExplicitTam ||
+      isLotRatioTam ||
+      (!isExplicitBin && !isClearlyThousands && ((eqSample >= 250_000_000) || (revSample >= 250_000_000) || normCurr === 'tl' || normCurr === 'try'));
 
-    const unitScale = (!isAlreadyTamTl && (normCurr.includes('bin') || normCurr.includes('thousand') || isClearlyThousands)) ? 1000 : 1;
+    const unitScale = (!isAlreadyTamTl && (isExplicitBin || isClearlyThousands)) ? 1000 : 1;
 
     // 1. TTM (Trailing Twelve Months) Hesaplaması
     const ttm = this.calculateTtmFinancials(sorted, latest, sector, unitScale);

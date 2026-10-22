@@ -2192,6 +2192,8 @@ export function computeFairValueTrend(
 
   const sorted = [...history].sort((a, b) => parsePeriodSortKey(a?.period) - parsePeriodSortKey(b?.period));
   const targetPeriods = sorted.slice(-4);
+  const latestHistoryItem = sorted[sorted.length - 1];
+  const latestPaidCap = Math.abs(parseFinancialNumber(latestHistoryItem?.paid_in_capital) ?? 0);
   const trendPoints: FairValueTrendPoint[] = [];
 
   for (let i = 0; i < targetPeriods.length; i++) {
@@ -2204,14 +2206,19 @@ export function computeFairValueTrend(
 
     const itemCurr = String(item?.currency || '').trim().toLowerCase();
     const itemPaidCap = Math.abs(parseFinancialNumber(item?.paid_in_capital) ?? 0);
+    const refPaidCap = latestPaidCap > 0 ? latestPaidCap : itemPaidCap;
+    const isRefTam = refPaidCap > 0 && effectiveShareCount > 0 && Math.abs((refPaidCap / effectiveShareCount) - 1.0) < 0.25;
+    const isRefBin = refPaidCap > 0 && effectiveShareCount > 0 && Math.abs((refPaidCap * 1000) / effectiveShareCount - 1.0) < 0.25;
     const isItemExplicitTam = item?.is_thousands === false ||
       itemCurr.includes('tam') ||
       itemCurr.includes('birim') ||
-      (itemPaidCap > 0 && effectiveShareCount > 0 && Math.abs((itemPaidCap / effectiveShareCount) - 1.0) < 0.25);
+      (itemPaidCap > 0 && effectiveShareCount > 0 && Math.abs((itemPaidCap / effectiveShareCount) - 1.0) < 0.25) ||
+      (isRefTam && itemPaidCap >= effectiveShareCount * 0.02);
     const unitScale = !isItemExplicitTam && (
       item?.is_thousands === true ||
       itemCurr.includes('bin') ||
       itemCurr.includes('thousand') ||
+      (isRefBin && itemPaidCap > 0 && itemPaidCap < effectiveShareCount * 0.02) ||
       (item?.total_assets && Math.abs(item.total_assets) < 500_000_000 && (itemPaidCap === 0 || Math.abs((itemPaidCap / effectiveShareCount) - 0.001) < 0.0005))
     ) ? 1000 : 1;
 
@@ -3250,6 +3257,25 @@ export function computeSectorValuationAndDrivers(
     }
   }
 
+  const historySeries = Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : [];
+  const computeTtmField = (field: string, rawVal: number): number => {
+    const pKey = parsePeriodSortKey(latest?.period);
+    const yr = Math.floor(pKey / 100);
+    const m = pKey % 100;
+    if (m === 12 || m === 0) return rawVal;
+    if (yr > 2000 && historySeries.length > 2) {
+      const prevYearEnd = historySeries.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + 12);
+      const prevYearMatch = historySeries.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + m);
+      const vEnd = parseFinancialNumber(prevYearEnd?.[field]);
+      const vMatch = parseFinancialNumber(prevYearMatch?.[field]);
+      if (vEnd !== null && vMatch !== null) {
+        const ttmVal = rawVal + vEnd - vMatch;
+        if (field !== 'revenue' || ttmVal > 0) return ttmVal;
+      }
+    }
+    return rawVal * periodAnnualFactor;
+  };
+
   if (!hasPresentationMargin) {
     if (sector === 'INSURANCE') {
       marginLabel = 'Kombine Oran (Teknik Kârlılık)';
@@ -3295,25 +3321,6 @@ export function computeSectorValuationAndDrivers(
     } else {
       marginLabel = 'FAVÖK Marjı (EBITDA Margin)';
       marginNote = 'Operasyonel kârlılık marjı, şirketin maliyet şoklarını absorbe etme kabiliyetini gösterir.';
-
-      const historySeries = Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : [];
-      const computeTtmField = (field: string, rawVal: number): number => {
-        const pKey = parsePeriodSortKey(latest?.period);
-        const yr = Math.floor(pKey / 100);
-        const m = pKey % 100;
-        if (m === 12 || m === 0) return rawVal;
-        if (yr > 2000 && historySeries.length > 2) {
-          const prevYearEnd = historySeries.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + 12);
-          const prevYearMatch = historySeries.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + m);
-          const vEnd = parseFinancialNumber(prevYearEnd?.[field]);
-          const vMatch = parseFinancialNumber(prevYearMatch?.[field]);
-          if (vEnd !== null && vMatch !== null) {
-            const ttmVal = rawVal + vEnd - vMatch;
-            if (field !== 'revenue' || ttmVal > 0) return ttmVal;
-          }
-        }
-        return rawVal * periodAnnualFactor;
-      };
 
       const rawLatestEbitda = parseFinancialNumber(latest?.ebitda) ?? 0;
       const rawLatestRev = parseFinancialNumber(latest?.revenue) ?? 0;
@@ -3472,7 +3479,7 @@ export function computeSectorValuationAndDrivers(
         }
       }
 
-      const currentEbitda = parseFinancialNumber(latest?.ebitda) ?? 0;
+      const currentEbitda = computeTtmField('ebitda', parseFinancialNumber(latest?.ebitda) ?? 0);
       if (currentEbitda <= 0) {
         // Negatif FAVÖK: FD/FAVÖK çarpanı matematiksel ve finansal olarak uygulanamaz (N/A).
         // Varlık tabanlı sıkıntılı şirket çarpanı (İskontolu Sıkıntılı PD/DD) devreye girer.
@@ -3644,8 +3651,8 @@ export function computeSectorValuationAndDrivers(
     const latestNet = parseFinancialNumber(latest?.net_income) ?? 0;
     const latestEq = parseFinancialNumber(latest?.equity) ?? 0;
 
-    const revFull = latestRev * unitScale * periodAnnualFactor;
-    const netFull = latestNet * unitScale * periodAnnualFactor;
+    const revFull = computeTtmField('revenue', latestRev) * unitScale;
+    const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
     const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
 
@@ -3703,27 +3710,8 @@ export function computeSectorValuationAndDrivers(
 
     // TTM (Son 12 Ay) Standartlaştırması:
     // Düz çarpma (3A*4) mevsimselliği bozar. Geçmiş çeyrekler varsa standart TTM hesaplanır.
-    const historySeries = Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : [];
     const getTtmOrAnnualized = (field: string, rawLatestVal: number): number => {
-      const pKey = parsePeriodSortKey(latest?.period);
-      const yr = Math.floor(pKey / 100);
-      const m = pKey % 100;
-
-      if (m === 12 || m === 0) {
-        return rawLatestVal * unitScale;
-      }
-
-      if (yr > 2000 && historySeries.length > 2) {
-        const prevYearEnd = historySeries.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + 12);
-        const prevYearMatch = historySeries.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + m);
-        const vEnd = parseFinancialNumber(prevYearEnd?.[field]);
-        const vMatch = parseFinancialNumber(prevYearMatch?.[field]);
-        if (vEnd !== null && vMatch !== null) {
-          const ttmVal = rawLatestVal + vEnd - vMatch;
-          return ttmVal * unitScale;
-        }
-      }
-      return rawLatestVal * unitScale * periodAnnualFactor;
+      return computeTtmField(field, rawLatestVal) * unitScale;
     };
 
     const ebitdaFull = getTtmOrAnnualized('ebitda', latestEbitda);
@@ -3874,7 +3862,7 @@ export function computeSectorValuationAndDrivers(
     ? Number((((fairValue - safeCurrentPrice) / safeCurrentPrice) * 100).toFixed(1))
     : 0;
   // Ayı Senaryosu (Taban): Modelin stres senaryosu hedef fiyatı
-  const latestEbitdaForScenario = parseFinancialNumber(latest?.ebitda) ?? 0;
+  const latestEbitdaForScenario = computeTtmField('ebitda', parseFinancialNumber(latest?.ebitda) ?? 0);
   const isDistressedLoss = sector === 'INDUSTRIAL' && latestEbitdaForScenario <= 0;
   const bearPrice: number = (isInsolvent || fairValue === null || fairValue <= 0)
     ? 0
@@ -4272,17 +4260,26 @@ export function calculateDuPont5Step(item: any, sectorOrPrev?: any, sectorOverri
     ebt = taxRate < 1 ? (netIncome / (1 - taxRate)) : netIncome;
   }
 
-  const taxBurden = (netIncome !== null && ebt !== null && ebt !== 0)
-    ? Number((netIncome / ebt).toFixed(3))
+  const rawTaxBurden = (netIncome !== null && ebt !== null && ebt !== 0)
+    ? (netIncome / ebt)
+    : null;
+  const taxBurden = rawTaxBurden !== null
+    ? Number(rawTaxBurden.toFixed(3))
     : null;
 
-  const interestBurden = (ebt !== null && ebit !== null && ebit !== 0)
-    ? Number((ebt / ebit).toFixed(3))
+  const rawInterestBurden = (ebt !== null && ebit !== null && ebit !== 0)
+    ? (ebt / ebit)
+    : null;
+  const interestBurden = rawInterestBurden !== null
+    ? Number(rawInterestBurden.toFixed(3))
     : null;
 
-  const ebitMargin = (ebit !== null && revenue !== null && revenue > 0)
-    ? Number(((ebit / revenue) * 100).toFixed(2))
-    : (item.ebitda_margin ? Number((item.ebitda_margin * 0.8).toFixed(2)) : null);
+  const rawEbitMarginPct = (ebit !== null && revenue !== null && revenue > 0)
+    ? ((ebit / revenue) * 100)
+    : (item.ebitda_margin ? (item.ebitda_margin * 0.8) : null);
+  const ebitMargin = rawEbitMarginPct !== null
+    ? Number(rawEbitMarginPct.toFixed(2))
+    : null;
 
   const avgAssets = (prevItem && prevItem.total_assets && totalAssets)
     ? (prevItem.total_assets + totalAssets) / 2
@@ -4308,13 +4305,16 @@ export function calculateDuPont5Step(item: any, sectorOrPrev?: any, sectorOverri
     ? Number(rawAssetTurnover.toFixed(rawAssetTurnover < 0.2 ? 3 : 2))
     : null;
 
-  const financialLeverage = (operationalAssets !== null && avgEquity !== null && avgEquity > 0)
-    ? Number((operationalAssets / avgEquity).toFixed(2))
+  const rawFinancialLeverage = (operationalAssets !== null && avgEquity !== null && avgEquity > 0)
+    ? (operationalAssets / avgEquity)
+    : null;
+  const financialLeverage = rawFinancialLeverage !== null
+    ? Number(rawFinancialLeverage.toFixed(2))
     : null;
 
   let calculatedRoe: number | null = null;
-  if (taxBurden !== null && interestBurden !== null && ebitMargin !== null && rawAssetTurnover !== null && financialLeverage !== null) {
-    calculatedRoe = Number((taxBurden * interestBurden * (ebitMargin / 100) * rawAssetTurnover * financialLeverage * 100).toFixed(1));
+  if (rawTaxBurden !== null && rawInterestBurden !== null && rawEbitMarginPct !== null && rawAssetTurnover !== null && rawFinancialLeverage !== null) {
+    calculatedRoe = Number((rawTaxBurden * rawInterestBurden * (rawEbitMarginPct / 100) * rawAssetTurnover * rawFinancialLeverage * 100).toFixed(1));
   }
 
   const reportedRoe = parseFinancialNumber(item.roe) ?? calculatedRoe;
@@ -4667,14 +4667,25 @@ export interface CompanyMultiplesComparison {
 }
 
 export function calculateCompanyMultiples(
-  latest: any,
+  latestOrHistory: any,
   currentPrice: number,
   shareCount: number,
   sector: SectorType = 'INDUSTRIAL',
   isYatirimMultiples?: any,
   currency?: string,
-  customSectorBenchmark?: Partial<SectorMultipleBenchmark> | null
+  customSectorBenchmark?: Partial<SectorMultipleBenchmark> | null,
+  history?: any[]
 ): CompanyMultiplesComparison {
+  const rawSeries: any[] = Array.isArray(latestOrHistory)
+    ? latestOrHistory
+    : (Array.isArray(history) ? history : (Array.isArray(latestOrHistory?.financial_history) ? latestOrHistory.financial_history : []));
+  const sortedSeries = rawSeries.length > 0
+    ? [...rawSeries].sort((a, b) => parsePeriodSortKey(a?.period) - parsePeriodSortKey(b?.period))
+    : [];
+  const latest = Array.isArray(latestOrHistory)
+    ? (sortedSeries[sortedSeries.length - 1] || {})
+    : (latestOrHistory || (sortedSeries[sortedSeries.length - 1] || {}));
+
   let benchmark: SectorMultipleBenchmark = { ...(SECTOR_MULTIPLE_BENCHMARKS[sector] || SECTOR_MULTIPLE_BENCHMARKS.INDUSTRIAL) };
 
   // İş Yatırım resmi sektör ortalamaları verildiyse, dinamik olarak benchmark'ı güncelle
@@ -4715,29 +4726,61 @@ export function calculateCompanyMultiples(
   const eqScaleSample = Math.abs(equity ?? 0);
   const revScaleSample = Math.abs(revenue ?? 0);
   const paidCapSample = Math.abs(parseFinancialNumber(latest?.paid_in_capital) ?? 0);
+
+  const isExplicitBin = normCurr.includes('bin') || normCurr.includes('thousand') || latest?.is_thousands === true;
+  const isExplicitTam = normCurr.includes('tam') || normCurr.includes('birim') || latest?.is_thousands === false;
+  const isLotRatioTam = paidCapSample > 0 && safeShares > 0 && Math.abs((paidCapSample / safeShares) - 1.0) < 0.25;
+  const isLotRatioBin = paidCapSample > 0 && safeShares > 0 && Math.abs((paidCapSample * 1000) / safeShares - 1.0) < 0.25;
+
   const isClearlyThousands =
-    (paidCapSample > 0 && paidCapSample < 10_000_000 && safeShares >= 5_000_000) ||
-    (eqScaleSample > 0 && eqScaleSample < 250_000_000 && (revScaleSample === 0 || revScaleSample < 250_000_000) && safeShares >= 1_000_000);
+    isLotRatioBin ||
+    (!isLotRatioTam && paidCapSample > 0 && paidCapSample < 10_000_000 && safeShares >= 5_000_000) ||
+    (!isLotRatioTam && eqScaleSample > 0 && eqScaleSample < 250_000_000 && (revScaleSample === 0 || revScaleSample < 250_000_000) && safeShares >= 1_000_000);
 
   // Eğer veriler zaten Tam TL ise asla 1000 ile çarparak Trilyonlara şişirme
-  const isExplicitTam = normCurr.includes('tam') || normCurr.includes('birim');
   const isAlreadyTamTl =
-    (paidCapSample > 0 && safeShares > 0 && Math.abs((paidCapSample / safeShares) - 1.0) < 0.25) ||
-    (equity !== null && Math.abs(equity) >= 250_000_000) ||
-    (revenue !== null && Math.abs(revenue) >= 250_000_000) ||
-    isExplicitTam;
+    isExplicitTam ||
+    isLotRatioTam ||
+    (!isExplicitBin && !isClearlyThousands && (
+      (equity !== null && Math.abs(equity) >= 250_000_000) ||
+      (revenue !== null && Math.abs(revenue) >= 250_000_000)
+    ));
 
   let unitScale = 1;
   if (!isAlreadyTamTl) {
-    if (normCurr.includes('bin') || normCurr.includes('thousand') || isClearlyThousands) {
+    if (isExplicitBin || isClearlyThousands) {
       unitScale = 1000;
     }
   }
 
-  const scaledNet = (netIncome !== null) ? netIncome * unitScale : null;
+  // Tarihsel seri mevcutsa ara dönemlerde (3A/6A/9A) mevsimsellik yanılsamasını (3A*4) önlemek için TTM hesapla
+  const resolveFlowAnnualized = (field: string, rawLatestVal: number | null): number | null => {
+    if (rawLatestVal === null) return null;
+    const pKey = parsePeriodSortKey(latest?.period);
+    const yr = Math.floor(pKey / 100);
+    const m = pKey % 100;
+    if (m === 12 || m === 0) {
+      return rawLatestVal * unitScale;
+    }
+    if (yr > 2000 && sortedSeries.length > 2) {
+      const prevYearEnd = sortedSeries.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + 12);
+      const prevYearMatch = sortedSeries.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + m);
+      const vEnd = parseFinancialNumber(field === 'revenue' ? (prevYearEnd?.revenue ?? prevYearEnd?.written_premiums) : prevYearEnd?.[field]);
+      const vMatch = parseFinancialNumber(field === 'revenue' ? (prevYearMatch?.revenue ?? prevYearMatch?.written_premiums) : prevYearMatch?.[field]);
+      if (vEnd !== null && vMatch !== null) {
+        const ttmVal = rawLatestVal + vEnd - vMatch;
+        if (field !== 'revenue' || ttmVal > 0) {
+          return ttmVal * unitScale;
+        }
+      }
+    }
+    return rawLatestVal * unitScale * annualFactor;
+  };
+
+  const annualizedNet = resolveFlowAnnualized('net_income', netIncome);
   const scaledEquity = (equity !== null) ? equity * unitScale : null;
-  const scaledEbitda = (ebitda !== null) ? ebitda * unitScale : null;
-  const scaledRevenue = (revenue !== null) ? revenue * unitScale : null;
+  const annualizedEbitda = resolveFlowAnnualized('ebitda', ebitda);
+  const annualizedRev = resolveFlowAnnualized('revenue', revenue);
   const scaledNetDebt = netDebt * unitScale;
 
   const marketCap = currentPrice * safeShares;
@@ -4745,18 +4788,13 @@ export function calculateCompanyMultiples(
 
   // 1. F/K (P/E)
   let peVal: number | null = isYatirimMultiples?.pe != null ? isYatirimMultiples.pe : null;
-  if (peVal === null && scaledNet !== null && scaledNet > 0) {
-    const annualizedNet = scaledNet * annualFactor;
+  if (peVal === null && annualizedNet !== null && annualizedNet !== 0) {
     peVal = Number((marketCap / annualizedNet).toFixed(2));
-  } else if (peVal === null && scaledNet !== null && scaledNet < 0) {
-    peVal = Number((marketCap / (scaledNet * annualFactor)).toFixed(2));
   }
 
   // 2. PD/DD (P/B)
   let pbVal: number | null = isYatirimMultiples?.pb != null ? isYatirimMultiples.pb : null;
-  if (pbVal === null && scaledEquity !== null && scaledEquity > 0) {
-    pbVal = Number((marketCap / scaledEquity).toFixed(2));
-  } else if (pbVal === null && scaledEquity !== null && scaledEquity < 0) {
+  if (pbVal === null && scaledEquity !== null && scaledEquity !== 0) {
     pbVal = Number((marketCap / scaledEquity).toFixed(2));
   }
 
@@ -4764,11 +4802,8 @@ export function calculateCompanyMultiples(
   let evEbitdaVal: number | null = null;
   if (!isMetricDisabled('ev_ebitda', sector)) {
     evEbitdaVal = isYatirimMultiples?.ev_ebitda != null ? isYatirimMultiples.ev_ebitda : (isYatirimMultiples?.evEbitda != null ? isYatirimMultiples.evEbitda : null);
-    if (evEbitdaVal === null && benchmark.evEbitdaMedian !== null && scaledEbitda !== null && scaledEbitda > 0) {
-      const annualizedEbitda = scaledEbitda * annualFactor;
+    if (evEbitdaVal === null && benchmark.evEbitdaMedian !== null && annualizedEbitda !== null && annualizedEbitda !== 0) {
       evEbitdaVal = Number((enterpriseValue / annualizedEbitda).toFixed(2));
-    } else if (evEbitdaVal === null && benchmark.evEbitdaMedian !== null && scaledEbitda !== null && scaledEbitda < 0) {
-      evEbitdaVal = Number((enterpriseValue / (scaledEbitda * annualFactor)).toFixed(2));
     }
   }
 
@@ -4776,8 +4811,7 @@ export function calculateCompanyMultiples(
   let evSalesVal: number | null = null;
   if (!isMetricDisabled('ev_sales', sector)) {
     evSalesVal = isYatirimMultiples?.ev_sales != null ? isYatirimMultiples.ev_sales : (isYatirimMultiples?.evSales != null ? isYatirimMultiples.evSales : null);
-    if (evSalesVal === null && benchmark.evSalesMedian !== null && scaledRevenue !== null && scaledRevenue > 0) {
-      const annualizedRev = scaledRevenue * annualFactor;
+    if (evSalesVal === null && benchmark.evSalesMedian !== null && annualizedRev !== null && annualizedRev > 0) {
       evSalesVal = Number((enterpriseValue / annualizedRev).toFixed(2));
     }
   }
@@ -4847,22 +4881,22 @@ export function calculateCompanyMultiples(
     };
   };
 
-  const eps = (scaledNet !== null && scaledNet > 0) ? (scaledNet * annualFactor) / safeShares : null;
+  const eps = (annualizedNet !== null && annualizedNet > 0) ? annualizedNet / safeShares : null;
   const bvps = (scaledEquity !== null && scaledEquity > 0) ? scaledEquity / safeShares : null;
 
   const peMetric = helper('PE', 'F/K (Fiyat / Kazanç)', peVal, benchmark.peMedian, (t) => eps ? Number((eps * t).toFixed(2)) : null);
   const pbMetric = helper('PB', 'PD/DD (Piyasa Değeri / Defter Değeri)', pbVal, benchmark.pbMedian, (t) => bvps ? Number((bvps * t).toFixed(2)) : null);
   const evEbitdaMetric = helper('EV_EBITDA', 'FD/FAVÖK (Firma Değeri / FAVÖK)', evEbitdaVal, benchmark.evEbitdaMedian, (t) => {
-    if (scaledEbitda && scaledEbitda > 0) {
-      const targetFirmVal = (scaledEbitda * annualFactor) * t;
+    if (annualizedEbitda && annualizedEbitda > 0) {
+      const targetFirmVal = annualizedEbitda * t;
       const targetEq = targetFirmVal - scaledNetDebt;
       return targetEq > 0 ? Number((targetEq / safeShares).toFixed(2)) : null;
     }
     return null;
   });
   const evSalesMetric = helper('EV_SALES', 'FD/Satışlar (Firma Değeri / Satışlar)', evSalesVal, benchmark.evSalesMedian, (t) => {
-    if (scaledRevenue && scaledRevenue > 0) {
-      const targetFirmVal = (scaledRevenue * annualFactor) * t;
+    if (annualizedRev && annualizedRev > 0) {
+      const targetFirmVal = annualizedRev * t;
       const targetEq = targetFirmVal - scaledNetDebt;
       return targetEq > 0 ? Number((targetEq / safeShares).toFixed(2)) : null;
     }

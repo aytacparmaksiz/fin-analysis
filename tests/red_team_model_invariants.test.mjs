@@ -241,6 +241,51 @@ test('RED TEAM MATHEMATICAL AUDIT & INVARIANT TEST SUITE', async (t) => {
     );
   });
 
+  await t.test('VULN-09 (Orta): calculateCompanyMultiples ara dönemlerde (2026/03) history verildiğinde 3A*4 yerine TTM Net Kâr ve TTM FAVÖK kullanmalı', () => {
+    const seasonalHistory = [
+      { period: '2025/03', revenue: 140_000_000_000, ebitda: 12_000_000_000, net_income: -3_500_000_000, equity: 420_000_000_000, net_debt: 310_000_000_000, paid_in_capital: 1_380_000_000 },
+      { period: '2025/12', revenue: 780_000_000_000, ebitda: 110_000_000_000, net_income: 65_000_000_000, equity: 510_000_000_000, net_debt: 320_000_000_000, paid_in_capital: 1_380_000_000 },
+      { period: '2026/03', revenue: 165_000_000_000, ebitda: 14_000_000_000, net_income: -4_000_000_000, equity: 506_000_000_000, net_debt: 320_000_000_000, paid_in_capital: 1_380_000_000 }
+    ];
+    // TTM Net Kâr = -4B + 65B - (-3.5B) = +64.5 Milyar TL (Kış çeyreği 3A*4 yapılsaydı -16B zarar çıkardı!)
+    // TTM FAVÖK = 14B + 110B - 12B = 112 Milyar TL
+    const mult = calculateCompanyMultiples(seasonalHistory[2], 280.0, 1_380_000_000, 'AVIATION', null, 'TRY', null, seasonalHistory);
+    assert.ok(mult.multiples.pe.companyValue !== null && mult.multiples.pe.companyValue > 5.5 && mult.multiples.pe.companyValue < 6.5, `TTM F/K ~5.99x olmalıdır (Hesaplanan: ${mult.multiples.pe.companyValue})`);
+    assert.ok(mult.multiples.evEbitda.companyValue !== null && mult.multiples.evEbitda.companyValue > 6.0 && mult.multiples.evEbitda.companyValue < 6.5, `TTM FD/FAVÖK ~6.31x olmalıdır (Hesaplanan: ${mult.multiples.evEbitda.companyValue})`);
+  });
+
+  await t.test('VULN-10 (Düşük): calculateDuPont5Step ara yuvarlama kaybı olmadan doğrudan (Net Kâr / Özkaynak) ile birebir örtüşmeli', () => {
+    const item = {
+      period: '2025/12',
+      net_income: 133,
+      ebt: 190,
+      ebit: 230,
+      revenue: 1750,
+      total_assets: 1230,
+      equity: 310
+    };
+    const dupont = calculateDuPont5Step(item);
+    const exactRoe = Number(((133 / 310) * 100).toFixed(1)); // %42.9
+    assert.equal(dupont.calculatedRoe, exactRoe, `DuPont 5-adım çarpımı ara yuvarlama sapması olmadan tam ROE (%${exactRoe}) üretmelidir (Hesaplanan: ${dupont.calculatedRoe})`);
+  });
+
+  await t.test('VULN-12 (Orta): computeFairValueTrend bedelsiz sermaye artırımı (bölünme) öncesi Bin TL çeyreklerde 1000x ölçek kaybı yaşamamalı', () => {
+    // 2025/03 ve 2025/06'da ödenmiş sermaye 100.000 Bin TL (100M lot), 2025/09 ve 2025/12'de %400 bedelsiz sonrası 500.000 Bin TL (500M lot)
+    const splitHistoryBinTl = [
+      { period: '2025/03', revenue: 120_000, ebitda: 30_000, net_income: 20_000, equity: 200_000, total_assets: 350_000, paid_in_capital: 100_000, net_debt: 20_000 },
+      { period: '2025/06', revenue: 250_000, ebitda: 62_000, net_income: 42_000, equity: 222_000, total_assets: 380_000, paid_in_capital: 100_000, net_debt: 18_000 },
+      { period: '2025/09', revenue: 390_000, ebitda: 95_000, net_income: 65_000, equity: 245_000, total_assets: 410_000, paid_in_capital: 500_000, net_debt: 15_000 },
+      { period: '2025/12', revenue: 540_000, ebitda: 130_000, net_income: 90_000, equity: 270_000, total_assets: 440_000, paid_in_capital: 500_000, net_debt: 10_000 }
+    ];
+    const trend = computeFairValueTrend(splitHistoryBinTl, 'INDUSTRIAL', 500_000_000, 2.0);
+    for (const pt of trend) {
+      assert.ok(
+        pt.fairValue > 0.5 && pt.fairValue < 10.0,
+        `Bedelsiz bölünme öncesi çeyreklerde (${pt.period}) Bin TL ölçeği bozulup 0.001x'e çökmemelidir (FV: ${pt.fairValue})`
+      );
+    }
+  });
+
   // ============================================================================
   // BÖLÜM 2: 3 SEKTÖR ARKETİPİ STRES VE UÇ DURUM (EDGE-CASE) SENARYOLARI
   // ============================================================================
@@ -342,12 +387,15 @@ test('RED TEAM MATHEMATICAL AUDIT & INVARIANT TEST SUITE', async (t) => {
   // BÖLÜM 3: PROPERTY-BASED (FUZZING) VE MATEMATİKSEL DEĞİŞMEZLİK (INVARIANT) TESTLERİ
   // ============================================================================
 
-  await t.test('INVARIANT A (Birim Ölçek Homojenliği): f(1000 * x, "Tam TL") === f(x, "Bin TL") (50 Rastgele Bilanço)', () => {
+  await t.test('INVARIANT A (Birim Ölçek Homojenliği): f(1000 * x, "Tam TL") === f(x, "Bin TL") (50 Rastgele Bilanço - Küçük ve BIST30 Dev Ölçek Dahil)', () => {
     const rand = mulberry32(20261022);
 
     for (let i = 0; i < 50; i++) {
-      const shares = Math.round((50 + rand() * 500)) * 1_000_000;
-      const revBin = Math.round(500_000 + rand() * 20_000_000);
+      const shares = Math.round((50 + rand() * 1500)) * 1_000_000;
+      // Hem orta ölçekli hem de >= 250 Milyar TL cirolu (Bin TL'de >= 250_000_000) dev şirketleri test et
+      const revBin = i % 3 === 0
+        ? Math.round(260_000_000 + rand() * 300_000_000)
+        : Math.round(500_000 + rand() * 20_000_000);
       const ebitdaMargin = 0.08 + rand() * 0.25;
       const netMargin = 0.03 + rand() * 0.15;
       const ebitdaBin = Math.round(revBin * ebitdaMargin);
@@ -406,10 +454,17 @@ test('RED TEAM MATHEMATICAL AUDIT & INVARIANT TEST SUITE', async (t) => {
         `Deneme #${i}: Bin TL (${valBin.valuation.fair_value}) ve Tam TL (${valTam.valuation.fair_value}) içsel değerleri birebir aynı olmalıdır`
       );
 
-      const multBin = calculateCompanyMultiples('INVTEST', 'INDUSTRIAL', itemBin, price, shares, 'TRY');
-      const multTam = calculateCompanyMultiples('INVTEST', 'INDUSTRIAL', itemTam, price, shares, 'TRY');
-      assert.equal(multBin.multiples.pe.companyValue, multTam.multiples.pe.companyValue, `Deneme #${i}: F/K ölçekten bağımsız olmalıdır`);
+      const multBin = calculateCompanyMultiples(itemBin, price, shares, 'INDUSTRIAL', undefined, 'TRY');
+      const multTam = calculateCompanyMultiples(itemTam, price, shares, 'INDUSTRIAL', undefined, 'TRY');
+      assert.ok(multBin.multiples.pe.companyValue !== null && multBin.multiples.pe.companyValue > 0, `Deneme #${i}: F/K null olmamalıdır`);
+      assert.equal(multBin.multiples.pe.companyValue, multTam.multiples.pe.companyValue, `Deneme #${i}: F/K ölçekten bağımsız olmalıdır (${multBin.multiples.pe.companyValue} vs ${multTam.multiples.pe.companyValue})`);
       assert.equal(multBin.multiples.pb.companyValue, multTam.multiples.pb.companyValue, `Deneme #${i}: PD/DD ölçekten bağımsız olmalıdır`);
+      assert.equal(multBin.multiples.evEbitda.companyValue, multTam.multiples.evEbitda.companyValue, `Deneme #${i}: FD/FAVÖK ölçekten bağımsız olmalıdır`);
+
+      const ratioBin = FinancialRatioEngine.computeMetrics({ ticker: 'INVTEST', history: [itemBin], currentPrice: price, shareCount: shares, sector: 'INDUSTRIAL', currency: 'TRY' });
+      const ratioTam = FinancialRatioEngine.computeMetrics({ ticker: 'INVTEST', history: [itemTam], currentPrice: price, shareCount: shares, sector: 'INDUSTRIAL', currency: 'TRY' });
+      assert.equal(ratioBin.valuation.pe, ratioTam.valuation.pe, `Deneme #${i}: RatioEngine F/K ölçekten bağımsız olmalıdır`);
+      assert.equal(ratioBin.valuation.evEbitda, ratioTam.valuation.evEbitda, `Deneme #${i}: RatioEngine FD/FAVÖK ölçekten bağımsız olmalıdır`);
     }
   });
 

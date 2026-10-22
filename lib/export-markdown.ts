@@ -148,7 +148,11 @@ export function generateFullAuditMarkdown(report: SavedReport): string {
     latestItem,
     priceNum !== null && priceNum > 0 ? priceNum : 100,
     shareCount,
-    report.sector || 'INDUSTRIAL'
+    report.sector || 'INDUSTRIAL',
+    undefined,
+    ext.currency,
+    null,
+    sortedHistory
   );
   if (multiples && multiples.multiples) {
     md += `## BÖLÜM 6: PİYASA ÇARPANLARI VE SEKTÖREL BENCHMARK KIYASI\n\n`;
