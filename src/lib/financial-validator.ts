@@ -78,8 +78,12 @@ export class FinancialDataValidator {
     // 2. PASİF DENKLİĞİ (Aktif Toplamı == Pasif Toplamı)
     const currentL = copy.current_liabilities ?? 0;
     const longTermL = copy.long_term_liabilities ?? 0;
+    const splitLiab = currentL + longTermL;
+    const totalLiab = (splitLiab > 0)
+      ? splitLiab
+      : (copy.total_liabilities !== null && copy.total_liabilities !== undefined && copy.total_liabilities > 0 ? copy.total_liabilities : 0);
     const eq = copy.equity ?? 0;
-    const totalP = (currentL + longTermL + eq);
+    const totalP = totalLiab + eq;
 
     if (copy.total_assets !== null && copy.total_assets > 0 && totalP > 0 && sector !== 'BANKING' && sector !== 'INSURANCE' && sector !== 'FINANCIAL_SERVICES') {
       const diffP = Math.abs(copy.total_assets - totalP);

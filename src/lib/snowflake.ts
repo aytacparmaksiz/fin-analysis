@@ -84,7 +84,7 @@ export function computeSnowflakeAnalysis(params: {
     sector,
     currentPrice,
     fairValue,
-    discountPct,
+    discountPct: rawDiscountPct,
     marketMultiples,
     companyMultiples,
     financialHistory = [],
@@ -98,7 +98,11 @@ export function computeSnowflakeAnalysis(params: {
     earningsQuality
   } = params;
 
-  const isFinancial = sector === 'BANKING' || sector === 'INSURANCE';
+  const discountPct = (typeof rawDiscountPct === 'number' && !isNaN(rawDiscountPct))
+    ? rawDiscountPct
+    : (fairValue > 0 && currentPrice > 0 ? ((fairValue - currentPrice) / currentPrice) * 100 : 0);
+
+  const isFinancial = sector === 'BANKING' || sector === 'INSURANCE' || sector === 'FINANCIAL_SERVICES';
   const isAviation = sector === 'AVIATION';
   const isForeign = isAviation || params.latestData?.is_foreign_currency;
 
@@ -116,18 +120,26 @@ export function computeSnowflakeAnalysis(params: {
     ? validPeerPes.reduce((a, b) => a + b, 0) / validPeerPes.length
     : sectorPe * 0.95;
 
-  // ROE Hesabı
-  const currentRoe = Number(
-    latestData?.roe ??
-    (latestData?.net_income && latestData?.equity && latestData.equity > 0 ? (latestData.net_income / latestData.equity) * 100 : null) ??
-    (financialHistory.length > 0 && financialHistory[financialHistory.length - 1]?.equity > 0
-      ? (Number(financialHistory[financialHistory.length - 1].net_income) / Number(financialHistory[financialHistory.length - 1].equity)) * 100
-      : 22.0)
-  );
+  // ROE Hesabı (Negatif özkaynak / TTK 376 veya sıfır kârda hayalet +22.0% ROE engellenir)
+  const latestEqRaw = latestData?.equity ?? (financialHistory.length > 0 ? financialHistory[financialHistory.length - 1]?.equity : undefined);
+  const latestNetRaw = latestData?.net_income ?? (financialHistory.length > 0 ? financialHistory[financialHistory.length - 1]?.net_income : undefined);
+  const isInsolventEquity = latestEqRaw != null && Number(latestEqRaw) <= 0;
+
+  const currentRoe = (() => {
+    if (isInsolventEquity) return 0.0;
+    if (latestData?.roe != null && !isNaN(Number(latestData.roe))) return Number(latestData.roe);
+    if (latestNetRaw != null && latestEqRaw != null && Number(latestEqRaw) > 0) {
+      return (Number(latestNetRaw) / Number(latestEqRaw)) * 100;
+    }
+    return 22.0;
+  })();
 
   // Tarihsel Büyüme Oranları
   const historicalGrowth = (() => {
     if (!financialHistory || financialHistory.length < 2) {
+      if (isInsolventEquity || (latestNetRaw != null && Number(latestNetRaw) < 0)) {
+        return { revGrowth: 0.0, profitGrowth: -25.0, cagr3Y: -20.0, consecutiveProfits: false };
+      }
       return { revGrowth: 28.0, profitGrowth: 25.0, cagr3Y: 22.0, consecutiveProfits: true };
     }
     const sorted = [...financialHistory].sort((a, b) => String(a.period || '').localeCompare(String(b.period || '')));
@@ -141,26 +153,35 @@ export function computeSnowflakeAnalysis(params: {
 
     const r1 = Number(newest?.revenue ?? newest?.gross_written_premiums ?? 0);
     const r0 = Number(prevYearSameQ?.revenue ?? prevYearSameQ?.gross_written_premiums ?? 0);
-    const revGrowth = r1 > 0 && r0 > 0 ? ((r1 - r0) / r0) * 100 : 25.0;
+    const revGrowth = r0 > 0 ? ((r1 - r0) / r0) * 100 : (r1 > 0 ? 25.0 : 0.0);
 
     const n1 = Number(newest?.net_income ?? 0);
     const n0 = Number(prevYearSameQ?.net_income ?? 0);
-    const profitGrowth = n1 !== 0 && n0 !== 0 ? ((n1 - n0) / Math.abs(n0)) * 100 : 20.0;
+    const profitGrowth = n0 !== 0
+      ? ((n1 - n0) / Math.abs(n0)) * 100
+      : (n1 > 0 ? 100.0 : (n1 < 0 ? -100.0 : 0.0));
 
     // Son 4 çeyrek kârlılık sürekliliği
     const last4 = sorted.slice(-4);
     const consecutiveProfits = last4.every(d => Number(d.net_income ?? 0) > 0);
 
-    // 3 Yıllık CAGR Tahmini
+    // 3 Yıllık CAGR Tahmini (Yıllık veya çeyreklik seri uzunluğuna duyarlı)
     const oldest = sorted.length >= 8 ? sorted[sorted.length - 8] : sorted[0];
     const nOld = Number(oldest?.net_income ?? 0);
-    const yearsDiff = Math.max(1, (sorted.length - 1) / 4);
-    let cagr3Y = 20.0;
+    const yNew = Number(String(newest?.period || '').slice(0, 4));
+    const yOld = Number(String(oldest?.period || '').slice(0, 4));
+    const yearsDiff = (!isNaN(yNew) && !isNaN(yOld) && yNew > yOld)
+      ? (yNew - yOld)
+      : Math.max(1, (sorted.length - 1) / 4);
+
+    let cagr3Y = profitGrowth;
     if (nOld > 0 && n1 > 0) {
       cagr3Y = (Math.pow(n1 / nOld, 1 / yearsDiff) - 1) * 100;
+    } else if (n1 <= 0) {
+      cagr3Y = Math.min(0, profitGrowth);
     }
 
-    return { revGrowth, profitGrowth, cagr3Y: isNaN(cagr3Y) ? 20.0 : cagr3Y, consecutiveProfits };
+    return { revGrowth, profitGrowth, cagr3Y: isNaN(cagr3Y) ? 0.0 : cagr3Y, consecutiveProfits };
   })();
 
   const revGrowth = Number(
@@ -349,7 +370,9 @@ export function computeSnowflakeAnalysis(params: {
   const cashConv = netIncome > 0 ? (ocf / netIncome) * 100 : 0;
   const currentMargin = Number(
     latestData?.net_margin ??
-    (latestData?.revenue && latestData?.net_income && latestData.revenue > 0 ? (latestData.net_income / latestData.revenue) * 100 : 12.0)
+    (latestData?.revenue != null && latestData?.net_income != null && Number(latestData.revenue) > 0
+      ? (Number(latestData.net_income) / Number(latestData.revenue)) * 100
+      : (latestData?.net_income != null && Number(latestData.net_income) <= 0 ? 0.0 : 12.0))
   );
 
   const pastChecks: SnowflakeCheck[] = [
@@ -431,6 +454,7 @@ export function computeSnowflakeAnalysis(params: {
   const currentAssets = Number(latestData?.current_assets ?? 0);
   const currentLiabilities = Number(latestData?.current_liabilities ?? 1);
   const currentRatio = currentLiabilities > 0 ? currentAssets / currentLiabilities : 0;
+  const minCurrentRatio = sector === 'RETAIL' ? 0.55 : 1.0;
   const netDebt = Number(latestData?.net_debt ?? 0);
   const financialDebt = Number(latestData?.financial_debt ?? 0);
   const ebitda = Number(latestData?.ebitda ?? 0);
@@ -438,8 +462,9 @@ export function computeSnowflakeAnalysis(params: {
   const totalLiabilities = Number(latestData?.total_liabilities ?? (totalAssets - Number(latestData?.equity ?? 0)));
   const equityRatio = totalAssets > 0 ? (Number(latestData?.equity ?? 0) / totalAssets) * 100 : 0;
   const ndRatio = ebitda > 0 ? netDebt / ebitda : (netDebt <= 0 ? 0 : 5.0);
-  const ebit = Number(latestData?.operating_income ?? latestData?.ebit ?? ebitda * 0.8);
-  const interestExpense = Number(latestData?.interest_expenses ?? latestData?.finance_costs ?? 0);
+  const ebit = Number(latestData?.operating_profit ?? latestData?.operating_income ?? latestData?.ebit ?? ebitda * 0.8);
+  const rawInterestExp = latestData?.interest_expenses ?? latestData?.financing_expenses ?? latestData?.finance_costs ?? 0;
+  const interestExpense = Math.abs(Number(rawInterestExp));
   const icr = interestExpense > 0 ? ebit / interestExpense : 99.0;
 
   const healthChecks: SnowflakeCheck[] = [
@@ -447,23 +472,23 @@ export function computeSnowflakeAnalysis(params: {
     {
       id: 'short_term_liabilities',
       title: 'Kısa Vadeli Borçları Karşılama',
-      passed: isFinancial ? equityRatio >= 10.0 : currentRatio >= 1.0,
+      passed: !isInsolventEquity && (isFinancial ? equityRatio >= 10.0 : currentRatio >= minCurrentRatio),
       metricValue: isFinancial ? `Özkaynak Oranı: %${equityRatio.toFixed(1)}` : `Cari Oran: ${currentRatio.toFixed(2)}x`,
-      threshold: isFinancial ? '>= %10.0' : '>= 1.00x',
+      threshold: isFinancial ? '>= %10.0' : `>= ${minCurrentRatio.toFixed(2)}x`,
       detail: isFinancial
         ? `Özkaynakların toplam aktiflere oranı (%${equityRatio.toFixed(1)}) yasal karşılık ve emniyet sınırını karşılamaktadır.`
-        : (currentRatio >= 1.0
-            ? `Dönen varlıklar (${formatCurrency(currentAssets)}), kısa vadeli borçları (${formatCurrency(currentLiabilities)}) emniyetle karşılamaktadır (Cari Oran: ${currentRatio.toFixed(2)}x).`
-            : `Cari oran (${currentRatio.toFixed(2)}x) 1.0 seviyesinin altına inerek işletme sermayesi baskısı yaratmaktadır.`)
+        : (currentRatio >= minCurrentRatio
+            ? `Dönen varlıklar (${formatCurrency(currentAssets)}), kısa vadeli borçları (${formatCurrency(currentLiabilities)}) sektörel normlarla emniyetle karşılamaktadır (Cari Oran: ${currentRatio.toFixed(2)}x).`
+            : `Cari oran (${currentRatio.toFixed(2)}x) ${minCurrentRatio.toFixed(2)} seviyesinin altına inerek işletme sermayesi baskısı yaratmaktadır.`)
     },
     // 4.2 Long Term Liabilities
     {
       id: 'long_term_liabilities',
       title: 'Uzun Vadeli Yükümlülükleri Karşılama',
-      passed: isFinancial ? equityRatio >= 12.0 : (totalAssets / Math.max(1, totalLiabilities) >= 1.30 || currentAssets > currentLiabilities),
+      passed: !isInsolventEquity && (isFinancial ? equityRatio >= 12.0 : (totalAssets / Math.max(1, totalLiabilities) >= 1.30 || currentAssets > currentLiabilities)),
       metricValue: isFinancial ? `Özkaynak/Aktif: %${equityRatio.toFixed(1)}` : `Varlık/Borç: ${(totalAssets / Math.max(1, totalLiabilities)).toFixed(2)}x`,
       threshold: isFinancial ? '>= %12.0' : '>= 1.30x',
-      detail: (totalAssets / Math.max(1, totalLiabilities)) >= 1.30 || isFinancial
+      detail: (!isInsolventEquity && ((totalAssets / Math.max(1, totalLiabilities)) >= 1.30 || isFinancial))
         ? 'Şirketin toplam aktif gücü ve özkaynak tabanı, uzun vadeli borçları karşılamak için güçlü bir teminat sunmaktadır.'
         : 'Toplam borç yükü varlık tabanına oranla yüksek seyretmektedir.'
     },
@@ -471,25 +496,25 @@ export function computeSnowflakeAnalysis(params: {
     {
       id: 'debt_level',
       title: 'Muhafazakar Borçluluk Düzeyi',
-      passed: isFinancial ? equityRatio >= 12.0 : (netDebt <= 0 || ndRatio <= 2.5),
+      passed: !isInsolventEquity && (isFinancial ? equityRatio >= 12.0 : (netDebt <= 0 || ndRatio <= 2.5)),
       metricValue: isFinancial ? `Sermaye Gücü: %${equityRatio.toFixed(1)}` : (netDebt <= 0 ? 'Net Nakit Fazlası' : `Net Borç / FAVÖK: ${ndRatio.toFixed(1)}x`),
       threshold: isFinancial ? '>= %12.0' : '<= 2.5x veya Net Nakit',
-      detail: netDebt <= 0
+      detail: netDebt <= 0 && !isInsolventEquity
         ? 'Şirket kasasındaki nakit ve likit benzerleri toplam borçlarını aşarak net nakit pozisyonunda yer almaktadır.'
-        : (ndRatio <= 2.5
+        : (!isInsolventEquity && ndRatio <= 2.5
             ? `Net Borç / FAVÖK çarpanı (${ndRatio.toFixed(1)}x), muhafazakar ve güvenli tavanın (2.5x) altındadır.`
-            : `Net Borç / FAVÖK çarpanı (${ndRatio.toFixed(1)}x), kritik eşiğin (2.5x) üzerindedir.`)
+            : `Net Borç / FAVÖK çarpanı (${ndRatio.toFixed(1)}x), kritik eşiğin (2.5x) üzerindedir veya özkaynaklar negatiftir.`)
     },
     // 4.4 Reducing Debt
     {
       id: 'reducing_debt',
       title: 'Borç Azaltımı ve Finansal Denge',
-      passed: netDebt <= 0 || ndRatio <= 3.0 || financialDebt === 0,
+      passed: !isInsolventEquity && (netDebt <= 0 || ndRatio <= 3.0 || financialDebt === 0),
       metricValue: netDebt <= 0 ? 'Net Nakit Pozisyonu' : `Kontrollü Borç: ${ndRatio.toFixed(1)}x`,
       threshold: 'Kontrollü / Düşen Borç',
-      detail: netDebt <= 0
+      detail: netDebt <= 0 && !isInsolventEquity
         ? 'Şirket net nakit fazlasını korumakta olup borçlanma kaynaklı bir bilanço riski taşımamaktadır.'
-        : (ndRatio <= 3.0
+        : (!isInsolventEquity && ndRatio <= 3.0
             ? 'Finansal borç düzeyi operasyonel nakit üretimiyle dengeli ve kontrol edilebilir seviyede yönetilmektedir.'
             : 'Finansal borçluluk seviyesi yüksek kalmaya devam etmektedir.')
     },
@@ -497,12 +522,12 @@ export function computeSnowflakeAnalysis(params: {
     {
       id: 'debt_coverage',
       title: 'Nakit Akışıyla Borç Karşılama',
-      passed: isFinancial ? true : (netDebt <= 0 || (financialDebt > 0 && ocf / financialDebt >= 0.20)),
+      passed: isFinancial ? !isInsolventEquity : (!isInsolventEquity && (netDebt <= 0 || (financialDebt > 0 && ocf / financialDebt >= 0.20))),
       metricValue: netDebt <= 0 ? 'Borçsuz / Net Nakit' : `Nakit / Borç: %${financialDebt > 0 ? ((ocf / financialDebt) * 100).toFixed(0) : '100'}`,
       threshold: '>= %20 veya Net Nakit',
-      detail: netDebt <= 0
+      detail: netDebt <= 0 && !isInsolventEquity
         ? 'Şirket net nakit pozisyonunda olduğu için borç ödeme baskısı bulunmamaktadır.'
-        : (financialDebt > 0 && ocf / financialDebt >= 0.20
+        : (!isInsolventEquity && financialDebt > 0 && ocf / financialDebt >= 0.20
             ? `İşletme nakit akışı (${formatCurrency(ocf)}), toplam finansal borçların en az %20'sini doğrudan karşılamaktadır.`
             : 'İşletme nakit akışının finansal borçları karşılama oranı zayıftır.')
     },
@@ -510,10 +535,10 @@ export function computeSnowflakeAnalysis(params: {
     {
       id: 'interest_coverage',
       title: 'Faiz Karşılama Oranı',
-      passed: isFinancial ? true : (interestExpense <= 0 || icr >= 3.0),
+      passed: isFinancial ? !isInsolventEquity : (interestExpense <= 0 ? ebit >= 0 : icr >= 3.0),
       metricValue: interestExpense <= 0 ? 'Net Faiz Geliri' : `${icr.toFixed(1)}x`,
       threshold: '>= 3.0x veya Net Faiz Geliri',
-      detail: interestExpense <= 0 || icr >= 50.0
+      detail: (interestExpense <= 0 && ebit >= 0) || icr >= 50.0
         ? 'Şirketin net faiz gideri bulunmamakta veya faiz gelirleri finansman giderlerini aşmaktadır.'
         : (icr >= 3.0
             ? `Esas faaliyet kârı (${formatCurrency(ebit)}), finansman faiz giderlerini ${icr.toFixed(1)} katı ile emniyetle karşılamaktadır.`
@@ -674,8 +699,8 @@ export function computeSnowflakeAnalysis(params: {
   if (!isFinancial && ndRatio > 3.0) {
     risks.push(`Yüksek Borçluluk Baskısı: Net Borç / FAVÖK çarpanı (${ndRatio.toFixed(1)}x) emniyet sınırının (3.0x) üzerindedir.`);
   }
-  if (currentRatio < 1.0 && !isFinancial) {
-    risks.push(`Düşük Likidite: Cari oran (${currentRatio.toFixed(2)}x) 1.0 seviyesinin altında olup işletme sermayesi takibi gerektirir.`);
+  if (currentRatio < minCurrentRatio && !isFinancial) {
+    risks.push(`Düşük Likidite: Cari oran (${currentRatio.toFixed(2)}x) ${minCurrentRatio.toFixed(2)} seviyesinin altında olup işletme sermayesi takibi gerektirir.`);
   }
   if (pe != null && pe <= 0) {
     risks.push('Dönemsel Zarar: Şirket son finansal tablosunda net dönem zararı açıklamıştır.');

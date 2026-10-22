@@ -163,6 +163,14 @@ export function parseFinancialNumber(raw: any, options?: { isPercentage?: boolea
     return null;
   }
 
+  // 0. Bilimsel Gösterim (Scientific Notation: 1e-5, -2.5e+8, 1,5E-4) Koruması:
+  // Aşağıdaki tire temizleme adımı "1e-5" ifadesini "1e5" (10^10 kat hata) yapmamalıdır.
+  if (/^[+-]?\d+(?:[.,]\d+)?e[+-]?\d+$/i.test(str)) {
+    const sciVal = parseFloat(str.replace(',', '.'));
+    if (isNaN(sciVal) || !isFinite(sciVal)) return null;
+    return sciVal === 0 ? 0 : sciVal;
+  }
+
   // 1. Eksi Bakiye Tespiti (Muhasebe Standartları & OCR):
   // Parantez içi: (1.234), ( 1.234,50 ), (1.234) TL, TL (1.234), (TL 1.234), (15%)
   const hasParenthesis = /\([^(]*\d+[^(]*\)/.test(str);
@@ -809,9 +817,24 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
       item.equity = Number((item.total_assets * (1 - levPct / 100)).toFixed(0));
     }
 
-    // Tüm sektörler için ROE, ROA, Kaldıraç Oranı dinamik hesapla (Safe ROE koruması ve Aktif=Pasif sonrası kesin Kaldıraç)
+    // Tüm sektörler için ROE, ROA, Kaldıraç Oranı dinamik hesapla (Safe ROE koruması ve TTM mevsimsellik koruması)
     if (item.equity != null && item.net_income != null) {
-      const roeRes = safeRoe(item.net_income, item.equity, annualFactor);
+      let roeNetIncome = item.net_income;
+      let roeAnnualFactor = annualFactor;
+      const pKeyRoe = parsePeriodSortKey(item.period);
+      const yrRoe = Math.floor(pKeyRoe / 100);
+      const mRoe = pKeyRoe % 100;
+      if (mRoe !== 12 && mRoe !== 0 && yrRoe > 2000 && history.length > 2) {
+        const prevEndRoe = history.find((h: any) => parsePeriodSortKey(h.period) === (yrRoe - 1) * 100 + 12);
+        const prevMatchRoe = history.find((h: any) => parsePeriodSortKey(h.period) === (yrRoe - 1) * 100 + mRoe);
+        const vEndNet = parseFinancialNumber(prevEndRoe?.net_income);
+        const vMatchNet = parseFinancialNumber(prevMatchRoe?.net_income);
+        if (vEndNet !== null && vMatchNet !== null) {
+          roeNetIncome = item.net_income + vEndNet - vMatchNet;
+          roeAnnualFactor = 1;
+        }
+      }
+      const roeRes = safeRoe(roeNetIncome, item.equity, roeAnnualFactor);
       item.roe = roeRes.roe;
       if (roeRes.isInsolvent) item.solvency_warning = roeRes.warning;
     }
@@ -1162,6 +1185,10 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
         if (prevYearEnd && prevYearMatch) {
           const getCleanNopat = (h: any): number | null => {
             let hOp = parseFinancialNumber(h.operating_profit ?? h.operating_income);
+            if (hOp === null || hOp === 0) {
+              const hEb = parseFinancialNumber(h.ebitda);
+              if (hEb !== null && hEb !== 0) hOp = hEb;
+            }
             const hGross = parseFinancialNumber(h.gross_profit);
             const hGAndA = parseFinancialNumber(h.general_administrative_expenses);
             const hMkt = parseFinancialNumber(h.marketing_sales_distribution_expenses);
@@ -2175,7 +2202,18 @@ export function computeFairValueTrend(
       ? currentPrice
       : parseFinancialNumber(item?.share_price);
 
-    const unitScale = (item?.is_thousands === true || (item?.total_assets && Math.abs(item.total_assets) < 500_000_000)) ? 1000 : 1;
+    const itemCurr = String(item?.currency || '').trim().toLowerCase();
+    const itemPaidCap = Math.abs(parseFinancialNumber(item?.paid_in_capital) ?? 0);
+    const isItemExplicitTam = item?.is_thousands === false ||
+      itemCurr.includes('tam') ||
+      itemCurr.includes('birim') ||
+      (itemPaidCap > 0 && effectiveShareCount > 0 && Math.abs((itemPaidCap / effectiveShareCount) - 1.0) < 0.25);
+    const unitScale = !isItemExplicitTam && (
+      item?.is_thousands === true ||
+      itemCurr.includes('bin') ||
+      itemCurr.includes('thousand') ||
+      (item?.total_assets && Math.abs(item.total_assets) < 500_000_000 && (itemPaidCap === 0 || Math.abs((itemPaidCap / effectiveShareCount) - 0.001) < 0.0005))
+    ) ? 1000 : 1;
 
     // TTM (Son 12 Ay) Hesabı: Düz çarpma (3A*4, 6A*2) KESİNLİKLE yasaktır, mevsimselliği bozar!
     const computePointTtm = (field: string): number => {
@@ -2196,7 +2234,7 @@ export function computeFairValueTrend(
         const vMatch = parseFinancialNumber(prevYearMatchItem?.[field]);
         if (vEnd !== null && vMatch !== null) {
           const ttmVal = currentVal + vEnd - vMatch;
-          if (ttmVal > 0) return ttmVal * unitScale;
+          if (field !== 'revenue' || ttmVal > 0) return ttmVal * unitScale;
         }
       }
 
@@ -3127,9 +3165,17 @@ export function computeSectorValuationAndDrivers(
     }
   }
 
+  const latestMonth = parsePeriodSortKey(latest?.period) % 100;
+  const prevMonth = parsePeriodSortKey(prevYearItem?.period) % 100;
+  const isCrossQuarterComparison = latestMonth !== prevMonth;
+  const latestFlowFactor = isCrossQuarterComparison ? getAnnualizationFactor(latest?.period) : 1;
+  const prevFlowFactor = isCrossQuarterComparison ? getAnnualizationFactor(prevYearItem?.period) : 1;
+
   if (!hasPresentationRev) {
-    const latestRev = parseFinancialNumber(latest?.revenue ?? latest?.written_premiums);
-    const prevRev = parseFinancialNumber(prevYearItem?.revenue ?? prevYearItem?.written_premiums);
+    const rawLatestRev = parseFinancialNumber(latest?.revenue ?? latest?.written_premiums);
+    const rawPrevRev = parseFinancialNumber(prevYearItem?.revenue ?? prevYearItem?.written_premiums);
+    const latestRev = rawLatestRev !== null ? rawLatestRev * latestFlowFactor : null;
+    const prevRev = rawPrevRev !== null ? rawPrevRev * prevFlowFactor : null;
 
     if (latestRev !== null && prevRev !== null && prevRev > 0 && latestRev > 0) {
       if (isCagr && yearDiff > 1) {
@@ -3163,8 +3209,10 @@ export function computeSectorValuationAndDrivers(
   }
 
   if (!hasPresentationNet) {
-    const latestNet = parseFinancialNumber(latest?.net_income);
-    const prevNet = parseFinancialNumber(prevYearItem?.net_income);
+    const rawLatestNet = parseFinancialNumber(latest?.net_income);
+    const rawPrevNet = parseFinancialNumber(prevYearItem?.net_income);
+    const latestNet = rawLatestNet !== null ? rawLatestNet * latestFlowFactor : null;
+    const prevNet = rawPrevNet !== null ? rawPrevNet * prevFlowFactor : null;
 
     if (latestNet !== null && prevNet !== null && prevNet !== 0) {
       if (isCagr && yearDiff > 1 && latestNet > 0 && prevNet > 0) {
@@ -3261,7 +3309,7 @@ export function computeSectorValuationAndDrivers(
           const vMatch = parseFinancialNumber(prevYearMatch?.[field]);
           if (vEnd !== null && vMatch !== null) {
             const ttmVal = rawVal + vEnd - vMatch;
-            if (ttmVal > 0) return ttmVal;
+            if (field !== 'revenue' || ttmVal > 0) return ttmVal;
           }
         }
         return rawVal * periodAnnualFactor;
@@ -4672,9 +4720,12 @@ export function calculateCompanyMultiples(
     (eqScaleSample > 0 && eqScaleSample < 250_000_000 && (revScaleSample === 0 || revScaleSample < 250_000_000) && safeShares >= 1_000_000);
 
   // Eğer veriler zaten Tam TL ise asla 1000 ile çarparak Trilyonlara şişirme
-  const isAlreadyTamTl = (equity !== null && Math.abs(equity) >= 250_000_000) || 
-                         (revenue !== null && Math.abs(revenue) >= 250_000_000) ||
-                         (normCurr === 'tl' || normCurr === 'try' || normCurr.includes('tam'));
+  const isExplicitTam = normCurr.includes('tam') || normCurr.includes('birim');
+  const isAlreadyTamTl =
+    (paidCapSample > 0 && safeShares > 0 && Math.abs((paidCapSample / safeShares) - 1.0) < 0.25) ||
+    (equity !== null && Math.abs(equity) >= 250_000_000) ||
+    (revenue !== null && Math.abs(revenue) >= 250_000_000) ||
+    isExplicitTam;
 
   let unitScale = 1;
   if (!isAlreadyTamTl) {

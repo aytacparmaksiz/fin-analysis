@@ -326,7 +326,7 @@ export const SECTOR_ARCHETYPE_CONFIGS: Record<FinancialArchetype, SectorArchetyp
     name: 'GYO & Holdingler',
     badge: 'Holding / GYO & NAD İskontosu Modu',
     description: 'Holdinglerde tekil F/K kullanımı yanıltıcıdır. Net Aktif Değeri (NAD / NAV), PD/NAD İskontosu/Primi ve iştirak temettü/kâr katkısı esastır.',
-    disabledMetrics: [],
+    disabledMetrics: ['ev_ebitda', 'ev_sales'],
     featuredMetrics: [
       { key: 'nav_discount', name: 'Net Aktif Değeri (NAD / NAV) İskontosu', unit: '%', description: 'Piyasa değeri vs portföy net aktif değeri iskonto cazibesi (>%25-%35)' },
       { key: 'pb_nav', name: 'PD/NAD Oranı', unit: 'x', description: 'Portföy değerleme çarpanı' },

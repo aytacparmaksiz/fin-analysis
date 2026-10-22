@@ -154,12 +154,12 @@ export class FinancialRatioEngine {
     const paidCapSample = Math.abs(latest?.paid_in_capital ?? 0);
 
     const isClearlyThousands =
-      (paidCapSample > 0 && paidCapSample < 10_000_000 && safeShares >= 5_000_000) ||
-      (eqSample > 0 && eqSample < 250_000_000 && (revSample === 0 || revSample < 250_000_000) && safeShares >= 1_000_000);
+      (paidCapSample > 0 && paidCapSample < 10_000_000 && safeShares >= 5_000_000 && Math.abs((paidCapSample * 1000) / safeShares - 1.0) < 0.25) ||
+      (paidCapSample === 0 && eqSample > 0 && eqSample < 50_000_000 && (eqSample / safeShares) < 0.25 && (revSample === 0 || (revSample / safeShares) < 0.50) && safeShares >= 10_000_000);
 
     const isAlreadyTamTl = (eqSample >= 250_000_000) || 
                            (revSample >= 250_000_000) ||
-                           (normCurr === 'tl' || normCurr === 'try' || normCurr.includes('tam'));
+                           ((normCurr === 'tl' || normCurr === 'try' || normCurr.includes('tam')) && !isClearlyThousands);
 
     const unitScale = (!isAlreadyTamTl && (normCurr.includes('bin') || normCurr.includes('thousand') || isClearlyThousands)) ? 1000 : 1;
 
@@ -194,7 +194,18 @@ export class FinancialRatioEngine {
     }
 
     const workingCapital = (curAssets !== null && curLiab !== null) ? curAssets - curLiab : null;
-    const investedCapital = (equityTl !== null && netDebtTl !== null) ? Math.max(0, equityTl + netDebtTl) : null;
+    let investedCapital: number | null = null;
+    if (equityTl !== null && netDebtTl !== null) {
+      if (netDebtTl > 0) {
+        investedCapital = Math.max(0, equityTl + netDebtTl);
+      } else if (equityTl > 0) {
+        const minOperatingCash = (ttm.revenue !== null && ttm.revenue > 0) ? ttm.revenue * 0.02 : (cashTl || 0) * 0.25;
+        const excessCash = Math.max(0, (cashTl || 0) - minOperatingCash);
+        investedCapital = Math.max(equityTl * 0.5, equityTl - excessCash);
+      } else {
+        investedCapital = 0;
+      }
+    }
 
     const balanceSheet: BalanceSheetMetrics = {
       currentAssets: curAssets,
@@ -277,7 +288,7 @@ export class FinancialRatioEngine {
       roic = parseFinancialNumber(latest?.roic);
     }
 
-    const wacc = parseFinancialNumber(latest?.wacc) ?? (sector === 'INSURANCE' ? 35.1 : 29.6);
+    const wacc = parseFinancialNumber((latest as any)?.benchmark_wacc ?? ((latest as any)?.is_tms29 ? (latest as any)?.real_wacc : null) ?? latest?.wacc) ?? (sector === 'INSURANCE' ? 35.1 : 29.6);
     const evaSpread = (roic !== null && wacc !== null) ? Number((roic - wacc).toFixed(1)) : null;
 
     const margins: ProfitabilityAndMargins = {
@@ -458,7 +469,7 @@ export class FinancialRatioEngine {
       };
     }
 
-    const cashConversion = netIncomeTl !== 0 ? Number((ocfTl / Math.abs(netIncomeTl)).toFixed(2)) : null;
+    const cashConversion = netIncomeTl > 0 ? Number((ocfTl / netIncomeTl).toFixed(2)) : null;
     const sloanAccrual = (totalAssetsTl && totalAssetsTl > 0)
       ? Number(((netIncomeTl - ocfTl) / totalAssetsTl).toFixed(3))
       : null;
@@ -493,12 +504,22 @@ export class FinancialRatioEngine {
       };
     }
 
+    if (ocfTl > 0 && netIncomeTl <= 0) {
+      return {
+        cashConversionRatio: null,
+        sloanAccrualRatio: sloanAccrual,
+        status: 'LOSS_BUFFER',
+        badgeTitle: '💡 Nakit Tamponlu Zarar',
+        evaluationText: `Muhasebesel net zarar bulunmasına rağmen operasyonel nakit akışı pozitiftir. Şirketin ana operasyonu nakit üretmeye devam etmektedir.`
+      };
+    }
+
     return {
-      cashConversionRatio: cashConversion,
+      cashConversionRatio: null,
       sloanAccrualRatio: sloanAccrual,
-      status: 'LOSS_BUFFER',
-      badgeTitle: '💡 Nakit Tamponlu Zarar',
-      evaluationText: `Muhasebesel net zarar bulunmasına rağmen operasyonel nakit akışı pozitiftir. Şirketin ana operasyonu nakit üretmeye devam etmektedir.`
+      status: 'CRITICAL_RISK',
+      badgeTitle: '🚨 Çift Yönlü Nakit & Zarar Baskısı',
+      evaluationText: `Şirket hem muhasebesel net zarar açıklamakta hem de operasyonel faaliyetlerinden nakit tüketmektedir (OCF <= 0). İki negatif büyüklüğün oranı analitik olarak anlamsızdır (N/A); likidite ve işletme sermayesi riski yüksektir.`
     };
   }
 }
