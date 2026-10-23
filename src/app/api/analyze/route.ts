@@ -281,8 +281,8 @@ RAPOR FORMATI KESİNLİKLE ŞU BAŞLIKLARLA VE YAPIDA OLMALIDIR:
     const totalCapexVal = latestItem?.total_investing_outflow;
     const netIncomeVal = latestItem?.net_income;
 
-    const shareCountNum = Number(extractedData?.shares_outstanding ?? extractedData?.share_count) || 180000000;
-    const currentPriceNum = Number(activePrice) || 100;
+    const shareCountNum = Number(extractedData?.shares_outstanding ?? extractedData?.share_count) || 0; // Pay adedi yoksa uydurma değer kullanılmaz
+    const currentPriceNum = Number(activePrice) || 0; // Fiyat yoksa uydurma değer kullanılmaz
     const unifiedMetrics = FinancialRatioEngine.computeMetrics({
       ticker: resolvedTicker,
       history: sortedHist,

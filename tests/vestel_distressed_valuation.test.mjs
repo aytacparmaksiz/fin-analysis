@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+﻿import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   computeSectorValuationAndDrivers,
@@ -149,11 +149,12 @@ describe('VESBE & Distressed Loss-Making Valuation Stress Test Suite', () => {
 
     const { valuation } = result;
     assert.equal(valuation.fair_value, 3.38);
-    assert.equal(valuation.bear_price, 2.16);
-    assert.equal(valuation.bull_price, 5.23);
+    // Ayı/Boğa artık sabit katsayı değil, zarar yolu senaryosundan (zarar +%25 / -%50) türetilir.
+    assert.ok(valuation.bear_price > 0 && valuation.bull_price > 0, 'Senaryo fiyatları pozitif olmalı');
+    assert.ok(valuation.bear_price < valuation.bull_price, 'Ayı < Boğa olmalı');
 
     // Bear price MUST be strictly below current market price
-    assert.ok(valuation.bear_price < marketPrice, `Bear price (${valuation.bear_price}) must be strictly below market price (${marketPrice})`);
+    assert.ok(valuation.bear_price <= valuation.fair_value && valuation.bear_price < marketPrice, `Bear price (${valuation.bear_price}) must be strictly below market price (${marketPrice})`);
     assert.ok(valuation.bear_price <= valuation.fair_value, `Bear price (${valuation.bear_price}) must be <= fair value (${valuation.fair_value})`);
     assert.ok(valuation.bull_price >= valuation.fair_value, `Bull price (${valuation.bull_price}) must be >= fair value (${valuation.fair_value})`);
   });

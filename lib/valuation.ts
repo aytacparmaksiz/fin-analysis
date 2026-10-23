@@ -4120,9 +4120,34 @@ export function computeSectorValuationAndDrivers(
       const nG = netGrowth / 100;
 
       if (ebF <= 0) {
-        // Operasyonel zarardaki sıkıntılı şirketlerde (Distressed Turnaround) tasfiye/erozyon stres katsayıları
-        bearPrice = Number((fairValue * 0.64).toFixed(2));
-        bullPrice = Number((fairValue * 1.548).toFixed(2));
+        // Operasyonel zarardaki şirketler (Distressed / Turnaround): Piyasa pratiği (sell-side ve değerleme literatürü),
+        // zarardaki şirkette çarpan değil VARLIK TABANI ve NAKİT YAKIM HIZI üzerinden senaryo kurar:
+        //  - Ayı: Zarar %25 derinleşir (özkaynak daha hızlı erir) -> defter değeri ve hak edilen PD/DD düşer.
+        //  - Boğa: Zarar yarıya iner (toparlanma) -> özkaynak erozyonu yavaşlar.
+        // Aynı distressed modeli farklı zarar yollarıyla yeniden çalıştırır; fiyata sabit katsayı UYGULANMAZ.
+        const runDistressed = (lossFactor: number): number | null => {
+          const res = computeIndustrialFairValue({
+            ebitdaFull: ebF,
+            netFull: ntF < 0 ? ntF * lossFactor : ntF,
+            totalEquityFull: eqF,
+            netDebt: nDb,
+            leaseLiabilities: lLi,
+            minorityInterests: mIn,
+            effectiveShareCount,
+            targetMultipleNum,
+            clampedRevGrowth: 0,
+            clampedNetGrowth: 0,
+            currentRoic: cRoic,
+            currentWacc: cWacc,
+            roe,
+            currentRatio: parseFinancialNumber(latest?.current_ratio)
+          });
+          return res.fairValue != null && res.fairValue > 0 ? res.fairValue : null;
+        };
+        const bearD = runDistressed(1.25);
+        const bullD = runDistressed(0.5);
+        bearPrice = Math.min(bearD ?? fairValue, fairValue);
+        bullPrice = Math.max(bullD ?? fairValue, fairValue);
       } else {
         // Ayı Senaryosu: Hedef Çarpan -%15, Ciro Büyümesi -8 puan
         const bearRes = computeIndustrialFairValue({
@@ -4141,7 +4166,7 @@ export function computeSectorValuationAndDrivers(
         roe,
         currentRatio: parseFinancialNumber(latest?.current_ratio)
       });
-      bearPrice = bearRes.fairValue != null ? bearRes.fairValue : Number((fairValue * 0.70).toFixed(2));
+      bearPrice = bearRes.fairValue != null ? bearRes.fairValue : fairValue;
 
       // Boğa Senaryosu: Hedef Çarpan +%15, Ciro Büyümesi +8 puan
       const bullRes = computeIndustrialFairValue({
@@ -4160,12 +4185,22 @@ export function computeSectorValuationAndDrivers(
         roe,
         currentRatio: parseFinancialNumber(latest?.current_ratio)
       });
-      bullPrice = bullRes.fairValue != null ? bullRes.fairValue : Number((fairValue * 1.30).toFixed(2));
+      bullPrice = bullRes.fairValue != null ? bullRes.fairValue : fairValue;
       }
     } else {
-      // Finansal / Holding / GYO Sektörleri için Senaryo
-      bearPrice = Number((fairValue * 0.75).toFixed(2));
-      bullPrice = Number((fairValue * 1.25).toFixed(2));
+      // Finansal / Holding / GYO: Değer = ileri defter/NAD x hedef çarpan olduğundan senaryo, çarpanın
+      // (P/B, NAD primi/iskontosu) +-%15 oynamasıyla kurulur; sektörün clamp sınırları korunur.
+      // Sabit fiyat katsayısı yoktur: oran modelin kendi formülünden türetilir.
+      const clampMult = (m: number): number => {
+        if (sector === 'HOLDING') return Math.max(0.40, Math.min(1.0, m));
+        if (sector === 'REIT') return Math.max(0.50, Math.min(1.0, m));
+        return m;
+      };
+      const baseM = clampMult(targetMultipleNum);
+      const bearRatio = baseM > 0 ? clampMult(targetMultipleNum * 0.85) / baseM : 1;
+      const bullRatio = baseM > 0 ? clampMult(targetMultipleNum * 1.15) / baseM : 1;
+      bearPrice = Number((fairValue * Math.min(1, bearRatio)).toFixed(2));
+      bullPrice = Number((fairValue * Math.max(1, bullRatio)).toFixed(2));
     }
   }
   const marginOfSafety = discountPct > 0 ? discountPct : 0;

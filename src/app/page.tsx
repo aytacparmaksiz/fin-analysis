@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -2019,6 +2019,52 @@ export default function ValuationTerminal({
     }
   }, [step, activeReport?.ticker, analyzedTab, mounted]);
 
+  // Eski şemalı (ana ortaklık özkaynağı / azınlık payı alanı olmayan) kayıtlı analizleri, PDF yüklemeden,
+  // resmi BIST/İş Yatırım mali tablolarını yeniden çekerek arka planda güncel motorla yeniler.
+  // Faaliyet raporu / sunum kaynaklı nitel alanlar (karne, güçlü-zayıf yönler vb.) korunur.
+  const staleRefreshStarted = useRef(false);
+  useEffect(() => {
+    if (!mounted || staleRefreshStarted.current || savedReports.length === 0) return;
+    const stale = savedReports.filter(r => {
+      const h = r.extractedData?.financial_history;
+      if (!Array.isArray(h) || h.length === 0) return false;
+      return h[h.length - 1]?.parent_equity === undefined;
+    });
+    if (stale.length === 0) return;
+    staleRefreshStarted.current = true;
+    (async () => {
+      for (const rep of stale) {
+        try {
+          const res = await fetch(`/api/bist?ticker=${encodeURIComponent(rep.ticker)}&t=${Date.now()}`, { cache: 'no-store' });
+          if (!res.ok) continue;
+          const bist = await res.json();
+          if (!bist || !Array.isArray(bist.financial_history) || bist.financial_history.length === 0) continue;
+          const refreshed = reconcileSavedReportWithLatestEngine({
+            ...rep,
+            price: bist.current_price ? String(bist.current_price) : rep.price,
+            extractedData: {
+              ...(rep.extractedData || {}),
+              financial_history: bist.financial_history,
+              shares_outstanding: bist.shares_outstanding ?? rep.extractedData?.shares_outstanding,
+            },
+          });
+          setSavedReports(prev => {
+            const next = prev.map(r => (r.id === rep.id ? refreshed : r));
+            try { localStorage.setItem('fin_valuation_reports', JSON.stringify(next)); } catch {}
+            return next;
+          });
+          fetch('/api/reports', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ report: refreshed }),
+          }).catch(() => {});
+        } catch (err) {
+          console.warn('Kayıtlı analiz yenileme atlandı:', rep.ticker, err);
+        }
+      }
+    })();
+  }, [mounted, savedReports]);
+
   const saveReport = async (newReport: SavedReport) => {
     // Aynı hissenin aynı çeyreklik dönem raporu varsa güncelle; farklı çeyrekse (örn: 2026/06 ve 2026/09) hafızada birlikte sakla
     const isSameQuarter = (a: SavedReport, b: SavedReport) => {
@@ -2030,6 +2076,33 @@ export default function ValuationTerminal({
       }
       return sameTicker;
     };
+
+    // Analiz Geçmişi (yalnızca görüntüleme): Eski rapor silinmeden önce özet bir kayıt (snapshot) olarak
+    // yeni raporun extractedData.analysis_history alanına eklenir. Değerleme motoru bu alanı ASLA okumaz;
+    // yeni rapor eski kayıtlardan etkilenmez, sadece trendi göstermek için saklanır.
+    const sameTickerPrev = savedReports.filter(r => (r.ticker || '').trim().toUpperCase() === (newReport.ticker || '').trim().toUpperCase() && r.id !== newReport.id);
+    const toSnapshot = (r: SavedReport) => ({
+      id: r.id,
+      period: r.period || null,
+      createdAt: r.createdAt,
+      price: r.price,
+      fairValue: r.fairValue || null,
+      score: r.score || null,
+      decision: r.decision || null,
+    });
+    const snapMap = new Map<string, any>();
+    for (const r of sameTickerPrev) {
+      for (const s of (r.extractedData?.analysis_history || [])) snapMap.set(s.id, s);
+      snapMap.set(r.id, toSnapshot(r));
+    }
+    for (const s of (newReport.extractedData?.analysis_history || [])) snapMap.set(s.id, s);
+    snapMap.delete(newReport.id);
+    const analysisHistory = Array.from(snapMap.values())
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 24);
+    if (analysisHistory.length > 0) {
+      newReport = { ...newReport, extractedData: { ...(newReport.extractedData || {}), analysis_history: analysisHistory } };
+    }
 
     const updated = [newReport, ...savedReports.filter(r => r.id !== newReport.id && !isSameQuarter(r, newReport))];
     setSavedReports(updated);
@@ -2281,7 +2354,7 @@ export default function ValuationTerminal({
         throw new Error(`${targetTicker} için BIST mali tablosu bulunamadı.`);
       }
 
-      const livePriceStr = bistData.current_price ? bistData.current_price.toString() : (price || '100');
+      const livePriceStr = bistData.current_price ? bistData.current_price.toString() : (price || '');
       if (bistData.current_price) {
         setPrice(livePriceStr);
       }
@@ -3050,7 +3123,7 @@ export default function ValuationTerminal({
 
   // Zaman Serisi Grafik Verisi (eskiden yeniye, kronolojik)
   const rawChartData = currentExtractedData?.financial_history || [];
-  const refMarketPrice = parseFloat(activeReport?.price || price || String(currentExtractedData?.current_price || currentExtractedData?.valuation?.current_price || '118.50')) || 118.50;
+  const refMarketPrice = parseFloat(activeReport?.price || price || String(currentExtractedData?.current_price || currentExtractedData?.valuation?.current_price || '')) || 0;
   const chartData = sanitizeHistoryData(
     rawChartData, 
     currentExtractedData?.debt_and_interest,
@@ -3901,7 +3974,7 @@ export default function ValuationTerminal({
   }, [baseDrivers, customDrivers]);
 
   // Güncel ve düzeltilmiş değerleme motoru (dynamicValuationResult.valuation) her zaman birincil kaynaktır
-  const currentMarketPrice = parseFloat(activeReport?.price || price || '118.50') || 118.50;
+  const currentMarketPrice = parseFloat(activeReport?.price || price || '') || 0;
   const valuationInfo: ValuationMetrics = {
     ...(currentExtractedData?.valuation || {}),
     ...dynamicValuationResult.valuation,
@@ -3970,7 +4043,7 @@ export default function ValuationTerminal({
 
   const unifiedMetrics: UnifiedFinancialMetrics | null = useMemo(() => {
     if (!chartData || chartData.length === 0) return null;
-    const sc = parseFinancialNumber(currentExtractedData?.shares_outstanding ?? currentExtractedData?.share_count) ?? 180000000;
+    const sc = parseFinancialNumber(currentExtractedData?.shares_outstanding ?? currentExtractedData?.share_count) ?? 0;
     return FinancialRatioEngine.computeMetrics({
       ticker: currentTicker || 'BIST',
       history: chartData,
@@ -3997,7 +4070,7 @@ export default function ValuationTerminal({
   }, [unifiedMetrics, latestPeriodItem, previousPeriodItem, currentSector]);
 
   const companyMultiplesData = useMemo(() => {
-    const sc = parseFinancialNumber(currentExtractedData?.shares_outstanding ?? currentExtractedData?.share_count) ?? 180000000;
+    const sc = parseFinancialNumber(currentExtractedData?.shares_outstanding ?? currentExtractedData?.share_count) ?? 0;
     return calculateCompanyMultiples(latestPeriodItem, valuationInfo.current_price || currentMarketPrice, sc, currentSector, marketMultiples, currentExtractedData?.currency, null, chartData);
   }, [latestPeriodItem, valuationInfo.current_price, currentMarketPrice, currentExtractedData?.shares_outstanding, currentExtractedData?.share_count, currentSector, marketMultiples, currentExtractedData?.currency, chartData]);
 

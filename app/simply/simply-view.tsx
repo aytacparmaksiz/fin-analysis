@@ -732,7 +732,7 @@ export default function SimplyView({
   // Çeyreklik Çarpan Trendi Verisi (F/K, PD/DD ve Sektör Referans Çizgileri)
   const quarterlyMultiplesData = useMemo(() => {
     if (!chartData || chartData.length === 0) return [];
-    const shares = parseFinancialNumber(report.extractedData?.shares_outstanding ?? report.extractedData?.share_count) ?? 180000000;
+    const shares = parseFinancialNumber(report.extractedData?.shares_outstanding ?? report.extractedData?.share_count) ?? 0;
     const sectorPe = marketMultiples?.sector_averages?.pe ?? companyMultiplesData?.benchmark?.peMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pe ?? 8.5;
     const sectorPb = marketMultiples?.sector_averages?.pb ?? companyMultiplesData?.benchmark?.pbMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pb ?? 2.1;
 
@@ -1943,6 +1943,41 @@ export default function SimplyView({
                 </div>
               </div>
 
+              {/* Analiz Geçmişi: yalnızca bilgi amaçlıdır, değerleme motoruna girdi OLMAZ */}
+              {Array.isArray(report.extractedData?.analysis_history) && report.extractedData.analysis_history.length > 0 && (
+                <details className="rounded-xl border border-[#232834] bg-[#151821] px-4 py-3 text-sm">
+                  <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-slate-400 select-none">
+                    Önceki Analizler ({report.extractedData.analysis_history.length})
+                  </summary>
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full text-xs font-mono">
+                      <thead>
+                        <tr className="text-slate-500 text-left">
+                          <th className="py-1 pr-4 font-medium">Dönem</th>
+                          <th className="py-1 pr-4 font-medium">Tarih</th>
+                          <th className="py-1 pr-4 font-medium">Fiyat</th>
+                          <th className="py-1 pr-4 font-medium">Adil Değer</th>
+                          <th className="py-1 pr-4 font-medium">Puan</th>
+                          <th className="py-1 font-medium">Karar</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {report.extractedData.analysis_history.map((h: any) => (
+                          <tr key={h.id} className="border-t border-[#232834] text-slate-300">
+                            <td className="py-1.5 pr-4">{h.period || '—'}</td>
+                            <td className="py-1.5 pr-4">{h.createdAt ? new Date(h.createdAt).toLocaleDateString('tr-TR') : '—'}</td>
+                            <td className="py-1.5 pr-4">{h.price || '—'}</td>
+                            <td className="py-1.5 pr-4">{h.fairValue || '—'}</td>
+                            <td className="py-1.5 pr-4">{h.score || '—'}</td>
+                            <td className="py-1.5">{h.decision || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              )}
+
               {/* 30 Kriter Kontrol Paneli (Açılır - Kapanır Liste) */}
               {showSnowflakeChecklist && (
                 <div className="p-4 sm:p-5 bg-[#14171e] rounded-xl border border-[#2b3240] space-y-4 animate-in fade-in duration-300">
@@ -2287,7 +2322,7 @@ export default function SimplyView({
                               {comp.ticker}
                             </div>
                             <div className="text-sm text-slate-400 font-mono">
-                              Skor: {comp.score || 75}/100
+                              Skor: {comp.score != null ? `${comp.score}/100` : '—'}
                             </div>
                           </div>
                         </div>
