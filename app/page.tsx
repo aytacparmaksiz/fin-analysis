@@ -105,6 +105,17 @@ import { extractSmartFinancialText, extractSmartDocumentText, splitScannedPdfInt
  * Böylece motor veya formüllerde yapılan tüm güncellemeler, kullanıcının daha önce kaydettiği
  * tüm analizlerin özet kartlarına (Hisse Tarama, Akış vb.) anında ve otomatik olarak yansır.
  */
+// createdAt "23 Ekim 2026 12:30" gibi yerelleştirilmiş metin olabildiğinden Date() ile ayrıştırılamaz (NaN).
+// Sıralama için güvenilir zaman damgası: extractedData.saved_at (ISO) > updatedAt (bulut) > createdAt.
+function reportTimestamp(r: any): number {
+  const cands = [r?.extractedData?.saved_at, r?.updatedAt, r?.createdAt];
+  for (const c of cands) {
+    const ms = typeof c === 'string' ? Date.parse(c) : NaN;
+    if (!Number.isNaN(ms)) return ms;
+  }
+  return 0;
+}
+
 function reconcileSavedReportWithLatestEngine(rep: SavedReport): SavedReport {
   if (!rep) return rep;
   const upperTicker = (rep.ticker || '').toUpperCase();
@@ -1903,7 +1914,7 @@ export default function ValuationTerminal({
             if (json.isCloudConfigured && Array.isArray(json.reports) && json.reports.length > 0) {
               const tickerMap = new Map<string, SavedReport>();
               const allReports = [...localData, ...json.reports].sort(
-                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                (a, b) => reportTimestamp(b) - reportTimestamp(a)
               );
               for (const rep of allReports) {
                 const sym = (rep.ticker || '').toUpperCase();
@@ -2025,11 +2036,15 @@ export default function ValuationTerminal({
   const staleRefreshStarted = useRef(false);
   useEffect(() => {
     if (!mounted || staleRefreshStarted.current || savedReports.length === 0) return;
+    const todayKey = new Date().toISOString().slice(0, 10);
     const stale = savedReports.filter(r => {
       const h = r.extractedData?.financial_history;
       if (!Array.isArray(h) || h.length === 0) return false;
-      return h[h.length - 1]?.parent_equity === undefined;
-    });
+      const schemaStale = h[h.length - 1]?.parent_equity === undefined;
+      let doneToday = false;
+      try { doneToday = localStorage.getItem(`fv_refreshed_${r.ticker}`) === todayKey; } catch {}
+      return schemaStale || !doneToday;
+    }).slice(0, 40);
     if (stale.length === 0) return;
     staleRefreshStarted.current = true;
     (async () => {
@@ -2053,6 +2068,7 @@ export default function ValuationTerminal({
             try { localStorage.setItem('fin_valuation_reports', JSON.stringify(next)); } catch {}
             return next;
           });
+          try { localStorage.setItem(`fv_refreshed_${rep.ticker}`, todayKey); } catch {}
           fetch('/api/reports', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2098,12 +2114,13 @@ export default function ValuationTerminal({
     for (const s of (newReport.extractedData?.analysis_history || [])) snapMap.set(s.id, s);
     snapMap.delete(newReport.id);
     const analysisHistory = Array.from(snapMap.values())
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .sort((a, b) => reportTimestamp(b) - reportTimestamp(a))
       .slice(0, 24);
     if (analysisHistory.length > 0) {
       newReport = { ...newReport, extractedData: { ...(newReport.extractedData || {}), analysis_history: analysisHistory } };
     }
 
+    newReport = { ...newReport, extractedData: { ...(newReport.extractedData || {}), saved_at: new Date().toISOString() } };
     const updated = [newReport, ...savedReports.filter(r => r.id !== newReport.id && !isSameQuarter(r, newReport))];
     setSavedReports(updated);
     try {
@@ -2346,7 +2363,7 @@ export default function ValuationTerminal({
 
     try {
       const res = await fetchWithClientRetry(
-        () => fetch(`/api/bist?ticker=${encodeURIComponent(targetTicker)}&t=${Date.now()}`, { cache: 'no-store' }),
+        () => fetch(`/api/bist?ticker=${encodeURIComponent(targetTicker)}&refresh=true&t=${Date.now()}`, { cache: 'no-store' }),
         setStatusMessage
       );
       const bistData = await parseApiResponse(res, `${targetTicker} için BIST verisi çekilemedi.`, 'bist');

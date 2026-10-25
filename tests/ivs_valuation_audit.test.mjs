@@ -106,12 +106,14 @@ test('IVS & IFRS 13 VALUATION ENGINE AUDIT & INVARIANT TEST SUITE', async (t) =>
     });
 
     assert.ok(
-      underwaterRes.valuation.boundary_warning?.includes('EV <= Net Borç') || underwaterRes.valuation.debt_distress_discount_pct !== undefined,
+      underwaterRes.valuation.boundary_warning?.includes('EV <= Net Borç') || 
+      underwaterRes.valuation.boundary_warning?.includes('Borç Köprüsünü') || 
+      underwaterRes.valuation.debt_distress_discount_pct !== undefined,
       `EV <= Net Borç durumunda model borç sıkıntısı uyarısı veya indirimi uygulamalıdır (Mevcut: ${underwaterRes.valuation.boundary_warning})`
     );
     // Borç aşınması ve 0 TL operasyonel özkaynak payı yansıtılmış olmalıdır:
-    // Model 0 TL EV/EBITDA payını %45 ağırlıkla dahil ettiği için hisse başı adil değer baskılanmalıdır (<= 0.50 TL)
-    assert.ok(underwaterRes.valuation.fair_value <= 0.50, `EV <= Net Borç durumunda adil değer borç yükünü yansıtmalıdır (Mevcut: ${underwaterRes.valuation.fair_value})`);
+    // Uçurum etkisini önlemek için kalan pozitif defter/kâr bileşenleri normalize edilir, piyasa fiyatının (3.0 TL) belirgin altında kalır:
+    assert.ok(underwaterRes.valuation.fair_value < 1.50, `EV <= Net Borç durumunda adil değer borç yükünü yansıtmalıdır (Mevcut: ${underwaterRes.valuation.fair_value})`);
 
     // Durum B: Tamamen batık şirket (Özkaynak <= 0 VE EV <= Net Borç)
     const insolventHistory = [

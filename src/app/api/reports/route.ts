@@ -85,6 +85,7 @@ export async function GET(req: NextRequest) {
       ticker: row.ticker,
       price: row.price,
       createdAt: row.created_at,
+      updatedAt: row.updated_at,
       period: row.period,
       report: row.report,
       decision: row.decision,

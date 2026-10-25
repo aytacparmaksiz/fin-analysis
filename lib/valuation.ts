@@ -3190,6 +3190,9 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
   }
 
   // Finansal Kaldıraç Takibi (Net Borç + TFRS 16 / FAVÖK > 4.0x)
+  // IVS 105 ve Kurumsal Finans Kuralı: Net borç zaten EV - Borç Köprüsü üzerinden nakit olarak
+  // düşüldüğünden, hisse başı özkaynak değerinden ikinci bir mükerrer yüzde kesintisi (double-counting) yapılmaz.
+  // Bu metrik yalnızca kaldıraç riskini ve sermaye tamponunu izlemek ve raporlamak için tutulur.
   if (netDebtToEbitda > 4.0) {
     debtDiscountPct = Math.min(0.35, Number(((netDebtToEbitda - 4.0) * 0.08).toFixed(3)));
   }
@@ -3269,7 +3272,10 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
       const pbPerShare = forwardBvps * justifiedPb;
 
       const validComponents: { val: number; weight: number }[] = [];
-      if (forwardEbitda > 0) validComponents.push({ val: evEbitdaPerShare, weight: 0.45 });
+      // Kurumsal Finans Değişmezi: EV Borç Köprüsünü karşılayamadığında (evEbitdaPerShare <= 0),
+      // sıfır (0 TL) değerini ortalamaya sokup yapay %45 seyreltme (haircut) yapmak uçurum etkisi yaratır.
+      // Operasyonel değer sıfırsa bileşen elenir ve geçerli kalan varlık/kâr bileşenleri (P/E, P/B) normalize edilir.
+      if (evEbitdaPerShare > 0) validComponents.push({ val: evEbitdaPerShare, weight: 0.45 });
       if (pePerShare > 0) validComponents.push({ val: pePerShare, weight: 0.25 });
       if (pbPerShare > 0) validComponents.push({ val: pbPerShare, weight: 0.30 });
 
@@ -3281,13 +3287,14 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
           hybridFair = (hybridFair * 0.4) + (pbPerShare * 0.6);
         }
       }
-      if (debtDiscountPct > 0 && enterpriseVal <= totalDebtBridge) {
-        hybridFair = hybridFair * (1 - debtDiscountPct);
-      }
 
+      // Kurumsal Finans Değişmezi: Borç EV köprüsünde zaten düşüldüğü için ikinci bir mükerrer
+      // debtDiscountPct indirimi yapılmaz (mükerrer borç cezası engellenmiştir).
       fairValue = Number(Math.max(0.5, hybridFair).toFixed(2));
       const haircutNote = evaHaircutApplied ? ` [EVA İndirimi: -%${(evaDiscountPct * 100).toFixed(0)}]` : '';
-      const debtNote = debtDiscountPct > 0 ? ` [Kaldıraç Takibi: Net Borç/FAVÖK ${(netDebtToEbitda).toFixed(1)}x]` : '';
+      const debtNote = (netDebtToEbitda > 4.0 && enterpriseVal <= totalDebtBridge) 
+        ? ` [Yüksek Kaldıraç Uyarısı: Net Borç/FAVÖK ${(netDebtToEbitda).toFixed(1)}x - EV Borcu Karşılamıyor]` 
+        : (netDebtToEbitda > 4.0 ? ` [Kaldıraç Takibi: Net Borç/FAVÖK ${(netDebtToEbitda).toFixed(1)}x]` : '');
       const leaseNote = leaseLiabilities > 0 ? ` [TFRS 16 Kiralama Borcu Düşüldü]` : '';
       formulaStr = `12A İleri FAVÖK: ${evEbitdaPerShare.toFixed(2).replace('.', ',')} TL | 12A İleri PD/DD: ${pbPerShare.toFixed(2).replace('.', ',')} TL ➔ Hibrit Adil Değer = ${fairValue.toFixed(2).replace('.', ',')} TL${haircutNote}${debtNote}${leaseNote}`;
 

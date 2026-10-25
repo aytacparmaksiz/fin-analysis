@@ -24,6 +24,7 @@ export interface SavedReport {
   fairValueTrend?: any[];
   dividendHistory?: any[];
   consensusTarget?: any;
+  updatedAt?: string;
 }
 
 /**

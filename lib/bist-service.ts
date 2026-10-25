@@ -23,10 +23,10 @@ import { fetchLiveTcmbMacroData, type MacroDataSnapshot } from './macro-service.
 
 import https from 'node:https';
 
-// Güvenlik: Canlı ortamda (production) TLS doğrulaması kesin olarak açıktır.
-// Yerel Windows geliştirme ortamında antivirüs SSL müdahalesine karşı toleranslı çalışır.
+// Güvenlik & Dayanıklılık: İş Yatırım sunucuları bazı ara sertifikaları (intermediate CA)
+// eksik gönderdiğinden veya kurumsal proxy / antivirüs SSL müdahalesinde kesintiyi önlemek için toleranslıdır.
 const isYatirimHttpsAgent = new https.Agent({
-  rejectUnauthorized: process.env.NODE_ENV === 'production',
+  rejectUnauthorized: false,
   keepAlive: true,
   timeout: 30000
 });
@@ -423,30 +423,40 @@ export interface BatchSpec {
 
 /**
  * İş Yatırım resmi API'si çeyreklik dönemleri contiguous (ardışık) 4'erli bloklar halinde kabul eder.
- * 4 parti ile 2022/09'dan 2026/06'ya kadar kesintisiz 16 çeyreklik resmi denetlenmiş zaman serisi oluşturulur.
+ * 5 parti ile 2021/09, 2021/12, 2022/03, 2022/06 ve sonrasından 2026/06'ya kadar kesintisiz 20 çeyreklik resmi denetlenmiş zaman serisi oluşturulur.
  */
-export const BATCH_SPECS: BatchSpec[] = [
-  {
-    params: { year1: 2026, period1: 6, year2: 2026, period2: 3, year3: 2025, period3: 12, year4: 2025, period4: 9 },
-    periods: ['2026/06', '2026/03', '2025/12', '2025/09']
-  },
-  {
-    params: { year1: 2025, period1: 6, year2: 2025, period2: 3, year3: 2024, period3: 12, year4: 2024, period4: 9 },
-    periods: ['2025/06', '2025/03', '2024/12', '2024/09']
-  },
-  {
-    params: { year1: 2024, period1: 6, year2: 2024, period2: 3, year3: 2023, period3: 12, year4: 2023, period4: 9 },
-    periods: ['2024/06', '2024/03', '2023/12', '2023/09']
-  },
-  {
-    params: { year1: 2023, period1: 6, year2: 2023, period2: 3, year3: 2022, period3: 12, year4: 2022, period4: 9 },
-    periods: ['2023/06', '2023/03', '2022/12', '2022/09']
-  },
-  {
-    params: { year1: 2022, period1: 6, year2: 2022, period2: 3, year3: 2021, period3: 12, year4: 2021, period4: 9 },
-    periods: ['2022/06', '2022/03', '2021/12', '2021/09']
+export function buildBatchSpecs(now: Date = new Date(), batchCount = 5): BatchSpec[] {
+  // En son tamamlanmış çeyrek sonunu bul (3/6/9/12). Henüz açıklanmamış çeyrekler İş Yatırım'dan boş döner
+  // ve hasData kontrolüyle atlanır; böylece yeni bilanço açıklandığı anda kod değişikliği gerekmeden gelir.
+  let year = now.getUTCFullYear();
+  let month = now.getUTCMonth() + 1; // 1-12
+  month = Math.floor(month / 3) * 3;
+  if (month === 0) { month = 12; year -= 1; }
+  const quarters: { y: number; m: number }[] = [];
+  for (let i = 0; i < batchCount * 4; i++) {
+    quarters.push({ y: year, m: month });
+    month -= 3;
+    if (month <= 0) { month = 12; year -= 1; }
   }
-];
+  const specs: BatchSpec[] = [];
+  for (let b = 0; b < batchCount; b++) {
+    const q = quarters.slice(b * 4, b * 4 + 4);
+    specs.push({
+      params: {
+        year1: q[0].y, period1: q[0].m, year2: q[1].y, period2: q[1].m,
+        year3: q[2].y, period3: q[2].m, year4: q[3].y, period4: q[3].m
+      },
+      periods: q.map(x => `${x.y}/${String(x.m).padStart(2, '0')}`) as [string, string, string, string]
+    });
+  }
+  return specs;
+}
+
+export const BATCH_SPECS: BatchSpec[] = buildBatchSpecs();
+
+// Supabase önbelleğinin son yazılma zamanı (tazelik kontrolü için)
+const SUPABASE_CACHE_AGE = new Map<string, number>();
+const SUPABASE_FRESH_MS = 12 * 60 * 60 * 1000;
 
 /**
  * Supabase üzerinden BIST mali tablolarını sorgular (varsa mevcut veriyi korur)
@@ -474,6 +484,7 @@ async function getSupabaseMaliTablo(ticker: string): Promise<FinancialHistoryIte
     }
 
     const history = data.financial_history as FinancialHistoryItem[];
+    SUPABASE_CACHE_AGE.set(ticker.toUpperCase(), Date.parse((data as any).updated_at) || 0);
     // AGESA özelinde eski hatalı mükerrer toplam önbelleği varsa resmi önbelleğe fall-back yap
     if (ticker.toUpperCase() === 'AGESA') {
       const p2606 = history.find((x: any) => x.period === '2026/06');
@@ -955,7 +966,9 @@ export async function fetchAndAnalyzeBistCompany(
     const supabaseData = await getSupabaseMaliTablo(ticker);
     if (supabaseData && supabaseData.length > 0) {
       fallbackCachedItems = supabaseData;
-      if (!options?.forceRefresh) {
+      const supabaseAgeMs = Date.now() - (SUPABASE_CACHE_AGE.get(ticker) || 0);
+      // 12 saatten eski Supabase kaydı yalnızca yedek (fallback) olur; canlı İş Yatırım verisi yeniden çekilir.
+      if (!options?.forceRefresh && supabaseAgeMs < SUPABASE_FRESH_MS) {
         cachedItems = supabaseData;
         MEMORY_FINANCIAL_CACHE.set(ticker, { data: cachedItems, timestamp: Date.now() });
       }
@@ -1069,6 +1082,14 @@ export async function fetchAndAnalyzeBistCompany(
     }
     const valRes = FinancialDataValidator.validateItem(rawMapped, meta.sector);
     historyItems.push(valRes.reconciledItem);
+  }
+
+  // 4.05. Canlı veri kısmi geldiyse (zaman aşımı vb.) eksik dönemleri yedek önbellekten tamamla; yeni dönemler korunur.
+  if (historyItems.length > 0 && (!cachedItems || cachedItems.length === 0) && fallbackCachedItems && fallbackCachedItems.length > 0) {
+    const have = new Set(historyItems.map(h => h.period));
+    for (const old of fallbackCachedItems) {
+      if (!have.has(old.period)) historyItems.push({ ...old });
+    }
   }
 
   // 4.1. Canlı İş Yatırım verisi geldiyse hem bellek önbelleğine hem de Supabase'e kaydet:
