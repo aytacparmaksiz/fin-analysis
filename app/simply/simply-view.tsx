@@ -1780,14 +1780,35 @@ export default function SimplyView({
                   </div>
 
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
-                    <span className={`inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2 rounded-xl font-mono text-xs sm:text-sm font-bold border whitespace-nowrap ${
-                      discountPctNum > 0
-                        ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
-                        : 'bg-rose-500/15 border-rose-500/40 text-rose-400'
-                    }`}>
-                      {discountPctNum > 0 ? <TrendingUp className="w-4 h-4 shrink-0" /> : <TrendingDown className="w-4 h-4 shrink-0" />}
-                      <span>%{Math.abs(discountPctNum).toFixed(1)} {discountPctNum > 0 ? 'İskontolu / Potansiyel' : 'Primli'}</span>
-                    </span>
+                    {(() => {
+                      const isTrapOrAlma = Boolean(valuationInfo?.is_value_trap || report.decision === 'ALMA' || (report as any)?.rawDecision === 'ALMA');
+                      return (
+                        <span className={`inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2 rounded-xl font-mono text-xs sm:text-sm font-bold border whitespace-nowrap ${
+                          isTrapOrAlma
+                            ? 'bg-rose-500/15 border-rose-500/40 text-rose-400'
+                            : discountPctNum > 0
+                              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                              : 'bg-rose-500/15 border-rose-500/40 text-rose-400'
+                        }`}>
+                          {isTrapOrAlma ? (
+                            <>
+                              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                              <span>{valuationInfo?.is_value_trap ? 'Değer Tuzağı Riski' : 'Yüksek Bilanço Riski'}</span>
+                            </>
+                          ) : discountPctNum > 0 ? (
+                            <>
+                              <TrendingUp className="w-4 h-4 shrink-0" />
+                              <span>%{Math.abs(discountPctNum).toFixed(1)} İskontolu / Potansiyel</span>
+                            </>
+                          ) : (
+                            <>
+                              <TrendingDown className="w-4 h-4 shrink-0" />
+                              <span>%{Math.abs(discountPctNum).toFixed(1)} Primli</span>
+                            </>
+                          )}
+                        </span>
+                      );
+                    })()}
                     {(() => {
                       const rawScore = report?.score || valuationInfo?.score || (report as any)?.scoreResult?.totalScore;
                       const cleanNum = rawScore ? parseInt(String(rawScore).split('/')[0].replace(/[^0-9]/g, ''), 10) : null;
@@ -4562,9 +4583,11 @@ export default function SimplyView({
                   <div className="h-8 w-px bg-[#282d37]" />
                   <div className="text-right">
                     <div className="text-sm text-slate-400 font-mono uppercase">Potansiyel</div>
-                    <div className={`text-xl font-black font-mono ${fairValueNum >= currentPriceNum ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    <div className={`text-xl font-black font-mono ${(valuationInfo?.is_value_trap || report.decision === 'ALMA' || (report as any)?.rawDecision === 'ALMA') ? 'text-rose-400' : (fairValueNum >= currentPriceNum ? 'text-emerald-400' : 'text-rose-400')}`}>
                       {currentPriceNum > 0
-                        ? `${fairValueNum >= currentPriceNum ? '+' : ''}${(((fairValueNum - currentPriceNum) / currentPriceNum) * 100).toFixed(1)}%`
+                        ? ((valuationInfo?.is_value_trap || report.decision === 'ALMA' || (report as any)?.rawDecision === 'ALMA') && fairValueNum >= currentPriceNum
+                            ? `Değer Tuzağı (${(((fairValueNum - currentPriceNum) / currentPriceNum) * 100).toFixed(1)}%)`
+                            : `${fairValueNum >= currentPriceNum ? '+' : ''}${(((fairValueNum - currentPriceNum) / currentPriceNum) * 100).toFixed(1)}%`)
                         : '—'}
                     </div>
                   </div>

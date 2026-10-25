@@ -3236,8 +3236,15 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
 
     // 12A İleri PD/DD
     const bvps = totalEquityFull > 0 ? (totalEquityFull / effectiveShareCount) : 0;
+    const activeRoe = roe != null ? roe : null;
 
-    if (ebitdaFull <= 0) {
+    // Sıkıntılı Şirket / Sermaye Değer Yıkımı Kriteri (IVS 105 & Kurumsal Finans Değişmezi):
+    // 1. TTM FAVÖK <= 0 ise VEYA
+    // 2. Net Kâr <= 0 VE Firma Değeri (EV) Borç Köprüsünü karşılayamıyorsa VE (Kaldıraç > 6.0x veya ROE < 0)
+    // Şirket hem operasyonel olarak nakit üretemiyor hem de kâr üretemiyorsa standart kârlı çarpan hibriti uygulanamaz.
+    const isOperatingDistress = ebitdaFull <= 0 || (netFull <= 0 && enterpriseVal <= totalDebtBridge && (netDebtToEbitda > 6.0 || (activeRoe !== null && activeRoe < 0)));
+
+    if (isOperatingDistress) {
       // Sıkıntılı Şirket Varlık Tabanı Modeli
       const forwardEquity = totalEquityFull + netFull;
       const forwardBvps = totalEquityFull > 0 ? Math.max(0, forwardEquity / effectiveShareCount) : 0;
@@ -3246,18 +3253,26 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
       const safeDebt = Math.max(0, totalDebtBridge);
       const totalCapital = totalEquityFull + safeDebt;
       const equityWeight = totalCapital > 0 ? (totalEquityFull / totalCapital) : 0.20;
-      const liquidityBuffer = Math.min(1.0, Math.max(0.35, (currentRatio ?? 1.0) / 1.5));
+      const liquidityBuffer = Math.min(1.0, Math.max(0.20, (currentRatio ?? 1.0) / 1.5));
       const baseMultiple = 0.378;
       const justifiedPb = Number((baseMultiple * capitalRetentionFactor * equityWeight * liquidityBuffer).toFixed(3));
       fairValue = Number(Math.max(0.5, forwardBvps * justifiedPb).toFixed(2));
-      formulaStr = `İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL) × Hak Edilen Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+      formulaStr = `İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL) × Hak Edilen Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) = ${fairValue.toFixed(2).replace('.', ',')} TL [Sıkıntılı Şirket / Varlık Tabanı Modeli]`;
     } else {
-      const activeRoe = roe != null ? roe : null;
       const forwardEquityGrowth = (activeRoe !== null && activeRoe > 0) ? Math.min(0.75, Math.max(0.10, (activeRoe / 100) * 0.85)) : 0;
       const forwardBvps = Math.max(0, bvps * (1 + forwardEquityGrowth));
       let justifiedPb = 1.0;
       if (activeRoe === null) {
         justifiedPb = 0; // ROE verisi yok: P/B bileşeni hesaplanamaz, uydurma değer kullanılmaz.
+      } else if (activeRoe <= 0) {
+        // Negatif ROE (Sermaye Değer Yıkımı): Sabit 0.32x tabanı uygulanamaz!
+        // Sermaye erozyonu ve borç yükü katsayısıyla hak edilen çarpan iskonto edilir.
+        const safeDebt = Math.max(0, totalDebtBridge);
+        const totalCapital = totalEquityFull + safeDebt;
+        const equityWeight = totalCapital > 0 ? (totalEquityFull / totalCapital) : 0.20;
+        const liquidityBuffer = Math.min(1.0, Math.max(0.20, (currentRatio ?? 1.0) / 1.5));
+        const erosionPenalty = Math.max(0.10, 1.0 - Math.min(0.85, Math.abs(activeRoe) / 50));
+        justifiedPb = Number(Math.max(0.08, Math.min(0.35, 0.378 * erosionPenalty * equityWeight * liquidityBuffer)).toFixed(3));
       } else if ((evaHaircutApplied || activeRoe < 8) && currentWacc != null) {
         justifiedPb = Math.max(0.32, Math.min(0.85, (Math.max(0, activeRoe) / Math.max(15, currentWacc)) * 0.85));
       } else if (activeRoe < 8) {
