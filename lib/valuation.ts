@@ -3255,7 +3255,20 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
       const equityWeight = totalCapital > 0 ? (totalEquityFull / totalCapital) : 0.20;
       const liquidityBuffer = Math.min(1.0, Math.max(0.20, (currentRatio ?? 1.0) / 1.5));
       const baseMultiple = 0.378;
-      const justifiedPb = Number((baseMultiple * capitalRetentionFactor * equityWeight * liquidityBuffer).toFixed(3));
+      let justifiedPb: number;
+      if (ebitdaFull <= 0) {
+        // Kademe 1: Operasyonel Nakit Yakımı (VESBE Tipi - Negatif FAVÖK)
+        // Şirket esas faaliyet düzeyinde zarar ettiği ve nakit yaktığı için derin varlık iskontosu (0.10x - 0.22x)
+        justifiedPb = Number((baseMultiple * capitalRetentionFactor * equityWeight * liquidityBuffer).toFixed(3));
+        justifiedPb = Math.max(0.10, Math.min(0.22, justifiedPb));
+      } else {
+        // Kademe 2: Finansal Kaldıraç / Borç Sıkıntısı ama POZİTİF FAVÖK (SASA Tipi - Faaliyet Kârı Var, Finansman Gideri Yüksek)
+        // Şirket fabrikalarını çalıştırıp operasyonel nakit ürettiği için (FAVÖK pozitif),
+        // Merton Opsiyonu & IVS 105 İşletmenin Sürekliliği uyarınca taban çarpan 0.28x - 0.38x bandındadır.
+        const dampedFactor = Math.sqrt(capitalRetentionFactor * equityWeight * Math.max(0.50, liquidityBuffer));
+        const rawPb = baseMultiple * dampedFactor;
+        justifiedPb = Number(Math.max(0.28, Math.min(0.38, rawPb)).toFixed(3));
+      }
       fairValue = Number(Math.max(0.05, forwardBvps * justifiedPb).toFixed(2));
       formulaStr = `İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL) × Hak Edilen Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) = ${fairValue.toFixed(2).replace('.', ',')} TL [Sıkıntılı Şirket / Varlık Tabanı Modeli]`;
     } else {
