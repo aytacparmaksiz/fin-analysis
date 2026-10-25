@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -156,6 +156,13 @@ function reconcileSavedReportWithLatestEngine(rep: SavedReport): SavedReport {
       }
       if (valRes?.valuation?.fair_value_trend) {
         updatedReport.fairValueTrend = valRes.valuation.fair_value_trend;
+      }
+      if (valRes?.valuation && updatedReport.report) {
+        updatedReport.report = syncReportTextWithValuation(updatedReport.report, {
+          ...(valRes.valuation || {}),
+          final_decision: valRes.optimization?.finalDecision || updatedReport.decision,
+          decision: valRes.optimization?.finalDecision || updatedReport.decision,
+        });
       }
     } catch (err) {
       console.warn('Reconcile error for', rep.ticker, err);

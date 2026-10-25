@@ -3256,7 +3256,7 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
       const liquidityBuffer = Math.min(1.0, Math.max(0.20, (currentRatio ?? 1.0) / 1.5));
       const baseMultiple = 0.378;
       const justifiedPb = Number((baseMultiple * capitalRetentionFactor * equityWeight * liquidityBuffer).toFixed(3));
-      fairValue = Number(Math.max(0.5, forwardBvps * justifiedPb).toFixed(2));
+      fairValue = Number(Math.max(0.05, forwardBvps * justifiedPb).toFixed(2));
       formulaStr = `İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL) × Hak Edilen Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) = ${fairValue.toFixed(2).replace('.', ',')} TL [Sıkıntılı Şirket / Varlık Tabanı Modeli]`;
     } else {
       const forwardEquityGrowth = (activeRoe !== null && activeRoe > 0) ? Math.min(0.75, Math.max(0.10, (activeRoe / 100) * 0.85)) : 0;
@@ -3305,7 +3305,7 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
 
       // Kurumsal Finans Değişmezi: Borç EV köprüsünde zaten düşüldüğü için ikinci bir mükerrer
       // debtDiscountPct indirimi yapılmaz (mükerrer borç cezası engellenmiştir).
-      fairValue = Number(Math.max(0.5, hybridFair).toFixed(2));
+      fairValue = Number(Math.max(0.05, hybridFair).toFixed(2));
       const haircutNote = evaHaircutApplied ? ` [EVA İndirimi: -%${(evaDiscountPct * 100).toFixed(0)}]` : '';
       const debtNote = (netDebtToEbitda > 4.0 && enterpriseVal <= totalDebtBridge) 
         ? ` [Yüksek Kaldıraç Uyarısı: Net Borç/FAVÖK ${(netDebtToEbitda).toFixed(1)}x - EV Borcu Karşılamıyor]` 
