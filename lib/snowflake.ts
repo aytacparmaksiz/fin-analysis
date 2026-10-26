@@ -280,10 +280,14 @@ export function computeSnowflakeAnalysis(params: {
   const isForeign = isAviation || params.latestData?.is_foreign_currency;
 
   // Temel Değişkenler
-  const pe = marketMultiples?.pe ?? companyMultiples?.multiples?.pe?.companyValue ?? (latestData?.pe != null ? Number(latestData.pe) : null);
-  const pb = marketMultiples?.pb ?? companyMultiples?.multiples?.pb?.companyValue ?? (latestData?.pb != null ? Number(latestData.pb) : null);
-  const sectorPe = marketMultiples?.sector_pe ?? companyMultiples?.multiples?.pe?.sectorMedian ?? (sector === 'BANKING' ? 4.5 : sector === 'INSURANCE' ? 6.5 : sector === 'TECH' ? 14.0 : 8.5);
-  const sectorPb = marketMultiples?.sector_pb ?? companyMultiples?.multiples?.pb?.sectorMedian ?? (sector === 'BANKING' ? 1.1 : sector === 'INSURANCE' ? 1.8 : sector === 'TECH' ? 4.5 : 2.4);
+  const pe = (companyMultiples?.multiples?.pe?.companyValue && companyMultiples.multiples.pe.companyValue > 0)
+    ? companyMultiples.multiples.pe.companyValue
+    : (marketMultiples?.pe ?? (latestData?.pe != null ? Number(latestData.pe) : null));
+  const pb = (companyMultiples?.multiples?.pb?.companyValue && companyMultiples.multiples.pb.companyValue > 0)
+    ? companyMultiples.multiples.pb.companyValue
+    : (marketMultiples?.pb ?? (latestData?.pb != null ? Number(latestData.pb) : null));
+  const sectorPe = marketMultiples?.sector_averages?.pe ?? marketMultiples?.sector_pe ?? companyMultiples?.benchmark?.peMedian ?? companyMultiples?.multiples?.pe?.sectorMedian ?? (sector === 'BANKING' ? 4.5 : sector === 'INSURANCE' ? 6.5 : sector === 'TECH' ? 14.0 : 8.5);
+  const sectorPb = marketMultiples?.sector_averages?.pb ?? marketMultiples?.sector_pb ?? companyMultiples?.benchmark?.pbMedian ?? companyMultiples?.multiples?.pb?.sectorMedian ?? (sector === 'BANKING' ? 1.1 : sector === 'INSURANCE' ? 1.8 : sector === 'TECH' ? 4.5 : 2.4);
 
   // Akran F/K Hesabı
   const validPeerPes = Array.isArray(peers)
@@ -300,9 +304,17 @@ export function computeSnowflakeAnalysis(params: {
 
   const currentRoe = (() => {
     if (isInsolventEquity) return 0.0;
+    if (companyMultiples?.profitability?.roe != null && !isNaN(Number(companyMultiples.profitability.roe))) {
+      return Number(companyMultiples.profitability.roe);
+    }
     if (latestData?.roe != null && !isNaN(Number(latestData.roe))) return Number(latestData.roe);
     if (latestNetRaw != null && latestEqRaw != null && Number(latestEqRaw) > 0) {
-      return (Number(latestNetRaw) / Number(latestEqRaw)) * 100;
+      const periodStr = String(latestData?.period ?? (financialHistory.length > 0 ? financialHistory[financialHistory.length - 1]?.period : ''));
+      let factor = 1.0;
+      if (/(?:\/0?3\b|3a\b|q1\b|1\.ç|1ç)/i.test(periodStr)) factor = 4.0;
+      else if (/(?:\/0?6\b|6a\b|q2\b|2\.ç|2ç)/i.test(periodStr)) factor = 2.0;
+      else if (/(?:\/0?9\b|9a\b|q3\b|3\.ç|3ç)/i.test(periodStr)) factor = 12.0 / 9.0;
+      return (Number(latestNetRaw) * factor / Number(latestEqRaw)) * 100;
     }
     return 22.0;
   })();
@@ -362,6 +374,10 @@ export function computeSnowflakeAnalysis(params: {
     valuationDrivers?.revenueGrowth?.base ??
     historicalGrowth.revGrowth
   );
+
+  const effectiveRevGrowth = (typeof historicalGrowth.revGrowth === 'number' && !isNaN(historicalGrowth.revGrowth) && historicalGrowth.revGrowth !== 0)
+    ? historicalGrowth.revGrowth
+    : revGrowth;
 
   const profitGrowth = Number(
     valuationDrivers?.net_income_growth?.value ??
@@ -504,23 +520,23 @@ export function computeSnowflakeAnalysis(params: {
     {
       id: 'revenue_vs_market',
       title: 'Piyasaya Göre Hasılat Büyümesi',
-      passed: revGrowth >= 25.0,
-      metricValue: `+%${revGrowth.toFixed(1)}`,
-      threshold: '>= %+25.0 Piyasa Medyanı',
-      detail: revGrowth >= 25.0
-        ? `Hasılat ve prim üretim büyümesi (%${revGrowth.toFixed(1)}), BIST genel piyasa hasılat artış ortalamasından (%25.0) daha hızlıdır.`
-        : `Hasılat büyüme hızı (%${revGrowth.toFixed(1)}), piyasa ortalamasının gerisindedir.`
+      passed: effectiveRevGrowth >= (isForeign ? 5.0 : 25.0),
+      metricValue: `+%${effectiveRevGrowth.toFixed(1)}`,
+      threshold: `>= %+${(isForeign ? 5.0 : 25.0).toFixed(1)} ${isForeign ? 'FX/Piyasa Eşiği' : 'Piyasa Medyanı'}`,
+      detail: effectiveRevGrowth >= (isForeign ? 5.0 : 25.0)
+        ? `Hasılat ve prim üretim büyümesi (%${effectiveRevGrowth.toFixed(1)}), BIST genel piyasa hasılat artış ortalamasından (%${(isForeign ? 5.0 : 25.0).toFixed(1)}) daha hızlıdır.`
+        : `Hasılat büyüme hızı (%${effectiveRevGrowth.toFixed(1)}), piyasa ortalamasının gerisindedir.`
     },
     // 2.5 High Growth Revenue
     {
       id: 'high_growth_revenue',
       title: 'Yüksek Hızlı Hasılat Büyümesi',
-      passed: revGrowth >= 30.0,
-      metricValue: `+%${revGrowth.toFixed(1)}`,
-      threshold: '>= %+30.0 Yüksek Büyüme',
-      detail: revGrowth >= 30.0
-        ? `Operasyonel iş hacmi ve ciro büyümesi (%${revGrowth.toFixed(1)}), yüksek hasılat genişleme eşiğini (%30+) aşmaktadır.`
-        : `Hasılat artış hızı (%${revGrowth.toFixed(1)}), yüksek büyüme eşiğinin (%30) gerisindedir.`
+      passed: effectiveRevGrowth >= (isForeign ? 15.0 : 30.0),
+      metricValue: `+%${effectiveRevGrowth.toFixed(1)}`,
+      threshold: `>= %+${(isForeign ? 15.0 : 30.0).toFixed(1)} Yüksek Büyüme`,
+      detail: effectiveRevGrowth >= (isForeign ? 15.0 : 30.0)
+        ? `Operasyonel iş hacmi ve ciro büyümesi (%${effectiveRevGrowth.toFixed(1)}), yüksek hasılat genişleme eşiğini (%${(isForeign ? 15.0 : 30.0).toFixed(1)}+) aşmaktadır.`
+        : `Hasılat artış hızı (%${effectiveRevGrowth.toFixed(1)}), yüksek büyüme eşiğinin (%${(isForeign ? 15.0 : 30.0).toFixed(1)}) gerisindedir.`
     },
     // 2.6 Future ROE
     {
@@ -531,7 +547,7 @@ export function computeSnowflakeAnalysis(params: {
       threshold: `>= %${isFinancial ? '25.0' : '20.0'} Getiri Eşiği`,
       detail: futureRoe >= (isFinancial ? 25.0 : 20.0)
         ? `Şirketin gelecek dönem tahmini özsermaye kârlılığı (%${futureRoe.toFixed(1)}), sermaye maliyetini aşarak güçlü getiri potansiyelini desteklemektedir.`
-        : `Gelecek dönem özsermaye kârlılığı (%${futureRoe.toFixed(1)}), sermaye maliyeti eşiğinin gerisindedir.`
+        : `Gelecek dönem özsermaye kârlılığı (%${futureRoe.toFixed(1)}), şirketin cari yıllıklandırılmış ROE'si (%${currentRoe.toFixed(1)}) ve ROIC (%${roic.toFixed(1)}) hibrit ağırlığıyla hesaplanmış olup sermaye maliyeti eşiğinin (%${isFinancial ? '25.0' : '20.0'}) gerisindedir.`
     }
   ];
 
@@ -696,13 +712,13 @@ export function computeSnowflakeAnalysis(params: {
       id: 'debt_coverage',
       title: 'Nakit Akışıyla Borç Karşılama',
       passed: isFinancial ? !isInsolventEquity : (!isInsolventEquity && (netDebt <= 0 || (financialDebt > 0 && ocf / financialDebt >= 0.20))),
-      metricValue: netDebt <= 0 ? 'Borçsuz / Net Nakit' : `Nakit / Borç: %${financialDebt > 0 ? ((ocf / financialDebt) * 100).toFixed(0) : '100'}`,
+      metricValue: netDebt <= 0 ? 'Borçsuz / Net Nakit' : `Faaliyet Nakit Akışı / Borç: %${financialDebt > 0 ? ((ocf / financialDebt) * 100).toFixed(0) : '100'}`,
       threshold: '>= %20 veya Net Nakit',
       detail: netDebt <= 0 && !isInsolventEquity
         ? 'Şirket net nakit pozisyonunda olduğu için borç ödeme baskısı bulunmamaktadır.'
         : (!isInsolventEquity && financialDebt > 0 && ocf / financialDebt >= 0.20
-            ? `İşletme nakit akışı (${formatCurrency(ocf)}), toplam finansal borçların en az %20'sini doğrudan karşılamaktadır.`
-            : 'İşletme nakit akışının finansal borçları karşılama oranı zayıftır.')
+            ? `İşletme faaliyet nakit akışı (${formatCurrency(ocf)}), toplam finansal borçların (${formatCurrency(financialDebt)}) en az %20'sini doğrudan karşılamaktadır.`
+            : `İşletme faaliyet nakit akışı (${formatCurrency(ocf)}), toplam finansal borçların (${formatCurrency(financialDebt)}) %${financialDebt > 0 ? ((ocf / financialDebt) * 100).toFixed(1) : '0'}'ini karşılamaktadır (Güvenli eşik: >= %20).`)
     },
     // 4.6 Interest Coverage
     {

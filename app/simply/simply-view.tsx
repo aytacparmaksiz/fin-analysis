@@ -757,11 +757,17 @@ export default function SimplyView({
       let rawPe = (scaledNet && scaledNet > 0 && mCap > 0) ? Number((mCap / (scaledNet * annualFactor)).toFixed(1)) : null;
       let rawPb = (scaledEquity && scaledEquity > 0 && mCap > 0) ? Number((mCap / scaledEquity).toFixed(1)) : null;
 
-      // Son dönem için İş Yatırım resmi canlı çarpanı varsa birebir senkronize et
-      if (isLatestPeriod && marketMultiples?.pe != null && marketMultiples.pe > 0) {
+      // Son dönem için İş Yatırım resmi canlı çarpanı veya dinamik rasyoları senkronize et
+      const liveDynPe = companyMultiplesData?.multiples?.pe?.companyValue;
+      const liveDynPb = companyMultiplesData?.multiples?.pb?.companyValue;
+      if (isLatestPeriod && liveDynPe != null && liveDynPe > 0) {
+        rawPe = Number(liveDynPe.toFixed(1));
+      } else if (isLatestPeriod && marketMultiples?.pe != null && marketMultiples.pe > 0) {
         rawPe = Number(marketMultiples.pe.toFixed(1));
       }
-      if (isLatestPeriod && marketMultiples?.pb != null && marketMultiples.pb > 0) {
+      if (isLatestPeriod && liveDynPb != null && liveDynPb > 0) {
+        rawPb = Number(liveDynPb.toFixed(1));
+      } else if (isLatestPeriod && marketMultiples?.pb != null && marketMultiples.pb > 0) {
         rawPb = Number(marketMultiples.pb.toFixed(1));
       }
 
@@ -1240,7 +1246,9 @@ export default function SimplyView({
   // Sektör Çarpanları Kıyaslama Çizelgesi
   const peerComparisonData = useMemo(() => {
     const data: Array<{ name: string; pe: number; isMain?: boolean; reportId?: string; ticker?: string }> = [];
-    const mainPE = marketMultiples?.pe || companyMultiplesData?.multiples?.pe?.companyValue || 8.5;
+    const mainPE = (companyMultiplesData?.multiples?.pe?.companyValue && companyMultiplesData.multiples.pe.companyValue > 0)
+      ? companyMultiplesData.multiples.pe.companyValue
+      : (marketMultiples?.pe || 8.5);
     data.push({ name: report.ticker, pe: Number(mainPE.toFixed(1)), isMain: true, reportId: report.id, ticker: report.ticker });
 
     analyzedCompetitors.slice(0, 4).forEach(comp => {
@@ -1868,7 +1876,7 @@ export default function SimplyView({
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-slate-300">F/K Oranı:</span>
                       <span className="font-mono font-bold text-white">
-                        {marketMultiples?.pe ? `${marketMultiples.pe.toFixed(2)}x` : '—'}
+                        {(companyMultiplesData?.multiples?.pe?.companyValue ?? marketMultiples?.pe) ? `${(companyMultiplesData?.multiples?.pe?.companyValue ?? marketMultiples.pe).toFixed(1)}x` : '—'}
                       </span>
                     </div>
                   </div>
@@ -3083,7 +3091,9 @@ export default function SimplyView({
               {[
                 {
                   label: 'F/K',
-                  rawVal: marketMultiples?.pe ?? companyMultiplesData?.multiples?.pe?.companyValue,
+                  rawVal: (companyMultiplesData?.multiples?.pe?.companyValue && companyMultiplesData.multiples.pe.companyValue > 0)
+                    ? companyMultiplesData.multiples.pe.companyValue
+                    : marketMultiples?.pe,
                   benchNum: marketMultiples?.sector_averages?.pe ?? companyMultiplesData?.benchmark?.peMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pe ?? 8.5,
                   format: (v: number) => `${v.toFixed(1)}x`,
                   isMultiple: true,
@@ -3091,7 +3101,9 @@ export default function SimplyView({
                 },
                 {
                   label: 'PD/DD',
-                  rawVal: marketMultiples?.pb ?? companyMultiplesData?.multiples?.pb?.companyValue,
+                  rawVal: (companyMultiplesData?.multiples?.pb?.companyValue && companyMultiplesData.multiples.pb.companyValue > 0)
+                    ? companyMultiplesData.multiples.pb.companyValue
+                    : marketMultiples?.pb,
                   benchNum: marketMultiples?.sector_averages?.pb ?? companyMultiplesData?.benchmark?.pbMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pb ?? 2.1,
                   format: (v: number) => `${v.toFixed(2)}x`,
                   isMultiple: true,
@@ -3099,7 +3111,9 @@ export default function SimplyView({
                 },
                 {
                   label: 'FD/FAVÖK',
-                  rawVal: isMetricDisabled('ev_ebitda', currentSector) ? null : (marketMultiples?.ev_ebitda ?? companyMultiplesData?.multiples?.evEbitda?.companyValue),
+                  rawVal: isMetricDisabled('ev_ebitda', currentSector) ? null : ((companyMultiplesData?.multiples?.evEbitda?.companyValue && companyMultiplesData.multiples.evEbitda.companyValue > 0)
+                    ? companyMultiplesData.multiples.evEbitda.companyValue
+                    : marketMultiples?.ev_ebitda),
                   benchNum: isMetricDisabled('ev_ebitda', currentSector) ? null : (marketMultiples?.sector_averages?.ev_ebitda ?? companyMultiplesData?.benchmark?.evEbitdaMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.evEbitda ?? 7.2),
                   format: (v: number) => `${v.toFixed(1)}x`,
                   isMultiple: true,
@@ -3107,7 +3121,9 @@ export default function SimplyView({
                 },
                 {
                   label: 'FD/Satışlar',
-                  rawVal: isMetricDisabled('ev_sales', currentSector) ? null : (marketMultiples?.ev_sales ?? companyMultiplesData?.multiples?.evSales?.companyValue),
+                  rawVal: isMetricDisabled('ev_sales', currentSector) ? null : ((companyMultiplesData?.multiples?.evSales?.companyValue && companyMultiplesData.multiples.evSales.companyValue > 0)
+                    ? companyMultiplesData.multiples.evSales.companyValue
+                    : marketMultiples?.ev_sales),
                   benchNum: isMetricDisabled('ev_sales', currentSector) ? null : (marketMultiples?.sector_averages?.ev_sales ?? companyMultiplesData?.benchmark?.evSalesMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.evSales ?? 1.8),
                   format: (v: number) => `${v.toFixed(1)}x`,
                   isMultiple: true,
@@ -3115,7 +3131,7 @@ export default function SimplyView({
                 },
                 {
                   label: 'Yabancı Payı',
-                  rawVal: marketMultiples?.foreign_share_pct,
+                  rawVal: liveCompanyDetails?.foreignShare?.currentPct ?? marketMultiples?.foreign_share_pct,
                   benchNum: 30.0,
                   format: (v: number) => `%${v.toFixed(1)}`,
                   isMultiple: false,
