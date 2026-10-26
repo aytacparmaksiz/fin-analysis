@@ -18,7 +18,50 @@ export interface SnowflakeCheck {
   detail: string;
   metricValue?: string;
   threshold?: string;
+  methodology?: string;
 }
+
+export const SNOWFLAKE_CHECK_METHODOLOGIES: Record<string, string> = {
+  // 1. Değerleme (Value)
+  below_dcf: 'İndirgenmiş Nakit Akışları (İNA/DCF) modeli: Şirketin gelecekte üreteceği serbest nakit akışlarının ağırlıklı ortalama sermaye maliyeti (WACC) ile bugüne indirgenmesiyle hesaplanan hisse başı içsel değerin cari piyasa fiyatından yüksek olması aranır.',
+  significantly_below_dcf: 'Kurumsal Güvenlik Marjı (Margin of Safety): Hisse fiyatının İNA adil değerine göre en az %20 iskontolu olması test edilir. Gelecek projeksiyon sapmalarına karşı kurumsal emniyet tamponudur.',
+  pe_vs_peers: 'Akran Kıyası: Şirketin F/K çarpanı, BIST\'te aynı alt sektörde faaliyet gösteren benzer operasyonel büyüklükteki akran şirketlerin medyan F/K çarpanı ile karşılaştırılır.',
+  pe_vs_industry: 'Sektör Kıyası: Şirketin F/K çarpanı, İş Yatırım\'ın 53 alt sektör bazlı resmi sektör ortalaması/medyanı ile kıyaslanır.',
+  pe_vs_fair: 'Peter Lynch & Gordon Büyüme Hibrit Modeli: Adil F/K = (Özsermaye Kârlılığı ROE × 0.22) + (Beklenen Net Kâr Büyümesi × 0.16) + 4.5. Şirketin kârlılık ve büyüme kalitesine göre piyasada hak ettiği kurumsal çarpanı hesaplar.',
+  analyst_forecast: 'Konsensüs Analist Hedefi: Yetkili aracı kurum ve yatırım bankalarının yayımladığı 12 aylık konsensüs hedef fiyat ortalamasının cari piyasa fiyatına göre en az %+10 prim potansiyeli taşıması şartıdır.',
+
+  // 2. Gelecek Büyüme (Future Growth)
+  earnings_vs_savings: 'Risksiz Faiz Kıyası: Şirketin yıllık tahmini net kâr büyüme hızının, alternatif risksiz getiri eşiğini (TL şirketleri için %32 risksiz getiri/enflasyon, döviz bazlı şirketler için %10) aşması aranır.',
+  earnings_vs_market: 'Piyasa Kâr Büyümesi: Şirketin beklenen kâr büyüme hızının BIST genel piyasa net kâr artış medyanının (%25.0) üzerinde olması test edilir.',
+  high_growth_earnings: 'Yüksek Hızlı Kâr Büyümesi: Şirketin yıllık net kâr artış projeksiyonunun %35 ve üzeri yüksek büyüme liginde olup olmadığı ölçülür.',
+  revenue_vs_market: 'Piyasa Hasılat Kıyası: Şirketin yıllık ciro artış hızının, BIST genel piyasa hasılat büyüme medyanını (%25.0; döviz bazlı şirketlerde reel %5.0) geride bırakması aranır.',
+  high_growth_revenue: 'Yüksek Hızlı Hasılat: Operasyonel iş hacmi ve ciro büyümesinin yıllık en az %30 (dövizli şirketlerde %15) genişleme eşiğini aşması incelenir.',
+  future_roe: 'İleri ROE Projeksiyonu: İleri ROE = max(Cari ROE, Cari ROE × 0.65 + ROIC × 0.35). Şirketin kârı özkaynaklarına katarak yeniden yatırıma dönüştürme ve sermaye maliyeti eşiğini (%20) aşma kabiliyetini modeller.',
+
+  // 3. Geçmiş Performans (Past Performance)
+  quality_earnings: 'Nakit Dönüşüm Oranı: Faaliyet Nakit Akışı (OCF) / Net Kâr >= %70. Kârın yalnızca muhasebesel tahakkuktan mı ibaret olduğunu, yoksa en az %70 oranında gerçek nakde dönüşüp dönüşmediğini denetler.',
+  growing_profit_margin: 'Net Kâr Marjı: Net Kâr / Satış Hasılatı >= %10. Şirketin operasyonel fiyatlama gücünü, maliyet baskısını yönetebilme yeteneğini ve çekirdek kâr marjını ölçer.',
+  earnings_trend: 'Kâr Sürekliliği: Şirketin son 4 çeyreğin tamamında kesintisiz pozitif net dönem kârı açıklamış olması (dönemsel zarar yazmaması) test edilir.',
+  accelerating_growth: 'Hızlanan İvme: Son dönem net kâr büyüme hızının, şirketin son 3 yıllık bileşik büyüme hızını (3Y CAGR) veya %20 eşiğini aşması beklenir.',
+  earnings_vs_industry: 'Sektörel Kâr Üstünlüğü: Şirketin net kâr artış hızının, faaliyet gösterdiği BIST sektör medyan kâr büyümesini (%20.0 eşiği) geride bırakması şartıdır.',
+  high_historical_roe: 'Yıllıklandırılmış Özsermaye Kârlılığı: Son 12 aylık Net Kâr / Özkaynaklar >= %20. Hissedar sermayesinin risksiz faiz üzerinde katma değer üretme verimliliğidir.',
+
+  // 4. Finansal Sağlık (Financial Health)
+  short_term_liquidity: 'Cari Oran: Dönen Varlıklar / Kısa Vadeli Yükümlülükler >= 1.0x (Perakendede 0.55x). 1 yıl içinde vadesi gelecek borçların dönen varlıklarla karşılanabilirliğini ölçer.',
+  long_term_solvency: 'Uzun Vadeli Karşılama: Dönen Varlıklar / Uzun Vadeli Finansal Yükümlülükler >= 0.8x. Likit bilanço gücünün uzun vadeli borç yüküne karşı koruyuculuğunu test eder.',
+  debt_level: 'Borçluluk Düzeyi: Net Borç / FAVÖK <= 2.5x veya şirketin Net Nakit pozisyonunda olması. Operasyonel kârın finansal borçları güvenli sürede itfa edebilme kapasitesidir.',
+  reducing_debt: 'Borç Disiplini: Net Borç / FAVÖK <= 3.0x veya pozitif net nakit fazlası. Bilanço borç yükünün operasyonel nakit üretimiyle kontrol altında tutulmasını ölçer.',
+  debt_coverage: 'Nakit Akışıyla Borç Karşılama: Faaliyet Nakit Akışı (OCF) / Toplam Finansal Borç >= %20. Şirketin operasyonlarından ürettiği nakit akışının toplam banka borçlarını karşılama gücüdür.',
+  interest_coverage: 'Faiz Karşılama (ICR): Faaliyet Kârı (EBIT) / Net Finansman Faiz Gideri >= 3.0x. Operasyonel kârın katlandığı finansman giderlerini en az 3 kat emniyetle karşılaması aranır.',
+
+  // 5. Temettü (Dividend)
+  notable_dividend: 'Temettü Verimi: Yıllık temettü veriminin en az %2.0 olması veya düzenli nakit kâr payı dağıtılması şartıdır.',
+  high_dividend: 'Yüksek Temettü Ligi: Şirketin temettü veriminin BIST\'teki en yüksek kâr payı ödeyen ilk %25\'lik lig medyanını (%4.5+) aşması incelenir.',
+  stable_dividend: 'Ödeme İstikrarı: Şirketin son 3+ yılda kesintisiz temettü dağıtarak hissedarlara nakit geri dönüş alışkanlığını kanıtlamış olması beklenir.',
+  growing_dividend: 'Büyüyen Temettü: Dağıtılan hisse başına nakit temettü tutarının son 3 yıllık dönemde nominal artış trendi sergilemesi aranır.',
+  earnings_coverage: 'Kâr Dağıtım Oranı: Dağıtılan Toplam Temettü / Yıllık Net Kâr <= %75 (veya güvenli koridorda içsel büyüme). Kârın aşırı dağıtılmayarak şirkette büyüme sermayesi bırakılmasıdır.',
+  cash_flow_coverage: 'Nakit Akış Temettü Kapsaması: Dağıtılan Temettü / Serbest Nakit Akışı (veya pozitif FCF). Kâr payının borçla değil, doğrudan üretilen serbest nakitle ödenmesini denetler.'
+};
 
 export interface SnowflakeAxis {
   key: 'value' | 'future' | 'past' | 'health' | 'dividend';
@@ -917,13 +960,18 @@ export function computeSnowflakeAnalysis(params: {
     risks.push('Makroekonomik faiz oynaklığı ve genel hisse senedi piyasası riskleri izlenmelidir.');
   }
 
+  const enrichCheck = (c: SnowflakeCheck): SnowflakeCheck => ({
+    ...c,
+    methodology: c.methodology || SNOWFLAKE_CHECK_METHODOLOGIES[c.id] || ''
+  });
+
   return {
     axes: {
-      value: { key: 'value', label: 'Değerleme', score: valueScore, maxScore: 6, checks: valueChecks },
-      future: { key: 'future', label: 'Gelecek Büyüme', score: futureScore, maxScore: 6, checks: futureChecks },
-      past: { key: 'past', label: 'Geçmiş Performans', score: pastScore, maxScore: 6, checks: pastChecks },
-      health: { key: 'health', label: 'Finansal Sağlık', score: healthScore, maxScore: 6, checks: healthChecks },
-      dividend: { key: 'dividend', label: 'Temettü', score: dividendScore, maxScore: 6, checks: dividendChecks }
+      value: { key: 'value', label: 'Değerleme', score: valueScore, maxScore: 6, checks: valueChecks.map(enrichCheck) },
+      future: { key: 'future', label: 'Gelecek Büyüme', score: futureScore, maxScore: 6, checks: futureChecks.map(enrichCheck) },
+      past: { key: 'past', label: 'Geçmiş Performans', score: pastScore, maxScore: 6, checks: pastChecks.map(enrichCheck) },
+      health: { key: 'health', label: 'Finansal Sağlık', score: healthScore, maxScore: 6, checks: healthChecks.map(enrichCheck) },
+      dividend: { key: 'dividend', label: 'Temettü', score: dividendScore, maxScore: 6, checks: dividendChecks.map(enrichCheck) }
     },
     totalScore,
     percentage,

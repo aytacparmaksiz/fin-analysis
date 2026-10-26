@@ -2074,9 +2074,28 @@ export default function SimplyView({
                             </span>
                           </div>
 
-                          <h4 className="text-sm font-bold text-white mb-2 leading-snug">
-                            {check.title}
-                          </h4>
+                          <div className="flex items-start justify-between gap-1.5 mb-2">
+                            <h4 className="text-sm font-bold text-white leading-snug">
+                              {check.title}
+                            </h4>
+                            {check.methodology && (
+                              <div className="relative group/tip flex-shrink-0">
+                                <button
+                                  type="button"
+                                  className="w-4 h-4 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white text-[10px] font-mono flex items-center justify-center transition-colors border border-slate-700/60 shadow-sm cursor-help"
+                                  aria-label="Hesaplama Metodolojisi"
+                                >
+                                  i
+                                </button>
+                                <div className="absolute right-0 bottom-full mb-1.5 hidden group-hover/tip:block group-focus-within/tip:block w-72 p-2.5 rounded-xl bg-[#0c1017] border border-slate-700/80 shadow-2xl text-[11px] text-slate-200 z-50 pointer-events-none leading-relaxed">
+                                  <div className="font-semibold text-emerald-400 mb-1 flex items-center gap-1.5 border-b border-white/5 pb-1">
+                                    <span className="text-xs">📐</span> Hesaplama Metodolojisi
+                                  </div>
+                                  <p className="text-slate-300 font-sans">{check.methodology}</p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
 
                           {(check.metricValue || check.threshold) && (
                             <div className="p-2 rounded bg-[#0d1015]/80 border border-white/5 text-xs font-mono space-y-1 mb-2.5">
