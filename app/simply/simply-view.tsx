@@ -1309,10 +1309,18 @@ export default function SimplyView({
       {
         id: 'roe',
         title: 'Özkaynak Kârlılığı',
-        data: series.map(d => ({
-          period: d.period ? d.period.slice(2) : '',
-          val: d.equity ? Number(((d.net_income || (d.equity * 0.35)) / d.equity * 100).toFixed(1)) : 35
-        })),
+        data: series.map(d => {
+          const pStr = String(d.period || '').toLowerCase();
+          let f = 1.0;
+          if (/(?:\/0?3\b|3a\b|q1\b|1\.ç|1ç)/i.test(pStr)) f = 4.0;
+          else if (/(?:\/0?6\b|6a\b|q2\b|2\.ç|2ç)/i.test(pStr)) f = 2.0;
+          else if (/(?:\/0?9\b|9a\b|q3\b|3\.ç|3ç)/i.test(pStr)) f = 12.0 / 9.0;
+          const annNet = d.net_income != null ? d.net_income * f : null;
+          return {
+            period: d.period ? d.period.slice(2) : '',
+            val: (d.equity && annNet != null) ? Number((annNet / d.equity * 100).toFixed(1)) : null
+          };
+        }),
         format: (v: number) => `%${v.toFixed(1)}`
       }
     ];
@@ -2294,7 +2302,12 @@ export default function SimplyView({
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <h3 className="font-sans text-lg sm:text-xl font-bold text-white">Özet Finansallar</h3>
+                  <h3 className="font-sans text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                    <span>Özet Finansallar</span>
+                    <span className="text-xs font-mono font-normal text-slate-400 bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                      (Birim: Bin TL)
+                    </span>
+                  </h3>
                 </div>
               </div>
 
@@ -2303,7 +2316,7 @@ export default function SimplyView({
                 <div className="bg-[#21262d] border border-[#2e3440] rounded-xl p-4 sm:p-5 space-y-3">
                   <div className="flex items-center justify-between border-b border-[#2e3440] pb-2.5">
                     <h4 className="text-[15px] sm:text-base font-bold text-white tracking-wide">Özet Gelir Tablosu</h4>
-                    <span className="text-sm text-slate-400 font-mono">YoY Çeyreklik</span>
+                    <span className="text-sm text-slate-400 font-mono">Yıllık Değişim (YoY)</span>
                   </div>
 
                   <table className="w-full text-sm sm:text-[15px] text-left">
@@ -2646,10 +2659,10 @@ export default function SimplyView({
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {sparklineMetrics.map((mini) => {
-                const values = mini.data.map(d => d.val).filter(v => v != null && !isNaN(v));
-                const isUptrend = values.length >= 2 && values[values.length - 1] >= values[0];
+                const values = mini.data.map(d => d.val).filter((v): v is number => v != null && !isNaN(v));
+                const isUptrend = values.length >= 2 && values[values.length - 1]! >= values[0]!;
                 const trendColor = isUptrend ? '#10b981' : '#f87171';
-                const latestVal = values.length > 0 ? values[values.length - 1] : 0;
+                const latestVal = values.length > 0 ? (values[values.length - 1] ?? 0) : 0;
 
                 return (
                   <div key={mini.id} className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-4 shadow-xl space-y-2">

@@ -56,6 +56,16 @@ export const COMPANY_PROFILES: Record<string, CompanyProfile> = {
     summary: 'Türkiye’nin bayrak taşıyıcı ulusal havayolu olan Türk Hava Yolları, dünyada en çok ülkeye ve uluslararası noktaya uçan küresel havayolu şirketidir. Yolcu taşımacılığının yanı sıra Turkish Cargo markasıyla uluslararası hava kargo pazarında ilk 5 arasında yer almaktadır.',
     segments: ['Yolcu Taşımacılığı', 'Turkish Cargo (Hava Kargo)', 'Teknik Bakım (THY Teknik)', 'Yer Hizmetleri (TGS)']
   },
+  TAVHL: {
+    ticker: 'TAVHL',
+    fullName: 'TAV Havalimanları Holding A.Ş.',
+    foundedYear: 1997,
+    employees: '35.000+',
+    ceo: 'Serkan Kaptan',
+    website: 'https://www.tavhavalimanlari.com.tr',
+    summary: 'TAV Havalimanları Holding A.Ş., Türkiye ve yurt dışında toplam 15 havalimanının işletmesini yürüten, Groupe ADP ortaklığında faaliyet gösteren küresel bir havalimanı işletmecisidir. Havalimanı operasyonlarının yanı sıra yer hizmetleri (HAVAŞ), yiyecek-içecek (BTA), gümrüksüz satış (ATÜ) ve bilişim (TAV Technologies) alanlarında entegre hizmet sunmaktadır.',
+    segments: ['Havalimanı Terminal İşletmeciliği', 'Yer Hizmetleri (HAVAŞ)', 'Duty-Free Mağazacılık (ATÜ)', 'Yiyecek & İçecek Hizmetleri (BTA)', 'Özel Güvenlik & Bilişim']
+  },
   MPARK: {
     ticker: 'MPARK',
     fullName: 'MLP Sağlık Hizmetleri Anonim Şirketi (Medical Park & Liv Hospital)',
