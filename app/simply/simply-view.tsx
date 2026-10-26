@@ -54,7 +54,8 @@ import {
   AreaChart,
   Area,
   ComposedChart,
-  Legend
+  Legend,
+  ReferenceLine
 } from 'recharts';
 import type { SavedReport } from '@/lib/report-resolver';
 import type { SectorType } from '@/lib/sectors';
@@ -240,6 +241,60 @@ function SimplyChartTooltip({ active, payload, label, currentSector }: any) {
     );
   }
   return null;
+}
+
+// Kurumsal Finansal Çeyreklik Bar Çizici (Mavi/Kırmızı Vurgulu Çizgi Başlıklı)
+function renderFinancialBar(props: any) {
+  const { x, y, width, height, value } = props;
+  if (width == null || height == null || isNaN(x) || isNaN(y)) return null;
+  const isNegative = typeof value === 'number' && value < 0;
+  const safeHeight = Math.max(Math.abs(height), 2);
+
+  if (isNegative) {
+    return (
+      <g>
+        <rect
+          x={x}
+          y={y}
+          width={width}
+          height={safeHeight}
+          fill="#3e1d23"
+          fillOpacity={0.88}
+          rx={1}
+        />
+        <line
+          x1={x}
+          y1={y + safeHeight}
+          x2={x + width}
+          y2={y + safeHeight}
+          stroke="#ef4444"
+          strokeWidth={2.5}
+        />
+      </g>
+    );
+  }
+
+  return (
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={safeHeight}
+        fill="#1f3354"
+        fillOpacity={0.88}
+        rx={1}
+      />
+      <line
+        x1={x}
+        y1={y}
+        x2={x + width}
+        y2={y}
+        stroke="#3b82f6"
+        strokeWidth={2.5}
+      />
+    </g>
+  );
 }
 
 // Akran Kıyaslama Tooltip (Koyu zemin, yüksek kontrast, okunaklı F/K)
@@ -2463,62 +2518,100 @@ export default function SimplyView({
                 <span>1.1 Çeyreklik Temel Finansallar</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
-                  <div className="text-[15px] font-bold text-white">
-                    {currentSector === 'INSURANCE' ? 'Çeyreklik Prim Üretimi' : 'Çeyreklik Satışlar'}
+                {/* 1. Çeyreklik Satışlar */}
+                <div className="bg-[#131518] border border-[#21242c] rounded-2xl p-5 shadow-2xl space-y-3">
+                  <div className="text-[15px] font-bold text-slate-100">
+                    {chartPeriodMode === 'ttm' ? 'Yıllıklandırılmış (TTM) Satışlar' : (currentSector === 'INSURANCE' ? 'Çeyreklik Prim Üretimi' : 'Çeyreklik Satışlar')}
                   </div>
-                  <div className="h-44 w-full">
+                  <div className="h-48 w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={(quarterlyChartData.length > 0 ? quarterlyChartData : chartData).slice(-5)}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #2b313d)" vertical={false} />
-                        <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
-                        <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} hide />
-                        <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
-                        <Bar dataKey="revenue" fill="#3b82f6" radius={[4, 4, 0, 0]}>
-                          {(quarterlyChartData.length > 0 ? quarterlyChartData : chartData).slice(-5).map((entry, idx) => (
-                            <Cell key={`rev-${idx}`} fill={(entry.revenue != null && entry.revenue < 0) ? '#ef4444' : '#3b82f6'} />
-                          ))}
-                        </Bar>
+                      <BarChart
+                        data={(chartPeriodMode === 'ttm' ? chartData : (quarterlyChartData.length > 0 ? quarterlyChartData : chartData)).slice(-5)}
+                        margin={{ top: 12, right: 8, left: 8, bottom: 4 }}
+                      >
+                        <ReferenceLine y={0} stroke="#252a36" strokeWidth={1} />
+                        <XAxis
+                          dataKey="period"
+                          stroke="#64748b"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: '#64748b', fontFamily: 'monospace' }}
+                          tickFormatter={(v: string) => v ? v.replace(/\/0(\d)/, '/$1') : ''}
+                        />
+                        <YAxis stroke="#6b7280" hide domain={['auto', 'auto']} />
+                        <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} cursor={{ fill: 'rgba(255, 255, 255, 0.03)' }} />
+                        <Bar
+                          dataKey="revenue"
+                          shape={renderFinancialBar}
+                          barSize={32}
+                          maxBarSize={38}
+                        />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
 
-                <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
-                  <div className="text-[15px] font-bold text-white">
-                    {currentSector === 'INSURANCE' ? 'Teknik Bölüm Dengesi' : 'Çeyreklik FAVÖK'}
+                {/* 2. Çeyreklik FAVÖK */}
+                <div className="bg-[#131518] border border-[#21242c] rounded-2xl p-5 shadow-2xl space-y-3">
+                  <div className="text-[15px] font-bold text-slate-100">
+                    {chartPeriodMode === 'ttm' ? 'Yıllıklandırılmış (TTM) FAVÖK' : (currentSector === 'INSURANCE' ? 'Teknik Bölüm Dengesi' : 'Çeyreklik FAVÖK')}
                   </div>
-                  <div className="h-44 w-full">
+                  <div className="h-48 w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={(quarterlyChartData.length > 0 ? quarterlyChartData : chartData).slice(-5)}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #2b313d)" vertical={false} />
-                        <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
-                        <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} hide />
-                        <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
-                        <Bar dataKey="ebitda" fill="#f59e0b" radius={[4, 4, 0, 0]}>
-                          {(quarterlyChartData.length > 0 ? quarterlyChartData : chartData).slice(-5).map((entry, idx) => (
-                            <Cell key={`ebitda-${idx}`} fill={(entry.ebitda != null && entry.ebitda < 0) ? '#ef4444' : '#f59e0b'} />
-                          ))}
-                        </Bar>
+                      <BarChart
+                        data={(chartPeriodMode === 'ttm' ? chartData : (quarterlyChartData.length > 0 ? quarterlyChartData : chartData)).slice(-5)}
+                        margin={{ top: 12, right: 8, left: 8, bottom: 4 }}
+                      >
+                        <ReferenceLine y={0} stroke="#252a36" strokeWidth={1} />
+                        <XAxis
+                          dataKey="period"
+                          stroke="#64748b"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: '#64748b', fontFamily: 'monospace' }}
+                          tickFormatter={(v: string) => v ? v.replace(/\/0(\d)/, '/$1') : ''}
+                        />
+                        <YAxis stroke="#6b7280" hide domain={['auto', 'auto']} />
+                        <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} cursor={{ fill: 'rgba(255, 255, 255, 0.03)' }} />
+                        <Bar
+                          dataKey="ebitda"
+                          shape={renderFinancialBar}
+                          barSize={32}
+                          maxBarSize={38}
+                        />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
 
-                <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
-                  <div className="text-[15px] font-bold text-white">Çeyreklik Net Kâr</div>
-                  <div className="h-44 w-full">
+                {/* 3. Çeyreklik Net Kâr */}
+                <div className="bg-[#131518] border border-[#21242c] rounded-2xl p-5 shadow-2xl space-y-3">
+                  <div className="text-[15px] font-bold text-slate-100">
+                    {chartPeriodMode === 'ttm' ? 'Yıllıklandırılmış (TTM) Net Kâr' : 'Çeyreklik Net Kâr'}
+                  </div>
+                  <div className="h-48 w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={(quarterlyChartData.length > 0 ? quarterlyChartData : chartData).slice(-5)}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #2b313d)" vertical={false} />
-                        <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
-                        <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} hide />
-                        <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
-                        <Bar dataKey="net_income" fill="#10b981" radius={[4, 4, 0, 0]}>
-                          {(quarterlyChartData.length > 0 ? quarterlyChartData : chartData).slice(-5).map((entry, idx) => (
-                            <Cell key={`net-${idx}`} fill={(entry.net_income != null && entry.net_income < 0) ? '#ef4444' : '#10b981'} />
-                          ))}
-                        </Bar>
+                      <BarChart
+                        data={(chartPeriodMode === 'ttm' ? chartData : (quarterlyChartData.length > 0 ? quarterlyChartData : chartData)).slice(-5)}
+                        margin={{ top: 12, right: 8, left: 8, bottom: 4 }}
+                      >
+                        <ReferenceLine y={0} stroke="#252a36" strokeWidth={1} />
+                        <XAxis
+                          dataKey="period"
+                          stroke="#64748b"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: '#64748b', fontFamily: 'monospace' }}
+                          tickFormatter={(v: string) => v ? v.replace(/\/0(\d)/, '/$1') : ''}
+                        />
+                        <YAxis stroke="#6b7280" hide domain={['auto', 'auto']} />
+                        <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} cursor={{ fill: 'rgba(255, 255, 255, 0.03)' }} />
+                        <Bar
+                          dataKey="net_income"
+                          shape={renderFinancialBar}
+                          barSize={32}
+                          maxBarSize={38}
+                        />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
