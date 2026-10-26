@@ -80,7 +80,7 @@ import {
   type SnowflakeAnalysisResult,
   type SnowflakeCheck
 } from '@/lib/snowflake';
-import { calculateDuPont5Step, calculateEarningsQuality, parseFinancialNumber } from '@/lib/valuation';
+import { calculateDuPont5Step, calculateEarningsQuality, parseFinancialNumber, parsePeriodSortKey } from '@/lib/valuation';
 
 export type SimplySectionId =
   | 'sec-ozet'
@@ -803,13 +803,33 @@ export default function SimplyView({
       const scaledNet = d.net_income != null ? d.net_income * chartUnitScale : null;
       const scaledEquity = d.equity != null ? d.equity * chartUnitScale : null;
 
-      const periodStr = String(d.period || '').toLowerCase();
-      let annualFactor = 1.0;
-      if (/(?:\/0?3\b|3a\b|q1\b|1\.ç|1ç)/i.test(periodStr)) annualFactor = 4.0;
-      else if (/(?:\/0?6\b|6a\b|q2\b|2\.ç|2ç)/i.test(periodStr)) annualFactor = 2.0;
-      else if (/(?:\/0?9\b|9a\b|q3\b|3\.ç|3ç)/i.test(periodStr)) annualFactor = 12.0 / 9.0;
+      // Kurumsal TTM Net Kâr: Son 12 aylık yuvarlanan net kâr (mevsimsellikten arındırılmış)
+      let ttmNet = d.net_income_ttm ?? null;
+      if (ttmNet == null && chartData && chartData.length > 0) {
+        const pKey = parsePeriodSortKey(d.period);
+        const yr = Math.floor(pKey / 100);
+        const m = pKey % 100;
+        if (m === 12 || m === 0) {
+          ttmNet = d.net_income;
+        } else if (yr > 2000) {
+          const prevEnd = chartData.find((x: any) => parsePeriodSortKey(x.period) === (yr - 1) * 100 + 12);
+          const prevMatch = chartData.find((x: any) => parsePeriodSortKey(x.period) === (yr - 1) * 100 + m);
+          if (prevEnd?.net_income != null && prevMatch?.net_income != null && d.net_income != null) {
+            ttmNet = d.net_income + prevEnd.net_income - prevMatch.net_income;
+          }
+        }
+      }
+      if (ttmNet == null) {
+        const periodStr = String(d.period || '').toLowerCase();
+        let annualFactor = 1.0;
+        if (/(?:\/0?3\b|3a\b|q1\b|1\.ç|1ç)/i.test(periodStr)) annualFactor = 4.0;
+        else if (/(?:\/0?6\b|6a\b|q2\b|2\.ç|2ç)/i.test(periodStr)) annualFactor = 2.0;
+        else if (/(?:\/0?9\b|9a\b|q3\b|3\.ç|3ç)/i.test(periodStr)) annualFactor = 12.0 / 9.0;
+        ttmNet = d.net_income != null ? d.net_income * annualFactor : null;
+      }
 
-      let rawPe = (scaledNet && scaledNet > 0 && mCap > 0) ? Number((mCap / (scaledNet * annualFactor)).toFixed(1)) : null;
+      const scaledTtmNet = ttmNet != null ? ttmNet * chartUnitScale : null;
+      let rawPe = (scaledTtmNet && scaledTtmNet > 0 && mCap > 0) ? Number((mCap / scaledTtmNet).toFixed(1)) : null;
       let rawPb = (scaledEquity && scaledEquity > 0 && mCap > 0) ? Number((mCap / scaledEquity).toFixed(1)) : null;
 
       // Son dönem için İş Yatırım resmi canlı çarpanı veya dinamik rasyoları senkronize et
@@ -828,7 +848,7 @@ export default function SimplyView({
 
       return {
         period: d.period,
-        pe: (rawPe && rawPe > 0 && rawPe < 80) ? rawPe : null,
+        pe: (rawPe && rawPe > 0 && rawPe < 150) ? rawPe : null,
         pb: (rawPb && rawPb > 0 && rawPb < 25) ? rawPb : null,
         sector_pe: sectorPe,
         sector_pb: sectorPb,
@@ -3405,8 +3425,8 @@ export default function SimplyView({
                       <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => `${v}x`} />
                       <Tooltip content={<MultiplesTrendTooltip />} />
                       <Legend align="left" verticalAlign="bottom" wrapperStyle={{ fontSize: '10.5px', paddingTop: '4px', paddingLeft: '8px' }} />
-                      <Line type="monotone" dataKey="pe" name="F/K" stroke="#38bdf8" strokeWidth={2.5} dot={{ r: 3, fill: '#38bdf8' }} legendType="line" />
-                      <Line type="monotone" dataKey="pb" name="PD/DD" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: '#10b981' }} legendType="line" />
+                      <Line type="monotone" dataKey="pe" name="F/K" stroke="#38bdf8" strokeWidth={2.5} dot={{ r: 3, fill: '#38bdf8' }} connectNulls={true} legendType="line" />
+                      <Line type="monotone" dataKey="pb" name="PD/DD" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: '#10b981' }} connectNulls={true} legendType="line" />
                       <Line type="monotone" dataKey="sector_pe" name="Sektör F/K (Ref)" stroke="#fbbf24" strokeWidth={1.5} strokeDasharray="4 4" dot={false} strokeOpacity={0.45} legendType="line" />
                       <Line type="monotone" dataKey="sector_pb" name="Sektör PD/DD (Ref)" stroke="#34d399" strokeWidth={1.5} strokeDasharray="4 4" dot={false} strokeOpacity={0.45} legendType="line" />
                     </LineChart>

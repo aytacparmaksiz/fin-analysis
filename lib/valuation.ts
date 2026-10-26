@@ -846,6 +846,7 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
         }
       }
       const roeRes = safeRoe(roeNetIncome, item.equity, roeAnnualFactor);
+      item.net_income_ttm = roeNetIncome;
       item.roe = roeRes.roe;
       if (roeRes.isInsolvent) item.solvency_warning = roeRes.warning;
     }
