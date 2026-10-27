@@ -1209,7 +1209,7 @@ export async function fetchAndAnalyzeBistCompany(
   });
 
   // 4.5. Güncel piyasa fiyatını İş Yatırım çarpanları veya önbellek ile teyit et
-  const finalMultiples = isMultiples as IsYatirimStockMultiples | null;
+  let finalMultiples = isMultiples as IsYatirimStockMultiples | null;
   if ((!currentPrice || currentPrice === 100.0) && finalMultiples?.lastPrice && finalMultiples.lastPrice > 0) {
     currentPrice = finalMultiples.lastPrice;
   }
@@ -1237,6 +1237,40 @@ export async function fetchAndAnalyzeBistCompany(
 
   // 4.8. İş Yatırım Resmi Temettü Geçmişi ve Konsensüs Hedef Fiyat Verilerini Çözümle
   const companyDetails = await fetchIsYatirimCompanyDetails(ticker);
+
+  // Canlı şirket kartından (sirket-karti.aspx) gelen anlık resmi İş Yatırım çarpanlarını finalMultiples ile senkronize et
+  if (companyDetails.liveMultiples) {
+    const lm = companyDetails.liveMultiples;
+    if (!finalMultiples) {
+      finalMultiples = {
+        ticker,
+        name: meta.name || ticker,
+        sectorName: meta.sector || '',
+        lastPrice: currentPrice,
+        marketCapMnUsd: null,
+        paidInCapitalMnTl: (effectiveShareCount / 1000000) || null,
+        pe: lm.pe,
+        pb: lm.pb,
+        evEbitda: lm.evEbitda ?? null,
+        evSales: lm.evSales ?? null,
+        marketCapMnTl: lm.marketCapMnTl,
+        netDebtMnTl: lm.netDebtMnTl ?? null,
+        freeFloatPct: lm.freeFloatPct,
+        foreignSharePct: lm.foreignSharePct,
+        lastPeriod: 'Canlı',
+        updatedAt: new Date().toISOString()
+      };
+    } else {
+      if (lm.pe !== null && lm.pe !== undefined) finalMultiples.pe = lm.pe;
+      if (lm.pb !== null && lm.pb !== undefined) finalMultiples.pb = lm.pb;
+      if (lm.evEbitda !== undefined) finalMultiples.evEbitda = lm.evEbitda;
+      if (lm.evSales !== undefined) finalMultiples.evSales = lm.evSales;
+      if (lm.marketCapMnTl !== null && lm.marketCapMnTl !== undefined) finalMultiples.marketCapMnTl = lm.marketCapMnTl;
+      if (lm.netDebtMnTl !== undefined) finalMultiples.netDebtMnTl = lm.netDebtMnTl;
+      if (lm.freeFloatPct !== null && lm.freeFloatPct !== undefined) finalMultiples.freeFloatPct = lm.freeFloatPct;
+      if (lm.foreignSharePct !== null && lm.foreignSharePct !== undefined) finalMultiples.foreignSharePct = lm.foreignSharePct;
+    }
+  }
 
   // Eğer finansal geçmişteki dönemlerde dividends_paid eksikse (ör. statik önbellek veya ara dönem),
   // resmi temettü kayıtlarından ilgili kümülatif dönem için ödenen nakit temettüyü tamamla:

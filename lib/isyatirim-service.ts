@@ -24,6 +24,7 @@ export interface IsYatirimStockMultiples {
   marketCapMnUsd: number | null;
   freeFloatPct: number | null;
   paidInCapitalMnTl: number | null;
+  netDebtMnTl?: number | null;
   pe: number | null; // F/K
   evEbitda: number | null; // FD/FAVÖK
   evSales: number | null; // FD/Satışlar
@@ -443,6 +444,16 @@ export interface IsYatirimCompanyDetails {
     prevPct: number | null;
     changeBps: number | null;
   } | null;
+  liveMultiples?: {
+    pe: number | null;
+    evEbitda: number | null;
+    pb: number | null;
+    evSales: number | null;
+    foreignSharePct: number | null;
+    marketCapMnTl: number | null;
+    netDebtMnTl: number | null;
+    freeFloatPct: number | null;
+  } | null;
   fetchedAt: string;
 }
 
@@ -667,8 +678,56 @@ export async function fetchIsYatirimCompanyDetails(
     let dividends: IsYatirimDividendRecord[] = [];
     let consensus: IsYatirimConsensusTarget | null = null;
     let foreignShare = defaultForeignShare;
+    let liveMultiples: IsYatirimCompanyDetails['liveMultiples'] = null;
 
     if (html) {
+      // 0. Cari Değerler Tablosu (F/K, PD/DD, FD/FAVÖK, FD/Satışlar, Yabancı Oranı, Piyasa Değeri, Net Borç)
+      const cariMatch = html.match(/Cari Değerler[\s\S]*?<table[^>]*>([\s\S]*?)<\/table>/i);
+      if (cariMatch) {
+        const tableHtml = cariMatch[1];
+        const rowMatches = tableHtml.matchAll(/<tr[^>]*>\s*<th[^>]*>([\s\S]*?)<\/th>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<\/tr>/gi);
+        const raw: Record<string, string> = {};
+        for (const m of rowMatches) {
+          const key = m[1].replace(/<[^>]+>/g, '').trim();
+          const val = m[2].replace(/<[^>]+>/g, '').trim();
+          raw[key] = val;
+        }
+        liveMultiples = {
+          pe: parseTrFloat(raw['F/K']),
+          evEbitda: parseTrFloat(raw['FD/FAVÖK']),
+          pb: parseTrFloat(raw['PD/DD']),
+          evSales: parseTrFloat(raw['FD/Satışlar']),
+          foreignSharePct: parseTrFloat(raw['Yabancı Oranı (%)']),
+          marketCapMnTl: parseTrFloat(raw['Piyasa Değeri']),
+          netDebtMnTl: parseTrFloat(raw['Net Borç']),
+          freeFloatPct: parseTrFloat(raw['Halka Açıklık Oranı (%)'])
+        };
+
+        if (liveMultiples.foreignSharePct !== null && !foreignShare) {
+          foreignShare = {
+            currentPct: liveMultiples.foreignSharePct,
+            prevPct: null,
+            changeBps: null
+          };
+        }
+
+        // Global cachedMultiples havuzunu canlı şirket kartı verisiyle derhal güncelle
+        if (cachedMultiples && cachedMultiples[ticker]) {
+          cachedMultiples[ticker] = {
+            ...cachedMultiples[ticker],
+            pe: liveMultiples.pe !== null ? liveMultiples.pe : cachedMultiples[ticker].pe,
+            pb: liveMultiples.pb !== null ? liveMultiples.pb : cachedMultiples[ticker].pb,
+            evEbitda: liveMultiples.evEbitda !== undefined ? liveMultiples.evEbitda : cachedMultiples[ticker].evEbitda,
+            evSales: liveMultiples.evSales !== undefined ? liveMultiples.evSales : cachedMultiples[ticker].evSales,
+            foreignSharePct: liveMultiples.foreignSharePct !== null ? liveMultiples.foreignSharePct : cachedMultiples[ticker].foreignSharePct,
+            marketCapMnTl: liveMultiples.marketCapMnTl !== null ? liveMultiples.marketCapMnTl : cachedMultiples[ticker].marketCapMnTl,
+            netDebtMnTl: liveMultiples.netDebtMnTl !== undefined ? liveMultiples.netDebtMnTl : cachedMultiples[ticker].netDebtMnTl,
+            freeFloatPct: liveMultiples.freeFloatPct !== null ? liveMultiples.freeFloatPct : cachedMultiples[ticker].freeFloatPct,
+            updatedAt: new Date().toISOString()
+          };
+        }
+      }
+
       // 1. Temettü Gerçekleşen Tablosu (temettugercek)
       const divMatch = html.match(/<table[^>]*data-csvname=["']temettugercek["'][^>]*>([\s\S]*?)<\/table>/i);
       if (divMatch) {
@@ -771,6 +830,7 @@ export async function fetchIsYatirimCompanyDetails(
       dividends,
       consensus,
       foreignShare,
+      liveMultiples,
       fetchedAt: new Date().toISOString()
     };
 

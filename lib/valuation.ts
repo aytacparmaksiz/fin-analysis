@@ -5266,12 +5266,25 @@ export function calculateCompanyMultiples(
 
   // 1. F/K (P/E)
   let peVal: number | null = isYatirimMultiples?.pe != null ? isYatirimMultiples.pe : null;
+  // Eğer İş Yatırım'dan gelen F/K statik bir kapanış fiyatına aitse ve canlı hisse fiyatı değişmişse orantısal güncelle
+  if (peVal !== null && peVal > 0 && isYatirimMultiples?.lastPrice && isYatirimMultiples.lastPrice > 0 && currentPrice > 0) {
+    const priceRatio = currentPrice / isYatirimMultiples.lastPrice;
+    if (Math.abs(priceRatio - 1) >= 0.02) {
+      peVal = Number((peVal * priceRatio).toFixed(1));
+    }
+  }
   if (peVal === null && annualizedNet !== null && annualizedNet !== 0) {
     peVal = Number((marketCap / annualizedNet).toFixed(2));
   }
 
   // 2. PD/DD (P/B)
   let pbVal: number | null = isYatirimMultiples?.pb != null ? isYatirimMultiples.pb : null;
+  if (pbVal !== null && pbVal > 0 && isYatirimMultiples?.lastPrice && isYatirimMultiples.lastPrice > 0 && currentPrice > 0) {
+    const priceRatio = currentPrice / isYatirimMultiples.lastPrice;
+    if (Math.abs(priceRatio - 1) >= 0.02) {
+      pbVal = Number((pbVal * priceRatio).toFixed(2));
+    }
+  }
   if (pbVal === null && scaledEquity !== null && scaledEquity !== 0) {
     pbVal = Number((marketCap / scaledEquity).toFixed(2));
   }
