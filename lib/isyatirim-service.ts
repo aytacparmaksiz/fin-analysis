@@ -449,6 +449,16 @@ export interface IsYatirimCompanyDetails {
 const companyDetailsCache = new Map<string, { data: IsYatirimCompanyDetails; timestamp: number }>();
 const DETAILS_CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 saat önbellek
 
+export function clearIsYatirimCache(ticker?: string): void {
+  const upper = ticker ? ticker.toUpperCase().replace(/\.IS$/, '').trim() : undefined;
+  if (upper) {
+    companyDetailsCache.delete(upper);
+  } else {
+    companyDetailsCache.clear();
+    lastFetchTimestamp = 0;
+  }
+}
+
 /**
  * Yahoo Finance ?events=div uç noktasından BIST hissesi için tarihsel nakit temettü ödemelerini çeker.
  * İş Yatırım sirket-karti.aspx sayfasına yurt dışı / bulut IP erişim engeli olduğunda yedek kaynak olarak çalışır.
@@ -619,9 +629,15 @@ export function synthesizeDividendsFromFinancialHistory(
  * Canlı HTML erişilemezse veya boş dönerse sırasıyla Resmi İş Yatırım Önbelleği ve Yahoo Finance
  * temettü servisine başvurur.
  */
-export async function fetchIsYatirimCompanyDetails(rawTicker: string): Promise<IsYatirimCompanyDetails> {
+export async function fetchIsYatirimCompanyDetails(
+  rawTicker: string,
+  options?: { forceRefresh?: boolean }
+): Promise<IsYatirimCompanyDetails> {
   const ticker = rawTicker.toUpperCase().replace(/\.IS$/, '').trim();
-  const cached = companyDetailsCache.get(ticker);
+  if (options?.forceRefresh) {
+    companyDetailsCache.delete(ticker);
+  }
+  const cached = options?.forceRefresh ? null : companyDetailsCache.get(ticker);
   if (cached && (Date.now() - cached.timestamp < DETAILS_CACHE_TTL_MS)) {
     return cached.data;
   }

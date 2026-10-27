@@ -20,8 +20,10 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const isRefresh = searchParams.get('refresh') === 'true' || searchParams.get('forceRefresh') === 'true';
+
     const [detailsResult, tvResult] = await Promise.allSettled([
-      fetchIsYatirimCompanyDetails(cleanTicker),
+      fetchIsYatirimCompanyDetails(cleanTicker, { forceRefresh: isRefresh }),
       fetchTradingViewConsensus(cleanTicker)
     ]);
 
@@ -34,7 +36,7 @@ export async function GET(req: NextRequest) {
       tvConsensus
     }, {
       headers: {
-        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400'
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate'
       }
     });
   } catch (error: any) {

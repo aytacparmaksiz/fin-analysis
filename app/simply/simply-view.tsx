@@ -689,7 +689,7 @@ export default function SimplyView({
     });
 
     if (report.ticker) {
-      fetch(`/api/company-details?ticker=${encodeURIComponent(report.ticker)}`)
+      fetch(`/api/company-details?ticker=${encodeURIComponent(report.ticker)}&refresh=true&t=${Date.now()}`, { cache: 'no-store' })
         .then(res => res.json())
         .then(data => {
           if (isMounted && data.success) {

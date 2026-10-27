@@ -2949,7 +2949,7 @@ export default function ValuationTerminal({
       if (!effectivePrice || Number(effectivePrice) <= 0) {
         setStatusMessage(`${normalizedTicker} için canlı BIST piyasa fiyatı sorgulanıyor...`);
         try {
-          const liveRes = await fetch(`/api/bist?ticker=${normalizedTicker}`);
+          const liveRes = await fetch(`/api/bist?ticker=${encodeURIComponent(normalizedTicker)}&refresh=true&t=${Date.now()}`, { cache: 'no-store' });
           if (liveRes.ok) {
             const liveJson = await liveRes.json();
             if (liveJson?.current_price && Number(liveJson.current_price) > 0) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 import { isValidTicker, isValidReportId, validateDeleteReportParams } from '@/lib/security';
 import { clearBistCache } from '@/lib/bist-service';
+import { clearIsYatirimCache } from '@/lib/isyatirim-service';
 
 export { isValidTicker, isValidReportId, validateDeleteReportParams };
 
@@ -197,10 +198,11 @@ export async function DELETE(req: NextRequest) {
 
     const { cleanId, cleanTicker } = validation;
 
-    // Sunucu belleğindeki geçici finansal önbelleği (RAM cache) de temizle
+    // Sunucu belleğindeki ve Supabase'deki tüm önbellek katmanlarını temizle
     if (cleanTicker) {
       try {
-        clearBistCache(cleanTicker);
+        await clearBistCache(cleanTicker);
+        clearIsYatirimCache(cleanTicker);
       } catch {}
     }
 

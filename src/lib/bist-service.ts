@@ -931,11 +931,30 @@ async function fetchYahooFundamentalsHistory(ticker: string, sector: SectorType)
   }
 }
 
-export function clearBistCache(ticker?: string): void {
-  if (ticker) {
-    MEMORY_FINANCIAL_CACHE.delete(ticker.toUpperCase().trim());
+export async function clearBistCache(ticker?: string): Promise<void> {
+  const upper = ticker ? ticker.toUpperCase().trim() : undefined;
+  if (upper) {
+    MEMORY_FINANCIAL_CACHE.delete(upper);
+    SUPABASE_CACHE_AGE.delete(upper);
   } else {
     MEMORY_FINANCIAL_CACHE.clear();
+    SUPABASE_CACHE_AGE.clear();
+  }
+
+  // Supabase kalıcı tablosundaki önbellek kaydını da sil
+  try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabase();
+      if (supabase) {
+        if (upper) {
+          await supabase.from('bist_mali_tablolar').delete().eq('ticker', upper);
+        } else {
+          await supabase.from('bist_mali_tablolar').delete().neq('ticker', '');
+        }
+      }
+    }
+  } catch {
+    // Non-blocking
   }
 }
 
