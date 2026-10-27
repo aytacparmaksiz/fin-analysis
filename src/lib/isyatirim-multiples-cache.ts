@@ -11890,9 +11890,9 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "pb": 1.2,
     "lastPeriod": "6/2026",
     "updatedAt": "2026-10-14T13:49:04.412Z",
-    "foreignSharePrevPct": 63.96,
-    "foreignSharePct": 63.87,
-    "foreignShareChangeBps": -8.57,
+    "foreignSharePrevPct": 64.62,
+    "foreignSharePct": 64.34,
+    "foreignShareChangeBps": -28.0,
     "foreignShareIndexImpactPct": -0.1,
     "historicalEstimates": {
       "peEstimate": 21.7,

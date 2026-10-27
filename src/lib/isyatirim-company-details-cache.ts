@@ -10080,9 +10080,9 @@ export const OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE: Record<string, IsYatir
       "source": "İş Yatırım Araştırma"
     },
     "foreignShare": {
-      "currentPct": 63.87,
-      "prevPct": 63.96,
-      "changeBps": -8.57
+      "currentPct": 64.34,
+      "prevPct": 64.62,
+      "changeBps": -28.0
     },
     "fetchedAt": "2026-10-22T07:37:44.545Z"
   },

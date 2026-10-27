@@ -708,6 +708,18 @@ export default function SimplyView({
     return () => { isMounted = false; };
   }, [report.ticker, report.dividendHistory, report.consensusTarget, report.extractedData, marketMultiples]);
 
+  // Kanonik Yabancı Takas Payı (3.1 Benchmark ve 3.4 Takas Paneli arasında %100 tam mutabakat)
+  const canonicalForeignShare = useMemo(() => {
+    const currentPct = liveCompanyDetails?.foreignShare?.currentPct ?? marketMultiples?.foreign_share_pct ?? null;
+    const prevPct = liveCompanyDetails?.foreignShare?.prevPct ?? marketMultiples?.foreign_share_prev_pct ?? null;
+    const changeBps = liveCompanyDetails?.foreignShare?.changeBps ?? marketMultiples?.foreign_share_change_bps ?? null;
+    return {
+      currentPct: currentPct != null && !isNaN(Number(currentPct)) ? Number(currentPct) : null,
+      prevPct: prevPct != null && !isNaN(Number(prevPct)) ? Number(prevPct) : null,
+      changeBps: changeBps != null && !isNaN(Number(changeBps)) ? Number(changeBps) : null
+    };
+  }, [liveCompanyDetails, marketMultiples]);
+
   // Kurumsal Şirket Profili
   const profile = useMemo(() => {
     return getCompanyProfile(report.ticker, sectorMeta?.title);
@@ -1069,7 +1081,8 @@ export default function SimplyView({
       consensusTarget: consensusTargetPrice,
       peers: analyzedCompetitors,
       earningsQuality,
-      dividends: resolvedDividends
+      dividends: resolvedDividends,
+      dupontResult
     });
   }, [
     report.ticker,
@@ -1088,7 +1101,8 @@ export default function SimplyView({
     latestData,
     consensusTargetPrice,
     analyzedCompetitors,
-    earningsQuality
+    earningsQuality,
+    dupontResult
   ]);
 
   // Kar Tanesi SVG Koordinatları (280x280 viewBox, cx=140, cy=140, maxRadius=95)
@@ -1309,13 +1323,21 @@ export default function SimplyView({
       {
         id: 'roe',
         title: 'Özkaynak Kârlılığı',
-        data: series.map(d => {
+        data: series.map((d, idx) => {
+          const isLatest = idx === series.length - 1;
+          if (isLatest && dupontResult?.calculatedRoe != null && !isNaN(dupontResult.calculatedRoe)) {
+            return {
+              period: d.period ? d.period.slice(2) : '',
+              val: dupontResult.calculatedRoe
+            };
+          }
           const pStr = String(d.period || '').toLowerCase();
           let f = 1.0;
           if (/(?:\/0?3\b|3a\b|q1\b|1\.ç|1ç)/i.test(pStr)) f = 4.0;
           else if (/(?:\/0?6\b|6a\b|q2\b|2\.ç|2ç)/i.test(pStr)) f = 2.0;
           else if (/(?:\/0?9\b|9a\b|q3\b|3\.ç|3ç)/i.test(pStr)) f = 12.0 / 9.0;
-          const annNet = d.net_income != null ? d.net_income * f : null;
+          const rawNet = d._rawCumulative?.net_income ?? d.net_income;
+          const annNet = rawNet != null ? rawNet * f : null;
           return {
             period: d.period ? d.period.slice(2) : '',
             val: (d.equity && annNet != null) ? Number((annNet / d.equity * 100).toFixed(1)) : null
@@ -1324,7 +1346,7 @@ export default function SimplyView({
         format: (v: number) => `%${v.toFixed(1)}`
       }
     ];
-  }, [quarterlyChartData, chartData, currentSector]);
+  }, [quarterlyChartData, chartData, currentSector, dupontResult]);
 
   // Sektör Çarpanları Kıyaslama Çizelgesi
   const peerComparisonData = useMemo(() => {
@@ -3276,9 +3298,9 @@ export default function SimplyView({
                 },
                 {
                   label: 'Yabancı Payı',
-                  rawVal: liveCompanyDetails?.foreignShare?.currentPct ?? marketMultiples?.foreign_share_pct,
+                  rawVal: canonicalForeignShare.currentPct,
                   benchNum: 30.0,
-                  format: (v: number) => `%${v.toFixed(1)}`,
+                  format: (v: number) => `%${v.toFixed(2)}`,
                   isMultiple: false,
                   customType: 'foreign' as const
                 },
@@ -3450,9 +3472,9 @@ export default function SimplyView({
 
             {/* 3.4 Yabancı Takas Payı */}
             {(() => {
-              const foreignPct = marketMultiples?.foreign_share_pct ?? liveCompanyDetails?.foreignShare?.currentPct;
-              const prevForeignPct = marketMultiples?.foreign_share_prev_pct ?? liveCompanyDetails?.foreignShare?.prevPct;
-              const changeBps = marketMultiples?.foreign_share_change_bps ?? liveCompanyDetails?.foreignShare?.changeBps;
+              const foreignPct = canonicalForeignShare.currentPct;
+              const prevForeignPct = canonicalForeignShare.prevPct;
+              const changeBps = canonicalForeignShare.changeBps;
 
               if (foreignPct == null) return null;
 

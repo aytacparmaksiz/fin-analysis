@@ -295,6 +295,7 @@ export function computeSnowflakeAnalysis(params: {
   earningsQuality?: any;
   dividends?: any[];
   dividendHistory?: any[];
+  dupontResult?: any;
 }): SnowflakeAnalysisResult {
   const {
     sector,
@@ -340,25 +341,29 @@ export function computeSnowflakeAnalysis(params: {
     ? validPeerPes.reduce((a, b) => a + b, 0) / validPeerPes.length
     : sectorPe * 0.95;
 
-  // ROE Hesabı (Negatif özkaynak / TTK 376 veya sıfır kârda hayalet +22.0% ROE engellenir)
+  // ROE Hesabı (DuPont ve Kurumsal Yıllıklandırma ile %100 tam mutabakat)
   const latestEqRaw = latestData?.equity ?? (financialHistory.length > 0 ? financialHistory[financialHistory.length - 1]?.equity : undefined);
   const latestNetRaw = latestData?.net_income ?? (financialHistory.length > 0 ? financialHistory[financialHistory.length - 1]?.net_income : undefined);
   const isInsolventEquity = latestEqRaw != null && Number(latestEqRaw) <= 0;
 
   const currentRoe = (() => {
     if (isInsolventEquity) return 0.0;
-    if (companyMultiples?.profitability?.roe != null && !isNaN(Number(companyMultiples.profitability.roe))) {
-      return Number(companyMultiples.profitability.roe);
+    if (params.dupontResult?.calculatedRoe != null && !isNaN(Number(params.dupontResult.calculatedRoe))) {
+      return Number(params.dupontResult.calculatedRoe);
     }
-    if (latestData?.roe != null && !isNaN(Number(latestData.roe))) return Number(latestData.roe);
-    if (latestNetRaw != null && latestEqRaw != null && Number(latestEqRaw) > 0) {
+    const rawCumulativeNet = (latestData as any)?._rawCumulative?.net_income ?? latestNetRaw;
+    if (rawCumulativeNet != null && latestEqRaw != null && Number(latestEqRaw) > 0) {
       const periodStr = String(latestData?.period ?? (financialHistory.length > 0 ? financialHistory[financialHistory.length - 1]?.period : ''));
       let factor = 1.0;
       if (/(?:\/0?3\b|3a\b|q1\b|1\.ç|1ç)/i.test(periodStr)) factor = 4.0;
       else if (/(?:\/0?6\b|6a\b|q2\b|2\.ç|2ç)/i.test(periodStr)) factor = 2.0;
       else if (/(?:\/0?9\b|9a\b|q3\b|3\.ç|3ç)/i.test(periodStr)) factor = 12.0 / 9.0;
-      return (Number(latestNetRaw) * factor / Number(latestEqRaw)) * 100;
+      return Number(((Number(rawCumulativeNet) * factor / Number(latestEqRaw)) * 100).toFixed(1));
     }
+    if (companyMultiples?.profitability?.roe != null && !isNaN(Number(companyMultiples.profitability.roe))) {
+      return Number(companyMultiples.profitability.roe);
+    }
+    if (latestData?.roe != null && !isNaN(Number(latestData.roe))) return Number(latestData.roe);
     return 22.0;
   })();
 
@@ -428,8 +433,14 @@ export function computeSnowflakeAnalysis(params: {
     historicalGrowth.profitGrowth
   );
 
-  // Peter Lynch & Gordon Modeli Adil F/K Çarpanı
-  const fairPe = Math.min(26.0, Math.max(6.0, (currentRoe * 0.22) + (Math.max(0, profitGrowth) * 0.16) + 4.5));
+  // Peter Lynch & Gordon Modeli Adil F/K Çarpanı (Sürdürülebilir Büyüme & Sektörel Tavan Koruması)
+  // Tekil çeyrek baz etkisi (düşük bazdan kaynaklı %100+ sıçrama) sürdürülebilir büyüme değildir;
+  // çarpanı yapay olarak tavan 26x'e kilitlememelidir.
+  // Kurumsal finans kuralı: Sürdürülebilir büyüme g <= %30 ile normalize edilir ve sektör medyan tavanı (maks 1.8x) uygulanır.
+  const normalizedProfitGrowth = Math.min(30.0, Math.max(0, profitGrowth));
+  const sectorMultipleCap = sectorPe > 0 ? Math.min(24.0, sectorPe * 1.8) : 18.0;
+  const rawFairPe = (currentRoe * 0.22) + (normalizedProfitGrowth * 0.16) + 4.5;
+  const fairPe = Number(Math.min(sectorMultipleCap, Math.max(6.0, rawFairPe)).toFixed(1));
 
   // 12A Konsensüs Hedef Fiyat & Potansiyel
   const targetPrice = consensusTarget || (latestData?.consensusTarget?.targetPrice ? Number(latestData.consensusTarget.targetPrice) : null);
