@@ -349,16 +349,25 @@ export function computeSnowflakeAnalysis(params: {
   const pb = (companyMultiples?.multiples?.pb?.companyValue && companyMultiples.multiples.pb.companyValue > 0)
     ? companyMultiples.multiples.pb.companyValue
     : (marketMultiples?.pb ?? (latestData?.pb != null ? Number(latestData.pb) : null));
-  const sectorPe = marketMultiples?.sector_averages?.pe ?? marketMultiples?.sector_pe ?? companyMultiples?.benchmark?.peMedian ?? companyMultiples?.multiples?.pe?.sectorMedian ?? (sector === 'BANKING' ? 4.5 : sector === 'INSURANCE' ? 6.5 : sector === 'TECH' ? 14.0 : 8.5);
-  const sectorPb = marketMultiples?.sector_averages?.pb ?? marketMultiples?.sector_pb ?? companyMultiples?.benchmark?.pbMedian ?? companyMultiples?.multiples?.pb?.sectorMedian ?? (sector === 'BANKING' ? 1.1 : sector === 'INSURANCE' ? 1.8 : sector === 'TECH' ? 4.5 : 2.4);
+  const sectorPe = marketMultiples?.sector_averages?.pe ?? marketMultiples?.sector_pe ?? companyMultiples?.benchmark?.peMedian ?? companyMultiples?.multiples?.pe?.sectorMedian ?? (sector === 'BANKING' ? 4.5 : sector === 'INSURANCE' ? 6.5 : sector === 'TECH' ? 14.0 : sector === 'REIT' ? 7.1 : 8.5);
+  const sectorPb = marketMultiples?.sector_averages?.pb ?? marketMultiples?.sector_pb ?? companyMultiples?.benchmark?.pbMedian ?? companyMultiples?.multiples?.pb?.sectorMedian ?? (sector === 'BANKING' ? 1.1 : sector === 'INSURANCE' ? 1.8 : sector === 'TECH' ? 4.5 : sector === 'REIT' ? 0.74 : 2.4);
 
-  // Akran F/K Hesabı
+  const isReit = sector === 'REIT';
+
+  // Akran Çarpanları Hesabı
   const validPeerPes = Array.isArray(peers)
     ? peers.map(p => Number(p?.pe)).filter(v => !isNaN(v) && v > 0)
     : [];
   const peerPe = validPeerPes.length > 0
     ? validPeerPes.reduce((a, b) => a + b, 0) / validPeerPes.length
     : sectorPe * 0.95;
+
+  const validPeerPbs = Array.isArray(peers)
+    ? peers.map(p => Number(p?.pb)).filter(v => !isNaN(v) && v > 0)
+    : [];
+  const peerPb = validPeerPbs.length > 0
+    ? validPeerPbs.reduce((a, b) => a + b, 0) / validPeerPbs.length
+    : sectorPb * 0.95;
 
   // ROE Hesabı (DuPont ve Kurumsal Yıllıklandırma ile %100 tam mutabakat)
   const latestEqRaw = latestData?.equity ?? (financialHistory.length > 0 ? financialHistory[financialHistory.length - 1]?.equity : undefined);
@@ -467,12 +476,16 @@ export function computeSnowflakeAnalysis(params: {
   // Peter Lynch & Gordon Büyüme Hibrit Modeli Adil F/K Çarpanı (Sürdürülebilir Büyüme & İçsel Değerleme)
   // Kurumsal Finans İlkesi:
   // Adil F/K, şirketin kendi özsermaye kârlılığı (ROE) ve sürdürülebilir kâr büyümesine dayalı İÇSEL bir çarpandır.
-  // Sektör medyanı kıyası zaten 1.4 kriterinde (pe_vs_industry) bağımsız olarak ölçülmektedir.
-  // Tekil çeyrek baz etkisi (düşük bazdan kaynaklı geçici sıçrama) sürdürülebilir büyüme tavanı g <= %30 ile normalize edilir.
-  // Çarpan koridoru kurumsal piyasa normlarına (6.0x - 20.0x) oturtulur.
+  // GYO (REIT) Sektöründe ise küresel standart (EPRA & CFA) F/K yerine PD/DD (Price to NAV) üzerinden çalışır.
   const normalizedProfitGrowth = Math.min(30.0, Math.max(0, effectiveProfitGrowth));
   const rawFairPe = (currentRoe * 0.22) + (normalizedProfitGrowth * 0.16) + 4.5;
   const fairPe = Number(Math.min(20.0, Math.max(6.0, rawFairPe)).toFixed(1));
+
+  // GYO Sektörü İçin Adil PD/DD Çarpanı: Portföy Net Aktif Değeri (NAD) ve ROE Bazlı Adil Çarpan
+  const rawFairPb = fairValue > 0 && currentPrice > 0 && pb != null && pb > 0
+    ? (fairValue / currentPrice) * pb
+    : (currentRoe * 0.04 + 0.65);
+  const fairPb = Number(Math.min(1.25, Math.max(0.50, rawFairPb)).toFixed(2));
 
   // 12A Konsensüs Hedef Fiyat & Potansiyel
   const targetPrice = consensusTarget || (latestData?.consensusTarget?.targetPrice ? Number(latestData.consensusTarget.targetPrice) : null);
@@ -508,44 +521,80 @@ export function computeSnowflakeAnalysis(params: {
         ? `Hisse adil değerine göre %${discountPct.toFixed(1)} oranında kurumsal güvenlik marjı eşiğini (%20+) aşan yüksek bir iskontoyla işlem görmektedir.`
         : `İskonto oranı (%${discountPct.toFixed(1)}), %20 emniyet marjı eşiğinin altındadır.`
     },
-    // 1.3 Price-To-Earnings vs Peers
+    // 1.3 Price-To-Earnings (veya GYO için Price-To-Book) vs Peers
     {
       id: 'pe_vs_peers',
-      title: 'Akran Şirketlere Göre F/K Oranı',
-      passed: pe != null && pe > 0 && peerPe > 0 && pe <= peerPe,
-      metricValue: pe != null && pe > 0 ? `${pe.toFixed(1)}x` : '—',
-      threshold: `<= ${peerPe.toFixed(1)}x Akran Medyanı`,
-      detail: pe != null && pe > 0
-        ? (pe <= peerPe
-            ? `Şirketin F/K çarpanı (${pe.toFixed(1)}x), sektör akranlarının medyan F/K seviyesinin (${peerPe.toFixed(1)}x) altındadır.`
-            : `Şirketin F/K çarpanı (${pe.toFixed(1)}x), akran medyanının (${peerPe.toFixed(1)}x) üzerindedir.`)
-        : 'Zarar veya veri eksikliği nedeniyle F/K hesaplanamadı.'
+      title: isReit ? 'Akran Şirketlere Göre PD/DD Oranı' : 'Akran Şirketlere Göre F/K Oranı',
+      passed: isReit
+        ? (pb != null && pb > 0 && peerPb > 0 && pb <= peerPb)
+        : (pe != null && pe > 0 && peerPe > 0 && pe <= peerPe),
+      metricValue: isReit
+        ? (pb != null && pb > 0 ? `${pb.toFixed(2)}x` : '—')
+        : (pe != null && pe > 0 ? `${pe.toFixed(1)}x` : '—'),
+      threshold: isReit
+        ? `<= ${peerPb.toFixed(2)}x Akran Medyanı`
+        : `<= ${peerPe.toFixed(1)}x Akran Medyanı`,
+      detail: isReit
+        ? (pb != null && pb > 0
+            ? (pb <= peerPb
+                ? `Şirketin PD/DD çarpanı (${pb.toFixed(2)}x), gayrimenkul akranlarının medyan PD/DD seviyesinin (${peerPb.toFixed(2)}x) altındadır.`
+                : `Şirketin PD/DD çarpanı (${pb.toFixed(2)}x), akran medyanının (${peerPb.toFixed(2)}x) üzerindedir.`)
+            : 'PD/DD hesaplanamadı.')
+        : (pe != null && pe > 0
+            ? (pe <= peerPe
+                ? `Şirketin F/K çarpanı (${pe.toFixed(1)}x), sektör akranlarının medyan F/K seviyesinin (${peerPe.toFixed(1)}x) altındadır.`
+                : `Şirketin F/K çarpanı (${pe.toFixed(1)}x), akran medyanının (${peerPe.toFixed(1)}x) üzerindedir.`)
+            : 'Zarar veya veri eksikliği nedeniyle F/K hesaplanamadı.')
     },
-    // 1.4 Price-To-Earnings vs Industry
+    // 1.4 Price-To-Earnings (veya GYO için Price-To-Book) vs Industry
     {
       id: 'pe_vs_industry',
-      title: 'Sektör Medyanına Göre F/K Oranı',
-      passed: pe != null && pe > 0 && sectorPe > 0 && pe <= sectorPe,
-      metricValue: pe != null && pe > 0 ? `${pe.toFixed(1)}x` : '—',
-      threshold: `<= ${sectorPe.toFixed(1)}x Sektör Medyanı`,
-      detail: pe != null && pe > 0
-        ? (pe <= sectorPe
-            ? `Şirketin F/K çarpanı (${pe.toFixed(1)}x), BIST sektör medyanının (${sectorPe.toFixed(1)}x) altındadır.`
-            : `Şirketin F/K çarpanı (${pe.toFixed(1)}x), BIST sektör medyanının (${sectorPe.toFixed(1)}x) üzerindedir.`)
-        : 'Sektör F/K verisi bulunamadı veya F/K negatiftir.'
+      title: isReit ? 'Sektör Medyanına Göre PD/DD Oranı' : 'Sektör Medyanına Göre F/K Oranı',
+      passed: isReit
+        ? (pb != null && pb > 0 && sectorPb > 0 && pb <= sectorPb)
+        : (pe != null && pe > 0 && sectorPe > 0 && pe <= sectorPe),
+      metricValue: isReit
+        ? (pb != null && pb > 0 ? `${pb.toFixed(2)}x` : '—')
+        : (pe != null && pe > 0 ? `${pe.toFixed(1)}x` : '—'),
+      threshold: isReit
+        ? `<= ${sectorPb.toFixed(2)}x Sektör Medyanı`
+        : `<= ${sectorPe.toFixed(1)}x Sektör Medyanı`,
+      detail: isReit
+        ? (pb != null && pb > 0
+            ? (pb <= sectorPb
+                ? `Şirketin PD/DD çarpanı (${pb.toFixed(2)}x), BIST GYO sektörü medyanının (${sectorPb.toFixed(2)}x) altındadır.`
+                : `Şirketin PD/DD çarpanı (${pb.toFixed(2)}x), BIST GYO sektörü medyanının (${sectorPb.toFixed(2)}x) üzerindedir.`)
+            : 'Sektör PD/DD verisi bulunamadı.')
+        : (pe != null && pe > 0
+            ? (pe <= sectorPe
+                ? `Şirketin F/K çarpanı (${pe.toFixed(1)}x), BIST sektör medyanının (${sectorPe.toFixed(1)}x) altındadır.`
+                : `Şirketin F/K çarpanı (${pe.toFixed(1)}x), BIST sektör medyanının (${sectorPe.toFixed(1)}x) üzerindedir.`)
+            : 'Sektör F/K verisi bulunamadı veya F/K negatiftir.')
     },
-    // 1.5 Price-To-Earnings vs Fair Ratio
+    // 1.5 Price-To-Earnings (veya GYO için Fair PB) vs Fair Ratio
     {
       id: 'pe_vs_fair',
-      title: 'Adil F/K Çarpanına Göre Değerleme',
-      passed: pe != null && pe > 0 && pe <= fairPe,
-      metricValue: pe != null && pe > 0 ? `${pe.toFixed(1)}x` : '—',
-      threshold: `<= ${fairPe.toFixed(1)}x Adil Çarpan`,
-      detail: pe != null && pe > 0
-        ? (pe <= fairPe
-            ? `Cari F/K çarpanı (${pe.toFixed(1)}x), şirketin büyüme ve kârlılık profiline göre hesaplanan adil F/K çarpanının (${fairPe.toFixed(1)}x) altındadır.`
-            : `Cari F/K çarpanı (${pe.toFixed(1)}x), şirketin kârlılık dinamiklerinin hak ettiği adil F/K çarpanını (${fairPe.toFixed(1)}x) aşmıştır.`)
-        : 'Şirket zarar açıkladığı için adil F/K kıyası uygulanamaz.'
+      title: isReit ? 'Adil PD/DD Çarpanına Göre Değerleme' : 'Adil F/K Çarpanına Göre Değerleme',
+      passed: isReit
+        ? (pb != null && pb > 0 && pb <= fairPb)
+        : (pe != null && pe > 0 && pe <= fairPe),
+      metricValue: isReit
+        ? (pb != null && pb > 0 ? `${pb.toFixed(2)}x` : '—')
+        : (pe != null && pe > 0 ? `${pe.toFixed(1)}x` : '—'),
+      threshold: isReit
+        ? `<= ${fairPb.toFixed(2)}x Adil Çarpan`
+        : `<= ${fairPe.toFixed(1)}x Adil Çarpan`,
+      detail: isReit
+        ? (pb != null && pb > 0
+            ? (pb <= fairPb
+                ? `Cari PD/DD çarpanı (${pb.toFixed(2)}x), portföy net aktif değeri ve kârlılığına göre hesaplanan adil PD/DD çarpanının (${fairPb.toFixed(2)}x) altındadır.`
+                : `Cari PD/DD çarpanı (${pb.toFixed(2)}x), şirketin adil PD/DD çarpanını (${fairPb.toFixed(2)}x) aşmıştır.`)
+            : 'PD/DD hesaplanamadı.')
+        : (pe != null && pe > 0
+            ? (pe <= fairPe
+                ? `Cari F/K çarpanı (${pe.toFixed(1)}x), şirketin büyüme ve kârlılık profiline göre hesaplanan adil F/K çarpanının (${fairPe.toFixed(1)}x) altındadır.`
+                : `Cari F/K çarpanı (${pe.toFixed(1)}x), şirketin kârlılık dinamiklerinin hak ettiği adil F/K çarpanını (${fairPe.toFixed(1)}x) aşmıştır.`)
+            : 'Şirket zarar açıkladığı için adil F/K kıyası uygulanamaz.')
     },
     // 1.6 Analyst Forecast
     {
@@ -1045,6 +1094,7 @@ export function computeSnowflakeAnalysis(params: {
   // Bütünlük Nöbetçisi (Invariant Sentinel): Çapraz çelişkileri denetle, kırmızı log bas ve otomatik onar
   return InvariantSentinel.validateAndHealSnowflake(rawResult, {
     ticker: params.ticker,
+    sector: params.sector,
     financialHistory: params.financialHistory,
     latestData: params.latestData,
     unifiedMetrics,

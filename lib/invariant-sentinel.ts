@@ -21,6 +21,7 @@ import { parseFinancialNumber } from './valuation.ts';
 
 export interface InvariantValidationContext {
   ticker: string;
+  sector?: string;
   financialHistory?: any[];
   latestData?: any;
   unifiedMetrics?: UnifiedFinancialMetrics | null;
@@ -174,25 +175,52 @@ export class InvariantSentinel {
       }
     }
 
-    // 2. F/K ÇARPANLARI MUTABAKATI
-    const truePe = ctx.marketMultiples?.pe ?? ctx.companyMultiples?.multiples?.pe?.companyValue ?? null;
-    if (truePe !== null && truePe > 0) {
-      for (const checkId of ['pe_vs_peers', 'pe_vs_industry', 'pe_vs_fair']) {
-        const chk = sf.axes.value.checks.find(c => c.id === checkId);
-        if (chk && chk.metricValue && chk.metricValue !== '—') {
-          const curVal = parseFloat(chk.metricValue.replace(/[^0-9.-]/g, ''));
-          if (!isNaN(curVal) && Math.abs(curVal - truePe) >= 0.2) {
-            this.logViolation(
-              ticker,
-              chk.title,
-              chk.metricValue,
-              `${truePe.toFixed(1)}x`,
-              'Değerleme F/K çarpanı canlı piyasa/İş Yatırım çarpanıyla çelişiyordu.'
-            );
-            chk.metricValue = `${truePe.toFixed(1)}x`;
-            const threshVal = parseFloat((chk.threshold || '').replace(/[^0-9.-]/g, ''));
-            if (!isNaN(threshVal) && threshVal > 0) {
-              chk.passed = truePe <= threshVal;
+    // 2. F/K veya GYO İÇİN PD/DD ÇARPANLARI MUTABAKATI
+    const isReit = ctx.sector === 'REIT' || ctx.latestData?.sector === 'REIT' || ctx.unifiedMetrics?.sector === 'REIT';
+    if (isReit) {
+      const truePb = ctx.marketMultiples?.pb ?? ctx.companyMultiples?.multiples?.pb?.companyValue ?? ctx.unifiedMetrics?.valuation?.pb ?? null;
+      if (truePb !== null && truePb > 0) {
+        for (const checkId of ['pe_vs_peers', 'pe_vs_industry', 'pe_vs_fair']) {
+          const chk = sf.axes.value.checks.find(c => c.id === checkId);
+          if (chk && chk.metricValue && chk.metricValue !== '—') {
+            const curVal = parseFloat(chk.metricValue.replace(/[^0-9.-]/g, ''));
+            if (!isNaN(curVal) && Math.abs(curVal - truePb) >= 0.05) {
+              this.logViolation(
+                ticker,
+                chk.title,
+                chk.metricValue,
+                `${truePb.toFixed(2)}x`,
+                'GYO PD/DD çarpanı canlı piyasa/İş Yatırım çarpanıyla çelişiyordu.'
+              );
+              chk.metricValue = `${truePb.toFixed(2)}x`;
+              const threshVal = parseFloat((chk.threshold || '').replace(/[^0-9.-]/g, ''));
+              if (!isNaN(threshVal) && threshVal > 0) {
+                chk.passed = truePb <= threshVal;
+              }
+            }
+          }
+        }
+      }
+    } else {
+      const truePe = ctx.marketMultiples?.pe ?? ctx.companyMultiples?.multiples?.pe?.companyValue ?? null;
+      if (truePe !== null && truePe > 0) {
+        for (const checkId of ['pe_vs_peers', 'pe_vs_industry', 'pe_vs_fair']) {
+          const chk = sf.axes.value.checks.find(c => c.id === checkId);
+          if (chk && chk.metricValue && chk.metricValue !== '—') {
+            const curVal = parseFloat(chk.metricValue.replace(/[^0-9.-]/g, ''));
+            if (!isNaN(curVal) && Math.abs(curVal - truePe) >= 0.2) {
+              this.logViolation(
+                ticker,
+                chk.title,
+                chk.metricValue,
+                `${truePe.toFixed(1)}x`,
+                'Değerleme F/K çarpanı canlı piyasa/İş Yatırım çarpanıyla çelişiyordu.'
+              );
+              chk.metricValue = `${truePe.toFixed(1)}x`;
+              const threshVal = parseFloat((chk.threshold || '').replace(/[^0-9.-]/g, ''));
+              if (!isNaN(threshVal) && threshVal > 0) {
+                chk.passed = truePe <= threshVal;
+              }
             }
           }
         }

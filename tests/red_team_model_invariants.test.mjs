@@ -922,6 +922,7 @@ test('RED TEAM MATHEMATICAL AUDIT & INVARIANT TEST SUITE', async (t) => {
       currentPrice: 86.80,
       fairValue: 144.38,
       discountPct: 66.3,
+      consensusTarget: 151.97,
       marketMultiples: { pe: 11.5, pb: 0.6 },
       unifiedMetrics: trgyoUnified,
       financialHistory: [
@@ -947,6 +948,17 @@ test('RED TEAM MATHEMATICAL AUDIT & INVARIANT TEST SUITE', async (t) => {
 
     // 2. Sağlık Ekseni 6/6 Tam Puan almalıdır
     assert.equal(sf.axes.health.score, 6, 'TRGYO net nakit ve 3.8x cari oran ile 6/6 tam puan almalıdır');
+
+    // 3. GYO (REIT) Sektörü F/K Yerine PD/DD (P/NAV) Değerlemesi Kuralı:
+    const pbIndustry = sf.axes.value.checks.find(c => c.id === 'pe_vs_industry');
+    assert.equal(pbIndustry?.title, 'Sektör Medyanına Göre PD/DD Oranı', 'GYO için başlık PD/DD olmalıdır');
+    assert.equal(pbIndustry?.passed, true, '0.60x <= 0.74x sektör ortalaması olduğu için GEÇTİ olmalıdır');
+
+    const pbFair = sf.axes.value.checks.find(c => c.id === 'pe_vs_fair');
+    assert.equal(pbFair?.title, 'Adil PD/DD Çarpanına Göre Değerleme', 'GYO için adil çarpan başlığı PD/DD olmalıdır');
+    assert.equal(pbFair?.passed, true, '0.60x <= adil PD/DD olduğu için GEÇTİ olmalıdır');
+
+    assert.equal(sf.axes.value.score, 6, 'TRGYO PD/DD iskontosu ile Değerleme ekseninden 6/6 tam puan almalıdır');
   });
 });
 
