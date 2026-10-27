@@ -702,7 +702,9 @@ export function computeSnowflakeAnalysis(params: {
       metricValue: `+%${historicalGrowth.profitGrowth.toFixed(1)} Son Dönem`,
       threshold: `>= %${historicalGrowth.cagr3Y.toFixed(1)} 3Y Ortalama`,
       detail: historicalGrowth.profitGrowth >= historicalGrowth.cagr3Y
-        ? `Son dönem kâr artış hızı (%${historicalGrowth.profitGrowth.toFixed(1)}), çok yıllık tarihsel ortalama büyüme hızını (%${historicalGrowth.cagr3Y.toFixed(1)}) aşmıştır.`
+        ? (Math.abs(historicalGrowth.profitGrowth - historicalGrowth.cagr3Y) < 0.1
+            ? `Son dönem kâr artış hızı (%${historicalGrowth.profitGrowth.toFixed(1)}), çok yıllık tarihsel ortalama büyüme hızını (%${historicalGrowth.cagr3Y.toFixed(1)}) korumuştur.`
+            : `Son dönem kâr artış hızı (%${historicalGrowth.profitGrowth.toFixed(1)}), çok yıllık tarihsel ortalama büyüme hızını (%${historicalGrowth.cagr3Y.toFixed(1)}) aşmıştır.`)
         : `Son dönem kâr artış ivmesi (%${historicalGrowth.profitGrowth.toFixed(1)}), geçmiş ortalamaların gerisinde yavaşlamıştır.`
     },
     // 3.5 Earnings vs Industry
