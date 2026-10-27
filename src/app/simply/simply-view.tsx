@@ -730,6 +730,33 @@ export default function SimplyView({
   const fairValueNum = Number(valuationInfo?.fair_value || report.fairValue || 0);
   const discountPctNum = Number(valuationInfo?.discount_pct || 0);
 
+  // Canlı Piyasa Getiri Performansı (TradingView BIST & Tarihsel Finansal Seriden Dinamik Çözüm)
+  const priceReturns = useMemo(() => {
+    const tv = liveCompanyDetails?.tvConsensus;
+    const r7d = tv?.perfW != null && !isNaN(tv.perfW) ? Number(tv.perfW) : null;
+    let r1y = tv?.perfY != null && !isNaN(tv.perfY) ? Number(tv.perfY) : null;
+
+    // 1 Yıllık Getiri için ikincil fallback: Tarihsel finansal tablodaki 1 yıl önceki hisse fiyatı
+    if (r1y === null && Array.isArray(chartData) && chartData.length > 3 && currentPriceNum > 0) {
+      const latestP = chartData[chartData.length - 1];
+      const latestKey = parsePeriodSortKey(latestP?.period);
+      if (latestKey > 200000) {
+        const targetKey = latestKey - 100;
+        const prevYearP = chartData.find(d => parsePeriodSortKey(d?.period) === targetKey);
+        const prevPrice = Number(prevYearP?.share_price || 0);
+        if (prevPrice > 0) {
+          r1y = Number((((currentPriceNum - prevPrice) / prevPrice) * 100).toFixed(1));
+        }
+      }
+    }
+
+    return {
+      return7d: r7d,
+      return1y: r1y,
+      returnYtd: tv?.perfYtd != null && !isNaN(tv.perfYtd) ? Number(tv.perfYtd) : null
+    };
+  }, [liveCompanyDetails?.tvConsensus, chartData, currentPriceNum]);
+
   // WACC, ROIC ve EVA Çözümü (TMS 29 Reel WACC ve Terminal ile %100 Senkronize)
   const isTms29 = Boolean(latestData?.is_tms29 ?? report.extractedData?.is_tms29 ?? true);
   const realWaccNum = Number(latestData?.real_wacc ?? valuationInfo?.real_wacc ?? (latestData?.wacc ? latestData.wacc - 18 : 4.7));
@@ -1966,17 +1993,44 @@ export default function SimplyView({
 
                 <div className="bg-[#21262d]/60 border border-[#2e3440] rounded-xl p-4 sm:p-5 flex flex-col justify-between space-y-3">
                   <div>
-                    <div className="text-[15px] font-bold text-white">Getiri Performansı</div>
+                    <div className="text-[15px] font-bold text-white flex items-center justify-between">
+                      <span>Getiri Performansı</span>
+                      {liveCompanyDetails?.tvConsensus && (
+                        <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/40">
+                          Canlı Piyasa
+                        </span>
+                      )}
+                    </div>
                     <div className="text-sm text-slate-300 mt-0.5">BIST piyasa dinamikleri</div>
                   </div>
                   <div className="space-y-2.5">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-slate-300">7 Günlük:</span>
-                      <span className="font-mono font-bold text-emerald-400">+%3.2</span>
+                      <span className={`font-mono font-bold ${
+                        priceReturns.return7d === null
+                          ? 'text-slate-400'
+                          : priceReturns.return7d > 0
+                            ? 'text-emerald-400'
+                            : priceReturns.return7d < 0
+                              ? 'text-rose-400'
+                              : 'text-slate-200'
+                      }`}>
+                        {priceReturns.return7d !== null ? `${priceReturns.return7d > 0 ? '+' : ''}%${priceReturns.return7d.toFixed(1)}` : '—'}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-slate-300">1 Yıllık:</span>
-                      <span className="font-mono font-bold text-emerald-400">+%84.6</span>
+                      <span className={`font-mono font-bold ${
+                        priceReturns.return1y === null
+                          ? 'text-slate-400'
+                          : priceReturns.return1y > 0
+                            ? 'text-emerald-400'
+                            : priceReturns.return1y < 0
+                              ? 'text-rose-400'
+                              : 'text-slate-200'
+                      }`}>
+                        {priceReturns.return1y !== null ? `${priceReturns.return1y > 0 ? '+' : ''}%${priceReturns.return1y.toFixed(1)}` : '—'}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-slate-300">F/K Oranı:</span>
@@ -1985,8 +2039,15 @@ export default function SimplyView({
                       </span>
                     </div>
                   </div>
-                  <div className="text-sm text-slate-400 border-t border-[#2e3440] pt-2.5">
-                    KAP verileriyle senkronize edilmiştir.
+                  <div className="text-sm text-slate-400 border-t border-[#2e3440] pt-2.5 flex items-center justify-between">
+                    <span>KAP ve BIST piyasa verileri</span>
+                    {priceReturns.returnYtd !== null && (
+                      <span className="text-xs font-mono text-slate-300">
+                        YTD: <strong className={priceReturns.returnYtd >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                          {priceReturns.returnYtd > 0 ? '+' : ''}%{priceReturns.returnYtd.toFixed(1)}
+                        </strong>
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

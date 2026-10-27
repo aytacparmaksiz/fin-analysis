@@ -2,6 +2,7 @@ import https from 'node:https';
 
 export interface TradingViewConsensus {
   ticker: string;
+  closePrice?: number | null;
   targetPriceAverage: number | null;
   targetPriceMedian: number | null;
   targetPriceHigh: number | null;
@@ -10,6 +11,10 @@ export interface TradingViewConsensus {
   recommendationLabel: 'GÜÇLÜ AL' | 'AL' | 'TUT' | 'SAT' | 'GÜÇLÜ SAT' | 'NÖTR';
   revenueForecastNextFq?: number | null;
   epsForecastNextFq?: number | null;
+  perfW?: number | null;   // 7 Günlük Getiri (%)
+  perf1M?: number | null;  // 1 Aylık Getiri (%)
+  perfY?: number | null;   // 1 Yıllık Getiri (%)
+  perfYtd?: number | null; // Yılbaşından Bugüne (%)
   source: string;
   fetchedAt: string;
 }
@@ -21,15 +26,30 @@ const tvHttpsAgent = new https.Agent({
 });
 
 const tvCache = new Map<string, { data: TradingViewConsensus | null; timestamp: number }>();
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 saat önbellek
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15 dakika önbellek
+
+export function clearTradingViewCache(ticker?: string): void {
+  const upper = ticker ? ticker.toUpperCase().replace(/\.IS$/, '').trim() : undefined;
+  if (upper) {
+    tvCache.delete(upper);
+  } else {
+    tvCache.clear();
+  }
+}
 
 /**
  * TradingView BIST Scanner üzerinden Refinitiv/LSEG tarafından toplanan
- * tüm yerli/yabancı aracı kurumların konsensüs hedef fiyatlarını çeker.
+ * tüm yerli/yabancı aracı kurumların konsensüs hedef fiyatlarını ve canlı getiri performansını çeker.
  */
-export async function fetchTradingViewConsensus(rawTicker: string): Promise<TradingViewConsensus | null> {
+export async function fetchTradingViewConsensus(
+  rawTicker: string,
+  options?: { forceRefresh?: boolean }
+): Promise<TradingViewConsensus | null> {
   const ticker = rawTicker.toUpperCase().replace(/\.IS$/, '').trim();
-  const cached = tvCache.get(ticker);
+  if (options?.forceRefresh) {
+    tvCache.delete(ticker);
+  }
+  const cached = options?.forceRefresh ? null : tvCache.get(ticker);
   if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
     return cached.data;
   }
@@ -37,7 +57,8 @@ export async function fetchTradingViewConsensus(rawTicker: string): Promise<Trad
   const columns = [
     'name', 'close',
     'price_target_average', 'price_target_median', 'price_target_high', 'price_target_low',
-    'recommendation_mark', 'revenue_forecast_next_fq', 'earnings_per_share_forecast_next_fq'
+    'recommendation_mark', 'revenue_forecast_next_fq', 'earnings_per_share_forecast_next_fq',
+    'Perf.W', 'Perf.1M', 'Perf.Y', 'Perf.YTD'
   ];
 
   const postBody = JSON.stringify({
@@ -101,6 +122,7 @@ export async function fetchTradingViewConsensus(rawTicker: string): Promise<Trad
     }
 
     const d = item.d;
+    const closePrice = typeof d[1] === 'number' && !isNaN(d[1]) ? Number(d[1].toFixed(2)) : null;
     const avg = typeof d[2] === 'number' && !isNaN(d[2]) && d[2] > 0 ? d[2] : null;
     const median = typeof d[3] === 'number' && !isNaN(d[3]) && d[3] > 0 ? d[3] : null;
     const high = typeof d[4] === 'number' && !isNaN(d[4]) && d[4] > 0 ? d[4] : null;
@@ -108,8 +130,14 @@ export async function fetchTradingViewConsensus(rawTicker: string): Promise<Trad
     const mark = typeof d[6] === 'number' && !isNaN(d[6]) ? d[6] : null;
     const revFq = typeof d[7] === 'number' && !isNaN(d[7]) ? d[7] : null;
     const epsFq = typeof d[8] === 'number' && !isNaN(d[8]) ? d[8] : null;
+    const perfW = typeof d[9] === 'number' && !isNaN(d[9]) ? Number(d[9].toFixed(2)) : null;
+    const perf1M = typeof d[10] === 'number' && !isNaN(d[10]) ? Number(d[10].toFixed(2)) : null;
+    const perfY = typeof d[11] === 'number' && !isNaN(d[11]) ? Number(d[11].toFixed(2)) : null;
+    const perfYtd = typeof d[12] === 'number' && !isNaN(d[12]) ? Number(d[12].toFixed(2)) : null;
 
-    if (!avg && !median && !high && !low) {
+    const hasConsensus = avg != null || median != null || high != null || low != null;
+    const hasPerf = perfW != null || perfY != null || perf1M != null;
+    if (!hasConsensus && !hasPerf) {
       return null;
     }
 
@@ -124,6 +152,7 @@ export async function fetchTradingViewConsensus(rawTicker: string): Promise<Trad
 
     const result: TradingViewConsensus = {
       ticker,
+      closePrice,
       targetPriceAverage: avg ? Number(avg.toFixed(2)) : null,
       targetPriceMedian: median ? Number(median.toFixed(2)) : null,
       targetPriceHigh: high ? Number(high.toFixed(2)) : null,
@@ -132,6 +161,10 @@ export async function fetchTradingViewConsensus(rawTicker: string): Promise<Trad
       recommendationLabel,
       revenueForecastNextFq: revFq,
       epsForecastNextFq: epsFq,
+      perfW,
+      perf1M,
+      perfY,
+      perfYtd,
       source: 'Piyasa Konsensüsü (LSEG / Refinitiv Kurumlar Havuzu)',
       fetchedAt: new Date().toISOString()
     };

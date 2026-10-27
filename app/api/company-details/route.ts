@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 
     const [detailsResult, tvResult] = await Promise.allSettled([
       fetchIsYatirimCompanyDetails(cleanTicker, { forceRefresh: isRefresh }),
-      fetchTradingViewConsensus(cleanTicker)
+      fetchTradingViewConsensus(cleanTicker, { forceRefresh: isRefresh })
     ]);
 
     const details = detailsResult.status === 'fulfilled' ? detailsResult.value : null;
