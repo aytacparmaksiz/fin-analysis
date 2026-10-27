@@ -318,7 +318,27 @@ export class InvariantSentinel {
       }
     }
 
-    // 5. SKORLARI YENİDEN HESAPLA (Self-Healing Sonrası Puan Doğrulaması)
+    // 8. NET NAKİT VE FAİZ KARŞILAMA MUTABAKATI
+    const isNetCashOrSurplus = (ctx.unifiedMetrics?.balanceSheet?.netDebt != null && ctx.unifiedMetrics.balanceSheet.netDebt <= 0) ||
+      (ctx.unifiedMetrics?.dupont?.interestBurden != null && ctx.unifiedMetrics.dupont.interestBurden >= 1.0);
+    if (isNetCashOrSurplus) {
+      const icrCheck = sf.axes.health.checks.find(c => c.id === 'interest_coverage');
+      if (icrCheck && !icrCheck.passed) {
+        this.logViolation(
+          ticker,
+          icrCheck.title,
+          icrCheck.metricValue,
+          'Net Nakit Fazlası / Net Faiz Geliri',
+          'Şirket net nakit fazlasında veya net finansman geliri pozisyonundayken faiz karşılama haksız yere başarısız sayılıyordu.'
+        );
+        icrCheck.metricValue = (ctx.unifiedMetrics?.balanceSheet?.netDebt != null && ctx.unifiedMetrics.balanceSheet.netDebt <= 0)
+          ? 'Net Nakit Fazlası'
+          : 'Net Faiz Geliri';
+        icrCheck.passed = true;
+      }
+    }
+
+    // 9. SKORLARI YENİDEN HESAPLA (Self-Healing Sonrası Puan Doğrulaması)
     for (const axisKey of Object.keys(sf.axes) as Array<keyof typeof sf.axes>) {
       const axis = sf.axes[axisKey];
       axis.score = axis.checks.filter(c => c.passed).length;

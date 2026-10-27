@@ -876,5 +876,77 @@ test('RED TEAM MATHEMATICAL AUDIT & INVARIANT TEST SUITE', async (t) => {
     const debtCoverage = sf.axes.health.checks.find(c => c.id === 'debt_coverage');
     assert.equal(debtCoverage?.metricValue, 'Faaliyet Nakit Akışı / Borç: %74', 'Debt coverage TTM OCF ile %74 olmalıdır');
   });
+
+  await t.test('REGRESYON 23: TRGYO Net Nakit Fazlası ve Faiz Karşılama Bütünlüğü', () => {
+    const trgyoUnified = {
+      ttm: {
+        revenue: 18938389706,
+        ebitda: 12670089437,
+        netIncome: 8908721185,
+        operatingCashFlow: 15083768973,
+      },
+      balanceSheet: {
+        netDebt: -2896732000, // Net Nakit Fazlası
+        financialDebt: 12458860000,
+        equity: 154004463000,
+        currentAssets: 24445857000,
+        currentLiabilities: 6425351000,
+        totalAssets: 196655058000,
+        totalLiabilities: 42650595000
+      },
+      liquidity: {
+        currentRatio: 3.80,
+        netDebtToEbitda: -0.2,
+      },
+      margins: {
+        netMargin: 47.0,
+        roe: 5.8,
+        roic: 8.4,
+      },
+      cashQuality: {
+        cashConversionRatio: 1.69,
+      },
+      dupont: {
+        calculatedRoe: 7.2,
+        interestBurden: 1.317, // Net finansman geliri pozitif
+      },
+      growth: {
+        revenueGrowthYoY: 35.6,
+        netIncomeGrowthYoY: 11.4,
+      }
+    };
+
+    const sf = calculateSnowflake({
+      ticker: 'TRGYO',
+      sector: 'REIT',
+      currentPrice: 86.80,
+      fairValue: 144.38,
+      discountPct: 66.3,
+      marketMultiples: { pe: 11.5, pb: 0.6 },
+      unifiedMetrics: trgyoUnified,
+      financialHistory: [
+        { period: '2025/06', revenue: 13965000000, net_income: 7990000000 },
+        { period: '2026/06', revenue: 18938389706, net_income: 8908721185, operating_profit: 11742500235, ebitda: 12670089437, net_debt: -2896732000, financial_debt: 12458860000, equity: 154004463000 }
+      ],
+      latestData: {
+        period: '2026/06',
+        net_income: 8908721185,
+        revenue: 18938389706,
+        ebitda: 12670089437,
+        operating_profit: 11742500235,
+        net_debt: -2896732000,
+        financial_debt: 12458860000,
+        equity: 154004463000
+      }
+    });
+
+    // 1. Faiz Karşılama Oranı: Net Nakit pozisyonunda olan şirkete FAIL verilmemeli
+    const icrCheck = sf.axes.health.checks.find(c => c.id === 'interest_coverage');
+    assert.equal(icrCheck?.metricValue, 'Net Nakit Fazlası', 'Net nakit fazlası olan şirkette faiz karşılama Net Nakit Fazlası olmalıdır');
+    assert.equal(icrCheck?.passed, true, 'Net nakit fazlasında faiz karşılama GEÇTİ olmalıdır');
+
+    // 2. Sağlık Ekseni 6/6 Tam Puan almalıdır
+    assert.equal(sf.axes.health.score, 6, 'TRGYO net nakit ve 3.8x cari oran ile 6/6 tam puan almalıdır');
+  });
 });
 

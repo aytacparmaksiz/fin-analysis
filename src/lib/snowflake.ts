@@ -754,6 +754,8 @@ export function computeSnowflakeAnalysis(params: {
   const interestExpense = Math.abs(Number(rawInterestExp));
   const icr = interestExpense > 0 ? ebit / interestExpense : 99.0;
 
+  const isNetCashOrFinanceSurplus = netDebt <= 0 || (unifiedMetrics?.dupont?.interestBurden != null && unifiedMetrics.dupont.interestBurden >= 1.0);
+
   const healthChecks: SnowflakeCheck[] = [
     // 4.1 Short Term Liabilities
     {
@@ -822,11 +824,15 @@ export function computeSnowflakeAnalysis(params: {
     {
       id: 'interest_coverage',
       title: 'Faiz Karşılama Oranı',
-      passed: isFinancial ? !isInsolventEquity : (interestExpense <= 0 ? ebit >= 0 : icr >= 3.0),
-      metricValue: interestExpense <= 0 ? 'Net Faiz Geliri' : `${icr.toFixed(1)}x`,
+      passed: isFinancial
+        ? !isInsolventEquity
+        : (isNetCashOrFinanceSurplus || interestExpense <= 0 ? ebit >= 0 : icr >= 3.0),
+      metricValue: isNetCashOrFinanceSurplus
+        ? (netDebt <= 0 ? 'Net Nakit Fazlası' : 'Net Faiz Geliri')
+        : (interestExpense <= 0 ? 'Net Faiz Geliri' : `${icr.toFixed(1)}x`),
       threshold: '>= 3.0x veya Net Faiz Geliri',
-      detail: (interestExpense <= 0 && ebit >= 0) || icr >= 50.0
-        ? 'Şirketin net faiz gideri bulunmamakta veya faiz gelirleri finansman giderlerini aşmaktadır.'
+      detail: (isNetCashOrFinanceSurplus || interestExpense <= 0 || icr >= 50.0) && ebit >= 0
+        ? 'Şirketin net nakit fazlası ve finansman gelirleri borçlanma maliyetlerini emniyetle aşmaktadır; faiz yükümlülüğü riski bulunmamaktadır.'
         : (icr >= 3.0
             ? `Esas faaliyet kârı (${formatCurrency(ebit)}), finansman faiz giderlerini ${icr.toFixed(1)} katı ile emniyetle karşılamaktadır.`
             : `Faiz karşılama oranı (${icr.toFixed(1)}x), güvenli eşiğin (3.0x) altındadır.`)
