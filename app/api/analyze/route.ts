@@ -9,6 +9,7 @@ import { computeSectorValuationAndDrivers, syncReportTextWithValuation } from '@
 import { fetchLiveBistPrice } from '@/lib/bist-service';
 import { fetchIsYatirimCompanyDetails, synthesizeDividendsFromFinancialHistory } from '@/lib/isyatirim-service';
 import { FinancialRatioEngine } from '@/lib/ratio-engine';
+import { InvariantSentinel } from '@/lib/invariant-sentinel';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -290,6 +291,14 @@ RAPOR FORMATI KESİNLİKLE ŞU BAŞLIKLARLA VE YAPIDA OLMALIDIR:
       shareCount: shareCountNum,
       sector,
       currency: extractedData?.currency || 'TRY'
+    });
+
+    // Bütünlük Nöbetçisi (Invariant Sentinel): Değer sürücülerinin gerçekleşen mali tablolara uyumunu doğrula ve onar
+    InvariantSentinel.validateAndHealDrivers(drivers, {
+      ticker: resolvedTicker,
+      financialHistory: sortedHist,
+      latestData: latestItem,
+      unifiedMetrics
     });
 
     const precomputedScorecardTable = `

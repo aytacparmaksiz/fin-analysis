@@ -10,6 +10,7 @@
  */
 
 import { getCompanySectorDisplayName, type SectorType } from './sectors.ts';
+import { InvariantSentinel } from './invariant-sentinel.ts';
 
 export interface SnowflakeCheck {
   id: string;
@@ -981,7 +982,7 @@ export function computeSnowflakeAnalysis(params: {
     methodology: c.methodology || SNOWFLAKE_CHECK_METHODOLOGIES[c.id] || ''
   });
 
-  return {
+  const rawResult: SnowflakeAnalysisResult = {
     axes: {
       value: { key: 'value', label: 'Değerleme', score: valueScore, maxScore: 6, checks: valueChecks.map(enrichCheck) },
       future: { key: 'future', label: 'Gelecek Büyüme', score: futureScore, maxScore: 6, checks: futureChecks.map(enrichCheck) },
@@ -994,6 +995,17 @@ export function computeSnowflakeAnalysis(params: {
     rewards,
     risks
   };
+
+  // Bütünlük Nöbetçisi (Invariant Sentinel): Çapraz çelişkileri denetle, kırmızı log bas ve otomatik onar
+  return InvariantSentinel.validateAndHealSnowflake(rawResult, {
+    ticker: params.ticker,
+    financialHistory: params.financialHistory,
+    latestData: params.latestData,
+    marketMultiples: params.marketMultiples,
+    companyMultiples: params.companyMultiples,
+    dupontResult: params.dupontResult,
+    currentPrice: params.currentPrice
+  });
 }
 
 /**

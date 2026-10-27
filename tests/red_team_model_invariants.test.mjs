@@ -740,5 +740,59 @@ test('RED TEAM MATHEMATICAL AUDIT & INVARIANT TEST SUITE', async (t) => {
     );
     assert.equal(earningsCheck.passed, true, 'MPARK %38.0 kâr büyümesiyle %32.0 risksiz faiz eşiğini geçmelidir');
   });
+
+  await t.test('REGRESYON 21: InvariantSentinel F/K ve ROE sapmalarını tespit edip kırmızı uyarı ve self-healing uygular', async () => {
+    const { InvariantSentinel } = await import('../lib/invariant-sentinel.ts');
+    
+    // Kasti olarak bozuk değerler içeren sahte bir Snowflake nesnesi
+    const mockSnowflake = {
+      axes: {
+        value: {
+          key: 'value',
+          label: 'Değerleme',
+          score: 1,
+          maxScore: 6,
+          checks: [
+            { id: 'pe_vs_peers', title: 'Akran Şirketlere Göre F/K Oranı', passed: false, metricValue: '25.0x', threshold: '<= 12.0x' },
+            { id: 'pe_vs_industry', title: 'Sektör Medyanına Göre F/K Oranı', passed: false, metricValue: '25.0x', threshold: '<= 13.0x' },
+            { id: 'pe_vs_fair', title: 'Adil F/K Çarpanına Göre Değerleme', passed: false, metricValue: '25.0x', threshold: '<= 14.0x' }
+          ]
+        },
+        future: { key: 'future', label: 'Gelecek Büyüme', score: 0, maxScore: 6, checks: [] },
+        past: {
+          key: 'past',
+          label: 'Geçmiş Performans',
+          score: 0,
+          maxScore: 6,
+          checks: [
+            { id: 'high_historical_roe', title: 'Yüksek Gerçekleşen Özsermaye Kârlılığı', passed: false, metricValue: '%5.0 Gerçekleşen ROE', threshold: '>= %20.0 Eşik' }
+          ]
+        },
+        health: { key: 'health', label: 'Finansal Sağlık', score: 0, maxScore: 6, checks: [] },
+        dividend: { key: 'dividend', label: 'Temettü', score: 0, maxScore: 6, checks: [] }
+      },
+      totalScore: 1,
+      percentage: 10,
+      rewards: [],
+      risks: []
+    };
+
+    // Sentinel çalıştır: Gerçek F/K 10.7x ve Gerçek DuPont ROE %28.5 verildiğinde
+    const healed = InvariantSentinel.validateAndHealSnowflake(mockSnowflake, {
+      ticker: 'TEST_STOCK',
+      marketMultiples: { pe: 10.7 },
+      dupontResult: { calculatedRoe: 28.5 }
+    });
+
+    // F/K kontrolleri 25.0x'ten 10.7x'e eşitlenmeli ve <= 12.0x, <= 13.0x, <= 14.0x eşiklerinden ötürü GEÇMELİDİR
+    const pePeer = healed.axes.value.checks.find(c => c.id === 'pe_vs_peers');
+    assert.equal(pePeer?.metricValue, '10.7x', 'Bozuk F/K canlı piyasa çarpanı 10.7x ile self-healing edilmelidir');
+    assert.equal(pePeer?.passed, true, '10.7x <= 12.0x olduğu için kriter GEÇTİ olarak düzeltilmelidir');
+
+    // ROE kontrolü %5.0'dan %28.5'e eşitlenmeli ve >= %20.0 eşiğinden ötürü GEÇMELİDİR
+    const roeCheck = healed.axes.past.checks.find(c => c.id === 'high_historical_roe');
+    assert.equal(roeCheck?.metricValue, '%28.5 Gerçekleşen ROE', 'Bozuk ROE DuPont değeri %28.5 ile self-healing edilmelidir');
+    assert.equal(roeCheck?.passed, true, '28.5 >= 20.0 olduğu için kriter GEÇTİ olarak düzeltilmelidir');
+  });
 });
 
