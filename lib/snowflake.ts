@@ -433,14 +433,15 @@ export function computeSnowflakeAnalysis(params: {
     historicalGrowth.profitGrowth
   );
 
-  // Peter Lynch & Gordon Modeli Adil F/K Çarpanı (Sürdürülebilir Büyüme & Sektörel Tavan Koruması)
-  // Tekil çeyrek baz etkisi (düşük bazdan kaynaklı %100+ sıçrama) sürdürülebilir büyüme değildir;
-  // çarpanı yapay olarak tavan 26x'e kilitlememelidir.
-  // Kurumsal finans kuralı: Sürdürülebilir büyüme g <= %30 ile normalize edilir ve sektör medyan tavanı (maks 1.8x) uygulanır.
+  // Peter Lynch & Gordon Büyüme Hibrit Modeli Adil F/K Çarpanı (Sürdürülebilir Büyüme & İçsel Değerleme)
+  // Kurumsal Finans İlkesi:
+  // Adil F/K, şirketin kendi özsermaye kârlılığı (ROE) ve sürdürülebilir kâr büyümesine dayalı İÇSEL bir çarpandır.
+  // Sektör medyanı kıyası zaten 1.4 kriterinde (pe_vs_industry) bağımsız olarak ölçülmektedir.
+  // Tekil çeyrek baz etkisi (düşük bazdan kaynaklı geçici sıçrama) sürdürülebilir büyüme tavanı g <= %30 ile normalize edilir.
+  // Çarpan koridoru kurumsal piyasa normlarına (6.0x - 20.0x) oturtulur.
   const normalizedProfitGrowth = Math.min(30.0, Math.max(0, profitGrowth));
-  const sectorMultipleCap = sectorPe > 0 ? Math.min(24.0, sectorPe * 1.8) : 18.0;
   const rawFairPe = (currentRoe * 0.22) + (normalizedProfitGrowth * 0.16) + 4.5;
-  const fairPe = Number(Math.min(sectorMultipleCap, Math.max(6.0, rawFairPe)).toFixed(1));
+  const fairPe = Number(Math.min(20.0, Math.max(6.0, rawFairPe)).toFixed(1));
 
   // 12A Konsensüs Hedef Fiyat & Potansiyel
   const targetPrice = consensusTarget || (latestData?.consensusTarget?.targetPrice ? Number(latestData.consensusTarget.targetPrice) : null);
