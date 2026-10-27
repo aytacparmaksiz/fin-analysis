@@ -11,6 +11,7 @@
 
 import { getCompanySectorDisplayName, type SectorType } from './sectors.ts';
 import { InvariantSentinel } from './invariant-sentinel.ts';
+import { FinancialRatioEngine, type UnifiedFinancialMetrics } from './ratio-engine.ts';
 
 export interface SnowflakeCheck {
   id: string;
@@ -287,6 +288,7 @@ export function computeSnowflakeAnalysis(params: {
   companyMultiples?: any;
   financialHistory?: any[];
   valuationDrivers?: any;
+  unifiedMetrics?: UnifiedFinancialMetrics | any;
   evaSpread?: number;
   roic?: number;
   wacc?: number;
@@ -300,21 +302,24 @@ export function computeSnowflakeAnalysis(params: {
 }): SnowflakeAnalysisResult {
   const {
     sector,
-    currentPrice,
-    fairValue,
+    currentPrice: rawCurrentPrice,
+    fairValue: rawFairValue,
     discountPct: rawDiscountPct,
     marketMultiples,
     companyMultiples,
     financialHistory = [],
     valuationDrivers,
     evaSpread = 0,
-    roic = 0,
+    roic: rawRoic = 0,
     wacc = 0,
     latestData = {},
     consensusTarget,
     peers = [],
     earningsQuality
   } = params;
+
+  const currentPrice = typeof rawCurrentPrice === 'number' && !isNaN(rawCurrentPrice) ? rawCurrentPrice : 0;
+  const fairValue = typeof rawFairValue === 'number' && !isNaN(rawFairValue) ? rawFairValue : 0;
 
   const discountPct = (typeof rawDiscountPct === 'number' && !isNaN(rawDiscountPct))
     ? rawDiscountPct
@@ -323,6 +328,19 @@ export function computeSnowflakeAnalysis(params: {
   const isFinancial = sector === 'BANKING' || sector === 'INSURANCE' || sector === 'FINANCIAL_SERVICES';
   const isAviation = sector === 'AVIATION';
   const isForeign = isAviation || params.latestData?.is_foreign_currency;
+
+  // 0. Tek Doğruluk Kaynağı: Unified Financial Metrics (TTM, Bilanço, Likidite, DuPont)
+  const unifiedMetrics: UnifiedFinancialMetrics | null = params.unifiedMetrics || (
+    financialHistory.length > 0
+      ? FinancialRatioEngine.computeMetrics({
+          ticker: params.ticker || 'BIST',
+          history: financialHistory,
+          currentPrice: currentPrice > 0 ? currentPrice : 1.0,
+          shareCount: Number(latestData?.paid_in_capital || 100_000_000),
+          sector
+        })
+      : null
+  );
 
   // Temel Değişkenler
   const pe = (companyMultiples?.multiples?.pe?.companyValue && companyMultiples.multiples.pe.companyValue > 0)
@@ -349,6 +367,12 @@ export function computeSnowflakeAnalysis(params: {
 
   const currentRoe = (() => {
     if (isInsolventEquity) return 0.0;
+    if (unifiedMetrics?.dupont?.calculatedRoe != null && !isNaN(Number(unifiedMetrics.dupont.calculatedRoe))) {
+      return Number(unifiedMetrics.dupont.calculatedRoe);
+    }
+    if (unifiedMetrics?.margins?.roe != null && !isNaN(Number(unifiedMetrics.margins.roe))) {
+      return Number(unifiedMetrics.margins.roe);
+    }
     if (params.dupontResult?.calculatedRoe != null && !isNaN(Number(params.dupontResult.calculatedRoe))) {
       return Number(params.dupontResult.calculatedRoe);
     }
@@ -367,6 +391,8 @@ export function computeSnowflakeAnalysis(params: {
     if (latestData?.roe != null && !isNaN(Number(latestData.roe))) return Number(latestData.roe);
     return 22.0;
   })();
+
+  const roic = Number(unifiedMetrics?.margins?.roic ?? rawRoic ?? 0);
 
   // Tarihsel Büyüme Oranları
   const historicalGrowth = (() => {
@@ -615,14 +641,20 @@ export function computeSnowflakeAnalysis(params: {
   // 3. EKSEN: GEÇMİŞ PERFORMANS (0 - 6 PUAN)
   // =========================================================================
   const ocf = Number(latestData?.operating_cash_flow ?? latestData?.cash_flow_from_operations ?? 0);
+  const ttmOcf = Number(unifiedMetrics?.ttm?.operatingCashFlow ?? ocf);
   const netIncome = Number(latestData?.net_income ?? 0);
-  const cashConv = netIncome > 0 ? (ocf / netIncome) * 100 : 0;
-  const currentMargin = Number(
-    latestData?.net_margin ??
-    (latestData?.revenue != null && latestData?.net_income != null && Number(latestData.revenue) > 0
-      ? (Number(latestData.net_income) / Number(latestData.revenue)) * 100
-      : (latestData?.net_income != null && Number(latestData.net_income) <= 0 ? 0.0 : 12.0))
-  );
+  const ttmNetIncome = Number(unifiedMetrics?.ttm?.netIncome ?? netIncome);
+  const cashConv = unifiedMetrics?.cashQuality?.cashConversionRatio != null
+    ? Math.round(unifiedMetrics.cashQuality.cashConversionRatio * 100)
+    : (netIncome > 0 ? (ocf / netIncome) * 100 : 0);
+  const currentMargin = unifiedMetrics?.margins?.netMargin != null
+    ? unifiedMetrics.margins.netMargin
+    : Number(
+        latestData?.net_margin ??
+        (latestData?.revenue != null && latestData?.net_income != null && Number(latestData.revenue) > 0
+          ? (Number(latestData.net_income) / Number(latestData.revenue)) * 100
+          : (latestData?.net_income != null && Number(latestData.net_income) <= 0 ? 0.0 : 12.0))
+      );
 
   const pastChecks: SnowflakeCheck[] = [
     // 3.1 Quality Earnings
@@ -631,14 +663,14 @@ export function computeSnowflakeAnalysis(params: {
       title: 'Kâr Kalitesi ve Nakit Dönüşümü',
       passed: isFinancial
         ? (latestData?.technical_balance != null ? latestData.technical_balance > 0 : netIncome > 0)
-        : (ocf > 0 && ocf >= netIncome * 0.70),
+        : (ttmOcf > 0 && ttmOcf >= ttmNetIncome * 0.70),
       metricValue: isFinancial ? 'Teknik Kâr Uyumu' : `Nakit Dönüşümü: %${cashConv.toFixed(0)}`,
       threshold: isFinancial ? 'Pozitif Rezerv' : '>= %70 Nakit Dönüşümü',
       detail: isFinancial
         ? 'Finansal/sigorta teknik karşılıkları ve portföy float nakit akışı net kârı desteklemektedir.'
-        : (ocf > 0 && ocf >= netIncome * 0.70
-            ? `Net dönem kârı (${formatCurrency(netIncome)}), yüksek operasyonel nakit girişiyle (${formatCurrency(ocf)}) desteklenmektedir.`
-            : `İşletme nakit akışı (${formatCurrency(ocf)}), muhasebesel net kârın (${formatCurrency(netIncome)}) gerisinde kalmıştır.`)
+        : (ttmOcf > 0 && ttmOcf >= ttmNetIncome * 0.70
+            ? `Net dönem kârı (${formatCurrency(ttmNetIncome)}), yüksek operasyonel nakit girişiyle (${formatCurrency(ttmOcf)}) desteklenmektedir.`
+            : `İşletme nakit akışı (${formatCurrency(ttmOcf)}), muhasebesel net kârın (${formatCurrency(ttmNetIncome)}) gerisinde kalmıştır.`)
     },
     // 3.2 Growing Profit Margin
     {
@@ -700,17 +732,23 @@ export function computeSnowflakeAnalysis(params: {
   // =========================================================================
   // 4. EKSEN: FİNANSAL SAĞLIK (0 - 6 PUAN)
   // =========================================================================
-  const currentAssets = Number(latestData?.current_assets ?? 0);
-  const currentLiabilities = Number(latestData?.current_liabilities ?? 1);
+  const currentAssets = Number(latestData?.current_assets ?? unifiedMetrics?.balanceSheet?.currentAssets ?? 0);
+  const currentLiabilities = Number(latestData?.current_liabilities ?? unifiedMetrics?.balanceSheet?.currentLiabilities ?? 1);
   const currentRatio = currentLiabilities > 0 ? currentAssets / currentLiabilities : 0;
   const minCurrentRatio = sector === 'RETAIL' ? 0.55 : 1.0;
-  const netDebt = Number(latestData?.net_debt ?? 0);
-  const financialDebt = Number(latestData?.financial_debt ?? 0);
+  const netDebt = Number(latestData?.net_debt ?? unifiedMetrics?.balanceSheet?.netDebt ?? 0);
+  const financialDebt = Number(latestData?.financial_debt ?? unifiedMetrics?.balanceSheet?.financialDebt ?? 0);
   const ebitda = Number(latestData?.ebitda ?? 0);
-  const totalAssets = Number(latestData?.total_assets ?? 1);
-  const totalLiabilities = Number(latestData?.total_liabilities ?? (totalAssets - Number(latestData?.equity ?? 0)));
-  const equityRatio = totalAssets > 0 ? (Number(latestData?.equity ?? 0) / totalAssets) * 100 : 0;
-  const ndRatio = ebitda > 0 ? netDebt / ebitda : (netDebt <= 0 ? 0 : 5.0);
+  const totalAssets = Number(latestData?.total_assets ?? unifiedMetrics?.balanceSheet?.totalAssets ?? 1);
+  const totalLiabilities = Number(latestData?.total_liabilities ?? unifiedMetrics?.balanceSheet?.totalLiabilities ?? (totalAssets - Number(latestData?.equity ?? 0)));
+  const equityRatio = totalAssets > 0 ? (Number(latestData?.equity ?? unifiedMetrics?.balanceSheet?.equity ?? 0) / totalAssets) * 100 : 0;
+  
+  // Net Borç / FAVÖK: Tek çeyreklik EBITDA yerine kurumsal TTM EBITDA esas alınır
+  const ndRatio = unifiedMetrics?.liquidity?.netDebtToEbitda != null
+    ? unifiedMetrics.liquidity.netDebtToEbitda
+    : (unifiedMetrics?.ttm?.ebitda && unifiedMetrics.ttm.ebitda > 0
+        ? netDebt / unifiedMetrics.ttm.ebitda
+        : (ebitda > 0 ? netDebt / ebitda : (netDebt <= 0 ? 0 : 5.0)));
   const ebit = Number(latestData?.operating_profit ?? latestData?.operating_income ?? latestData?.ebit ?? ebitda * 0.8);
   const rawInterestExp = latestData?.interest_expenses ?? latestData?.financing_expenses ?? latestData?.finance_costs ?? 0;
   const interestExpense = Math.abs(Number(rawInterestExp));
@@ -771,14 +809,14 @@ export function computeSnowflakeAnalysis(params: {
     {
       id: 'debt_coverage',
       title: 'Nakit Akışıyla Borç Karşılama',
-      passed: isFinancial ? !isInsolventEquity : (!isInsolventEquity && (netDebt <= 0 || (financialDebt > 0 && ocf / financialDebt >= 0.20))),
-      metricValue: netDebt <= 0 ? 'Borçsuz / Net Nakit' : `Faaliyet Nakit Akışı / Borç: %${financialDebt > 0 ? ((ocf / financialDebt) * 100).toFixed(0) : '100'}`,
+      passed: isFinancial ? !isInsolventEquity : (!isInsolventEquity && (netDebt <= 0 || (financialDebt > 0 && ttmOcf / financialDebt >= 0.20))),
+      metricValue: netDebt <= 0 ? 'Borçsuz / Net Nakit' : `Faaliyet Nakit Akışı / Borç: %${financialDebt > 0 ? ((ttmOcf / financialDebt) * 100).toFixed(0) : '100'}`,
       threshold: '>= %20 veya Net Nakit',
       detail: netDebt <= 0 && !isInsolventEquity
         ? 'Şirket net nakit pozisyonunda olduğu için borç ödeme baskısı bulunmamaktadır.'
-        : (!isInsolventEquity && financialDebt > 0 && ocf / financialDebt >= 0.20
-            ? `İşletme faaliyet nakit akışı (${formatCurrency(ocf)}), toplam finansal borçların (${formatCurrency(financialDebt)}) en az %20'sini doğrudan karşılamaktadır.`
-            : `İşletme faaliyet nakit akışı (${formatCurrency(ocf)}), toplam finansal borçların (${formatCurrency(financialDebt)}) %${financialDebt > 0 ? ((ocf / financialDebt) * 100).toFixed(1) : '0'}'ini karşılamaktadır (Güvenli eşik: >= %20).`)
+        : (!isInsolventEquity && financialDebt > 0 && ttmOcf / financialDebt >= 0.20
+            ? `İşletme faaliyet nakit akışı (${formatCurrency(ttmOcf)}), toplam finansal borçların (${formatCurrency(financialDebt)}) en az %20'sini doğrudan karşılamaktadır.`
+            : `İşletme faaliyet nakit akışı (${formatCurrency(ttmOcf)}), toplam finansal borçların (${formatCurrency(financialDebt)}) %${financialDebt > 0 ? ((ttmOcf / financialDebt) * 100).toFixed(1) : '0'}'ini karşılamaktadır (Güvenli eşik: >= %20).`)
     },
     // 4.6 Interest Coverage
     {
@@ -1001,6 +1039,7 @@ export function computeSnowflakeAnalysis(params: {
     ticker: params.ticker,
     financialHistory: params.financialHistory,
     latestData: params.latestData,
+    unifiedMetrics,
     marketMultiples: params.marketMultiples,
     companyMultiples: params.companyMultiples,
     dupontResult: params.dupontResult,

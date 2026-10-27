@@ -1101,6 +1101,7 @@ export default function SimplyView({
       companyMultiples: companyMultiplesData,
       financialHistory: report.extractedData?.financial_history,
       valuationDrivers: valuationInfo?.drivers,
+      unifiedMetrics: (report as any)?.unified_metrics ?? (report.extractedData as any)?.unified_metrics,
       evaSpread: evaSpreadNum,
       roic: roicNum,
       wacc: waccNum,
@@ -1113,6 +1114,8 @@ export default function SimplyView({
     });
   }, [
     report.ticker,
+    (report as any)?.unified_metrics,
+    report.extractedData,
     currentSector,
     currentPriceNum,
     fairValueNum,

@@ -200,7 +200,7 @@ export class InvariantSentinel {
     }
 
     // 3. ROE (ÖZSERMAYE KÂRLILIĞI) MUTABAKATI
-    const trueRoe = ctx.unifiedMetrics?.dupont?.calculatedRoe ?? ctx.dupontResult?.calculatedRoe ?? null;
+    const trueRoe = ctx.unifiedMetrics?.dupont?.calculatedRoe ?? ctx.unifiedMetrics?.margins?.roe ?? ctx.dupontResult?.calculatedRoe ?? null;
     if (trueRoe !== null && trueRoe > 0) {
       const roeCheck = sf.axes.past.checks.find(c => c.id === 'high_historical_roe');
       if (roeCheck && roeCheck.metricValue) {
@@ -215,6 +215,16 @@ export class InvariantSentinel {
           );
           roeCheck.metricValue = `%${trueRoe.toFixed(1)} Gerçekleşen ROE`;
           roeCheck.passed = trueRoe >= 20.0;
+        }
+      }
+
+      // Gelecek ROE kontrolünü de hizala
+      const futureRoeCheck = sf.axes.future.checks.find(c => c.id === 'future_roe');
+      if (futureRoeCheck && futureRoeCheck.metricValue) {
+        const curFutVal = parseFloat(futureRoeCheck.metricValue.replace(/[^0-9.-]/g, ''));
+        if (!isNaN(curFutVal) && curFutVal < trueRoe) {
+          futureRoeCheck.metricValue = `%${trueRoe.toFixed(1)} İleri ROE`;
+          futureRoeCheck.passed = trueRoe >= 20.0;
         }
       }
     }
@@ -239,6 +249,71 @@ export class InvariantSentinel {
           );
           crCheck.metricValue = `Cari Oran: ${trueCurrentRatio.toFixed(2)}x`;
           crCheck.passed = trueCurrentRatio >= 1.0;
+        }
+      }
+    }
+
+    // 5. NET BORÇ / FAVÖK (NET DEBT / EBITDA) TTM MUTABAKATI
+    const trueNdEbitda = ctx.unifiedMetrics?.liquidity?.netDebtToEbitda ?? null;
+    if (trueNdEbitda !== null && !isNaN(trueNdEbitda)) {
+      for (const checkId of ['debt_level', 'reducing_debt']) {
+        const chk = sf.axes.health.checks.find(c => c.id === checkId);
+        if (chk && chk.metricValue && (chk.metricValue.includes('Net Borç / FAVÖK') || chk.metricValue.includes('Kontrollü Borç'))) {
+          const curVal = parseFloat(chk.metricValue.replace(/[^0-9.-]/g, ''));
+          if (!isNaN(curVal) && Math.abs(curVal - trueNdEbitda) >= 0.2) {
+            this.logViolation(
+              ticker,
+              chk.title,
+              chk.metricValue,
+              `${trueNdEbitda.toFixed(1)}x`,
+              'Net Borç / FAVÖK çarpanı kurumsal TTM FAVÖK yerine tek ara çeyreklik verisiyle hesaplanıyordu.'
+            );
+            chk.metricValue = checkId === 'debt_level'
+              ? `Net Borç / FAVÖK: ${trueNdEbitda.toFixed(1)}x`
+              : `Kontrollü Borç: ${trueNdEbitda.toFixed(1)}x`;
+            chk.passed = trueNdEbitda <= 2.5;
+          }
+        }
+      }
+    }
+
+    // 6. KÂR KALİTESİ VE NAKİT DÖNÜŞÜMÜ (TTM OCF / NET KÂR) MUTABAKATI
+    const trueCashConvRatio = ctx.unifiedMetrics?.cashQuality?.cashConversionRatio ?? null;
+    if (trueCashConvRatio !== null && !isNaN(trueCashConvRatio)) {
+      const chk = sf.axes.past.checks.find(c => c.id === 'quality_earnings');
+      if (chk && chk.metricValue && chk.metricValue.includes('Nakit Dönüşümü')) {
+        const curVal = parseFloat(chk.metricValue.replace(/[^0-9.-]/g, ''));
+        const trueCashConvPct = Math.round(trueCashConvRatio * 100);
+        if (!isNaN(curVal) && Math.abs(curVal - trueCashConvPct) >= 5) {
+          this.logViolation(
+            ticker,
+            chk.title,
+            chk.metricValue,
+            `Nakit Dönüşümü: %${trueCashConvPct}`,
+            'Nakit dönüşüm oranı TTM kümülatif nakit akışları yerine tek çeyreklik veriden sapıyordu.'
+          );
+          chk.metricValue = `Nakit Dönüşümü: %${trueCashConvPct}`;
+          chk.passed = trueCashConvPct >= 70;
+        }
+      }
+    }
+
+    // 7. NET KÂR MARJI (TTM ÇEKİRDEK MARJ) MUTABAKATI
+    const trueNetMargin = ctx.unifiedMetrics?.margins?.netMargin ?? null;
+    if (trueNetMargin !== null && !isNaN(trueNetMargin)) {
+      const chk = sf.axes.past.checks.find(c => c.id === 'growing_profit_margin');
+      if (chk && chk.metricValue && chk.metricValue.includes('Kâr Marjı')) {
+        const curVal = parseFloat(chk.metricValue.replace(/[^0-9.-]/g, ''));
+        if (!isNaN(curVal) && Math.abs(curVal - trueNetMargin) >= 0.5) {
+          this.logViolation(
+            ticker,
+            chk.title,
+            chk.metricValue,
+            `%${trueNetMargin.toFixed(1)} Kâr Marjı`,
+            'Net kâr marjı 12A TTM net marjı yerine tek çeyreklik marj üzerinden hesaplanıyordu.'
+          );
+          chk.metricValue = `%${trueNetMargin.toFixed(1)} Kâr Marjı`;
+          chk.passed = trueNetMargin >= 10.0;
         }
       }
     }

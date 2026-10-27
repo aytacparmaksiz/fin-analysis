@@ -508,6 +508,7 @@ ZORUNLU TALİMAT (Önceki Raporla Karşılaştırma & Çeyreklik Hafıza):
       drivers,
       scoreResult,
       optimization,
+      unified_metrics: unifiedMetrics,
       dividend_history: dividendHistory,
       consensus_target: consensusTarget
     });

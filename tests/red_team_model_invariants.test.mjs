@@ -794,5 +794,87 @@ test('RED TEAM MATHEMATICAL AUDIT & INVARIANT TEST SUITE', async (t) => {
     assert.equal(roeCheck?.metricValue, '%28.5 Gerçekleşen ROE', 'Bozuk ROE DuPont değeri %28.5 ile self-healing edilmelidir');
     assert.equal(roeCheck?.passed, true, '28.5 >= 20.0 olduğu için kriter GEÇTİ olarak düzeltilmelidir');
   });
+
+  await t.test('REGRESYON 22: MPARK TTM Yıllıklandırma, Çarpan ve Snowflake Akış/Stok Bütünlüğü', () => {
+    const mparkUnified = {
+      ttm: {
+        revenue: 66860489839,
+        ebitda: 19830532954,
+        netIncome: 7388408703,
+        operatingCashFlow: 15807345628,
+      },
+      balanceSheet: {
+        netDebt: 13250271000,
+        financialDebt: 21506168000,
+        equity: 43827509000,
+        currentAssets: 23347897000,
+        currentLiabilities: 27823684000,
+      },
+      liquidity: {
+        currentRatio: 0.84,
+        netDebtToEbitda: 0.7,
+      },
+      margins: {
+        netMargin: 11.1,
+        roe: 16.9,
+        roic: 15.5,
+      },
+      cashQuality: {
+        cashConversionRatio: 2.14,
+      },
+      dupont: {
+        calculatedRoe: 17.4,
+      },
+      growth: {
+        revenueGrowthYoY: 6.2,
+        netIncomeGrowthYoY: 38.0,
+      }
+    };
+
+    const sf = calculateSnowflake({
+      ticker: 'MPARK',
+      sector: 'HEALTHCARE',
+      currentPrice: 378.25,
+      fairValue: 535.17,
+      discountPct: 41.5,
+      marketMultiples: { pe: 10.7, pb: 1.6 },
+      unifiedMetrics: mparkUnified,
+      financialHistory: [
+        { period: '2025/06', revenue: 32143591000, net_income: 2284499000 },
+        { period: '2026/06', revenue: 34127444000, net_income: 3153018000, operating_cash_flow: 7560000000, ebitda: 9954527000, net_debt: 13250271000, financial_debt: 21506168000, equity: 43827509000 }
+      ],
+      latestData: {
+        period: '2026/06',
+        net_income: 3153018000,
+        revenue: 34127444000,
+        ebitda: 9954527000,
+        operating_cash_flow: 7560000000,
+        net_debt: 13250271000,
+        financial_debt: 21506168000,
+        equity: 43827509000
+      }
+    });
+
+    // 1. Net Borç / FAVÖK 6M EBITDA (1.3x) yerine TTM EBITDA (0.7x) ile hizalanmalıdır
+    const debtLevel = sf.axes.health.checks.find(c => c.id === 'debt_level');
+    assert.equal(debtLevel?.metricValue, 'Net Borç / FAVÖK: 0.7x', 'Net Borç / FAVÖK TTM 0.7x olmalıdır');
+
+    // 2. Nakit Dönüşümü 6M (%240) yerine TTM (%214) ile hizalanmalıdır
+    const cashQuality = sf.axes.past.checks.find(c => c.id === 'quality_earnings');
+    assert.equal(cashQuality?.metricValue, 'Nakit Dönüşümü: %214', 'Nakit dönüşümü TTM %214 olmalıdır');
+
+    // 3. Net Kâr Marjı 6M (%9.2) yerine TTM (%11.1) olmalı ve >= %10 eşiğini GEÇMELİDİR
+    const profitMargin = sf.axes.past.checks.find(c => c.id === 'growing_profit_margin');
+    assert.equal(profitMargin?.metricValue, '%11.1 Kâr Marjı', 'Net kâr marjı TTM %11.1 olmalıdır');
+    assert.equal(profitMargin?.passed, true, 'TTM %11.1 >= %10 olduğu için kriter GEÇTİ olmalıdır');
+
+    // 4. ROE %14.4 yerine DuPont %17.4 olmalıdır
+    const roeCheck = sf.axes.past.checks.find(c => c.id === 'high_historical_roe');
+    assert.equal(roeCheck?.metricValue, '%17.4 Gerçekleşen ROE', 'ROE DuPont 5 aşamalı kârlılıkla %17.4 olmalıdır');
+
+    // 5. Borç karşılama 6M OCF (%35) yerine 12A TTM OCF (%74) olmalıdır
+    const debtCoverage = sf.axes.health.checks.find(c => c.id === 'debt_coverage');
+    assert.equal(debtCoverage?.metricValue, 'Faaliyet Nakit Akışı / Borç: %74', 'Debt coverage TTM OCF ile %74 olmalıdır');
+  });
 });
 
