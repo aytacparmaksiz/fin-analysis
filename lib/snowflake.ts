@@ -433,13 +433,17 @@ export function computeSnowflakeAnalysis(params: {
     historicalGrowth.profitGrowth
   );
 
+  const effectiveProfitGrowth = (typeof historicalGrowth.profitGrowth === 'number' && !isNaN(historicalGrowth.profitGrowth) && historicalGrowth.profitGrowth !== 0)
+    ? historicalGrowth.profitGrowth
+    : profitGrowth;
+
   // Peter Lynch & Gordon Büyüme Hibrit Modeli Adil F/K Çarpanı (Sürdürülebilir Büyüme & İçsel Değerleme)
   // Kurumsal Finans İlkesi:
   // Adil F/K, şirketin kendi özsermaye kârlılığı (ROE) ve sürdürülebilir kâr büyümesine dayalı İÇSEL bir çarpandır.
   // Sektör medyanı kıyası zaten 1.4 kriterinde (pe_vs_industry) bağımsız olarak ölçülmektedir.
   // Tekil çeyrek baz etkisi (düşük bazdan kaynaklı geçici sıçrama) sürdürülebilir büyüme tavanı g <= %30 ile normalize edilir.
   // Çarpan koridoru kurumsal piyasa normlarına (6.0x - 20.0x) oturtulur.
-  const normalizedProfitGrowth = Math.min(30.0, Math.max(0, profitGrowth));
+  const normalizedProfitGrowth = Math.min(30.0, Math.max(0, effectiveProfitGrowth));
   const rawFairPe = (currentRoe * 0.22) + (normalizedProfitGrowth * 0.16) + 4.5;
   const fairPe = Number(Math.min(20.0, Math.max(6.0, rawFairPe)).toFixed(1));
 
@@ -542,34 +546,34 @@ export function computeSnowflakeAnalysis(params: {
     {
       id: 'earnings_vs_savings',
       title: 'Tasarruf ve Risksiz Getiriye Göre Kâr Artışı',
-      passed: profitGrowth >= savingsThreshold,
-      metricValue: `+%${profitGrowth.toFixed(1)}`,
+      passed: effectiveProfitGrowth >= savingsThreshold,
+      metricValue: `+%${effectiveProfitGrowth.toFixed(1)}`,
       threshold: `>= %${savingsThreshold.toFixed(1)} Eşik`,
-      detail: profitGrowth >= savingsThreshold
-        ? `Öngörülen net kâr artış ivmesi (%${profitGrowth.toFixed(1)}), risksiz faiz ve sermaye koruma eşiğinin (%${savingsThreshold.toFixed(1)}) üzerindedir.`
-        : `Beklenen kâr büyümesi (%${profitGrowth.toFixed(1)}), risksiz getiri eşiğinin (%${savingsThreshold.toFixed(1)}) gerisindedir.`
+      detail: effectiveProfitGrowth >= savingsThreshold
+        ? `Öngörülen net kâr artış ivmesi (%${effectiveProfitGrowth.toFixed(1)}), risksiz faiz ve sermaye koruma eşiğinin (%${savingsThreshold.toFixed(1)}) üzerindedir.`
+        : `Beklenen kâr büyümesi (%${effectiveProfitGrowth.toFixed(1)}), risksiz getiri eşiğinin (%${savingsThreshold.toFixed(1)}) gerisindedir.`
     },
     // 2.2 Earnings vs Market
     {
       id: 'earnings_vs_market',
       title: 'Piyasaya Göre Kâr Büyümesi',
-      passed: profitGrowth >= 25.0,
-      metricValue: `+%${profitGrowth.toFixed(1)}`,
+      passed: effectiveProfitGrowth >= 25.0,
+      metricValue: `+%${effectiveProfitGrowth.toFixed(1)}`,
       threshold: '>= %+25.0 Piyasa Medyanı',
-      detail: profitGrowth >= 25.0
-        ? `Şirketin beklenen kâr büyümesi (%${profitGrowth.toFixed(1)}), BIST genel piyasa büyüme medyanının (%25.0) üzerindedir.`
-        : `Beklenen kâr büyümesi (%${profitGrowth.toFixed(1)}), genel piyasa kâr büyüme medyanının (%25.0) altındadır.`
+      detail: effectiveProfitGrowth >= 25.0
+        ? `Şirketin beklenen kâr büyümesi (%${effectiveProfitGrowth.toFixed(1)}), BIST genel piyasa büyüme medyanının (%25.0) üzerindedir.`
+        : `Beklenen kâr büyümesi (%${effectiveProfitGrowth.toFixed(1)}), genel piyasa kâr büyüme medyanının (%25.0) altındadır.`
     },
     // 2.3 High Growth Earnings
     {
       id: 'high_growth_earnings',
       title: 'Yüksek Hızlı Kâr Büyümesi',
-      passed: profitGrowth >= 35.0,
-      metricValue: `+%${profitGrowth.toFixed(1)}`,
+      passed: effectiveProfitGrowth >= 35.0,
+      metricValue: `+%${effectiveProfitGrowth.toFixed(1)}`,
       threshold: '>= %+35.0 Yüksek Büyüme',
-      detail: profitGrowth >= 35.0
-        ? `Yıllık kâr artış projeksiyonu (%${profitGrowth.toFixed(1)}) yüksek büyüme bandında (%35+) güçlü seyretmektedir.`
-        : `Kâr artış projeksiyonu (%${profitGrowth.toFixed(1)}), yüksek büyüme eşiğinin (%35) altındadır.`
+      detail: effectiveProfitGrowth >= 35.0
+        ? `Yıllık kâr artış projeksiyonu (%${effectiveProfitGrowth.toFixed(1)}) yüksek büyüme bandında (%35+) güçlü seyretmektedir.`
+        : `Kâr artış projeksiyonu (%${effectiveProfitGrowth.toFixed(1)}), yüksek büyüme eşiğinin (%35) altındadır.`
     },
     // 2.4 Revenue vs Market
     {
