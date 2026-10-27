@@ -10,15 +10,18 @@ import {
   detectValueTrap,
   optimizeFinalDecision,
   calculateSectorScore,
-  enrichAndSanitizeFinancialHistory
+  enrichAndSanitizeFinancialHistory,
+  calculateValuationSensitivityMatrix
 } from '../lib/valuation.ts';
 import { FinancialRatioEngine } from '../lib/ratio-engine.ts';
 import { computeSnowflakeAnalysis as calculateSnowflake } from '../lib/snowflake.ts';
 import { FinancialDataValidator } from '../lib/financial-validator.ts';
-import { isMetricDisabled } from '../lib/sectors.ts';
+import { isMetricDisabled, mapIsYatirimSectorToValuationSector } from '../lib/sectors.ts';
 import { IsYatirimApiAdapter } from '../lib/isyatirim-adapter.ts';
 import { synthesizeDividendsFromFinancialHistory } from '../lib/isyatirim-service.ts';
 import { OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE } from '../lib/isyatirim-company-details-cache.ts';
+import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from '../lib/isyatirim-multiples-cache.ts';
+import { OFFICIAL_ISYATIRIM_CACHE } from '../lib/isyatirim-official-cache.ts';
 
 // Deterministik PRNG (Property-Based / Fuzzing Testleri için)
 function mulberry32(seed) {
@@ -959,6 +962,364 @@ test('RED TEAM MATHEMATICAL AUDIT & INVARIANT TEST SUITE', async (t) => {
     assert.equal(pbFair?.passed, true, '0.60x <= adil PD/DD olduğu için GEÇTİ olmalıdır');
 
     assert.equal(sf.axes.value.score, 6, 'TRGYO PD/DD iskontosu ile Değerleme ekseninden 6/6 tam puan almalıdır');
+  });
+
+  await t.test('REGRESYON 24: 53 Sektörün Her Birinden En Az 2 Hisse (Toplam 106 Hisse) İle Uçtan Uca Bütünlük ve Sıfır Çelişki (Sapma <= %1) Denetimi', () => {
+    const bySector = {};
+    for (const [ticker, m] of Object.entries(OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE)) {
+      const s = m.sectorName || 'Diğer';
+      if (!bySector[s]) bySector[s] = [];
+      bySector[s].push(ticker);
+    }
+
+    const selectedStocks = [];
+    for (const [sectorName, tickers] of Object.entries(bySector)) {
+      const sorted = [...tickers].sort((a, b) => {
+        const hasA = OFFICIAL_ISYATIRIM_CACHE[a] ? 1 : 0;
+        const hasB = OFFICIAL_ISYATIRIM_CACHE[b] ? 1 : 0;
+        return hasB - hasA;
+      });
+      const countToPick = Math.max(2, Math.min(2, sorted.length));
+      for (let i = 0; i < countToPick; i++) {
+        selectedStocks.push({ sectorName, ticker: sorted[i] });
+      }
+    }
+
+    assert.ok(selectedStocks.length >= 100, `En az 100 hisse seçilmelidir (Seçilen: ${selectedStocks.length})`);
+
+    const discrepancies = [];
+
+    for (const { sectorName, ticker } of selectedStocks) {
+      const mBaseline = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[ticker] || {
+        ticker,
+        name: ticker,
+        sectorName,
+        lastPrice: 20.0,
+        marketCapMnTl: 2000,
+        paidInCapitalMnTl: 100,
+        pe: 8.0,
+        pb: 1.5,
+        evEbitda: 6.0,
+        evSales: 1.1
+      };
+
+      const sectorType = mapIsYatirimSectorToValuationSector(sectorName);
+      const price = mBaseline.lastPrice > 0 ? mBaseline.lastPrice : 20.0;
+      const shareCount = (mBaseline.paidInCapitalMnTl && mBaseline.paidInCapitalMnTl > 0)
+        ? mBaseline.paidInCapitalMnTl * 1_000_000
+        : 100_000_000;
+
+      let rawHistory;
+      if (OFFICIAL_ISYATIRIM_CACHE[ticker] && OFFICIAL_ISYATIRIM_CACHE[ticker].length > 0) {
+        rawHistory = OFFICIAL_ISYATIRIM_CACHE[ticker].map(item => ({ ...item }));
+      } else {
+        const mcap = (mBaseline.marketCapMnTl && mBaseline.marketCapMnTl > 0) ? mBaseline.marketCapMnTl * 1_000_000 : 5_000_000_000;
+        const pe = (mBaseline.pe && mBaseline.pe > 0) ? mBaseline.pe : 8.5;
+        const pb = (mBaseline.pb && mBaseline.pb > 0) ? mBaseline.pb : 1.8;
+        const evEbitda = (mBaseline.evEbitda && mBaseline.evEbitda > 0) ? mBaseline.evEbitda : 6.5;
+        const evSales = (mBaseline.evSales && mBaseline.evSales > 0) ? mBaseline.evSales : 1.2;
+
+        const ttmNet = Math.round(mcap / pe);
+        const ttmRev = Math.round(mcap / evSales);
+        const ttmEbitda = Math.round(mcap / evEbitda);
+        const equity = Math.round(mcap / pb);
+        const netDebt = Math.round(mcap * 0.15);
+        const totalAssets = Math.round(equity * 2.2);
+        const curAssets = Math.round(totalAssets * 0.45);
+        const curLiab = Math.round(totalAssets * 0.35);
+        const totalLiab = totalAssets - equity;
+        const cash = Math.round(curAssets * 0.25);
+        const finDebt = cash + netDebt;
+        const ocf = Math.round(ttmNet * 1.15);
+
+        rawHistory = [
+          {
+            period: '2025/06',
+            revenue: Math.round(ttmRev * 0.48),
+            gross_profit: Math.round(ttmRev * 0.48 * 0.28),
+            ebitda: Math.round(ttmEbitda * 0.48),
+            operating_profit: Math.round(ttmEbitda * 0.48 * 0.85),
+            net_income: Math.round(ttmNet * 0.48),
+            operating_cash_flow: Math.round(ocf * 0.48),
+            current_assets: Math.round(curAssets * 0.90),
+            total_assets: Math.round(totalAssets * 0.90),
+            current_liabilities: Math.round(curLiab * 0.90),
+            total_liabilities: Math.round(totalLiab * 0.90),
+            equity: Math.round(equity * 0.92),
+            paid_in_capital: shareCount,
+            cash_and_equivalents: Math.round(cash * 0.90),
+            net_debt: Math.round(netDebt * 0.95),
+            financial_debt: Math.round(finDebt * 0.95),
+            wacc: 32.0,
+            real_wacc: 14.5,
+            is_tms29: true
+          },
+          {
+            period: '2025/12',
+            revenue: Math.round(ttmRev * 0.95),
+            gross_profit: Math.round(ttmRev * 0.95 * 0.28),
+            ebitda: Math.round(ttmEbitda * 0.95),
+            operating_profit: Math.round(ttmEbitda * 0.95 * 0.85),
+            net_income: Math.round(ttmNet * 0.95),
+            operating_cash_flow: Math.round(ocf * 0.95),
+            current_assets: Math.round(curAssets * 0.95),
+            total_assets: Math.round(totalAssets * 0.95),
+            current_liabilities: Math.round(curLiab * 0.95),
+            total_liabilities: Math.round(totalLiab * 0.95),
+            equity: Math.round(equity * 0.96),
+            paid_in_capital: shareCount,
+            cash_and_equivalents: Math.round(cash * 0.95),
+            net_debt: Math.round(netDebt * 0.98),
+            financial_debt: Math.round(finDebt * 0.98),
+            wacc: 32.0,
+            real_wacc: 14.5,
+            is_tms29: true
+          },
+          {
+            period: '2026/03',
+            revenue: Math.round(ttmRev * 0.26),
+            gross_profit: Math.round(ttmRev * 0.26 * 0.29),
+            ebitda: Math.round(ttmEbitda * 0.26),
+            operating_profit: Math.round(ttmEbitda * 0.26 * 0.86),
+            net_income: Math.round(ttmNet * 0.26),
+            operating_cash_flow: Math.round(ocf * 0.27),
+            current_assets: Math.round(curAssets * 0.98),
+            total_assets: Math.round(totalAssets * 0.98),
+            current_liabilities: Math.round(curLiab * 0.98),
+            total_liabilities: Math.round(totalLiab * 0.98),
+            equity: Math.round(equity * 0.98),
+            paid_in_capital: shareCount,
+            cash_and_equivalents: Math.round(cash * 0.98),
+            net_debt: Math.round(netDebt * 0.99),
+            financial_debt: Math.round(finDebt * 0.99),
+            wacc: 32.0,
+            real_wacc: 14.5,
+            is_tms29: true
+          },
+          {
+            period: '2026/06',
+            revenue: ttmRev,
+            gross_profit: Math.round(ttmRev * 0.30),
+            ebitda: ttmEbitda,
+            operating_profit: Math.round(ttmEbitda * 0.88),
+            net_income: ttmNet,
+            operating_cash_flow: ocf,
+            current_assets: curAssets,
+            total_assets: totalAssets,
+            current_liabilities: curLiab,
+            total_liabilities: totalLiab,
+            equity: equity,
+            paid_in_capital: shareCount,
+            cash_and_equivalents: cash,
+            net_debt: netDebt,
+            financial_debt: finDebt,
+            wacc: 32.0,
+            real_wacc: 14.5,
+            is_tms29: true
+          }
+        ];
+      }
+
+      const rawPayload = {
+        ticker,
+        company_name: mBaseline.name || ticker,
+        sector: sectorType,
+        currency: 'TRY',
+        reporting_period: rawHistory[rawHistory.length - 1].period,
+        share_count: shareCount,
+        current_price: price,
+        financial_history: rawHistory,
+        valuation: { current_price: price }
+      };
+      const sanitized = enrichAndSanitizeFinancialHistory(rawPayload);
+
+      const unified = FinancialRatioEngine.computeMetrics({
+        ticker,
+        history: sanitized.financial_history,
+        currentPrice: price,
+        shareCount,
+        sector: sectorType,
+        marketMultiples: {
+          pe: mBaseline.pe,
+          pb: mBaseline.pb,
+          evEbitda: mBaseline.evEbitda,
+          evSales: mBaseline.evSales
+        }
+      });
+
+      const valRes = computeSectorValuationAndDrivers(sanitized, price.toString(), sectorType);
+
+      const companyMultiples = calculateCompanyMultiples(
+        sanitized.financial_history,
+        price,
+        shareCount,
+        sectorType,
+        { pe: mBaseline.pe, pb: mBaseline.pb, ev_ebitda: mBaseline.evEbitda, ev_sales: mBaseline.evSales, sector_name: sectorName },
+        'TRY',
+        null,
+        sanitized.financial_history
+      );
+
+      const sf = calculateSnowflake({
+        ticker,
+        sector: sectorType,
+        currentPrice: price,
+        fairValue: valRes.valuation?.fair_value || 10,
+        discountPct: valRes.valuation?.discount_pct || 0,
+        marketMultiples: {
+          pe: mBaseline.pe,
+          pb: mBaseline.pb,
+          evEbitda: mBaseline.evEbitda,
+          evSales: mBaseline.evSales
+        },
+        companyMultiples,
+        financialHistory: sanitized.financial_history,
+        valuationDrivers: valRes.drivers,
+        unifiedMetrics: unified,
+        latestData: sanitized.financial_history[sanitized.financial_history.length - 1],
+        dupontResult: unified.dupont
+      });
+
+      // 1. ROE UYUMU: DuPont === Margins ROE === Snowflake ROE
+      const dupontRoe = unified.dupont.calculatedRoe;
+      const marginsRoe = unified.margins.roe;
+      const sfRoeCheck = sf.axes.past.checks.find(c => c.id === 'high_historical_roe');
+      const sfRoeVal = sfRoeCheck ? parseFloat(sfRoeCheck.metricValue.replace(/[^0-9.-]/g, '')) : null;
+
+      if (dupontRoe != null && marginsRoe != null && Math.abs(dupontRoe - marginsRoe) > 1.0) {
+        discrepancies.push(`${ticker} (${sectorName}) DuPont ROE (%${dupontRoe}) != Margins ROE (%${marginsRoe})`);
+      }
+      if (sfRoeVal != null && marginsRoe != null && Math.abs(sfRoeVal - marginsRoe) > 1.0) {
+        discrepancies.push(`${ticker} (${sectorName}) Snowflake ROE (%${sfRoeVal}) != Margins ROE (%${marginsRoe})`);
+      }
+
+      // 2. ÇARPAN UYUMU (F/K veya GYO için PD/DD)
+      if (sectorType === 'REIT') {
+        const truePb = unified.valuation.pb ?? mBaseline.pb;
+        const sfPbCheck = sf.axes.value.checks.find(c => c.id === 'pe_vs_peers');
+        const sfPbVal = sfPbCheck ? parseFloat(sfPbCheck.metricValue.replace(/[^0-9.-]/g, '')) : null;
+        if (truePb != null && sfPbVal != null && Math.abs(truePb - sfPbVal) > 0.05) {
+          const dev = Math.abs((sfPbVal - truePb) / truePb) * 100;
+          if (dev > 1.0) discrepancies.push(`${ticker} (${sectorName}) PD/DD sapması > %1 (${sfPbVal}x vs ${truePb}x)`);
+        }
+      } else {
+        const truePe = unified.valuation.pe ?? mBaseline.pe;
+        const sfPeCheck = sf.axes.value.checks.find(c => c.id === 'pe_vs_peers');
+        const sfPeVal = sfPeCheck ? parseFloat(sfPeCheck.metricValue.replace(/[^0-9.-]/g, '')) : null;
+        if (truePe != null && sfPeVal != null && truePe > 0 && Math.abs(truePe - sfPeVal) > 0.1) {
+          const dev = Math.abs((sfPeVal - truePe) / truePe) * 100;
+          if (dev > 1.0) discrepancies.push(`${ticker} (${sectorName}) F/K sapması > %1 (${sfPeVal}x vs ${truePe}x)`);
+        }
+      }
+
+      // 3. FISHER REEL WACC DENKLEMİ
+      const latestItem = sanitized.financial_history[sanitized.financial_history.length - 1];
+      const isTms29OrForeign = latestItem.is_tms29 || sectorType === 'AVIATION' || latestItem.is_foreign_currency;
+      if (isTms29OrForeign && latestItem.nominal_wacc && latestItem.real_wacc && latestItem.expected_inflation) {
+        const leftSide = 1 + latestItem.nominal_wacc / 100;
+        const rightSide = (1 + latestItem.real_wacc / 100) * (1 + latestItem.expected_inflation / 100);
+        if (Math.abs(leftSide - rightSide) > 0.015) {
+          discrepancies.push(`${ticker} (${sectorName}) Fisher Reel WACC sapması: ${leftSide.toFixed(4)} != ${rightSide.toFixed(4)}`);
+        }
+      }
+    }
+
+    assert.equal(discrepancies.length, 0, `53 sektör ve 106 hissede hiçbir matematiksel çelişki kalmamalıdır: ${discrepancies.join('; ')}`);
+  });
+
+  await t.test('REGRESYON 25: DuPont TTM Akım Tutarlılığı, Snowflake Faiz Karşılama ve İNA Duyarlılık Sınır Koruması', () => {
+    // 1. DuPont 5-Aşamalı: Ara dönemlerde TTM akımları kullanıldığında vergi yükü ve faiz yükü 12A TTM EBT üzerinden tutarlı hesaplanmalı
+    const interimItem = {
+      period: '2026/03',
+      revenue: 100_000_000,
+      operating_profit: 20_000_000,
+      ebt: 5_000_000, // Tek çeyreklik EBT
+      interest_expenses: -15_000_000,
+      net_income: 3_750_000,
+      equity: 120_000_000,
+      total_assets: 250_000_000
+    };
+
+    const dupontTtm = calculateDuPont5Step(interimItem, null, 'INDUSTRIAL', {
+      ttm: {
+        revenue: 450_000_000,
+        ebitda: 110_000_000,
+        operatingProfit: 90_000_000,
+        ebt: 60_000_000, // TTM EBT
+        interestExpense: 30_000_000,
+        netIncome: 45_000_000
+      },
+      equity: 120_000_000,
+      totalAssets: 250_000_000
+    });
+
+    assert.equal(dupontTtm.taxBurden, 0.75, 'Vergi yükü (45M / 60M) = 0.75 olmalıdır; tek çeyreklik EBT ile bölünerek 9.0 yapılmamalıdır');
+    assert.ok(Math.abs(dupontTtm.interestBurden - 0.667) < 0.01, `Faiz yükü (60M / 90M) ~0.667 olmalıdır, got ${dupontTtm.interestBurden}`);
+    assert.equal(dupontTtm.calculatedRoe, 37.5, 'Hesaplanan ROE (45M / 120M) = %37.5 olmalıdır');
+
+    // 2. Snowflake: Net faiz geliri / net nakit pozisyonunda olan mevsimsel kış zararlı şirket (THYAO) faiz karşılamayı geçer
+    const sfThyao = calculateSnowflake({
+      ticker: 'THYAO',
+      sector: 'AVIATION',
+      currentPrice: 310.0,
+      fairValue: 450.0,
+      discountPct: 31.1,
+      latestData: {
+        period: '2026/06',
+        net_debt: -25_000_000_000, // Net nakit fazlası
+        equity: 900_000_000_000,
+        operating_profit: -14_000_000_000 // Muhasebesel çeyreklik zarar
+      },
+      unifiedMetrics: {
+        ticker: 'THYAO',
+        sector: 'AVIATION',
+        balanceSheet: {
+          netDebt: -25_000_000_000,
+          currentAssets: 500_000_000_000,
+          currentLiabilities: 400_000_000_000,
+          equity: 900_000_000_000,
+          totalAssets: 2_000_000_000_000,
+          totalLiabilities: 1_100_000_000_000
+        },
+        ttm: {
+          operatingProfit: 45_000_000_000,
+          ebitda: 60_000_000_000,
+          interestExpenses: 0
+        },
+        dupont: { interestBurden: 1.15, calculatedRoe: 18.5 }
+      }
+    });
+
+    const icrChk = sfThyao.axes.health.checks.find(c => c.id === 'interest_coverage');
+    assert.ok(icrChk.passed, 'Net nakit fazlası / net faiz gelirinde faiz karşılama geçmiş sayılmalıdır');
+    assert.equal(icrChk.metricValue, 'Net Nakit Fazlası');
+
+    // 3. İNA Duyarlılık Matrisi: baseWacc <= baseGrowth durumunda parametre sınır koruması
+    const sensLowWacc = calculateValuationSensitivityMatrix({
+      baseFairValue: 100.0,
+      currentPrice: 80.0,
+      baseWacc: 14.0, // Reel WACC veya döviz WACC
+      baseGrowth: 15.0 // Nominal büyüme varsayımı
+    });
+
+    assert.ok(sensLowWacc.baseWacc > sensLowWacc.growthRange[2], 'Baz WACC baz büyümeden büyük olacak şekilde emniyet tamponu uygulanmalıdır');
+    assert.ok(sensLowWacc.matrix[2][2].fairValue > 0, 'Baz hücre adil değeri pozitif sonlu olmalıdır');
+
+    // 4. Negatif büyüme formatlama koruması: `+%-25.0%` anomalisi üretilmemeli
+    const sfNegGrowth = calculateSnowflake({
+      ticker: 'ZARAR',
+      sector: 'INDUSTRIAL',
+      currentPrice: 10.0,
+      fairValue: 8.0,
+      unifiedMetrics: {
+        ticker: 'ZARAR',
+        growth: { netIncomeGrowthYoY: -28.4, revenueGrowthYoY: -12.1 }
+      }
+    });
+
+    const savingsChk = sfNegGrowth.axes.future.checks.find(c => c.id === 'earnings_vs_savings');
+    assert.ok(!savingsChk.metricValue.includes('+-'), `Negatif büyümede '+-' bulunmamalıdır, got: ${savingsChk.metricValue}`);
+    assert.ok(savingsChk.metricValue.startsWith('-'), `Negatif büyüme '-' ile başlamalıdır, got: ${savingsChk.metricValue}`);
   });
 });
 

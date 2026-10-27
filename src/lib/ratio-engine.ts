@@ -31,6 +31,8 @@ export interface TtmFinancials {
   grossProfit: number | null;
   operatingProfit: number | null;
   ebitda: number | null;
+  ebt: number | null;
+  interestExpenses: number | null;
   netIncome: number | null;
   operatingCashFlow: number | null;
   freeCashFlow: number | null;
@@ -236,8 +238,22 @@ export class FinancialRatioEngine {
     const marketCap = safePrice * safeShares;
     const enterpriseValue = netDebtTl !== null ? marketCap + netDebtTl : marketCap;
 
-    const pe = marketMultiples?.pe ?? (ttm.netIncome && ttm.netIncome > 0 ? Number((marketCap / ttm.netIncome).toFixed(2)) : null);
-    const pb = marketMultiples?.pb ?? (equityTl && equityTl > 0 ? Number((marketCap / equityTl).toFixed(2)) : null);
+    let pe = marketMultiples?.pe ?? (ttm.netIncome && ttm.netIncome > 0 ? Number((marketCap / ttm.netIncome).toFixed(2)) : null);
+    if (pe !== null && pe > 0 && (marketMultiples as any)?.lastPrice && (marketMultiples as any).lastPrice > 0 && safePrice > 0) {
+      const priceRatio = safePrice / (marketMultiples as any).lastPrice;
+      if (Math.abs(priceRatio - 1) >= 0.02) {
+        pe = Number((pe * priceRatio).toFixed(1));
+      }
+    }
+
+    let pb = marketMultiples?.pb ?? (equityTl && equityTl > 0 ? Number((marketCap / equityTl).toFixed(2)) : null);
+    if (pb !== null && pb > 0 && (marketMultiples as any)?.lastPrice && (marketMultiples as any).lastPrice > 0 && safePrice > 0) {
+      const priceRatio = safePrice / (marketMultiples as any).lastPrice;
+      if (Math.abs(priceRatio - 1) >= 0.02) {
+        pb = Number((pb * priceRatio).toFixed(2));
+      }
+    }
+
     const evEbitda = (isMetricDisabled('ev_ebitda', sector) || isMetricDisabled('ebitda', sector))
       ? null
       : (marketMultiples?.evEbitda ?? marketMultiples?.ev_ebitda ?? (ttm.ebitda && ttm.ebitda > 0 ? Number((enterpriseValue / ttm.ebitda).toFixed(2)) : null));
@@ -256,7 +272,21 @@ export class FinancialRatioEngine {
       fcfYield
     };
 
-    // 4. Kârlılık & Marjlar
+    // 4. DuPont 5-Aşamalı Kârlılık Ayrıştırması (Merkezi TTM ve Bilanço ile %100 Uyumlu)
+    const dupont = calculateDuPont5Step(latest, prevYearItem, sector, {
+      ttm: {
+        revenue: ttm.revenue,
+        ebitda: ttm.ebitda,
+        operatingProfit: ttm.operatingProfit,
+        ebt: ttm.ebt,
+        interestExpense: ttm.interestExpenses,
+        netIncome: ttm.netIncome
+      },
+      equity: equityTl,
+      totalAssets: totAssets
+    });
+
+    // 5. Kârlılık & Marjlar
     const grossMargin = (isMetricDisabled('gross_profit', sector) || isMetricDisabled('gross_margin', sector))
       ? null
       : ((ttm.grossProfit !== null && ttm.revenue !== null && ttm.revenue > 0)
@@ -277,9 +307,13 @@ export class FinancialRatioEngine {
       ? Number(((ttm.netIncome / ttm.revenue) * 100).toFixed(1))
       : parseFinancialNumber(latest?.net_margin);
 
-    const roe = (ttm.netIncome !== null && equityTl !== null && equityTl > 0)
-      ? Number(((ttm.netIncome / equityTl) * 100).toFixed(1))
-      : parseFinancialNumber(latest?.roe);
+    const roe = (dupont.calculatedRoe !== null && !isNaN(dupont.calculatedRoe))
+      ? dupont.calculatedRoe
+      : ((equityTl !== null && equityTl <= 0)
+        ? 0.0
+        : ((ttm.netIncome !== null && equityTl !== null && equityTl > 0)
+          ? Number(((ttm.netIncome / equityTl) * 100).toFixed(1))
+          : parseFinancialNumber(latest?.roe)));
 
     const roa = (ttm.netIncome !== null && totAssets !== null && totAssets > 0)
       ? Number(((ttm.netIncome / totAssets) * 100).toFixed(1))
@@ -298,7 +332,11 @@ export class FinancialRatioEngine {
       roic = Number(((nopat / investedCapital) * 100).toFixed(1));
     }
 
-    const wacc = parseFinancialNumber((latest as any)?.benchmark_wacc ?? ((latest as any)?.is_tms29 ? (latest as any)?.real_wacc : null) ?? latest?.wacc) ?? (sector === 'INSURANCE' ? 35.1 : 29.6);
+    const wacc = parseFinancialNumber(
+      (latest as any)?.benchmark_wacc ??
+      ((latest as any)?.is_tms29 ? (latest as any)?.real_wacc : null) ??
+      latest?.wacc
+    ) ?? (sector === 'INSURANCE' ? 35.1 : 29.6);
     const evaSpread = (roic !== null && wacc !== null) ? Number((roic - wacc).toFixed(1)) : null;
 
     const margins: ProfitabilityAndMargins = {
@@ -313,7 +351,7 @@ export class FinancialRatioEngine {
       evaSpread
     };
 
-    // 5. Likidite ve Kaldıraç
+    // 6. Likidite ve Kaldıraç
     const currentRatio = isMetricDisabled('current_ratio', sector)
       ? null
       : ((curAssets !== null && curLiab !== null && curLiab > 0)
@@ -354,11 +392,8 @@ export class FinancialRatioEngine {
       financialLeverage
     };
 
-    // 6. Kâr Kalitesi & Nakit Akışı Teşhisi
+    // 7. Kâr Kalitesi & Nakit Akışı Teşhisi
     const cashQuality = this.diagnoseCashQuality(ttm.operatingCashFlow, ttm.netIncome, totAssets);
-
-    // 7. DuPont 5-Aşamalı Kârlılık Ayrıştırması
-    const dupont = calculateDuPont5Step(latest, prevYearItem, sector);
 
     // 8. Karşılaştırmalı Büyüme (YoY)
     const priorComparison = IsYatirimApiAdapter.computePriorPeriodComparison(sorted, latest.period);
@@ -452,6 +487,11 @@ export class FinancialRatioEngine {
       grossProfit: isMetricDisabled('gross_profit', sector) ? null : computeTtmMetric(i => i.gross_profit),
       operatingProfit: computeTtmMetric(i => i.operating_profit ?? i.technical_profit),
       ebitda: isMetricDisabled('ebitda', sector) ? null : computeTtmMetric(i => i.ebitda ?? i.technical_profit),
+      ebt: computeTtmMetric(i => i.ebt ?? i.profit_before_tax),
+      interestExpenses: computeTtmMetric(i => {
+        const raw = i.interest_expenses ?? i.financial_expenses ?? i.financing_expenses ?? i.interest_expense ?? i.financial_expense;
+        return raw !== undefined && raw !== null ? Math.abs(raw) : null;
+      }),
       netIncome: computeTtmMetric(i => i.net_income),
       operatingCashFlow: computeTtmMetric(i => i.operating_cash_flow),
       freeCashFlow: computeTtmMetric(i => i.free_cash_flow),

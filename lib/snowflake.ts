@@ -345,10 +345,10 @@ export function computeSnowflakeAnalysis(params: {
   // Temel Değişkenler
   const pe = (companyMultiples?.multiples?.pe?.companyValue && companyMultiples.multiples.pe.companyValue > 0)
     ? companyMultiples.multiples.pe.companyValue
-    : (marketMultiples?.pe ?? (latestData?.pe != null ? Number(latestData.pe) : null));
+    : (marketMultiples?.pe ?? (unifiedMetrics?.valuation?.pe && unifiedMetrics.valuation.pe > 0 ? unifiedMetrics.valuation.pe : (latestData?.pe != null ? Number(latestData.pe) : null)));
   const pb = (companyMultiples?.multiples?.pb?.companyValue && companyMultiples.multiples.pb.companyValue > 0)
     ? companyMultiples.multiples.pb.companyValue
-    : (marketMultiples?.pb ?? (latestData?.pb != null ? Number(latestData.pb) : null));
+    : (marketMultiples?.pb ?? (unifiedMetrics?.valuation?.pb && unifiedMetrics.valuation.pb > 0 ? unifiedMetrics.valuation.pb : (latestData?.pb != null ? Number(latestData.pb) : null)));
   const sectorPe = marketMultiples?.sector_averages?.pe ?? marketMultiples?.sector_pe ?? companyMultiples?.benchmark?.peMedian ?? companyMultiples?.multiples?.pe?.sectorMedian ?? (sector === 'BANKING' ? 4.5 : sector === 'INSURANCE' ? 6.5 : sector === 'TECH' ? 14.0 : sector === 'REIT' ? 7.1 : 8.5);
   const sectorPb = marketMultiples?.sector_averages?.pb ?? marketMultiples?.sector_pb ?? companyMultiples?.benchmark?.pbMedian ?? companyMultiples?.multiples?.pb?.sectorMedian ?? (sector === 'BANKING' ? 1.1 : sector === 'INSURANCE' ? 1.8 : sector === 'TECH' ? 4.5 : sector === 'REIT' ? 0.74 : 2.4);
 
@@ -422,13 +422,19 @@ export function computeSnowflakeAnalysis(params: {
 
     const r1 = Number(newest?.revenue ?? newest?.gross_written_premiums ?? 0);
     const r0 = Number(prevYearSameQ?.revenue ?? prevYearSameQ?.gross_written_premiums ?? 0);
-    const revGrowth = r0 > 0 ? ((r1 - r0) / r0) * 100 : (r1 > 0 ? 25.0 : 0.0);
+    const rawRevGrowth = r0 > 0 ? ((r1 - r0) / r0) * 100 : (r1 > 0 ? 25.0 : 0.0);
+    const revGrowth = (unifiedMetrics?.growth?.revenueGrowthYoY != null && !isNaN(unifiedMetrics.growth.revenueGrowthYoY))
+      ? unifiedMetrics.growth.revenueGrowthYoY
+      : rawRevGrowth;
 
     const n1 = Number(newest?.net_income ?? 0);
     const n0 = Number(prevYearSameQ?.net_income ?? 0);
-    const profitGrowth = n0 !== 0
+    const rawProfitGrowth = n0 !== 0
       ? ((n1 - n0) / Math.abs(n0)) * 100
       : (n1 > 0 ? 100.0 : (n1 < 0 ? -100.0 : 0.0));
+    const profitGrowth = (unifiedMetrics?.growth?.netIncomeGrowthYoY != null && !isNaN(unifiedMetrics.growth.netIncomeGrowthYoY))
+      ? unifiedMetrics.growth.netIncomeGrowthYoY
+      : rawProfitGrowth;
 
     // Son 4 çeyrek kârlılık sürekliliği
     const last4 = sorted.slice(-4);
@@ -459,9 +465,11 @@ export function computeSnowflakeAnalysis(params: {
     historicalGrowth.revGrowth
   );
 
-  const effectiveRevGrowth = (typeof historicalGrowth.revGrowth === 'number' && !isNaN(historicalGrowth.revGrowth) && historicalGrowth.revGrowth !== 0)
-    ? historicalGrowth.revGrowth
-    : revGrowth;
+  const effectiveRevGrowth = (unifiedMetrics?.growth?.revenueGrowthYoY != null && !isNaN(unifiedMetrics.growth.revenueGrowthYoY))
+    ? unifiedMetrics.growth.revenueGrowthYoY
+    : ((typeof historicalGrowth.revGrowth === 'number' && !isNaN(historicalGrowth.revGrowth) && historicalGrowth.revGrowth !== 0)
+        ? historicalGrowth.revGrowth
+        : revGrowth);
 
   const profitGrowth = Number(
     valuationDrivers?.net_income_growth?.value ??
@@ -469,9 +477,11 @@ export function computeSnowflakeAnalysis(params: {
     historicalGrowth.profitGrowth
   );
 
-  const effectiveProfitGrowth = (typeof historicalGrowth.profitGrowth === 'number' && !isNaN(historicalGrowth.profitGrowth) && historicalGrowth.profitGrowth !== 0)
-    ? historicalGrowth.profitGrowth
-    : profitGrowth;
+  const effectiveProfitGrowth = (unifiedMetrics?.growth?.netIncomeGrowthYoY != null && !isNaN(unifiedMetrics.growth.netIncomeGrowthYoY))
+    ? unifiedMetrics.growth.netIncomeGrowthYoY
+    : ((typeof historicalGrowth.profitGrowth === 'number' && !isNaN(historicalGrowth.profitGrowth) && historicalGrowth.profitGrowth !== 0)
+        ? historicalGrowth.profitGrowth
+        : profitGrowth);
 
   // Peter Lynch & Gordon Büyüme Hibrit Modeli Adil F/K Çarpanı (Sürdürülebilir Büyüme & İçsel Değerleme)
   // Kurumsal Finans İlkesi:
@@ -616,6 +626,7 @@ export function computeSnowflakeAnalysis(params: {
   // =========================================================================
   const savingsThreshold = isForeign ? 10.0 : 32.0;
   const futureRoe = Math.min(65.0, Math.max(currentRoe, (currentRoe * 0.65 + roic * 0.35)));
+  const fmtGrowthPct = (val: number) => (val >= 0 ? `+%${val.toFixed(1)}` : `-%${Math.abs(val).toFixed(1)}`);
 
   const futureChecks: SnowflakeCheck[] = [
     // 2.1 Earnings vs Savings Rate
@@ -623,7 +634,7 @@ export function computeSnowflakeAnalysis(params: {
       id: 'earnings_vs_savings',
       title: 'Tasarruf ve Risksiz Getiriye Göre Kâr Artışı',
       passed: effectiveProfitGrowth >= savingsThreshold,
-      metricValue: `+%${effectiveProfitGrowth.toFixed(1)}`,
+      metricValue: fmtGrowthPct(effectiveProfitGrowth),
       threshold: `>= %${savingsThreshold.toFixed(1)} Eşik`,
       detail: effectiveProfitGrowth >= savingsThreshold
         ? `Öngörülen net kâr artış ivmesi (%${effectiveProfitGrowth.toFixed(1)}), risksiz faiz ve sermaye koruma eşiğinin (%${savingsThreshold.toFixed(1)}) üzerindedir.`
@@ -634,7 +645,7 @@ export function computeSnowflakeAnalysis(params: {
       id: 'earnings_vs_market',
       title: 'Piyasaya Göre Kâr Büyümesi',
       passed: effectiveProfitGrowth >= 25.0,
-      metricValue: `+%${effectiveProfitGrowth.toFixed(1)}`,
+      metricValue: fmtGrowthPct(effectiveProfitGrowth),
       threshold: '>= %+25.0 Piyasa Medyanı',
       detail: effectiveProfitGrowth >= 25.0
         ? `Şirketin beklenen kâr büyümesi (%${effectiveProfitGrowth.toFixed(1)}), BIST genel piyasa büyüme medyanının (%25.0) üzerindedir.`
@@ -645,7 +656,7 @@ export function computeSnowflakeAnalysis(params: {
       id: 'high_growth_earnings',
       title: 'Yüksek Hızlı Kâr Büyümesi',
       passed: effectiveProfitGrowth >= 35.0,
-      metricValue: `+%${effectiveProfitGrowth.toFixed(1)}`,
+      metricValue: fmtGrowthPct(effectiveProfitGrowth),
       threshold: '>= %+35.0 Yüksek Büyüme',
       detail: effectiveProfitGrowth >= 35.0
         ? `Yıllık kâr artış projeksiyonu (%${effectiveProfitGrowth.toFixed(1)}) yüksek büyüme bandında (%35+) güçlü seyretmektedir.`
@@ -656,7 +667,7 @@ export function computeSnowflakeAnalysis(params: {
       id: 'revenue_vs_market',
       title: 'Piyasaya Göre Hasılat Büyümesi',
       passed: effectiveRevGrowth >= (isForeign ? 5.0 : 25.0),
-      metricValue: `+%${effectiveRevGrowth.toFixed(1)}`,
+      metricValue: fmtGrowthPct(effectiveRevGrowth),
       threshold: `>= %+${(isForeign ? 5.0 : 25.0).toFixed(1)} ${isForeign ? 'FX/Piyasa Eşiği' : 'Piyasa Medyanı'}`,
       detail: effectiveRevGrowth >= (isForeign ? 5.0 : 25.0)
         ? `Hasılat ve prim üretim büyümesi (%${effectiveRevGrowth.toFixed(1)}), BIST genel piyasa hasılat artış ortalamasından (%${(isForeign ? 5.0 : 25.0).toFixed(1)}) daha hızlıdır.`
@@ -667,7 +678,7 @@ export function computeSnowflakeAnalysis(params: {
       id: 'high_growth_revenue',
       title: 'Yüksek Hızlı Hasılat Büyümesi',
       passed: effectiveRevGrowth >= (isForeign ? 15.0 : 30.0),
-      metricValue: `+%${effectiveRevGrowth.toFixed(1)}`,
+      metricValue: fmtGrowthPct(effectiveRevGrowth),
       threshold: `>= %+${(isForeign ? 15.0 : 30.0).toFixed(1)} Yüksek Büyüme`,
       detail: effectiveRevGrowth >= (isForeign ? 15.0 : 30.0)
         ? `Operasyonel iş hacmi ve ciro büyümesi (%${effectiveRevGrowth.toFixed(1)}), yüksek hasılat genişleme eşiğini (%${(isForeign ? 15.0 : 30.0).toFixed(1)}+) aşmaktadır.`
@@ -761,7 +772,7 @@ export function computeSnowflakeAnalysis(params: {
       id: 'earnings_vs_industry',
       title: 'Sektöre Göre Kâr Büyümesi',
       passed: historicalGrowth.profitGrowth >= 20.0,
-      metricValue: `+%${historicalGrowth.profitGrowth.toFixed(1)}`,
+      metricValue: fmtGrowthPct(historicalGrowth.profitGrowth),
       threshold: '>= %+20.0 Sektör Medyanı',
       detail: historicalGrowth.profitGrowth >= 20.0
         ? `Şirketin kâr büyümesi (%${historicalGrowth.profitGrowth.toFixed(1)}), BIST sektör medyan kâr büyümesini geride bırakmıştır.`
@@ -783,16 +794,16 @@ export function computeSnowflakeAnalysis(params: {
   // =========================================================================
   // 4. EKSEN: FİNANSAL SAĞLIK (0 - 6 PUAN)
   // =========================================================================
-  const currentAssets = Number(latestData?.current_assets ?? unifiedMetrics?.balanceSheet?.currentAssets ?? 0);
-  const currentLiabilities = Number(latestData?.current_liabilities ?? unifiedMetrics?.balanceSheet?.currentLiabilities ?? 1);
+  const currentAssets = Number(unifiedMetrics?.balanceSheet?.currentAssets ?? latestData?.current_assets ?? 0);
+  const currentLiabilities = Number(unifiedMetrics?.balanceSheet?.currentLiabilities ?? latestData?.current_liabilities ?? 1);
   const currentRatio = currentLiabilities > 0 ? currentAssets / currentLiabilities : 0;
   const minCurrentRatio = sector === 'RETAIL' ? 0.55 : 1.0;
-  const netDebt = Number(latestData?.net_debt ?? unifiedMetrics?.balanceSheet?.netDebt ?? 0);
-  const financialDebt = Number(latestData?.financial_debt ?? unifiedMetrics?.balanceSheet?.financialDebt ?? 0);
-  const ebitda = Number(latestData?.ebitda ?? 0);
-  const totalAssets = Number(latestData?.total_assets ?? unifiedMetrics?.balanceSheet?.totalAssets ?? 1);
-  const totalLiabilities = Number(latestData?.total_liabilities ?? unifiedMetrics?.balanceSheet?.totalLiabilities ?? (totalAssets - Number(latestData?.equity ?? 0)));
-  const equityRatio = totalAssets > 0 ? (Number(latestData?.equity ?? unifiedMetrics?.balanceSheet?.equity ?? 0) / totalAssets) * 100 : 0;
+  const netDebt = Number(unifiedMetrics?.balanceSheet?.netDebt ?? latestData?.net_debt ?? 0);
+  const financialDebt = Number(unifiedMetrics?.balanceSheet?.financialDebt ?? latestData?.financial_debt ?? 0);
+  const ebitda = Number(unifiedMetrics?.ttm?.ebitda ?? latestData?.ebitda ?? 0);
+  const totalAssets = Number(unifiedMetrics?.balanceSheet?.totalAssets ?? latestData?.total_assets ?? 1);
+  const totalLiabilities = Number(unifiedMetrics?.balanceSheet?.totalLiabilities ?? latestData?.total_liabilities ?? (totalAssets - Number(latestData?.equity ?? 0)));
+  const equityRatio = totalAssets > 0 ? (Number(unifiedMetrics?.balanceSheet?.equity ?? latestData?.equity ?? 0) / totalAssets) * 100 : 0;
   
   // Net Borç / FAVÖK: Tek çeyreklik EBITDA yerine kurumsal TTM EBITDA esas alınır
   const ndRatio = unifiedMetrics?.liquidity?.netDebtToEbitda != null
@@ -800,8 +811,8 @@ export function computeSnowflakeAnalysis(params: {
     : (unifiedMetrics?.ttm?.ebitda && unifiedMetrics.ttm.ebitda > 0
         ? netDebt / unifiedMetrics.ttm.ebitda
         : (ebitda > 0 ? netDebt / ebitda : (netDebt <= 0 ? 0 : 5.0)));
-  const ebit = Number(latestData?.operating_profit ?? latestData?.operating_income ?? latestData?.ebit ?? ebitda * 0.8);
-  const rawInterestExp = latestData?.interest_expenses ?? latestData?.financing_expenses ?? latestData?.finance_costs ?? 0;
+  const ebit = Number(unifiedMetrics?.ttm?.operatingProfit ?? latestData?.operating_profit ?? latestData?.operating_income ?? latestData?.ebit ?? ebitda * 0.8);
+  const rawInterestExp = unifiedMetrics?.ttm?.interestExpenses ?? latestData?.interest_expenses ?? latestData?.financing_expenses ?? latestData?.finance_costs ?? 0;
   const interestExpense = Math.abs(Number(rawInterestExp));
   const icr = interestExpense > 0 ? ebit / interestExpense : 99.0;
 
@@ -877,12 +888,12 @@ export function computeSnowflakeAnalysis(params: {
       title: 'Faiz Karşılama Oranı',
       passed: isFinancial
         ? !isInsolventEquity
-        : (isNetCashOrFinanceSurplus || interestExpense <= 0 ? ebit >= 0 : icr >= 3.0),
+        : (isNetCashOrFinanceSurplus || interestExpense <= 0 ? true : icr >= 3.0),
       metricValue: isNetCashOrFinanceSurplus
         ? (netDebt <= 0 ? 'Net Nakit Fazlası' : 'Net Faiz Geliri')
         : (interestExpense <= 0 ? 'Net Faiz Geliri' : `${icr.toFixed(1)}x`),
-      threshold: '>= 3.0x veya Net Faiz Geliri',
-      detail: (isNetCashOrFinanceSurplus || interestExpense <= 0 || icr >= 50.0) && ebit >= 0
+      threshold: '>= 3.0x veya Net Faiz Geliri / Nakit Fazlası',
+      detail: (isNetCashOrFinanceSurplus || interestExpense <= 0 || icr >= 50.0)
         ? 'Şirketin net nakit fazlası ve finansman gelirleri borçlanma maliyetlerini emniyetle aşmaktadır; faiz yükümlülüğü riski bulunmamaktadır.'
         : (icr >= 3.0
             ? `Esas faaliyet kârı (${formatCurrency(ebit)}), finansman faiz giderlerini ${icr.toFixed(1)} katı ile emniyetle karşılamaktadır.`

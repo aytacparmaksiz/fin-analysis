@@ -4582,7 +4582,23 @@ export interface Dupont5StepResult {
 
 export type DuPont5StepResult = Dupont5StepResult;
 
-export function calculateDuPont5Step(item: any, sectorOrPrev?: any, sectorOverride?: SectorType): Dupont5StepResult {
+export function calculateDuPont5Step(
+  item: any,
+  sectorOrPrev?: any,
+  sectorOverride?: SectorType,
+  options?: {
+    ttm?: {
+      revenue?: number | null;
+      ebitda?: number | null;
+      operatingProfit?: number | null;
+      ebt?: number | null;
+      interestExpense?: number | null;
+      netIncome?: number | null;
+    } | null;
+    equity?: number | null;
+    totalAssets?: number | null;
+  }
+): Dupont5StepResult {
   if (!item || typeof item !== 'object') {
     return {
       hasData: false,
@@ -4609,28 +4625,53 @@ export function calculateDuPont5Step(item: any, sectorOrPrev?: any, sectorOverri
 
   const prevItem = (sectorOrPrev && typeof sectorOrPrev === 'object') ? sectorOrPrev : null;
 
-  const netIncome = parseFinancialNumber(item.net_income);
-  const revenue = parseFinancialNumber(item.revenue ?? item.written_premiums);
-  const totalAssets = parseFinancialNumber(item.total_assets);
-  const equity = parseFinancialNumber(item.equity);
+  const ttmOpts = options?.ttm ?? (item as any)?.ttm ?? (item as any)?._ttm;
+  const isTtmMode = Boolean(ttmOpts && ttmOpts.netIncome != null && ttmOpts.revenue != null);
 
-  // EBIT & EBT derivation
-  let ebit = parseFinancialNumber(item.ebit ?? item.operating_profit ?? item.operating_income);
-  if (resolvedSector === 'INSURANCE') {
-    const techP = parseFinancialNumber(item.technical_balance ?? item.technical_profit ?? item.ebitda);
-    if (techP !== null) {
-      ebit = techP;
+  const netIncome = isTtmMode
+    ? Number(ttmOpts.netIncome)
+    : parseFinancialNumber(item.net_income);
+  const revenue = isTtmMode
+    ? Number(ttmOpts.revenue)
+    : parseFinancialNumber(item.revenue ?? item.written_premiums);
+  const totalAssets = (options?.totalAssets != null)
+    ? Number(options.totalAssets)
+    : parseFinancialNumber(item.total_assets);
+  const equity = (options?.equity != null)
+    ? Number(options.equity)
+    : parseFinancialNumber(item.equity);
+
+  // EBIT & EBT derivation (TTM akımları ve tüm BIST sektörleri ile %100 uyumlu)
+  let ebit: number | null = null;
+  if (isTtmMode) {
+    ebit = (ttmOpts.operatingProfit != null)
+      ? Number(ttmOpts.operatingProfit)
+      : (ttmOpts.ebitda != null ? Number(ttmOpts.ebitda) : parseFinancialNumber(item.operating_profit ?? item.ebitda ?? item.ebit));
+  } else {
+    ebit = parseFinancialNumber(item.ebit ?? item.operating_profit ?? item.operating_income);
+    if (resolvedSector === 'INSURANCE') {
+      const techP = parseFinancialNumber(item.technical_balance ?? item.technical_profit ?? item.ebitda);
+      if (techP !== null) {
+        ebit = techP;
+      }
+    } else if (ebit === null && item.ebitda != null) {
+      ebit = item.ebitda;
     }
-  } else if (ebit === null && item.ebitda != null) {
-    ebit = item.ebitda;
   }
 
-  const rawInterestExp = parseFinancialNumber(item.interest_expenses ?? item.financial_expenses ?? item.financing_expenses ?? item.interest_expense ?? item.financial_expense);
+  const rawInterestExp = isTtmMode
+    ? (ttmOpts.interestExpense != null ? Number(ttmOpts.interestExpense) : parseFinancialNumber(item.interest_expenses ?? item.financial_expenses ?? item.financing_expenses ?? item.interest_expense ?? item.financial_expense))
+    : parseFinancialNumber(item.interest_expenses ?? item.financial_expenses ?? item.financing_expenses ?? item.interest_expense ?? item.financial_expense);
   const interestExp = rawInterestExp !== null ? Math.abs(rawInterestExp) : null;
-  let ebt = parseFinancialNumber(item.ebt ?? item.profit_before_tax);
-  if (ebt === null && ebit !== null && interestExp !== null && resolvedSector !== 'INSURANCE') {
+
+  let ebt: number | null = null;
+  if (isTtmMode && ttmOpts.ebt != null) {
+    ebt = Number(ttmOpts.ebt);
+  } else if (!isTtmMode && item.ebt != null) {
+    ebt = parseFinancialNumber(item.ebt ?? item.profit_before_tax);
+  } else if (ebit !== null && interestExp !== null && resolvedSector !== 'INSURANCE') {
     ebt = ebit - interestExp;
-  } else if (ebt === null && netIncome !== null) {
+  } else if (netIncome !== null) {
     const taxRate = resolvedSector === 'REIT' ? 0.0 : ((resolvedSector === 'BANKING' || resolvedSector === 'INSURANCE' || resolvedSector === 'FINANCIAL_SERVICES') ? 0.30 : 0.25);
     ebt = taxRate < 1 ? (netIncome / (1 - taxRate)) : netIncome;
   }
@@ -4656,15 +4697,19 @@ export function calculateDuPont5Step(item: any, sectorOrPrev?: any, sectorOverri
     ? Number(rawEbitMarginPct.toFixed(2))
     : null;
 
-  const avgAssets = (prevItem && prevItem.total_assets && totalAssets)
-    ? (prevItem.total_assets + totalAssets) / 2
-    : totalAssets;
+  const avgAssets = isTtmMode
+    ? totalAssets
+    : ((prevItem && prevItem.total_assets && totalAssets)
+        ? (prevItem.total_assets + totalAssets) / 2
+        : totalAssets);
 
-  const avgEquity = (prevItem && prevItem.equity && equity)
-    ? (prevItem.equity + equity) / 2
-    : equity;
+  const avgEquity = isTtmMode
+    ? equity
+    : ((prevItem && prevItem.equity && equity)
+        ? (prevItem.equity + equity) / 2
+        : equity);
 
-  const annualFactor = getAnnualizationFactor(item.period);
+  const annualFactor = isTtmMode ? 1.0 : getAnnualizationFactor(item.period);
 
   const insFiduciary = resolvedSector === 'INSURANCE' 
     ? (parseFinancialNumber(item.financial_assets_insured) ?? 0)
@@ -4838,12 +4883,15 @@ export function calculateValuationSensitivityMatrix({
   const safeBaseWacc = Math.max(5.0, baseWacc);
   const safePrice = (currentPrice && currentPrice > 0) ? currentPrice : 1.0;
   const safeBaseFair = (baseFairValue && baseFairValue > 0) ? baseFairValue : 0;
+  const safeBaseGrowth = baseGrowth >= safeBaseWacc
+    ? Math.max(1.0, safeBaseWacc - 2.0)
+    : baseGrowth;
 
   const waccRange = waccDeltas.map(d => Number((safeBaseWacc + d).toFixed(1)));
-  const growthRange = growthDeltas.map(d => Number((baseGrowth + d).toFixed(1)));
+  const growthRange = growthDeltas.map(d => Number((safeBaseGrowth + d).toFixed(1)));
 
-  const baseDenom = safeBaseWacc - baseGrowth;
-  const baseCapFactor = baseDenom > 0 ? (1 + baseGrowth / 100) / (baseDenom / 100) : 10.0;
+  const baseDenom = safeBaseWacc - safeBaseGrowth;
+  const baseCapFactor = baseDenom > 0 ? (1 + safeBaseGrowth / 100) / (baseDenom / 100) : 10.0;
 
   let hasSingularity = false;
   let singularityCount = 0;

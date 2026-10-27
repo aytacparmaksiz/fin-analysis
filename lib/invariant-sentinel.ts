@@ -98,6 +98,8 @@ export class InvariantSentinel {
     }
 
     if (trueProfitGrowth !== null && !isNaN(trueProfitGrowth)) {
+      const fmtGrowth = (val: number) => (val >= 0 ? `+%${val.toFixed(1)}` : `-%${Math.abs(val).toFixed(1)}`);
+
       // 2. Eksen (Gelecek Büyüme) kontrolleri: 2.1, 2.2, 2.3
       const savingsCheck = sf.axes.future.checks.find(c => c.id === 'earnings_vs_savings');
       if (savingsCheck && savingsCheck.metricValue) {
@@ -107,10 +109,10 @@ export class InvariantSentinel {
             ticker,
             savingsCheck.title,
             savingsCheck.metricValue,
-            `+%${trueProfitGrowth.toFixed(1)}`,
+            fmtGrowth(trueProfitGrowth),
             'Değerleme sürücüsü veya yapay varsayım, gerçekleşen mali tablo net kâr büyümesini ezmiş.'
           );
-          savingsCheck.metricValue = `+%${trueProfitGrowth.toFixed(1)}`;
+          savingsCheck.metricValue = fmtGrowth(trueProfitGrowth);
           savingsCheck.passed = trueProfitGrowth >= 32.0;
           savingsCheck.detail = savingsCheck.passed
             ? `Öngörülen net kâr artış ivmesi (%${trueProfitGrowth.toFixed(1)}), risksiz faiz ve sermaye koruma eşiğinin (%32.0) üzerindedir.`
@@ -126,10 +128,10 @@ export class InvariantSentinel {
             ticker,
             marketGrowthCheck.title,
             marketGrowthCheck.metricValue,
-            `+%${trueProfitGrowth.toFixed(1)}`,
+            fmtGrowth(trueProfitGrowth),
             'Piyasaya göre kâr büyümesi kartında mali tablo verisi dışındaki varsayım ezildi.'
           );
-          marketGrowthCheck.metricValue = `+%${trueProfitGrowth.toFixed(1)}`;
+          marketGrowthCheck.metricValue = fmtGrowth(trueProfitGrowth);
           marketGrowthCheck.passed = trueProfitGrowth >= 25.0;
           marketGrowthCheck.detail = marketGrowthCheck.passed
             ? `Şirketin kâr büyümesi (%${trueProfitGrowth.toFixed(1)}), BIST genel piyasa büyüme medyanının (%25.0) üzerindedir.`
@@ -145,10 +147,10 @@ export class InvariantSentinel {
             ticker,
             highGrowthCheck.title,
             highGrowthCheck.metricValue,
-            `+%${trueProfitGrowth.toFixed(1)}`,
+            fmtGrowth(trueProfitGrowth),
             'Yüksek hızlı kâr büyümesi kartı gerçek mali tabloya eşitlendi.'
           );
-          highGrowthCheck.metricValue = `+%${trueProfitGrowth.toFixed(1)}`;
+          highGrowthCheck.metricValue = fmtGrowth(trueProfitGrowth);
           highGrowthCheck.passed = trueProfitGrowth >= 35.0;
           highGrowthCheck.detail = highGrowthCheck.passed
             ? `Yıllık kâr artış projeksiyonu (%${trueProfitGrowth.toFixed(1)}) yüksek büyüme bandında (%35+) güçlü seyretmektedir.`
@@ -161,7 +163,7 @@ export class InvariantSentinel {
       if (accelCheck && accelCheck.metricValue) {
         const curVal = parseFloat(accelCheck.metricValue.replace(/[^0-9.-]/g, ''));
         if (Math.abs(curVal - trueProfitGrowth) >= 0.5) {
-          accelCheck.metricValue = `+%${trueProfitGrowth.toFixed(1)} Son Dönem`;
+          accelCheck.metricValue = `${fmtGrowth(trueProfitGrowth)} Son Dönem`;
         }
       }
 
@@ -169,7 +171,7 @@ export class InvariantSentinel {
       if (pastIndCheck && pastIndCheck.metricValue) {
         const curVal = parseFloat(pastIndCheck.metricValue.replace(/[^0-9.-]/g, ''));
         if (Math.abs(curVal - trueProfitGrowth) >= 0.5) {
-          pastIndCheck.metricValue = `+%${trueProfitGrowth.toFixed(1)}`;
+          pastIndCheck.metricValue = fmtGrowth(trueProfitGrowth);
           pastIndCheck.passed = trueProfitGrowth >= 20.0;
         }
       }
@@ -178,7 +180,7 @@ export class InvariantSentinel {
     // 2. F/K veya GYO İÇİN PD/DD ÇARPANLARI MUTABAKATI
     const isReit = ctx.sector === 'REIT' || ctx.latestData?.sector === 'REIT' || ctx.unifiedMetrics?.sector === 'REIT';
     if (isReit) {
-      const truePb = ctx.marketMultiples?.pb ?? ctx.companyMultiples?.multiples?.pb?.companyValue ?? ctx.unifiedMetrics?.valuation?.pb ?? null;
+      const truePb = ctx.companyMultiples?.multiples?.pb?.companyValue ?? ctx.marketMultiples?.pb ?? ctx.unifiedMetrics?.valuation?.pb ?? null;
       if (truePb !== null && truePb > 0) {
         for (const checkId of ['pe_vs_peers', 'pe_vs_industry', 'pe_vs_fair']) {
           const chk = sf.axes.value.checks.find(c => c.id === checkId);
@@ -202,7 +204,7 @@ export class InvariantSentinel {
         }
       }
     } else {
-      const truePe = ctx.marketMultiples?.pe ?? ctx.companyMultiples?.multiples?.pe?.companyValue ?? null;
+      const truePe = ctx.companyMultiples?.multiples?.pe?.companyValue ?? ctx.marketMultiples?.pe ?? ctx.unifiedMetrics?.valuation?.pe ?? null;
       if (truePe !== null && truePe > 0) {
         for (const checkId of ['pe_vs_peers', 'pe_vs_industry', 'pe_vs_fair']) {
           const chk = sf.axes.value.checks.find(c => c.id === checkId);
