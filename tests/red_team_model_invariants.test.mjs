@@ -1,4 +1,4 @@
-﻿import test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
@@ -699,6 +699,46 @@ test('RED TEAM MATHEMATICAL AUDIT & INVARIANT TEST SUITE', async (t) => {
     assert.ok(sanItem.real_wacc < sanItem.nominal_wacc, `TMS 29 altında Reel WACC (${sanItem.real_wacc}) < Nominal WACC (${sanItem.nominal_wacc}) olmalıdır`);
     assert.equal(sanItem.wacc, sanItem.nominal_wacc, 'Güncellenen WACC eski önbellek değerini ezmelidir');
     assert.ok(sanItem.roic > 5 && sanItem.roic < 20, `MGROS çekirdek ROIC makul aralıkta (~%7-%12) olmalıdır (Hesaplanan: %${sanItem.roic})`);
+  });
+
+  // ============================================================================
+  // BÖLÜM 5: ÇAPRAZ BİLEŞEN BÜTÜNLÜĞÜ VE DEĞİŞMEZLİK DENETİMİ (CROSS-COMPONENT SSOT)
+  // ============================================================================
+
+  await t.test('REGRESYON 20: MPARK Snowflake Kâr Büyümesi ile Gelir Tablosu YoY Mutabakatı (+%38.0)', async () => {
+    const { OFFICIAL_ISYATIRIM_CACHE } = await import('../lib/isyatirim-official-cache.ts');
+    const mparkHistory = OFFICIAL_ISYATIRIM_CACHE['MPARK'];
+    assert.ok(mparkHistory && mparkHistory.length >= 2, 'MPARK finansal geçmişi mevcut olmalıdır');
+
+    const latest = mparkHistory[mparkHistory.length - 1]; // 2026/06 (Net: 3.153.018.000)
+    const prev = mparkHistory.find(h => h.period === '2025/06'); // 2025/06 (Net: 2.284.499.000)
+    assert.ok(latest && prev, 'MPARK 2026/06 ve 2025/06 dönemleri bulunmalıdır');
+
+    const expectedYoYGrowth = Number((((latest.net_income - prev.net_income) / prev.net_income) * 100).toFixed(1));
+    assert.equal(expectedYoYGrowth, 38.0, 'MPARK 2026/06 YoY Net Kâr Büyümesi %38.0 olmalıdır');
+
+    // Snowflake hesabı (dışarıdan değerleme sürücüsü olarak yanlışlıkla 4.5 gelse bile)
+    const sf = calculateSnowflake({
+      ticker: 'MPARK',
+      sector: 'HEALTHCARE',
+      currentPrice: 384.5,
+      fairValue: 420.0,
+      discountPct: 8.5,
+      financialHistory: mparkHistory,
+      latestData: latest,
+      valuationDrivers: {
+        net_income_growth: { value: 4.5, label: 'Varsayımsal Sürücü' }
+      }
+    });
+
+    const earningsCheck = sf.axes.future.checks.find(c => c.id === 'earnings_vs_savings');
+    assert.ok(earningsCheck, 'earnings_vs_savings kriteri bulunmalıdır');
+    assert.equal(
+      earningsCheck.metricValue,
+      '+%38.0',
+      `Snowflake Kâr Büyümesi (+%38.0) mali tabloyla %100 örtüşmelidir, varsayımsal değerle ezilemez (Hesaplanan: ${earningsCheck.metricValue})`
+    );
+    assert.equal(earningsCheck.passed, true, 'MPARK %38.0 kâr büyümesiyle %32.0 risksiz faiz eşiğini geçmelidir');
   });
 });
 
