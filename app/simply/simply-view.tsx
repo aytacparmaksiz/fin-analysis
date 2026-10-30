@@ -1803,9 +1803,6 @@ export default function SimplyView({
                 <h3 className="font-sans text-[15px] font-bold text-white tracking-tight line-clamp-1" title={profile.fullName}>
                   {getCleanCompanyName(profile.fullName, report.ticker)}
                 </h3>
-                <div className="text-xs text-slate-300 font-mono font-bold tracking-wider">
-                  {report.ticker.toUpperCase()}
-                </div>
                 <div className="text-xs text-slate-400 font-sans">
                   Piyasa Değeri: {formattedMarketCap}
                 </div>
@@ -1925,8 +1922,12 @@ export default function SimplyView({
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     {(() => {
                       const isTrapOrAlma = Boolean(valuationInfo?.is_value_trap || report.decision === 'ALMA' || (report as any)?.rawDecision === 'ALMA');
+                      const upsidePct = currentPriceNum > 0 ? ((fairValueNum - currentPriceNum) / currentPriceNum) * 100 : 0;
+                      const trueDiscountPct = fairValueNum > 0 ? ((fairValueNum - currentPriceNum) / fairValueNum) * 100 : 0;
                       return (
-                        <span className={`inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2 rounded-xl font-mono text-xs sm:text-sm font-bold border whitespace-nowrap ${
+                        <span 
+                          title={fairValueNum > 0 ? `Piyasa Fiyatı: ₺${currentPriceNum.toFixed(2)} ➔ Hedef Adil Değer: ₺${fairValueNum.toFixed(2)} | Getiri Potansiyeli: +%${Math.abs(upsidePct).toFixed(1)} | İskonto Payı: %${Math.abs(trueDiscountPct).toFixed(1)}` : undefined}
+                          className={`inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl font-mono text-xs sm:text-sm font-bold border whitespace-nowrap shadow-sm ${
                           isTrapOrAlma
                             ? 'bg-rose-500/15 border-rose-500/40 text-rose-400'
                             : discountPctNum > 0
@@ -1940,13 +1941,23 @@ export default function SimplyView({
                             </>
                           ) : discountPctNum > 0 ? (
                             <>
-                              <TrendingUp className="w-4 h-4 shrink-0" />
-                              <span>%{Math.abs(discountPctNum).toFixed(1)} İskontolu / Potansiyel</span>
+                              <TrendingUp className="w-4 h-4 shrink-0 text-emerald-400" />
+                              <span className="flex items-center gap-1.5">
+                                <span>+%{Math.abs(upsidePct).toFixed(1)} Potansiyel</span>
+                                <span className="text-[11px] font-normal text-emerald-400/75 border-l border-emerald-500/30 pl-1.5">
+                                  %{Math.abs(trueDiscountPct).toFixed(0)} İskonto
+                                </span>
+                              </span>
                             </>
                           ) : (
                             <>
-                              <TrendingDown className="w-4 h-4 shrink-0" />
-                              <span>%{Math.abs(discountPctNum).toFixed(1)} Primli</span>
+                              <TrendingDown className="w-4 h-4 shrink-0 text-rose-400" />
+                              <span className="flex items-center gap-1.5">
+                                <span>-%{Math.abs(upsidePct).toFixed(1)} Potansiyel</span>
+                                <span className="text-[11px] font-normal text-rose-400/75 border-l border-rose-500/30 pl-1.5">
+                                  +%{Math.abs(trueDiscountPct).toFixed(0)} Prim
+                                </span>
+                              </span>
                             </>
                           )}
                         </span>
@@ -3609,7 +3620,7 @@ export default function SimplyView({
                   <div className="text-2xl font-black font-mono text-white">
                     ₺{valuationInfo?.bear_price ? Number(valuationInfo.bear_price).toFixed(2) : (fairValueNum * 0.75).toFixed(2)}
                   </div>
-                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                  <p className="text-xs text-slate-400 leading-relaxed">
                     Yüksek iskonto oranı (+%4 WACC), daralan marjlar ve düşük büyüme varsayımı.
                   </p>
                 </div>
@@ -3618,22 +3629,22 @@ export default function SimplyView({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-[#f5c242]">Baz Senaryo</span>
                   </div>
-                  <div className="text-3xl font-black font-mono text-[#f5c242]">
+                  <div className="text-2xl sm:text-3xl font-black font-mono text-[#f5c242]">
                     ₺{fairValueNum.toFixed(2)}
                   </div>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                  <p className="text-xs text-slate-400 leading-relaxed">
                     Şirketin tarihsel getiri ortalamaları, mevcut sermaye verimliliği ve sektör katsayıları.
                   </p>
                 </div>
 
                 <div className="bg-[#12151b] border border-[#232834] rounded-xl p-5 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-bold text-emerald-400">Boğa Senaryosu</span>
+                    <span className="text-xs font-bold text-emerald-400">Boğa Senaryosu</span>
                   </div>
                   <div className="text-2xl font-black font-mono text-white">
                     ₺{valuationInfo?.bull_price ? Number(valuationInfo.bull_price).toFixed(2) : (fairValueNum * 1.30).toFixed(2)}
                   </div>
-                  <p className="text-sm text-slate-300 leading-relaxed">
+                  <p className="text-xs text-slate-400 leading-relaxed">
                     Pazar payı genişlemesi, marj artışı ve risksiz faiz oranında normalleşme.
                   </p>
                 </div>
@@ -4837,6 +4848,13 @@ export default function SimplyView({
                             : `${fairValueNum >= currentPriceNum ? '+' : ''}${(((fairValueNum - currentPriceNum) / currentPriceNum) * 100).toFixed(1)}%`)
                         : '—'}
                     </div>
+                    {fairValueNum > 0 && currentPriceNum > 0 && !(valuationInfo?.is_value_trap || report.decision === 'ALMA' || (report as any)?.rawDecision === 'ALMA') && (
+                      <div className="text-[10.5px] font-mono text-slate-400 font-medium">
+                        {fairValueNum >= currentPriceNum 
+                          ? `%${Math.abs(((fairValueNum - currentPriceNum) / fairValueNum) * 100).toFixed(0)} İskontolu` 
+                          : `%${Math.abs(((currentPriceNum - fairValueNum) / currentPriceNum) * 100).toFixed(0)} Primli`}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
