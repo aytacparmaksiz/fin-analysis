@@ -2001,46 +2001,90 @@ export default function SimplyView({
 
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     {(() => {
-                      const isTrapOrAlma = Boolean(valuationInfo?.is_value_trap || report.decision === 'ALMA' || (report as any)?.rawDecision === 'ALMA');
+                      const isTrap = Boolean(valuationInfo?.is_value_trap);
+                      const isAlma = Boolean(report.decision === 'ALMA' || (report as any)?.rawDecision === 'ALMA');
+                      const rawScore = report?.score || valuationInfo?.score || (report as any)?.scoreResult?.totalScore;
+                      const cleanNum = rawScore ? parseInt(String(rawScore).split('/')[0].replace(/[^0-9]/g, ''), 10) : null;
+                      
                       const upsidePct = currentPriceNum > 0 ? ((fairValueNum - currentPriceNum) / currentPriceNum) * 100 : 0;
                       const trueDiscountPct = fairValueNum > 0 ? ((fairValueNum - currentPriceNum) / fairValueNum) * 100 : 0;
+                      const isNearFairValue = Math.abs(upsidePct) < 1.0;
+
+                      // Net, şeffaf ve analitik risk rozeti ve açıklaması
+                      let riskBadge: { label: string; tooltip: string } | null = null;
+                      if (isTrap) {
+                        riskBadge = {
+                          label: 'Değer Tuzağı Riski',
+                          tooltip: 'Hisse çarpan bazında ucuz görünse de operasyonel nakit akışı veya kâr kalitesi bozulması nedeniyle değer tuzağı riski taşımaktadır.'
+                        };
+                      } else if (cleanNum !== null && cleanNum < 30) {
+                        riskBadge = {
+                          label: 'Düşük Temel Performans',
+                          tooltip: `Sektörel analiz puanı (${cleanNum}/100) kritik seviyenin altındadır. Marj daralması veya borç baskısı nedeniyle temkinli yaklaşım önerilir.`
+                        };
+                      } else if (isAlma) {
+                        riskBadge = {
+                          label: 'Temkinli Görünüm',
+                          tooltip: 'Temel bilanço göstergeleri ve sermaye verimliliği mevcut piyasa fiyatlaması karşısında alım emniyeti sunmamaktadır.'
+                        };
+                      }
+
                       return (
-                        <span 
-                          title={fairValueNum > 0 ? `Piyasa Fiyatı: ₺${currentPriceNum.toFixed(2)} ➔ Hedef Adil Değer: ₺${fairValueNum.toFixed(2)} | Getiri Potansiyeli: +%${Math.abs(upsidePct).toFixed(1)} | İskonto Payı: %${Math.abs(trueDiscountPct).toFixed(1)}` : undefined}
-                          className={`inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl font-mono text-xs sm:text-sm font-bold border whitespace-nowrap shadow-sm ${
-                          isTrapOrAlma
-                            ? 'bg-rose-500/15 border-rose-500/40 text-rose-400'
-                            : discountPctNum > 0
-                              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
-                              : 'bg-rose-500/15 border-rose-500/40 text-rose-400'
-                        }`}>
-                          {isTrapOrAlma ? (
-                            <>
-                              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
-                              <span>{valuationInfo?.is_value_trap ? 'Değer Tuzağı Riski' : 'Yüksek Bilanço Riski'}</span>
-                            </>
-                          ) : discountPctNum > 0 ? (
-                            <>
-                              <TrendingUp className="w-4 h-4 shrink-0 text-emerald-400" />
-                              <span className="flex items-center gap-1.5">
-                                <span>+%{Math.abs(upsidePct).toFixed(1)} Potansiyel</span>
-                                <span className="text-[11px] font-normal text-emerald-400/75 border-l border-emerald-500/30 pl-1.5">
-                                  %{Math.abs(trueDiscountPct).toFixed(0)} İskonto
-                                </span>
-                              </span>
-                            </>
-                          ) : (
-                            <>
-                              <TrendingDown className="w-4 h-4 shrink-0 text-rose-400" />
-                              <span className="flex items-center gap-1.5">
-                                <span>-%{Math.abs(upsidePct).toFixed(1)} Potansiyel</span>
-                                <span className="text-[11px] font-normal text-rose-400/75 border-l border-rose-500/30 pl-1.5">
-                                  +%{Math.abs(trueDiscountPct).toFixed(0)} Prim
-                                </span>
-                              </span>
-                            </>
+                        <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+                          {/* Risk uyarısı varsa, iskonto panelini silmeden YANINA şık bir etiket olarak eklenir */}
+                          {riskBadge && (
+                            <span 
+                              title={riskBadge.tooltip}
+                              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl font-sans text-xs font-bold border border-rose-500/40 bg-rose-500/15 text-rose-400 whitespace-nowrap shadow-sm cursor-help"
+                            >
+                              <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+                              <span>{riskBadge.label}</span>
+                            </span>
                           )}
-                        </span>
+
+                          {/* İskonto & Potansiyel Paneli - ASLA KAYBOLMAZ, HER ZAMAN EKSİKSİZ GÖSTERİLİR */}
+                          <span 
+                            title={fairValueNum > 0 ? `Piyasa Fiyatı: ₺${currentPriceNum.toFixed(2)} ➔ Hedef Adil Değer: ₺${fairValueNum.toFixed(2)} | Potansiyel: ${upsidePct >= 0 ? '+' : ''}%${upsidePct.toFixed(1)} | İskonto/Prim: %${Math.abs(trueDiscountPct).toFixed(1)}` : undefined}
+                            className={`inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl font-mono text-xs sm:text-sm font-bold border whitespace-nowrap shadow-sm ${
+                              fairValueNum > currentPriceNum && !isNearFairValue
+                                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                                : isNearFairValue
+                                ? 'bg-slate-800/80 border-slate-700/80 text-slate-300'
+                                : 'bg-rose-500/15 border-rose-500/40 text-rose-400'
+                            }`}
+                          >
+                            {fairValueNum > currentPriceNum && !isNearFairValue ? (
+                              <>
+                                <TrendingUp className="w-4 h-4 shrink-0 text-emerald-400" />
+                                <span className="flex items-center gap-1.5">
+                                  <span>+%{Math.abs(upsidePct).toFixed(1)} Potansiyel</span>
+                                  <span className="text-[11px] font-normal text-emerald-400/75 border-l border-emerald-500/30 pl-1.5">
+                                    %{Math.abs(trueDiscountPct).toFixed(0)} İskonto
+                                  </span>
+                                </span>
+                              </>
+                            ) : isNearFairValue ? (
+                              <>
+                                <span className="flex items-center gap-1.5">
+                                  <span>Adil Değerinde</span>
+                                  <span className="text-[11px] font-normal text-slate-400 border-l border-slate-700 pl-1.5">
+                                    {upsidePct >= 0 ? '+' : ''}%{upsidePct.toFixed(1)} Fark
+                                  </span>
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <TrendingDown className="w-4 h-4 shrink-0 text-rose-400" />
+                                <span className="flex items-center gap-1.5">
+                                  <span>-%{Math.abs(upsidePct).toFixed(1)} Potansiyel</span>
+                                  <span className="text-[11px] font-normal text-rose-400/75 border-l border-rose-500/30 pl-1.5">
+                                    +%{Math.abs(trueDiscountPct).toFixed(0)} Prim
+                                  </span>
+                                </span>
+                              </>
+                            )}
+                          </span>
+                        </div>
                       );
                     })()}
                     {(() => {
@@ -5037,14 +5081,12 @@ export default function SimplyView({
                   <div className="h-8 w-px bg-[#282d37]" />
                   <div className="text-right">
                     <div className="text-sm text-slate-400 font-mono uppercase">Potansiyel</div>
-                    <div className={`text-xl font-black font-mono ${(valuationInfo?.is_value_trap || report.decision === 'ALMA' || (report as any)?.rawDecision === 'ALMA') ? 'text-rose-400' : (fairValueNum >= currentPriceNum ? 'text-emerald-400' : 'text-rose-400')}`}>
+                    <div className={`text-xl font-black font-mono ${fairValueNum >= currentPriceNum ? 'text-emerald-400' : 'text-rose-400'}`}>
                       {currentPriceNum > 0
-                        ? ((valuationInfo?.is_value_trap || report.decision === 'ALMA' || (report as any)?.rawDecision === 'ALMA') && fairValueNum >= currentPriceNum
-                            ? `Değer Tuzağı (${(((fairValueNum - currentPriceNum) / currentPriceNum) * 100).toFixed(1)}%)`
-                            : `${fairValueNum >= currentPriceNum ? '+' : ''}${(((fairValueNum - currentPriceNum) / currentPriceNum) * 100).toFixed(1)}%`)
+                        ? `${fairValueNum >= currentPriceNum ? '+' : ''}${(((fairValueNum - currentPriceNum) / currentPriceNum) * 100).toFixed(1)}%`
                         : '—'}
                     </div>
-                    {fairValueNum > 0 && currentPriceNum > 0 && !(valuationInfo?.is_value_trap || report.decision === 'ALMA' || (report as any)?.rawDecision === 'ALMA') && (
+                    {fairValueNum > 0 && currentPriceNum > 0 && (
                       <div className="text-[10.5px] font-mono text-slate-400 font-medium">
                         {fairValueNum >= currentPriceNum 
                           ? `%${Math.abs(((fairValueNum - currentPriceNum) / fairValueNum) * 100).toFixed(0)} İskontolu` 
