@@ -243,11 +243,11 @@ export function mapIsYatirimSectorToValuationSector(isySectorName?: string | nul
   const s = isySectorName.trim();
   
   if (s === 'Bankacılık') return 'BANKING';
-  if (s === 'Sigorta') return 'INSURANCE';
+  if (s === 'Sigorta' || s === 'Sigortacılık') return 'INSURANCE';
   if (s === 'GYO') return 'REIT';
-  if (s === 'Holdingler') return 'HOLDING';
-  if (s === 'Havayolları ve Hizm.') return 'AVIATION';
-  if (s === 'Perakande - Ticaret' || s === 'Pazarlama') return 'RETAIL';
+  if (s === 'Holdingler' || s === 'Holding') return 'HOLDING';
+  if (s === 'Havayolları ve Hizm.' || s === 'Havacılık') return 'AVIATION';
+  if (s === 'Perakande - Ticaret' || s === 'Gıda & Ticaret Perakende' || s === 'Pazarlama') return 'RETAIL';
   if (s === 'Teknoloji' || s === 'Bilgisayar Toptancılığı' || s === 'İletişim Cihazları') return 'TECH';
   if (s === 'Sağlık ve İlaç') return 'HEALTHCARE';
   if (
