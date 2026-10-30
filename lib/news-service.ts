@@ -1,6 +1,6 @@
 import https from 'node:https';
 import { getKapCompanyDisclosuresUrl } from './kap-mapping.ts';
-import { COMPANY_PROFILES } from './company-profiles.ts';
+import { COMPANY_PROFILES, getCompanyProfile } from './company-profiles.ts';
 
 const isProduction = process.env.NODE_ENV === 'production';
 const newsHttpsAgent = new https.Agent({
@@ -410,6 +410,13 @@ const KNOWN_COMPANIES: Record<string, CompanyMeta> = {
 export function getCompanyMeta(ticker: string): CompanyMeta {
   const norm = ticker.toUpperCase().trim();
   if (KNOWN_COMPANIES[norm]) return KNOWN_COMPANIES[norm];
+  const profile = getCompanyProfile(norm);
+  if (profile?.fullName && !profile.fullName.endsWith('Anonim Şirketi')) {
+    return {
+      cleanName: profile.fullName,
+      fullName: profile.fullName,
+    };
+  }
   if (COMPANY_PROFILES[norm]?.fullName) {
     return {
       cleanName: norm,

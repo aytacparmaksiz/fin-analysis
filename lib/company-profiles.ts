@@ -4,6 +4,8 @@
  * Asla yapay veya tahmini veri içermez.
  */
 
+import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from './isyatirim-multiples-cache.ts';
+
 export interface CompanyProfile {
   ticker: string;
   fullName: string;
@@ -155,12 +157,22 @@ export const COMPANY_PROFILES: Record<string, CompanyProfile> = {
     website: 'https://www.aselsan.com',
     summary: 'Türk Silahlı Kuvvetlerini Güçlendirme Vakfı kuruluşu olan ASELSAN, Türkiye’nin en büyük savunma sanayii ve ileri teknoloji şirketi olup radar, elektronik harp, haberleşme, elektro-optik ve güdüm sistemleri alanlarında küresel ligde yer almaktadır.',
     segments: ['Radar & Elektronik Harp', 'Haberleşme & Bilgi Teknolojileri', 'Savunma Sistem Teknolojileri', 'Mikroelektronik & Elektro-Optik']
+  },
+  GLYHO: {
+    ticker: 'GLYHO',
+    fullName: 'Global Yatırım Holding',
+    foundedYear: 1990,
+    employees: '2.500+',
+    ceo: 'Mehmet Kutman',
+    website: 'https://www.globalyatirim.com.tr',
+    summary: 'Global Yatırım Holding; liman işletmeciliği (dünyanın en büyük bağımsız kruvaziyer liman işletmecisi Global Ports Holding), temiz enerji, gaz, madencilik, gayrimenkul ve finansal hizmetler alanlarında faaliyet gösteren öncü bir yatırım holdingidir.',
+    segments: ['Liman İşletmeciliği (Global Ports Holding)', 'Temiz Enerji & Gaz', 'Gayrimenkul Geliştirme', 'Finansal Hizmetler']
   }
 };
 
 /**
  * Verilen ticker için kurumsal profil bilgilerini döndürür.
- * Bilgi bankasında yoksa KAP resmi profiline bağlanan güvenilir dinamik model oluşturur.
+ * Bilgi bankasında yoksa İş Yatırım resmi BIST künyesi ve KAP profiline bağlanan dinamik model oluşturur.
  */
 export function getCompanyProfile(ticker: string, sectorTitle?: string): CompanyProfile {
   const norm = (ticker || '').trim().toUpperCase();
@@ -168,10 +180,15 @@ export function getCompanyProfile(ticker: string, sectorTitle?: string): Company
     return COMPANY_PROFILES[norm];
   }
 
+  const baseline = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[norm];
+  const realName = baseline?.name?.trim();
+  const resolvedFullName = realName || `${norm} Anonim Şirketi`;
+  const resolvedSector = sectorTitle || baseline?.sectorName || 'ilgili';
+
   return {
     ticker: norm,
-    fullName: `${norm} Anonim Şirketi`,
+    fullName: resolvedFullName,
     website: `https://www.kap.org.tr/tr/sirket-bilgileri/genel/${norm}`,
-    summary: `${norm} koduyla Borsa İstanbul'da (BIST) işlem gören, ${sectorTitle || 'ilgili'} sektöründe faaliyet gösteren anonim şirkettir. Finansal tabloları ve özel durum açıklamaları Kamuyu Aydınlatma Platformu üzerinden düzenli olarak ilan edilmektedir.`
+    summary: `${resolvedFullName} (${norm}), Borsa İstanbul'da (BIST) işlem gören, ${resolvedSector} sektöründe faaliyet gösteren şirkettir. Finansal tabloları ve kurumsal açıklamaları Kamuyu Aydınlatma Platformu üzerinden düzenli olarak ilan edilmektedir.`
   };
 }

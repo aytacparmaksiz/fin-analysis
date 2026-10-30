@@ -1803,9 +1803,6 @@ export default function SimplyView({
                 <h3 className="font-sans text-[15px] font-bold text-white tracking-tight line-clamp-1" title={profile.fullName}>
                   {getCleanCompanyName(profile.fullName, report.ticker)}
                 </h3>
-                <div className="text-xs text-slate-300 font-mono font-bold tracking-wider">
-                  {report.ticker.toUpperCase()}
-                </div>
                 <div className="text-xs text-slate-400 font-sans">
                   Piyasa Değeri: {formattedMarketCap}
                 </div>
@@ -3609,7 +3606,7 @@ export default function SimplyView({
                   <div className="text-2xl font-black font-mono text-white">
                     ₺{valuationInfo?.bear_price ? Number(valuationInfo.bear_price).toFixed(2) : (fairValueNum * 0.75).toFixed(2)}
                   </div>
-                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                  <p className="text-xs text-slate-400 leading-relaxed">
                     Yüksek iskonto oranı (+%4 WACC), daralan marjlar ve düşük büyüme varsayımı.
                   </p>
                 </div>
@@ -3618,22 +3615,22 @@ export default function SimplyView({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-[#f5c242]">Baz Senaryo</span>
                   </div>
-                  <div className="text-3xl font-black font-mono text-[#f5c242]">
+                  <div className="text-2xl sm:text-3xl font-black font-mono text-[#f5c242]">
                     ₺{fairValueNum.toFixed(2)}
                   </div>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                  <p className="text-xs text-slate-400 leading-relaxed">
                     Şirketin tarihsel getiri ortalamaları, mevcut sermaye verimliliği ve sektör katsayıları.
                   </p>
                 </div>
 
                 <div className="bg-[#12151b] border border-[#232834] rounded-xl p-5 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-bold text-emerald-400">Boğa Senaryosu</span>
+                    <span className="text-xs font-bold text-emerald-400">Boğa Senaryosu</span>
                   </div>
                   <div className="text-2xl font-black font-mono text-white">
                     ₺{valuationInfo?.bull_price ? Number(valuationInfo.bull_price).toFixed(2) : (fairValueNum * 1.30).toFixed(2)}
                   </div>
-                  <p className="text-sm text-slate-300 leading-relaxed">
+                  <p className="text-xs text-slate-400 leading-relaxed">
                     Pazar payı genişlemesi, marj artışı ve risksiz faiz oranında normalleşme.
                   </p>
                 </div>
