@@ -428,6 +428,84 @@ export function isAutomotiveSector(officialSectorName: string, ticker?: string):
   return s === 'Otomotiv' || s === 'Otomotiv Parçası' || s === 'Otomotiv Lastiği' || s.includes('Otomotiv');
 }
 
+/**
+ * Petrol, Rafineri & Petrokimya Sektörü:
+ * TUPRS, PETKM, AYGAZ, SASA, ALKIM.
+ */
+export function isPetroleumRefinerySector(officialSectorName: string, ticker?: string): boolean {
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  if (['TUPRS', 'PETKM', 'AYGAZ', 'SASA', 'ALKIM'].includes(t)) return true;
+  const s = String(officialSectorName || '').trim();
+  return s === 'Petrol' || s === 'Kimyasal Ürün' || s.includes('Petrol');
+}
+
+export function isRefinerySector(ticker?: string): boolean {
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  return t === 'TUPRS' || t === 'AYGAZ';
+}
+
+export function isPetrochemicalSector(ticker?: string, officialSectorName?: string): boolean {
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  if (['PETKM', 'SASA', 'ALKIM', 'BAGFS', 'GUBRF'].includes(t)) return true;
+  const s = String(officialSectorName || '').trim();
+  return s === 'Kimyasal Ürün' || s === 'Tarım Kimyasalları';
+}
+
+/**
+ * Enerji & Elektrik Üretim / Dağıtım / Ekipman Sektörü:
+ * ENJSA, AKSEN, ASTOR, CWENE, EUPWR, GESAN, KONTR, GWIND, CANTE, ZOREN.
+ */
+export function isEnergyUtilitiesSector(officialSectorName: string, ticker?: string): boolean {
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  if (['ENJSA', 'AKSEN', 'ASTOR', 'CWENE', 'EUPWR', 'GESAN', 'KONTR', 'GWIND', 'CANTE', 'ZOREN', 'ODAS', 'AYDEM', 'BIOEN', 'TATEN'].includes(t)) return true;
+  const s = String(officialSectorName || '').trim();
+  return s === 'Elektrik Üretim' || s === 'Elektrik - Doğalgaz Dağıtım' || s === 'Elektrik Enerji Ürt.Teçh/Tesis Kurulum' || s.includes('Elektrik');
+}
+
+/**
+ * Dayanıklı Tüketim & Beyaz Eşya:
+ * ARCLK, VESBE, VESTL.
+ */
+export function isDurablesSector(officialSectorName: string, ticker?: string): boolean {
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  if (['ARCLK', 'VESBE', 'VESTL'].includes(t)) return true;
+  const s = String(officialSectorName || '').trim();
+  return s === 'Dayanıklı Tüketim';
+}
+
+/**
+ * Çimento & İnşaat Malzemeleri:
+ * OYAKC, CIMSA, AKCNS, NUHCM, BUCIM, EGPRO.
+ */
+export function isCementBuildingSector(officialSectorName: string, ticker?: string): boolean {
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  if (['OYAKC', 'CIMSA', 'AKCNS', 'NUHCM', 'BUCIM', 'EGPRO', 'KLKIM', 'BOBET', 'BSOKE'].includes(t)) return true;
+  const s = String(officialSectorName || '').trim();
+  return s === 'Çimento' || s === 'İnşaat Malzemeleri';
+}
+
+/**
+ * Madencilik:
+ * KOZAL, KOZAA, IPEKE.
+ */
+export function isMiningSector(officialSectorName: string, ticker?: string): boolean {
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  if (['KOZAL', 'KOZAA', 'IPEKE', 'PRKME'].includes(t)) return true;
+  const s = String(officialSectorName || '').trim();
+  return s === 'Madencilik';
+}
+
+/**
+ * Gıda & İçecek:
+ * CCOLA, AEFES, ULKER, TATGD, PNSUT.
+ */
+export function isFoodBeverageSector(officialSectorName: string, ticker?: string): boolean {
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  if (['CCOLA', 'AEFES', 'ULKER', 'TATGD', 'PNSUT', 'BANVT', 'KNFRT', 'PETUN', 'SOKM'].includes(t)) return true;
+  const s = String(officialSectorName || '').trim();
+  return s === 'Gıda' || s === 'Meşrubat / İçecek' || s === 'Hayvancılık';
+}
+
 export interface FeaturedMetric {
   key: string;
   name: string;

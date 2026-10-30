@@ -4562,7 +4562,7 @@ export default function ValuationTerminal({
           </div>
         </header>
 
-        <div className="p-4 sm:p-6 w-full max-w-[1600px] mx-auto space-y-5">
+        <div className="p-3 sm:p-6 pb-24 md:pb-6 w-full max-w-[1600px] mx-auto space-y-5">
           
           {/* ADIM 1: YENİ ANALİZ EKRANI (ŞİRKET DEĞERLEME & BİLANÇO ANALİZİ) */}
           {step === 'input' && (
@@ -7410,6 +7410,100 @@ export default function ValuationTerminal({
         onSelectReport={(reportId, tickerSym) => openReport(reportId, tickerSym)}
         onAnalyzeTicker={(tickerSym) => handleBistDirectAnalysis(tickerSym)}
       />
+
+      {/* MOBİL ALT SABİT NAVİGASYON BARI (MD:HIDDEN) */}
+      <nav 
+        aria-label="Mobil Ana Menü"
+        className="fixed bottom-0 left-0 right-0 z-50 bg-[#111418]/95 backdrop-blur-md border-t border-[#21262d] flex items-center justify-around py-1.5 px-1 pb-safe md:hidden select-none shadow-2xl"
+      >
+        <button
+          type="button"
+          onClick={() => navigateTo('saved')}
+          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer min-w-[48px] ${
+            step === 'saved' && analyzedTab !== 'PORTFOLIO' && analyzedTab !== 'FAVORITES'
+              ? 'text-emerald-400 font-bold'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <TrendingUp className="w-4 h-4" />
+          <span className="text-[10px]">Akış</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigateTo('portfolio')}
+          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer min-w-[48px] relative ${
+            step === 'saved' && analyzedTab === 'PORTFOLIO'
+              ? 'text-[#f5c242] font-bold'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Briefcase className="w-4 h-4" />
+          <span className="text-[10px]">Portföy</span>
+          {portfolioTickers.length > 0 && (
+            <span className="absolute top-0 right-1 text-[9px] font-mono px-1 rounded-full bg-[#f5c242] text-slate-950 font-black">
+              {portfolioTickers.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigateTo('favorites')}
+          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer min-w-[48px] relative ${
+            step === 'saved' && analyzedTab === 'FAVORITES'
+              ? 'text-amber-400 font-bold'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Star className="w-4 h-4" />
+          <span className="text-[10px]">Favoriler</span>
+          {favoriteTickers.length > 0 && (
+            <span className="absolute top-0 right-1 text-[9px] font-mono px-1 rounded-full bg-amber-400 text-slate-950 font-black">
+              {favoriteTickers.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigateTo('themes')}
+          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer min-w-[48px] ${
+            step === 'themes'
+              ? 'text-cyan-400 font-bold'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />
+          <span className="text-[10px]">Temalar</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigateTo('leaderboard')}
+          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer min-w-[48px] ${
+            step === 'leaderboard'
+              ? 'text-amber-400 font-bold'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          <span className="text-[10px]">Tarama</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigateTo('sectors')}
+          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer min-w-[48px] ${
+            step === 'sectors'
+              ? 'text-emerald-400 font-bold'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Building2 className="w-4 h-4" />
+          <span className="text-[10px]">Sektörler</span>
+        </button>
+      </nav>
 
     </div>
   );

@@ -1860,6 +1860,29 @@ export default function SimplyView({
   return (
     <div className="space-y-6 font-sans text-slate-100">
 
+      {/* MOBİL VE TABLET İÇİN YATAY SABİT BÖLÜM GEZİNTİ BARI (LG:HIDDEN) */}
+      <div className="lg:hidden sticky top-14 z-30 bg-[#111418]/95 backdrop-blur-md border-b border-[#21262d] -mx-4 px-4 sm:-mx-6 sm:px-6 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar touch-pan-x shadow-md">
+        {NAVIGATION_ITEMS.map((item) => {
+          const isActive = activeSection === item.id;
+          const IconComp = item.icon;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => scrollToSection(item.id)}
+              className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition cursor-pointer select-none ${
+                isActive
+                  ? 'bg-[#f5c242] text-slate-950 font-bold shadow-sm'
+                  : 'bg-[#181b20] text-slate-400 hover:text-white border border-[#282d37]'
+              }`}
+            >
+              {IconComp && <IconComp className="w-3.5 h-3.5 shrink-0 opacity-80" />}
+              <span className="truncate">{item.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* 2 SÜTUNLU DÜZEN: SOL FREEZE PANE SABİT PANEL + SAĞ İÇERİK AKIŞI */}
       <div className="flex items-start gap-6 lg:gap-8 relative min-h-screen">
 
@@ -1961,9 +1984,61 @@ export default function SimplyView({
           {/* BÖLÜM 1: GENEL BAKIŞ & SNOWFLAKE (#sec-ozet)                             */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Özet Panosu Hatası">
-          <section id="sec-ozet" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
+          <section id="sec-ozet" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-4 sm:p-7 shadow-xl space-y-6">
+
+            {/* Mobil Kar Tanesi Radarı & Hızlı Aksiyon Kartı (lg:hidden) */}
+            <div className="lg:hidden bg-[#181b20] border border-[#2b313d] rounded-xl p-4 shadow-md flex flex-col items-center text-center space-y-3">
+              <SnowflakeRadar
+                axes={snowflake.axes}
+                ticker={report.ticker}
+                size={140}
+                onSelectSection={(secId) => scrollToSection(secId as any)}
+                showLabels={true}
+              />
+              <div className="space-y-0.5">
+                <h2 className="font-sans text-base font-bold text-white tracking-tight line-clamp-1">
+                  {getCleanCompanyName(profile.fullName, report.ticker)}
+                </h2>
+                <div className="text-xs text-slate-400 font-sans">
+                  Piyasa Değeri: {formattedMarketCap}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 w-full pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onTogglePortfolio) onTogglePortfolio(report.ticker);
+                  }}
+                  className={`py-2 px-3 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm w-full ${
+                    isInPortfolio
+                      ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold'
+                      : 'bg-[#f5c242] hover:bg-[#e5b332] text-slate-950 font-bold'
+                  }`}
+                  title={isInPortfolio ? 'Portföyden Çıkar' : 'Portföye Ekle'}
+                >
+                  <span>{isInPortfolio ? '✓' : '+'}</span>
+                  <span>Portföy</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onToggleFavorite) onToggleFavorite(report.ticker);
+                  }}
+                  className={`py-2 px-3 text-xs font-semibold rounded-lg border transition cursor-pointer flex items-center justify-center gap-1.5 w-full ${
+                    isFavorite
+                      ? 'bg-amber-400/20 text-amber-300 border-amber-400/50'
+                      : 'bg-[#1e2229] hover:bg-[#282e38] text-slate-400 hover:text-white border-[#2e3440]'
+                  }`}
+                  title={isFavorite ? 'Favorilerden Çıkar' : 'Favorilere Ekle'}
+                >
+                  <span className={`text-sm leading-none ${isFavorite ? 'text-amber-400 font-bold' : ''}`}>★</span>
+                  <span>{isFavorite ? 'İzleniyor' : 'İzle'}</span>
+                </button>
+              </div>
+            </div>
+
             {/* Sub-Card 1: Üst Şirket Bilgi ve Fiyat Özeti Kartı */}
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-xl p-6 sm:p-7 shadow-md space-y-6">
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-xl p-4 sm:p-7 shadow-md space-y-6">
               <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-6 border-b border-[#282d37]">
                 <div className="space-y-1.5 min-w-0 max-w-full xl:max-w-[48%]">
                   <div className="flex items-center gap-2 text-sm font-mono text-slate-300">
@@ -3153,11 +3228,11 @@ export default function SimplyView({
               </div>
 
               {/* Finansal Tablo Grid */}
-              <div className="w-full overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden border border-[#282d37]/50 rounded-xl">
+              <div className="w-full overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden border border-[#282d37]/50 rounded-xl touch-pan-x">
                 <table className="w-full text-xs text-left border-collapse font-mono">
                   <thead>
                     <tr className="border-b border-[#282d37] text-slate-400 bg-[#21262d]/90">
-                      <th className="p-3 text-white font-sans font-bold text-xs sm:text-sm min-w-[180px] sm:min-w-[200px]">
+                      <th className="p-3 text-white font-sans font-bold text-xs sm:text-sm min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#21262d] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
                         {selectedTableTab === 'bs' && 'Bilanço Kalemleri'}
                         {selectedTableTab === 'is' && 'Gelir Tablosu Kalemleri'}
                         {selectedTableTab === 'cf' && 'Nakit Akışı Kalemleri'}

@@ -677,3 +677,33 @@ input[type="number"],
 [data-theme="dark"] .border-\[\#384252\] { border-color: var(--border-hairline) !important; }
 [data-theme="dark"] .border-\[\#3b4354\] { border-color: var(--border-hairline) !important; }
 [data-theme="dark"] .border-\[\#f5c242\] { border-color: var(--border-hairline) !important; }
+
+/* ========================================================================= */
+/* MOBİL DOKUNMA, KAYDIRMA & GÜVENLİ ALAN YARDIMCILARI                      */
+/* ========================================================================= */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.touch-pan-x {
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+}
+
+.touch-pan-y {
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 1rem);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0.5rem);
+}
+

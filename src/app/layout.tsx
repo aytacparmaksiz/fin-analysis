@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Serif, IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 import "katex/dist/katex.min.css";
@@ -16,6 +16,14 @@ const ibmPlexSans = IBM_Plex_Sans({
   variable: "--font-ibm-plex-sans",
   display: "swap",
 });
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+  themeColor: "#111418",
+};
 
 export const metadata: Metadata = {
   title: "Fair Value",
