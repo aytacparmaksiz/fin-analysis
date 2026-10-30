@@ -95,6 +95,17 @@ export interface ValuationMetrics {
   final_decision?: 'AL' | 'ALMA' | 'NÖTR';
   decision?: 'AL' | 'ALMA' | 'NÖTR';
   sensitivity_matrix?: ValuationSensitivityMatrixResult;
+  reit_metrics?: ReitSpecialMetrics;
+}
+
+export interface ReitSpecialMetrics {
+  noi_cap_rate: number | null;
+  payout_ratio: number | null;
+  is_noi_positive: boolean;
+  is_payout_positive: boolean;
+  noi_label: string;
+  payout_label: string;
+  tax_exemption_status: string;
 }
 
 export interface SectorScoreBreakdown {
@@ -1736,15 +1747,57 @@ export function calculateSectorScore(
     else { s2 = 4; r2 = `Kritik Borçluluk: LTV (%${(ltv * 100).toFixed(1)}) gayrimenkul döngüsü için yüksek riskli!`; st2 = 'danger'; anomalies.push(`Aşırı GYO Borçluluğu (LTV: %${(ltv * 100).toFixed(1)})`); }
     breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
 
-    // 3. Kira Akışı & FFO Verimi (Max 25)
+    // 3. Kira Akışı, Portföy Verimliliği (NOI / Cap Rate) ve Temettü Dönüşümü (Max 25)
+    // 7524 Sayılı Kanun (KVK 5/1-d) gereği taşınmaz kazançlarının en az %50'sinin temettü olarak dağıtılması esastır.
     const ocf = parseFinancialNumber(latest?.operating_cash_flow);
+    const opProfit = parseFinancialNumber(latest?.operating_profit);
+    const ebitda = parseFinancialNumber(latest?.ebitda);
+    const rawNoi = opProfit ?? ebitda ?? ocf;
+    const periodFactor = getAnnualizationFactor(latest?.period);
+    const annualizedNoi = rawNoi !== null ? rawNoi * periodFactor : null;
+    const portfolioVal = parseFinancialNumber(latest?.non_current_assets ?? latest?.total_assets ?? latest?.equity);
+
+    let noiCapRate: number | null = null;
+    if (annualizedNoi !== null && annualizedNoi > 0 && portfolioVal !== null && portfolioVal > 0) {
+      noiCapRate = Number(((annualizedNoi / portfolioVal) * 100).toFixed(1));
+    }
+
+    let payoutRatio: number | null = null;
+    const rawDivs = Array.isArray(data?.dividends) ? data.dividends : (Array.isArray(data?.dividend_history) ? data.dividend_history : []);
+    if (rawDivs.length > 0) {
+      const p = parseFinancialNumber(rawDivs[0]?.payoutRatioPct ?? rawDivs[0]?.payout_ratio ?? rawDivs[0]?.dagitmaOrani);
+      if (p !== null) payoutRatio = p;
+    }
+
     let s3 = 18;
     let r3 = 'Kira ve proje nakit akışı portföy giderlerini karşılıyor.';
     let st3: 'good' | 'warning' | 'danger' = 'good';
-    if (ocf !== null && ocf > 0) {
-      s3 = 24; r3 = 'Operasyonel nakit üretimi (FFO) pozitif; düzenli kira ve teslimat tahsilatı güçlü.'; st3 = 'good';
+
+    const noiPositive = noiCapRate !== null && noiCapRate >= 6.5;
+    const payoutPositive = payoutRatio !== null && payoutRatio >= 50.0;
+
+    if (noiPositive && payoutPositive) {
+      s3 = 25;
+      r3 = `Olumlu: Güçlü Portföy Verimliliği (NOI / Cap Rate: %${noiCapRate}) ve 7524 Sayılı Kanun %50 Temettü İstisna Eşiği Tam Uyumlu (%${payoutRatio} Payout). Kurumlar vergisi tam korumalı.`;
+      st3 = 'good';
+    } else if (noiPositive) {
+      s3 = 23;
+      const payoutNote = payoutRatio !== null ? `Temettü Dağıtım Oranı: %${payoutRatio} (7524 SK %50 takibinde)` : 'Temettü geçmişi izlenmeli';
+      r3 = `Olumlu: Güçlü Kira Getirisi & Portföy Verimliliği (NOI / Cap Rate: %${noiCapRate} >= %6.5); ${payoutNote}.`;
+      st3 = 'good';
+    } else if (payoutPositive) {
+      s3 = 23;
+      const noiNote = noiCapRate !== null ? `NOI / Cap Rate: %${noiCapRate}` : 'Portföy nakit akışı dengeli';
+      r3 = `Olumlu: 7524 Sayılı Kanun %50 Temettü İstisna Eşiği Sağlanıyor (%${payoutRatio} >= %50.0); ${noiNote}.`;
+      st3 = 'good';
+    } else if (ocf !== null && ocf > 0) {
+      s3 = 20;
+      r3 = 'Operasyonel nakit üretimi (FFO) pozitif; düzenli kira ve teslimat tahsilatı dengeli.';
+      st3 = 'good';
     } else if (ocf !== null && ocf < 0) {
-      s3 = 9; r3 = 'İşletme nakit akışı negatif; proje geliştirme veya tahsilat gecikmeleri nakit yakıyor.'; st3 = 'warning';
+      s3 = 9;
+      r3 = 'İşletme nakit akışı negatif; proje geliştirme veya tahsilat gecikmeleri nakit yakıyor.';
+      st3 = 'warning';
     }
     breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
 
@@ -4422,6 +4475,42 @@ export function computeSectorValuationAndDrivers(
     eva_discount_pct: evaDiscountPct > 0 ? Number((evaDiscountPct * 100).toFixed(1)) : undefined,
     debt_distress_discount_pct: debtDiscountPct > 0 ? Number((debtDiscountPct * 100).toFixed(1)) : undefined,
     sensitivity_matrix: sensitivityMatrix,
+    reit_metrics: (() => {
+      if (sector !== 'REIT') return undefined;
+      const rawNoi = parseFinancialNumber(latest?.operating_profit ?? latest?.ebitda ?? latest?.operating_cash_flow);
+      const periodFactor = getAnnualizationFactor(latest?.period);
+      const annualizedNoi = rawNoi !== null ? rawNoi * periodFactor : null;
+      const portfolioVal = parseFinancialNumber(latest?.non_current_assets ?? latest?.total_assets ?? latest?.equity);
+      const capRate = (annualizedNoi !== null && annualizedNoi > 0 && portfolioVal !== null && portfolioVal > 0)
+        ? Number(((annualizedNoi / portfolioVal) * 100).toFixed(1))
+        : null;
+
+      let payout: number | null = null;
+      const rawDivs = Array.isArray(extractedData?.dividends) ? extractedData.dividends : (Array.isArray(extractedData?.dividend_history) ? extractedData.dividend_history : []);
+      if (rawDivs.length > 0) {
+        const p = parseFinancialNumber(rawDivs[0]?.payoutRatioPct ?? rawDivs[0]?.payout_ratio ?? rawDivs[0]?.dagitmaOrani);
+        if (p !== null) payout = p;
+      }
+
+      const isNoiPositive = capRate !== null && capRate >= 6.5;
+      const isPayoutPositive = payout !== null && payout >= 50.0;
+
+      return {
+        noi_cap_rate: capRate,
+        payout_ratio: payout,
+        is_noi_positive: isNoiPositive,
+        is_payout_positive: isPayoutPositive,
+        noi_label: isNoiPositive
+          ? `Olumlu (Güçlü Portföy Verimi: %${capRate} >= %6.5)`
+          : (capRate !== null ? `Dengeli (Portföy Verimi: %${capRate})` : 'Veri Yok'),
+        payout_label: isPayoutPositive
+          ? `Olumlu (7524 Sayılı Kanun Uyumlu: %${payout} >= %50.0)`
+          : (payout !== null ? `İzlenmeli (Temettü Oranı: %${payout} < %50.0)` : 'Kayıt Yok'),
+        tax_exemption_status: isPayoutPositive
+          ? 'Kurumlar Vergisi İstisnası Tam Korumalı (Asgari %10 KV)'
+          : 'Temettü Eşiği Sağlanamazsa %30 Genel Kurumlar Vergisi Riski'
+      };
+    })(),
   };
 
   // Sektörel Puanlama ve Karar Optimizasyonu

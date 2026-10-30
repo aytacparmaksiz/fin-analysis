@@ -439,6 +439,8 @@ export const SECTOR_ARCHETYPE_CONFIGS: Record<FinancialArchetype, SectorArchetyp
     featuredMetrics: [
       { key: 'nav_discount', name: 'Net Aktif Değeri (NAD / NAV) İskontosu', unit: '%', description: 'Piyasa değeri vs portföy net aktif değeri iskonto cazibesi (>%25-%35)' },
       { key: 'pb_nav', name: 'PD/NAD Oranı', unit: 'x', description: 'Portföy değerleme çarpanı' },
+      { key: 'noi_cap_rate', name: 'Kira Geliri / Portföy Verimliliği (NOI / Cap Rate)', unit: '%', description: 'Net faaliyet gelirlerinin gayrimenkul portföy değerine oranı (>%6.5 güçlü)' },
+      { key: 'reit_payout_ratio', name: 'Kira Temettü Dönüşüm Katsayısı (Payout Ratio)', unit: '%', description: '7524 Sayılı Kanun gereği Kurumlar Vergisi istisnası için >=%50 yasal eşik' },
       { key: 'subsidiary_contribution', name: 'İştirak Kâr / Temettü Katkısı', unit: 'TL', description: 'Portföy şirketlerinden düzenli nakit ve temettü akışı' },
       { key: 'solo_liquidity', name: 'Solo Nakit / Borç Dengesi', unit: 'TL', description: 'Merkez holding bilançosunun net nakit gücü ve borçsuzluk' },
     ],
@@ -745,8 +747,8 @@ export const SECTOR_DEFINITIONS: Record<SectorType, SectorDefinition> = {
   REIT: {
     id: 'REIT',
     title: 'Gayrimenkul Yatırım Ortaklığı (GYO)',
-    badge: 'GYO / NAD Modu (Vergisiz %0 KV)',
-    description: 'GYO’lar 5520 sayılı KVK md. 5/1-d uyarınca Kurumlar Vergisinden MUAFTIR (%0 KV). Net Aktif Değeri (NAD / NAV), LTV borçluluk ve kira/FFO akışı esastır.',
+    badge: 'GYO / NAD & %50 Temettü İstisna Modu (7524 Sayılı Kanun)',
+    description: 'GYO’lar 7524 sayılı Kanun uyarınca taşınmaz kazançlarının en az %50’sini ortaklarına kâr payı olarak dağıtmak şartıyla Kurumlar Vergisi istisnasından faydalanır. Net Aktif Değeri (NAD / NAV), LTV borçluluk, NOI / Cap Rate ve Kira Temettü Dönüşümü esastır.',
     revenueLabel: 'Kira & Proje Gelirleri (Hasılat)',
     revenueSublabel: 'Düzenli Kira Gelirleri ve Bağımsız Bölüm Satışları',
     operatingProfitLabel: 'Esas Faaliyet Kârı (Ekspertiz Öncesi/Dahil)',

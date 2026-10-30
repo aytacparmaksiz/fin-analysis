@@ -1620,7 +1620,18 @@ export default function SimplyView({
   ], []);
 
   // Rasyolar Bölümleri (Isı Haritası için dinamik raw değerler dahil)
-  const ratiosSections = useMemo(() => [
+  const ratiosSections = useMemo(() => {
+    const sections: Array<{
+      id: string;
+      title: string;
+      rows: Array<{
+        key: string;
+        label: string;
+        calc: (c: any) => string;
+        raw: (c: any) => number | null;
+        isHighlight?: boolean;
+      }>;
+    }> = [
     {
       id: 'likidite',
       title: 'Likidite Rasyoları',
@@ -1708,7 +1719,76 @@ export default function SimplyView({
         }
       ]
     }
-  ], []);
+  ];
+
+  if (currentSector === 'REIT') {
+    sections.push({
+      id: 'gyo_ozel',
+      title: 'GYO Portföy & Temettü Rasyoları (7524 Sayılı Kanun)',
+      rows: [
+        {
+          key: 'noi_cap_rate',
+          label: 'Kira Geliri / Portföy Verimliliği (NOI / Cap Rate)',
+          calc: (c: any) => {
+            const rawNoi = c.operating_profit ?? c.ebitda ?? c.operating_cash_flow;
+            const portfolio = c.non_current_assets ?? c.total_assets ?? c.equity;
+            if (!rawNoi || !portfolio || portfolio <= 0) return '—';
+            let f = 1.0;
+            if (/(?:\/0?3\b|3a\b|q1\b|1\.ç|1ç)/i.test(c.period || '')) f = 4.0;
+            else if (/(?:\/0?6\b|6a\b|q2\b|2\.ç|2ç)/i.test(c.period || '')) f = 2.0;
+            else if (/(?:\/0?9\b|9a\b|q3\b|3\.ç|3ç)/i.test(c.period || '')) f = 12.0 / 9.0;
+            const rate = ((rawNoi * f) / portfolio) * 100;
+            return `%${rate.toFixed(1)}${rate >= 6.5 ? ' (Olumlu)' : ''}`;
+          },
+          raw: (c: any) => {
+            const rawNoi = c.operating_profit ?? c.ebitda ?? c.operating_cash_flow;
+            const portfolio = c.non_current_assets ?? c.total_assets ?? c.equity;
+            if (!rawNoi || !portfolio || portfolio <= 0) return null;
+            let f = 1.0;
+            if (/(?:\/0?3\b|3a\b|q1\b|1\.ç|1ç)/i.test(c.period || '')) f = 4.0;
+            else if (/(?:\/0?6\b|6a\b|q2\b|2\.ç|2ç)/i.test(c.period || '')) f = 2.0;
+            else if (/(?:\/0?9\b|9a\b|q3\b|3\.ç|3ç)/i.test(c.period || '')) f = 12.0 / 9.0;
+            return ((rawNoi * f) / portfolio) * 100;
+          },
+          isHighlight: true
+        },
+        {
+          key: 'reit_payout_ratio',
+          label: 'Kira Temettü Dönüşüm Katsayısı (Payout Ratio)',
+          calc: (c: any) => {
+            const p = c.payout_ratio ?? c.payoutRatioPct ?? c.dagitmaOrani;
+            if (p != null && !isNaN(Number(p))) {
+              const val = Number(p);
+              return `%${val.toFixed(0)}${val >= 50 ? ' (7524 SK Uyumlu: Olumlu)' : ''}`;
+            }
+            const yr = c.period ? c.period.slice(0, 4) : '';
+            if (yr && Array.isArray(resolvedDividends)) {
+              const matchDiv = resolvedDividends.find((d: any) => (d.year && String(d.year) === yr) || (d.date && d.date.includes(yr)));
+              if (matchDiv?.payoutRatioPct != null) {
+                const val = Number(matchDiv.payoutRatioPct);
+                return `%${val.toFixed(0)}${val >= 50 ? ' (7524 SK Uyumlu: Olumlu)' : ''}`;
+              }
+            }
+            return '—';
+          },
+          raw: (c: any) => {
+            const p = c.payout_ratio ?? c.payoutRatioPct ?? c.dagitmaOrani;
+            if (p != null && !isNaN(Number(p))) return Number(p);
+            const yr = c.period ? c.period.slice(0, 4) : '';
+            if (yr && Array.isArray(resolvedDividends)) {
+              const matchDiv = resolvedDividends.find((d: any) => (d.year && String(d.year) === yr) || (d.date && d.date.includes(yr)));
+              if (matchDiv?.payoutRatioPct != null) return Number(matchDiv.payoutRatioPct);
+            }
+            return null;
+          },
+          isHighlight: true
+        }
+      ]
+    });
+  }
+
+  return sections;
+}, [currentSector, resolvedDividends]);
 
   // Finansal Tablolar Hücre Çizici (Satır üzerine gelindiğinde %lik artış/azalış, sütun ve satırlar oynamadan)
   const renderDataCell = (
@@ -3480,6 +3560,107 @@ export default function SimplyView({
               </div>
             </div>
 
+            {/* 3.2 GYO Portföy Verimliliği & 7524 Sayılı Kanun Temettü Uyumu */}
+            {currentSector === 'REIT' && (() => {
+              const rawNoi = parseFinancialNumber(latestData?.operating_profit ?? latestData?.ebitda ?? latestData?.operating_cash_flow);
+              let f = 1.0;
+              if (/(?:\/0?3\b|3a\b|q1\b|1\.ç|1ç)/i.test(latestData?.period || '')) f = 4.0;
+              else if (/(?:\/0?6\b|6a\b|q2\b|2\.ç|2ç)/i.test(latestData?.period || '')) f = 2.0;
+              else if (/(?:\/0?9\b|9a\b|q3\b|3\.ç|3ç)/i.test(latestData?.period || '')) f = 12.0 / 9.0;
+              const annualizedNoi = rawNoi !== null ? rawNoi * f : null;
+              const portfolio = parseFinancialNumber(latestData?.non_current_assets ?? latestData?.total_assets ?? latestData?.equity);
+              const noiCapRate = (annualizedNoi !== null && annualizedNoi > 0 && portfolio !== null && portfolio > 0)
+                ? Number(((annualizedNoi / portfolio) * 100).toFixed(1))
+                : (valuationInfo?.reit_metrics?.noi_cap_rate ?? null);
+
+              const latestDiv = Array.isArray(resolvedDividends) && resolvedDividends.length > 0 ? resolvedDividends[0] : null;
+              const payoutRatio = latestDiv?.payoutRatioPct != null 
+                ? Number(latestDiv.payoutRatioPct) 
+                : (valuationInfo?.reit_metrics?.payout_ratio ?? null);
+
+              const isNoiGood = noiCapRate !== null && noiCapRate >= 6.5;
+              const isPayoutGood = payoutRatio !== null && payoutRatio >= 50.0;
+
+              return (
+                <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#282d37] pb-3 gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                        <Building2 className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="font-sans text-base sm:text-lg font-bold text-white">
+                          3.2 GYO Portföy Verimliliği & 7524 Sayılı Kanun Temettü Uyumu
+                        </span>
+                        <div className="text-xs text-slate-400">
+                          Gayrimenkul portföy nakit üretimi ve yasal Kurumlar Vergisi temettü istisna kriterleri
+                        </div>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-950/60 border border-emerald-500/30 font-mono text-xs font-bold text-emerald-400 self-start sm:self-auto">
+                      7524 Sayılı Kanun Kapsamı
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Kart 1: NOI / Cap Rate */}
+                    <div className={`p-4 rounded-xl border space-y-2.5 ${isNoiGood ? 'bg-emerald-950/20 border-emerald-500/30' : 'bg-[#12151b] border-[#232834]'}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                          Kira Geliri / Portföy Verimliliği (NOI / Cap Rate)
+                        </span>
+                        <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${isNoiGood ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 text-slate-300'}`}>
+                          {isNoiGood ? 'Olumlu (Güçlü Portföy Getirisi)' : (noiCapRate !== null ? 'Dengeli' : 'Veri Yok')}
+                        </span>
+                      </div>
+                      <div className="flex items-baseline gap-3">
+                        <div className="text-2xl sm:text-3xl font-black font-mono text-white">
+                          {noiCapRate !== null ? `%${noiCapRate}` : '—'}
+                        </div>
+                        <div className="text-xs text-slate-400 font-mono">
+                          Referans Eşik: <span className="text-slate-200 font-bold">%6.5+</span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                        {isNoiGood 
+                          ? `Sonuç: Olumlu. Yıllıklandırılmış net faaliyet kârı / kira akışı gayrimenkul portföy değerinin %${noiCapRate}'ine ulaşarak BIST GYO eşiğini (>%6.5) aşmıştır. Portföy kâğıt üstünde kalmayıp güçlü nakit üretmektedir.`
+                          : (noiCapRate !== null 
+                              ? `Sonuç: Dengeli. Portföy kira ve faaliyet kârı verimi %${noiCapRate} seviyesindedir.`
+                              : 'Net faaliyet kârı veya duran varlık verisi henüz tam işlenmemiştir.')}
+                      </p>
+                    </div>
+
+                    {/* Kart 2: Kira Temettü Dönüşüm Katsayısı */}
+                    <div className={`p-4 rounded-xl border space-y-2.5 ${isPayoutGood ? 'bg-emerald-950/20 border-emerald-500/30' : 'bg-[#12151b] border-[#232834]'}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                          Kira Temettü Dönüşüm Katsayısı (Payout Ratio)
+                        </span>
+                        <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${isPayoutGood ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : (payoutRatio !== null && payoutRatio >= 25 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-rose-500/20 text-rose-300 border border-rose-500/40')}`}>
+                          {isPayoutGood ? 'Olumlu (7524 SK Uyumlu)' : (payoutRatio !== null ? 'Takip Edilmeli' : 'Kayıt Yok')}
+                        </span>
+                      </div>
+                      <div className="flex items-baseline gap-3">
+                        <div className="text-2xl sm:text-3xl font-black font-mono text-white">
+                          {payoutRatio !== null ? `%${payoutRatio}` : '—'}
+                        </div>
+                        <div className="text-xs text-slate-400 font-mono">
+                          Yasal Eşik: <span className="text-slate-200 font-bold">%50.0</span> (7524 SK)
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                        {isPayoutGood
+                          ? `Sonuç: Olumlu. Şirket son kâr payı dağıtımında %${payoutRatio} dağıtma oranına ulaşarak 7524 Sayılı Kanun'un %50 yasal kâr payı istisna şartını sağlamıştır. Kurumlar Vergisi istisnası (%10 asgari vergi tavanıyla) tam güvencededir.`
+                          : (payoutRatio !== null 
+                              ? `Sonuç: Takip Edilmeli. Dağıtma oranı (%${payoutRatio}) %50 yasal istisna eşiğinin altındadır. Yıl sonuna kadar ek kâr dağıtımı yapılmazsa %30 genel kurumlar vergisi riski oluşabilir.`
+                              : '7524 Sayılı Kanun gereğince GYO istisnasından faydalanmak için taşınmaz kazançlarının en az %50\'sinin Haziran sonuna kadar dağıtılması zorunludur.')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Sektör Karşılaştırma & Çeyreklik Çarpan Trendi (2 Sütunlu Grid) */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* 3.2 Sektör ve Akran F/K Kıyaslaması (Kompakt ve temiz) */}
@@ -4301,6 +4482,21 @@ export default function SimplyView({
                 <h2 className="font-sans text-xl sm:text-2xl font-bold text-white">Temettü</h2>
               </div>
             </div>
+
+            {/* 7524 Sayılı Kanun GYO Yasal Temettü Uyarısı */}
+            {currentSector === 'REIT' && (
+              <div className="p-4 rounded-xl bg-emerald-950/30 border border-emerald-500/30 flex items-start gap-3">
+                <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                <div className="space-y-1 text-xs">
+                  <div className="font-bold text-emerald-300 font-sans">
+                    7524 Sayılı Kanun Yasal Kâr Payı Dağıtım Zorunluluğu (1 Ocak 2025 Sonrası)
+                  </div>
+                  <p className="text-slate-300 leading-relaxed font-sans">
+                    GYO’ların Kurumlar Vergisi istisnasından faydalanabilmesi için taşınmazlardan elde ettikleri kazançların <strong>en az %50'sini</strong> ortaklarına temettü olarak dağıtması yasal zorunluluktur. Bu şartı sağlayan şirketler %10 asgari kurumlar vergisi tavanında kalırken, dağıtmayanlar %30 genel vergi ve vergi ziyaı cezasına tabi tutulur.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {(() => {
               const dividends: any[] = resolvedDividends;
