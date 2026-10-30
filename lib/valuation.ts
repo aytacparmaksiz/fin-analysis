@@ -828,6 +828,20 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
       item.equity = Number((item.total_assets * (1 - levPct / 100)).toFixed(0));
     }
 
+    // Eksik Bilanço ve Sahte Özkaynak Kalkanı (GLRMK / Halka Arz ara dönemleri):
+    // Eğer bilançoda toplam varlıklar sıfır/eksikse ve özkaynak tek çeyrek net kârına eşitlenmişse,
+    // gerçek bir bilanço mevcut değildir. Özkaynak sıfırlanır ve geçersiz ROE türetilmesi engellenir.
+    const isSyntheticEquityFromNetIncome = typeof item.equity === 'number' && 
+      typeof item.net_income === 'number' && 
+      item.equity > 0 && 
+      Math.abs(item.equity - item.net_income) < 1.0 && 
+      (!item.total_assets || item.total_assets <= 0);
+
+    if (isSyntheticEquityFromNetIncome) {
+      item.equity = null;
+      item.total_equity = null;
+    }
+
     // Tüm sektörler için ROE, ROA, Kaldıraç Oranı dinamik hesapla (Safe ROE koruması ve TTM mevsimsellik koruması)
     if (item.equity != null && item.net_income != null) {
       let roeNetIncome = item.net_income;
@@ -1274,9 +1288,9 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
 
       if (investedCapital > 0 && annualizedNopat !== 0) {
         const calculated = (annualizedNopat / investedCapital) * 100;
-        if (calculated >= -100 && calculated <= 250) {
+        if (calculated >= -100 && calculated <= 150) {
           item.roic = Number(calculated.toFixed(2));
-        } else if (typeof item.roe === 'number') {
+        } else if (typeof item.roe === 'number' && item.roe >= -100 && item.roe <= 150) {
           item.roic = Number(item.roe.toFixed(2));
         } else {
           item.roic = null;
@@ -1287,9 +1301,9 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
         if (leaseDebt > 0 && (investedCapital + leaseDebt) > 0) {
           item.roic_tfrs16 = Number(((annualizedNopat / (investedCapital + leaseDebt)) * 100).toFixed(2));
         }
-      } else if (typeof item.roe === 'number') {
+      } else if (typeof item.roe === 'number' && item.roe >= -100 && item.roe <= 150 && item.total_assets && item.total_assets > 0) {
         item.roic = Number(item.roe.toFixed(2));
-      } else if (item.roic != null && !isNaN(Number(item.roic))) {
+      } else if (item.roic != null && !isNaN(Number(item.roic)) && Number(item.roic) >= -100 && Number(item.roic) <= 150) {
         item.roic = Number((Number(item.roic) * (item.roic < 25 && annualFactor > 1 ? annualFactor : 1)).toFixed(2));
       } else {
         item.roic = null;
