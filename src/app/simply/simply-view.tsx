@@ -1941,7 +1941,7 @@ export default function SimplyView({
                           ) : discountPctNum > 0 ? (
                             <>
                               <TrendingUp className="w-4 h-4 shrink-0" />
-                              <span>%{Math.abs(discountPctNum).toFixed(1)} İskontolu / Potansiyel</span>
+                              <span>%{Math.abs(discountPctNum).toFixed(1)} İskontolu</span>
                             </>
                           ) : (
                             <>

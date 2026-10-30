@@ -961,6 +961,7 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     let erp = 8.56; // Damodaran Güncel Türkiye Hisse Senedi Risk Primi (ABD Mature ERP %4.60 + CDS/Country Risk %3.96)
     let preTaxKd = 46.0; // Kurumsal Ticari Kredi Faizi (%)
     const taxRate = (detectedSector === 'BANKING' || detectedSector === 'INSURANCE' || detectedSector === 'FINANCIAL_SERVICES') ? 0.30 : (detectedSector === 'REIT' ? 0.0 : 0.25);
+    const tcmbPeriodInflation = getExpectedInflationForPeriod(item.period, macroSnapshot);
 
     if (isForeignCurrency) {
       rf = reportCurrency === 'EUR' ? 2.8 : 4.25; // 10Y US Treasury / German Bund
@@ -1020,8 +1021,15 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
           preTaxKd = Math.max(3.0, Math.min(22.0, blended));
           kdSource = `Havacılık / Döviz Borç Portföyü Efektif Kd (%${companySpecificKd} Dinamik / %${preTaxKd.toFixed(1)} Harmanlanmış)`;
         } else if (isFxHeavyDebt) {
-          preTaxKd = Math.max(6.0, Math.min(65.0, (calculatedKd * 0.80) + (preTaxKd * 0.20)));
-          kdSource = `Döviz/Reeskont Ağırlıklı Kredi Portföyü (%${companySpecificKd} Efektif / %${preTaxKd.toFixed(1)} Harmanlanmış)`;
+          // Profesyonel Kurumsal Finans & UIP (Faiz Haddi Paritesi) İlkesi:
+          // Döviz cinsi borçlanan bir Türk şirketinin efektif TL borç maliyeti,
+          // dövizin nakit kupon faizi + beklenen kur artışıdır (enflasyon farkı).
+          // Nakit faiz gideri tek başına TL kur değer kaybını içermediğinden, nominal borç maliyeti
+          // beklenen enflasyonun altına inemez (aksi takdirde negatif reel borç faizi oluşur).
+          const minFxNominalKd = (tcmbPeriodInflation > 0 ? tcmbPeriodInflation : 23.0) + 5.0;
+          const weightedFxKd = (calculatedKd * 0.70) + (preTaxKd * 0.30);
+          preTaxKd = Math.max(minFxNominalKd, Math.min(65.0, weightedFxKd));
+          kdSource = `Döviz/Reeskont Ağırlıklı Kredi Portföyü (Parite Düzeltmeli %${preTaxKd.toFixed(1)} / %${companySpecificKd} Nakit Kupon)`;
         } else {
           preTaxKd = Math.max(18.0, Math.min(65.0, blended));
           kdSource = `Şirket Finansal Giderlerinden Dinamik Türetildi (%${companySpecificKd} Efektif / %${preTaxKd.toFixed(1)} Harmanlanmış)`;
@@ -1099,14 +1107,24 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     // karşılaştırma Fisher Denklemi: (1 + WACC_nominal) = (1 + WACC_real) * (1 + inflation) ile Reel WACC üzerinden yapılır.
     // Döviz fonksiyonel para birimine sahip şirketlerde (AVIATION veya isForeignCurrency) Türkiye'nin %18-36 TÜFE'si değil,
     // para birimine uygun enflasyon (USD %2.5 / EUR %2.2) kullanılır.
-    const tcmbPeriodInflation = getExpectedInflationForPeriod(item.period, macroSnapshot);
     const expectedInflation = isForeignCurrency
       ? (reportCurrency === 'EUR' ? 2.2 : 2.5)
       : tcmbPeriodInflation;
-    const nominalWacc = computedWacc;
-    const realWacc = ((item.is_tms29 || isForeignCurrency) && expectedInflation > 0)
+    let nominalWacc = computedWacc;
+    let realWacc = ((item.is_tms29 || isForeignCurrency) && expectedInflation > 0)
       ? Number((((1 + nominalWacc / 100) / (1 + expectedInflation / 100) - 1) * 100).toFixed(1))
       : nominalWacc;
+
+    // Kurumsal Finans & IVS 105 Değerleme Standartları Koruması:
+    // Türkiye'de faal sanayi/holding/enerji şirketleri için (Hazine risksiz reel faizi + Ülke CDS risk primi + kurumsal spread)
+    // gereği bağımsız denetim raporunda resmi bir oran açıklanmamışsa Reel WACC asgari makro tabanı %9.5 olarak uygulanır.
+    // Fisher eşitliği (1 + Nominal) = (1 + Reel) * (1 + Enflasyon) kusursuz korunacak şekilde senkronize edilir.
+    if (item.is_tms29 && !isForeignCurrency && reportedWacc === null && (detectedSector === 'INDUSTRIAL' || detectedSector === 'HOLDING' || detectedSector === 'ENERGY')) {
+      if (realWacc < 9.5) {
+        realWacc = 9.5;
+        nominalWacc = Number((((1 + realWacc / 100) * (1 + expectedInflation / 100) - 1) * 100).toFixed(1));
+      }
+    }
 
     const priorNominalWacc = item.nominal_wacc;
     item.nominal_wacc = nominalWacc;
@@ -2117,7 +2135,7 @@ export function calculateSectorScore(
     const cr = parseFinancialNumber(latest?.current_ratio);
 
     let s1 = 18;
-    let r1 = 'Finansal borçluluk ve likidite dengeli';
+    let r1 = debtRatio !== null ? `Dengeli borçluluk ve likidite (Net Borç / TTM FAVÖK: ${debtRatio.toFixed(2)}x)` : 'Finansal borçluluk ve likidite dengeli';
     let st1: 'good' | 'warning' | 'danger' = 'good';
 
     if (isEbitdaNegativeWithDebt) {
@@ -3347,7 +3365,8 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
         ? ` [Yüksek Kaldıraç Uyarısı: Net Borç/FAVÖK ${(netDebtToEbitda).toFixed(1)}x - EV Borcu Karşılamıyor]` 
         : (netDebtToEbitda > 4.0 ? ` [Kaldıraç Takibi: Net Borç/FAVÖK ${(netDebtToEbitda).toFixed(1)}x]` : '');
       const leaseNote = leaseLiabilities > 0 ? ` [TFRS 16 Kiralama Borcu Düşüldü]` : '';
-      formulaStr = `12A İleri FAVÖK: ${evEbitdaPerShare.toFixed(2).replace('.', ',')} TL | 12A İleri PD/DD: ${pbPerShare.toFixed(2).replace('.', ',')} TL ➔ Hibrit Adil Değer = ${fairValue.toFixed(2).replace('.', ',')} TL${haircutNote}${debtNote}${leaseNote}`;
+      const pePart = pePerShare > 0 ? ` | 12A İleri F/K: ${pePerShare.toFixed(2).replace('.', ',')} TL` : '';
+      formulaStr = `12A İleri FAVÖK: ${evEbitdaPerShare.toFixed(2).replace('.', ',')} TL${pePart} | 12A İleri PD/DD: ${pbPerShare.toFixed(2).replace('.', ',')} TL ➔ Hibrit Adil Değer = ${fairValue.toFixed(2).replace('.', ',')} TL${haircutNote}${debtNote}${leaseNote}`;
 
       return {
         fairValue,
