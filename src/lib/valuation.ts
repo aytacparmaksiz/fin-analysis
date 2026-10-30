@@ -3185,9 +3185,12 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
   const netDebtToEbitda = (ebitdaFull > 0 && totalDebtBridge > 0) ? (totalDebtBridge / ebitdaFull) : 0;
 
   // Sermaye Verimliliği Kesintisi (EVA Destruction Haircut)
+  // Kurumsal Finans İlkesi: Şirket sermaye maliyetini karşılayamadığında (ROIC < WACC),
+  // sabit bir duvara çarpmak yerine sermaye tahribatının büyüklüğüne göre pürüzsüz ve dinamik bir iskonto uygulanır.
   if (evaSpread !== null && (evaSpread < 0 || (currentRoic != null && currentRoic <= 0))) {
     evaHaircutApplied = true;
-    evaDiscountPct = Math.min(0.45, Math.max(0.12, (Math.abs(evaSpread) / 100) * 1.35));
+    const rawHaircut = 0.04 + (Math.abs(evaSpread) / 100) * 1.25;
+    evaDiscountPct = Math.min(0.45, Math.max(0.04, rawHaircut));
   }
 
   // Finansal Kaldıraç Takibi (Net Borç + TFRS 16 / FAVÖK > 4.0x)
@@ -3287,6 +3290,11 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
         const liquidityBuffer = Math.min(1.0, Math.max(0.20, (currentRatio ?? 1.0) / 1.5));
         const erosionPenalty = Math.max(0.10, 1.0 - Math.min(0.85, Math.abs(activeRoe) / 50));
         justifiedPb = Number(Math.max(0.08, Math.min(0.35, 0.378 * erosionPenalty * equityWeight * liquidityBuffer)).toFixed(3));
+      } else if (evaHaircutApplied && currentWacc != null) {
+        // Negatif EVA Durumu: Gerekçeli PD/DD paydası şirketin gerçek sermaye maliyetine dinamik duyarlıdır.
+        // Gordon Büyüme tekillik koruması olarak reel sermaye maliyeti alt sınırı %10.0'dır.
+        const effectiveCostOfCapital = Math.max(10.0, currentWacc);
+        justifiedPb = Math.max(0.25, Math.min(0.85, (Math.max(0, activeRoe) / effectiveCostOfCapital) * 0.85));
       } else if ((evaHaircutApplied || activeRoe < 8) && currentWacc != null) {
         justifiedPb = Math.max(0.32, Math.min(0.85, (Math.max(0, activeRoe) / Math.max(15, currentWacc)) * 0.85));
       } else if (activeRoe < 8) {
