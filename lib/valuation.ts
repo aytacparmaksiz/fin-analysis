@@ -1119,7 +1119,7 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     // Türkiye'de faal sanayi/holding/enerji şirketleri için (Hazine risksiz reel faizi + Ülke CDS risk primi + kurumsal spread)
     // gereği bağımsız denetim raporunda resmi bir oran açıklanmamışsa Reel WACC asgari makro tabanı %9.5 olarak uygulanır.
     // Fisher eşitliği (1 + Nominal) = (1 + Reel) * (1 + Enflasyon) kusursuz korunacak şekilde senkronize edilir.
-    if (item.is_tms29 && !isForeignCurrency && reportedWacc === null && (detectedSector === 'INDUSTRIAL' || detectedSector === 'HOLDING' || detectedSector === 'ENERGY')) {
+    if (item.is_tms29 && !isForeignCurrency && reportedWacc === null && (detectedSector === 'INDUSTRIAL' || detectedSector === 'HOLDING' || detectedSector === 'UTILITIES_TELCO')) {
       if (realWacc < 9.5) {
         realWacc = 9.5;
         nominalWacc = Number((((1 + realWacc / 100) * (1 + expectedInflation / 100) - 1) * 100).toFixed(1));
