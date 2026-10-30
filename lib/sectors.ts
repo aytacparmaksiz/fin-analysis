@@ -346,6 +346,88 @@ export function getFinancialArchetype(sector: SectorType): FinancialArchetype {
   }
 }
 
+/**
+ * Döngüsel & Ağır Emtia Sanayii (Through-the-Cycle Normalized Mid-Cycle EBITDA & Varlık Tabanı Koruması):
+ * Cam, Demir-Çelik Temel, Demir-Çelik Döküm, Kimyasal Ürün, Tarım Kimyasalları, Çimento, İnşaat Malzemeleri, Madencilik, Seramik.
+ * Bu sektörlerde tek çeyreklik veya tek yıllık dip (trough) FAVÖK'ü ile borç düşülmesi distorsiyon yaratır;
+ * uluslararası CFA/Damodaran standartlarına göre 5 yıllık tarihsel medyan marjı ile Through-the-Cycle normalizasyonu uygulanır.
+ */
+export function isCyclicalCommoditySector(officialSectorName: string, ticker?: string): boolean {
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  if (['SISE', 'EREGL', 'KRDMD', 'KRDMA', 'KRDMB', 'ISDMR', 'CEMTS', 'PETKM', 'SASA', 'HEKTS', 'BAGFS', 'GUBRF', 'ALKIM', 'CIMSA', 'OYAKC', 'BUCIM', 'AKCNS', 'EGSER', 'KLKIM', 'KOZAL', 'KOZAA', 'IPEKE'].includes(t)) {
+    return true;
+  }
+  const s = String(officialSectorName || '').trim();
+  return (
+    s === 'Cam Sanayii' ||
+    s === 'Cam' ||
+    s === 'Demir-Çelik Temel' ||
+    s === 'Demir-Çelik Döküm' ||
+    s === 'Kimyasal Ürün' ||
+    s === 'Tarım Kimyasalları' ||
+    s === 'Çimento' ||
+    s === 'İnşaat Malzemeleri' ||
+    s === 'Madencilik' ||
+    s === 'Seramik'
+  );
+}
+
+/**
+ * Savunma Sanayii (Savunma Elektroniği, Yüksek AR-GE & Devlet Garantili Sipariş Birikimi - Backlog):
+ * ASELS, SDTTR, ALTNY, PAPIL.
+ * Küresel savunma çarpanları (18.0x - 24.0x EV/EBITDA, 20.0x - 26.0x F/K) ile değerlenir.
+ */
+export function isDefenseSector(officialSectorName: string, ticker?: string): boolean {
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  if (['ASELS', 'SDTTR', 'ALTNY', 'PAPIL'].includes(t)) return true;
+  const s = String(officialSectorName || '').trim();
+  return s === 'Savunma' || s === 'Savunma Sanayii' || s.includes('Savunma');
+}
+
+/**
+ * Regüle Dağıtım Altyapısı (EPDK Düzenlemeye Tabi Varlık Tabanı - RAB Modeli):
+ * ENJSA (Elektrik Dağıtım & Perakende).
+ */
+export function isRegulatedDistributionSector(officialSectorName: string, ticker?: string): boolean {
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  if (t === 'ENJSA') return true;
+  const s = String(officialSectorName || '').trim();
+  return s === 'Elektrik - Doğalgaz Dağıtım';
+}
+
+/**
+ * Telekomünikasyon (Lisans ve Spektrum Amortismanı, Sürekli Altyapı CapEx'i - OpFCF Çarpanı Modeli):
+ * TCELL, TTKOM.
+ */
+export function isTelecomSector(officialSectorName: string, ticker?: string): boolean {
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  if (['TCELL', 'TTKOM'].includes(t)) return true;
+  const s = String(officialSectorName || '').trim();
+  return s === 'İletişim' || s === 'İletişim Cihazları';
+}
+
+/**
+ * Perakende & Tüketim (Negatif İşletme Sermayesi - Float Üretimi & TFRS 16 Kiralama Borçları):
+ * BIMAS, MGROS, SOKM, BIZIM, MAVI.
+ */
+export function isRetailFloatSector(officialSectorName: string, ticker?: string): boolean {
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  if (['BIMAS', 'MGROS', 'SOKM', 'BIZIM', 'MAVI', 'DESA', 'VAKKO'].includes(t)) return true;
+  const s = String(officialSectorName || '').trim();
+  return s === 'Gıda & Ticaret Perakende' || s === 'Perakande - Ticaret' || s === 'Gıda Perakende';
+}
+
+/**
+ * Otomotiv & Ağır Sanayi İhracat Üreticileri (OEM Maliyet Artı Kâr Sözleşmeleri & CapEx Dönüşümü):
+ * FROTO, TOASO, TTRAK, DOAS, OTKAR, BRISA, BFREN.
+ */
+export function isAutomotiveSector(officialSectorName: string, ticker?: string): boolean {
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  if (['FROTO', 'TOASO', 'TTRAK', 'DOAS', 'OTKAR', 'BRISA', 'BFREN', 'GOODY', 'TMSN'].includes(t)) return true;
+  const s = String(officialSectorName || '').trim();
+  return s === 'Otomotiv' || s === 'Otomotiv Parçası' || s === 'Otomotiv Lastiği' || s.includes('Otomotiv');
+}
+
 export interface FeaturedMetric {
   key: string;
   name: string;
