@@ -5220,7 +5220,7 @@ export default function ValuationTerminal({
                                   <div className="flex items-center justify-between text-[11px] font-mono">
                                     <span className="text-slate-400">Potansiyel:</span>
                                     <span className={`font-bold ${isCheap ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                      %{Math.abs(discNum).toFixed(1)} {isCheap ? 'İskonto' : 'Prim'}
+                                      {isCheap ? `+${Math.abs(discNum).toFixed(1)}%` : `-${Math.abs(discNum).toFixed(1)}%`}
                                     </span>
                                   </div>
                                 )}

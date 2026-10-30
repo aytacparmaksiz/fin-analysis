@@ -3721,19 +3721,30 @@ export function computeSectorValuationAndDrivers(
 
   // Yatırım Evresi & Normalleştirilmiş Döngü Tespiti (CapEx Transition & Cycle Normalization):
   // Sanayi veya Enerji/Altyapı şirketlerinde, devasa fabrika alımı veya büyük yatırım harcaması yapıldığında
-  // (Maddi Duran Varlık / Özkaynak > %65 veya CapEx > 5 Milyar TL), yatırımlar finansal borçla finanse edilir
+  // (Maddi Duran Varlık / Özkaynak > %65 ve Aktif CapEx > 3 Milyar TL veya CapEx/Ciro > %8), yatırımlar finansal borçla finanse edilir
   // ancak yeni tesis henüz tam kapasiteye ulaşmadığı için dönemsel marjlar tarihsel medyanın çok altında kalır.
-  // Kurumsal finans ilkesi gereği: Tam borç köprüsü (EV - Borç) düşülürken, operasyonel FAVÖK dip marj yerine
-  // normalleştirilmiş döngü ortalamasına (mid-cycle margin) yakınsar.
+  // Gıda, İçecek, Tekstil, Perakende gibi tüketici sektörleri bu ağır sanayi kuralından muaftır.
   let isCapExTransitionPhase = false;
   let normalizedMidCycleMargin: number | null = null;
   let histMedianMargin: number | null = null;
 
-  if (sector === 'INDUSTRIAL' || sector === 'UTILITIES_TELCO') {
+  const currentTickerUpper = String(extractedData?.ticker || '').toUpperCase();
+  const detectedOfficialSecName = getCompanySectorDisplayName(currentTickerUpper, sector);
+  const isExcludedLightSector = 
+    detectedOfficialSecName === 'Gıda' || 
+    detectedOfficialSecName === 'İçecek' || 
+    detectedOfficialSecName === 'Gıda & Ticaret Perakende' || 
+    detectedOfficialSecName === 'Perakande - Ticaret' || 
+    detectedOfficialSecName === 'Tekstil' || 
+    sector === 'RETAIL';
+
+  if (!isExcludedLightSector && (sector === 'INDUSTRIAL' || sector === 'UTILITIES_TELCO')) {
     const latestTangible = parseFinancialNumber(latest?.tangible_assets ?? latest?.maddi_duran_varliklar) ?? 0;
     const latestEq = parseFinancialNumber(latest?.equity) ?? 0;
     const latestCapex = parseFinancialNumber(latest?.capex ?? latest?.maddi_duran_varlik_alimlari) ?? 0;
-    const isAssetHeavy = (latestEq > 0 && (latestTangible / latestEq) > 0.65) || latestCapex > 5_000_000_000;
+    const latestRev = parseFinancialNumber(latest?.revenue) ?? 0;
+    const hasActiveHeavyCapex = latestCapex >= 3_000_000_000 || (latestRev > 0 && (latestCapex / latestRev) >= 0.08);
+    const isAssetHeavy = latestEq > 0 && (latestTangible / latestEq) > 0.65 && hasActiveHeavyCapex;
 
     const histMargins: number[] = [];
     for (const h of sortedHistory) {
@@ -3888,7 +3899,7 @@ export function computeSectorValuationAndDrivers(
       let sectorName = 'Sanayi ve Hizmet';
 
       // Dinamik Sektör Taban Çarpanı: Hisse kodu listeleri yerine doğrudan İş Yatırım 53 resmi sektör adına göre belirlenir.
-      const officialSecName = getCompanySectorDisplayName(tickerUpper, sector);
+      const officialSecName = detectedOfficialSecName || getCompanySectorDisplayName(tickerUpper, sector);
       sectorName = officialSecName;
 
       if (officialSecName === 'Gıda & Ticaret Perakende' || officialSecName === 'Perakande - Ticaret' || sector === 'RETAIL') {
