@@ -4821,11 +4821,11 @@ export default function ValuationTerminal({
                 </div>
               </div>
 
-              <div className="overflow-x-auto border border-slate-800 rounded-lg">
+              <div className="overflow-x-auto touch-pan-x border border-slate-800 rounded-lg">
                 <table className="w-full text-xs text-left border-collapse font-mono">
                   <thead className="bg-slate-950 text-slate-300 border-b border-slate-800">
                     <tr>
-                      <th className="p-3">Dönem</th>
+                      <th className="p-3 sticky left-0 bg-slate-950 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] min-w-[130px]">Dönem</th>
                       <th className="p-3 text-right">{currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Hasılat'}</th>
                       <th className="p-3 text-right">{currentSector === 'INSURANCE' ? 'Teknik Kâr' : 'FAVÖK'}</th>
                       <th className="p-3 text-right">Net Kâr</th>
@@ -4848,7 +4848,7 @@ export default function ValuationTerminal({
 
                       return (
                         <tr key={i} className="hover:bg-slate-800/40">
-                          <td className="p-3 font-bold text-white flex items-center gap-1.5">
+                          <td className="p-3 font-bold text-white flex items-center gap-1.5 sticky left-0 bg-slate-900 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] min-w-[130px]">
                             <span>{row.period}</span>
                             {row.is_tms29 && (
                               <span className="text-[9px] font-sans font-bold px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">
@@ -5582,12 +5582,11 @@ export default function ValuationTerminal({
                                   </button>
                                 </div>
                               ) : (
-                                <div className="overflow-x-auto">
+                                <div className="overflow-x-auto touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                                   <table className="w-full text-left text-sm border-collapse font-sans">
                                     <thead>
                                       <tr className="border-b border-[#2e3440] bg-[#12151c]/80 text-[11px] font-mono text-slate-400 uppercase tracking-wider">
-                                        <th className="py-3 px-5">Sıra</th>
-                                        <th className="py-3 px-4">Hisse</th>
+                                        <th className="py-3 px-4 sticky left-0 bg-[#12151c] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] min-w-[110px]">Hisse</th>
                                         <th className="py-3 px-4">Şirket Ünvanı</th>
                                         <th className="py-3 px-4 text-right">Piyasa Fiyatı</th>
                                         <th className="py-3 px-4 text-right">Adil Değer</th>
@@ -5610,13 +5609,13 @@ export default function ValuationTerminal({
                                             onClick={() => openReport(rep.id, rep.ticker)}
                                             className="hover:bg-[#21262d] transition cursor-pointer group"
                                           >
-                                            <td className="py-3 px-5 font-mono text-xs text-slate-500">
-                                              #{idx + 1}
-                                            </td>
-                                            <td className="py-3 px-4">
-                                              <span className="font-mono font-bold text-white text-base group-hover:text-[#f5c242] transition">
-                                                {rep.ticker}
-                                              </span>
+                                            <td className="py-3 px-4 sticky left-0 bg-[#12151c] group-hover:bg-[#21262d] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] min-w-[110px]">
+                                              <div className="flex items-center gap-1.5">
+                                                <span className="font-mono text-xs text-slate-500">#{idx + 1}</span>
+                                                <span className="font-mono font-bold text-white text-base group-hover:text-[#f5c242] transition">
+                                                  {rep.ticker}
+                                                </span>
+                                              </div>
                                             </td>
                                             <td className="py-3 px-4 text-xs text-slate-300 font-sans truncate max-w-[200px]">
                                               {compName || '—'}
@@ -5890,13 +5889,13 @@ export default function ValuationTerminal({
                 ) : discoverViewMode === 'list' ? (
                   /* Liste / Tablo Görünümü */
                   <div className="bg-[#1a1e26] border border-[#2e3440] rounded-2xl overflow-hidden shadow-xl">
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                       <table className="w-full text-left text-sm border-collapse font-sans">
                         <thead>
                           <tr className="border-b border-[#2e3440] bg-[#12151c]/80 text-[11px] font-mono text-slate-400 uppercase tracking-wider">
                             <th 
                               onClick={() => setThemesSort(p => ({ key: 'ticker', direction: p.key === 'ticker' && p.direction === 'asc' ? 'desc' : 'asc' }))}
-                              className="py-3.5 px-4 cursor-pointer select-none hover:text-white transition group"
+                              className="py-3.5 px-4 cursor-pointer select-none hover:text-white transition group sticky left-0 bg-[#12151c] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] min-w-[120px]"
                               title="Şirkete Göre Sırala"
                             >
                               <span className="inline-flex items-center gap-1.5">
@@ -6038,7 +6037,7 @@ export default function ValuationTerminal({
                                 onClick={() => openReport(report.id, report.ticker)}
                                 className="hover:bg-[#21262d] transition cursor-pointer group"
                               >
-                                <td className="py-3 px-4">
+                                <td className="py-3 px-4 sticky left-0 bg-[#1a1e26] group-hover:bg-[#21262d] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] min-w-[120px]">
                                   <div className="flex items-center gap-2">
                                     <span className="font-mono font-bold text-white group-hover:text-[#f5c242] transition">
                                       {report.ticker}

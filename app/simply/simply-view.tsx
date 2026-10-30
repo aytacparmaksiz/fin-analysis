@@ -2615,7 +2615,8 @@ export default function SimplyView({
                     <span className="text-sm text-slate-400 font-mono">Yıllık Değişim (YoY)</span>
                   </div>
 
-                  <table className="w-full text-sm sm:text-[15px] text-left">
+                  <div className="w-full overflow-x-auto touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                    <table className="w-full text-sm sm:text-[15px] text-left">
                     <thead>
                       <tr className="text-slate-300 border-b border-[#282d37] text-sm">
                         <th className="pb-2.5 font-semibold">Kalem</th>
@@ -2660,6 +2661,7 @@ export default function SimplyView({
                       })}
                     </tbody>
                   </table>
+                  </div>
                 </div>
 
                 {/* Sağ Tablo: Özet Bilanço (QoQ) */}
@@ -2669,7 +2671,8 @@ export default function SimplyView({
                     <span className="text-sm text-slate-400 font-mono">QoQ Çeyreklik</span>
                   </div>
 
-                  <table className="w-full text-sm sm:text-[15px] text-left">
+                  <div className="w-full overflow-x-auto touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                    <table className="w-full text-sm sm:text-[15px] text-left">
                     <thead>
                       <tr className="text-slate-300 border-b border-[#282d37] text-sm">
                         <th className="pb-2.5 font-semibold">Kalem</th>
@@ -2714,6 +2717,7 @@ export default function SimplyView({
                       })}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               </div>
             </div>
@@ -3305,7 +3309,7 @@ export default function SimplyView({
                             onMouseLeave={() => setHoveredRowKey(null)}
                             className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
                           >
-                            <td className="py-2.5 px-3 pl-6 font-sans text-sm text-slate-200 font-normal truncate" title={row.label}>
+                            <td className="py-2.5 px-3 pl-6 font-sans text-sm text-slate-200 font-normal truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#181b20] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]" title={row.label}>
                               {row.label}
                             </td>
                             {visiblePeriods.map((c, colIdx) =>
@@ -3320,7 +3324,7 @@ export default function SimplyView({
                           onMouseLeave={() => setHoveredRowKey(null)}
                           className="bg-[#1a1e24] border-t border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
                         >
-                          <td className="py-2.5 px-3 font-sans font-bold text-white text-[15px] truncate">
+                          <td className="py-2.5 px-3 font-sans font-bold text-white text-[15px] truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#1a1e24] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
                             {sec.totalLabel}
                           </td>
                           {visiblePeriods.map((c, colIdx) =>
@@ -3335,7 +3339,7 @@ export default function SimplyView({
                             onMouseLeave={() => setHoveredRowKey(null)}
                             className="bg-[#242a35] border-t-2 border-b-2 border-[#f5c242]/40 font-bold hover:bg-[#2c3442] transition-colors"
                           >
-                            <td className="py-3 px-3 font-sans font-extrabold text-[#f5c242] text-base tracking-wide truncate">
+                            <td className="py-3 px-3 font-sans font-extrabold text-[#f5c242] text-base tracking-wide truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#242a35] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
                               {sec.grandTotalLabel}
                             </td>
                             {visiblePeriods.map((c, colIdx) =>
@@ -3351,7 +3355,7 @@ export default function SimplyView({
                             onMouseLeave={() => setHoveredRowKey(null)}
                             className="bg-[#1a1e24] border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
                           >
-                            <td className="py-2.5 px-3 pl-4 font-sans font-semibold text-slate-200 text-sm truncate">
+                            <td className="py-2.5 px-3 pl-4 font-sans font-semibold text-slate-200 text-sm truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#1a1e24] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
                               {sec.extraRow.label}
                             </td>
                             {visiblePeriods.map((c, colIdx) =>
@@ -3378,7 +3382,7 @@ export default function SimplyView({
                             onMouseLeave={() => setHoveredRowKey(null)}
                             className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
                           >
-                            <td className="py-2.5 px-3 pl-6 font-sans text-sm text-slate-200 font-normal truncate" title={row.label}>
+                            <td className="py-2.5 px-3 pl-6 font-sans text-sm text-slate-200 font-normal truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#181b20] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]" title={row.label}>
                               {row.label}
                             </td>
                             {visiblePeriods.map((c, colIdx) =>
@@ -3392,7 +3396,7 @@ export default function SimplyView({
                           onMouseLeave={() => setHoveredRowKey(null)}
                           className="bg-[#1a1e24] border-t border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
                         >
-                          <td className="py-2.5 px-3 font-sans font-bold text-white text-[15px] truncate">
+                          <td className="py-2.5 px-3 font-sans font-bold text-white text-[15px] truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#1a1e24] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
                             {sec.totalLabel}
                           </td>
                           {visiblePeriods.map((c, colIdx) =>
@@ -3406,7 +3410,7 @@ export default function SimplyView({
                             onMouseLeave={() => setHoveredRowKey(null)}
                             className="bg-[#242a35] border-t-2 border-b-2 border-[#f5c242]/40 font-bold hover:bg-[#2c3442] transition-colors"
                           >
-                            <td className="py-3 px-3 font-sans font-extrabold text-[#f5c242] text-base tracking-wide truncate">
+                            <td className="py-3 px-3 font-sans font-extrabold text-[#f5c242] text-base tracking-wide truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#242a35] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
                               {sec.grandTotalLabel}
                             </td>
                             {visiblePeriods.map((c, colIdx) =>
@@ -3433,7 +3437,7 @@ export default function SimplyView({
                             onMouseLeave={() => setHoveredRowKey(null)}
                             className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
                           >
-                            <td className="py-2.5 px-3 pl-6 font-sans text-sm text-slate-200 font-normal truncate" title={row.label}>
+                            <td className="py-2.5 px-3 pl-6 font-sans text-sm text-slate-200 font-normal truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#181b20] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]" title={row.label}>
                               {row.label}
                             </td>
                             {visiblePeriods.map((c, colIdx) =>
@@ -3447,7 +3451,7 @@ export default function SimplyView({
                           onMouseLeave={() => setHoveredRowKey(null)}
                           className="bg-[#1a1e24] border-t border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
                         >
-                          <td className="py-2.5 px-3 font-sans font-bold text-white text-[15px] truncate">
+                          <td className="py-2.5 px-3 font-sans font-bold text-white text-[15px] truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#1a1e24] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
                             {sec.totalLabel}
                           </td>
                           {visiblePeriods.map((c, colIdx) =>
@@ -3473,7 +3477,7 @@ export default function SimplyView({
                             onMouseLeave={() => setHoveredRowKey(null)}
                             className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
                           >
-                            <td className={`py-2.5 px-3 pl-6 font-sans text-sm truncate ${row.isHighlight ? 'font-bold text-white' : 'font-normal text-slate-200'}`} title={row.label}>
+                            <td className={`py-2.5 px-3 pl-6 font-sans text-sm truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#181b20] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] ${row.isHighlight ? 'font-bold text-white' : 'font-normal text-slate-200'}`} title={row.label}>
                               {row.label}
                             </td>
                             {visiblePeriods.map((c) => {

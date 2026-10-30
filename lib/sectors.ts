@@ -298,7 +298,7 @@ export function getCompanySectorDisplayName(ticker?: string, rawSector?: string)
   }
 
   if (rawSector) {
-    const cleanSector = rawSector.trim();
+    const cleanSector = typeof rawSector === 'string' ? rawSector.trim() : String(rawSector || '').trim();
     const upperSector = cleanSector.toUpperCase();
     if (SECTOR_TYPE_NAMES[upperSector]) {
       return SECTOR_TYPE_NAMES[upperSector];
@@ -501,9 +501,31 @@ export function isMiningSector(officialSectorName: string, ticker?: string): boo
  */
 export function isFoodBeverageSector(officialSectorName: string, ticker?: string): boolean {
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['CCOLA', 'AEFES', 'ULKER', 'TATGD', 'PNSUT', 'BANVT', 'KNFRT', 'PETUN', 'SOKM'].includes(t)) return true;
+  if (['CCOLA', 'AEFES', 'ULKER', 'TATGD', 'PNSUT', 'BANVT', 'KNFRT', 'PETUN'].includes(t)) return true;
   const s = String(officialSectorName || '').trim();
   return s === 'Gıda' || s === 'Meşrubat / İçecek' || s === 'Hayvancılık';
+}
+
+/**
+ * Demir-Çelik & Metal Ana Sanayii:
+ * EREGL, KRDMD, KRDMA, KRDMB, ISDMR, CEMTS, BUCIM.
+ */
+export function isSteelSector(officialSectorName: string, ticker?: string): boolean {
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  if (['EREGL', 'KRDMD', 'KRDMA', 'KRDMB', 'ISDMR', 'CEMTS', 'DITAS', 'BMSCH', 'BURCE', 'KCAER'].includes(t)) return true;
+  const s = String(officialSectorName || '').trim();
+  return s === 'Demir-Çelik Temel' || s === 'Demir-Çelik Döküm' || s.includes('Demir-Çelik');
+}
+
+/**
+ * Sağlık, Hastanecilik & İlaç Sektörü:
+ * MPARK, DEVA, GENIL, SELEC, LKMNH, TNZTP, RTALB, TRILC.
+ */
+export function isHealthcareSector(officialSectorName: string, ticker?: string): boolean {
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  if (['MPARK', 'DEVA', 'GENIL', 'SELEC', 'LKMNH', 'TNZTP', 'RTALB', 'TRILC', 'MEDTR'].includes(t)) return true;
+  const s = String(officialSectorName || '').trim();
+  return s === 'Sağlık ve İlaç' || s.includes('Sağlık') || s.includes('İlaç');
 }
 
 export interface FeaturedMetric {
