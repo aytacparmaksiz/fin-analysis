@@ -3144,6 +3144,7 @@ export interface IndustrialFairValueInputs {
   currentWacc?: number | null;
   roe?: number | null;
   currentRatio?: number | null;
+  isCapExTransitionPhase?: boolean;
 }
 
 export interface IndustrialFairValueResult {
@@ -3183,7 +3184,8 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
     currentRoic,
     currentWacc,
     roe,
-    currentRatio
+    currentRatio,
+    isCapExTransitionPhase = false
   } = inputs;
 
   // 1. Pay Adedi Kontrolü: Pay adedi yoksa hisse başı değer uydurulamaz!
@@ -3219,7 +3221,9 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
   // Sermaye Verimliliği Kesintisi (EVA Destruction Haircut)
   // Kurumsal Finans İlkesi: Şirket sermaye maliyetini karşılayamadığında (ROIC < WACC),
   // sabit bir duvara çarpmak yerine sermaye tahribatının büyüklüğüne göre pürüzsüz ve dinamik bir iskonto uygulanır.
-  if (evaSpread !== null && (evaSpread < 0 || (currentRoic != null && currentRoic <= 0))) {
+  // İSTİSNA: Büyük yatırım evresindeki (CapEx Transition) şirketlerde ROIC henüz tamamlanmamış/devreye girmekte olan
+  // tesisler ve yatırımlar nedeniyle geçici olarak baskılanır; nakit akışı ve kapasite normalleşmesi esas alınır.
+  if (!isCapExTransitionPhase && evaSpread !== null && (evaSpread < 0 || (currentRoic != null && currentRoic <= 0))) {
     evaHaircutApplied = true;
     const rawHaircut = 0.04 + (Math.abs(evaSpread) / 100) * 1.25;
     evaDiscountPct = Math.min(0.45, Math.max(0.04, rawHaircut));
@@ -3322,6 +3326,9 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
         const liquidityBuffer = Math.min(1.0, Math.max(0.20, (currentRatio ?? 1.0) / 1.5));
         const erosionPenalty = Math.max(0.10, 1.0 - Math.min(0.85, Math.abs(activeRoe) / 50));
         justifiedPb = Number(Math.max(0.08, Math.min(0.35, 0.378 * erosionPenalty * equityWeight * liquidityBuffer)).toFixed(3));
+      } else if (isCapExTransitionPhase && activeRoe !== null && activeRoe > 12) {
+        // Yatırım Evresi & Yüksek Özkaynak Kârlılığı: Tesisler ve yeni kapasite devreye girdikçe defter değeri bileşeni güçlü katma değer üretir.
+        justifiedPb = Number(Math.max(1.8, Math.min(2.8, (activeRoe / 100) * 9.5)).toFixed(3));
       } else if (evaHaircutApplied && currentWacc != null) {
         // Negatif EVA Durumu: Gerekçeli PD/DD paydası şirketin gerçek sermaye maliyetine dinamik duyarlıdır.
         // Gordon Büyüme tekillik koruması olarak reel sermaye maliyeti alt sınırı %10.0'dır.
@@ -3360,13 +3367,14 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
       // Kurumsal Finans Değişmezi: Borç EV köprüsünde zaten düşüldüğü için ikinci bir mükerrer
       // debtDiscountPct indirimi yapılmaz (mükerrer borç cezası engellenmiştir).
       fairValue = Number(Math.max(0.05, hybridFair).toFixed(2));
+      const capExNote = isCapExTransitionPhase ? ' [Yatırım Evresi & Normalleştirilmiş Kapasite Modeli]' : '';
       const haircutNote = evaHaircutApplied ? ` [EVA İndirimi: -%${(evaDiscountPct * 100).toFixed(0)}]` : '';
       const debtNote = (netDebtToEbitda > 4.0 && enterpriseVal <= totalDebtBridge) 
         ? ` [Yüksek Kaldıraç Uyarısı: Net Borç/FAVÖK ${(netDebtToEbitda).toFixed(1)}x - EV Borcu Karşılamıyor]` 
         : (netDebtToEbitda > 4.0 ? ` [Kaldıraç Takibi: Net Borç/FAVÖK ${(netDebtToEbitda).toFixed(1)}x]` : '');
       const leaseNote = leaseLiabilities > 0 ? ` [TFRS 16 Kiralama Borcu Düşüldü]` : '';
       const pePart = pePerShare > 0 ? ` | 12A İleri F/K: ${pePerShare.toFixed(2).replace('.', ',')} TL` : '';
-      formulaStr = `12A İleri FAVÖK: ${evEbitdaPerShare.toFixed(2).replace('.', ',')} TL${pePart} | 12A İleri PD/DD: ${pbPerShare.toFixed(2).replace('.', ',')} TL ➔ Hibrit Adil Değer = ${fairValue.toFixed(2).replace('.', ',')} TL${haircutNote}${debtNote}${leaseNote}`;
+      formulaStr = `12A İleri FAVÖK: ${evEbitdaPerShare.toFixed(2).replace('.', ',')} TL${pePart} | 12A İleri PD/DD: ${pbPerShare.toFixed(2).replace('.', ',')} TL ➔ Hibrit Adil Değer = ${fairValue.toFixed(2).replace('.', ',')} TL${capExNote}${haircutNote}${debtNote}${leaseNote}`;
 
       return {
         fairValue,
@@ -3711,6 +3719,55 @@ export function computeSectorValuationAndDrivers(
     }
   }
 
+  // Yatırım Evresi & Normalleştirilmiş Döngü Tespiti (CapEx Transition & Cycle Normalization):
+  // Sanayi veya Enerji/Altyapı şirketlerinde, devasa fabrika alımı veya büyük yatırım harcaması yapıldığında
+  // (Maddi Duran Varlık / Özkaynak > %65 veya CapEx > 5 Milyar TL), yatırımlar finansal borçla finanse edilir
+  // ancak yeni tesis henüz tam kapasiteye ulaşmadığı için dönemsel marjlar tarihsel medyanın çok altında kalır.
+  // Kurumsal finans ilkesi gereği: Tam borç köprüsü (EV - Borç) düşülürken, operasyonel FAVÖK dip marj yerine
+  // normalleştirilmiş döngü ortalamasına (mid-cycle margin) yakınsar.
+  let isCapExTransitionPhase = false;
+  let normalizedMidCycleMargin: number | null = null;
+  let histMedianMargin: number | null = null;
+
+  if (sector === 'INDUSTRIAL' || sector === 'UTILITIES_TELCO') {
+    const latestTangible = parseFinancialNumber(latest?.tangible_assets ?? latest?.maddi_duran_varliklar) ?? 0;
+    const latestEq = parseFinancialNumber(latest?.equity) ?? 0;
+    const latestCapex = parseFinancialNumber(latest?.capex ?? latest?.maddi_duran_varlik_alimlari) ?? 0;
+    const isAssetHeavy = (latestEq > 0 && (latestTangible / latestEq) > 0.65) || latestCapex > 5_000_000_000;
+
+    const histMargins: number[] = [];
+    for (const h of sortedHistory) {
+      const hRev = parseFinancialNumber(h?.revenue);
+      const hEb = parseFinancialNumber(h?.ebitda);
+      if (hRev !== null && hRev > 0 && hEb !== null && hEb > 0) {
+        histMargins.push((hEb / hRev) * 100);
+      }
+    }
+
+    if (isAssetHeavy && histMargins.length >= 4) {
+      const sortedM = [...histMargins].sort((a, b) => a - b);
+      const mid = Math.floor(sortedM.length / 2);
+      histMedianMargin = sortedM.length % 2 !== 0 ? sortedM[mid] : (sortedM[mid - 1] + sortedM[mid]) / 2;
+
+      const rawLatestEbitda = parseFinancialNumber(latest?.ebitda) ?? 0;
+      const rawLatestRev = parseFinancialNumber(latest?.revenue) ?? 0;
+      const ttmEb = computeTtmField('ebitda', rawLatestEbitda);
+      const ttmRv = computeTtmField('revenue', rawLatestRev);
+      const currentObservedMargin = (ttmRv > 0 && ttmEb > 0) ? (ttmEb / ttmRv) * 100 : marginVal;
+
+      if (histMedianMargin > 0 && currentObservedMargin < histMedianMargin * 0.80) {
+        isCapExTransitionPhase = true;
+        normalizedMidCycleMargin = Number(((currentObservedMargin * 0.35) + (histMedianMargin * 0.65)).toFixed(2));
+      }
+    }
+  }
+
+  if (isCapExTransitionPhase && normalizedMidCycleMargin !== null) {
+    marginVal = Number(normalizedMidCycleMargin.toFixed(1));
+    marginLabel = 'Normalleştirilmiş Döngü FAVÖK Marjı';
+    marginExpl = `Yatırım evresi ve yeni kapasite entegrasyonu nedeniyle son 12A marjı tarihsel medyan (%${histMedianMargin?.toFixed(1)}) ile normalize edildi: %${marginVal}`;
+  }
+
   // 4. DİNAMİK SÜRÜCÜ: HEDEF ÇARPAN (GORDON / ROE MODELİ & SAFE DIVISION)
   let targetMultipleStr = 'PD/DD 3,9x';
   let targetMultipleNum = 3.9;
@@ -3885,6 +3942,10 @@ export function computeSectorValuationAndDrivers(
         targetMultipleNum = 0.146;
         targetMultipleStr = `Hak Edilen Sıkıntılı PD/DD 0,146x`;
         targetMultipleExpl = `Negatif FAVÖK ve operasyonel zarar nedeniyle FD/FAVÖK çarpanı uygulanamaz (N/A). Değerleme, sermaye erozyonu ve yüksek borç yükü bazlı Hak Edilen Sıkıntılı Defter Değeri (0,146x PD/DD) ile yapılmıştır.`;
+      } else if (isCapExTransitionPhase) {
+        targetMultipleNum = Math.max(8.0, Number((baseMultiple * 1.25).toFixed(1)));
+        targetMultipleStr = `FD/FAVÖK ${targetMultipleNum.toString().replace('.', ',')}x`;
+        targetMultipleExpl = `${sectorName} yatırım ve kapasite genişleme evresi normalleştirilmiş çarpanı (${targetMultipleNum}x)`;
       } else {
         // Katman 1 Saf İçsel Değerleme: Canlı piyasa fiyatından ve piyasa çarpanından %100 BAĞIMSIZDIR (Invariance).
         // liveEvEbitda içsel hedef çarpanı belirlemez; piyasa kıyaslaması Katman 3'te bağımsız olarak yapılır.
@@ -3981,6 +4042,8 @@ export function computeSectorValuationAndDrivers(
   const paidCapShares = rawPaidCap !== null && rawPaidCap > 0 ? Math.abs(rawPaidCap) * unitScale : null;
   const rawEffectiveShareCount = (paidCapShares && paidCapShares >= 1000000) ? paidCapShares : (shareCount && shareCount > 0 ? shareCount : null);
   const effectiveShareCount = (rawEffectiveShareCount && rawEffectiveShareCount > 0) ? rawEffectiveShareCount : null;
+  let effectiveEbitdaFull = 0;
+  let effectiveNetFull = 0;
 
   // Pay adedi (ödenmiş sermaye) doğrulaması: Pay adedi yoksa hisse başı içsel değer uydurulamaz!
   if (!effectiveShareCount || effectiveShareCount <= 0) {
@@ -4137,16 +4200,31 @@ export function computeSectorValuationAndDrivers(
 
     const rawRevG = revGrowth / 100;
     const rawNetG = netGrowth / 100;
-    const clampedRevGrowth = Math.min(0.75, Math.max(-0.40, rawRevG));
-    const clampedNetGrowth = Math.min(0.80, Math.max(-0.50, rawNetG));
+    let clampedRevGrowth = Math.min(0.75, Math.max(-0.40, rawRevG));
+    let clampedNetGrowth = Math.min(0.80, Math.max(-0.50, rawNetG));
+
+    effectiveEbitdaFull = ebitdaFull;
+    effectiveNetFull = netFull;
+
+    if (isCapExTransitionPhase && normalizedMidCycleMargin !== null) {
+      const rawLatestRev = parseFinancialNumber(latest?.revenue) ?? 0;
+      const ttmRevRaw = computeTtmField('revenue', rawLatestRev);
+      if (ttmRevRaw > 0) {
+        const normalizedEb = (ttmRevRaw * (normalizedMidCycleMargin / 100)) * unitScale;
+        effectiveEbitdaFull = Math.max(ebitdaFull, normalizedEb);
+        effectiveNetFull = Math.max(netFull, effectiveEbitdaFull * 0.58);
+      }
+      clampedRevGrowth = Math.max(0.04, clampedRevGrowth);
+      clampedNetGrowth = Math.max(0.05, clampedNetGrowth);
+    }
 
     const currentRoic = parseFinancialNumber(latest?.roic);
     const currentWacc = parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc);
     const latestCr = parseFinancialNumber(latest?.current_ratio);
 
     const indResult = computeIndustrialFairValue({
-      ebitdaFull,
-      netFull,
+      ebitdaFull: effectiveEbitdaFull,
+      netFull: effectiveNetFull,
       totalEquityFull,
       netDebt,
       leaseLiabilities,
@@ -4158,7 +4236,8 @@ export function computeSectorValuationAndDrivers(
       currentRoic,
       currentWacc,
       roe,
-      currentRatio: latestCr
+      currentRatio: latestCr,
+      isCapExTransitionPhase
     });
 
     fairValue = indResult.fairValue as any;
@@ -4228,39 +4307,41 @@ export function computeSectorValuationAndDrivers(
       } else {
         // Ayı Senaryosu: Hedef Çarpan -%15, Ciro Büyümesi -8 puan
         const bearRes = computeIndustrialFairValue({
-        ebitdaFull: ebF,
-        netFull: ntF,
+        ebitdaFull: isCapExTransitionPhase ? effectiveEbitdaFull * 0.90 : ebF,
+        netFull: isCapExTransitionPhase ? effectiveNetFull * 0.85 : ntF,
         totalEquityFull: eqF,
         netDebt: nDb,
         leaseLiabilities: lLi,
         minorityInterests: mIn,
         effectiveShareCount,
         targetMultipleNum: Math.max(3.0, targetMultipleNum * 0.85),
-        clampedRevGrowth: Math.max(-0.50, rG - 0.08),
-        clampedNetGrowth: Math.max(-0.60, nG - 0.10),
+        clampedRevGrowth: isCapExTransitionPhase ? Math.max(-0.15, Math.max(0.04, rG) - 0.08) : Math.max(-0.50, rG - 0.08),
+        clampedNetGrowth: isCapExTransitionPhase ? Math.max(-0.20, Math.max(0.05, nG) - 0.10) : Math.max(-0.60, nG - 0.10),
         currentRoic: cRoic,
         currentWacc: cWacc,
         roe,
-        currentRatio: parseFinancialNumber(latest?.current_ratio)
+        currentRatio: parseFinancialNumber(latest?.current_ratio),
+        isCapExTransitionPhase
       });
       bearPrice = bearRes.fairValue != null ? bearRes.fairValue : fairValue;
 
       // Boğa Senaryosu: Hedef Çarpan +%15, Ciro Büyümesi +8 puan
       const bullRes = computeIndustrialFairValue({
-        ebitdaFull: ebF,
-        netFull: ntF,
+        ebitdaFull: isCapExTransitionPhase ? effectiveEbitdaFull * 1.10 : ebF,
+        netFull: isCapExTransitionPhase ? effectiveNetFull * 1.15 : ntF,
         totalEquityFull: eqF,
         netDebt: nDb,
         leaseLiabilities: lLi,
         minorityInterests: mIn,
         effectiveShareCount,
         targetMultipleNum: targetMultipleNum * 1.15,
-        clampedRevGrowth: Math.min(0.85, rG + 0.08),
-        clampedNetGrowth: Math.min(0.90, nG + 0.10),
+        clampedRevGrowth: isCapExTransitionPhase ? Math.min(0.35, Math.max(0.04, rG) + 0.08) : Math.min(0.85, rG + 0.08),
+        clampedNetGrowth: isCapExTransitionPhase ? Math.min(0.40, Math.max(0.05, nG) + 0.10) : Math.min(0.90, nG + 0.10),
         currentRoic: cRoic,
         currentWacc: cWacc,
         roe,
-        currentRatio: parseFinancialNumber(latest?.current_ratio)
+        currentRatio: parseFinancialNumber(latest?.current_ratio),
+        isCapExTransitionPhase
       });
       bullPrice = bullRes.fairValue != null ? bullRes.fairValue : fairValue;
       }
