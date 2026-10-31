@@ -409,6 +409,39 @@ export function isBeverageSector(officialSectorName: string, ticker?: string): b
 }
 
 /**
+ * İnşaat - Taahhüt & Altyapı Mühendislik:
+ * ENKAI, TKFEN.
+ */
+export function isConstructionContractingSector(officialSectorName: string, ticker?: string): boolean {
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  if (['ENKAI', 'TKFEN'].includes(t)) return true;
+  const s = String(officialSectorName || '').trim();
+  return s === 'İnşaat- Taahhüt' || s === 'İnşaat - Taahhüt' || s.includes('Taahhüt');
+}
+
+/**
+ * Tarım Kimyasalları & Gübre Sanayii:
+ * GUBRF, HEKTS, BAGFS.
+ */
+export function isAgroChemicalSector(officialSectorName: string, ticker?: string): boolean {
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  if (['GUBRF', 'HEKTS', 'BAGFS'].includes(t)) return true;
+  const s = String(officialSectorName || '').trim();
+  return s === 'Tarım Kimyasalları' || s.includes('Gübre');
+}
+
+/**
+ * Tekstil Entegre & Teknik Tekstil Üretimi:
+ * KORDS, YUNSA, SKTAS, ARSAN, BOSSA, ATEKS.
+ */
+export function isTextileSector(officialSectorName: string, ticker?: string): boolean {
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  if (['KORDS', 'YUNSA', 'SKTAS', 'ARSAN', 'BOSSA', 'ATEKS'].includes(t)) return true;
+  const s = String(officialSectorName || '').trim();
+  return s === 'Tekstil Entegre' || s === 'Tekstil' || s.includes('Tekstil');
+}
+
+/**
  * Savunma Sanayii (Savunma Elektroniği, Yüksek AR-GE & Devlet Garantili Sipariş Birikimi - Backlog):
  * ASELS, SDTTR, ALTNY, PAPIL.
  * Küresel savunma çarpanları (18.0x - 24.0x EV/EBITDA, 20.0x - 26.0x F/K) ile değerlenir.

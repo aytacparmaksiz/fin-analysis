@@ -291,5 +291,144 @@ test('Borsa Istanbul Comprehensive Multi-Sector Valuation & Calibration Test Sui
     assert.ok(res.valuation.valuation_model_name.includes('Meşrubat'), `Model should be Meşrubat, got ${res.valuation.valuation_model_name}`);
     assert.equal(res.valuation.is_value_trap, false, 'AEFES must not be value trap');
   });
+
+  await t.test('11. İnşaat - Taahhüt (ENKAI, TKFEN): Activates dedicated international EPC & net cash bridge model', () => {
+    const enkaiBase = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE['ENKAI'];
+    assert.ok(enkaiBase, 'ENKAI baseline must exist');
+
+    const mockHistory = [
+      {
+        period: '2026/06',
+        ebitda: 12000000000,
+        revenue: 65000000000,
+        net_income: 14000000000,
+        equity: 210000000000,
+        net_debt: -60000000000, // Massive net cash
+        operating_cash_flow: 18000000000,
+        roe: 14.5
+      }
+    ];
+
+    const res = computeSectorValuationAndDrivers({
+      extractedData: {
+        ticker: 'ENKAI',
+        financial_history: mockHistory,
+        share_count: 6000000000,
+        official_sector_name: enkaiBase.sectorName
+      },
+      inputPriceStr: String(enkaiBase.lastPrice),
+      sector: 'INDUSTRIAL'
+    });
+
+    assert.ok(res.valuation.valuation_model_name.includes('İnşaat - Taahhüt'), `Model should be İnşaat - Taahhüt, got ${res.valuation.valuation_model_name}`);
+    assert.equal(res.valuation.is_value_trap, false, 'ENKAI must not be value trap');
+    assert.ok(res.valuation.fair_value > 45.0, `ENKAI fair value (${res.valuation.fair_value}) should reflect net cash and backlog`);
+  });
+
+  await t.test('12. Tarım Kimyasalları & Gübre (GUBRF, HEKTS, BAGFS): Activates dedicated cyclical commodity spread model', () => {
+    const gubrfBase = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE['GUBRF'];
+    assert.ok(gubrfBase, 'GUBRF baseline must exist');
+
+    const mockHistory = [
+      {
+        period: '2026/06',
+        ebitda: 4500000000,
+        revenue: 35000000000,
+        net_income: 2800000000,
+        equity: 32000000000,
+        net_debt: 8000000000,
+        operating_cash_flow: 3200000000,
+        roe: 16.0
+      }
+    ];
+
+    const res = computeSectorValuationAndDrivers({
+      extractedData: {
+        ticker: 'GUBRF',
+        financial_history: mockHistory,
+        share_count: gubrfBase.paidInCapitalMnTl * 1e6,
+        official_sector_name: gubrfBase.sectorName
+      },
+      inputPriceStr: String(gubrfBase.lastPrice),
+      sector: 'INDUSTRIAL'
+    });
+
+    assert.ok(res.valuation.valuation_model_name.includes('Tarımsal Kimya, Gübre'), `Model should be Tarımsal Kimya, got ${res.valuation.valuation_model_name}`);
+    assert.equal(res.valuation.is_value_trap, false, 'GUBRF must not be value trap');
+    assert.ok(res.valuation.fair_value > 150.0, `GUBRF fair value (${res.valuation.fair_value}) calibrated`);
+  });
+
+  await t.test('13. Tekstil Entegre & Teknik Tekstil (KORDS): Activates dedicated export & composite model', () => {
+    const kordsBase = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE['KORDS'];
+    assert.ok(kordsBase, 'KORDS baseline must exist');
+
+    const mockHistory = [
+      {
+        period: '2026/06',
+        ebitda: 3800000000,
+        revenue: 28000000000,
+        net_income: 1900000000,
+        equity: 24000000000,
+        net_debt: 9500000000,
+        operating_cash_flow: 2500000000,
+        roe: 12.0
+      }
+    ];
+
+    const res = computeSectorValuationAndDrivers({
+      extractedData: {
+        ticker: 'KORDS',
+        financial_history: mockHistory,
+        share_count: kordsBase.paidInCapitalMnTl * 1e6,
+        official_sector_name: kordsBase.sectorName
+      },
+      inputPriceStr: String(kordsBase.lastPrice),
+      sector: 'INDUSTRIAL'
+    });
+
+    assert.ok(res.valuation.valuation_model_name.includes('Teknik Tekstil'), `Model should be Teknik Tekstil, got ${res.valuation.valuation_model_name}`);
+    assert.equal(res.valuation.is_value_trap, false, 'KORDS must not be value trap');
+  });
+
+  await t.test('14. TCELL Live Pipeline Invariant: Prevents false value trap when OCF is positive and margin is 48%', () => {
+    const tcellBase = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE['TCELL'];
+    assert.ok(tcellBase, 'TCELL baseline must exist');
+
+    // Exact scenario from user: 2025/06 had 66.2% margin, 2026/06 has 48.1% margin, OCF is +44.75B TL, CapEx is 84B TL (FCF negative)
+    const tcellLiveHistory = [
+      {
+        period: '2025/06',
+        revenue: 130037300000,
+        ebitda: 86126186000, // 66.2% margin
+        net_income: 7467754000,
+        equity: 219706432000,
+        net_debt: 45791738000,
+        operating_cash_flow: 81229298000,
+        free_cash_flow: 75965578000
+      },
+      {
+        period: '2026/06',
+        revenue: 137467389000,
+        ebitda: 66115489000, // 48.1% margin (YoY dropped from 66.2%)
+        net_income: 10194669000,
+        equity: 309560267000,
+        net_debt: 96860723000,
+        operating_cash_flow: 44757968000, // Positive OCF!
+        capex: 84028188000,
+        free_cash_flow: -39270220000 // Negative FCF due to CapEx
+      }
+    ];
+
+    const trapCheck = detectValueTrap(
+      tcellLiveHistory,
+      90.25,
+      124.31,
+      'UTILITIES_TELCO',
+      { ticker: 'TCELL', ...tcellLiveHistory[1] }
+    );
+
+    assert.equal(trapCheck.isValueTrap, false, `TCELL must NOT be flagged as value trap (got reasons: ${trapCheck.reasons.join(', ')})`);
+    assert.equal(trapCheck.reasons.length, 0, `TCELL trap reasons must be empty (got: ${trapCheck.reasons.join(', ')})`);
+  });
 });
 
