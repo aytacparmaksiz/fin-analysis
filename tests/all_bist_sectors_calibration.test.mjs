@@ -141,4 +141,155 @@ test('Borsa Istanbul Comprehensive Multi-Sector Valuation & Calibration Test Sui
     const ekgyoUpside = ((ekgyoRes.valuation.fair_value - ekgyoBase.lastPrice) / ekgyoBase.lastPrice) * 100;
     assert.ok(ekgyoUpside < 85.0, `EKGYO upside should be calibrated below +85% (was ${ekgyoUpside.toFixed(1)}%, previously +112%)`);
   });
+
+  await t.test('6. TCELL Anomaly Resolution: Eliminates false ALMA and produces AL decision with sound 95 score', () => {
+    const tcellHist = OFFICIAL_ISYATIRIM_CACHE['TCELL'];
+    const tcellBase = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE['TCELL'];
+    assert.ok(tcellHist, 'TCELL history must exist');
+    assert.ok(tcellBase, 'TCELL baseline must exist');
+
+    const price = 90.25;
+    const shares = tcellBase.paidInCapitalMnTl * 1e6;
+    const sector = mapIsYatirimSectorToValuationSector(tcellBase.sectorName);
+
+    const res = computeSectorValuationAndDrivers({
+      extractedData: {
+        ticker: 'TCELL',
+        financial_history: tcellHist,
+        share_count: shares,
+        official_sector_name: tcellBase.sectorName
+      },
+      inputPriceStr: String(price),
+      sector
+    });
+
+    assert.ok(res.valuation.valuation_model_name.includes('Telekomünikasyon'), `Model should be Telekomünikasyon, got ${res.valuation.valuation_model_name}`);
+    assert.equal(res.valuation.is_value_trap, false, 'TCELL must not be falsely flagged as value trap');
+    assert.equal(res.optimization?.finalDecision, 'AL', `TCELL must receive AL decision (got ${res.optimization?.finalDecision})`);
+    assert.ok(res.valuation.fair_value > 120.0, `TCELL fair value (${res.valuation.fair_value}) should reflect robust telecom cash flows`);
+  });
+
+  await t.test('7. Cam Sanayii & Entegre Soda Külü (SISE): Activates dedicated international model and resolves false distress', () => {
+    const siseHist = OFFICIAL_ISYATIRIM_CACHE['SISE'];
+    const siseBase = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE['SISE'];
+    assert.ok(siseHist, 'SISE history must exist');
+
+    const price = siseBase.lastPrice;
+    const shares = siseBase.paidInCapitalMnTl * 1e6;
+    const sector = mapIsYatirimSectorToValuationSector(siseBase.sectorName);
+
+    const res = computeSectorValuationAndDrivers({
+      extractedData: {
+        ticker: 'SISE',
+        financial_history: siseHist,
+        share_count: shares,
+        official_sector_name: siseBase.sectorName
+      },
+      inputPriceStr: String(price),
+      sector
+    });
+
+    assert.ok(res.valuation.valuation_model_name.includes('Cam Sanayii & Entegre Soda Külü'), `Model should be Cam Sanayii & Soda Külü, got ${res.valuation.valuation_model_name}`);
+    assert.equal(res.valuation.is_value_trap, false, 'SISE must not be value trap');
+    assert.notEqual(res.optimization?.finalDecision, 'ALMA', 'SISE must not receive false distressed ALMA rating');
+    assert.ok(res.valuation.fair_value > 45.0, `SISE fair value (${res.valuation.fair_value}) should reflect soda ash & glass mid-cycle normalization`);
+  });
+
+  await t.test('8. Çelik Boru & Altyapı (BRSAN): Activates Berg Pipe & Energy Infrastructure spiral welded model', () => {
+    const brsanBase = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE['BRSAN'];
+    assert.ok(brsanBase, 'BRSAN baseline must exist');
+
+    const mockHistory = [
+      {
+        period: '2026/06',
+        ebitda: 7000000000,
+        revenue: 45000000000,
+        net_income: 3500000000,
+        equity: 42000000000,
+        net_debt: 12000000000,
+        operating_cash_flow: 4000000000,
+        roe: 18.5
+      }
+    ];
+
+    const res = computeSectorValuationAndDrivers({
+      extractedData: {
+        ticker: 'BRSAN',
+        financial_history: mockHistory,
+        share_count: brsanBase.paidInCapitalMnTl * 1e6,
+        official_sector_name: brsanBase.sectorName
+      },
+      inputPriceStr: String(brsanBase.lastPrice),
+      sector: 'INDUSTRIAL'
+    });
+
+    assert.ok(res.valuation.valuation_model_name.includes('Çelik Boru'), `Model should be Çelik Boru, got ${res.valuation.valuation_model_name}`);
+    assert.equal(res.valuation.is_value_trap, false, 'BRSAN must not be value trap');
+    assert.ok(res.valuation.fair_value > 400.0, `BRSAN fair value (${res.valuation.fair_value}) calibrated`);
+  });
+
+  await t.test('9. Elektrik Teçhizat & Trafo (ASTOR, CWENE, EUPWR): Activates dedicated grid equipment model', () => {
+    const astorBase = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE['ASTOR'];
+    assert.ok(astorBase, 'ASTOR baseline must exist');
+
+    const mockHistory = [
+      {
+        period: '2026/06',
+        ebitda: 14000000000,
+        revenue: 40000000000,
+        net_income: 11000000000,
+        equity: 45000000000,
+        net_debt: -2000000000, // Net cash
+        operating_cash_flow: 8000000000,
+        roe: 28.0
+      }
+    ];
+
+    const res = computeSectorValuationAndDrivers({
+      extractedData: {
+        ticker: 'ASTOR',
+        financial_history: mockHistory,
+        share_count: astorBase.paidInCapitalMnTl * 1e6,
+        official_sector_name: astorBase.sectorName
+      },
+      inputPriceStr: String(astorBase.lastPrice),
+      sector: 'INDUSTRIAL'
+    });
+
+    assert.ok(res.valuation.valuation_model_name.includes('Elektrik Teçhizat'), `Model should be Elektrik Teçhizat, got ${res.valuation.valuation_model_name}`);
+    assert.equal(res.optimization?.finalDecision, 'AL', `ASTOR should receive AL rating (got ${res.optimization?.finalDecision})`);
+  });
+
+  await t.test('10. Meşrubat / İçecek (AEFES, CCOLA): Activates dedicated international FMCG beverage model', () => {
+    const aefesBase = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE['AEFES'];
+    assert.ok(aefesBase, 'AEFES baseline must exist');
+
+    const mockHistory = [
+      {
+        period: '2026/06',
+        ebitda: 32000000000,
+        revenue: 160000000000,
+        net_income: 14000000000,
+        equity: 120000000000,
+        net_debt: 25000000000,
+        operating_cash_flow: 22000000000,
+        roe: 19.0
+      }
+    ];
+
+    const res = computeSectorValuationAndDrivers({
+      extractedData: {
+        ticker: 'AEFES',
+        financial_history: mockHistory,
+        share_count: aefesBase.paidInCapitalMnTl * 1e6,
+        official_sector_name: aefesBase.sectorName
+      },
+      inputPriceStr: String(aefesBase.lastPrice),
+      sector: 'INDUSTRIAL'
+    });
+
+    assert.ok(res.valuation.valuation_model_name.includes('Meşrubat'), `Model should be Meşrubat, got ${res.valuation.valuation_model_name}`);
+    assert.equal(res.valuation.is_value_trap, false, 'AEFES must not be value trap');
+  });
 });
+
