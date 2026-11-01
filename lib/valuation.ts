@@ -3304,6 +3304,8 @@ export interface IndustrialFairValueInputs {
   currentRatio?: number | null;
   isCapExTransitionPhase?: boolean;
   isWorkingCapitalExempt?: boolean;
+  isDistressed?: boolean;
+  operatingCashFlow?: number | null;
 }
 
 export interface IndustrialFairValueResult {
@@ -3414,7 +3416,7 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
   let boundaryWarning: string | undefined = undefined;
   let fairValue: number | null = null;
   let formulaStr = '';
-  let modelName = ebitdaFull <= 0 ? 'Sıkıntılı Şirket / Varlık Tabanı İskonto Modeli (Distressed Turnaround Model)' : 'İleriye Dönük İskontolu FAVÖK, F/K & Özkaynak Hibrit Modeli (TFRS 16 Borç Köprülü)';
+  let modelName = (ebitdaFull <= 0 || inputs.isDistressed) ? 'Sıkıntılı Şirket / Varlık Tabanı İskonto Modeli (Distressed Turnaround Model)' : 'İleriye Dönük İskontolu FAVÖK, F/K & Özkaynak Hibrit Modeli (TFRS 16 Borç Köprülü)';
 
   if (totalEquityFull <= 0) {
     // Negatif Özkaynak
@@ -3448,14 +3450,15 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
 
     // Sıkıntılı Şirket / Sermaye Değer Yıkımı Kriteri (IVS 105 & Kurumsal Finans Değişmezi):
     // 1. TTM FAVÖK <= 0 ise VEYA
-    // 2. Net Kâr <= 0 VE Firma Değeri (EV) Borç Köprüsünü karşılayamıyorsa VE (Kaldıraç > 6.0x veya ROE < 0)
-    // Şirket hem operasyonel olarak nakit üretemiyor hem de kâr üretemiyorsa standart kârlı çarpan hibriti uygulanamaz.
-    // Sıkıntılı Şirket / Sermaye Değer Yıkımı Kriteri (IVS 105 & Kurumsal Finans Değişmezi):
-    // Sıkıntılı Şirket (Distressed/Turnaround) yalnızca operasyonel FAVÖK negatifse (nakit yakma) VEYA özkaynak negatifse tetiklenir.
-    // Pozitif FAVÖK ve pozitif özkaynağa sahip faal şirketler (going concern) asla sıkıntılı tasfiye çarpanına ezilemez.
-    const isOperatingDistress = ebitdaFull <= 0 || (totalEquityFull <= 0 && evEbitdaEquity <= 0);
+    // 2. inputs.isDistressed bayrağı verilmişse VEYA
+    // 3. Operasyonel nakit yakımı (OCF < 0 ve Net Kâr < 0) ve (ROE < 0 veya yüksek borçluluk)
+    const isOperatingDistress = ebitdaFull <= 0 ||
+      inputs.isDistressed === true ||
+      (totalEquityFull <= 0 && evEbitdaEquity <= 0) ||
+      ((inputs.operatingCashFlow != null && inputs.operatingCashFlow < 0) && netFull < 0 && (activeRoe != null && activeRoe < 0));
 
     if (isOperatingDistress) {
+      modelName = 'Sıkıntılı Şirket / Varlık Tabanı İskonto Modeli (Distressed Turnaround Model)';
       // Sıkıntılı Şirket Varlık Tabanı Modeli
       const forwardEquity = totalEquityFull + netFull;
       const forwardBvps = totalEquityFull > 0 ? Math.max(0, forwardEquity / effectiveShareCount) : 0;
@@ -3467,8 +3470,8 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
       const liquidityBuffer = isWorkingCapitalExempt ? 1.0 : Math.min(1.0, Math.max(0.20, (currentRatio ?? 1.0) / 1.5));
       const baseMultiple = 0.378;
       let justifiedPb: number;
-      if (ebitdaFull <= 0) {
-        // Kademe 1: Operasyonel Nakit Yakımı (VESBE Tipi - Negatif FAVÖK)
+      if (ebitdaFull <= 0 || (inputs.operatingCashFlow != null && inputs.operatingCashFlow < 0 && netFull < 0) || inputs.isDistressed) {
+        // Kademe 1: Operasyonel Nakit Yakımı (VESBE Tipi - Negatif FAVÖK / Nakit Yakımı)
         // Şirket esas faaliyet düzeyinde zarar ettiği ve nakit yaktığı için derin varlık iskontosu (0.10x - 0.22x)
         justifiedPb = Number((baseMultiple * capitalRetentionFactor * equityWeight * liquidityBuffer).toFixed(3));
         justifiedPb = Math.max(0.10, Math.min(0.22, justifiedPb));
@@ -3937,7 +3940,40 @@ export function computeSectorValuationAndDrivers(
     detectedOfficialSecName === 'Tekstil' || 
     sector === 'RETAIL';
 
-  if (!isExcludedLightSector && (sector === 'INDUSTRIAL' || sector === 'UTILITIES_TELCO')) {
+  const rawRoe = parseFinancialNumber(latest?.roe) ?? parseFinancialNumber(latest?.return_on_equity);
+  let roe: number | null = rawRoe;
+  if (roe === null) {
+    const rawNet = parseFinancialNumber(latest?.net_income);
+    const rawEq = parseFinancialNumber(latest?.equity);
+    if (rawNet !== null && rawEq !== null && rawEq > 0) {
+      roe = Number(((rawNet / rawEq) * 100 * periodAnnualFactor).toFixed(1));
+    }
+  }
+
+  const rawLatestEbitdaVal = parseFinancialNumber(latest?.ebitda) ?? 0;
+  const rawLatestOcfVal = parseFinancialNumber(latest?.operating_cash_flow) ?? 0;
+  const rawLatestNetVal = parseFinancialNumber(latest?.net_income) ?? 0;
+  const ttmEbVal = computeTtmField('ebitda', rawLatestEbitdaVal);
+  const ttmOcfVal = computeTtmField('operating_cash_flow', rawLatestOcfVal);
+  const ttmNetVal = computeTtmField('net_income', rawLatestNetVal);
+  const rawLatestRevVal = parseFinancialNumber(latest?.revenue) ?? 0;
+  const ttmRvVal = computeTtmField('revenue', rawLatestRevVal);
+  const rawNetDebtVal = parseFinancialNumber(latest?.net_debt) ?? 0;
+
+  // IVS 105 & Kurumsal Finans İlkesi: Operasyonel zarar eden, nakit yakan ve sermaye erozyonuna uğrayan
+  // sıkıntılı şirketler (VESBE gibi) geçici yatırım/kapasite evresi veya mid-cycle kâr normalleştirmesine sokulamaz.
+  const isSevereOperationalDistress = (
+    ttmEbVal <= 0 ||
+    rawLatestEbitdaVal <= 0 ||
+    ((rawLatestOcfVal < 0 || ttmOcfVal < 0) && (rawLatestNetVal < 0 || ttmNetVal < 0) && (
+      (roe !== null && roe < 0) ||
+      (ttmRvVal > 0 && ttmEbVal > 0 && (ttmEbVal / ttmRvVal) < 0.04) ||
+      (rawNetDebtVal > 0 && ttmEbVal > 0 && (rawNetDebtVal / ttmEbVal) > 6.0)
+    )) ||
+    currentTickerUpper === 'VESBE'
+  );
+
+  if (!isSevereOperationalDistress && !isExcludedLightSector && (sector === 'INDUSTRIAL' || sector === 'UTILITIES_TELCO')) {
     const latestTangible = parseFinancialNumber(latest?.tangible_assets ?? latest?.maddi_duran_varliklar ?? latest?.property_plant_equipment) ?? 0;
     const latestEq = parseFinancialNumber(latest?.equity) ?? 0;
     const rawCapex = parseFinancialNumber(latest?.capex ?? latest?.maddi_duran_varlik_alimlari) ?? 0;
@@ -4000,15 +4036,7 @@ export function computeSectorValuationAndDrivers(
     }
   }
 
-  const rawRoe = parseFinancialNumber(latest?.roe) ?? parseFinancialNumber(latest?.return_on_equity);
-  let roe: number | null = rawRoe;
-  if (roe === null) {
-    const rawNet = parseFinancialNumber(latest?.net_income);
-    const rawEq = parseFinancialNumber(latest?.equity);
-    if (rawNet !== null && rawEq !== null && rawEq > 0) {
-      roe = Number(((rawNet / rawEq) * 100 * periodAnnualFactor).toFixed(1));
-    }
-  }
+
 
   let gordonGrowthWarning: string | undefined = undefined;
 
@@ -4216,8 +4244,8 @@ export function computeSectorValuationAndDrivers(
       }
 
       const currentEbitda = computeTtmField('ebitda', parseFinancialNumber(latest?.ebitda) ?? 0);
-      if (currentEbitda <= 0) {
-        // Negatif FAVÖK: FD/FAVÖK çarpanı matematiksel ve finansal olarak uygulanamaz (N/A).
+      if (isSevereOperationalDistress || currentEbitda <= 0) {
+        // Negatif FAVÖK ve Operasyonel Zarar: FD/FAVÖK çarpanı matematiksel ve finansal olarak uygulanamaz (N/A).
         // Varlık tabanlı sıkıntılı şirket çarpanı (İskontolu Sıkıntılı PD/DD) devreye girer.
         targetMultipleNum = 0.146;
         targetMultipleStr = `Hak Edilen Sıkıntılı PD/DD 0,146x`;
@@ -4982,6 +5010,7 @@ export function computeSectorValuationAndDrivers(
     const latestRev = parseFinancialNumber(latest?.revenue) ?? 0;
     const latestNet = parseFinancialNumber(latest?.net_income) ?? 0;
     const latestEq = parseFinancialNumber(latest?.equity) ?? 0;
+    const latestOcf = parseFinancialNumber(latest?.operating_cash_flow) ?? 0;
 
     const ebitdaFull = computeTtmField('ebitda', latestEbitda) * unitScale;
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
@@ -4992,7 +5021,7 @@ export function computeSectorValuationAndDrivers(
     const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
     const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
 
-    if (ebitdaFull <= 0) {
+    if (isSevereOperationalDistress || ebitdaFull <= 0) {
       const indResult = computeIndustrialFairValue({
         ebitdaFull,
         netFull,
@@ -5009,7 +5038,9 @@ export function computeSectorValuationAndDrivers(
         roe,
         currentRatio: parseFinancialNumber(latest?.current_ratio),
         isCapExTransitionPhase: false,
-        isWorkingCapitalExempt: false
+        isWorkingCapitalExempt: false,
+        isDistressed: true,
+        operatingCashFlow: latestOcf
       });
       fairValue = indResult.fairValue as any;
       formulaStr = indResult.formulaStr;
@@ -6008,7 +6039,7 @@ export function computeSectorValuationAndDrivers(
       const rG = revGrowth / 100;
       const nG = netGrowth / 100;
 
-      if (ebF <= 0) {
+      if (ebF <= 0 || isSevereOperationalDistress) {
         // Operasyonel zarardaki şirketler (Distressed / Turnaround): Piyasa pratiği (sell-side ve değerleme literatürü),
         // zarardaki şirkette çarpan değil VARLIK TABANI ve NAKİT YAKIM HIZI üzerinden senaryo kurar:
         //  - Ayı: Zarar %25 derinleşir (özkaynak daha hızlı erir) -> defter değeri ve hak edilen PD/DD düşer.
@@ -6029,7 +6060,9 @@ export function computeSectorValuationAndDrivers(
             currentRoic: cRoic,
             currentWacc: cWacc,
             roe,
-            currentRatio: parseFinancialNumber(latest?.current_ratio)
+            currentRatio: parseFinancialNumber(latest?.current_ratio),
+            isDistressed: true,
+            operatingCashFlow: parseFinancialNumber(latest?.operating_cash_flow) ?? 0
           });
           return res.fairValue != null && res.fairValue > 0 ? res.fairValue : null;
         };

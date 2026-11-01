@@ -1,4 +1,4 @@
-﻿import { describe, it } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   computeSectorValuationAndDrivers,
@@ -176,4 +176,20 @@ describe('VESBE & Distressed Loss-Making Valuation Stress Test Suite', () => {
     assert.equal(midPriceRes.valuation.fair_value, 3.38);
     assert.equal(highPriceRes.valuation.fair_value, 3.38);
   });
+
+  it('8. Live BIST Pipeline Invariant: fetchAndAnalyzeBistCompany("VESBE") does NOT apply mid-cycle margin and falls back to Distressed Turnaround Model', async () => {
+    const { fetchAndAnalyzeBistCompany } = await import('../lib/bist-service.ts');
+    const result = await fetchAndAnalyzeBistCompany('VESBE', { forceRefresh: false });
+    assert.ok(result);
+    assert.match(result.valuation.valuation_model_name, /Sıkıntılı Şirket \/ Varlık Tabanı İskonto Modeli/i);
+    assert.match(result.drivers.target_multiple.value, /Hak Edilen Sıkıntılı PD\/DD/i);
+    assert.equal(result.optimization.finalDecision, 'ALMA');
+    assert.equal(result.valuation.margin_of_safety_status, 'UNSAFE');
+    assert.equal(result.valuation.margin_of_safety, 0);
+    // Fair value must be distressed realistic (~2.0 - ~3.5 TL), NEVER hyper-inflated (e.g. 12.46 TL)
+    assert.ok(result.valuation.fair_value < 5.0, `Fair value (${result.valuation.fair_value}) must be < 5.0 TL`);
+    assert.ok(result.valuation.fair_value > 1.5, `Fair value (${result.valuation.fair_value}) must be > 1.5 TL`);
+    assert.doesNotMatch(result.valuation.valuation_model_name, /Döngüsel Normalizasyon/i);
+  });
 });
+
