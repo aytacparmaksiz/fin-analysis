@@ -188,11 +188,14 @@ export interface BistCompanyMetadata {
   ticker: string;
   name: string;
   sector: SectorType;
-  financialGroup: 'XI_29' | 'UFRS' | 'UFRS_K';
+  financialGroup: 'XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A';
   shareCount?: number;
 }
 
 export const KNOWN_BIST_DIRECTORY: Record<string, BistCompanyMetadata> = {
+  DOCO:  { ticker: 'DOCO',  name: 'DO & CO Aktiengesellschaft', sector: 'AVIATION', financialGroup: 'UFRS_A', shareCount: 10983460 },
+  ORGE:  { ticker: 'ORGE',  name: 'ORGE Enerji Elektrik Taahhüt A.Ş.', sector: 'INDUSTRIAL', financialGroup: 'XI_29', shareCount: 400000000 },
+
   AGESA: { ticker: 'AGESA', name: 'Agesa Hayat ve Emeklilik A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS_K', shareCount: 180000000 },
   ANHYT: { ticker: 'ANHYT', name: 'Anadolu Hayat Emeklilik A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS_K', shareCount: 430000000 },
   TURSG: { ticker: 'TURSG', name: 'Türkiye Sigorta A.Ş.', sector: 'INSURANCE', financialGroup: 'UFRS_K', shareCount: 5000000000 },
@@ -318,8 +321,10 @@ export function resolveBistCompanyMeta(rawTicker: string): BistCompanyMetadata {
   const isy = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[cleanTicker];
   if (isy && isy.sectorName) {
     const valuationSector = mapIsYatirimSectorToValuationSector(isy.sectorName);
-    let group: 'XI_29' | 'UFRS' | 'UFRS_K' = 'XI_29';
-    if (valuationSector === 'INSURANCE') {
+    let group: 'XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A' = 'XI_29';
+    if (cleanTicker === 'DOCO') {
+      group = 'UFRS_A';
+    } else if (valuationSector === 'INSURANCE') {
       group = 'UFRS_K';
     } else if (valuationSector === 'BANKING') {
       group = 'UFRS';
@@ -343,8 +348,10 @@ export function resolveBistCompanyMeta(rawTicker: string): BistCompanyMetadata {
   }
 
   const detectedSector = detectSector(cleanTicker);
-  let group: 'XI_29' | 'UFRS' | 'UFRS_K' = 'XI_29';
-  if (detectedSector === 'INSURANCE') {
+  let group: 'XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A' = 'XI_29';
+  if (cleanTicker === 'DOCO') {
+    group = 'UFRS_A';
+  } else if (detectedSector === 'INSURANCE') {
     group = 'UFRS_K';
   } else if (detectedSector === 'BANKING') {
     group = 'UFRS';
@@ -554,18 +561,21 @@ async function fetchIsYatirimSingleBatch(
 export async function fetchIsYatirimMaliTabloBatches(
   ticker: string,
   sector: SectorType,
-  preferredGroup?: 'XI_29' | 'UFRS' | 'UFRS_K'
+  preferredGroup?: 'XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A'
 ): Promise<{ rowsByBatch: { spec: BatchSpec; rows: any[] }[]; activeGroup: string | null }> {
-  const defaultCandidates: ('XI_29' | 'UFRS' | 'UFRS_K')[] = 
-    sector === 'INSURANCE'
+  const cleanTicker = (ticker || '').toUpperCase().replace(/\.IS$/i, '').trim();
+  const defaultCandidates: ('XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A')[] = 
+    cleanTicker === 'DOCO'
+      ? ['UFRS_A', 'UFRS', 'XI_29']
+      : sector === 'INSURANCE'
       ? ['UFRS_K', 'UFRS']
       : sector === 'BANKING'
       ? ['UFRS', 'UFRS_K']
-      : ['XI_29', 'UFRS'];
+      : ['XI_29', 'UFRS', 'UFRS_A'];
 
-  const candidateGroups: ('XI_29' | 'UFRS' | 'UFRS_K')[] = preferredGroup
-    ? [preferredGroup, ...defaultCandidates.filter(g => g !== preferredGroup)].slice(0, 2)
-    : defaultCandidates.slice(0, 2);
+  const candidateGroups: ('XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A')[] = preferredGroup
+    ? [preferredGroup, ...defaultCandidates.filter(g => g !== preferredGroup)].slice(0, 3)
+    : defaultCandidates.slice(0, 3);
 
   // 1. Aşama: Eğer preferredGroup biliniyorsa tüm 5 partiyi doğrudan tam paralel çek (10 saniyede 20 çeyrek)
   if (preferredGroup) {
@@ -580,7 +590,7 @@ export async function fetchIsYatirimMaliTabloBatches(
   }
 
   // 2. Aşama: Eğer preferredGroup yoksa veya ilk denemede boş geldiyse aday grupları probe et
-  const probeGroup = async (group: ('XI_29' | 'UFRS' | 'UFRS_K')) => {
+  const probeGroup = async (group: ('XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A')) => {
     const rows0 = await fetchIsYatirimSingleBatch(ticker, group, BATCH_SPECS[0].params);
     if (rows0 && rows0.length >= 5) {
       return { group, rows0 };
@@ -592,7 +602,7 @@ export async function fetchIsYatirimMaliTabloBatches(
     throw new Error(`Grup ${group} için veri bulunamadı`);
   };
 
-  let chosenGroup: ('XI_29' | 'UFRS' | 'UFRS_K') | null = null;
+  let chosenGroup: ('XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A') | null = null;
   try {
     const probeResult = await Promise.any(candidateGroups.map(probeGroup));
     chosenGroup = probeResult.group;
@@ -1226,14 +1236,23 @@ export async function fetchAndAnalyzeBistCompany(
   }
 
   // Borsa İstanbul'da 1 TL nominal Ödenmiş Sermaye = 1 Adet Pay (Lot).
-  // Bilançodaki güncel Ödenmiş Sermaye (paid_in_capital) en doğru ve güncel hisse sayısıdır.
+  // Cari hisse fiyatı ve piyasa değeri güncel resmi pay adedi (isYatirimShares) ile uyumludur.
+  // Şirket sermaye artırımı (bedelsiz/bedelli) yapmışsa, eski bilançolardaki paid_in_capital yerine güncel sermaye esastır.
   const latestPaidCapital = latestItem?.paid_in_capital ? Math.abs(latestItem.paid_in_capital) : null;
   const isYatirimShares = (finalMultiples?.paidInCapitalMnTl && finalMultiples.paidInCapitalMnTl > 0)
-    ? finalMultiples.paidInCapitalMnTl * 1000000
+    ? Math.round(finalMultiples.paidInCapitalMnTl * 1000000)
     : null;
-  const effectiveShareCount = (latestPaidCapital && latestPaidCapital >= 1000000)
-    ? latestPaidCapital
-    : (isYatirimShares || meta.shareCount || 500000000);
+  const effectiveShareCount = (isYatirimShares && isYatirimShares >= 1000000)
+    ? isYatirimShares
+    : ((latestPaidCapital && latestPaidCapital >= 1000000)
+      ? latestPaidCapital
+      : (meta.shareCount || 500000000));
+
+  // Eğer şirket sermaye artırımı yapmış ve cari pay adedi bilançodaki eski sermayeden büyükse,
+  // son bilançodaki nominal sermayeyi güncel pay adediyle senkronize et:
+  if (latestItem && effectiveShareCount > 0 && (!latestItem.paid_in_capital || effectiveShareCount > (latestPaidCapital || 0))) {
+    latestItem.paid_in_capital = effectiveShareCount;
+  }
 
   // 4.8. İş Yatırım Resmi Temettü Geçmişi ve Konsensüs Hedef Fiyat Verilerini Çözümle
   const companyDetails = await fetchIsYatirimCompanyDetails(ticker);

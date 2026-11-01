@@ -582,6 +582,59 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     return parsePeriodSortKey(a.period) - parsePeriodSortKey(b.period);
   });
 
+  // Zaman Serisi Çapraz Dönem Aykırı Değer (1000x Spike) Temizliği:
+  // Eğer geçmiş bir dönemde veya veri kaynağından gelen tabloda 1000x ölçekleme anomalisi (örn. DESA 2022/03 191 Mr TL)
+  // oluşmuşsa, median referansına göre tespit edip deterministik olarak 1000'e bölerek onar:
+  if (history.length >= 3) {
+    const getMedianVal = (arr: number[]) => {
+      if (arr.length === 0) return 0;
+      const s = [...arr].sort((a, b) => a - b);
+      const mid = Math.floor(s.length / 2);
+      return s.length % 2 !== 0 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+    };
+
+    const rawEqs = history.map(h => typeof h?.equity === 'number' ? Math.abs(h.equity) : 0).filter(v => v > 0);
+    const rawRevs = history.map(h => typeof h?.revenue === 'number' ? Math.abs(h.revenue) : (typeof h?.written_premiums === 'number' ? Math.abs(h.written_premiums) : 0)).filter(v => v > 0);
+    const medianEq = getMedianVal(rawEqs);
+    const medianRev = getMedianVal(rawRevs);
+
+    const monetaryFieldsForSpike = [
+      'revenue', 'cost_of_sales', 'gross_profit', 'marketing_expenses', 'administrative_expenses', 'rd_expenses',
+      'operating_expenses', 'other_operating_income', 'other_operating_expense', 'other_operating_income_net',
+      'operating_profit', 'operating_income', 'ebit', 'ebitda',
+      'financing_income', 'financing_expenses', 'interest_expenses', 'ebt', 'profit_before_tax', 'tax_expense', 'net_income',
+      'operating_cash_flow', 'depreciation', 'working_capital_change', 'capex', 'tangible_capex', 'investing_cash_flow', 'free_cash_flow', 'financing_cash_flow', 'dividends_paid', 'net_change_in_cash',
+      'short_term_debt', 'long_term_debt', 'financial_debt', 'net_debt',
+      'equity', 'paid_in_capital', 'retained_earnings',
+      'total_assets', 'current_assets', 'cash_and_equivalents', 'cash', 'financial_investments', 'financial_assets_insured',
+      'trade_receivables', 'other_receivables', 'derivative_instruments', 'inventories', 'prepaid_expenses', 'other_current_assets',
+      'non_current_assets', 'non_current_financial_investments', 'non_current_trade_receivables', 'tangible_assets', 'intangible_assets', 'right_of_use_assets', 'deferred_tax_assets', 'other_non_current_assets',
+      'current_liabilities', 'trade_payables', 'employee_benefit_obligations', 'other_current_liabilities',
+      'long_term_liabilities', 'other_long_term_liabilities', 'total_liabilities',
+      'written_premiums', 'gross_written_premiums', 'earned_premiums', 'technical_profit', 'technical_balance',
+      'investment_income', 'pension_aum', 'net_interest_income'
+    ];
+
+    for (let i = 0; i < history.length; i++) {
+      const item = history[i];
+      if (!item) continue;
+      const currEq = Math.abs(item.equity || 0);
+      const currRev = Math.abs(item.revenue || item.written_premiums || 0);
+
+      let isSpike = false;
+      if (medianEq > 0 && currEq > 250 * medianEq) isSpike = true;
+      else if (medianRev > 0 && currRev > 250 * medianRev) isSpike = true;
+
+      if (isSpike) {
+        for (const mf of monetaryFieldsForSpike) {
+          if (typeof item[mf] === 'number' && item[mf] !== 0) {
+            item[mf] = Math.round(item[mf] / 1000);
+          }
+        }
+      }
+    }
+  }
+
   // Tarihsel seride Tam TL (>= 500M) dönem olup olmadığını tespit et
   const hasFullTlPeriodInSeries = history.some(h => {
     const eq = typeof h?.equity === 'number' ? Math.abs(h.equity) : 0;
@@ -745,8 +798,26 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     
     // İdempotent Ölçekleme: Bir dönem zaten Tam TL olarak normalize edilmişse ikinci çağrıda ASLA tekrar x1000 çarpılamaz.
     if (!item._scaleNormalized) {
-      const isPeriodInThousands = (isContainerBin && itemEqAbs < 250_000_000) ||
-                                  (hasFullTlPeriodInSeries && itemEqAbs > 0 && itemEqAbs < 250_000_000 && (itemRevAbs === 0 || itemRevAbs < 250_000_000));
+      const prevItem = i > 0 ? history[i - 1] : null;
+      const nextItem = i < history.length - 1 ? history[i + 1] : null;
+      const prevEqAbs = prevItem && typeof prevItem.equity === 'number' ? Math.abs(prevItem.equity) : 0;
+      const nextEqAbs = nextItem && typeof nextItem.equity === 'number' ? Math.abs(nextItem.equity) : 0;
+
+      // Komşularıyla aynı mertebede ise (örn. 0.15x - 6.0x) aynı birim ölçeğindedir
+      const isNeighborCompatible = (prevEqAbs > 0 && (itemEqAbs / prevEqAbs) >= 0.15 && (itemEqAbs / prevEqAbs) <= 6.0) ||
+                                   (nextEqAbs > 0 && (itemEqAbs / nextEqAbs) >= 0.15 && (itemEqAbs / nextEqAbs) <= 6.0);
+
+      // Sadece ve sadece seride Tam TL (>=500M) dönemler varken bu dönemin büyüklüğü serinin tavanına göre
+      // belirgin şekilde 1/1000 düzeyinde (örn. <%1.5) kalmışsa ve komşularıyla uyumlu değilse Bin TL kabul edilir:
+      const nonZeroEquities = history.map(h => typeof h?.equity === 'number' ? Math.abs(h.equity) : 0).filter(v => v > 0);
+      const nonZeroRevenues = history.map(h => typeof h?.revenue === 'number' ? Math.abs(h.revenue) : (typeof h?.written_premiums === 'number' ? Math.abs(h.written_premiums) : 0)).filter(v => v > 0);
+      const maxEqInSeries = nonZeroEquities.length > 0 ? Math.max(...nonZeroEquities) : 0;
+      const maxRevInSeries = nonZeroRevenues.length > 0 ? Math.max(...nonZeroRevenues) : 0;
+      const isIsolatedDepressed = hasFullTlPeriodInSeries && !isNeighborCompatible &&
+        itemEqAbs > 0 && (maxEqInSeries > 0 ? (itemEqAbs / maxEqInSeries) < 0.015 : false) &&
+        (itemRevAbs === 0 || (maxRevInSeries > 0 ? (itemRevAbs / maxRevInSeries) < 0.015 : false));
+
+      const isPeriodInThousands = (isContainerBin && itemEqAbs < 250_000_000) || isIsolatedDepressed;
       if (isPeriodInThousands) {
         for (const mf of monetaryFields) {
           if (typeof item[mf] === 'number' && item[mf] !== 0) {
@@ -4347,7 +4418,12 @@ export function computeSectorValuationAndDrivers(
   // Borsa İstanbul'da 1 TL nominal Ödenmiş Sermaye = 1 Adet Pay (Lot).
   const rawPaidCap = parseFinancialNumber(latest?.paid_in_capital);
   const paidCapShares = rawPaidCap !== null && rawPaidCap > 0 ? Math.abs(rawPaidCap) * unitScale : null;
-  const rawEffectiveShareCount = (paidCapShares && paidCapShares >= 1000000) ? paidCapShares : (shareCount && shareCount > 0 ? shareCount : null);
+  // Cari hisse fiyatı ve piyasa değeri güncel pay adedi (shareCount) üzerinden işlem gördüğünden,
+  // sermaye artırımı/bölünme sonrası shareCount ve paidCapShares karşılaştırılır:
+  // Eğer shareCount açıkça mevcut ve paidCapShares'ten belirgin şekilde büyükse (sermaye artırımı, örn. ORGE 400M vs 80M) shareCount kullanılır:
+  const rawEffectiveShareCount = (shareCount && paidCapShares && shareCount > paidCapShares * 1.5)
+    ? shareCount
+    : ((paidCapShares && paidCapShares >= 1000000) ? paidCapShares : (shareCount && shareCount > 0 ? shareCount : null));
   const effectiveShareCount = (rawEffectiveShareCount && rawEffectiveShareCount > 0) ? rawEffectiveShareCount : null;
   let effectiveEbitdaFull = 0;
   let effectiveNetFull = 0;
