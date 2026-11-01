@@ -11,7 +11,9 @@ import {
   KNOWN_BIST_DIRECTORY
 } from '../lib/bist-service.ts';
 import {
-  isElectricalEquipmentSector
+  isElectricalEquipmentSector,
+  isRefinerySector,
+  isEnergyUtilitiesSector
 } from '../lib/sectors.ts';
 
 test('ORGE: capital split and post-split shareCount calibration', async (t) => {
@@ -220,6 +222,49 @@ test('Universal 630+ BIST Sector & Corporate Action Architecture', async (t) => 
     assert.ok(valResult.valuation.fair_value !== null);
     // Fair value must be 85.83 TL (NOT ~338 TL!)
     assert.equal(valResult.valuation.fair_value, 85.83, 'Must automatically cross-reference 400M live shares from official baseline and prevent 5x split distortion');
+  });
+
+  await t.test('isRefinerySector dynamically identifies refinery companies by official sector without hardcoding', () => {
+    assert.equal(isRefinerySector('NEWCO', 'Petrol'), true, 'Must identify Petrol sector as refinery');
+    assert.equal(isRefinerySector('NEWCO', 'Akdeniz Rafineri Sanayii'), true, 'Must identify Rafineri sector as refinery');
+    assert.equal(isRefinerySector('NEWCO', 'Teknoloji'), false, 'Non-petrol company must not match refinery');
+  });
+
+  await t.test('CWENE is correctly classified as electrical equipment and not energy utilities', () => {
+    assert.equal(isElectricalEquipmentSector('', 'CWENE'), true, 'CWENE must be recognized as electrical equipment');
+    assert.equal(isEnergyUtilitiesSector('', 'CWENE'), false, 'CWENE must NOT be misclassified as an energy utility');
+  });
+
+  await t.test('computeSectorValuationAndDrivers self-heals capital reduction (sermaye azaltımı)', () => {
+    const mockReductionHistory = [
+      {
+        period: '2026/06',
+        revenue: 1000000000,
+        ebitda: 200000000,
+        net_income: 100000000,
+        equity: 500000000,
+        total_assets: 800000000,
+        net_debt: 50000000,
+        paid_in_capital: 500000000 // Stale balance sheet capital before 30% reduction
+      }
+    ];
+
+    // Live share count is 350M (reduced from 500M)
+    const valResult = computeSectorValuationAndDrivers({
+      extractedData: {
+        ticker: 'REDUC',
+        sector: 'INDUSTRIAL',
+        financial_history: mockReductionHistory,
+        valuation: { current_price: 10.0 }
+      },
+      shareCount: 350000000, // Live market shares after capital reduction
+      marketPrice: 10.0
+    });
+
+    assert.ok(valResult.valuation.fair_value !== null);
+    // Formula must use 350M shares, resulting in 5.95 TL (NOT 4.17 TL with stale 500M shares)
+    assert.equal(valResult.valuation.fair_value, 5.95, 'Must heal capital reduction and use 350M live shares');
+    assert.ok(valResult.valuation.formula_display?.includes('TL'), 'Valuation must succeed');
   });
 });
 

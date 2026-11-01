@@ -4465,10 +4465,10 @@ export function computeSectorValuationAndDrivers(
   // Ancak Borsa İstanbul'da hisse fiyatı ve lotlar derhal bölünmüş fiyata geçer.
   // Bu nedenle canlı piyasa sermayesi ile bilanço sermayesi arasında fark varsa:
   // - Bedelsiz/bedelli bölünme (liveMarketShares > paidCapShares * 1.05)
-  // - Yabancı kote çift listeleme (paidCapShares > liveMarketShares * 1.5 && liveMarketShares >= 1_000_000)
+  // - Sermaye azaltımı / Ters bölünme / Yabancı kote çift listeleme (paidCapShares > liveMarketShares * 1.05)
   const isCorporateActionOrSplit = liveMarketShares && paidCapShares && (
     (liveMarketShares > paidCapShares * 1.05) ||
-    (paidCapShares > liveMarketShares * 1.5 && liveMarketShares >= 1_000_000)
+    (paidCapShares > liveMarketShares * 1.05 && liveMarketShares >= 1_000_000)
   );
   const rawEffectiveShareCount = isCorporateActionOrSplit
     ? liveMarketShares
@@ -4903,10 +4903,10 @@ export function computeSectorValuationAndDrivers(
     fairValue = Number(Math.max(1.0, rawFair).toFixed(2));
     formulaStr = `FD/OpFCF & FAVÖK (${targetEvEbitdaMult.toFixed(1).replace('.', ',')}x): ${evPerShare.toFixed(2).replace('.', ',')} TL (%45) + F/K (${targetPe.toFixed(1).replace('.', ',')}x): ${pePerShare.toFixed(2).replace('.', ',')} TL (%35) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%20) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
   } else if (isPetroleumRefinerySector(detectedOfficialSecName, currentTickerUpper)) {
-    modelName = isRefinerySector(currentTickerUpper)
+    modelName = isRefinerySector(currentTickerUpper, detectedOfficialSecName)
       ? 'Uluslararası Petrol & Rafineri Değerleme Modeli (Akdeniz Rafineri Marjı & USD Paritesi)'
       : 'Uluslararası Petrokimya Değerleme Modeli (Through-the-Cycle Döngüsel Marj & Varlık Tabanı)';
-    const isRefinery = isRefinerySector(currentTickerUpper);
+    const isRefinery = isRefinerySector(currentTickerUpper, detectedOfficialSecName);
     const latestEbitda = parseFinancialNumber(latest?.ebitda) ?? 0;
     const latestRev = parseFinancialNumber(latest?.revenue) ?? 0;
     const latestNet = parseFinancialNumber(latest?.net_income) ?? 0;

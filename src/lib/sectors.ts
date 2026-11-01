@@ -201,6 +201,7 @@ export const BIST_COMPANY_SPECIFIC_SECTOR: Record<string, string> = {
   ENJSA: 'Elektrik Dağıtım',
   ASTOR: 'Trafo & Elektrik Ekipman',
   CWENE: 'Güneş Paneli & Teçhizat',
+  ORGE: 'Elektrik Taahhüt & Şebeke Kurulum',
   EUPWR: 'Elektrik Sistemleri',
   GESAN: 'Elektrik & Mühendislik',
   KONTR: 'Kontrol & Otomasyon',
@@ -419,7 +420,9 @@ export function isElectricalEquipmentSector(officialSectorName: string, ticker?:
     s.includes('Teçh/Tesis Kurulum') ||
     s === 'Kablo' ||
     s.includes('Trafo') ||
-    s.includes('Elektrik Ekipman')
+    s.includes('Elektrik Ekipman') ||
+    s.includes('Güneş Paneli') ||
+    s.includes('Şebeke')
   ) {
     return true;
   }
@@ -564,8 +567,12 @@ export function isPetroleumRefinerySector(officialSectorName: string, ticker?: s
   return ['TUPRS', 'PETKM', 'AYGAZ', 'SASA', 'ALKIM', 'DYOBY', 'POLHO'].includes(t);
 }
 
-export function isRefinerySector(ticker?: string): boolean {
-  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+export function isRefinerySector(tickerOrSector?: string, officialSectorName?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, tickerOrSector);
+  if (s === 'Petrol' || s.includes('Rafineri')) {
+    return true;
+  }
+  const t = tickerOrSector ? tickerOrSector.toUpperCase().replace(/\.IS$/i, '') : '';
   return t === 'TUPRS' || t === 'AYGAZ';
 }
 
@@ -587,13 +594,13 @@ export function isEnergyUtilitiesSector(officialSectorName: string, ticker?: str
   if (
     s === 'Elektrik Üretim' ||
     s === 'Elektrik - Doğalgaz Dağıtım' ||
-    (s.includes('Elektrik') && !s.includes('Teçh/Tesis Kurulum')) ||
+    (s.includes('Elektrik') && !s.includes('Teçh/Tesis Kurulum') && !s.includes('Teçhizat')) ||
     s.includes('Enerji Üretim')
   ) {
     return true;
   }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  return ['ENJSA', 'AKSEN', 'GWIND', 'CANTE', 'ZOREN', 'ODAS', 'AYDEM', 'BIOEN', 'TATEN', 'AENRJ', 'CWENE'].includes(t);
+  return ['ENJSA', 'AKSEN', 'GWIND', 'CANTE', 'ZOREN', 'ODAS', 'AYDEM', 'BIOEN', 'TATEN', 'AENRJ'].includes(t);
 }
 
 /**
