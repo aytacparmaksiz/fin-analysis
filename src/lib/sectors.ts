@@ -392,7 +392,7 @@ export function isGlassSector(officialSectorName: string, ticker?: string): bool
  */
 export function isElectricalEquipmentSector(officialSectorName: string, ticker?: string): boolean {
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['ASTOR', 'CWENE', 'EUPWR', 'GESAN', 'KONTR', 'ALFAS', 'SMRTG', 'KAREL'].includes(t)) return true;
+  if (['ASTOR', 'CWENE', 'EUPWR', 'GESAN', 'KONTR', 'ALFAS', 'SMRTG', 'KAREL', 'ORGE'].includes(t)) return true;
   const s = String(officialSectorName || '').trim();
   return s === 'Elektrik Enerji Ürt.Teçh/Tesis Kurulum' || s.includes('Teçh/Tesis Kurulum');
 }

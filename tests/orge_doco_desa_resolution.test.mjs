@@ -10,12 +10,20 @@ import {
   resolveBistCompanyMeta,
   KNOWN_BIST_DIRECTORY
 } from '../lib/bist-service.ts';
+import {
+  isElectricalEquipmentSector
+} from '../lib/sectors.ts';
 
 test('ORGE: capital split and post-split shareCount calibration', async (t) => {
   await t.test('resolves ORGE meta with 400M shares', () => {
     const meta = resolveBistCompanyMeta('ORGE');
     assert.equal(meta.ticker, 'ORGE');
     assert.equal(meta.shareCount, 400000000);
+  });
+
+  await t.test('isElectricalEquipmentSector recognizes ORGE even without official sector string', () => {
+    assert.equal(isElectricalEquipmentSector('', 'ORGE'), true);
+    assert.equal(isElectricalEquipmentSector('Elektrik Enerji Ürt.Teçh/Tesis Kurulum', 'ORGE'), true);
   });
 
   await t.test('computeSectorValuationAndDrivers prioritizes live 400M shareCount over stale 80M balance sheet capital', () => {
@@ -60,12 +68,46 @@ test('DOCO: dual-listed UFRS_A financial group auto-discovery and resolution', a
     const meta = resolveBistCompanyMeta('DOCO');
     assert.equal(meta.ticker, 'DOCO');
     assert.equal(meta.financialGroup, 'UFRS_A');
+    assert.equal(meta.shareCount, 10983460);
   });
 
   await t.test('resolveBistCompanyMeta handles .IS suffix and case insensitivity for DOCO', () => {
     const metaWithSuffix = resolveBistCompanyMeta('doco.is');
     assert.equal(metaWithSuffix.ticker, 'DOCO');
     assert.equal(metaWithSuffix.financialGroup, 'UFRS_A');
+    assert.equal(metaWithSuffix.shareCount, 10983460);
+  });
+
+  await t.test('computeSectorValuationAndDrivers prioritizes live 10.98M shareCount over 1.16B nominal balance sheet capital', () => {
+    const docoLatestItem = {
+      period: '2026/03',
+      revenue: 33901336923,
+      ebitda: 4131875579,
+      net_income: 1645147496,
+      equity: 27392154734,
+      total_assets: 72928778482,
+      net_debt: -1053769010,
+      paid_in_capital: 1166312602 // Raw balance sheet nominal translated capital
+    };
+
+    const valResult = computeSectorValuationAndDrivers({
+      extractedData: {
+        ticker: 'DOCO',
+        sector: 'AVIATION',
+        currency: 'TRY',
+        share_count: 10983460, // Real official Austrian dual-listed share count
+        financial_history: [docoLatestItem],
+        valuation: { current_price: 11652.50 }
+      },
+      sector: 'AVIATION',
+      marketPrice: 11652.50
+    });
+
+    assert.ok(valResult.valuation.fair_value !== null);
+    // Fair value must be calibrated with ~11M shares (~8,000 - 14,000 TL), NOT 79.49 TL!
+    assert.ok(valResult.valuation.fair_value > 5000.0, `DOCO fair value (${valResult.valuation.fair_value}) must NOT be divided by 1.16B shares`);
+    assert.ok(valResult.valuation.fair_value < 20000.0, `DOCO fair value (${valResult.valuation.fair_value}) must be realistic around market price`);
+    assert.equal(valResult.valuation.fair_value, 8202.88);
   });
 });
 
@@ -95,7 +137,7 @@ test('DESA: unit scale preservation and 1000x outlier spike healing', async (t) 
   await t.test('cross-period outlier healer detects and divides 1000x corrupted upstream periods', () => {
     const corruptedHistory = [
       { period: '2021/12', revenue: 432405300, equity: 207950699 },
-      { period: '2022/03', revenue: 191862414000, equity: 227225781000 }, // Corrupted 1000x jump
+      { period: '2022/03', revenue: 191862414000, equity: 227225781000, minority_interests: 50000000000 }, // Corrupted 1000x jump
       { period: '2022/06', revenue: 461578742, equity: 273667157 }
     ];
 
@@ -109,5 +151,27 @@ test('DESA: unit scale preservation and 1000x outlier spike healing', async (t) 
     const p2203 = sanitized.financial_history.find(p => p.period === '2022/03');
     assert.equal(p2203.revenue, 191862414, 'Corrupted 191.8B revenue must be healed to 191.8M');
     assert.equal(p2203.equity, 227225781, 'Corrupted 227.2B equity must be healed to 227.2M');
+    assert.equal(p2203.minority_interests, 50000000, 'Corrupted 50B minority interests must be healed to 50M');
+  });
+
+  await t.test('consecutive historical Bin TL quarters (<0.005 of series maximum) are correctly converted to Tam TL', () => {
+    const historyWithConsecutiveBin = [
+      { period: '2020/09', revenue: 100000, equity: 150000 }, // Bin TL
+      { period: '2020/12', revenue: 120000, equity: 180000 }, // Bin TL
+      { period: '2026/06', revenue: 2352641708, equity: 4744193715 } // Modern Tam TL (4.7B)
+    ];
+
+    const sanitized = enrichAndSanitizeFinancialHistory({
+      ticker: 'DESA',
+      sector: 'INDUSTRIAL',
+      currency: 'TRY',
+      financial_history: historyWithConsecutiveBin
+    });
+
+    const p2009 = sanitized.financial_history.find(p => p.period === '2020/09');
+    const p2012 = sanitized.financial_history.find(p => p.period === '2020/12');
+    assert.equal(p2009.equity, 150000000, '2020/09 equity must be scaled from 150K to 150M TL');
+    assert.equal(p2012.equity, 180000000, '2020/12 equity must be scaled from 180K to 180M TL');
   });
 });
+

@@ -330,9 +330,10 @@ export function resolveBistCompanyMeta(rawTicker: string): BistCompanyMetadata {
       group = 'UFRS';
     }
 
-    const shareCount = (isy.paidInCapitalMnTl && isy.paidInCapitalMnTl > 0)
-      ? Math.round(isy.paidInCapitalMnTl * 1_000_000)
-      : (KNOWN_BIST_DIRECTORY[cleanTicker]?.shareCount || 500000000);
+    const shareCount = (KNOWN_BIST_DIRECTORY[cleanTicker]?.shareCount) ||
+      ((isy.paidInCapitalMnTl && isy.paidInCapitalMnTl > 0)
+        ? Math.round(isy.paidInCapitalMnTl * 1_000_000)
+        : 500000000);
 
     return {
       ticker: cleanTicker,
@@ -1242,15 +1243,16 @@ export async function fetchAndAnalyzeBistCompany(
   const isYatirimShares = (finalMultiples?.paidInCapitalMnTl && finalMultiples.paidInCapitalMnTl > 0)
     ? Math.round(finalMultiples.paidInCapitalMnTl * 1000000)
     : null;
-  const effectiveShareCount = (isYatirimShares && isYatirimShares >= 1000000)
-    ? isYatirimShares
-    : ((latestPaidCapital && latestPaidCapital >= 1000000)
-      ? latestPaidCapital
-      : (meta.shareCount || 500000000));
+  const effectiveShareCount = (meta.shareCount && meta.shareCount >= 1000000)
+    ? meta.shareCount
+    : ((isYatirimShares && isYatirimShares >= 1000000)
+      ? isYatirimShares
+      : ((latestPaidCapital && latestPaidCapital >= 1000000)
+        ? latestPaidCapital
+        : 500000000));
 
-  // Eğer şirket sermaye artırımı yapmış ve cari pay adedi bilançodaki eski sermayeden büyükse,
-  // son bilançodaki nominal sermayeyi güncel pay adediyle senkronize et:
-  if (latestItem && effectiveShareCount > 0 && (!latestItem.paid_in_capital || effectiveShareCount > (latestPaidCapital || 0))) {
+  // Son bilançodaki nominal sermayeyi kesinleşmiş resmi pay adediyle senkronize et:
+  if (latestItem && effectiveShareCount > 0) {
     latestItem.paid_in_capital = effectiveShareCount;
   }
 

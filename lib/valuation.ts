@@ -605,14 +605,15 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
       'financing_income', 'financing_expenses', 'interest_expenses', 'ebt', 'profit_before_tax', 'tax_expense', 'net_income',
       'operating_cash_flow', 'depreciation', 'working_capital_change', 'capex', 'tangible_capex', 'investing_cash_flow', 'free_cash_flow', 'financing_cash_flow', 'dividends_paid', 'net_change_in_cash',
       'short_term_debt', 'long_term_debt', 'financial_debt', 'net_debt',
-      'equity', 'paid_in_capital', 'retained_earnings',
+      'equity', 'parent_equity', 'minority_interests', 'non_controlling_interests', 'azinlik_paylari', 'total_equity', 'paid_in_capital', 'retained_earnings',
       'total_assets', 'current_assets', 'cash_and_equivalents', 'cash', 'financial_investments', 'financial_assets_insured',
       'trade_receivables', 'other_receivables', 'derivative_instruments', 'inventories', 'prepaid_expenses', 'other_current_assets',
       'non_current_assets', 'non_current_financial_investments', 'non_current_trade_receivables', 'tangible_assets', 'intangible_assets', 'right_of_use_assets', 'deferred_tax_assets', 'other_non_current_assets',
-      'current_liabilities', 'trade_payables', 'employee_benefit_obligations', 'other_current_liabilities',
+      'current_liabilities', 'trade_payables', 'employee_benefit_obligations', 'lease_liabilities', 'kiralama_borclari', 'other_current_liabilities',
       'long_term_liabilities', 'other_long_term_liabilities', 'total_liabilities',
       'written_premiums', 'gross_written_premiums', 'earned_premiums', 'technical_profit', 'technical_balance',
-      'investment_income', 'pension_aum', 'net_interest_income'
+      'investment_income', 'pension_aum', 'net_interest_income',
+      'gross_operating_cash_flow', 'net_operating_cash_flow', 'total_investing_outflow'
     ];
 
     for (let i = 0; i < history.length; i++) {
@@ -622,8 +623,15 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
       const currRev = Math.abs(item.revenue || item.written_premiums || 0);
 
       let isSpike = false;
-      if (medianEq > 0 && currEq > 250 * medianEq) isSpike = true;
-      else if (medianRev > 0 && currRev > 250 * medianRev) isSpike = true;
+      const nextItem = i < history.length - 1 ? history[i + 1] : null;
+      const nextEq = nextItem ? Math.abs(nextItem.equity || 0) : 0;
+      const nextRev = nextItem ? Math.abs(nextItem.revenue || nextItem.written_premiums || 0) : 0;
+
+      // Geçici ara dönem sıçraması (Spike): Hem medyana hem de sonraki döneme göre >250x anormal sıçrama ve geri düşüş
+      if (nextItem) {
+        if (medianEq > 0 && currEq > 250 * medianEq && nextEq > 0 && currEq > 250 * nextEq) isSpike = true;
+        else if (medianRev > 0 && currRev > 250 * medianRev && nextRev > 0 && currRev > 250 * nextRev) isSpike = true;
+      }
 
       if (isSpike) {
         for (const mf of monetaryFieldsForSpike) {
@@ -781,14 +789,15 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
       'financing_income', 'financing_expenses', 'interest_expenses', 'ebt', 'profit_before_tax', 'tax_expense', 'net_income',
       'operating_cash_flow', 'depreciation', 'working_capital_change', 'capex', 'tangible_capex', 'investing_cash_flow', 'free_cash_flow', 'financing_cash_flow', 'dividends_paid', 'net_change_in_cash',
       'short_term_debt', 'long_term_debt', 'financial_debt', 'net_debt',
-      'equity', 'paid_in_capital', 'retained_earnings',
+      'equity', 'parent_equity', 'minority_interests', 'non_controlling_interests', 'azinlik_paylari', 'total_equity', 'paid_in_capital', 'retained_earnings',
       'total_assets', 'current_assets', 'cash_and_equivalents', 'cash', 'financial_investments', 'financial_assets_insured',
       'trade_receivables', 'other_receivables', 'derivative_instruments', 'inventories', 'prepaid_expenses', 'other_current_assets',
       'non_current_assets', 'non_current_financial_investments', 'non_current_trade_receivables', 'tangible_assets', 'intangible_assets', 'right_of_use_assets', 'deferred_tax_assets', 'other_non_current_assets',
-      'current_liabilities', 'trade_payables', 'employee_benefit_obligations', 'other_current_liabilities',
+      'current_liabilities', 'trade_payables', 'employee_benefit_obligations', 'lease_liabilities', 'kiralama_borclari', 'other_current_liabilities',
       'long_term_liabilities', 'other_long_term_liabilities', 'total_liabilities',
       'written_premiums', 'gross_written_premiums', 'earned_premiums', 'technical_profit', 'technical_balance',
-      'investment_income', 'pension_aum', 'net_interest_income'
+      'investment_income', 'pension_aum', 'net_interest_income',
+      'gross_operating_cash_flow', 'net_operating_cash_flow', 'total_investing_outflow'
     ];
     // Standart Kural: Sistemimizdeki tüm finansal zaman serisi tutarları tek tip 'Tam TL' (TRY) olarak normalize edilir.
     // Eğer girdi 'Bin TRY' olarak gelmişse (örn. KAP PDF tablosundan 15.448.698 olarak), 1000 ile çarparak Tam TL'ye yükseltilir.
@@ -808,16 +817,22 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
                                    (nextEqAbs > 0 && (itemEqAbs / nextEqAbs) >= 0.15 && (itemEqAbs / nextEqAbs) <= 6.0);
 
       // Sadece ve sadece seride Tam TL (>=500M) dönemler varken bu dönemin büyüklüğü serinin tavanına göre
-      // belirgin şekilde 1/1000 düzeyinde (örn. <%1.5) kalmışsa ve komşularıyla uyumlu değilse Bin TL kabul edilir:
+      // belirgin şekilde 1/1000 düzeyinde kalmışsa Bin TL kabul edilir:
       const nonZeroEquities = history.map(h => typeof h?.equity === 'number' ? Math.abs(h.equity) : 0).filter(v => v > 0);
       const nonZeroRevenues = history.map(h => typeof h?.revenue === 'number' ? Math.abs(h.revenue) : (typeof h?.written_premiums === 'number' ? Math.abs(h.written_premiums) : 0)).filter(v => v > 0);
       const maxEqInSeries = nonZeroEquities.length > 0 ? Math.max(...nonZeroEquities) : 0;
       const maxRevInSeries = nonZeroRevenues.length > 0 ? Math.max(...nonZeroRevenues) : 0;
+
+      // Ardışık tarihsel Bin TL çeyrekleri (<0.005 serinin tavanı, örneğin 150K vs 4.7B = %0.003)
+      const isDepressedScale = hasFullTlPeriodInSeries && itemEqAbs > 0 &&
+        (maxEqInSeries > 0 ? (itemEqAbs / maxEqInSeries) < 0.005 : false) &&
+        (itemRevAbs === 0 || (maxRevInSeries > 0 ? (itemRevAbs / maxRevInSeries) < 0.005 : false));
+
       const isIsolatedDepressed = hasFullTlPeriodInSeries && !isNeighborCompatible &&
         itemEqAbs > 0 && (maxEqInSeries > 0 ? (itemEqAbs / maxEqInSeries) < 0.015 : false) &&
         (itemRevAbs === 0 || (maxRevInSeries > 0 ? (itemRevAbs / maxRevInSeries) < 0.015 : false));
 
-      const isPeriodInThousands = (isContainerBin && itemEqAbs < 250_000_000) || isIsolatedDepressed;
+      const isPeriodInThousands = (isContainerBin && itemEqAbs < 250_000_000) || isDepressedScale || isIsolatedDepressed;
       if (isPeriodInThousands) {
         for (const mf of monetaryFields) {
           if (typeof item[mf] === 'number' && item[mf] !== 0) {
@@ -4419,9 +4434,10 @@ export function computeSectorValuationAndDrivers(
   const rawPaidCap = parseFinancialNumber(latest?.paid_in_capital);
   const paidCapShares = rawPaidCap !== null && rawPaidCap > 0 ? Math.abs(rawPaidCap) * unitScale : null;
   // Cari hisse fiyatı ve piyasa değeri güncel pay adedi (shareCount) üzerinden işlem gördüğünden,
-  // sermaye artırımı/bölünme sonrası shareCount ve paidCapShares karşılaştırılır:
-  // Eğer shareCount açıkça mevcut ve paidCapShares'ten belirgin şekilde büyükse (sermaye artırımı, örn. ORGE 400M vs 80M) shareCount kullanılır:
-  const rawEffectiveShareCount = (shareCount && paidCapShares && shareCount > paidCapShares * 1.5)
+  // sermaye artırımı/bölünme sonrası veya yabancı kote çift para birimli nominal sermaye durumunda shareCount ve rawPaidCap karşılaştırılır:
+  // - Bedelsiz bölünme/sermaye artırımı (örn. ORGE 400M vs 80M): shareCount > rawPaidCap * 1.5
+  // - Yabancı/Avusturya kote çift para birimli nominal sermaye (örn. DOCO 1.16B vs 10.98M): rawPaidCap > shareCount * 5 && shareCount >= 1000000
+  const rawEffectiveShareCount = (shareCount && rawPaidCap && (shareCount > rawPaidCap * 1.5 || (rawPaidCap > shareCount * 5 && shareCount >= 1000000)))
     ? shareCount
     : ((paidCapShares && paidCapShares >= 1000000) ? paidCapShares : (shareCount && shareCount > 0 ? shareCount : null));
   const effectiveShareCount = (rawEffectiveShareCount && rawEffectiveShareCount > 0) ? rawEffectiveShareCount : null;
