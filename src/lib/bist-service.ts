@@ -330,10 +330,11 @@ export function resolveBistCompanyMeta(rawTicker: string): BistCompanyMetadata {
       group = 'UFRS';
     }
 
-    const shareCount = (KNOWN_BIST_DIRECTORY[cleanTicker]?.shareCount) ||
-      ((isy.paidInCapitalMnTl && isy.paidInCapitalMnTl > 0)
+    const shareCount = (cleanTicker === 'DOCO' && KNOWN_BIST_DIRECTORY[cleanTicker]?.shareCount)
+      ? KNOWN_BIST_DIRECTORY[cleanTicker].shareCount
+      : ((isy.paidInCapitalMnTl && isy.paidInCapitalMnTl > 0)
         ? Math.round(isy.paidInCapitalMnTl * 1_000_000)
-        : 500000000);
+        : (KNOWN_BIST_DIRECTORY[cleanTicker]?.shareCount || 500000000));
 
     return {
       ticker: cleanTicker,
@@ -1243,13 +1244,15 @@ export async function fetchAndAnalyzeBistCompany(
   const isYatirimShares = (finalMultiples?.paidInCapitalMnTl && finalMultiples.paidInCapitalMnTl > 0)
     ? Math.round(finalMultiples.paidInCapitalMnTl * 1000000)
     : null;
-  const effectiveShareCount = (meta.shareCount && meta.shareCount >= 1000000)
+  const effectiveShareCount = (ticker === 'DOCO' && meta.shareCount && meta.shareCount >= 1000000)
     ? meta.shareCount
     : ((isYatirimShares && isYatirimShares >= 1000000)
       ? isYatirimShares
-      : ((latestPaidCapital && latestPaidCapital >= 1000000)
-        ? latestPaidCapital
-        : 500000000));
+      : ((meta.shareCount && meta.shareCount >= 1000000)
+        ? meta.shareCount
+        : ((latestPaidCapital && latestPaidCapital >= 1000000)
+          ? latestPaidCapital
+          : 500000000)));
 
   // Son bilançodaki nominal sermayeyi kesinleşmiş resmi pay adediyle senkronize et:
   if (latestItem && effectiveShareCount > 0) {

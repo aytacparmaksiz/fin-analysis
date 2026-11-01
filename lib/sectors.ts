@@ -350,18 +350,34 @@ export function getFinancialArchetype(sector: SectorType): FinancialArchetype {
 }
 
 /**
+ * Verilen resmi sektör adını veya ticker'ın İş Yatırım 630 BIST resmi veritabanındaki
+ * kesin sektör adını dinamik olarak çözümler.
+ * Asla hardcoded hisse kodu dizilerine bağımlı kalmaz.
+ */
+export function resolveOfficialSectorName(officialSectorName?: string, ticker?: string): string {
+  let s = String(officialSectorName || '').trim();
+  if (ticker && (!s || s === 'INDUSTRIAL' || s === 'BIST' || s === 'Sanayi & İmalat' || s === 'Sanayi' || s === 'Diğer')) {
+    const cleanTicker = ticker.toUpperCase().replace(/\.IS$/i, '').trim();
+    const isy = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[cleanTicker];
+    if (isy && isy.sectorName) {
+      return isy.sectorName;
+    }
+    if (BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker]) {
+      return BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker];
+    }
+  }
+  return s;
+}
+
+/**
  * Döngüsel & Ağır Emtia Sanayii (Through-the-Cycle Normalized Mid-Cycle EBITDA & Varlık Tabanı Koruması):
  * Cam, Demir-Çelik Temel, Demir-Çelik Döküm, Kimyasal Ürün, Tarım Kimyasalları, Çimento, İnşaat Malzemeleri, Madencilik, Seramik.
  * Bu sektörlerde tek çeyreklik veya tek yıllık dip (trough) FAVÖK'ü ile borç düşülmesi distorsiyon yaratır;
  * uluslararası CFA/Damodaran standartlarına göre 5 yıllık tarihsel medyan marjı ile Through-the-Cycle normalizasyonu uygulanır.
  */
 export function isCyclicalCommoditySector(officialSectorName: string, ticker?: string): boolean {
-  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['SISE', 'EREGL', 'KRDMD', 'KRDMA', 'KRDMB', 'ISDMR', 'CEMTS', 'BRSAN', 'CVKMD', 'PETKM', 'SASA', 'HEKTS', 'BAGFS', 'GUBRF', 'ALKIM', 'CIMSA', 'OYAKC', 'BUCIM', 'AKCNS', 'EGSER', 'KLKIM', 'KOZAL', 'KOZAA', 'IPEKE'].includes(t)) {
-    return true;
-  }
-  const s = String(officialSectorName || '').trim();
-  return (
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (
     s === 'Cam Sanayii' ||
     s === 'Cam' ||
     s === 'Demir-Çelik Temel' ||
@@ -371,30 +387,44 @@ export function isCyclicalCommoditySector(officialSectorName: string, ticker?: s
     s === 'Çimento' ||
     s === 'İnşaat Malzemeleri' ||
     s === 'Madencilik' ||
-    s === 'Seramik'
-  );
+    s === 'Seramik' ||
+    s === 'Boya'
+  ) {
+    return true;
+  }
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  return ['SISE', 'EREGL', 'KRDMD', 'KRDMA', 'KRDMB', 'ISDMR', 'CEMTS', 'BRSAN', 'CVKMD', 'PETKM', 'SASA', 'HEKTS', 'BAGFS', 'GUBRF', 'ALKIM', 'CIMSA', 'OYAKC', 'BUCIM', 'AKCNS', 'EGSER', 'KLKIM', 'KOZAL', 'KOZAA', 'IPEKE'].includes(t);
 }
 
 /**
  * Cam Sanayii & Entegre Soda Külü Üretimi:
- * SISE.
+ * SISE, CGCAM ve sektördeki tüm cam üreticileri.
  */
 export function isGlassSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (s === 'Cam Sanayii' || s === 'Cam' || s.includes('Cam')) return true;
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['SISE'].includes(t)) return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'Cam Sanayii' || s === 'Cam';
+  return ['SISE', 'CGCAM'].includes(t);
 }
 
 /**
- * Elektrik Teçhizat, Trafo & Şebeke Kurulum / Taahhüt Sektörü:
- * ASTOR, CWENE, EUPWR, GESAN, KONTR, ALFAS, SMRTG, KAREL.
+ * Elektrik Teçhizat, Trafo, Şebeke Kurulum, Güneş/Rüzgar Ekipmanları & Taahhüt Sektörü:
+ * ASTOR, CWENE, EUPWR, GESAN, KONTR, ALFAS, SMRTG, KAREL, ORGE, BETAE, EMKEL, KLYPV, MAGEN, MASFN, MOGAN, NATEN, SARAE, SAYAS, ULUSE.
+ * Tüm 18 BIST şirketi ve sektör kuralına tabi tüm şirketleri resmi BIST sınıflandırmasıyla otomatik kapsar.
  */
 export function isElectricalEquipmentSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (
+    s === 'Elektrik Enerji Ürt.Teçh/Tesis Kurulum' ||
+    s.includes('Teçh/Tesis Kurulum') ||
+    s === 'Kablo' ||
+    s.includes('Trafo') ||
+    s.includes('Elektrik Ekipman')
+  ) {
+    return true;
+  }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['ASTOR', 'CWENE', 'EUPWR', 'GESAN', 'KONTR', 'ALFAS', 'SMRTG', 'KAREL', 'ORGE'].includes(t)) return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'Elektrik Enerji Ürt.Teçh/Tesis Kurulum' || s.includes('Teçh/Tesis Kurulum');
+  return ['ASTOR', 'CWENE', 'EUPWR', 'GESAN', 'KONTR', 'ALFAS', 'SMRTG', 'KAREL', 'ORGE', 'BETAE', 'EMKEL', 'KLYPV', 'MAGEN', 'MASFN', 'MOGAN', 'NATEN', 'SARAE', 'SAYAS', 'ULUSE'].includes(t);
 }
 
 /**
@@ -402,10 +432,10 @@ export function isElectricalEquipmentSector(officialSectorName: string, ticker?:
  * AEFES, CCOLA, TBORG.
  */
 export function isBeverageSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (s === 'Meşrubat / İçecek' || s === 'İçecek' || s.includes('Meşrubat')) return true;
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['AEFES', 'CCOLA', 'TBORG'].includes(t)) return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'Meşrubat / İçecek' || s === 'İçecek';
+  return ['AEFES', 'CCOLA', 'TBORG'].includes(t);
 }
 
 /**
@@ -413,10 +443,10 @@ export function isBeverageSector(officialSectorName: string, ticker?: string): b
  * ENKAI, TKFEN.
  */
 export function isConstructionContractingSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (s === 'İnşaat- Taahhüt' || s === 'İnşaat - Taahhüt' || s.includes('Taahhüt')) return true;
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['ENKAI', 'TKFEN'].includes(t)) return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'İnşaat- Taahhüt' || s === 'İnşaat - Taahhüt' || s.includes('Taahhüt');
+  return ['ENKAI', 'TKFEN'].includes(t);
 }
 
 /**
@@ -424,21 +454,29 @@ export function isConstructionContractingSector(officialSectorName: string, tick
  * GUBRF, HEKTS, BAGFS.
  */
 export function isAgroChemicalSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (s === 'Tarım Kimyasalları' || s.includes('Gübre') || s.includes('Tarım Kimya')) return true;
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['GUBRF', 'HEKTS', 'BAGFS'].includes(t)) return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'Tarım Kimyasalları' || s.includes('Gübre');
+  return ['GUBRF', 'HEKTS', 'BAGFS'].includes(t);
 }
 
 /**
  * Tekstil Entegre & Teknik Tekstil Üretimi:
- * KORDS, YUNSA, SKTAS, ARSAN, BOSSA, ATEKS.
+ * KORDS, YUNSA, SKTAS, ARSAN, BOSSA, ATEKS, DESA, DERIM.
  */
 export function isTextileSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (
+    s === 'Tekstil Entegre' ||
+    s === 'Endüstriyel Tekstil' ||
+    s === 'Tekstil' ||
+    s === 'Deri Giyim' ||
+    s.includes('Tekstil')
+  ) {
+    return true;
+  }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['KORDS', 'YUNSA', 'SKTAS', 'ARSAN', 'BOSSA', 'ATEKS'].includes(t)) return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'Tekstil Entegre' || s === 'Tekstil' || s.includes('Tekstil');
+  return ['KORDS', 'YUNSA', 'SKTAS', 'ARSAN', 'BOSSA', 'ATEKS', 'DESA', 'DERIM', 'MNDRS', 'HATEK'].includes(t);
 }
 
 /**
@@ -447,21 +485,21 @@ export function isTextileSector(officialSectorName: string, ticker?: string): bo
  * Küresel savunma çarpanları (18.0x - 24.0x EV/EBITDA, 20.0x - 26.0x F/K) ile değerlenir.
  */
 export function isDefenseSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (s === 'Savunma' || s === 'Savunma Sanayii' || s.includes('Savunma')) return true;
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['ASELS', 'SDTTR', 'ALTNY', 'PAPIL'].includes(t)) return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'Savunma' || s === 'Savunma Sanayii' || s.includes('Savunma');
+  return ['ASELS', 'SDTTR', 'ALTNY', 'PAPIL'].includes(t);
 }
 
 /**
  * Regüle Dağıtım Altyapısı (EPDK Düzenlemeye Tabi Varlık Tabanı - RAB Modeli):
- * ENJSA (Elektrik Dağıtım & Perakende).
+ * ENJSA (Elektrik Dağıtım & Perakende), AKFYE.
  */
 export function isRegulatedDistributionSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (s === 'Elektrik - Doğalgaz Dağıtım' || s.includes('Dağıtım')) return true;
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (t === 'ENJSA') return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'Elektrik - Doğalgaz Dağıtım';
+  return ['ENJSA', 'AKFYE'].includes(t);
 }
 
 /**
@@ -469,43 +507,61 @@ export function isRegulatedDistributionSector(officialSectorName: string, ticker
  * TCELL, TTKOM.
  */
 export function isTelecomSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (s === 'İletişim' || s === 'İletişim Cihazları' || s.includes('Telekom')) return true;
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['TCELL', 'TTKOM'].includes(t)) return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'İletişim' || s === 'İletişim Cihazları';
+  return ['TCELL', 'TTKOM', 'NETAS', 'KFEIN'].includes(t);
 }
 
 /**
  * Perakende & Tüketim (Negatif İşletme Sermayesi - Float Üretimi & TFRS 16 Kiralama Borçları):
- * BIMAS, MGROS, SOKM, BIZIM, MAVI.
+ * BIMAS, MGROS, SOKM, BIZIM, MAVI, DESA, VAKKO, EBEBK, TKNSA.
  */
 export function isRetailFloatSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (
+    s === 'Gıda & Ticaret Perakende' ||
+    s === 'Perakande - Ticaret' ||
+    s === 'Gıda Perakende' ||
+    s === 'Pazarlama' ||
+    s.includes('Perakende')
+  ) {
+    return true;
+  }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['BIMAS', 'MGROS', 'SOKM', 'BIZIM', 'MAVI', 'DESA', 'VAKKO'].includes(t)) return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'Gıda & Ticaret Perakende' || s === 'Perakande - Ticaret' || s === 'Gıda Perakende';
+  return ['BIMAS', 'MGROS', 'SOKM', 'BIZIM', 'MAVI', 'DESA', 'VAKKO', 'EBEBK', 'TKNSA', 'SUWEN'].includes(t);
 }
 
 /**
  * Otomotiv & Ağır Sanayi İhracat Üreticileri (OEM Maliyet Artı Kâr Sözleşmeleri & CapEx Dönüşümü):
- * FROTO, TOASO, TTRAK, DOAS, OTKAR, BRISA, BFREN.
+ * FROTO, TOASO, TTRAK, DOAS, OTKAR, BRISA, BFREN, GOODY, TMSN, ASUZU.
  */
 export function isAutomotiveSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (
+    s === 'Otomotiv' ||
+    s === 'Otomotiv Parçası' ||
+    s === 'Otomotiv Lastiği' ||
+    s.includes('Otomotiv') ||
+    s.includes('Traktör')
+  ) {
+    return true;
+  }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['FROTO', 'TOASO', 'TTRAK', 'DOAS', 'OTKAR', 'BRISA', 'BFREN', 'GOODY', 'TMSN'].includes(t)) return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'Otomotiv' || s === 'Otomotiv Parçası' || s === 'Otomotiv Lastiği' || s.includes('Otomotiv');
+  return ['FROTO', 'TOASO', 'TTRAK', 'DOAS', 'OTKAR', 'BRISA', 'BFREN', 'GOODY', 'TMSN', 'ASUZU', 'KARTN', 'PARSN'].includes(t);
 }
 
 /**
  * Petrol, Rafineri & Petrokimya Sektörü:
- * TUPRS, PETKM, AYGAZ, SASA, ALKIM.
+ * TUPRS, PETKM, AYGAZ, SASA, ALKIM, DYOBY, POLHO.
  */
 export function isPetroleumRefinerySector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (s === 'Petrol' || s === 'Kimyasal Ürün' || s === 'Boya' || s.includes('Petrol') || s.includes('Rafineri')) {
+    return true;
+  }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['TUPRS', 'PETKM', 'AYGAZ', 'SASA', 'ALKIM'].includes(t)) return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'Petrol' || s === 'Kimyasal Ürün' || s.includes('Petrol');
+  return ['TUPRS', 'PETKM', 'AYGAZ', 'SASA', 'ALKIM', 'DYOBY', 'POLHO'].includes(t);
 }
 
 export function isRefinerySector(ticker?: string): boolean {
@@ -514,43 +570,62 @@ export function isRefinerySector(ticker?: string): boolean {
 }
 
 export function isPetrochemicalSector(ticker?: string, officialSectorName?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (s === 'Kimyasal Ürün' || s === 'Tarım Kimyasalları' || s.includes('Petrokimya')) {
+    return true;
+  }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['PETKM', 'SASA', 'ALKIM', 'BAGFS', 'GUBRF'].includes(t)) return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'Kimyasal Ürün' || s === 'Tarım Kimyasalları';
+  return ['PETKM', 'SASA', 'ALKIM', 'BAGFS', 'GUBRF'].includes(t);
 }
 
 /**
  * Enerji & Elektrik Üretim / Dağıtım Sektörü:
- * ENJSA, AKSEN, GWIND, CANTE, ZOREN, ODAS, AYDEM.
+ * ENJSA, AKSEN, GWIND, CANTE, ZOREN, ODAS, AYDEM, BIOEN, TATEN.
  */
 export function isEnergyUtilitiesSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (
+    s === 'Elektrik Üretim' ||
+    s === 'Elektrik - Doğalgaz Dağıtım' ||
+    (s.includes('Elektrik') && !s.includes('Teçh/Tesis Kurulum')) ||
+    s.includes('Enerji Üretim')
+  ) {
+    return true;
+  }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['ENJSA', 'AKSEN', 'GWIND', 'CANTE', 'ZOREN', 'ODAS', 'AYDEM', 'BIOEN', 'TATEN'].includes(t)) return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'Elektrik Üretim' || s === 'Elektrik - Doğalgaz Dağıtım' || (s.includes('Elektrik') && !s.includes('Teçh/Tesis Kurulum'));
+  return ['ENJSA', 'AKSEN', 'GWIND', 'CANTE', 'ZOREN', 'ODAS', 'AYDEM', 'BIOEN', 'TATEN', 'AENRJ', 'CWENE'].includes(t);
 }
 
 /**
- * Dayanıklı Tüketim & Beyaz Eşya:
- * ARCLK, VESBE, VESTL.
+ * Dayanıklı Tüketim & Beyaz Eşya / Mobilya:
+ * ARCLK, VESBE, VESTL, YATAS, DGNMO.
  */
 export function isDurablesSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (s === 'Dayanıklı Tüketim' || s === 'Mobilya' || s.includes('Beyaz Eşya') || s.includes('Dayanıklı')) {
+    return true;
+  }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['ARCLK', 'VESBE', 'VESTL'].includes(t)) return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'Dayanıklı Tüketim';
+  return ['ARCLK', 'VESBE', 'VESTL', 'YATAS', 'DGNMO'].includes(t);
 }
 
 /**
- * Çimento & İnşaat Malzemeleri:
- * OYAKC, CIMSA, AKCNS, NUHCM, BUCIM, EGPRO.
+ * Çimento & İnşaat Malzemeleri / Seramik:
+ * OYAKC, CIMSA, AKCNS, NUHCM, BUCIM, EGPRO, KLKIM, BOBET, BSOKE, EGSER, KUAZR.
  */
 export function isCementBuildingSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (
+    s === 'Çimento' ||
+    s === 'İnşaat Malzemeleri' ||
+    s === 'Seramik' ||
+    s.includes('Çimento') ||
+    s.includes('Seramik')
+  ) {
+    return true;
+  }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['OYAKC', 'CIMSA', 'AKCNS', 'NUHCM', 'BUCIM', 'EGPRO', 'KLKIM', 'BOBET', 'BSOKE'].includes(t)) return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'Çimento' || s === 'İnşaat Malzemeleri';
+  return ['OYAKC', 'CIMSA', 'AKCNS', 'NUHCM', 'BUCIM', 'EGPRO', 'KLKIM', 'BOBET', 'BSOKE', 'EGSER', 'KUAZR'].includes(t);
 }
 
 /**
@@ -558,21 +633,28 @@ export function isCementBuildingSector(officialSectorName: string, ticker?: stri
  * KOZAL, KOZAA, IPEKE, CVKMD, PRKME.
  */
 export function isMiningSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (s === 'Madencilik' || s.includes('Maden')) return true;
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['KOZAL', 'KOZAA', 'IPEKE', 'PRKME', 'CVKMD'].includes(t)) return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'Madencilik';
+  return ['KOZAL', 'KOZAA', 'IPEKE', 'PRKME', 'CVKMD'].includes(t);
 }
 
 /**
  * Gıda & İçecek:
- * CCOLA, AEFES, ULKER, TATGD, PNSUT.
+ * CCOLA, AEFES, ULKER, TATGD, PNSUT, BANVT, KNFRT, PETUN.
  */
 export function isFoodBeverageSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (
+    s === 'Gıda' ||
+    s === 'Meşrubat / İçecek' ||
+    s === 'Hayvancılık' ||
+    (s.includes('Gıda') && !s.includes('Perakende') && !s.includes('Ticaret'))
+  ) {
+    return true;
+  }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['CCOLA', 'AEFES', 'ULKER', 'TATGD', 'PNSUT', 'BANVT', 'KNFRT', 'PETUN'].includes(t)) return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'Gıda' || s === 'Meşrubat / İçecek' || s === 'Hayvancılık';
+  return ['CCOLA', 'AEFES', 'ULKER', 'TATGD', 'PNSUT', 'BANVT', 'KNFRT', 'PETUN', 'KUTPO'].includes(t);
 }
 
 /**
@@ -580,21 +662,28 @@ export function isFoodBeverageSector(officialSectorName: string, ticker?: string
  * EREGL, KRDMD, KRDMA, KRDMB, ISDMR, CEMTS, BRSAN, BUCIM.
  */
 export function isSteelSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (
+    s === 'Demir-Çelik Temel' ||
+    s === 'Demir-Çelik Döküm' ||
+    s.includes('Demir-Çelik') ||
+    s.includes('Çelik Boru')
+  ) {
+    return true;
+  }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['EREGL', 'KRDMD', 'KRDMA', 'KRDMB', 'ISDMR', 'CEMTS', 'BRSAN', 'DITAS', 'BMSCH', 'BURCE', 'KCAER'].includes(t)) return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'Demir-Çelik Temel' || s === 'Demir-Çelik Döküm' || s.includes('Demir-Çelik');
+  return ['EREGL', 'KRDMD', 'KRDMA', 'KRDMB', 'ISDMR', 'CEMTS', 'BRSAN', 'DITAS', 'BMSCH', 'BURCE', 'KCAER'].includes(t);
 }
 
 /**
  * Sağlık, Hastanecilik & İlaç Sektörü:
- * MPARK, DEVA, GENIL, SELEC, LKMNH, TNZTP, RTALB, TRILC.
+ * MPARK, DEVA, GENIL, SELEC, LKMNH, TNZTP, RTALB, TRILC, MEDTR.
  */
 export function isHealthcareSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (s === 'Sağlık ve İlaç' || s.includes('Sağlık') || s.includes('İlaç')) return true;
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  if (['MPARK', 'DEVA', 'GENIL', 'SELEC', 'LKMNH', 'TNZTP', 'RTALB', 'TRILC', 'MEDTR'].includes(t)) return true;
-  const s = String(officialSectorName || '').trim();
-  return s === 'Sağlık ve İlaç' || s.includes('Sağlık') || s.includes('İlaç');
+  return ['MPARK', 'DEVA', 'GENIL', 'SELEC', 'LKMNH', 'TNZTP', 'RTALB', 'TRILC', 'MEDTR'].includes(t);
 }
 
 export interface FeaturedMetric {

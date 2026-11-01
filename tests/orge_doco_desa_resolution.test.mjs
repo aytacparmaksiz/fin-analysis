@@ -175,3 +175,52 @@ test('DESA: unit scale preservation and 1000x outlier spike healing', async (t) 
   });
 });
 
+test('Universal 630+ BIST Sector & Corporate Action Architecture', async (t) => {
+  await t.test('dynamically recognizes all 18 electrical equipment companies via official sector without hardcoding', async () => {
+    const electricalEquipmentTickers = [
+      'ALFAS', 'ASTOR', 'BETAE', 'CWENE', 'EMKEL', 'EUPWR',
+      'GESAN', 'KLYPV', 'KONTR', 'MAGEN', 'MASFN', 'MOGAN',
+      'NATEN', 'ORGE',  'SARAE', 'SAYAS', 'SMRTG', 'ULUSE'
+    ];
+
+    for (const ticker of electricalEquipmentTickers) {
+      assert.equal(
+        isElectricalEquipmentSector('', ticker),
+        true,
+        `${ticker} must dynamically match electrical equipment sector without manual hardcoded patches`
+      );
+    }
+  });
+
+  await t.test('computeSectorValuationAndDrivers self-heals stale balance sheet capital for ORGE even when share_count is omitted', () => {
+    const mockOrgeHistory = [
+      {
+        period: '2026/06',
+        revenue: 2597519683,
+        ebitda: 1560458709,
+        net_income: 478166626,
+        net_income_ttm: 989743308,
+        equity: 5205533687,
+        total_assets: 8512771081,
+        net_debt: -389017699,
+        paid_in_capital: 80000000 // Stale balance sheet capital from pre-split Q2
+      }
+    ];
+
+    // OMIT share_count deliberately
+    const valResult = computeSectorValuationAndDrivers({
+      extractedData: {
+        ticker: 'ORGE',
+        financial_history: mockOrgeHistory,
+        valuation: { current_price: 18.60 }
+      },
+      marketPrice: 18.60
+    });
+
+    assert.ok(valResult.valuation.fair_value !== null);
+    // Fair value must be 85.83 TL (NOT ~338 TL!)
+    assert.equal(valResult.valuation.fair_value, 85.83, 'Must automatically cross-reference 400M live shares from official baseline and prevent 5x split distortion');
+  });
+});
+
+

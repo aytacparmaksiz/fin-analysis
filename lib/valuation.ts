@@ -28,6 +28,7 @@ import {
   isTextileSector
 } from './sectors.ts';
 import { getExpectedInflationForPeriod, type MacroDataSnapshot } from './macro-service.ts';
+import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from './isyatirim-multiples-cache.ts';
 
 export interface DriverDetail {
   value: number;
@@ -650,6 +651,9 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     return eq >= 500_000_000 || rev >= 500_000_000;
   });
 
+  const containerCurr = String(container.currency || '').trim().toLowerCase();
+  const isContainerBin = containerCurr.includes('bin') || containerCurr.includes('thousand');
+
   for (let i = 0; i < history.length; i++) {
     const item = history[i];
     if (!item) continue;
@@ -695,9 +699,6 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
       const isFinSec = detectedSector === 'BANKING' || detectedSector === 'INSURANCE' || detectedSector === 'FINANCIAL_SERVICES';
       item.is_tms29 = isFinSec ? false : (yr >= 2024 || (yr === 2023 && (periodStr.includes('12') || periodStr.includes('Q4'))));
     }
-
-    const containerCurr = String(container.currency || '').trim().toLowerCase();
-    const isContainerBin = containerCurr.includes('bin') || containerCurr.includes('thousand');
 
     // Sigorta sektörü özel alan eşleştirmeleri ve Emeklilik Fonu (AUM) Kalkanı
     if (detectedSector === 'INSURANCE') {
@@ -832,7 +833,14 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
         itemEqAbs > 0 && (maxEqInSeries > 0 ? (itemEqAbs / maxEqInSeries) < 0.015 : false) &&
         (itemRevAbs === 0 || (maxRevInSeries > 0 ? (itemRevAbs / maxRevInSeries) < 0.015 : false));
 
-      const isPeriodInThousands = (isContainerBin && itemEqAbs < 250_000_000) || isDepressedScale || isIsolatedDepressed;
+      // Veri kaynağının veya LLM'in container etiketini 'Bin TRY' koyup içindeki sayıları Tam TL vermesi
+      // durumunda (örn. net_income > 250M, equity > 2B, total_assets > 15B gibi Bin TL olması imkansız tutarlar)
+      // veriyi tekrar 1000 ile çarpmaktan koru:
+      const isAlreadyFullTl = (itemEqAbs > 2_000_000_000) ||
+                              (typeof item.net_income === 'number' && Math.abs(item.net_income) > 250_000_000) ||
+                              (typeof item.total_assets === 'number' && Math.abs(item.total_assets) > 15_000_000_000);
+
+      const isPeriodInThousands = (!isAlreadyFullTl && isContainerBin) || isDepressedScale || isIsolatedDepressed;
       if (isPeriodInThousands) {
         for (const mf of monetaryFields) {
           if (typeof item[mf] === 'number' && item[mf] !== 0) {
@@ -1522,6 +1530,10 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
         }
       }
     });
+  }
+
+  if (isContainerBin && container && container.currency) {
+    container.currency = 'Tam TRY';
   }
 
   return isDirectArray ? container.financial_history : container;
@@ -4433,13 +4445,34 @@ export function computeSectorValuationAndDrivers(
   // Borsa İstanbul'da 1 TL nominal Ödenmiş Sermaye = 1 Adet Pay (Lot).
   const rawPaidCap = parseFinancialNumber(latest?.paid_in_capital);
   const paidCapShares = rawPaidCap !== null && rawPaidCap > 0 ? Math.abs(rawPaidCap) * unitScale : null;
-  // Cari hisse fiyatı ve piyasa değeri güncel pay adedi (shareCount) üzerinden işlem gördüğünden,
-  // sermaye artırımı/bölünme sonrası veya yabancı kote çift para birimli nominal sermaye durumunda shareCount ve rawPaidCap karşılaştırılır:
-  // - Bedelsiz bölünme/sermaye artırımı (örn. ORGE 400M vs 80M): shareCount > rawPaidCap * 1.5
-  // - Yabancı/Avusturya kote çift para birimli nominal sermaye (örn. DOCO 1.16B vs 10.98M): rawPaidCap > shareCount * 5 && shareCount >= 1000000
-  const rawEffectiveShareCount = (shareCount && rawPaidCap && (shareCount > rawPaidCap * 1.5 || (rawPaidCap > shareCount * 5 && shareCount >= 1000000)))
+
+  // 630 BIST şirketinin resmi canlı piyasa ödenmiş sermayesi (İş Yatırım / BIST Resmi Çarpanlar Veritabanı)
+  const cleanCurrentTicker = currentTickerUpper.replace(/\.IS$/i, '').trim();
+  const isyBaselineItem = cleanCurrentTicker ? OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[cleanCurrentTicker] : null;
+  const baselineLivePaidInCap = (cleanCurrentTicker !== 'DOCO' && isyBaselineItem?.paidInCapitalMnTl && isyBaselineItem.paidInCapitalMnTl > 0)
+    ? Math.round(isyBaselineItem.paidInCapitalMnTl * 1_000_000)
+    : null;
+
+  // Canlı piyasa pay adedi: Caller tarafından sağlanan shareCount veya resmi İş Yatırım/BIST baseline canlı sermayesi
+  const liveMarketShares = (shareCount && shareCount > 0)
     ? shareCount
-    : ((paidCapShares && paidCapShares >= 1000000) ? paidCapShares : (shareCount && shareCount > 0 ? shareCount : null));
+    : (baselineLivePaidInCap && baselineLivePaidInCap > 0 ? baselineLivePaidInCap : null);
+
+  // Kurumsal işlem / Sermaye Artırımı / Bedelsiz / Bedelli Çapraz Teyidi:
+  // Bilanço çeyreklik dönemlerde (örn. 30 Haziran) kapandığı için, bilanço tarihinden sonra yapılan
+  // bedelsiz veya bedelli sermaye artırımları (örn. Ağustos'ta tescil edilen ORGE 80M -> 400M artırımı)
+  // bir sonraki çeyrek bilançosu açıklanana kadar (~3 ay boyunca) bilançoda eski sermaye olarak kalır.
+  // Ancak Borsa İstanbul'da hisse fiyatı ve lotlar derhal bölünmüş fiyata geçer.
+  // Bu nedenle canlı piyasa sermayesi ile bilanço sermayesi arasında fark varsa:
+  // - Bedelsiz/bedelli bölünme (liveMarketShares > paidCapShares * 1.05)
+  // - Yabancı kote çift listeleme (paidCapShares > liveMarketShares * 1.5 && liveMarketShares >= 1_000_000)
+  const isCorporateActionOrSplit = liveMarketShares && paidCapShares && (
+    (liveMarketShares > paidCapShares * 1.05) ||
+    (paidCapShares > liveMarketShares * 1.5 && liveMarketShares >= 1_000_000)
+  );
+  const rawEffectiveShareCount = isCorporateActionOrSplit
+    ? liveMarketShares
+    : ((paidCapShares && paidCapShares >= 1000000) ? paidCapShares : (liveMarketShares && liveMarketShares > 0 ? liveMarketShares : null));
   const effectiveShareCount = (rawEffectiveShareCount && rawEffectiveShareCount > 0) ? rawEffectiveShareCount : null;
   let effectiveEbitdaFull = 0;
   let effectiveNetFull = 0;
