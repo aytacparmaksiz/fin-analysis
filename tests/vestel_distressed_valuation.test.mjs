@@ -191,5 +191,22 @@ describe('VESBE & Distressed Loss-Making Valuation Stress Test Suite', () => {
     assert.ok(result.valuation.fair_value > 1.5, `Fair value (${result.valuation.fair_value}) must be > 1.5 TL`);
     assert.doesNotMatch(result.valuation.valuation_model_name, /Döngüsel Normalizasyon/i);
   });
+
+  it('9. Generic Distressed Invariant: Any industrial company burning cash with net losses activates Distressed Model without hardcoded ticker', () => {
+    const genericDistressedData = {
+      ticker: 'NON_VESBE_DISTRESSED',
+      financial_history: [
+        { period: '2025/12', revenue: 1000, ebitda: 300, net_income: 100, equity: 1000, net_debt: 2000, operating_cash_flow: 100 },
+        { period: '2026/09', revenue: 800, ebitda: 50, net_income: -200, equity: 800, net_debt: 2500, operating_cash_flow: -500, roe: -20 }
+      ],
+      shares_outstanding: 100
+    };
+    const res = computeSectorValuationAndDrivers({ extractedData: genericDistressedData, sector: 'INDUSTRIAL', marketPrice: 10 });
+    assert.match(res.valuation.valuation_model_name, /Sıkıntılı Şirket \/ Varlık Tabanı İskonto Modeli/i);
+    assert.match(res.drivers.target_multiple.value, /Hak Edilen Sıkıntılı PD\/DD/i);
+    assert.ok(res.valuation.fair_value > 0);
+    assert.ok(res.valuation.bear_price <= res.valuation.fair_value, `Bear price (${res.valuation.bear_price}) <= Fair value (${res.valuation.fair_value})`);
+    assert.ok(res.valuation.fair_value <= res.valuation.bull_price, `Fair value (${res.valuation.fair_value}) <= Bull price (${res.valuation.bull_price})`);
+  });
 });
 

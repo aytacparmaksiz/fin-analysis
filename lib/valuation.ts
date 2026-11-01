@@ -3969,8 +3969,7 @@ export function computeSectorValuationAndDrivers(
       (roe !== null && roe < 0) ||
       (ttmRvVal > 0 && ttmEbVal > 0 && (ttmEbVal / ttmRvVal) < 0.04) ||
       (rawNetDebtVal > 0 && ttmEbVal > 0 && (rawNetDebtVal / ttmEbVal) > 6.0)
-    )) ||
-    currentTickerUpper === 'VESBE'
+    ))
   );
 
   if (!isSevereOperationalDistress && !isExcludedLightSector && (sector === 'INDUSTRIAL' || sector === 'UTILITIES_TELCO')) {
@@ -4955,11 +4954,11 @@ export function computeSectorValuationAndDrivers(
     fairValue = Number(Math.max(1.0, rawFair).toFixed(2));
     formulaStr = `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x): ${evPerShare.toFixed(2).replace('.', ',')} TL (%45) + F/K (${targetPe.toFixed(1).replace('.', ',')}x): ${pePerShare.toFixed(2).replace('.', ',')} TL (%35) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%20) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
   } else if (isElectricalEquipmentSector(detectedOfficialSecName, currentTickerUpper)) {
-    modelName = 'Uluslararası Elektrik Teçhizat, Trafo & Şebeke Kurulum Modeli (Backlog, İhracat & CapEx Çarpanı)';
     const latestEbitda = parseFinancialNumber(latest?.ebitda) ?? 0;
     const latestRev = parseFinancialNumber(latest?.revenue) ?? 0;
     const latestNet = parseFinancialNumber(latest?.net_income) ?? 0;
     const latestEq = parseFinancialNumber(latest?.equity) ?? 0;
+    const latestOcf = parseFinancialNumber(latest?.operating_cash_flow) ?? 0;
 
     const ebitdaFull = computeTtmField('ebitda', latestEbitda) * unitScale;
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
@@ -4970,41 +4969,75 @@ export function computeSectorValuationAndDrivers(
     const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
     const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
 
-    const rawRevG = revGrowth / 100;
-    const clampedRevG = Math.min(0.40, Math.max(-0.10, rawRevG));
-    const rawNetG = netGrowth / 100;
-    const clampedNetG = Math.min(0.45, Math.max(-0.15, rawNetG));
-
-    const forwardEbitda = ebitdaFull > 0 ? ebitdaFull * (1 + clampedRevG) : 0;
-    const targetEvMultiple = 11.5;
-    const enterpriseVal = forwardEbitda * targetEvMultiple;
-
-    let evEquity = enterpriseVal - totalDebtBridge;
-    if (enterpriseVal > 0 && totalEquityFull > 0) {
-      evEquity = Math.max(evEquity, enterpriseVal * 0.40);
-    }
-    const evPerShare = evEquity > 0 ? (evEquity / effectiveShareCount) : 0;
-
-    const forwardNet = netFull > 0 ? netFull * (1 + clampedNetG) : 0;
-    const targetPe = 14.5;
-    const pePerShare = forwardNet > 0 ? (forwardNet * targetPe) / effectiveShareCount : 0;
-
-    const bvps = totalEquityFull > 0 ? (totalEquityFull / effectiveShareCount) : 0;
-    const forwardBvps = Math.max(0, bvps * (1 + ((roe !== null && roe > 0) ? Math.min(0.45, (roe / 100) * 0.75) : 0)));
-    const justifiedPb = Math.max(2.5, Math.min(4.8, (roe !== null && roe > 0) ? (roe / 12.0) : 3.2));
-    const pbPerShare = forwardBvps * justifiedPb;
-
-    const weights = pePerShare > 0 ? { ev: 0.50, pe: 0.35, pb: 0.15 } : { ev: 0.70, pe: 0.0, pb: 0.30 };
-    let rawFair = 0;
-    if (pePerShare > 0) {
-      rawFair = (evPerShare * weights.ev) + (pePerShare * weights.pe) + (pbPerShare * weights.pb);
+    if (isSevereOperationalDistress || ebitdaFull <= 0) {
+      const indResult = computeIndustrialFairValue({
+        ebitdaFull,
+        netFull,
+        totalEquityFull,
+        netDebt,
+        leaseLiabilities,
+        minorityInterests,
+        effectiveShareCount,
+        targetMultipleNum,
+        clampedRevGrowth: 0,
+        clampedNetGrowth: 0,
+        currentRoic: parseFinancialNumber(latest?.roic),
+        currentWacc: parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc),
+        roe,
+        currentRatio: parseFinancialNumber(latest?.current_ratio),
+        isCapExTransitionPhase: false,
+        isWorkingCapitalExempt: false,
+        isDistressed: true,
+        operatingCashFlow: latestOcf
+      });
+      fairValue = indResult.fairValue as any;
+      formulaStr = indResult.formulaStr;
+      modelName = indResult.modelName;
+      isInsolvent = indResult.isInsolvent;
+      if (indResult.boundaryWarning) {
+        boundaryWarning = boundaryWarning ? `${boundaryWarning} | ${indResult.boundaryWarning}` : indResult.boundaryWarning;
+      }
+      evaDiscountPct = indResult.evaDiscountPct;
+      debtDiscountPct = indResult.debtDiscountPct;
+      evaHaircutApplied = indResult.evaHaircutApplied;
     } else {
-      rawFair = (evPerShare * weights.ev) + (pbPerShare * weights.pb);
+      modelName = 'Uluslararası Elektrik Teçhizat, Trafo & Şebeke Kurulum Modeli (Backlog, İhracat & CapEx Çarpanı)';
+      const rawRevG = revGrowth / 100;
+      const clampedRevG = Math.min(0.40, Math.max(-0.10, rawRevG));
+      const rawNetG = netGrowth / 100;
+      const clampedNetG = Math.min(0.45, Math.max(-0.15, rawNetG));
+
+      const forwardEbitda = ebitdaFull > 0 ? ebitdaFull * (1 + clampedRevG) : 0;
+      const targetEvMultiple = 11.5;
+      const enterpriseVal = forwardEbitda * targetEvMultiple;
+
+      let evEquity = enterpriseVal - totalDebtBridge;
+      if (enterpriseVal > 0 && totalEquityFull > 0) {
+        evEquity = Math.max(evEquity, enterpriseVal * 0.40);
+      }
+      const evPerShare = evEquity > 0 ? (evEquity / effectiveShareCount) : 0;
+
+      const forwardNet = netFull > 0 ? netFull * (1 + clampedNetG) : 0;
+      const targetPe = 14.5;
+      const pePerShare = forwardNet > 0 ? (forwardNet * targetPe) / effectiveShareCount : 0;
+
+      const bvps = totalEquityFull > 0 ? (totalEquityFull / effectiveShareCount) : 0;
+      const forwardBvps = Math.max(0, bvps * (1 + ((roe !== null && roe > 0) ? Math.min(0.45, (roe / 100) * 0.75) : 0)));
+      const justifiedPb = Math.max(2.5, Math.min(4.8, (roe !== null && roe > 0) ? (roe / 12.0) : 3.2));
+      const pbPerShare = forwardBvps * justifiedPb;
+
+      const weights = pePerShare > 0 ? { ev: 0.50, pe: 0.35, pb: 0.15 } : { ev: 0.70, pe: 0.0, pb: 0.30 };
+      let rawFair = 0;
+      if (pePerShare > 0) {
+        rawFair = (evPerShare * weights.ev) + (pePerShare * weights.pe) + (pbPerShare * weights.pb);
+      } else {
+        rawFair = (evPerShare * weights.ev) + (pbPerShare * weights.pb);
+      }
+      fairValue = Number(Math.max(1.0, rawFair).toFixed(2));
+      formulaStr = pePerShare > 0
+        ? `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x): ${evPerShare.toFixed(2).replace('.', ',')} TL (%50) + F/K (${targetPe.toFixed(1).replace('.', ',')}x): ${pePerShare.toFixed(2).replace('.', ',')} TL (%35) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%15) = ${fairValue.toFixed(2).replace('.', ',')} TL`
+        : `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x): ${evPerShare.toFixed(2).replace('.', ',')} TL (%70) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%30) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
     }
-    fairValue = Number(Math.max(1.0, rawFair).toFixed(2));
-    formulaStr = pePerShare > 0
-      ? `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x): ${evPerShare.toFixed(2).replace('.', ',')} TL (%50) + F/K (${targetPe.toFixed(1).replace('.', ',')}x): ${pePerShare.toFixed(2).replace('.', ',')} TL (%35) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%15) = ${fairValue.toFixed(2).replace('.', ',')} TL`
-      : `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x): ${evPerShare.toFixed(2).replace('.', ',')} TL (%70) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%30) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
   } else if (isDurablesSector(detectedOfficialSecName, currentTickerUpper)) {
     const latestEbitda = parseFinancialNumber(latest?.ebitda) ?? 0;
     const latestRev = parseFinancialNumber(latest?.revenue) ?? 0;
@@ -5102,6 +5135,7 @@ export function computeSectorValuationAndDrivers(
     const latestRev = parseFinancialNumber(latest?.revenue) ?? 0;
     const latestNet = parseFinancialNumber(latest?.net_income) ?? 0;
     const latestEq = parseFinancialNumber(latest?.equity) ?? 0;
+    const latestOcf = parseFinancialNumber(latest?.operating_cash_flow) ?? 0;
 
     const ebitdaFull = computeTtmField('ebitda', latestEbitda) * unitScale;
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
@@ -5112,7 +5146,7 @@ export function computeSectorValuationAndDrivers(
     const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
     const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
 
-    if (ebitdaFull <= 0) {
+    if (isSevereOperationalDistress || ebitdaFull <= 0) {
       const indResult = computeIndustrialFairValue({
         ebitdaFull,
         netFull,
@@ -5129,7 +5163,9 @@ export function computeSectorValuationAndDrivers(
         roe,
         currentRatio: parseFinancialNumber(latest?.current_ratio),
         isCapExTransitionPhase: false,
-        isWorkingCapitalExempt: false
+        isWorkingCapitalExempt: false,
+        isDistressed: true,
+        operatingCashFlow: latestOcf
       });
       fairValue = indResult.fairValue as any;
       formulaStr = indResult.formulaStr;
@@ -5191,6 +5227,7 @@ export function computeSectorValuationAndDrivers(
     const latestRev = parseFinancialNumber(latest?.revenue) ?? 0;
     const latestNet = parseFinancialNumber(latest?.net_income) ?? 0;
     const latestEq = parseFinancialNumber(latest?.equity) ?? 0;
+    const latestOcf = parseFinancialNumber(latest?.operating_cash_flow) ?? 0;
 
     const ebitdaFull = computeTtmField('ebitda', latestEbitda) * unitScale;
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
@@ -5201,7 +5238,7 @@ export function computeSectorValuationAndDrivers(
     const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
     const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
 
-    if (ebitdaFull <= 0) {
+    if (isSevereOperationalDistress || ebitdaFull <= 0) {
       const indResult = computeIndustrialFairValue({
         ebitdaFull,
         netFull,
@@ -5218,7 +5255,9 @@ export function computeSectorValuationAndDrivers(
         roe,
         currentRatio: parseFinancialNumber(latest?.current_ratio),
         isCapExTransitionPhase: false,
-        isWorkingCapitalExempt: false
+        isWorkingCapitalExempt: false,
+        isDistressed: true,
+        operatingCashFlow: latestOcf
       });
       fairValue = indResult.fairValue as any;
       formulaStr = indResult.formulaStr;
@@ -5292,6 +5331,7 @@ export function computeSectorValuationAndDrivers(
     const latestRev = parseFinancialNumber(latest?.revenue) ?? 0;
     const latestNet = parseFinancialNumber(latest?.net_income) ?? 0;
     const latestEq = parseFinancialNumber(latest?.equity) ?? 0;
+    const latestOcf = parseFinancialNumber(latest?.operating_cash_flow) ?? 0;
 
     const ebitdaFull = computeTtmField('ebitda', latestEbitda) * unitScale;
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
@@ -5302,7 +5342,7 @@ export function computeSectorValuationAndDrivers(
     const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
     const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
 
-    if (ebitdaFull <= 0) {
+    if (isSevereOperationalDistress || ebitdaFull <= 0) {
       const indResult = computeIndustrialFairValue({
         ebitdaFull,
         netFull,
@@ -5319,7 +5359,9 @@ export function computeSectorValuationAndDrivers(
         roe,
         currentRatio: parseFinancialNumber(latest?.current_ratio),
         isCapExTransitionPhase: false,
-        isWorkingCapitalExempt: false
+        isWorkingCapitalExempt: false,
+        isDistressed: true,
+        operatingCashFlow: latestOcf
       });
       fairValue = indResult.fairValue as any;
       formulaStr = indResult.formulaStr;
@@ -5431,6 +5473,7 @@ export function computeSectorValuationAndDrivers(
     const latestRev = parseFinancialNumber(latest?.revenue) ?? 0;
     const latestNet = parseFinancialNumber(latest?.net_income) ?? 0;
     const latestEq = parseFinancialNumber(latest?.equity) ?? 0;
+    const latestOcf = parseFinancialNumber(latest?.operating_cash_flow) ?? 0;
 
     const ebitdaFull = computeTtmField('ebitda', latestEbitda) * unitScale;
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
@@ -5441,7 +5484,7 @@ export function computeSectorValuationAndDrivers(
     const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
     const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
 
-    if (ebitdaFull <= 0) {
+    if (isSevereOperationalDistress || ebitdaFull <= 0) {
       const indResult = computeIndustrialFairValue({
         ebitdaFull,
         netFull,
@@ -5458,7 +5501,9 @@ export function computeSectorValuationAndDrivers(
         roe,
         currentRatio: parseFinancialNumber(latest?.current_ratio),
         isCapExTransitionPhase: false,
-        isWorkingCapitalExempt: false
+        isWorkingCapitalExempt: false,
+        isDistressed: true,
+        operatingCashFlow: latestOcf
       });
       fairValue = indResult.fairValue as any;
       formulaStr = indResult.formulaStr;
@@ -5998,7 +6043,9 @@ export function computeSectorValuationAndDrivers(
       roe,
       currentRatio: latestCr,
       isCapExTransitionPhase,
-      isWorkingCapitalExempt: isExcludedLightSector || (sector as string) === 'RETAIL'
+      isWorkingCapitalExempt: isExcludedLightSector || (sector as string) === 'RETAIL',
+      isDistressed: isSevereOperationalDistress,
+      operatingCashFlow: rawLatestOcfVal
     });
 
     fairValue = indResult.fairValue as any;
