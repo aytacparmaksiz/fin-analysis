@@ -614,9 +614,32 @@ export function buildDisclosureKeySummary(
 
   if (category === 'CONTRACT') {
     if (amountStr) {
-      return `Şirket, iş hacmini ve geleceğe dönük nakit akışını güçlendiren toplam **${amountStr}** tutarında yeni sözleşme ve sipariş anlaşması imzaladı.`;
+      return `Şirket, iş hacmini ve geleceğe dönük nakit akışını güçlendiren toplam **${amountStr}** tutarında yeni sözleşme imzaladı.`;
     }
-    return `Şirketin operasyonel büyümesini destekleyen yeni iş ilişkisi, sipariş teslimatı ve ihale kazanımına ilişkin resmi sözleşme detayları KAP'ta yayımlandı.`;
+
+    // Başlıktan proje veya iş birimi adını tespit et (Örn: "Mandarin Oriental Etiler Projesi")
+    const projectMatch = title.match(/([A-Za-zÇĞİÖŞÜçğıöşü0-9\s-]+?\s+(?:Projesi|İhalesi|Fabrikası|Tesisi|Hattı))/i)
+      || title.match(/([A-Za-zÇĞİÖŞÜçğıöşü0-9\s-]+?)(?:'nde|'nda|'de|'da|'te|'ta|\s+kapsamında|\s+ile)\s+(?:sözleşme|ihale|sipariş|anlaşma)/i);
+
+    let entity = '';
+    if (projectMatch && projectMatch[1]) {
+      const candidate = projectMatch[1].replace(/^[,\s\w]+\s*,\s*/, '').trim();
+      if (candidate.length > 3 && !candidate.toLowerCase().includes('şirket')) {
+        entity = candidate;
+      }
+    }
+
+    if (entity) {
+      return `Şirket, **${entity}** kapsamındaki sözleşme sürecini tamamlayarak taahhüt portföyünü ve operasyonel iş hacmini güçlendirdi.`;
+    }
+
+    if (tLower.includes('ihale')) {
+      return `Şirketin katıldığı ihale sürecinin neticelenmesi ve resmi sözleşme imzalanmasına ilişkin detaylar KAP'ta yayımlandı.`;
+    }
+    if (tLower.includes('sipariş')) {
+      return `Şirketin üretim ve teslimat takvimini destekleyen yeni sipariş alımına ilişkin resmi bildirim kamuoyu ile paylaşıldı.`;
+    }
+    return `Şirketin taahhüt büyüklüğünü ve geleceğe dönük iş hacmini artıran yeni sözleşme detayları KAP'ta duyuruldu.`;
   }
 
   if (category === 'DIVIDEND') {

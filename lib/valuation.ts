@@ -29,6 +29,7 @@ import {
 } from './sectors.ts';
 import { getExpectedInflationForPeriod, type MacroDataSnapshot } from './macro-service.ts';
 import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from './isyatirim-multiples-cache.ts';
+import { OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE, ISYATIRIM_SECTOR_NAME_TO_CODE } from './isyatirim-sector-averages-cache.ts';
 
 export interface DriverDetail {
   value: number;
@@ -624,14 +625,28 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
       const currRev = Math.abs(item.revenue || item.written_premiums || 0);
 
       let isSpike = false;
+      const prevItem = i > 0 ? history[i - 1] : null;
       const nextItem = i < history.length - 1 ? history[i + 1] : null;
+      const prevEq = prevItem ? Math.abs(prevItem.equity || 0) : 0;
       const nextEq = nextItem ? Math.abs(nextItem.equity || 0) : 0;
+      const prevRev = prevItem ? Math.abs(prevItem.revenue || prevItem.written_premiums || 0) : 0;
       const nextRev = nextItem ? Math.abs(nextItem.revenue || nextItem.written_premiums || 0) : 0;
 
-      // Geçici ara dönem sıçraması (Spike): Hem medyana hem de sonraki döneme göre >250x anormal sıçrama ve geri düşüş
-      if (nextItem) {
-        if (medianEq > 0 && currEq > 250 * medianEq && nextEq > 0 && currEq > 250 * nextEq) isSpike = true;
-        else if (medianRev > 0 && currRev > 250 * medianRev && nextRev > 0 && currRev > 250 * nextRev) isSpike = true;
+      // 1. İki komşu arasında geçici anormal tepe (Neighbor Spike / Sandwiched Outlier):
+      // Örn: DESA 2022/03 (432M -> 191 Mr -> 461M) hem önceki hem sonraki döneme göre >20x sıçrama ve geri düşüş
+      const isNeighborSpikeRev = (prevRev > 0 && nextRev > 0 && currRev > 20 * prevRev && currRev > 20 * nextRev);
+      const isNeighborSpikeEq = (prevEq > 0 && nextEq > 0 && currEq > 20 * prevEq && currEq > 20 * nextEq);
+
+      // 2. Medyana ve komşusuna göre ara dönem sıçraması:
+      const isMedianSpikeRev = prevItem && nextItem && medianRev > 0 && currRev > 25 * medianRev && (currRev > 20 * nextRev || currRev > 20 * prevRev);
+      const isMedianSpikeEq = prevItem && nextItem && medianEq > 0 && currEq > 25 * medianEq && (currEq > 20 * nextEq || currEq > 20 * prevEq);
+
+      // 3. Kenar dönem (ilk çeyrek) 1000x ölçekleme anomalisi (>250x sıçrama):
+      const isEdgeSpikeRev = (!prevItem && nextRev > 0 && currRev > 250 * nextRev);
+      const isEdgeSpikeEq = (!prevItem && nextEq > 0 && currEq > 250 * nextEq);
+
+      if (isNeighborSpikeRev || isNeighborSpikeEq || isMedianSpikeRev || isMedianSpikeEq || isEdgeSpikeRev || isEdgeSpikeEq) {
+        isSpike = true;
       }
 
       if (isSpike) {
@@ -836,9 +851,11 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
       // Veri kaynağının veya LLM'in container etiketini 'Bin TRY' koyup içindeki sayıları Tam TL vermesi
       // durumunda (örn. net_income > 250M, equity > 2B, total_assets > 15B gibi Bin TL olması imkansız tutarlar)
       // veriyi tekrar 1000 ile çarpmaktan koru:
-      const isAlreadyFullTl = (itemEqAbs > 2_000_000_000) ||
-                              (typeof item.net_income === 'number' && Math.abs(item.net_income) > 250_000_000) ||
-                              (typeof item.total_assets === 'number' && Math.abs(item.total_assets) > 15_000_000_000);
+      const isAlreadyFullTl = (itemEqAbs > 50_000_000 && isNeighborCompatible) ||
+                              (itemRevAbs > 50_000_000 && isNeighborCompatible) ||
+                              (itemEqAbs > 1_500_000_000) ||
+                              (typeof item.net_income === 'number' && Math.abs(item.net_income) > 150_000_000) ||
+                              (typeof item.total_assets === 'number' && Math.abs(item.total_assets) > 5_000_000_000);
 
       const isPeriodInThousands = (!isAlreadyFullTl && isContainerBin) || isDepressedScale || isIsolatedDepressed;
       if (isPeriodInThousands) {
@@ -2378,6 +2395,8 @@ export function calculateSectorScore(
     let r3 = 'Nakit akışı takibi yapılıyor';
     let st3: 'good' | 'warning' | 'danger' = 'warning';
 
+    const cashConversion = (netIncome !== null && netIncome > 0 && ocf !== null) ? (ocf / netIncome) : null;
+
     // KRİTİK ANOMALİ 1: Net Kâr pozitif ama OCF negatif (Bilanço Makyajı / Kârın nakde dönmemesi)
     if (netIncome !== null && netIncome > 0 && ocf !== null && ocf < 0) {
       s3 = 2;
@@ -2390,12 +2409,22 @@ export function calculateSectorScore(
       r3 = 'Çift Yönlü Nakit & Kâr Baskısı: Şirket hem muhasebesel net zarar açıklamakta hem de operasyonlarından nakit tüketmektedir. Nakit Dönüşüm Oranı uygulanamaz (N/A).';
       st3 = 'danger';
       anomalies.push('Çift Negatif Nakit Baskısı: Hem net zarar hem negatif OCF (Nakit yakımı).');
+    // KRİTİK ANOMALİ 3: Aşırı Düşük Nakit Dönüşümü (Tahakkuk Riski - Kâr Kağıt Üzerinde Kalıyor)
+    } else if (cashConversion !== null && cashConversion < 0.35) {
+      s3 = 8;
+      r3 = `Kritik Tahakkuk Riski: İşletme nakit akışı net kârın yalnızca %${(cashConversion * 100).toFixed(0)} seviyesindedir! Kârın %65'inden fazlası alacak ve stoklarda bağlı kalmaktadır.`;
+      st3 = 'warning';
+      anomalies.push(`Zayıf Nakit Dönüşümü: OCF/Net Kâr %${(cashConversion * 100).toFixed(0)} (Tahakkuk Riski)`);
+    } else if (cashConversion !== null && cashConversion < 0.55) {
+      s3 = 12;
+      r3 = `Ilımlı Nakit Dönüşümü: İşletme nakit akışı net kârın %${(cashConversion * 100).toFixed(0)} seviyesinde; çalışma sermayesi nakit emmektedir.`;
+      st3 = 'warning';
     } else if (fcf !== null && fcf > 0 && ocf !== null && netIncome !== null && netIncome > 0 && ocf >= netIncome * 0.75) {
       s3 = 25;
       r3 = 'Mükemmel Nakit Kalitesi: İşletme nakit akışı net kârı destekliyor ve serbest nakit akışı (FCF) güçlü pozitif.';
       st3 = 'good';
     } else if (fcf !== null && fcf > 0) {
-      s3 = 20;
+      s3 = 18;
       r3 = 'Pozitif serbest nakit akışı hissedar kazancını destekliyor.';
       st3 = 'good';
     } else if (ocf !== null && ocf > 0) {
@@ -2412,14 +2441,26 @@ export function calculateSectorScore(
     // 4. Büyüme & Rekabet Kalkanı (Moat) (Max 25)
     const margin = parseFinancialNumber(latest?.ebitda_margin);
     const kko = parseFinancialNumber(latest?.capacity_utilization_rate);
+    const revGrowthRate = sortedHistory.length >= 2 ? computeComparableIncomeGrowth((h) => h?.revenue) : null;
+    const isGrowthStagnant = revGrowthRate !== null && revGrowthRate < 15.0; // Enflasyon altı veya negatif büyüme
+
     let s4 = 18;
     let r4 = 'Operasyonel marjlar makul';
     let st4: 'good' | 'warning' | 'danger' = 'good';
     if (margin !== null) {
-      if (margin >= 25.0) { s4 = 25; r4 = `Güçlü Fiyatlama Gücü (Moat): FAVÖK marjı %${margin} seviyesinde korunuyor.`; st4 = 'good'; }
-      else if (margin >= 15.0) { s4 = 19; r4 = `Sağlıklı operasyonel kârlılık (FAVÖK marjı: %${margin}).`; st4 = 'good'; }
-      else if (margin >= 8.0) { s4 = 11; r4 = `Düşük FAVÖK marjı (%${margin}), maliyet şoklarına duyarlı.`; st4 = 'warning'; }
-      else { s4 = 4; r4 = `Kritik marj erozyonu (FAVÖK marjı: %${margin}).`; st4 = 'danger'; anomalies.push(`Düşük FAVÖK Marjı: %${margin}`); }
+      if (margin >= 25.0 && !isGrowthStagnant) {
+        s4 = 25; r4 = `Güçlü Fiyatlama Gücü ve Büyüme (Moat): FAVÖK marjı %${margin} seviyesinde korunuyor ve ciro organik genişliyor.`; st4 = 'good';
+      } else if (margin >= 25.0 && isGrowthStagnant) {
+        s4 = 14; r4 = `Yüksek Marj ama Durgun Büyüme: FAVÖK marjı güçlü (%${margin}), ancak ciro büyümesi (${revGrowthRate !== null ? `%${revGrowthRate.toFixed(1)}` : 'yetersiz'}) talep yavaşlamasını yansıtıyor.`; st4 = 'warning';
+      } else if (margin >= 15.0) {
+        s4 = isGrowthStagnant ? 12 : 19;
+        r4 = `Sağlıklı operasyonel kârlılık (FAVÖK marjı: %${margin}).`;
+        st4 = isGrowthStagnant ? 'warning' : 'good';
+      } else if (margin >= 8.0) {
+        s4 = 10; r4 = `Düşük FAVÖK marjı (%${margin}), maliyet şoklarına duyarlı.`; st4 = 'warning';
+      } else {
+        s4 = 4; r4 = `Kritik marj erozyonu (FAVÖK marjı: %${margin}).`; st4 = 'danger'; anomalies.push(`Düşük FAVÖK Marjı: %${margin}`);
+      }
     }
     if (kko !== null && kko > 0) {
       r4 += ` (TCMB İmalat KKO: %${kko.toFixed(1)} ${kko < 78 ? '- Organik üretim kapasitesi elverişli' : '- Yüksek kapasite baskısı'}).`;
@@ -3011,6 +3052,11 @@ export function optimizeFinalDecision({
       overrideApplied = true;
       overrideReason = 'Makyajlı Bilanço Koruması: Net kâr pozitif olmasına rağmen işletme nakit akışı (OCF) negatiftir. Şirketin kâr kalitesi zayıf ve tahsilat/stok riski bulunduğu için AL kararı engellendi.';
       safetyFlags.push('Bilanço Makyajı: OCF negatif, net kâr pozitif.');
+    } else if (!overrideApplied && isOperatingSector && netIncome !== null && netIncome > 0 && ocf !== null && ocf > 0 && (ocf / netIncome) < 0.35) {
+      finalDecision = 'NÖTR';
+      overrideApplied = true;
+      overrideReason = `Zayıf Nakit Dönüşümü (Tahakkuk Riski): İşletme nakit akışı net kârın yalnızca %${((ocf / netIncome) * 100).toFixed(0)} seviyesindedir. Kârın büyük kısmının nakde dönmemesi ve alacak/stoklarda bağlı kalması nedeniyle karar temkinli 'NÖTR' (Koşullu İzleme) olarak dengelendi.`;
+      safetyFlags.push(`Düşük Nakit Dönüşümü: OCF/Net Kâr %${((ocf / netIncome) * 100).toFixed(0)}`);
     }
 
     // 3. Kural: Reel Sektör Borçluluk & Negatif FAVÖK Filtresi
@@ -5643,9 +5689,9 @@ export function computeSectorValuationAndDrivers(
     } else {
       modelName = 'Uluslararası Meşrubat, İçecek & Bira Üretim Modeli (FMCG Defansif Hacim & Fiyatlama Gücü)';
       const rawRevG = revGrowth / 100;
-      const clampedRevG = Math.min(0.25, Math.max(-0.10, rawRevG));
+      const clampedRevG = Math.min(0.20, Math.max(-0.10, rawRevG));
       const rawNetG = netGrowth / 100;
-      const clampedNetG = Math.min(0.30, Math.max(-0.20, rawNetG));
+      const clampedNetG = Math.min(0.20, Math.max(-0.20, rawNetG));
 
       let effectiveEbitda = ebitdaFull;
       const midCycleMargin = 0.195;
@@ -5654,24 +5700,48 @@ export function computeSectorValuationAndDrivers(
       }
       const effectiveNet = netFull;
 
+      // 1. Resmi İş Yatırım Sektör Ortalaması Çarpanları
+      const secCode = (typeof ISYATIRIM_SECTOR_NAME_TO_CODE !== 'undefined' ? ISYATIRIM_SECTOR_NAME_TO_CODE['Meşrubat / İçecek'] : null) || '0029';
+      const secAvg = typeof OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE !== 'undefined' ? OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE[secCode] : null;
+      const baseEv = (secAvg && secAvg.evEbitda && secAvg.evEbitda > 3.0 && secAvg.evEbitda < 12.0) ? secAvg.evEbitda : 5.0;
+      const basePe = (secAvg && secAvg.pe && secAvg.pe > 5.0 && secAvg.pe < 25.0) ? secAvg.pe : 10.5;
+      const basePb = (secAvg && secAvg.pb && secAvg.pb > 0.8 && secAvg.pb < 5.0) ? secAvg.pb : 1.86;
+
+      // Kârlılık ve Moat Prim Ayarlaması (Sektör üzeri marj varsa azami +%15 kalite primi)
+      const currentEbitdaMargin = (revFull > 0 && effectiveEbitda > 0) ? (effectiveEbitda / revFull) : 0.20;
+      const qualityFactor = currentEbitdaMargin >= 0.25 ? 1.15 : (currentEbitdaMargin >= 0.20 ? 1.05 : 0.95);
+      const targetEvMultiple = Number((baseEv * qualityFactor).toFixed(2));
+      const targetPe = Number((basePe * (currentEbitdaMargin >= 0.22 ? 1.05 : 0.95)).toFixed(2));
+
       const forwardEbitda = effectiveEbitda > 0 ? effectiveEbitda * (1 + clampedRevG) : 0;
-      const targetEvMultiple = 8.2;
       const enterpriseVal = forwardEbitda * targetEvMultiple;
 
       let evEquity = enterpriseVal - totalDebtBridge;
       if (enterpriseVal > 0 && totalEquityFull > 0) {
-        evEquity = Math.max(evEquity, enterpriseVal * 0.40);
+        evEquity = Math.max(evEquity, enterpriseVal * 0.30);
       }
       const evPerShare = evEquity > 0 ? (evEquity / effectiveShareCount) : 0;
 
       const forwardNet = effectiveNet > 0 ? effectiveNet * (1 + clampedNetG) : 0;
-      const targetPe = 12.0;
       const pePerShare = forwardNet > 0 ? (forwardNet * targetPe) / effectiveShareCount : 0;
 
       const bvps = totalEquityFull > 0 ? (totalEquityFull / effectiveShareCount) : 0;
-      const forwardBvps = Math.max(0, bvps * (1 + ((roe !== null && roe > 0) ? Math.min(0.35, (roe / 100) * 0.70) : 0)));
-      const justifiedPb = Math.max(1.80, Math.min(3.20, (roe !== null && roe > 0) ? (roe / 14.0) : 2.10));
+      const forwardBvps = Math.max(0, bvps * (1 + ((roe !== null && roe > 0) ? Math.min(0.25, (roe / 100) * 0.60) : 0)));
+      const justifiedPb = Math.max(1.10, Math.min(basePb, (roe !== null && roe > 0) ? (roe / 15.0) : 1.35));
       const pbPerShare = forwardBvps * justifiedPb;
+
+      // 2. Kâr Kalitesi ve Nakit Dönüşüm Düzeltmesi (Cash Conversion & Accrual Quality Haircut):
+      // Sloan (1996) Tahakkuk Anomalisi ve Kurumsal Finans İlkesi:
+      // Eğer işletme nakit akışı net kârın %50'sinden az ise (kâr kağıt üzerinde alacak/stoklarda bağlı kalıyorsa),
+      // nakit üretmeyen tahakkuk kârı tam çarpanla fiyatlanamaz.
+      const latestOcf = parseFinancialNumber(latest?.operating_cash_flow);
+      const cashConversion = (effectiveNet > 0 && latestOcf != null) ? (latestOcf / (effectiveNet * (latest?.period?.includes('06') ? 0.5 : 1.0))) : 1.0;
+      let accrualHaircut = 0;
+      if (cashConversion < 0.50 && cashConversion > 0) {
+        accrualHaircut = Math.min(0.20, Number(((0.50 - cashConversion) * 0.60).toFixed(3)));
+      } else if (latestOcf != null && latestOcf <= 0 && effectiveNet > 0) {
+        accrualHaircut = 0.25;
+      }
 
       const weights = pePerShare > 0 ? { ev: 0.50, pe: 0.35, pb: 0.15 } : { ev: 0.70, pe: 0.0, pb: 0.30 };
       let rawFair = 0;
@@ -5680,10 +5750,15 @@ export function computeSectorValuationAndDrivers(
       } else {
         rawFair = (evPerShare * weights.ev) + (pbPerShare * weights.pb);
       }
+
+      if (accrualHaircut > 0) {
+        rawFair = rawFair * (1 - accrualHaircut);
+      }
       fairValue = Number(Math.max(1.0, rawFair).toFixed(2));
+      const haircutText = accrualHaircut > 0 ? ` [-% ${(accrualHaircut * 100).toFixed(0)} Tahakkuk & Zayıf Nakit Dönüşümü Düzeltmesi]` : '';
       formulaStr = pePerShare > 0
-        ? `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x): ${evPerShare.toFixed(2).replace('.', ',')} TL (%50) + F/K (${targetPe.toFixed(1).replace('.', ',')}x): ${pePerShare.toFixed(2).replace('.', ',')} TL (%35) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%15) = ${fairValue.toFixed(2).replace('.', ',')} TL`
-        : `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x): ${evPerShare.toFixed(2).replace('.', ',')} TL (%70) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%30) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+        ? `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x): ${evPerShare.toFixed(2).replace('.', ',')} TL (%50) + F/K (${targetPe.toFixed(1).replace('.', ',')}x): ${pePerShare.toFixed(2).replace('.', ',')} TL (%35) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%15)${haircutText} = ${fairValue.toFixed(2).replace('.', ',')} TL`
+        : `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x): ${evPerShare.toFixed(2).replace('.', ',')} TL (%70) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%30)${haircutText} = ${fairValue.toFixed(2).replace('.', ',')} TL`;
     }
   } else if (isFoodBeverageSector(detectedOfficialSecName, currentTickerUpper)) {
     const latestEbitda = parseFinancialNumber(latest?.ebitda) ?? 0;

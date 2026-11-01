@@ -156,6 +156,38 @@ test('DESA: unit scale preservation and 1000x outlier spike healing', async (t) 
     assert.equal(p2203.minority_interests, 50000000, 'Corrupted 50B minority interests must be healed to 50M');
   });
 
+  await t.test('heals DESA 191 Mr TL 2022/03 jump even across full 16 inflation-adjusted quarters', () => {
+    const desa16Quarters = [
+      { period: '2021/12', revenue: 432405300, equity: 207950699 },
+      { period: '2022/03', revenue: 191862414000, equity: 227225781000 }, // 1000x corrupted
+      { period: '2022/06', revenue: 461578742, equity: 273667157 },
+      { period: '2022/09', revenue: 650000000, equity: 350000000 },
+      { period: '2022/12', revenue: 890000000, equity: 480000000 },
+      { period: '2023/03', revenue: 700000000, equity: 520000000 },
+      { period: '2023/06', revenue: 950000000, equity: 650000000 },
+      { period: '2023/09', revenue: 1200000000, equity: 800000000 },
+      { period: '2023/12', revenue: 1500000000, equity: 1100000000 },
+      { period: '2024/03', revenue: 1100000000, equity: 1300000000 },
+      { period: '2024/06', revenue: 1400000000, equity: 1600000000 },
+      { period: '2024/09', revenue: 1700000000, equity: 2000000000 },
+      { period: '2024/12', revenue: 2100000000, equity: 2600000000 },
+      { period: '2025/03', revenue: 1600000000, equity: 3000000000 },
+      { period: '2025/06', revenue: 2000000000, equity: 3800000000 },
+      { period: '2026/06', revenue: 2352641708, equity: 4744193715 }
+    ];
+
+    const sanitized = enrichAndSanitizeFinancialHistory({
+      ticker: 'DESA',
+      sector: 'INDUSTRIAL',
+      currency: 'TRY',
+      financial_history: desa16Quarters
+    });
+
+    const p2203 = sanitized.financial_history.find(p => p.period === '2022/03');
+    assert.equal(p2203.revenue, 191862414, '2022/03 revenue across 16 periods must be healed to 191.86M');
+    assert.equal(p2203.equity, 227225781, '2022/03 equity across 16 periods must be healed to 227.22M');
+  });
+
   await t.test('consecutive historical Bin TL quarters (<0.005 of series maximum) are correctly converted to Tam TL', () => {
     const historyWithConsecutiveBin = [
       { period: '2020/09', revenue: 100000, equity: 150000 }, // Bin TL
@@ -267,5 +299,62 @@ test('Universal 630+ BIST Sector & Corporate Action Architecture', async (t) => 
     assert.ok(valResult.valuation.formula_display?.includes('TL'), 'Valuation must succeed');
   });
 });
+
+test('TBORG & FMCG: Accrual Risk and Sector Multiples Calibration', async (t) => {
+  await t.test('TBORG valuation applies official sector multiples and cash conversion haircut, preventing inflated 226 TL', () => {
+    const mockTborgHistory = [
+      {
+        period: '2025/06',
+        revenue: 21678120000,
+        ebitda: 6010000000,
+        net_income: 1950000000,
+        equity: 24000000000,
+        operating_cash_flow: 480000000,
+        free_cash_flow: 120000000,
+        net_debt: -1200000000
+      },
+      {
+        period: '2026/06',
+        revenue: 23114295000,
+        ebitda: 6564681000,
+        net_income: 2085116000,
+        equity: 29844375000,
+        total_assets: 61356003000,
+        net_debt: -1622377000,
+        operating_cash_flow: 602854000, // Only 28.9% of Net Income!
+        free_cash_flow: 184972000,
+        paid_in_capital: 322500000,
+        ebitda_margin: 28.4
+      }
+    ];
+
+    const valResult = computeSectorValuationAndDrivers({
+      extractedData: {
+        ticker: 'TBORG',
+        sector: 'INDUSTRIAL',
+        currency: 'TRY',
+        share_count: 322500000,
+        financial_history: mockTborgHistory,
+        valuation: { current_price: 109.10 }
+      },
+      sector: 'INDUSTRIAL',
+      marketPrice: 109.10
+    });
+
+    const fv = valResult.valuation.fair_value;
+    assert.ok(fv !== null, 'Fair value must not be null');
+    // Must be calibrated with official Meşrubat multiples + accrual haircut (~141 - 171 TL), NOT inflated 226.64 TL!
+    assert.ok(fv < 185.0, `Fair value (${fv}) must not be inflated above 185 TL`);
+    assert.ok(fv > 110.0, `Fair value (${fv}) must reflect net cash and strong margins`);
+    assert.ok(valResult.valuation.formula_display.includes('Tahakkuk & Zayıf Nakit Dönüşümü'), 'Formula must disclose accrual haircut');
+    
+    // Score must be calibrated to Dengeli (~70-75), NOT inflated 95/100!
+    assert.ok(valResult.scoreResult.totalScore <= 75, `Total score (${valResult.scoreResult.totalScore}) must be <= 75 due to accrual deficit`);
+    
+    // Decision must NOT be an unqualified AL when OCF is only 29% of Net Income!
+    assert.equal(valResult.valuation.final_decision, 'NÖTR', 'Decision must be NÖTR due to weak cash conversion');
+  });
+});
+
 
 

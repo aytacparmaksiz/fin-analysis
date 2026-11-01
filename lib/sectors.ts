@@ -1547,3 +1547,126 @@ export function detectSector(ticker: string, contextText = ''): SectorType {
 
   return 'INDUSTRIAL';
 }
+
+export interface ScoreColorStyle {
+  scoreNum: number | null;
+  text: string;
+  bg: string;
+  border: string;
+  badge: string;
+  hex: string;
+  label: string;
+}
+
+/**
+ * Şirket Skorunu (0 - 100) yeşilden kırmızıya ton geçişli dinamik renk paletine eşler.
+ * 80-100: Canlı Zümrüt Yeşili (Çok Güçlü)
+ * 65-79:  Limon Yeşili (Güçlü)
+ * 50-64:  Sarı / Altın (Dengeli)
+ * 35-49:  Turuncu (Zayıf)
+ * 20-34:  Açık Kırmızı / Mercan (Yüksek Risk)
+ * 0-19:   Koyu Kırmızı / Bordo (Kritik Risk)
+ */
+export function getScoreColorStyle(score: any): ScoreColorStyle {
+  if (score === null || score === undefined || score === '') {
+    return {
+      scoreNum: null,
+      text: 'text-slate-400',
+      bg: 'bg-slate-800/40',
+      border: 'border-slate-700/50',
+      badge: 'bg-slate-800/60 text-slate-400 border border-slate-700/60',
+      hex: '#94a3b8',
+      label: 'Belirsiz',
+    };
+  }
+  const str = String(score).trim();
+  const match = str.match(/\d+/);
+  if (!match) {
+    return {
+      scoreNum: null,
+      text: 'text-slate-400',
+      bg: 'bg-slate-800/40',
+      border: 'border-slate-700/50',
+      badge: 'bg-slate-800/60 text-slate-400 border border-slate-700/60',
+      hex: '#94a3b8',
+      label: 'Belirsiz',
+    };
+  }
+  const num = parseInt(match[0], 10);
+  if (isNaN(num)) {
+    return {
+      scoreNum: null,
+      text: 'text-slate-400',
+      bg: 'bg-slate-800/40',
+      border: 'border-slate-700/50',
+      badge: 'bg-slate-800/60 text-slate-400 border border-slate-700/60',
+      hex: '#94a3b8',
+      label: 'Belirsiz',
+    };
+  }
+
+  if (num >= 80) {
+    return {
+      scoreNum: num,
+      text: 'text-emerald-400',
+      bg: 'bg-emerald-500/10',
+      border: 'border-emerald-500/30',
+      badge: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30',
+      hex: '#10b981',
+      label: 'Çok Güçlü',
+    };
+  }
+  if (num >= 65) {
+    return {
+      scoreNum: num,
+      text: 'text-lime-400',
+      bg: 'bg-lime-500/10',
+      border: 'border-lime-500/30',
+      badge: 'bg-lime-500/10 text-lime-400 border border-lime-500/30',
+      hex: '#a3e635',
+      label: 'Güçlü',
+    };
+  }
+  if (num >= 50) {
+    return {
+      scoreNum: num,
+      text: 'text-amber-300',
+      bg: 'bg-amber-400/10',
+      border: 'border-amber-400/30',
+      badge: 'bg-amber-400/10 text-amber-300 border border-amber-400/30',
+      hex: '#fcd34d',
+      label: 'Dengeli',
+    };
+  }
+  if (num >= 35) {
+    return {
+      scoreNum: num,
+      text: 'text-orange-400',
+      bg: 'bg-orange-500/10',
+      border: 'border-orange-500/30',
+      badge: 'bg-orange-500/10 text-orange-400 border border-orange-500/30',
+      hex: '#fb923c',
+      label: 'Zayıf',
+    };
+  }
+  if (num >= 20) {
+    return {
+      scoreNum: num,
+      text: 'text-rose-400',
+      bg: 'bg-rose-500/10',
+      border: 'border-rose-500/30',
+      badge: 'bg-rose-500/10 text-rose-400 border border-rose-500/30',
+      hex: '#fb7185',
+      label: 'Yüksek Risk',
+    };
+  }
+  return {
+    scoreNum: num,
+    text: 'text-red-500',
+    bg: 'bg-red-950/60',
+    border: 'border-red-600/50',
+    badge: 'bg-red-950/60 text-red-500 border border-red-600/50',
+    hex: '#ef4444',
+    label: 'Kritik Risk',
+  };
+}

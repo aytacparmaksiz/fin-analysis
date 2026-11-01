@@ -65,7 +65,8 @@ import {
   BIST_BANKING_TICKERS,
   BIST_HOLDING_TICKERS,
   BIST_REIT_TICKERS,
-  isMetricDisabled
+  isMetricDisabled,
+  getScoreColorStyle
 } from '@/lib/sectors';
 import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from '@/lib/isyatirim-multiples-cache';
 import { OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE } from '@/lib/isyatirim-company-details-cache';
@@ -2167,9 +2168,9 @@ export default function SimplyView({
                       const cleanNum = rawScore ? parseInt(String(rawScore).split('/')[0].replace(/[^0-9]/g, ''), 10) : null;
                       if (cleanNum === null || isNaN(cleanNum)) return null;
                       return (
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950/90 border border-[#2b313d] text-xs font-mono font-bold text-slate-300 shadow-sm">
+                        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950/90 border text-xs font-mono font-bold shadow-sm ${getScoreColorStyle(cleanNum).border}`}>
                           <span className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider">Skor:</span>
-                          <span className="text-emerald-400 font-bold">{cleanNum}/100</span>
+                          <span className={`font-bold ${getScoreColorStyle(cleanNum).text}`}>{cleanNum}/100</span>
                         </div>
                       );
                     })()}
@@ -2758,7 +2759,9 @@ export default function SimplyView({
                               {comp.ticker}
                             </div>
                             <div className="text-sm text-slate-400 font-mono">
-                              Skor: {comp.score != null ? `${comp.score}/100` : '—'}
+                              Skor: {comp.score != null ? (
+                                <span className={`font-bold ${getScoreColorStyle(comp.score).text}`}>{comp.score}/100</span>
+                              ) : '—'}
                             </div>
                           </div>
                         </div>

@@ -47,7 +47,8 @@ import {
   getFinancialArchetype,
   SECTOR_ARCHETYPE_CONFIGS,
   getCompanySectorDisplayName,
-  ISYATIRIM_53_OFFICIAL_SECTOR_NAMES
+  ISYATIRIM_53_OFFICIAL_SECTOR_NAMES,
+  getScoreColorStyle
 } from '@/lib/sectors';
 
 import { SavedReport } from '@/lib/report-resolver';
@@ -4804,7 +4805,7 @@ export default function ValuationTerminal({
                 </span>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-mono px-2.5 py-1 rounded bg-slate-950 text-emerald-400 border border-slate-800 font-bold">
-                    {extractedData.ticker || ticker} • {currentSector}
+                    {extractedData.ticker || ticker} • {getCompanySectorDisplayName(extractedData.ticker || ticker, currentSector)}
                   </span>
                   <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 px-2.5 py-1 rounded">
                     <span className="text-[11px] text-slate-400 font-medium">Fiyat:</span>
@@ -5228,7 +5229,7 @@ export default function ValuationTerminal({
 
                               <div className="flex items-center justify-between pt-2 border-t border-[#232834] text-[11px] font-mono">
                                 <span className="text-slate-400">Skor:</span>
-                                <span className="text-emerald-400 font-bold">{formatScore(item.score)}</span>
+                                <span className={`font-bold ${getScoreColorStyle(item.score).text}`}>{formatScore(item.score)}</span>
                               </div>
                             </div>
                           );
@@ -5368,7 +5369,7 @@ export default function ValuationTerminal({
                                   </span>
                                 ) : <span className="text-slate-500">—</span>}
                               </td>
-                              <td className="p-3.5 text-right font-mono font-bold text-sm text-emerald-400">
+                              <td className={`p-3.5 text-right font-mono font-bold text-sm ${getScoreColorStyle(item.score).text}`}>
                                 {formatScore(item.score)}
                               </td>
                               <td className="p-3.5 text-center">
@@ -5635,7 +5636,7 @@ export default function ValuationTerminal({
                                                 </span>
                                               ) : <span className="text-slate-500">—</span>}
                                             </td>
-                                            <td className="py-3 px-4 text-center font-mono font-bold text-xs text-emerald-400">
+                                            <td className={`py-3 px-4 text-center font-mono font-bold text-xs ${getScoreColorStyle(rep.score).text}`}>
                                               {formatScore(rep.score)}
                                             </td>
                                             <td className="py-3 px-4 text-center font-mono">
@@ -6067,7 +6068,7 @@ export default function ValuationTerminal({
                                     </span>
                                   ) : <span className="text-slate-500">—</span>}
                                 </td>
-                                <td className="py-3 px-3 text-center font-mono font-bold text-xs text-slate-200">
+                                <td className={`py-3 px-3 text-center font-mono font-bold text-xs ${getScoreColorStyle(report.score).text}`}>
                                   {formatScore(report.score)}
                                 </td>
                                 <td className="py-3 px-3 text-center">
@@ -7115,7 +7116,7 @@ export default function ValuationTerminal({
                                     </span>
                                   ) : <span className="text-slate-500">—</span>}
                                 </td>
-                                <td className="py-3 px-3 text-center font-mono font-bold text-xs text-slate-200">
+                                <td className={`py-3 px-3 text-center font-mono font-bold text-xs ${getScoreColorStyle(item.score).text}`}>
                                   {formatScore(item.score)}
                                 </td>
                                 <td className="py-3 px-3 text-center">
@@ -7218,7 +7219,7 @@ export default function ValuationTerminal({
                           <div className="pt-2 border-t border-[#2e3440]/60 flex items-center justify-between text-[11px] font-mono">
                             <span className="text-white font-bold">{priceNum > 0 ? `₺${priceNum.toFixed(1)}` : '—'}</span>
                             {item.score ? (
-                              <span className="text-slate-300 font-bold px-1.5 py-0.2 rounded bg-[#12151c] border border-[#2e3440]">
+                              <span className={`font-bold px-1.5 py-0.2 rounded bg-[#12151c] border border-[#2e3440] ${getScoreColorStyle(item.score).text}`}>
                                 {item.score}p
                               </span>
                             ) : null}
@@ -7315,7 +7316,7 @@ export default function ValuationTerminal({
                                 <div className={`px-2.5 py-1 rounded-xl border text-xs font-mono font-bold flex items-center gap-2 ${badgeCls}`}>
                                   <span>{item.decision || 'NÖTR'}</span>
                                   <span className="w-1 h-3 bg-current opacity-30" />
-                                  <span>{formatScore(item.score)}</span>
+                                  <span className={getScoreColorStyle(item.score).text}>{formatScore(item.score)}</span>
                                 </div>
                               </div>
                             </div>
