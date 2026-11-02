@@ -1,5 +1,7 @@
 import { 
   SECTOR_SCORING_CONFIG, 
+  getSectorScoringConfig,
+  getSectorDefinition,
   detectSector, 
   type SectorType, 
   isMetricDisabled, 
@@ -1674,7 +1676,8 @@ export function syncReportTextWithValuation(reportText: string, valuation: any):
  */
 export function calculateSectorScore(
   data: any,
-  sector: SectorType = 'INDUSTRIAL'
+  sector: SectorType = 'INDUSTRIAL',
+  officialSectorName?: string
 ): SectorScoreResult {
   const history: any[] = Array.isArray(data?.financial_history) ? data.financial_history : [];
   // Seriyi kronolojik sıralayarak en güncel dönemi doğru tespit et
@@ -1708,18 +1711,10 @@ export function calculateSectorScore(
   const anomalies: string[] = [];
   const conditionalWarnings: string[] = [];
 
-  const config = (SECTOR_SCORING_CONFIG && SECTOR_SCORING_CONFIG[sector])
-    ? SECTOR_SCORING_CONFIG[sector]
-    : (SECTOR_SCORING_CONFIG?.INDUSTRIAL || {
-        sector: 'INDUSTRIAL' as SectorType,
-        categories: [
-          { key: 'financial_health', name: 'Finansal Sağlık & Likidite', maxScore: 25, description: '' },
-          { key: 'capital_efficiency', name: 'Sermaye Verimliliği (ROIC > WACC)', maxScore: 25, description: '' },
-          { key: 'cash_flow_quality', name: 'Nakit Akış Kalitesi (OCF & FCF)', maxScore: 25, description: '' },
-          { key: 'growth_moat', name: 'Reel Büyüme & Rekabet Kalkanı (Moat)', maxScore: 25, description: '' }
-        ],
-        riskThresholds: { criticalDebtRatio: 4, minLiquidityRatio: 1, minMarginOfSafety: 20, idealMarginOfSafety: 30 }
-      });
+  const targetSectorOrOfficial = officialSectorName || data?.official_sector_name;
+  const config = targetSectorOrOfficial
+    ? getSectorScoringConfig(targetSectorOrOfficial, data?.ticker)
+    : (SECTOR_SCORING_CONFIG[sector] || SECTOR_SCORING_CONFIG.INDUSTRIAL);
 
   if (sector === 'INSURANCE') {
     // 1. Teknik Kârlılık & Kombine Oran (Max 25)
@@ -4565,7 +4560,9 @@ export function computeSectorValuationAndDrivers(
     boundaryWarning = 'Resmi pay adedi (ödenmiş sermaye) eksik olduğundan hisse başı içsel değer hesaplanamamıştır.';
     formulaStr = 'Ödenmiş sermaye / pay adedi resmi verilerde tespit edilemediği için hisse başı içsel değer hesaplanamaz (N/A).';
   } else if (sector === 'INSURANCE' || sector === 'BANKING') {
-    modelName = 'Gordon Büyüme & 12 Aylık İleriye Dönük Defter Değeri Modeli';
+    modelName = sector === 'BANKING'
+      ? 'Bankacılık Gerekçeli Defter Değeri (Justified P/B) & Gordon Büyüme Modeli (NIM, SYR & Kredi Riski)'
+      : 'Sigortacılık & BES Gordon Büyüme & Float Getirisi Modeli (Bileşik Oran & Liderlik Primi)';
     const parentEq = parseFinancialNumber(latest?.parent_equity);
     const rawEq = parseFinancialNumber(latest?.equity) ?? 0;
     const minInt = parseFinancialNumber(latest?.minority_interests ?? latest?.non_controlling_interests) ?? 0;
@@ -6772,7 +6769,7 @@ export function computeSectorValuationAndDrivers(
   };
 
   // Sektörel Puanlama ve Karar Optimizasyonu
-  const scoreResult = calculateSectorScore(extractedData, sector);
+  const scoreResult = calculateSectorScore(extractedData, sector, detectedOfficialSecName);
   const optimization = optimizeFinalDecision({
     rawDecision: scoreResult.suggestedDecision,
     score: scoreResult.totalScore,

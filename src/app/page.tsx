@@ -43,6 +43,7 @@ import {
   detectSector, 
   SectorType, 
   SECTOR_DEFINITIONS,
+  getSectorDefinition,
   isMetricDisabled,
   getFinancialArchetype,
   SECTOR_ARCHETYPE_CONFIGS,
@@ -3167,7 +3168,8 @@ export default function ValuationTerminal({
     return detectSector(sym, (activeReport as any)?.companyName || currentExtractedData?.company_name) || 'INDUSTRIAL';
   })();
 
-  const sectorMeta = SECTOR_DEFINITIONS[currentSector] || SECTOR_DEFINITIONS.INDUSTRIAL;
+  const activeTickerSym = (activeReport?.ticker || ticker || '').trim().toUpperCase();
+  const sectorMeta = getSectorDefinition(currentSector, activeTickerSym);
 
   const tickerHistory = activeReport 
     ? savedReports

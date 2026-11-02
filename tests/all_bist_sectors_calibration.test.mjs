@@ -2,14 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { OFFICIAL_ISYATIRIM_CACHE } from '../lib/isyatirim-official-cache.ts';
 import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from '../lib/isyatirim-multiples-cache.ts';
-import { computeSectorValuationAndDrivers, detectValueTrap } from '../lib/valuation.ts';
+import { computeSectorValuationAndDrivers, detectValueTrap, calculateSectorScore } from '../lib/valuation.ts';
 import {
   mapIsYatirimSectorToValuationSector,
   USER_OFFICIAL_BIST_COMPANY_SECTORS,
   USER_53_OFFICIAL_SECTOR_NAMES,
   resolveOfficialSectorName,
-  detectSector
+  detectSector,
+  getSectorDefinition,
+  getSectorScoringConfig,
+  getSectorArchetypeConfig,
+  OFFICIAL_53_SECTOR_CONFIGS
 } from '../lib/sectors.ts';
+import { resolveBistCompanyMeta, formatCompanyName } from '../lib/bist-service.ts';
 
 test('Borsa Istanbul Comprehensive Multi-Sector Valuation & Calibration Test Suite', async (t) => {
   await t.test('1. Dayanıklı Tüketim (White Goods: ARCLK) activates dedicated mid-cycle model and prevents extreme plunge', () => {
@@ -539,6 +544,107 @@ test('Borsa Istanbul Comprehensive Multi-Sector Valuation & Calibration Test Sui
       assert.ok(typeof model === 'string' && model.length > 0, `Sector '${sec}' must produce a non-empty valuation model name`);
       assert.ok(typeof res?.valuation?.formula_display === 'string' && res.valuation.formula_display.length > 0, `Sector '${sec}' must produce formula_display`);
     }
+  });
+
+  await t.test('18. All 53 Official BIST Sectors have comprehensive definitions, scoring configs and archetypes', () => {
+    assert.equal(USER_53_OFFICIAL_SECTOR_NAMES.length, 53, 'Should have exactly 53 official sector names');
+
+    for (const sec of USER_53_OFFICIAL_SECTOR_NAMES) {
+      const def = getSectorDefinition(sec);
+      assert.ok(def, `Definition for sector '${sec}' must exist`);
+      assert.ok(def.title && def.title.length > 0, `Sector '${sec}' definition must have a title`);
+      assert.ok(def.badge && def.badge.length > 0, `Sector '${sec}' definition must have a badge`);
+      assert.ok(def.revenueLabel && def.revenueLabel.length > 0, `Sector '${sec}' definition must have revenueLabel`);
+      assert.ok(def.operatingProfitLabel && def.operatingProfitLabel.length > 0, `Sector '${sec}' definition must have operatingProfitLabel`);
+      assert.ok(def.marginLabel && def.marginLabel.length > 0, `Sector '${sec}' definition must have marginLabel`);
+      assert.ok(def.valuationMultiples && def.valuationMultiples.length > 0, `Sector '${sec}' definition must have valuationMultiples`);
+      assert.ok(def.primaryEfficiencyMetric && def.primaryEfficiencyMetric.length > 0, `Sector '${sec}' definition must have primaryEfficiencyMetric`);
+
+      const scoring = getSectorScoringConfig(sec);
+      assert.ok(scoring, `Scoring config for sector '${sec}' must exist`);
+      assert.equal(scoring.categories.length, 4, `Sector '${sec}' must have exactly 4 scoring categories`);
+      for (const cat of scoring.categories) {
+        assert.ok(cat.key && cat.key.length > 0, `Category in sector '${sec}' must have non-empty key`);
+        assert.ok(cat.name && cat.name.length > 0, `Category in sector '${sec}' must have non-empty name`);
+        assert.equal(cat.maxScore, 25, `Category '${cat.key}' in sector '${sec}' maxScore must be 25`);
+      }
+      assert.ok(scoring.riskThresholds.minMarginOfSafety > 0, `Sector '${sec}' minMarginOfSafety must be > 0`);
+      assert.ok(scoring.riskThresholds.idealMarginOfSafety > 0, `Sector '${sec}' idealMarginOfSafety must be > 0`);
+
+      const arch = getSectorArchetypeConfig(sec);
+      assert.ok(arch, `Archetype config for sector '${sec}' must exist`);
+      assert.ok(arch.name && arch.name.length > 0, `Sector '${sec}' archetypeConfig must have name`);
+      assert.ok(arch.badge && arch.badge.length > 0, `Sector '${sec}' archetypeConfig must have badge`);
+      assert.ok(Array.isArray(arch.featuredMetrics) && arch.featuredMetrics.length >= 3, `Sector '${sec}' must have >= 3 featuredMetrics`);
+    }
+  });
+
+  await t.test('19. resolveBistCompanyMeta sanitizes company names, prevents duplicate A.Ş. and sets officialSectorName', () => {
+    // Check companies with existing A.Ş. in name
+    const sasa = resolveBistCompanyMeta('SASA');
+    assert.ok(!sasa.name.includes('A.Ş. A.Ş.'), `SASA name should not contain duplicate 'A.Ş. A.Ş.': got '${sasa.name}'`);
+    assert.ok(sasa.name.endsWith('A.Ş.'), `SASA name should end with single 'A.Ş.': got '${sasa.name}'`);
+    assert.ok(sasa.officialSectorName, `SASA officialSectorName should be populated: got '${sasa.officialSectorName}'`);
+
+    const anhyt = resolveBistCompanyMeta('ANHYT');
+    assert.ok(!anhyt.name.includes('A.Ş. A.Ş.'), `ANHYT name should not contain duplicate 'A.Ş. A.Ş.': got '${anhyt.name}'`);
+    assert.equal(anhyt.officialSectorName, 'Sigorta', `ANHYT official sector must be 'Sigorta'`);
+
+    const ralyh = resolveBistCompanyMeta('RALYH');
+    assert.equal(ralyh.officialSectorName, 'Tekstil Entegre', `RALYH must strictly be 'Tekstil Entegre'`);
+
+    const fener = resolveBistCompanyMeta('FENER');
+    assert.ok(!fener.name.includes('A.Ş. A.Ş.'), `FENER name should not contain duplicate 'A.Ş. A.Ş.': got '${fener.name}'`);
+
+    // Helper formatCompanyName standalone check
+    assert.equal(formatCompanyName('Test Sanayi A.Ş.'), 'Test Sanayi A.Ş.');
+    assert.equal(formatCompanyName('Test Sanayi A.S.'), 'Test Sanayi A.S.');
+    assert.equal(formatCompanyName('Test Anonim Şirketi'), 'Test Anonim Şirketi');
+    assert.equal(formatCompanyName('Test Üretim'), 'Test Üretim A.Ş.');
+  });
+
+  await t.test('20. calculateSectorScore dynamically adapts category names to 53 official sectors', () => {
+    const mockData = {
+      ticker: 'FROTO',
+      official_sector_name: 'Otomotiv',
+      financial_history: [
+        { period: '2023/12', revenue: 100000, ebitda: 15000, net_debt: 5000, roic: 28, wacc: 20 },
+        { period: '2024/12', revenue: 140000, ebitda: 22000, net_debt: 7000, roic: 32, wacc: 20 }
+      ]
+    };
+
+    const scoreResult = calculateSectorScore(mockData, 'INDUSTRIAL', 'Otomotiv');
+    assert.equal(scoreResult.breakdown.length, 4);
+    assert.equal(scoreResult.breakdown[0].category, 'OEM Maliyet Artı Kâr & Sözleşme Marjı');
+    assert.equal(scoreResult.breakdown[1].category, 'İhracat Payı & Yeni Model Dönüşüm Verimi');
+    assert.equal(scoreResult.breakdown[2].category, 'Sermaye Verimliliği (ROIC vs WACC)');
+    assert.equal(scoreResult.breakdown[3].category, 'Net Borç / FAVÖK & Bilanço Tamponu');
+
+    // Savunma
+    const aselsScore = calculateSectorScore({
+      ticker: 'ASELS',
+      official_sector_name: 'Savunma',
+      financial_history: mockData.financial_history
+    }, 'INDUSTRIAL', 'Savunma');
+    assert.equal(aselsScore.breakdown[0].category, 'Sipariş Birikimi (Backlog) & Book-to-Bill');
+
+    // Banking model name check
+    const bankRes = computeSectorValuationAndDrivers({
+      extractedData: {
+        ticker: 'GARAN',
+        official_sector_name: 'Bankacılık',
+        sector: 'BANKING',
+        financial_history: [
+          { period: '2024/09', equity: 200000000000, roe: 35.0, shares_count: 4200000000 }
+        ],
+        share_count: 4200000000
+      },
+      inputPriceStr: '115.0',
+      sector: 'BANKING',
+      shareCount: 4200000000
+    });
+    assert.ok(bankRes.valuation.valuation_model_name.includes('Bankacılık Gerekçeli Defter Değeri (Justified P/B)'),
+      `Model name should include Justified P/B, got: ${bankRes.valuation.valuation_model_name}`);
   });
 });
 

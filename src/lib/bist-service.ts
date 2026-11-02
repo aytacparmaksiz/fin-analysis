@@ -1,4 +1,4 @@
-import { type SectorType, detectSector, mapIsYatirimSectorToValuationSector, USER_OFFICIAL_BIST_COMPANY_SECTORS } from './sectors.ts';
+import { type SectorType, detectSector, mapIsYatirimSectorToValuationSector, USER_OFFICIAL_BIST_COMPANY_SECTORS, resolveOfficialSectorName } from './sectors.ts';
 import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from './isyatirim-multiples-cache.ts';
 import { 
   enrichAndSanitizeFinancialHistory, 
@@ -190,6 +190,21 @@ export interface BistCompanyMetadata {
   sector: SectorType;
   financialGroup: 'XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A';
   shareCount?: number;
+  officialSectorName?: string;
+}
+
+/**
+ * Şirket unvanını 'A.Ş.' eki için sanitize eder; çift eklemeyi (A.Ş. A.Ş.) önler.
+ */
+export function formatCompanyName(rawName?: string, defaultTicker?: string): string {
+  if (!rawName || !rawName.trim()) {
+    return defaultTicker ? `${defaultTicker} - Borsa İstanbul Şirketi` : 'Borsa İstanbul Şirketi';
+  }
+  const trimmed = rawName.trim();
+  if (/(?:\b|\s)(?:A\.?\s*Ş\.?|A\.?\s*S\.?|ANON[Iİ]M\s*Ş[Iİ]RKET[Iİ])$/iu.test(trimmed)) {
+    return trimmed;
+  }
+  return `${trimmed} A.Ş.`;
 }
 
 export const KNOWN_BIST_DIRECTORY: Record<string, BistCompanyMetadata> = {
@@ -337,12 +352,15 @@ export function resolveBistCompanyMeta(rawTicker: string): BistCompanyMetadata {
         ? Math.round(isy.paidInCapitalMnTl * 1_000_000)
         : (KNOWN_BIST_DIRECTORY[cleanTicker]?.shareCount || 500000000));
 
+    const rawName = userSec.name || isy?.name || KNOWN_BIST_DIRECTORY[cleanTicker]?.name;
+
     return {
       ticker: cleanTicker,
-      name: userSec.name ? `${userSec.name} A.Ş.` : (isy?.name ? `${isy.name} A.Ş.` : (KNOWN_BIST_DIRECTORY[cleanTicker]?.name || `${cleanTicker} - Borsa İstanbul Şirketi`)),
+      name: formatCompanyName(rawName, cleanTicker),
       sector: valuationSector,
       financialGroup: group,
-      shareCount
+      shareCount,
+      officialSectorName: userSec.sector
     };
   }
 
@@ -367,15 +385,21 @@ export function resolveBistCompanyMeta(rawTicker: string): BistCompanyMetadata {
 
     return {
       ticker: cleanTicker,
-      name: isy.name ? `${isy.name} A.Ş.` : (KNOWN_BIST_DIRECTORY[cleanTicker]?.name || `${cleanTicker} - Borsa İstanbul Şirketi`),
+      name: formatCompanyName(isy.name, cleanTicker),
       sector: valuationSector,
       financialGroup: group,
-      shareCount
+      shareCount,
+      officialSectorName: isy.sectorName
     };
   }
 
   if (KNOWN_BIST_DIRECTORY[cleanTicker]) {
-    return KNOWN_BIST_DIRECTORY[cleanTicker];
+    const known = KNOWN_BIST_DIRECTORY[cleanTicker];
+    return {
+      ...known,
+      name: formatCompanyName(known.name, cleanTicker),
+      officialSectorName: known.officialSectorName || resolveOfficialSectorName(undefined, cleanTicker)
+    };
   }
 
   const detectedSector = detectSector(cleanTicker);
@@ -393,7 +417,8 @@ export function resolveBistCompanyMeta(rawTicker: string): BistCompanyMetadata {
     name: `${cleanTicker} - Borsa İstanbul Şirketi`,
     sector: detectedSector,
     financialGroup: group,
-    shareCount: 500000000
+    shareCount: 500000000,
+    officialSectorName: resolveOfficialSectorName(undefined, cleanTicker)
   };
 }
 

@@ -4,6 +4,7 @@ import {
   USER_53_OFFICIAL_SECTOR_NAMES,
   type UserBistCompanySector
 } from './user-sectors-cache.ts';
+import { OFFICIAL_53_SECTOR_CONFIGS } from './sector-definitions-53.ts';
 
 export {
   USER_OFFICIAL_BIST_COMPANY_SECTORS,
@@ -285,14 +286,18 @@ export function getCompanySectorDisplayName(ticker?: string, rawSector?: string)
 }
 
 export type FinancialArchetype =
-  | 'INDUSTRIAL'          // A) REEL SEKTÖR & SANAYİ (Otomotiv, Kimya, Çimento, Demir-Çelik, Teknoloji, Sağlık)
+  | 'INDUSTRIAL'          // A) REEL SEKTÖR & SANAYİ (Otomotiv, Kimya, Çimento, Demir-Çelik)
   | 'AVIATION'            // B) HAVACILIK & ULAŞTIRMA (TAVHL, THYAO, PGSUS)
   | 'BANKING'             // C) BANKACILIK (GARAN, AKBNK, ISCTR, YKBNK)
   | 'INSURANCE'           // D) SİGORTACILIK (TURSG, AGESA, ANSGR)
-  | 'HOLDING_REIT'        // E) GYO & HOLDİNGLER (EKGYO, SAHOL, KCHOL)
+  | 'HOLDING_REIT'        // E) GYO & HOLDİNGLER (Geriye Dönük Uyumluluk)
+  | 'HOLDING'             // E1) HOLDİNGLER (KCHOL, SAHOL, AGHOL)
+  | 'REIT'                // E2) GYO (EKGYO, TRGYO)
   | 'RETAIL'              // F) PERAKENDE & TÜKETİM (BIMAS, MGROS, CCOLA)
   | 'UTILITIES_TELCO'     // G) ENERJİ & TELEKOMÜNİKASYON (ENJSA, TCELL, TTKOM)
-  | 'FINANCIAL_SERVICES'; // H) FACTORING, LEASING & GİRİŞİM (VAKFN, GSDHO)
+  | 'FINANCIAL_SERVICES'  // H) FACTORING, LEASING & GİRİŞİM (VAKFN, GSDHO)
+  | 'TECH'                // I) TEKNOLOJİ, BİLİŞİM & YAZILIM
+  | 'HEALTHCARE';         // J) SAĞLIK, HASTANECİLİK & İLAÇ
 
 export function getFinancialArchetype(sector: SectorType): FinancialArchetype {
   switch (sector) {
@@ -303,16 +308,19 @@ export function getFinancialArchetype(sector: SectorType): FinancialArchetype {
     case 'INSURANCE':
       return 'INSURANCE';
     case 'HOLDING':
+      return 'HOLDING';
     case 'REIT':
-      return 'HOLDING_REIT';
+      return 'REIT';
     case 'RETAIL':
       return 'RETAIL';
     case 'UTILITIES_TELCO':
       return 'UTILITIES_TELCO';
     case 'FINANCIAL_SERVICES':
       return 'FINANCIAL_SERVICES';
-    case 'HEALTHCARE':
     case 'TECH':
+      return 'TECH';
+    case 'HEALTHCARE':
+      return 'HEALTHCARE';
     case 'INDUSTRIAL':
     default:
       return 'INDUSTRIAL';
@@ -851,6 +859,66 @@ export const SECTOR_ARCHETYPE_CONFIGS: Record<FinancialArchetype, SectorArchetyp
     ],
     taxRate: 0.25, // REIT has 0% tax, handled dynamically per sector
   },
+  HOLDING: {
+    archetype: 'HOLDING',
+    name: 'Holdingler & Yatırım Şirketleri',
+    badge: 'Holding / SOTP & NAD İskontosu Modu',
+    description: 'Holdinglerde tekil F/K kullanımı yanıltıcıdır. Net Aktif Değeri (NAD / NAV), solo nakit/borç pozisyonu, SOTP ve iştirak temettü akışı esastır.',
+    disabledMetrics: ['ev_ebitda', 'ev_sales'],
+    featuredMetrics: [
+      { key: 'nav_discount', name: 'Net Aktif Değeri (NAD) İskontosu', unit: '%', description: 'Piyasa değeri vs portföy net aktif değeri iskonto cazibesi (>%30)' },
+      { key: 'pb_nav', name: 'PD/NAD Oranı', unit: 'x', description: 'Portföy piyasa değerleme çarpanı' },
+      { key: 'solo_liquidity', name: 'Solo Nakit / Borç Dengesi', unit: 'TL', description: 'Merkez holding bilançosunun net nakit gücü ve solo borçsuzluk' },
+      { key: 'subsidiary_contribution', name: 'İştirak Kâr / Temettü Katkısı', unit: 'TL', description: 'Portföy şirketlerinden düzenli nakit ve temettü akışı' },
+      { key: 'nav_growth', name: 'Hisse Başı NAD Büyümesi', unit: '%', description: 'Konsolide portföyün bileşik büyüme performansı' },
+    ],
+    taxRate: 0.25,
+  },
+  REIT: {
+    archetype: 'REIT',
+    name: 'Gayrimenkul Yatırım Ortaklığı (GYO)',
+    badge: 'GYO / NAD & %50 Temettü İstisna Modu (7524 Sayılı Kanun)',
+    description: '7524 sayılı Kanun gereği Kurumlar Vergisi istisnası için >=%50 temettü dağıtım şartı, gayrimenkul ekspertiz NAD/NAV, LTV borçluluk ve kira getirisi esastır.',
+    disabledMetrics: ['ev_ebitda', 'ev_sales'],
+    featuredMetrics: [
+      { key: 'nav_discount', name: 'Net Aktif Değeri (NAD) İskontosu', unit: '%', description: 'Piyasa değeri vs portföy net aktif değeri iskonto cazibesi (%25-%40 üzeri cazip)' },
+      { key: 'reit_payout_ratio', name: 'Kira Temettü Dağıtım Oranı', unit: '%', description: '7524 Sayılı Kanun gereği Kurumlar Vergisi istisnası için >=%50 yasal eşik' },
+      { key: 'noi_cap_rate', name: 'Kira Geliri / Cap Rate Verimi', unit: '%', description: 'Net faaliyet kira gelirlerinin portföy değerine oranı (>%6.5 güçlü)' },
+      { key: 'debt_ltv', name: 'Finansal Borç / Portföy (LTV Oranı)', unit: '%', description: 'Krediler / Aktif ekspertiz toplamı (<%40 güvenli tampon)' },
+      { key: 'rental_ffo_yield', name: 'Operasyonel Nakit Akışı (FFO) Verimi', unit: '%', description: 'Kira operasyonel nakit üretim gücü' },
+    ],
+    taxRate: 0.0,
+  },
+  TECH: {
+    archetype: 'TECH',
+    name: 'Teknoloji, Bilişim & Yazılım',
+    badge: 'Teknoloji / SaaS & Rule of 40 Modu',
+    description: 'Hafif varlık yapısı (Asset-light), Rule of 40 metriği, yüksek brüt kâr marjı, net nakit pozisyonu ve Ar-Ge sermayeleştirmesi esastır.',
+    disabledMetrics: ['stock_turnover'],
+    featuredMetrics: [
+      { key: 'rule_of_40', name: 'Rule of 40 (Büyüme + FCF)', unit: '%', description: 'Hasılat artışı + Serbest Nakit Akışı marjı toplamı (>= %40 dünya standardı)' },
+      { key: 'gross_margin_software', name: 'Brüt Kâr Marjı', unit: '%', description: 'Yazılım ve lisanslama marjı (>= %50 güçlü fiyatlama kalkanı)' },
+      { key: 'net_cash_cushion', name: 'Net Nakit Pozisyonu', unit: 'TL', description: 'Teknoloji şirketlerinde negatif net borç (güçlü nakit fazlası)' },
+      { key: 'roic', name: 'Sermaye Verimliliği (ROIC)', unit: '%', description: 'Hafif varlık yapısı ve yüksek yatırılan sermaye getirisi' },
+      { key: 'ebitda_margin', name: 'FAVÖK Marjı', unit: '%', description: 'Operasyonel nakit kârlılığı' },
+    ],
+    taxRate: 0.25,
+  },
+  HEALTHCARE: {
+    archetype: 'HEALTHCARE',
+    name: 'Sağlık, Hastanecilik & İlaç',
+    badge: 'Sağlık / ARPU & Medikal Turizm Modu',
+    description: 'Özel hastane zincirleri, yatak kapasitesi, medikal turizm döviz gelirleri, hasta başı ortalama gelir (ARPU) ve ROIC esastır.',
+    disabledMetrics: [],
+    featuredMetrics: [
+      { key: 'arpu_patient', name: 'Hasta Başı Gelir (ARPU)', unit: 'TL', description: 'Hasta kabul başına ortalama fatura büyüklüğü ve fiyatlama gücü' },
+      { key: 'foreign_revenue_share', name: 'Medikal Turizm Gelir Payı', unit: '%', description: 'Yabancı hasta döviz cinsi gelir payı' },
+      { key: 'ebitda_margin', name: 'FAVÖK Marjı', unit: '%', description: 'Operasyonel kârlılık ve yatak başı kârlılık verimi' },
+      { key: 'roic', name: 'ROIC vs WACC Makası', unit: '%', description: 'Hastane ve cihaz yatırımlarının ekonomik katma değeri' },
+      { key: 'net_debt_ebitda', name: 'Net Borç / FAVÖK', unit: 'x', description: 'Sağlık kompleksi yatırım borçlarının geri ödeme gücü' },
+    ],
+    taxRate: 0.25,
+  },
   RETAIL: {
     archetype: 'RETAIL',
     name: 'Perakende & Tüketim',
@@ -899,9 +967,8 @@ export const SECTOR_ARCHETYPE_CONFIGS: Record<FinancialArchetype, SectorArchetyp
   },
 };
 
-export function isMetricDisabled(metricKey: string, sector: SectorType): boolean {
-  const archetype = getFinancialArchetype(sector);
-  const cfg = SECTOR_ARCHETYPE_CONFIGS[archetype];
+export function isMetricDisabled(metricKey: string, sector: SectorType | string, ticker?: string): boolean {
+  const cfg = getSectorArchetypeConfig(sector, ticker);
   if (!cfg) return false;
   return cfg.disabledMetrics.includes(metricKey);
 }
@@ -1262,6 +1329,54 @@ export const SECTOR_DEFINITIONS: Record<SectorType, SectorDefinition> = {
     primaryEfficiencyMetric: 'ROIC vs WACC Sermaye Makası',
   },
 };
+
+export { OFFICIAL_53_SECTOR_CONFIGS } from './sector-definitions-53.ts';
+
+/**
+ * 53 resmi sektör tanımını veya ana sektör tipini dinamik çözer
+ */
+export function getSectorDefinition(sector: SectorType | string, ticker?: string): SectorDefinition {
+  const official = resolveOfficialSectorName(typeof sector === 'string' ? sector : undefined, ticker);
+  if (official && OFFICIAL_53_SECTOR_CONFIGS[official]?.definition) {
+    return OFFICIAL_53_SECTOR_CONFIGS[official].definition;
+  }
+  const cleanSector = typeof sector === 'string' ? sector.toUpperCase() : '';
+  if (cleanSector && SECTOR_DEFINITIONS[cleanSector as SectorType]) {
+    return SECTOR_DEFINITIONS[cleanSector as SectorType];
+  }
+  return SECTOR_DEFINITIONS.INDUSTRIAL;
+}
+
+/**
+ * 53 resmi sektör puanlama konfigürasyonunu veya ana sektör tipini dinamik çözer
+ */
+export function getSectorScoringConfig(sector: SectorType | string, ticker?: string): SectorScoringDefinition {
+  const official = resolveOfficialSectorName(typeof sector === 'string' ? sector : undefined, ticker);
+  if (official && OFFICIAL_53_SECTOR_CONFIGS[official]?.scoring) {
+    return OFFICIAL_53_SECTOR_CONFIGS[official].scoring;
+  }
+  const cleanSector = typeof sector === 'string' ? sector.toUpperCase() : '';
+  if (cleanSector && SECTOR_SCORING_CONFIG[cleanSector as SectorType]) {
+    return SECTOR_SCORING_CONFIG[cleanSector as SectorType];
+  }
+  return SECTOR_SCORING_CONFIG.INDUSTRIAL;
+}
+
+/**
+ * 53 resmi sektör arketip ve öne çıkan metrik konfigürasyonunu dinamik çözer
+ */
+export function getSectorArchetypeConfig(sector: SectorType | string, ticker?: string): SectorArchetypeConfig {
+  const official = resolveOfficialSectorName(typeof sector === 'string' ? sector : undefined, ticker);
+  if (official && OFFICIAL_53_SECTOR_CONFIGS[official]?.archetypeConfig) {
+    return OFFICIAL_53_SECTOR_CONFIGS[official].archetypeConfig;
+  }
+  const cleanSector = typeof sector === 'string' ? sector.toUpperCase() : '';
+  const arch = getFinancialArchetype(cleanSector as SectorType);
+  if (SECTOR_ARCHETYPE_CONFIGS[arch]) {
+    return SECTOR_ARCHETYPE_CONFIGS[arch];
+  }
+  return SECTOR_ARCHETYPE_CONFIGS.INDUSTRIAL;
+}
 
 export const BIST_AVIATION_TICKERS = [
   'THYAO',
