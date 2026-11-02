@@ -1,4 +1,4 @@
-import { type SectorType, detectSector, mapIsYatirimSectorToValuationSector } from './sectors.ts';
+import { type SectorType, detectSector, mapIsYatirimSectorToValuationSector, USER_OFFICIAL_BIST_COMPANY_SECTORS } from './sectors.ts';
 import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from './isyatirim-multiples-cache.ts';
 import { 
   enrichAndSanitizeFinancialHistory, 
@@ -317,7 +317,36 @@ export const OFFICIAL_PENSION_AUM_SERIES: Record<string, Record<string, number>>
 export function resolveBistCompanyMeta(rawTicker: string): BistCompanyMetadata {
   const cleanTicker = (rawTicker || '').toUpperCase().replace(/\.IS$/i, '').trim();
 
-  // 1. İş Yatırım Resmi Veritabanından Dinamik ve Hatasız Çözümleme (Öncelikli Tek Doğruluk Kaynağı)
+  // 1. Kullanıcı 53 Resmi Sektör ve 630 Şirket Master Listesi (Birincil Yetkili Kaynak)
+  const userSec = USER_OFFICIAL_BIST_COMPANY_SECTORS[cleanTicker];
+  if (userSec && userSec.sector) {
+    const valuationSector = mapIsYatirimSectorToValuationSector(userSec.sector);
+    let group: 'XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A' = 'XI_29';
+    if (cleanTicker === 'DOCO') {
+      group = 'UFRS_A';
+    } else if (valuationSector === 'INSURANCE') {
+      group = 'UFRS_K';
+    } else if (valuationSector === 'BANKING') {
+      group = 'UFRS';
+    }
+
+    const isy = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[cleanTicker];
+    const shareCount = (cleanTicker === 'DOCO' && KNOWN_BIST_DIRECTORY[cleanTicker]?.shareCount)
+      ? KNOWN_BIST_DIRECTORY[cleanTicker].shareCount
+      : ((isy?.paidInCapitalMnTl && isy.paidInCapitalMnTl > 0)
+        ? Math.round(isy.paidInCapitalMnTl * 1_000_000)
+        : (KNOWN_BIST_DIRECTORY[cleanTicker]?.shareCount || 500000000));
+
+    return {
+      ticker: cleanTicker,
+      name: userSec.name ? `${userSec.name} A.Ş.` : (isy?.name ? `${isy.name} A.Ş.` : (KNOWN_BIST_DIRECTORY[cleanTicker]?.name || `${cleanTicker} - Borsa İstanbul Şirketi`)),
+      sector: valuationSector,
+      financialGroup: group,
+      shareCount
+    };
+  }
+
+  // 2. İş Yatırım Resmi Veritabanından Dinamik ve Hatasız Çözümleme (Fallback)
   const isy = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[cleanTicker];
   if (isy && isy.sectorName) {
     const valuationSector = mapIsYatirimSectorToValuationSector(isy.sectorName);

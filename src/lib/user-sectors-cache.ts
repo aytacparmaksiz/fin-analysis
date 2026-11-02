@@ -1,0 +1,2589 @@
+/**
+ * Borsa İstanbul 53 Resmi Sektör ve 630 Şirket Master Listesi
+ * Kaynak: Kullanıcı Resmi Sektör ve Şirket Listesi (sirket_sektorleri.xlsx & sektor_listesi.xlsx)
+ * Tarih: 2026
+ */
+
+export interface UserBistCompanySector {
+  name: string;
+  sector: string;
+}
+
+export const USER_53_OFFICIAL_SECTOR_NAMES: string[] = [
+  "Aracı Kurumlar",
+  "Bankacılık",
+  "Bilgisayar Toptancılığı",
+  "Boya",
+  "Cam",
+  "Çimento",
+  "Dayanıklı Tüketim",
+  "Demir-Çelik Döküm",
+  "Demir-Çelik Temel",
+  "Deri Giyim",
+  "Diğer",
+  "Eğlence Hizmetleri",
+  "Elektrik - Doğalgaz Dağıtım",
+  "Elektrik Enerji Ürt.Teçh/Tesis Kurulum",
+  "Elektrik Üretim",
+  "Endüstriyel Makine -Teçhizat Üretim",
+  "Endüstriyel Tekstil",
+  "Fin.Kiralama ve Faktoring",
+  "Gıda",
+  "GYO",
+  "Havayolları ve Hizm.",
+  "Hayvancılık",
+  "Holdingler",
+  "İletişim",
+  "İletişim Cihazları",
+  "İnşaat Malzemeleri",
+  "İnşaat- Taahhüt",
+  "Kablo",
+  "Kağıt Ürünleri",
+  "Kırtasiye",
+  "Kimyasal Ürün",
+  "Madencilik",
+  "Medya",
+  "Meşrubat / İçecek",
+  "Mobilya",
+  "Otomotiv",
+  "Otomotiv Lastiği",
+  "Otomotiv Parçası",
+  "Pazarlama",
+  "Perakande - Ticaret",
+  "Petrol",
+  "Sağlık ve İlaç",
+  "Savunma",
+  "Seramik",
+  "Sigorta",
+  "Spor",
+  "Tarım Kimyasalları",
+  "Teknoloji",
+  "Tekstil Entegre",
+  "Turizm",
+  "Ulaştırma-Lojistik",
+  "Varlık Yönetim",
+  "Yatırım Ortaklıkları"
+];
+
+export const USER_OFFICIAL_BIST_COMPANY_SECTORS: Record<string, UserBistCompanySector> = {
+  "A1CAP": {
+    "name": "A1 Capital",
+    "sector": "Aracı Kurumlar"
+  },
+  "A1YEN": {
+    "name": "Kartal Yenilenebili Enerji",
+    "sector": "Elektrik Üretim"
+  },
+  "AAGYO": {
+    "name": "Ağaoğlu GYO",
+    "sector": "GYO"
+  },
+  "ACSEL": {
+    "name": "Acıselsan Acıpayam Selüloz",
+    "sector": "Kimyasal Ürün"
+  },
+  "ADEL": {
+    "name": "Adel Kalemcilik",
+    "sector": "Kırtasiye"
+  },
+  "ADESE": {
+    "name": "Adese AVM",
+    "sector": "GYO"
+  },
+  "ADGYO": {
+    "name": "Adra GYO",
+    "sector": "GYO"
+  },
+  "AEFES": {
+    "name": "Anadolu Efes",
+    "sector": "Meşrubat / İçecek"
+  },
+  "AFYON": {
+    "name": "Afyon Çimento",
+    "sector": "Çimento"
+  },
+  "AGESA": {
+    "name": "Agesa Hayat ve Emeklilik",
+    "sector": "Sigorta"
+  },
+  "AGHOL": {
+    "name": "Anadolu Grubu Holding",
+    "sector": "Holdingler"
+  },
+  "AGROT": {
+    "name": "Agrotech Yüksek Teknoloji",
+    "sector": "Diğer"
+  },
+  "AGYO": {
+    "name": "Atakule GYO",
+    "sector": "GYO"
+  },
+  "AHGAZ": {
+    "name": "Ahlatçı Doğalgaz",
+    "sector": "Elektrik - Doğalgaz Dağıtım"
+  },
+  "AHSGY": {
+    "name": "Ahes GYO",
+    "sector": "GYO"
+  },
+  "AKBNK": {
+    "name": "Akbank",
+    "sector": "Bankacılık"
+  },
+  "AKCNS": {
+    "name": "Akçansa",
+    "sector": "Çimento"
+  },
+  "AKENR": {
+    "name": "Akenerji",
+    "sector": "Elektrik Üretim"
+  },
+  "AKFGY": {
+    "name": "Akfen GYO",
+    "sector": "GYO"
+  },
+  "AKFIS": {
+    "name": "Akfen İnşaat",
+    "sector": "İnşaat- Taahhüt"
+  },
+  "AKFYE": {
+    "name": "Akfen Yenilenebilir Enerji",
+    "sector": "Elektrik Üretim"
+  },
+  "AKGRT": {
+    "name": "Aksigorta",
+    "sector": "Sigorta"
+  },
+  "AKHAN": {
+    "name": "Akhan Un",
+    "sector": "Gıda"
+  },
+  "AKMGY": {
+    "name": "Akmerkez GYO",
+    "sector": "GYO"
+  },
+  "AKSA": {
+    "name": "Aksa",
+    "sector": "Endüstriyel Tekstil"
+  },
+  "AKSEN": {
+    "name": "Aksa Enerji",
+    "sector": "Elektrik Üretim"
+  },
+  "AKSGY": {
+    "name": "Akis GYO",
+    "sector": "GYO"
+  },
+  "AKSUE": {
+    "name": "Aksu Enerji",
+    "sector": "Elektrik Üretim"
+  },
+  "AKYHO": {
+    "name": "Akdeniz Yatırım Holding",
+    "sector": "Holdingler"
+  },
+  "ALARK": {
+    "name": "Alarko Holding",
+    "sector": "Holdingler"
+  },
+  "ALBRK": {
+    "name": "Albaraka Türk",
+    "sector": "Bankacılık"
+  },
+  "ALBTN": {
+    "name": "Albayrak Hazır Beton",
+    "sector": "Çimento"
+  },
+  "ALCAR": {
+    "name": "Alarko Carrier",
+    "sector": "Dayanıklı Tüketim"
+  },
+  "ALCTL": {
+    "name": "Alcatel Teletaş",
+    "sector": "İletişim Cihazları"
+  },
+  "ALFAS": {
+    "name": "Alfa Solar",
+    "sector": "Elektrik Enerji Ürt.Teçh/Tesis Kurulum"
+  },
+  "ALGYO": {
+    "name": "Alarko GYO",
+    "sector": "GYO"
+  },
+  "ALKA": {
+    "name": "Alkim Kağıt",
+    "sector": "Kağıt Ürünleri"
+  },
+  "ALKIM": {
+    "name": "Alkim",
+    "sector": "Kimyasal Ürün"
+  },
+  "ALKLC": {
+    "name": "Altınkılıç Gıda",
+    "sector": "Gıda"
+  },
+  "ALTNY": {
+    "name": "Altınay Savunma",
+    "sector": "Savunma"
+  },
+  "ALVES": {
+    "name": "Alves Kablo",
+    "sector": "Kablo"
+  },
+  "ANELE": {
+    "name": "Anel Elektrik",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "ANGEN": {
+    "name": "Anatolia Biyoteknoloji",
+    "sector": "Sağlık ve İlaç"
+  },
+  "ANHYT": {
+    "name": "Anadolu Hayat Emeklilik A.Ş.",
+    "sector": "Sigorta"
+  },
+  "ANSGR": {
+    "name": "Anadolu Sigorta",
+    "sector": "Sigorta"
+  },
+  "ARASE": {
+    "name": "Doğu Aras Enerji",
+    "sector": "Elektrik - Doğalgaz Dağıtım"
+  },
+  "ARCLK": {
+    "name": "Arçelik",
+    "sector": "Dayanıklı Tüketim"
+  },
+  "ARDYZ": {
+    "name": "ARD Grup Bilişim",
+    "sector": "Teknoloji"
+  },
+  "ARENA": {
+    "name": "Arena Bilgisayar",
+    "sector": "Bilgisayar Toptancılığı"
+  },
+  "ARFYE": {
+    "name": "Arf Bio Enerji",
+    "sector": "Elektrik Üretim"
+  },
+  "ARMGD": {
+    "name": "Armada Gıda",
+    "sector": "Gıda"
+  },
+  "ARSAN": {
+    "name": "Arsan Holding",
+    "sector": "Tekstil Entegre"
+  },
+  "ARTMS": {
+    "name": "Artemis Halı",
+    "sector": "Tekstil Entegre"
+  },
+  "ARZUM": {
+    "name": "Arzum Ev Aletleri",
+    "sector": "Dayanıklı Tüketim"
+  },
+  "ASELS": {
+    "name": "Aselsan",
+    "sector": "Savunma"
+  },
+  "ASGYO": {
+    "name": "Asce GYO",
+    "sector": "GYO"
+  },
+  "ASTOR": {
+    "name": "Astor Enerji",
+    "sector": "Elektrik Enerji Ürt.Teçh/Tesis Kurulum"
+  },
+  "ASUZU": {
+    "name": "Anadolu Isuzu",
+    "sector": "Otomotiv"
+  },
+  "ATAGY": {
+    "name": "Ata GYO",
+    "sector": "GYO"
+  },
+  "ATAKP": {
+    "name": "Atakey Patates",
+    "sector": "Gıda"
+  },
+  "ATATP": {
+    "name": "ATP Bilgisayar",
+    "sector": "Teknoloji"
+  },
+  "ATATR": {
+    "name": "Ata Turizm",
+    "sector": "Turizm"
+  },
+  "ATEKS": {
+    "name": "Akın Tekstil",
+    "sector": "Tekstil Entegre"
+  },
+  "ATLAS": {
+    "name": "Atlas YO",
+    "sector": "Yatırım Ortaklıkları"
+  },
+  "ATSYH": {
+    "name": "Atlantis YO",
+    "sector": "Holdingler"
+  },
+  "AVGYO": {
+    "name": "Avrasya YO",
+    "sector": "GYO"
+  },
+  "AVHOL": {
+    "name": "Avrupa Yatırım Holding",
+    "sector": "Holdingler"
+  },
+  "AVOD": {
+    "name": "Avod Kurutulmuş Gıda",
+    "sector": "Gıda"
+  },
+  "AVPGY": {
+    "name": "Avrupakent GYO",
+    "sector": "GYO"
+  },
+  "AVTUR": {
+    "name": "Avrasya Petrol&Turistik Tesis",
+    "sector": "Turizm"
+  },
+  "AYCES": {
+    "name": "Altınyunus Çesme",
+    "sector": "Turizm"
+  },
+  "AYDEM": {
+    "name": "Aydem Enerji",
+    "sector": "Elektrik Üretim"
+  },
+  "AYEN": {
+    "name": "Ayen Enerji",
+    "sector": "Elektrik Üretim"
+  },
+  "AYES": {
+    "name": "Ayes Çelik Hasır & Çit",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "AYGAZ": {
+    "name": "Aygaz",
+    "sector": "Petrol"
+  },
+  "AZTEK": {
+    "name": "Aztek Teknoloji",
+    "sector": "Teknoloji"
+  },
+  "BAGFS": {
+    "name": "Bandırma Gübre Fabrikaları A.Ş",
+    "sector": "Tarım Kimyasalları"
+  },
+  "BAHKM": {
+    "name": "Bahadır Kimya",
+    "sector": "Kimyasal Ürün"
+  },
+  "BAKAB": {
+    "name": "Bak Ambalaj",
+    "sector": "Kağıt Ürünleri"
+  },
+  "BALAT": {
+    "name": "Balatacılar Balatacılık",
+    "sector": "Otomotiv Parçası"
+  },
+  "BALSU": {
+    "name": "Balsu Gıda",
+    "sector": "Gıda"
+  },
+  "BANVT": {
+    "name": "Banvit",
+    "sector": "Hayvancılık"
+  },
+  "BARMA": {
+    "name": "Barem Ambalaj",
+    "sector": "Kağıt Ürünleri"
+  },
+  "BASCM": {
+    "name": "Baştaş Başkent Çimento Sanayi",
+    "sector": "Çimento"
+  },
+  "BASGZ": {
+    "name": "Başkent Doğalgaz",
+    "sector": "Elektrik - Doğalgaz Dağıtım"
+  },
+  "BAYRK": {
+    "name": "Bayrak EBT Taban",
+    "sector": "Tekstil Entegre"
+  },
+  "BEGYO": {
+    "name": "Batı Ege GYO",
+    "sector": "GYO"
+  },
+  "BERA": {
+    "name": "Bera Holding",
+    "sector": "Holdingler"
+  },
+  "BESLR": {
+    "name": "Besler Gıda",
+    "sector": "Gıda"
+  },
+  "BESTE": {
+    "name": "Best Brands Grup",
+    "sector": "Elektrik Üretim"
+  },
+  "BETAE": {
+    "name": "Beta Enerji",
+    "sector": "Elektrik Enerji Ürt.Teçh/Tesis Kurulum"
+  },
+  "BEYAZ": {
+    "name": "Beyaz Filo",
+    "sector": "Ulaştırma-Lojistik"
+  },
+  "BFREN": {
+    "name": "Bosch Fren",
+    "sector": "Otomotiv Parçası"
+  },
+  "BIENY": {
+    "name": "Bien Yapı",
+    "sector": "Seramik"
+  },
+  "BIGCH": {
+    "name": "BigChefs",
+    "sector": "Gıda"
+  },
+  "BIGEN": {
+    "name": "Birleşim Grup Enerji",
+    "sector": "Elektrik Üretim"
+  },
+  "BIGTK": {
+    "name": "Big Medya",
+    "sector": "Medya"
+  },
+  "BIMAS": {
+    "name": "Bim Birleşik Mağazalar A.Ş",
+    "sector": "Perakande - Ticaret"
+  },
+  "BINBN": {
+    "name": "BinBin",
+    "sector": "Ulaştırma-Lojistik"
+  },
+  "BINHO": {
+    "name": "1000 Yatırımlar",
+    "sector": "Holdingler"
+  },
+  "BIOEN": {
+    "name": "Biotrend Enerji",
+    "sector": "Elektrik Üretim"
+  },
+  "BIZIM": {
+    "name": "Bizim Toptan",
+    "sector": "Perakande - Ticaret"
+  },
+  "BJKAS": {
+    "name": "Beşiktaş",
+    "sector": "Spor"
+  },
+  "BKRGY": {
+    "name": "Bakırcı GYO",
+    "sector": "GYO"
+  },
+  "BLCYT": {
+    "name": "Bilici Yatırım",
+    "sector": "Tekstil Entegre"
+  },
+  "BLUME": {
+    "name": "Blume Metal Kimya",
+    "sector": "Turizm"
+  },
+  "BMSCH": {
+    "name": "BMS Çelik Hasır",
+    "sector": "Demir-Çelik Döküm"
+  },
+  "BMSTL": {
+    "name": "BMS Birleşik Metal",
+    "sector": "Demir-Çelik Döküm"
+  },
+  "BNTAS": {
+    "name": "Bantaş Bandırma Ambalaj",
+    "sector": "Kimyasal Ürün"
+  },
+  "BOBET": {
+    "name": "Boğaziçi Beton",
+    "sector": "Çimento"
+  },
+  "BORLS": {
+    "name": "Borlease Otomotiv",
+    "sector": "Ulaştırma-Lojistik"
+  },
+  "BORSK": {
+    "name": "Bor Şeker",
+    "sector": "Gıda"
+  },
+  "BOSSA": {
+    "name": "Bossa",
+    "sector": "Tekstil Entegre"
+  },
+  "BRISA": {
+    "name": "Brisa",
+    "sector": "Otomotiv Lastiği"
+  },
+  "BRKO": {
+    "name": "Birko Mensucat",
+    "sector": "Tekstil Entegre"
+  },
+  "BRKSN": {
+    "name": "Berkosan Yalıtım",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "BRKVY": {
+    "name": "Birikim Varlık",
+    "sector": "Varlık Yönetim"
+  },
+  "BRLSM": {
+    "name": "Birlesim Mühendislik",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "BRMEN": {
+    "name": "Birlik Mensucat",
+    "sector": "Tekstil Entegre"
+  },
+  "BRSAN": {
+    "name": "Borusan Birleşik Boru Fab.",
+    "sector": "Demir-Çelik Temel"
+  },
+  "BRYAT": {
+    "name": "Borusan Yatırım",
+    "sector": "Holdingler"
+  },
+  "BSOKE": {
+    "name": "Batıçim Çimento",
+    "sector": "Çimento"
+  },
+  "BTCIM": {
+    "name": "Batıçim",
+    "sector": "Çimento"
+  },
+  "BUCIM": {
+    "name": "Bursa Çimento",
+    "sector": "Çimento"
+  },
+  "BULGS": {
+    "name": "Bulls GSYO",
+    "sector": "Yatırım Ortaklıkları"
+  },
+  "BURCE": {
+    "name": "Burçelik",
+    "sector": "Demir-Çelik Döküm"
+  },
+  "BURVA": {
+    "name": "Burçelik Vana Sanayii",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "BVSAN": {
+    "name": "Bülbüloğlu Vinç",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "BYDNR": {
+    "name": "Baydöner",
+    "sector": "Gıda"
+  },
+  "CANTE": {
+    "name": "Çan2 Termik A.S",
+    "sector": "Elektrik Üretim"
+  },
+  "CASA": {
+    "name": "Casa Emtia Petrol Kim.Tür.AŞ",
+    "sector": "Perakande - Ticaret"
+  },
+  "CATES": {
+    "name": "Çates Elektrik",
+    "sector": "Elektrik Üretim"
+  },
+  "CCOLA": {
+    "name": "Coca-Cola İçecek A.Ş",
+    "sector": "Meşrubat / İçecek"
+  },
+  "CELHA": {
+    "name": "Çelik Halat",
+    "sector": "Demir-Çelik Temel"
+  },
+  "CEMAS": {
+    "name": "Çemaş Döküm",
+    "sector": "Demir-Çelik Döküm"
+  },
+  "CEMTS": {
+    "name": "Çemtas",
+    "sector": "Demir-Çelik Temel"
+  },
+  "CEMZY": {
+    "name": "Cem Zeytin",
+    "sector": "Gıda"
+  },
+  "CEOEM": {
+    "name": "CEO Event Medya",
+    "sector": "Medya"
+  },
+  "CGCAM": {
+    "name": "Çağdaş Cam",
+    "sector": "Cam"
+  },
+  "CIMSA": {
+    "name": "Çimsa",
+    "sector": "Çimento"
+  },
+  "CITAS": {
+    "name": "Çitlekçi Gıda",
+    "sector": "Gıda"
+  },
+  "CLEBI": {
+    "name": "Çelebi",
+    "sector": "Havayolları ve Hizm."
+  },
+  "CMBTN": {
+    "name": "Çimbeton",
+    "sector": "Çimento"
+  },
+  "CMENT": {
+    "name": "Çimentaş",
+    "sector": "Çimento"
+  },
+  "CONSE": {
+    "name": "Consus Enerji",
+    "sector": "Elektrik Üretim"
+  },
+  "COSMO": {
+    "name": "Cosmos Yatırım Holding",
+    "sector": "Holdingler"
+  },
+  "CRDFA": {
+    "name": "Creditwest Faktoring",
+    "sector": "Fin.Kiralama ve Faktoring"
+  },
+  "CRFSA": {
+    "name": "Carrefoursa",
+    "sector": "Perakande - Ticaret"
+  },
+  "CUSAN": {
+    "name": "Çuhadaroğlu Metal",
+    "sector": "Demir-Çelik Döküm"
+  },
+  "CVKMD": {
+    "name": "Cvk Maden",
+    "sector": "Madencilik"
+  },
+  "CWENE": {
+    "name": "Cw Enerji",
+    "sector": "Elektrik Enerji Ürt.Teçh/Tesis Kurulum"
+  },
+  "DAGI": {
+    "name": "Dagi Giyim",
+    "sector": "Tekstil Entegre"
+  },
+  "DAPGM": {
+    "name": "Dap Gayrimenkul",
+    "sector": "GYO"
+  },
+  "DARDL": {
+    "name": "Dardanel",
+    "sector": "Gıda"
+  },
+  "DCTTR": {
+    "name": "Dct Trading",
+    "sector": "Diğer"
+  },
+  "DENGE": {
+    "name": "Denge Holding",
+    "sector": "Holdingler"
+  },
+  "DERHL": {
+    "name": "Derlüks Yatırım Holding",
+    "sector": "Deri Giyim"
+  },
+  "DERIM": {
+    "name": "Derimod",
+    "sector": "Deri Giyim"
+  },
+  "DESA": {
+    "name": "Desa Deri Sanayii",
+    "sector": "Deri Giyim"
+  },
+  "DESPC": {
+    "name": "Despec Bilgisayar",
+    "sector": "Bilgisayar Toptancılığı"
+  },
+  "DEVA": {
+    "name": "Deva Holding",
+    "sector": "Sağlık ve İlaç"
+  },
+  "DGATE": {
+    "name": "Datagate",
+    "sector": "Bilgisayar Toptancılığı"
+  },
+  "DGGYO": {
+    "name": "Doğuş GYO",
+    "sector": "GYO"
+  },
+  "DGNMO": {
+    "name": "Doğanlar Mobilya",
+    "sector": "Mobilya"
+  },
+  "DIRIT": {
+    "name": "Diriteks Diriliş Tekstil",
+    "sector": "Tekstil Entegre"
+  },
+  "DITAS": {
+    "name": "Ditaş BDY",
+    "sector": "Otomotiv Parçası"
+  },
+  "DMRGD": {
+    "name": "DMR Unlu Mamüller",
+    "sector": "Gıda"
+  },
+  "DMSAS": {
+    "name": "Demisaş",
+    "sector": "Demir-Çelik Döküm"
+  },
+  "DNISI": {
+    "name": "Dinamik Isı Yalıtım",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "DOAS": {
+    "name": "Doğuş Otomotiv",
+    "sector": "Otomotiv"
+  },
+  "DOCO": {
+    "name": "DO & CO Aktiengesellschaft",
+    "sector": "Ulaştırma-Lojistik"
+  },
+  "DOFER": {
+    "name": "Dofer Yapı",
+    "sector": "Demir-Çelik Temel"
+  },
+  "DOFRB": {
+    "name": "Dof Robotik",
+    "sector": "Teknoloji"
+  },
+  "DOGUB": {
+    "name": "Doğusan",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "DOHOL": {
+    "name": "Doğan Holding",
+    "sector": "Holdingler"
+  },
+  "DOKTA": {
+    "name": "Döktaş Dökümcülük",
+    "sector": "Otomotiv Parçası"
+  },
+  "DSTKF": {
+    "name": "Destek Finans Faktoring",
+    "sector": "Fin.Kiralama ve Faktoring"
+  },
+  "DUNYH": {
+    "name": "Dünya Holding",
+    "sector": "Gıda"
+  },
+  "DURDO": {
+    "name": "Duran Doğan Basım",
+    "sector": "Kağıt Ürünleri"
+  },
+  "DURKN": {
+    "name": "Durukan Şekerleme",
+    "sector": "Gıda"
+  },
+  "DYOBY": {
+    "name": "DYO Boya",
+    "sector": "Boya"
+  },
+  "DZGYO": {
+    "name": "Deniz GYO",
+    "sector": "GYO"
+  },
+  "EBEBK": {
+    "name": "Ebebek",
+    "sector": "Perakande - Ticaret"
+  },
+  "ECILC": {
+    "name": "Eczacıbaşı İlaç",
+    "sector": "Sağlık ve İlaç"
+  },
+  "ECOGR": {
+    "name": "Ecogreen",
+    "sector": "Elektrik Üretim"
+  },
+  "ECZYT": {
+    "name": "Eczacıbaşı Yatırım",
+    "sector": "Holdingler"
+  },
+  "EDATA": {
+    "name": "E-Data Teknoloji",
+    "sector": "Teknoloji"
+  },
+  "EDIP": {
+    "name": "Edip Gayrimenkul Yat. San.",
+    "sector": "GYO"
+  },
+  "EFOR": {
+    "name": "Efor Yat. San.",
+    "sector": "Gıda"
+  },
+  "EGEEN": {
+    "name": "Ege Endüstri",
+    "sector": "Otomotiv Parçası"
+  },
+  "EGEGY": {
+    "name": "Egeyapı GYO",
+    "sector": "GYO"
+  },
+  "EGEPO": {
+    "name": "Egepol Hastanesi",
+    "sector": "Sağlık ve İlaç"
+  },
+  "EGGUB": {
+    "name": "Ege Gübre",
+    "sector": "Tarım Kimyasalları"
+  },
+  "EGPRO": {
+    "name": "Ege Profil",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "EGSER": {
+    "name": "Ege Seramik",
+    "sector": "Seramik"
+  },
+  "EKDMR": {
+    "name": "Ekinciler",
+    "sector": "Demir-Çelik Temel"
+  },
+  "EKGYO": {
+    "name": "Emlak Konut GYO",
+    "sector": "GYO"
+  },
+  "EKIM": {
+    "name": "Ekim Turizm",
+    "sector": "Ulaştırma-Lojistik"
+  },
+  "EKIZ": {
+    "name": "Ekiz Yağ ve Sabun",
+    "sector": "Gıda"
+  },
+  "EKOS": {
+    "name": "Ekos Teknoloji",
+    "sector": "Endüstriyel Makine -Teçhizat Üretim"
+  },
+  "EKSUN": {
+    "name": "Eksun Gıda",
+    "sector": "Gıda"
+  },
+  "ELITE": {
+    "name": "Elite Organik Gıda",
+    "sector": "Gıda"
+  },
+  "EMKEL": {
+    "name": "Emek Elektrik",
+    "sector": "Elektrik Enerji Ürt.Teçh/Tesis Kurulum"
+  },
+  "EMNIS": {
+    "name": "Eminiş Ambalaj",
+    "sector": "Boya"
+  },
+  "EMPAE": {
+    "name": "Empa Elektronik",
+    "sector": "Teknoloji"
+  },
+  "ENDAE": {
+    "name": "Enda Enerji",
+    "sector": "Elektrik Üretim"
+  },
+  "ENERY": {
+    "name": "Enerya Enerji",
+    "sector": "Elektrik - Doğalgaz Dağıtım"
+  },
+  "ENJSA": {
+    "name": "Enerjisa Enerji",
+    "sector": "Elektrik - Doğalgaz Dağıtım"
+  },
+  "ENKAI": {
+    "name": "Enka İnşaat",
+    "sector": "İnşaat- Taahhüt"
+  },
+  "ENPRA": {
+    "name": "Enpara",
+    "sector": "Bankacılık"
+  },
+  "ENSRI": {
+    "name": "Ensari Deri",
+    "sector": "Deri Giyim"
+  },
+  "ENTRA": {
+    "name": "Ic Enterra Yenilenebilir",
+    "sector": "Elektrik Üretim"
+  },
+  "EPLAS": {
+    "name": "Egeplast",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "ERBOS": {
+    "name": "Erbosan",
+    "sector": "Demir-Çelik Döküm"
+  },
+  "ERCB": {
+    "name": "Erciyas Çelik Boru",
+    "sector": "Demir-Çelik Temel"
+  },
+  "EREGL": {
+    "name": "Ereğli Demir Çelik",
+    "sector": "Demir-Çelik Temel"
+  },
+  "ERSU": {
+    "name": "Ersu Gıda",
+    "sector": "Meşrubat / İçecek"
+  },
+  "ESCAR": {
+    "name": "Escar Filo",
+    "sector": "Ulaştırma-Lojistik"
+  },
+  "ESCOM": {
+    "name": "Escort Teknoloji",
+    "sector": "Teknoloji"
+  },
+  "ESEN": {
+    "name": "Esenboğa Elektrik",
+    "sector": "Elektrik Üretim"
+  },
+  "ETILR": {
+    "name": "Etiler Gıda",
+    "sector": "Gıda"
+  },
+  "ETYAT": {
+    "name": "Euro Trend Yatırım",
+    "sector": "Yatırım Ortaklıkları"
+  },
+  "EUHOL": {
+    "name": "Euro Yatırım",
+    "sector": "Holdingler"
+  },
+  "EUKYO": {
+    "name": "Euro Kapital Yatırım Ortaklığı",
+    "sector": "Yatırım Ortaklıkları"
+  },
+  "EUPWR": {
+    "name": "Europower Enerji",
+    "sector": "Elektrik Enerji Ürt.Teçh/Tesis Kurulum"
+  },
+  "EUREN": {
+    "name": "Europen Endüstri",
+    "sector": "Demir-Çelik Döküm"
+  },
+  "EUYO": {
+    "name": "Euro Menkul",
+    "sector": "Yatırım Ortaklıkları"
+  },
+  "EYGYO": {
+    "name": "EYG Gayrimenkul",
+    "sector": "GYO"
+  },
+  "FADE": {
+    "name": "Fade Gıda Yatırım",
+    "sector": "Gıda"
+  },
+  "FENER": {
+    "name": "Fenerbahce Futbol A.Ş.",
+    "sector": "Spor"
+  },
+  "FLAP": {
+    "name": "Flap Kongre Hiz.Oto.Tur.A.Ş",
+    "sector": "Diğer"
+  },
+  "FMIZP": {
+    "name": "F-M İzmit Piston",
+    "sector": "Otomotiv Parçası"
+  },
+  "FONET": {
+    "name": "Fonet Bilgi Teknolojileri",
+    "sector": "Teknoloji"
+  },
+  "FORMT": {
+    "name": "Formet Metal ve Cam Sanayii",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "FORTE": {
+    "name": "Forte Bilgi İletişim",
+    "sector": "Teknoloji"
+  },
+  "FRIGO": {
+    "name": "Frigo Pak Gıda",
+    "sector": "Gıda"
+  },
+  "FRMPL": {
+    "name": "Formül Plastik",
+    "sector": "Kimyasal Ürün"
+  },
+  "FROTO": {
+    "name": "Ford Otosan",
+    "sector": "Otomotiv"
+  },
+  "FZLGY": {
+    "name": "Fuzul Gayrimenkul",
+    "sector": "GYO"
+  },
+  "GARAN": {
+    "name": "Garanti Bankası",
+    "sector": "Bankacılık"
+  },
+  "GARFA": {
+    "name": "Garanti BBVA Faktoring",
+    "sector": "Fin.Kiralama ve Faktoring"
+  },
+  "GATEG": {
+    "name": "Gate Group",
+    "sector": "Medya"
+  },
+  "GEDIK": {
+    "name": "Gedik Yatırım",
+    "sector": "Aracı Kurumlar"
+  },
+  "GEDZA": {
+    "name": "Gediz Ambalaj Sanayi",
+    "sector": "Kimyasal Ürün"
+  },
+  "GENIL": {
+    "name": "Gen İlaç",
+    "sector": "Sağlık ve İlaç"
+  },
+  "GENKM": {
+    "name": "Gentaş Kimya",
+    "sector": "Kimyasal Ürün"
+  },
+  "GENTS": {
+    "name": "Gentaş",
+    "sector": "Mobilya"
+  },
+  "GEREL": {
+    "name": "Gersan Elektrik",
+    "sector": "Kablo"
+  },
+  "GESAN": {
+    "name": "Girişim Elektrik",
+    "sector": "Elektrik Enerji Ürt.Teçh/Tesis Kurulum"
+  },
+  "GIPTA": {
+    "name": "Gıpta",
+    "sector": "Kırtasiye"
+  },
+  "GLBMD": {
+    "name": "Global Menkul Değerler",
+    "sector": "Aracı Kurumlar"
+  },
+  "GLCVY": {
+    "name": "Gelecek Varlık Yön.",
+    "sector": "Varlık Yönetim"
+  },
+  "GLRMK": {
+    "name": "Gülermak Ağır Sanayi",
+    "sector": "İnşaat- Taahhüt"
+  },
+  "GLRYH": {
+    "name": "Güler Yatırım Holding",
+    "sector": "Holdingler"
+  },
+  "GLYHO": {
+    "name": "Global Yatırım Holding",
+    "sector": "Holdingler"
+  },
+  "GMTAS": {
+    "name": "Gimat Mağazacılık",
+    "sector": "Perakande - Ticaret"
+  },
+  "GOKNR": {
+    "name": "Göknur Gıda",
+    "sector": "Gıda"
+  },
+  "GOLDA": {
+    "name": "Golda Gıda",
+    "sector": "Gıda"
+  },
+  "GOLTS": {
+    "name": "Göltaş Çimento",
+    "sector": "Çimento"
+  },
+  "GOODY": {
+    "name": "Goodyear",
+    "sector": "Otomotiv Lastiği"
+  },
+  "GOZDE": {
+    "name": "Gözde Girisim Sermayesi",
+    "sector": "Yatırım Ortaklıkları"
+  },
+  "GRNYO": {
+    "name": "Garanti YO",
+    "sector": "Yatırım Ortaklıkları"
+  },
+  "GRSEL": {
+    "name": "Gürsel Taşımacılık",
+    "sector": "Ulaştırma-Lojistik"
+  },
+  "GRTHO": {
+    "name": "GrainTurk Tarım",
+    "sector": "Perakande - Ticaret"
+  },
+  "GSDDE": {
+    "name": "GSD Denizcilik Gayrimenkul İnş",
+    "sector": "Ulaştırma-Lojistik"
+  },
+  "GSDHO": {
+    "name": "GSD Holding A.Ş.",
+    "sector": "Holdingler"
+  },
+  "GSRAY": {
+    "name": "Galatasaray Sportif A.Ş",
+    "sector": "Spor"
+  },
+  "GUBRF": {
+    "name": "Gübre Fabrikaları",
+    "sector": "Tarım Kimyasalları"
+  },
+  "GUNDG": {
+    "name": "Gündoğdu Gıda",
+    "sector": "Gıda"
+  },
+  "GWIND": {
+    "name": "Galata Wind Enerji",
+    "sector": "Elektrik Üretim"
+  },
+  "GZNMI": {
+    "name": "Gezinomi Seyahat",
+    "sector": "Turizm"
+  },
+  "HALKB": {
+    "name": "Halkbank",
+    "sector": "Bankacılık"
+  },
+  "HATEK": {
+    "name": "Hateks Hatay Tekstil",
+    "sector": "Tekstil Entegre"
+  },
+  "HATSN": {
+    "name": "Hat-San",
+    "sector": "Ulaştırma-Lojistik"
+  },
+  "HDFGS": {
+    "name": "Hedef Girişim Sermayesi",
+    "sector": "Yatırım Ortaklıkları"
+  },
+  "HEDEF": {
+    "name": "Hedef Holding",
+    "sector": "Holdingler"
+  },
+  "HEKTS": {
+    "name": "Hektaş",
+    "sector": "Tarım Kimyasalları"
+  },
+  "HKTM": {
+    "name": "Hidropar",
+    "sector": "Endüstriyel Makine -Teçhizat Üretim"
+  },
+  "HLGYO": {
+    "name": "Halk GYO",
+    "sector": "GYO"
+  },
+  "HOROZ": {
+    "name": "Horoz Lojistik",
+    "sector": "Ulaştırma-Lojistik"
+  },
+  "HRKET": {
+    "name": "Hareket Proje",
+    "sector": "Endüstriyel Makine -Teçhizat Üretim"
+  },
+  "HTTBT": {
+    "name": "Hitit Bilgisayar",
+    "sector": "Teknoloji"
+  },
+  "HUBVC": {
+    "name": "Hub Girişim Ser. Y.O.",
+    "sector": "Yatırım Ortaklıkları"
+  },
+  "HUNER": {
+    "name": "Hun Enerji",
+    "sector": "Elektrik Üretim"
+  },
+  "HURGZ": {
+    "name": "Hürriyet",
+    "sector": "Medya"
+  },
+  "ICBCT": {
+    "name": "ICBC Turkey Bank",
+    "sector": "Bankacılık"
+  },
+  "ICUGS": {
+    "name": "Icu Girişim Ser. Y.O.",
+    "sector": "Yatırım Ortaklıkları"
+  },
+  "IDGYO": {
+    "name": "İdealist GYO",
+    "sector": "GYO"
+  },
+  "IEYHO": {
+    "name": "Işıklar Enerji ve Yapı Holding",
+    "sector": "Holdingler"
+  },
+  "IHAAS": {
+    "name": "İhlas Haber Ajansı",
+    "sector": "Medya"
+  },
+  "IHEVA": {
+    "name": "İhlas Ev Aletleri",
+    "sector": "Dayanıklı Tüketim"
+  },
+  "IHGZT": {
+    "name": "İhlas Gazetecilik",
+    "sector": "Medya"
+  },
+  "IHLAS": {
+    "name": "İhlas Holding",
+    "sector": "Holdingler"
+  },
+  "IHLGM": {
+    "name": "İhlas Gayrimenkul",
+    "sector": "GYO"
+  },
+  "IHYAY": {
+    "name": "İhlas Yayın Holding",
+    "sector": "Medya"
+  },
+  "IMASM": {
+    "name": "İmaş Makine",
+    "sector": "Endüstriyel Makine -Teçhizat Üretim"
+  },
+  "INDES": {
+    "name": "İndeks Bilgisayar",
+    "sector": "Bilgisayar Toptancılığı"
+  },
+  "INFO": {
+    "name": "İnfo Yatırım",
+    "sector": "Aracı Kurumlar"
+  },
+  "INGRM": {
+    "name": "İngram Bilişim",
+    "sector": "Bilgisayar Toptancılığı"
+  },
+  "INTEK": {
+    "name": "Innosa Teknoloji",
+    "sector": "Teknoloji"
+  },
+  "INTEM": {
+    "name": "İntema",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "INTET": {
+    "name": "Intetra Teknoloji",
+    "sector": "Teknoloji"
+  },
+  "INVEO": {
+    "name": "İnveo Yatırım Holding",
+    "sector": "Holdingler"
+  },
+  "INVES": {
+    "name": "Investco Holding",
+    "sector": "Holdingler"
+  },
+  "ISATR": {
+    "name": "İş Bankası (A)",
+    "sector": "Bankacılık"
+  },
+  "ISBIR": {
+    "name": "İşbir Holding",
+    "sector": "Holdingler"
+  },
+  "ISBTR": {
+    "name": "İş Bankası (B)",
+    "sector": "Bankacılık"
+  },
+  "ISCTR": {
+    "name": "İş Bankası (C)",
+    "sector": "Bankacılık"
+  },
+  "ISDMR": {
+    "name": "İskenderun Demir Çelik",
+    "sector": "Demir-Çelik Temel"
+  },
+  "ISFIN": {
+    "name": "İş Finansal Kiralama",
+    "sector": "Fin.Kiralama ve Faktoring"
+  },
+  "ISGSY": {
+    "name": "İş Girişim",
+    "sector": "Yatırım Ortaklıkları"
+  },
+  "ISGYO": {
+    "name": "İş GYO",
+    "sector": "GYO"
+  },
+  "ISKPL": {
+    "name": "Işıklar Plastik",
+    "sector": "Kimyasal Ürün"
+  },
+  "ISKUR": {
+    "name": "İş Bankası Kurucu",
+    "sector": "Bankacılık"
+  },
+  "ISMEN": {
+    "name": "İş Yatırım",
+    "sector": "Aracı Kurumlar"
+  },
+  "ISSEN": {
+    "name": "İşbir Sentetik",
+    "sector": "Tekstil Entegre"
+  },
+  "ISVEA": {
+    "name": "İsvea Seramik",
+    "sector": "Seramik"
+  },
+  "ISYAT": {
+    "name": "İs YO",
+    "sector": "Yatırım Ortaklıkları"
+  },
+  "IZENR": {
+    "name": "İzdemir Enerji",
+    "sector": "Elektrik Üretim"
+  },
+  "IZFAS": {
+    "name": "İzmir Fırça",
+    "sector": "Boya"
+  },
+  "IZINV": {
+    "name": "İz Yatırım Holding",
+    "sector": "Gıda"
+  },
+  "IZMDC": {
+    "name": "İzmir Demir Çelik",
+    "sector": "Demir-Çelik Temel"
+  },
+  "JANTS": {
+    "name": "Jantsa Jant",
+    "sector": "Otomotiv Parçası"
+  },
+  "KAPLM": {
+    "name": "Kaplamin",
+    "sector": "Kağıt Ürünleri"
+  },
+  "KARCL": {
+    "name": "Kardemir Çelik Sanayi",
+    "sector": "Demir-Çelik Temel"
+  },
+  "KAREL": {
+    "name": "Karel Elektronik",
+    "sector": "İletişim Cihazları"
+  },
+  "KARSN": {
+    "name": "Karsan Otomotiv",
+    "sector": "Otomotiv"
+  },
+  "KARTN": {
+    "name": "Kartonsan",
+    "sector": "Kağıt Ürünleri"
+  },
+  "KATMR": {
+    "name": "Katmerciler Araç Üstü Ekipman",
+    "sector": "Otomotiv Parçası"
+  },
+  "KAYSE": {
+    "name": "Kayseri Şeker",
+    "sector": "Gıda"
+  },
+  "KBORU": {
+    "name": "Kuzey Boru",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "KCAER": {
+    "name": "Kocaer Çelik Sanayi",
+    "sector": "Demir-Çelik Temel"
+  },
+  "KCHOL": {
+    "name": "Koç Holding",
+    "sector": "Holdingler"
+  },
+  "KENT": {
+    "name": "Kent Gıda",
+    "sector": "Gıda"
+  },
+  "KERVN": {
+    "name": "Kervansaray Yat. Holding",
+    "sector": "Holdingler"
+  },
+  "KFEIN": {
+    "name": "Kafein Yazılım",
+    "sector": "Teknoloji"
+  },
+  "KGYO": {
+    "name": "Koray GYO",
+    "sector": "GYO"
+  },
+  "KIMMR": {
+    "name": "Ersan Alışveriş Hizmetleri",
+    "sector": "Perakande - Ticaret"
+  },
+  "KLGYO": {
+    "name": "Kiler GYO",
+    "sector": "GYO"
+  },
+  "KLKIM": {
+    "name": "Kalekim Kimyevi Maddeler",
+    "sector": "Seramik"
+  },
+  "KLMSN": {
+    "name": "Klimasan",
+    "sector": "Dayanıklı Tüketim"
+  },
+  "KLNMA": {
+    "name": "T. Kalkınma Bankası",
+    "sector": "Bankacılık"
+  },
+  "KLRHO": {
+    "name": "Kiler Holding",
+    "sector": "Holdingler"
+  },
+  "KLSER": {
+    "name": "Kaleseramik",
+    "sector": "Seramik"
+  },
+  "KLSYN": {
+    "name": "Koleksiyon Mobilya",
+    "sector": "Mobilya"
+  },
+  "KLYPV": {
+    "name": "Kalyon Güneş Teknolojileri",
+    "sector": "Elektrik Enerji Ürt.Teçh/Tesis Kurulum"
+  },
+  "KMPUR": {
+    "name": "Kimteks Poliüretan",
+    "sector": "Kimyasal Ürün"
+  },
+  "KNFRT": {
+    "name": "Konfrut Gıda",
+    "sector": "Meşrubat / İçecek"
+  },
+  "KOCMT": {
+    "name": "Koç Metalurji",
+    "sector": "Demir-Çelik Temel"
+  },
+  "KONKA": {
+    "name": "Konya Kağıt",
+    "sector": "Kağıt Ürünleri"
+  },
+  "KONTR": {
+    "name": "Kontrolmatik Teknoloji",
+    "sector": "Elektrik Enerji Ürt.Teçh/Tesis Kurulum"
+  },
+  "KONYA": {
+    "name": "Konya Çimento",
+    "sector": "Çimento"
+  },
+  "KOPOL": {
+    "name": "Koza Polyester",
+    "sector": "Endüstriyel Tekstil"
+  },
+  "KORDS": {
+    "name": "Kordsa Teknik Tekstil",
+    "sector": "Endüstriyel Tekstil"
+  },
+  "KOTON": {
+    "name": "Koton",
+    "sector": "Tekstil Entegre"
+  },
+  "KPEKS": {
+    "name": "Kapeks Kimya",
+    "sector": "Kimyasal Ürün"
+  },
+  "KRDMA": {
+    "name": "Kardemir (A)",
+    "sector": "Demir-Çelik Temel"
+  },
+  "KRDMB": {
+    "name": "Kardemir (B)",
+    "sector": "Demir-Çelik Temel"
+  },
+  "KRDMD": {
+    "name": "Kardemir (D)",
+    "sector": "Demir-Çelik Temel"
+  },
+  "KRGYO": {
+    "name": "Korfez GYO",
+    "sector": "GYO"
+  },
+  "KRONT": {
+    "name": "Kron Teknoloji",
+    "sector": "Teknoloji"
+  },
+  "KRPLS": {
+    "name": "Koroplast Temizlik Ambalaj",
+    "sector": "Kağıt Ürünleri"
+  },
+  "KRSTL": {
+    "name": "Kristal Kola",
+    "sector": "Meşrubat / İçecek"
+  },
+  "KRTEK": {
+    "name": "Karsu Tekstil",
+    "sector": "Tekstil Entegre"
+  },
+  "KRVGD": {
+    "name": "Kervan Gıda",
+    "sector": "Gıda"
+  },
+  "KSTUR": {
+    "name": "Kuştur Turizm",
+    "sector": "Turizm"
+  },
+  "KTLEV": {
+    "name": "Katılımevim",
+    "sector": "Diğer"
+  },
+  "KTSKR": {
+    "name": "Kütahya Şeker",
+    "sector": "Gıda"
+  },
+  "KUTPO": {
+    "name": "Kütahya Porselen",
+    "sector": "Seramik"
+  },
+  "KUVVA": {
+    "name": "Kuvva Gıda",
+    "sector": "Gıda"
+  },
+  "KUYAS": {
+    "name": "Kuyas Yatırım AŞ",
+    "sector": "İnşaat- Taahhüt"
+  },
+  "KZBGY": {
+    "name": "Kızılbük GYO",
+    "sector": "GYO"
+  },
+  "KZGYO": {
+    "name": "Kuzugrup GYO",
+    "sector": "GYO"
+  },
+  "LIDER": {
+    "name": "Lider Turizm",
+    "sector": "Ulaştırma-Lojistik"
+  },
+  "LIDFA": {
+    "name": "Lider Faktoring",
+    "sector": "Fin.Kiralama ve Faktoring"
+  },
+  "LILAK": {
+    "name": "Lila Kağıt",
+    "sector": "Kağıt Ürünleri"
+  },
+  "LINK": {
+    "name": "Link Bilgisayar",
+    "sector": "Teknoloji"
+  },
+  "LKMNH": {
+    "name": "Lokman Hekim Engurusag",
+    "sector": "Sağlık ve İlaç"
+  },
+  "LMKDC": {
+    "name": "Limak Doğu Anadolu Çimento",
+    "sector": "Çimento"
+  },
+  "LOGO": {
+    "name": "Logo Yazılım",
+    "sector": "Teknoloji"
+  },
+  "LRSHO": {
+    "name": "Loras Holding",
+    "sector": "Holdingler"
+  },
+  "LUKSK": {
+    "name": "Lüks Kadife",
+    "sector": "Tekstil Entegre"
+  },
+  "LXGYO": {
+    "name": "Luxera GYO",
+    "sector": "GYO"
+  },
+  "LYDHO": {
+    "name": "Lydia Holding",
+    "sector": "Holdingler"
+  },
+  "LYDYE": {
+    "name": "Lydia Yeşil Enerji",
+    "sector": "Gıda"
+  },
+  "MAALT": {
+    "name": "Marmaris Altınyunus",
+    "sector": "Turizm"
+  },
+  "MACKO": {
+    "name": "Maçkolik",
+    "sector": "Eğlence Hizmetleri"
+  },
+  "MAGEN": {
+    "name": "Margün Enerji",
+    "sector": "Elektrik Enerji Ürt.Teçh/Tesis Kurulum"
+  },
+  "MAKIM": {
+    "name": "Makim Makina",
+    "sector": "Endüstriyel Makine -Teçhizat Üretim"
+  },
+  "MAKTK": {
+    "name": "Makina Takım",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "MANAS": {
+    "name": "Manas Enerji Yönetimi",
+    "sector": "Teknoloji"
+  },
+  "MARBL": {
+    "name": "Tureks Turunç",
+    "sector": "Madencilik"
+  },
+  "MARMR": {
+    "name": "Marmara Holding",
+    "sector": "Kimyasal Ürün"
+  },
+  "MARTI": {
+    "name": "Martı Otel İşletmeleri",
+    "sector": "Turizm"
+  },
+  "MASFN": {
+    "name": "Masfen Enerji",
+    "sector": "Elektrik Enerji Ürt.Teçh/Tesis Kurulum"
+  },
+  "MAVI": {
+    "name": "Mavi Giyim Sanayi Tic.A.S",
+    "sector": "Tekstil Entegre"
+  },
+  "MCARD": {
+    "name": "MetropolCard",
+    "sector": "Teknoloji"
+  },
+  "MEDTR": {
+    "name": "Meditera Tıbbi Malzeme",
+    "sector": "Sağlık ve İlaç"
+  },
+  "MEGAP": {
+    "name": "Mega Polietilen Köpük",
+    "sector": "Tekstil Entegre"
+  },
+  "MEGMT": {
+    "name": "Mega Metal",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "MEKAG": {
+    "name": "Meka Beton",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "MEPET": {
+    "name": "MEPET Metro",
+    "sector": "Petrol"
+  },
+  "MERCN": {
+    "name": "Mercan Kimya",
+    "sector": "Kimyasal Ürün"
+  },
+  "MERIT": {
+    "name": "Merit Turizm Yatırım",
+    "sector": "Turizm"
+  },
+  "MERKO": {
+    "name": "Merko Gıda",
+    "sector": "Gıda"
+  },
+  "METEN": {
+    "name": "Metgün Enerji",
+    "sector": "Elektrik Üretim"
+  },
+  "METRO": {
+    "name": "Metro Tic. Mali Yat.",
+    "sector": "Holdingler"
+  },
+  "MEYSU": {
+    "name": "Meysu Gıda",
+    "sector": "Gıda"
+  },
+  "MGROS": {
+    "name": "Migros",
+    "sector": "Perakande - Ticaret"
+  },
+  "MHRGY": {
+    "name": "Mhr GYO",
+    "sector": "GYO"
+  },
+  "MIATK": {
+    "name": "Mia Teknoloji",
+    "sector": "Teknoloji"
+  },
+  "MMCAS": {
+    "name": "MMC San.ve Tic. Yatırımlar A.Ş",
+    "sector": "Holdingler"
+  },
+  "MNDRS": {
+    "name": "Menderes Tekstil",
+    "sector": "Tekstil Entegre"
+  },
+  "MNDTR": {
+    "name": "Mondi Tire",
+    "sector": "Kağıt Ürünleri"
+  },
+  "MOBTL": {
+    "name": "Mobitel İletişim",
+    "sector": "İletişim"
+  },
+  "MOGAN": {
+    "name": "Mogan Enerji",
+    "sector": "Elektrik Enerji Ürt.Teçh/Tesis Kurulum"
+  },
+  "MOPAS": {
+    "name": "Mopaş",
+    "sector": "Perakande - Ticaret"
+  },
+  "MPARK": {
+    "name": "MLP Sağlık Hizmetleri",
+    "sector": "Sağlık ve İlaç"
+  },
+  "MRGYO": {
+    "name": "Martı GYO",
+    "sector": "GYO"
+  },
+  "MRSHL": {
+    "name": "Marshall",
+    "sector": "Boya"
+  },
+  "MSGYO": {
+    "name": "Mistral GYO",
+    "sector": "GYO"
+  },
+  "MTRKS": {
+    "name": "Matriks Finansal Teknolojiler",
+    "sector": "Teknoloji"
+  },
+  "MTRYO": {
+    "name": "Metro YO",
+    "sector": "Yatırım Ortaklıkları"
+  },
+  "MZHLD": {
+    "name": "Mazhar Zorlu Holding",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "NATEN": {
+    "name": "Naturel Yenilenebilir Enerji",
+    "sector": "Elektrik Enerji Ürt.Teçh/Tesis Kurulum"
+  },
+  "NETAS": {
+    "name": "Netaş",
+    "sector": "İletişim Cihazları"
+  },
+  "NETCD": {
+    "name": "Netcad Yazılım",
+    "sector": "Teknoloji"
+  },
+  "NETGL": {
+    "name": "Net Global",
+    "sector": "Kimyasal Ürün"
+  },
+  "NIBAS": {
+    "name": "Niğde Beton Sanayi",
+    "sector": "Çimento"
+  },
+  "NTGAZ": {
+    "name": "Naturel Gaz",
+    "sector": "Petrol"
+  },
+  "NTHOL": {
+    "name": "Net Holding",
+    "sector": "Holdingler"
+  },
+  "NUGYO": {
+    "name": "Nurol GYO",
+    "sector": "GYO"
+  },
+  "NUHCM": {
+    "name": "Nuh Çimento",
+    "sector": "Çimento"
+  },
+  "OBAMS": {
+    "name": "Oba Makarnacılık",
+    "sector": "Gıda"
+  },
+  "OBASE": {
+    "name": "Obase Bilgisayar Danışmanlık",
+    "sector": "Teknoloji"
+  },
+  "ODAS": {
+    "name": "Odaş Elektrik Üretim",
+    "sector": "Elektrik Üretim"
+  },
+  "ODINE": {
+    "name": "Odine Solutions",
+    "sector": "Teknoloji"
+  },
+  "OFSYM": {
+    "name": "Ofis Yem",
+    "sector": "Gıda"
+  },
+  "ONCSM": {
+    "name": "Oncosem",
+    "sector": "Sağlık ve İlaç"
+  },
+  "ONRYT": {
+    "name": "Onur Yüksek Teknoloji",
+    "sector": "Savunma"
+  },
+  "ORCAY": {
+    "name": "Ortaköy Çay Sanayi",
+    "sector": "Meşrubat / İçecek"
+  },
+  "ORGE": {
+    "name": "ORGE Enerji Elektrik",
+    "sector": "Elektrik Enerji Ürt.Teçh/Tesis Kurulum"
+  },
+  "ORMA": {
+    "name": "Orma Orman Mahsulleri",
+    "sector": "Kağıt Ürünleri"
+  },
+  "ORZAX": {
+    "name": "Orzaks İlaç",
+    "sector": "Sağlık ve İlaç"
+  },
+  "OSMEN": {
+    "name": "Osmanlı Menkul Değ.",
+    "sector": "Aracı Kurumlar"
+  },
+  "OSTIM": {
+    "name": "Ostim Endüst. Yatırımlar",
+    "sector": "Diğer"
+  },
+  "OTKAR": {
+    "name": "Otokar",
+    "sector": "Otomotiv"
+  },
+  "OTTO": {
+    "name": "Otto Holding",
+    "sector": "Gıda"
+  },
+  "OYAKC": {
+    "name": "Oyak Çimento",
+    "sector": "Çimento"
+  },
+  "OYAYO": {
+    "name": "Oyak Yatırım Ortaklığı",
+    "sector": "Yatırım Ortaklıkları"
+  },
+  "OYLUM": {
+    "name": "Oylum Sınai Yatırımlar",
+    "sector": "Gıda"
+  },
+  "OYYAT": {
+    "name": "Oyak Yatırım",
+    "sector": "Aracı Kurumlar"
+  },
+  "OZATD": {
+    "name": "Özata Denizcilik",
+    "sector": "Endüstriyel Makine -Teçhizat Üretim"
+  },
+  "OZGYO": {
+    "name": "Özderici GYO",
+    "sector": "GYO"
+  },
+  "OZKGY": {
+    "name": "Özak GYO",
+    "sector": "GYO"
+  },
+  "OZRDN": {
+    "name": "Özerden Plastik",
+    "sector": "Kimyasal Ürün"
+  },
+  "OZSUB": {
+    "name": "Özsu Balık",
+    "sector": "Hayvancılık"
+  },
+  "OZYSR": {
+    "name": "Özyaşar Tel",
+    "sector": "Demir-Çelik Temel"
+  },
+  "PAGYO": {
+    "name": "Panora GYO",
+    "sector": "GYO"
+  },
+  "PAHOL": {
+    "name": "Pasifik Holding",
+    "sector": "Holdingler"
+  },
+  "PAMEL": {
+    "name": "Pamel Yenilenebilir Elekt.",
+    "sector": "Elektrik Üretim"
+  },
+  "PAPIL": {
+    "name": "Papilon Savunma",
+    "sector": "Teknoloji"
+  },
+  "PARSN": {
+    "name": "Parsan",
+    "sector": "Otomotiv Parçası"
+  },
+  "PASEU": {
+    "name": "Pasifik Eurasia",
+    "sector": "Ulaştırma-Lojistik"
+  },
+  "PATEK": {
+    "name": "Pasifik Teknoloji",
+    "sector": "Teknoloji"
+  },
+  "PCILT": {
+    "name": "PC İletişim ve Medya",
+    "sector": "Medya"
+  },
+  "PEKGY": {
+    "name": "Peker GYO",
+    "sector": "GYO"
+  },
+  "PENGD": {
+    "name": "Penguen Gıda",
+    "sector": "Gıda"
+  },
+  "PENTA": {
+    "name": "Penta Teknoloji",
+    "sector": "Bilgisayar Toptancılığı"
+  },
+  "PETKM": {
+    "name": "Petkim",
+    "sector": "Petrol"
+  },
+  "PETUN": {
+    "name": "Pınar Et ve Un",
+    "sector": "Gıda"
+  },
+  "PGSUS": {
+    "name": "Pegasus Hava Taşımacılığı",
+    "sector": "Havayolları ve Hizm."
+  },
+  "PINSU": {
+    "name": "Pınar Su",
+    "sector": "Meşrubat / İçecek"
+  },
+  "PKART": {
+    "name": "Plastikkart A.Ş",
+    "sector": "Teknoloji"
+  },
+  "PKENT": {
+    "name": "Petrokent",
+    "sector": "Turizm"
+  },
+  "PLTUR": {
+    "name": "Platform Turizm",
+    "sector": "Ulaştırma-Lojistik"
+  },
+  "PNLSN": {
+    "name": "Panelsan Çatı Cephe",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "PNSUT": {
+    "name": "Pınar Süt",
+    "sector": "Meşrubat / İçecek"
+  },
+  "POLHO": {
+    "name": "Polisan Holding",
+    "sector": "Holdingler"
+  },
+  "POLTK": {
+    "name": "Politeknik Metal",
+    "sector": "Kimyasal Ürün"
+  },
+  "PRDGS": {
+    "name": "Pardus Girişim",
+    "sector": "Yatırım Ortaklıkları"
+  },
+  "PRKAB": {
+    "name": "Prysmian Kablo",
+    "sector": "Kablo"
+  },
+  "PRKME": {
+    "name": "Park Elek. Madencilik",
+    "sector": "Madencilik"
+  },
+  "PRZMA": {
+    "name": "Prizma Pres Matbaacılık",
+    "sector": "Kağıt Ürünleri"
+  },
+  "PSDTC": {
+    "name": "Pergamon Status",
+    "sector": "Perakande - Ticaret"
+  },
+  "PSGYO": {
+    "name": "Pasifik GYO",
+    "sector": "GYO"
+  },
+  "QNBFK": {
+    "name": "QNB Finans Fin. Kir.",
+    "sector": "Fin.Kiralama ve Faktoring"
+  },
+  "QNBTR": {
+    "name": "QNB Bank",
+    "sector": "Bankacılık"
+  },
+  "QUAGR": {
+    "name": "QUA Granite",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "QUICK": {
+    "name": "Quick Sigorta",
+    "sector": "Sigorta"
+  },
+  "RALYH": {
+    "name": "Ral Yatırım Holding",
+    "sector": "Tekstil Entegre"
+  },
+  "RAYSG": {
+    "name": "Ray Sigorta",
+    "sector": "Sigorta"
+  },
+  "REEDR": {
+    "name": "Reeder",
+    "sector": "İletişim Cihazları"
+  },
+  "RGYAS": {
+    "name": "Rönesans Gayrimenkul",
+    "sector": "GYO"
+  },
+  "RNPOL": {
+    "name": "Rainbow Polikarbonat",
+    "sector": "Kimyasal Ürün"
+  },
+  "RODRG": {
+    "name": "Rodrigo Tekstil",
+    "sector": "Tekstil Entegre"
+  },
+  "RTALB": {
+    "name": "RTA laboratuvarlari",
+    "sector": "Sağlık ve İlaç"
+  },
+  "RUBNS": {
+    "name": "Rubenis Tekstil",
+    "sector": "Tekstil Entegre"
+  },
+  "RUZYE": {
+    "name": "Ruzy Madencilik ve Enerji",
+    "sector": "Madencilik"
+  },
+  "RYGYO": {
+    "name": "Reysaş GYO",
+    "sector": "GYO"
+  },
+  "RYSAS": {
+    "name": "Reysaş Taşımacılık",
+    "sector": "Ulaştırma-Lojistik"
+  },
+  "SAFKR": {
+    "name": "Safkar Ege Soğutmacılık",
+    "sector": "Dayanıklı Tüketim"
+  },
+  "SAHOL": {
+    "name": "Sabancı Holding",
+    "sector": "Holdingler"
+  },
+  "SAMAT": {
+    "name": "Saray Matbaacılık",
+    "sector": "Kağıt Ürünleri"
+  },
+  "SANEL": {
+    "name": "San-El Muhendislik",
+    "sector": "Endüstriyel Makine -Teçhizat Üretim"
+  },
+  "SANFM": {
+    "name": "Sanifoam Sünger Sanayi",
+    "sector": "Kimyasal Ürün"
+  },
+  "SANKO": {
+    "name": "Sanko Pazarlama",
+    "sector": "Pazarlama"
+  },
+  "SARAE": {
+    "name": "Şa-Ra Enerji",
+    "sector": "Elektrik Enerji Ürt.Teçh/Tesis Kurulum"
+  },
+  "SARKY": {
+    "name": "Sarkuysan",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "SASA": {
+    "name": "Sasa Polyester Sanayi A.Ş.",
+    "sector": "Endüstriyel Tekstil"
+  },
+  "SAYAS": {
+    "name": "Say Yenilenebilir Enerji",
+    "sector": "Elektrik Enerji Ürt.Teçh/Tesis Kurulum"
+  },
+  "SDTTR": {
+    "name": "SDT Uzay",
+    "sector": "Savunma"
+  },
+  "SEGMN": {
+    "name": "Seğmen Gıda",
+    "sector": "Gıda"
+  },
+  "SEGYO": {
+    "name": "Şeker GYO",
+    "sector": "GYO"
+  },
+  "SEKFK": {
+    "name": "Şeker Finansal Kiralama A.Ş",
+    "sector": "Fin.Kiralama ve Faktoring"
+  },
+  "SEKUR": {
+    "name": "Sekuro Plastik",
+    "sector": "Kimyasal Ürün"
+  },
+  "SELEC": {
+    "name": "Selçuk Ecza Deposu",
+    "sector": "Sağlık ve İlaç"
+  },
+  "SELVA": {
+    "name": "Selva Gıda",
+    "sector": "Gıda"
+  },
+  "SERNT": {
+    "name": "Seranit Granit",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "SEYKM": {
+    "name": "Seyitler Kimya",
+    "sector": "Kimyasal Ürün"
+  },
+  "SILVR": {
+    "name": "Silverline",
+    "sector": "Endüstriyel Makine -Teçhizat Üretim"
+  },
+  "SISE": {
+    "name": "Şişecam",
+    "sector": "Cam"
+  },
+  "SKBNK": {
+    "name": "Şekerbank",
+    "sector": "Bankacılık"
+  },
+  "SKTAS": {
+    "name": "Söktaş",
+    "sector": "Tekstil Entegre"
+  },
+  "SKYLP": {
+    "name": "Skyalp Fin. Tek.ve Danışmanlık",
+    "sector": "Diğer"
+  },
+  "SKYMD": {
+    "name": "Şeker Yatırım",
+    "sector": "Aracı Kurumlar"
+  },
+  "SMART": {
+    "name": "Smartiks Yazılım",
+    "sector": "Teknoloji"
+  },
+  "SMRTG": {
+    "name": "Smart Güneş Enerjisi",
+    "sector": "Elektrik Enerji Ürt.Teçh/Tesis Kurulum"
+  },
+  "SMRVA": {
+    "name": "Sümer Varlık Yönetim",
+    "sector": "Varlık Yönetim"
+  },
+  "SNGYO": {
+    "name": "Sinpas GYO",
+    "sector": "GYO"
+  },
+  "SNICA": {
+    "name": "Sanica Isı Sanayi",
+    "sector": "Dayanıklı Tüketim"
+  },
+  "SNPAM": {
+    "name": "Sönmez Pamuklu",
+    "sector": "Tekstil Entegre"
+  },
+  "SODSN": {
+    "name": "Sodaş Sodyum Sanayii",
+    "sector": "Kimyasal Ürün"
+  },
+  "SOHOE": {
+    "name": "Soho Giyim",
+    "sector": "Tekstil Entegre"
+  },
+  "SOKE": {
+    "name": "Söke Değirmencilik",
+    "sector": "Gıda"
+  },
+  "SOKM": {
+    "name": "Şok Marketler",
+    "sector": "Perakande - Ticaret"
+  },
+  "SONME": {
+    "name": "Sönmez Filament",
+    "sector": "Tekstil Entegre"
+  },
+  "SRVGY": {
+    "name": "Servet GYO",
+    "sector": "GYO"
+  },
+  "SSAAT": {
+    "name": "Saat ve Saat",
+    "sector": "Perakande - Ticaret"
+  },
+  "SUMAS": {
+    "name": "Sumas Mobilya",
+    "sector": "Mobilya"
+  },
+  "SUNTK": {
+    "name": "Sun Tekstil",
+    "sector": "Tekstil Entegre"
+  },
+  "SURGY": {
+    "name": "Sur GYO",
+    "sector": "GYO"
+  },
+  "SUWEN": {
+    "name": "Suwen Tekstil",
+    "sector": "Tekstil Entegre"
+  },
+  "SVGYO": {
+    "name": "Savur GYO",
+    "sector": "GYO"
+  },
+  "TABGD": {
+    "name": "Tab Gıda",
+    "sector": "Gıda"
+  },
+  "TARKM": {
+    "name": "Tarkim",
+    "sector": "Tarım Kimyasalları"
+  },
+  "TATEN": {
+    "name": "Tatlıpınar Enerji",
+    "sector": "Elektrik Üretim"
+  },
+  "TATGD": {
+    "name": "Tat Gıda",
+    "sector": "Gıda"
+  },
+  "TAVHL": {
+    "name": "TAV Holding",
+    "sector": "Havayolları ve Hizm."
+  },
+  "TBORG": {
+    "name": "Tuborg",
+    "sector": "Meşrubat / İçecek"
+  },
+  "TCELL": {
+    "name": "Turkcell",
+    "sector": "İletişim"
+  },
+  "TCKRC": {
+    "name": "Kıraç Galvaniz",
+    "sector": "Diğer"
+  },
+  "TDGYO": {
+    "name": "Trend GYO",
+    "sector": "GYO"
+  },
+  "TEHOL": {
+    "name": "Tera Holding",
+    "sector": "Holdingler"
+  },
+  "TEKTU": {
+    "name": "Tek-Art Turizm",
+    "sector": "Turizm"
+  },
+  "TERA": {
+    "name": "Tera Yatırım",
+    "sector": "Aracı Kurumlar"
+  },
+  "TEZOL": {
+    "name": "Europap Tezol",
+    "sector": "Kağıt Ürünleri"
+  },
+  "TGSAS": {
+    "name": "TGS Dış Ticaret",
+    "sector": "Pazarlama"
+  },
+  "THYAO": {
+    "name": "Türk Hava Yolları",
+    "sector": "Havayolları ve Hizm."
+  },
+  "TKFEN": {
+    "name": "Tekfen Holding",
+    "sector": "İnşaat- Taahhüt"
+  },
+  "TKNKA": {
+    "name": "Teknika Plastik",
+    "sector": "Petrol"
+  },
+  "TKNSA": {
+    "name": "Teknosa İç ve Dış Tic.",
+    "sector": "Perakande - Ticaret"
+  },
+  "TLMAN": {
+    "name": "Trabzon Liman İşletmeciliği",
+    "sector": "Ulaştırma-Lojistik"
+  },
+  "TMPOL": {
+    "name": "TE-MAPOL Polimer Plastik",
+    "sector": "Kimyasal Ürün"
+  },
+  "TMSN": {
+    "name": "Tümosan Motor ve Traktör",
+    "sector": "Otomotiv"
+  },
+  "TNZTP": {
+    "name": "Tapdi Oksijen",
+    "sector": "Sağlık ve İlaç"
+  },
+  "TOASO": {
+    "name": "Tofaş Fabrika",
+    "sector": "Otomotiv"
+  },
+  "TRALT": {
+    "name": "Türk Altın",
+    "sector": "Madencilik"
+  },
+  "TRCAS": {
+    "name": "Turcas Holding",
+    "sector": "Petrol"
+  },
+  "TRENJ": {
+    "name": "TR Doğal Enerji Kaynakları",
+    "sector": "Elektrik Üretim"
+  },
+  "TRGYO": {
+    "name": "Torunlar GYO",
+    "sector": "GYO"
+  },
+  "TRHOL": {
+    "name": "Tera Finansal Yat. Holding",
+    "sector": "Holdingler"
+  },
+  "TRILC": {
+    "name": "Turk İlaç ve Serum Sanayi",
+    "sector": "Sağlık ve İlaç"
+  },
+  "TRMET": {
+    "name": "TR Anadolu Metal",
+    "sector": "Madencilik"
+  },
+  "TSGYO": {
+    "name": "TSKB GYO",
+    "sector": "GYO"
+  },
+  "TSKB": {
+    "name": "TSKB",
+    "sector": "Bankacılık"
+  },
+  "TSPOR": {
+    "name": "Trabzonspor A.Ş",
+    "sector": "Spor"
+  },
+  "TTKOM": {
+    "name": "Türk Telekom",
+    "sector": "İletişim"
+  },
+  "TTRAK": {
+    "name": "Türk Traktör",
+    "sector": "Otomotiv"
+  },
+  "TUCLK": {
+    "name": "Tuğçelik Alüminyum ve Metal",
+    "sector": "Otomotiv Parçası"
+  },
+  "TUKAS": {
+    "name": "Tukaş",
+    "sector": "Gıda"
+  },
+  "TUPRS": {
+    "name": "Tüpraş",
+    "sector": "Petrol"
+  },
+  "TUREX": {
+    "name": "Tureks Tur.Taşımacılık",
+    "sector": "Ulaştırma-Lojistik"
+  },
+  "TURGG": {
+    "name": "Türker Proje Gay.Gel.",
+    "sector": "GYO"
+  },
+  "TURSG": {
+    "name": "Türkiye Sigorta",
+    "sector": "Sigorta"
+  },
+  "UCAYM": {
+    "name": "Üçay Mühendislik",
+    "sector": "Diğer"
+  },
+  "UFUK": {
+    "name": "Ufuk Yat.Yön.ve Gay. AŞ.",
+    "sector": "Fin.Kiralama ve Faktoring"
+  },
+  "ULAS": {
+    "name": "Ulaşlar Turizm Yatırımları",
+    "sector": "Turizm"
+  },
+  "ULKER": {
+    "name": "Ülker Bisküvi",
+    "sector": "Gıda"
+  },
+  "ULUFA": {
+    "name": "Ulusal Faktoring",
+    "sector": "Fin.Kiralama ve Faktoring"
+  },
+  "ULUSE": {
+    "name": "Ulusoy Elektrik",
+    "sector": "Elektrik Enerji Ürt.Teçh/Tesis Kurulum"
+  },
+  "ULUUN": {
+    "name": "Ulusoy Un",
+    "sector": "Gıda"
+  },
+  "UNLU": {
+    "name": "Ünlü Yatırım Holding",
+    "sector": "Aracı Kurumlar"
+  },
+  "USAK": {
+    "name": "Uşak Seramik",
+    "sector": "Seramik"
+  },
+  "USHOL": {
+    "name": "Marka Yatırım Holding",
+    "sector": "Holdingler"
+  },
+  "VAKBN": {
+    "name": "Vakıfbank",
+    "sector": "Bankacılık"
+  },
+  "VAKFA": {
+    "name": "Vakıf Faktoring",
+    "sector": "Fin.Kiralama ve Faktoring"
+  },
+  "VAKFN": {
+    "name": "Vakıf Fin. Kir.",
+    "sector": "Fin.Kiralama ve Faktoring"
+  },
+  "VAKKO": {
+    "name": "Vakko Tekstil",
+    "sector": "Perakande - Ticaret"
+  },
+  "VANGD": {
+    "name": "Vanet Gıda Sanayi",
+    "sector": "Gıda"
+  },
+  "VBTYZ": {
+    "name": "VBT Yazılım",
+    "sector": "Teknoloji"
+  },
+  "VERTU": {
+    "name": "Verusatürk Girişim Sermayesi",
+    "sector": "Yatırım Ortaklıkları"
+  },
+  "VERUS": {
+    "name": "Verusa Holding",
+    "sector": "Holdingler"
+  },
+  "VESBE": {
+    "name": "Vestel Beyaz Esya",
+    "sector": "Dayanıklı Tüketim"
+  },
+  "VESTL": {
+    "name": "Vestel Elektronik",
+    "sector": "Dayanıklı Tüketim"
+  },
+  "VEYAS": {
+    "name": "Vangölü Enerj",
+    "sector": "Elektrik - Doğalgaz Dağıtım"
+  },
+  "VKFYO": {
+    "name": "Vakıf YO",
+    "sector": "Yatırım Ortaklıkları"
+  },
+  "VKGYO": {
+    "name": "Vakıf GYO",
+    "sector": "GYO"
+  },
+  "VKING": {
+    "name": "Viking Kağıt",
+    "sector": "Kağıt Ürünleri"
+  },
+  "VRGYO": {
+    "name": "Vera GYO",
+    "sector": "GYO"
+  },
+  "VSNMD": {
+    "name": "Vişne Madencilik",
+    "sector": "Madencilik"
+  },
+  "YAPRK": {
+    "name": "Yaprak Süt & Besi Çiftlikleri",
+    "sector": "Gıda"
+  },
+  "YATAS": {
+    "name": "Yataş Yatak",
+    "sector": "Mobilya"
+  },
+  "YAYLA": {
+    "name": "Yayla Enerji Uretim Turizm",
+    "sector": "Elektrik Üretim"
+  },
+  "YBTAS": {
+    "name": "Yibitaş İnş. Malzemeleri",
+    "sector": "İnşaat Malzemeleri"
+  },
+  "YEOTK": {
+    "name": "YEO Teknoloji",
+    "sector": "İnşaat- Taahhüt"
+  },
+  "YESIL": {
+    "name": "Yeşil Yatırım Holding",
+    "sector": "Holdingler"
+  },
+  "YGGYO": {
+    "name": "Yeni Gimat GYO",
+    "sector": "GYO"
+  },
+  "YIGIT": {
+    "name": "Yiğit Akü",
+    "sector": "Otomotiv Parçası"
+  },
+  "YKBNK": {
+    "name": "Yapı Kredi Bankası",
+    "sector": "Bankacılık"
+  },
+  "YKSLN": {
+    "name": "Yükselen Çelik",
+    "sector": "Demir-Çelik Temel"
+  },
+  "YONGA": {
+    "name": "Yonga Mobilya Sanayi",
+    "sector": "Mobilya"
+  },
+  "YUNSA": {
+    "name": "Yünsa",
+    "sector": "Tekstil Entegre"
+  },
+  "YYAPI": {
+    "name": "Yesil Yapi",
+    "sector": "İnşaat- Taahhüt"
+  },
+  "YYLGD": {
+    "name": "Yayla Agro Gıda",
+    "sector": "Gıda"
+  },
+  "ZEDUR": {
+    "name": "Zedur Enerji",
+    "sector": "Elektrik Üretim"
+  },
+  "ZERGY": {
+    "name": "Zeray GYO",
+    "sector": "GYO"
+  },
+  "ZGYO": {
+    "name": "Z GYO",
+    "sector": "GYO"
+  },
+  "ZOREN": {
+    "name": "Zorlu Enerji",
+    "sector": "Elektrik Üretim"
+  },
+  "ZRGYO": {
+    "name": "Ziraat GYO",
+    "sector": "GYO"
+  }
+};

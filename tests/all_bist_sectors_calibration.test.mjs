@@ -3,7 +3,13 @@ import assert from 'node:assert/strict';
 import { OFFICIAL_ISYATIRIM_CACHE } from '../lib/isyatirim-official-cache.ts';
 import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from '../lib/isyatirim-multiples-cache.ts';
 import { computeSectorValuationAndDrivers, detectValueTrap } from '../lib/valuation.ts';
-import { mapIsYatirimSectorToValuationSector } from '../lib/sectors.ts';
+import {
+  mapIsYatirimSectorToValuationSector,
+  USER_OFFICIAL_BIST_COMPANY_SECTORS,
+  USER_53_OFFICIAL_SECTOR_NAMES,
+  resolveOfficialSectorName,
+  detectSector
+} from '../lib/sectors.ts';
 
 test('Borsa Istanbul Comprehensive Multi-Sector Valuation & Calibration Test Suite', async (t) => {
   await t.test('1. Dayanıklı Tüketim (White Goods: ARCLK) activates dedicated mid-cycle model and prevents extreme plunge', () => {
@@ -429,6 +435,110 @@ test('Borsa Istanbul Comprehensive Multi-Sector Valuation & Calibration Test Sui
 
     assert.equal(trapCheck.isValueTrap, false, `TCELL must NOT be flagged as value trap (got reasons: ${trapCheck.reasons.join(', ')})`);
     assert.equal(trapCheck.reasons.length, 0, `TCELL trap reasons must be empty (got: ${trapCheck.reasons.join(', ')})`);
+  });
+
+  await t.test('15. User Master List 630 Companies & 53 Official Sectors Full Integrity', () => {
+    const entries = Object.entries(USER_OFFICIAL_BIST_COMPANY_SECTORS);
+    assert.equal(entries.length, 630, `Must contain exactly 630 companies, got ${entries.length}`);
+    assert.equal(USER_53_OFFICIAL_SECTOR_NAMES.length, 53, `Must contain exactly 53 official sectors, got ${USER_53_OFFICIAL_SECTOR_NAMES.length}`);
+
+    const sectorSet = new Set(USER_53_OFFICIAL_SECTOR_NAMES);
+    for (const [ticker, item] of entries) {
+      assert.ok(ticker && ticker.length >= 2, `Company key must be valid ticker: ${ticker}`);
+      assert.ok(item.name && item.name.trim().length > 0, `Company name must be non-empty for ${ticker}`);
+      assert.ok(item.sector && sectorSet.has(item.sector), `Sector '${item.sector}' for ${ticker} must belong to official 53 sectors`);
+      
+      const resolved = resolveOfficialSectorName(undefined, ticker);
+      assert.equal(resolved, item.sector, `resolveOfficialSectorName for ${ticker} must match user sector '${item.sector}', got '${resolved}'`);
+
+      const archetype = detectSector(ticker);
+      assert.ok(['INDUSTRIAL', 'AVIATION', 'BANKING', 'INSURANCE', 'HOLDING', 'REIT', 'RETAIL', 'UTILITIES_TELCO', 'FINANCIAL_SERVICES', 'TECH', 'HEALTHCARE'].includes(archetype),
+        `detectSector for ${ticker} must return valid archetype, got ${archetype}`);
+    }
+  });
+
+  await t.test('16. RALYH User Assignment & Specialized Textile Valuation Invariant', () => {
+    const ralyhMeta = USER_OFFICIAL_BIST_COMPANY_SECTORS['RALYH'];
+    assert.ok(ralyhMeta, 'RALYH must exist in user master list');
+    assert.equal(ralyhMeta.sector, 'Tekstil Entegre', 'RALYH must be mapped to Tekstil Entegre (not Holdingler)');
+    assert.equal(resolveOfficialSectorName(undefined, 'RALYH'), 'Tekstil Entegre');
+    assert.equal(detectSector('RALYH'), 'INDUSTRIAL');
+
+    const mockHistory = [
+      {
+        period: '2026/06',
+        revenue: 2500000000,
+        ebitda: 450000000,
+        net_income: 220000000,
+        equity: 1800000000,
+        total_assets: 3500000000,
+        net_debt: 300000000,
+        paid_in_capital: 200000000,
+        operating_cash_flow: 380000000,
+        free_cash_flow: 250000000,
+        roe: 14.5
+      }
+    ];
+
+    const res = computeSectorValuationAndDrivers({
+      extractedData: {
+        ticker: 'RALYH',
+        financial_history: mockHistory,
+        share_count: 200000000,
+        valuation: { current_price: 35.0 }
+      },
+      inputPriceStr: '35.0',
+      sector: 'INDUSTRIAL',
+      shareCount: 200000000
+    });
+
+    assert.ok(res.valuation.valuation_model_name.includes('Tekstil'), `RALYH model name must be textile-specific, got ${res.valuation.valuation_model_name}`);
+    assert.ok(typeof res.valuation.fair_value === 'number' && !isNaN(res.valuation.fair_value) && isFinite(res.valuation.fair_value) && res.valuation.fair_value > 0);
+  });
+
+  await t.test('17. Universal Coverage: All 53 Official Sectors Produce Finite Valid Valuations', () => {
+    const mockHistory = [
+      {
+        period: '2026/06',
+        revenue: 5000000000,
+        ebitda: 1000000000,
+        net_income: 600000000,
+        equity: 4000000000,
+        total_assets: 8000000000,
+        net_debt: 800000000,
+        paid_in_capital: 500000000,
+        operating_cash_flow: 900000000,
+        free_cash_flow: 700000000,
+        roe: 18.5,
+        roic: 16.2,
+        wacc: 14.5
+      }
+    ];
+
+    for (const sec of USER_53_OFFICIAL_SECTOR_NAMES) {
+      const valuationSector = mapIsYatirimSectorToValuationSector(sec);
+      assert.ok(valuationSector, `mapIsYatirimSectorToValuationSector must map '${sec}' to valid SectorType`);
+
+      const res = computeSectorValuationAndDrivers({
+        extractedData: {
+          ticker: 'TESTCO',
+          official_sector_name: sec,
+          sector: valuationSector,
+          financial_history: mockHistory,
+          share_count: 500000000,
+          valuation: { current_price: 25.0 }
+        },
+        inputPriceStr: '25.0',
+        sector: valuationSector,
+        shareCount: 500000000
+      });
+
+      const fv = res?.valuation?.fair_value;
+      const model = res?.valuation?.valuation_model_name;
+      assert.ok(typeof fv === 'number' && !isNaN(fv) && isFinite(fv) && fv > 0, `Sector '${sec}' fair value (${fv}) must be positive finite number`);
+      assert.ok(typeof model === 'string' && model.length > 0, `Sector '${sec}' must produce a non-empty valuation model name`);
+      assert.ok(typeof res?.valuation?.formula_display === 'string' && res.valuation.formula_display.length > 0, `Sector '${sec}' must produce formula_display`);
+    }
   });
 });
 

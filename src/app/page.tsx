@@ -2189,7 +2189,7 @@ export default function ValuationTerminal({
         if (reportsList.length > 0) {
           const existingIds = new Set(savedReports.map(r => r.id));
           const newEntries = reportsList.filter((r: any) => r.id && r.ticker);
-          const merged = [...newEntries.filter(r => !existingIds.has(r.id)), ...savedReports].map(reconcileSavedReportWithLatestEngine);
+          const merged = [...newEntries.filter((r: any) => !existingIds.has(r.id)), ...savedReports].map(reconcileSavedReportWithLatestEngine);
           setSavedReports(merged);
           localStorage.setItem('fin_valuation_reports', JSON.stringify(merged));
 

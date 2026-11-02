@@ -1,4 +1,15 @@
 import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from './isyatirim-multiples-cache.ts';
+import {
+  USER_OFFICIAL_BIST_COMPANY_SECTORS,
+  USER_53_OFFICIAL_SECTOR_NAMES,
+  type UserBistCompanySector
+} from './user-sectors-cache.ts';
+
+export {
+  USER_OFFICIAL_BIST_COMPANY_SECTORS,
+  USER_53_OFFICIAL_SECTOR_NAMES,
+  type UserBistCompanySector
+};
 
 export type SectorType = 
   | 'INDUSTRIAL'
@@ -28,60 +39,9 @@ export const SECTOR_TYPE_NAMES: Record<string, string> = {
 };
 
 export const ISYATIRIM_53_OFFICIAL_SECTOR_NAMES: string[] = [
-  'Aracı Kurumlar',
-  'Bankacılık',
-  'Bilgisayar Toptancılığı',
-  'Boya',
-  'Cam Sanayii',
-  'Dayanıklı Tüketim',
-  'Demir-Çelik Döküm',
-  'Demir-Çelik Temel',
-  'Deri Giyim',
-  'Elektrik - Doğalgaz Dağıtım',
-  'Elektrik Enerji Ürt.Teçh/Tesis Kurulum',
-  'Elektrik Üretim',
-  'Endüstriyel Makine -Teçhizat Üretim',
-  'Endüstriyel Tekstil',
-  'Eğlence Hizmetleri',
-  'Fin.Kiralama ve Faktoring',
-  'GYO',
-  'Gıda',
-  'Gıda & Ticaret Perakende',
-  'Havacılık',
-  'Hayvancılık',
-  'Holding',
-  'Kablo',
-  'Kağıt Ürünleri',
-  'Kimyasal Ürün',
-  'Kırtasiye',
-  'Madencilik',
-  'Medya',
-  'Meşrubat / İçecek',
-  'Mobilya',
-  'Otomotiv',
-  'Otomotiv Lastiği',
-  'Otomotiv Parçası',
-  'Pazarlama',
-  'Petrol',
-  'Savunma',
-  'Sağlık ve İlaç',
-  'Seramik',
-  'Sigortacılık',
-  'Spor',
-  'Tarım Kimyasalları',
-  'Teknoloji',
-  'Tekstil Entegre',
-  'Turizm',
-  'Ulaştırma-Lojistik',
-  'Varlık Yönetim',
-  'Yatırım Ortaklıkları',
-  'Çimento',
-  'İletişim',
-  'İletişim Cihazları',
-  'İnşaat Malzemeleri',
-  'İnşaat- Taahhüt',
-  'Diğer'
+  ...USER_53_OFFICIAL_SECTOR_NAMES
 ];
+
 
 export const BIST_COMPANY_SPECIFIC_SECTOR: Record<string, string> = {
   // Havacılık
@@ -287,6 +247,15 @@ export function mapIsYatirimSectorToValuationSector(isySectorName?: string | nul
 export function getCompanySectorDisplayName(ticker?: string, rawSector?: string): string {
   if (ticker) {
     const cleanTicker = ticker.trim().toUpperCase().replace(/\.IS$/i, '');
+    const userSec = USER_OFFICIAL_BIST_COMPANY_SECTORS[cleanTicker];
+    if (userSec && userSec.sector) {
+      if (userSec.sector === 'Havayolları ve Hizm.') return 'Havacılık';
+      if (userSec.sector === 'Perakande - Ticaret') return 'Gıda & Ticaret Perakende';
+      if (userSec.sector === 'Holdingler') return 'Holding';
+      if (userSec.sector === 'Sigorta') return 'Sigortacılık';
+      if (userSec.sector === 'Cam') return 'Cam Sanayii';
+      return userSec.sector;
+    }
     const isy = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[cleanTicker];
     if (isy && isy.sectorName) {
       if (isy.sectorName === 'Havayolları ve Hizm.') return 'Havacılık';
@@ -351,14 +320,16 @@ export function getFinancialArchetype(sector: SectorType): FinancialArchetype {
 }
 
 /**
- * Verilen resmi sektör adını veya ticker'ın İş Yatırım 630 BIST resmi veritabanındaki
- * kesin sektör adını dinamik olarak çözümler.
- * Asla hardcoded hisse kodu dizilerine bağımlı kalmaz.
+ * Verilen resmi sektör adını veya ticker'ın Kullanıcı Resmi 630 Şirket Master Listesindeki
+ * kesin sektör adını dinamik olarak çözümler (Fallback: İş Yatırım Baseline).
  */
 export function resolveOfficialSectorName(officialSectorName?: string, ticker?: string): string {
-  let s = String(officialSectorName || '').trim();
-  if (ticker && (!s || s === 'INDUSTRIAL' || s === 'BIST' || s === 'Sanayi & İmalat' || s === 'Sanayi' || s === 'Diğer')) {
+  if (ticker) {
     const cleanTicker = ticker.toUpperCase().replace(/\.IS$/i, '').trim();
+    const userSec = USER_OFFICIAL_BIST_COMPANY_SECTORS[cleanTicker];
+    if (userSec && userSec.sector) {
+      return userSec.sector;
+    }
     const isy = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[cleanTicker];
     if (isy && isy.sectorName) {
       return isy.sectorName;
@@ -367,12 +338,17 @@ export function resolveOfficialSectorName(officialSectorName?: string, ticker?: 
       return BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker];
     }
   }
+  let s = String(officialSectorName || '').trim();
+  if (s && s !== 'INDUSTRIAL' && s !== 'BIST' && s !== 'Sanayi & İmalat' && s !== 'Sanayi' && s !== 'Diğer') {
+    return s;
+  }
   return s;
 }
 
+
 /**
  * Döngüsel & Ağır Emtia Sanayii (Through-the-Cycle Normalized Mid-Cycle EBITDA & Varlık Tabanı Koruması):
- * Cam, Demir-Çelik Temel, Demir-Çelik Döküm, Kimyasal Ürün, Tarım Kimyasalları, Çimento, İnşaat Malzemeleri, Madencilik, Seramik.
+ * Cam, Demir-Çelik Temel, Demir-Çelik Döküm, Kimyasal Ürün, Tarım Kimyasalları, Çimento, İnşaat Malzemeleri, Madencilik, Seramik, Boya, Kağıt Ürünleri, Kablo.
  * Bu sektörlerde tek çeyreklik veya tek yıllık dip (trough) FAVÖK'ü ile borç düşülmesi distorsiyon yaratır;
  * uluslararası CFA/Damodaran standartlarına göre 5 yıllık tarihsel medyan marjı ile Through-the-Cycle normalizasyonu uygulanır.
  */
@@ -389,7 +365,10 @@ export function isCyclicalCommoditySector(officialSectorName: string, ticker?: s
     s === 'İnşaat Malzemeleri' ||
     s === 'Madencilik' ||
     s === 'Seramik' ||
-    s === 'Boya'
+    s === 'Boya' ||
+    s === 'Kağıt Ürünleri' ||
+    s === 'Kablo' ||
+    s === 'Endüstriyel Makine -Teçhizat Üretim'
   ) {
     return true;
   }
@@ -465,7 +444,7 @@ export function isAgroChemicalSector(officialSectorName: string, ticker?: string
 
 /**
  * Tekstil Entegre & Teknik Tekstil Üretimi:
- * KORDS, YUNSA, SKTAS, ARSAN, BOSSA, ATEKS, DESA, DERIM.
+ * KORDS, YUNSA, SKTAS, ARSAN, BOSSA, ATEKS, DESA, DERIM, RALYH.
  */
 export function isTextileSector(officialSectorName: string, ticker?: string): boolean {
   const s = resolveOfficialSectorName(officialSectorName, ticker);
@@ -479,8 +458,87 @@ export function isTextileSector(officialSectorName: string, ticker?: string): bo
     return true;
   }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  return ['KORDS', 'YUNSA', 'SKTAS', 'ARSAN', 'BOSSA', 'ATEKS', 'DESA', 'DERIM', 'MNDRS', 'HATEK'].includes(t);
+  return ['KORDS', 'YUNSA', 'SKTAS', 'ARSAN', 'BOSSA', 'ATEKS', 'DESA', 'DERIM', 'MNDRS', 'HATEK', 'RALYH'].includes(t);
 }
+
+/**
+ * Ulaştırma - Lojistik & Liman İşletmeciliği:
+ * DOCO, TLMAN, AYCES, CLEBI, GSDDE, RYSAS, HOROZ.
+ */
+export function isTransportationLogisticsSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (s === 'Ulaştırma-Lojistik' || s.includes('Lojistik') || s.includes('Ulaştırma') || s.includes('Liman')) return true;
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  return ['TLMAN', 'AYCES', 'CLEBI', 'GSDDE', 'RYSAS', 'DOCO', 'HOROZ'].includes(t);
+}
+
+/**
+ * Turizm & Otelcilik:
+ * AYCES, MAALT, PKENT, TEZOL, MARTI, KSTUR.
+ */
+export function isTourismHospitalitySector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (s === 'Turizm' || s.includes('Turizm') || s.includes('Otel') || s.includes('Konaklama')) return true;
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  return ['AYCES', 'MAALT', 'PKENT', 'TEZOL', 'MARTI', 'KSTUR'].includes(t);
+}
+
+/**
+ * Medya, Spor & Eğlence Hizmetleri:
+ * BJKAS, GSRAY, TSPOR, FENER, HURGZ, DMRGD.
+ */
+export function isMediaEntertainmentSportsSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (
+    s === 'Medya' ||
+    s === 'Spor' ||
+    s === 'Eğlence Hizmetleri' ||
+    s.includes('Medya') ||
+    s.includes('Spor') ||
+    s.includes('Eğlence')
+  ) {
+    return true;
+  }
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  return ['BJKAS', 'GSRAY', 'TSPOR', 'FENER', 'HURGZ', 'DMRGD'].includes(t);
+}
+
+/**
+ * Döngüsel İmalat, Kağıt Ürünleri, Kırtasiye & Ağır Makine / Teçhizat:
+ * ADEL, KARTN, ALKA, BAKAB, DURDO, GENTS, SARKY.
+ */
+export function isPaperStationeryPackagingSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (
+    s === 'Kağıt Ürünleri' ||
+    s === 'Kırtasiye' ||
+    s === 'Endüstriyel Makine -Teçhizat Üretim' ||
+    s.includes('Kağıt') ||
+    s.includes('Kırtasiye') ||
+    s.includes('Makine')
+  ) {
+    return true;
+  }
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  return ['ADEL', 'KARTN', 'ALKA', 'BAKAB', 'DURDO', 'GENTS', 'SARKY'].includes(t);
+}
+
+/**
+ * Aracı Kurumlar & Varlık Yönetimi & Menkul Kıymet Yatırım Ortaklıkları:
+ */
+export function isBrokerageWealthMgmtSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  return s === 'Aracı Kurumlar' || s === 'Varlık Yönetim' || s === 'Yatırım Ortaklıkları';
+}
+
+/**
+ * Finansal Kiralama ve Faktoring:
+ */
+export function isLeasingFactoringSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  return s === 'Fin.Kiralama ve Faktoring' || s.includes('Faktoring') || s.includes('Kiralama');
+}
+
 
 /**
  * Savunma Sanayii (Savunma Elektroniği, Yüksek AR-GE & Devlet Garantili Sipariş Birikimi - Backlog):
@@ -1383,7 +1441,13 @@ export function detectSector(ticker: string, contextText = ''): SectorType {
   const normTicker = (ticker || '').toUpperCase().trim();
   const cleanTicker = normTicker.replace(/\.IS$/i, '').trim();
 
-  // 1. İş Yatırım Resmi 630 Şirket Baseline Kontrolü (Birincil Yetkili Kaynak)
+  // 1. Kullanıcı 53 Resmi Sektör ve 630 Şirket Master Listesi (Birincil Yetkili Kaynak)
+  const userSec = USER_OFFICIAL_BIST_COMPANY_SECTORS[cleanTicker];
+  if (userSec && userSec.sector) {
+    return mapIsYatirimSectorToValuationSector(userSec.sector);
+  }
+
+  // 2. İş Yatırım Resmi 630 Şirket Baseline Kontrolü
   const isy = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[cleanTicker];
   if (isy && isy.sectorName) {
     return mapIsYatirimSectorToValuationSector(isy.sectorName);
