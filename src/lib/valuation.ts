@@ -4530,25 +4530,34 @@ export function computeSectorValuationAndDrivers(
     ? Math.round(isyBaselineItem.paidInCapitalMnTl * 1_000_000)
     : null;
 
-  // Canlı piyasa pay adedi: Caller tarafından sağlanan shareCount veya resmi İş Yatırım/BIST baseline canlı sermayesi
-  const liveMarketShares = (shareCount && shareCount > 0)
-    ? shareCount
-    : (baselineLivePaidInCap && baselineLivePaidInCap > 0 ? baselineLivePaidInCap : null);
+  // Canlı piyasa pay adedi ve sermaye artırımı / bölünme sağlama:
+  // Resmi İş Yatırım / BIST baseline sermayesi borsa takasındaki en güncel nominal pay adedidir.
+  // Bilanço çeyreklik dönemlerde (örn. 30 Haziran) kapandığı için, bilanço tarihinden sonra yapılan
+  // bedelsiz veya bedelli sermaye artırımlarında (örn. Ağustos'ta tescil edilen ORGE 80M -> 400M artırımı),
+  // eski rapordaki shareCount veya bilançodaki nominal sermaye bayat (stale) kalır.
+  // Dolayısıyla baselineLivePaidInCap mevcutsa ve caller shareCount'u veya paidCapShares ile arasında bölünme farkı (>%5) varsa,
+  // Borsa İstanbul'da fiilen işlem gören baselineLivePaidInCap esas alınmalıdır!
+  const hasSplitMismatchWithBaseline = baselineLivePaidInCap && (
+    (shareCount && (baselineLivePaidInCap > shareCount * 1.05 || shareCount > baselineLivePaidInCap * 1.05)) ||
+    (paidCapShares && (baselineLivePaidInCap > paidCapShares * 1.05 || paidCapShares > baselineLivePaidInCap * 1.05))
+  );
+
+  const liveMarketShares = hasSplitMismatchWithBaseline
+    ? baselineLivePaidInCap
+    : (baselineLivePaidInCap && baselineLivePaidInCap > 0
+        ? baselineLivePaidInCap
+        : (shareCount && shareCount > 0 ? shareCount : null));
 
   // Kurumsal işlem / Sermaye Artırımı / Bedelsiz / Bedelli Çapraz Teyidi:
-  // Bilanço çeyreklik dönemlerde (örn. 30 Haziran) kapandığı için, bilanço tarihinden sonra yapılan
-  // bedelsiz veya bedelli sermaye artırımları (örn. Ağustos'ta tescil edilen ORGE 80M -> 400M artırımı)
-  // bir sonraki çeyrek bilançosu açıklanana kadar (~3 ay boyunca) bilançoda eski sermaye olarak kalır.
-  // Ancak Borsa İstanbul'da hisse fiyatı ve lotlar derhal bölünmüş fiyata geçer.
-  // Bu nedenle canlı piyasa sermayesi ile bilanço sermayesi arasında fark varsa:
-  // - Bedelsiz/bedelli bölünme (liveMarketShares > paidCapShares * 1.05)
-  // - Sermaye azaltımı / Ters bölünme / Yabancı kote çift listeleme (paidCapShares > liveMarketShares * 1.05)
-  const isCorporateActionOrSplit = liveMarketShares && paidCapShares && (
-    (liveMarketShares > paidCapShares * 1.05) ||
-    (paidCapShares > liveMarketShares * 1.05 && liveMarketShares >= 1_000_000)
+  const isCorporateActionOrSplit = Boolean(
+    hasSplitMismatchWithBaseline ||
+    (liveMarketShares && paidCapShares && (
+      (liveMarketShares > paidCapShares * 1.05) ||
+      (paidCapShares > liveMarketShares * 1.05 && liveMarketShares >= 1_000_000)
+    ))
   );
   const rawEffectiveShareCount = isCorporateActionOrSplit
-    ? liveMarketShares
+    ? (baselineLivePaidInCap || liveMarketShares)
     : ((paidCapShares && paidCapShares >= 1000000) ? paidCapShares : (liveMarketShares && liveMarketShares > 0 ? liveMarketShares : null));
   const effectiveShareCount = (rawEffectiveShareCount && rawEffectiveShareCount > 0) ? rawEffectiveShareCount : null;
   let effectiveEbitdaFull = 0;

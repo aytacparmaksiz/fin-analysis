@@ -139,6 +139,17 @@ function reconcileSavedReportWithLatestEngine(rep: SavedReport): SavedReport {
     };
   }
 
+  // Sermaye Artırımı / Bedelsiz Bölünme Senkronizasyonu (Örn. ORGE 80M -> 400M)
+  const isyBaseline = upperTicker ? OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[upperTicker] : null;
+  if (isyBaseline?.paidInCapitalMnTl && isyBaseline.paidInCapitalMnTl > 0 && updatedReport.extractedData) {
+    const liveShares = Math.round(isyBaseline.paidInCapitalMnTl * 1_000_000);
+    const existingShares = Number(String(updatedReport.extractedData.share_count || '').replace(/[^0-9]/g, ''));
+    if (!existingShares || Math.abs(existingShares - liveShares) / Math.min(existingShares, liveShares) > 0.05) {
+      updatedReport.extractedData.share_count = String(liveShares);
+      updatedReport.extractedData.shares_outstanding = liveShares;
+    }
+  }
+
   if (updatedReport.extractedData && Array.isArray(updatedReport.extractedData.financial_history) && updatedReport.extractedData.financial_history.length > 0) {
     try {
       const sanitized = enrichAndSanitizeFinancialHistory({
