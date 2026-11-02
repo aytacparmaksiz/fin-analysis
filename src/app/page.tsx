@@ -140,6 +140,14 @@ function reconcileSavedReportWithLatestEngine(rep: SavedReport): SavedReport {
 
   if (updatedReport.extractedData && Array.isArray(updatedReport.extractedData.financial_history) && updatedReport.extractedData.financial_history.length > 0) {
     try {
+      const sanitized = enrichAndSanitizeFinancialHistory({
+        ...updatedReport.extractedData,
+        sector: canonicalSector,
+        currency: updatedReport.extractedData.currency || 'TRY'
+      });
+      if (Array.isArray(sanitized?.financial_history)) {
+        updatedReport.extractedData.financial_history = sanitized.financial_history;
+      }
       const valRes = computeSectorValuationAndDrivers(updatedReport.extractedData, rep.price, canonicalSector);
       if (valRes?.valuation?.fair_value && valRes.valuation.fair_value > 0) {
         updatedReport.fairValue = `${valRes.valuation.fair_value.toFixed(2)} TL`;
@@ -993,13 +1001,13 @@ function exportTableToCsv(filename: string, headers: string[], rows: (string | n
   }
 }
 
-function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorType = 'INDUSTRIAL', referencePrice: number = 100, currency: string = 'Bin TRY') {
+function sanitizeHistoryData(history: any[], debtInfo: any = {}, sector: SectorType = 'INDUSTRIAL', referencePrice: number = 100, currency: string = 'TRY') {
   if (!Array.isArray(history) || history.length === 0) return [];
 
   // enrichAndSanitizeFinancialHistory ile tam deterministik türetme ve TMS 29 homojenizasyonu
   const payload = {
     sector,
-    currency: currency || 'Bin TRY',
+    currency: currency || 'TRY',
     debt_and_interest: debtInfo,
     financial_history: history.map((it: any) => (it && typeof it === 'object' ? { ...it } : it))
   };
@@ -3154,14 +3162,14 @@ export default function ValuationTerminal({
     currentExtractedData?.debt_and_interest,
     currentSector,
     refMarketPrice,
-    currentExtractedData?.currency || 'Bin TRY'
+    currentExtractedData?.currency || 'TRY'
   );
   const quarterlyChartData = useMemo(() => computeIncrementalQuarterlyData(chartData), [chartData]);
   const ttmChartData = useMemo(() => computeTtmChartData(quarterlyChartData, chartData), [quarterlyChartData, chartData]);
   const activeFlowChartData = chartMode === 'ttm' ? ttmChartData : quarterlyChartData;
 
   const chartYAxisFmt = useCallback(
-    (v: number) => formatFinancialScale(v, currentExtractedData?.currency || 'Bin TRY', true, false),
+    (v: number) => formatFinancialScale(v, currentExtractedData?.currency || 'TRY', true, false),
     [currentExtractedData?.currency]
   );
 

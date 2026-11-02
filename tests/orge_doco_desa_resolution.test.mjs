@@ -57,10 +57,10 @@ test('ORGE: capital split and post-split shareCount calibration', async (t) => {
     });
 
     assert.ok(valResult.valuation.fair_value !== null);
-    // With 400M shares, fair value is ~85.83 TL on single mock period (NOT ~338.31 TL)
-    assert.ok(valResult.valuation.fair_value < 100.0, `Fair value (${valResult.valuation.fair_value}) must be realistic and calibrated with 400M shares`);
+    // With 400M shares, fair value is ~95.55 TL on single mock period using official Is Yatirim sector multiples (NOT ~338.31 TL)
+    assert.ok(valResult.valuation.fair_value < 110.0, `Fair value (${valResult.valuation.fair_value}) must be realistic and calibrated with 400M shares`);
     assert.ok(valResult.valuation.fair_value > 30.0, `Fair value (${valResult.valuation.fair_value}) must reflect strong operating margins and net cash`);
-    assert.equal(valResult.valuation.fair_value, 85.83);
+    assert.equal(valResult.valuation.fair_value, 95.55);
   });
 });
 
@@ -252,8 +252,8 @@ test('Universal 630+ BIST Sector & Corporate Action Architecture', async (t) => 
     });
 
     assert.ok(valResult.valuation.fair_value !== null);
-    // Fair value must be 85.83 TL (NOT ~338 TL!)
-    assert.equal(valResult.valuation.fair_value, 85.83, 'Must automatically cross-reference 400M live shares from official baseline and prevent 5x split distortion');
+    // Fair value must be 95.55 TL using official Is Yatirim sector multiples (NOT ~338 TL!)
+    assert.equal(valResult.valuation.fair_value, 95.55, 'Must automatically cross-reference 400M live shares from official baseline and prevent 5x split distortion');
   });
 
   await t.test('isRefinerySector dynamically identifies refinery companies by official sector without hardcoding', () => {
