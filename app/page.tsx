@@ -1292,6 +1292,7 @@ export default function ValuationTerminal({
   const activityInputRef = useRef<HTMLInputElement>(null);
   const presentationInputRef = useRef<HTMLInputElement>(null);
   const appendFinancialInputRef = useRef<HTMLInputElement>(null);
+  const backupFileInputRef = useRef<HTMLInputElement>(null);
   const [pipelineStep, setPipelineStep] = useState<1 | 2 | 3 | null>(null);
   const [pipelineProgress, setPipelineProgress] = useState<number>(0);
   const files = useMemo(() => [...financialFiles, ...activityFiles, ...presentationFiles], [financialFiles, activityFiles, presentationFiles]);
@@ -2156,12 +2157,19 @@ export default function ValuationTerminal({
 
   const exportBackup = () => {
     try {
-      const dataStr = JSON.stringify(savedReports, null, 2);
+      const backupPayload = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        reports: savedReports,
+        portfolio: portfolioTickers,
+        favorites: favoriteTickers,
+      };
+      const dataStr = JSON.stringify(backupPayload, null, 2);
       const blob = new Blob([dataStr], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `fin_degerleme_raporlari_${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `fairvalue_analiz_yedegi_${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -2177,13 +2185,26 @@ export default function ValuationTerminal({
     reader.onload = (event) => {
       try {
         const parsed = JSON.parse(event.target?.result as string);
-        if (Array.isArray(parsed)) {
+        const reportsList = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.reports) ? parsed.reports : []);
+        if (reportsList.length > 0) {
           const existingIds = new Set(savedReports.map(r => r.id));
-          const newEntries = parsed.filter((r: any) => r.id && r.ticker);
+          const newEntries = reportsList.filter((r: any) => r.id && r.ticker);
           const merged = [...newEntries.filter(r => !existingIds.has(r.id)), ...savedReports].map(reconcileSavedReportWithLatestEngine);
           setSavedReports(merged);
           localStorage.setItem('fin_valuation_reports', JSON.stringify(merged));
-          alert(`${newEntries.length} adet rapor başarıyla içeri aktarıldı!`);
+
+          if (Array.isArray(parsed?.portfolio)) {
+            const mergedPort = Array.from(new Set([...portfolioTickers, ...parsed.portfolio]));
+            setPortfolioTickers(mergedPort);
+            localStorage.setItem('fair_value_portfolio', JSON.stringify(mergedPort));
+          }
+          if (Array.isArray(parsed?.favorites)) {
+            const mergedFav = Array.from(new Set([...favoriteTickers, ...parsed.favorites]));
+            setFavoriteTickers(mergedFav);
+            localStorage.setItem('fair_value_favorites', JSON.stringify(mergedFav));
+          }
+
+          alert(`${newEntries.length} adet analiz edilmiş şirket ve portföy listeniz başarıyla yüklendi!`);
           if (merged.length > 0) {
             setActiveReportId(merged[0].id);
             setStep('report');
@@ -4544,6 +4565,24 @@ export default function ValuationTerminal({
                       <Star className="w-3.5 h-3.5 text-amber-400" />
                       <span>İzleme Listem ({favoriteTickers.length})</span>
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => { exportBackup(); setIsUserMenuOpen(false); }}
+                      className="w-full flex items-center gap-2 p-2 rounded-lg text-slate-300 hover:text-white hover:bg-[#21262d] text-left cursor-pointer"
+                      title="Analiz edilen şirketleri JSON olarak indir"
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Yedeği Dışa Aktar (JSON)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { backupFileInputRef.current?.click(); setIsUserMenuOpen(false); }}
+                      className="w-full flex items-center gap-2 p-2 rounded-lg text-slate-300 hover:text-white hover:bg-[#21262d] text-left cursor-pointer"
+                      title="Başka bilgisayardan indirilen JSON yedeğini yükle"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Yedekten İçe Aktar (JSON)</span>
+                    </button>
                   </div>
                   <div className="pt-1">
                     <button
@@ -6409,14 +6448,24 @@ export default function ValuationTerminal({
                           Akış panelinde yalnızca analiz ettiğiniz şirketlerin resmi KAP bildirimleri ve fiyat-duyarlı finansal gelişmeleri listelenir.
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={resetToNewAnalysis}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition cursor-pointer font-sans shadow-lg shadow-sky-600/20"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>Yeni Şirket Analiz Et</span>
-                      </button>
+                      <div className="flex items-center justify-center gap-3 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={resetToNewAnalysis}
+                          className="inline-flex items-center gap-2 px-4 py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition cursor-pointer font-sans shadow-lg shadow-sky-600/20"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Yeni Şirket Analiz Et</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => backupFileInputRef.current?.click()}
+                          className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#21262d] hover:bg-[#2b313d] text-cyan-400 border border-[#3b4252] rounded-xl text-xs font-bold transition cursor-pointer font-sans"
+                        >
+                          <Upload className="w-4 h-4" />
+                          <span>Başka Cihazdan Yedek Yükle (JSON)</span>
+                        </button>
+                      </div>
                     </div>
                   ) : newsFeed.length === 0 ? (
                     <div className="bg-[#1a1e26] border border-[#2e3440] rounded-2xl p-12 text-center text-slate-400 space-y-3">
@@ -6927,8 +6976,27 @@ export default function ValuationTerminal({
                     </div>
                   </div>
 
-                  {/* Görünüm Seçici (Liste / Kartlar / Küçük Simgeler) - Varsayılan: Liste */}
-                  <div className="flex items-center bg-[#12151c] p-1 rounded-xl border border-[#2e3440] self-start md:self-auto">
+                  {/* Görünüm Seçici ve Cihazlar Arası Yedekleme Butonları */}
+                  <div className="flex items-center gap-2 flex-wrap self-start md:self-auto">
+                    <div className="flex items-center bg-[#12151c] p-1 rounded-xl border border-[#2e3440]">
+                      <button
+                        type="button"
+                        onClick={exportBackup}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-[#21262d] transition cursor-pointer"
+                        title="Verileri Dışa Aktar (JSON İndir)"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => backupFileInputRef.current?.click()}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-[#21262d] transition cursor-pointer"
+                        title="Başka Cihazdan Yedek Yükle (JSON İçe Aktar)"
+                      >
+                        <Upload className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="flex items-center bg-[#12151c] p-1 rounded-xl border border-[#2e3440]">
                     <button
                       type="button"
                       title="Liste / Tablo Görünümü (Varsayılan)"
@@ -6953,6 +7021,7 @@ export default function ValuationTerminal({
                     >
                       <Grid className="w-4 h-4" />
                     </button>
+                    </div>
                   </div>
                 </div>
 
@@ -7049,14 +7118,24 @@ export default function ValuationTerminal({
                         ? 'Şirket analiz ekranında sol menüdeki "+ Portföy" butonuna tıklayarak hisseleri portföyünüze ekleyebilirsiniz.'
                         : 'Şirket analiz ekranında hisse kodunun yanındaki "★" butonuna tıklayarak hisseleri favori listenize alabilirsiniz.'}
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => navigateTo('input')}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-bold transition cursor-pointer font-sans"
-                    >
-                      <PlusCircle className="w-4 h-4" />
-                      <span>Yeni Şirket Analiz Et</span>
-                    </button>
+                    <div className="flex items-center justify-center gap-3 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => navigateTo('input')}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-bold transition cursor-pointer font-sans"
+                      >
+                        <PlusCircle className="w-4 h-4" />
+                        <span>Yeni Şirket Analiz Et</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => backupFileInputRef.current?.click()}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#21262d] hover:bg-[#2b313d] text-cyan-400 border border-[#3b4252] rounded-xl text-sm font-bold transition cursor-pointer font-sans"
+                      >
+                        <Upload className="w-4 h-4" />
+                        <span>Başka Cihazdan Yedek Yükle (JSON)</span>
+                      </button>
+                    </div>
                   </div>
                 ) : currentViewMode === 'list' ? (
                   /* Liste / Tablo Görünümü (Varsayılan) */
@@ -7400,6 +7479,15 @@ export default function ValuationTerminal({
 
         </div>
       </main>
+
+      {/* Gizli Yedek Yükleme Dosya Girişi */}
+      <input
+        type="file"
+        ref={backupFileInputRef}
+        accept=".json,application/json"
+        className="hidden"
+        onChange={importBackup}
+      />
 
       {/* Yatırımcı Giriş & Kayıt Modalı */}
       <LoginModal
