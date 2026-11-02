@@ -134,7 +134,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Boya": {
-    archetype: "INDUSTRIAL",
+    archetype: "COMMODITY_HEAVY_IND",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -161,7 +161,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1.1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "COMMODITY_HEAVY_IND",
       name: "Boya & Kaplama Sanayii",
       badge: "Kimya / Döngüsel Marj & İhracat Modu",
       description: "Hammadde maliyetleri (akrilik, solvent, pigment), inşaat/sanayi talebi, ihracat payı ve Through-the-Cycle FAVÖK marjı esastır.",
@@ -172,7 +172,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Cam": {
-    archetype: "INDUSTRIAL",
+    archetype: "COMMODITY_HEAVY_IND",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -199,7 +199,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":4,"minLiquidityRatio":1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "COMMODITY_HEAVY_IND",
       name: "Cam Sanayii & Entegre Soda Külü",
       badge: "Cam / Düzcam & Soda Külü Modu",
       description: "Entegre üretim yapısı, global soda külü (soda ash) ve düzcam fiyatları, fırın yatırımları ve 5 yıllık Through-the-Cycle normalizasyonu esastır.",
@@ -210,7 +210,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Çimento": {
-    archetype: "INDUSTRIAL",
+    archetype: "COMMODITY_HEAVY_IND",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -237,7 +237,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "COMMODITY_HEAVY_IND",
       name: "Çimento & Klinker Sanayii",
       badge: "Çimento / Varlık İkame & Döngü Modu",
       description: "Klinker kapasite kullanım oranı, yakıt (petrokök/kömür) maliyet yönetimi, ihracat liman erişimi ve tesis ikame değeri esastır.",
@@ -248,7 +248,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Dayanıklı Tüketim": {
-    archetype: "INDUSTRIAL",
+    archetype: "COMMODITY_HEAVY_IND",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -275,7 +275,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.8,"minLiquidityRatio":1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "COMMODITY_HEAVY_IND",
       name: "Dayanıklı Tüketim & Beyaz Eşya",
       badge: "Beyaz Eşya / Döngüsel Normalizasyon Modu",
       description: "Küresel talep döngüsü, hammadde (çelik, plastik) maliyetleri, ihracat pazar payı ve TFRS 16 borç düzeltmeli normalizasyon esastır.",
@@ -286,7 +286,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Demir-Çelik Döküm": {
-    archetype: "INDUSTRIAL",
+    archetype: "COMMODITY_HEAVY_IND",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -313,7 +313,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1.1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "COMMODITY_HEAVY_IND",
       name: "Demir-Çelik Döküm & Vasıflı Metal",
       badge: "Döküm / Katma Değerli İmalat Modu",
       description: "Katma değerli alaşımlı döküm, otomotiv ve makine sanayii müşteri sözleşmeleri, hurda/enerji maliyet makası ve Through-the-Cycle medyanı esastır.",
@@ -324,7 +324,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Demir-Çelik Temel": {
-    archetype: "INDUSTRIAL",
+    archetype: "COMMODITY_HEAVY_IND",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -351,7 +351,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":4,"minLiquidityRatio":1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "COMMODITY_HEAVY_IND",
       name: "Demir-Çelik Ana Sanayii",
       badge: "Çelik / HRC Yayılımı & Döngü Modu",
       description: "Sıcak Haddelenmiş Rulo (HRC) - Hurda/Kömür/Cevher fiyat makası, küresel çelik döngüsü, 5 yıllık medyan FAVÖK ve varlık ikame tabanı esastır.",
@@ -362,7 +362,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Deri Giyim": {
-    archetype: "INDUSTRIAL",
+    archetype: "TEXTILE",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -389,7 +389,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1.1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "TEXTILE",
       name: "Deri Giyim & Lüks Tüketim İmalatı",
       badge: "Deri & Tekstil / İhracat & Marj Modu",
       description: "İhracat payı, lüks segment fiyatlama gücü, hammadde temini ve stok devir verimliliği esastır.",
@@ -438,7 +438,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Eğlence Hizmetleri": {
-    archetype: "INDUSTRIAL",
+    archetype: "MEDIA_ENTERTAINMENT",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -465,7 +465,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "MEDIA_ENTERTAINMENT",
       name: "Eğlence, Medya & Rekreasyon Hizmetleri",
       badge: "Eğlence / Biletleme & Etkinlik Modu",
       description: "Etkinlik trafiği, biletleme ve sponsorluk hasılatı, mevsimsellik ve serbest nakit akışı esastır.",
@@ -514,7 +514,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Elektrik Enerji Ürt.Teçh/Tesis Kurulum": {
-    archetype: "INDUSTRIAL",
+    archetype: "COMMODITY_HEAVY_IND",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -541,7 +541,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":2.8,"minLiquidityRatio":1.3,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "COMMODITY_HEAVY_IND",
       name: "Elektrik Enerji Teçhizatı, Trafo & Tesis Kurulum",
       badge: "Teçhizat / Backlog & İhracat Modu",
       description: "Trafo, şebeke ve güneş paneli sipariş birikimi (Backlog), ihracat oranı, yüksek marjlı proje teslimatları ve CapEx çarpanı esastır.",
@@ -590,7 +590,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Endüstriyel Makine -Teçhizat Üretim": {
-    archetype: "INDUSTRIAL",
+    archetype: "COMMODITY_HEAVY_IND",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -617,7 +617,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1.2,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "COMMODITY_HEAVY_IND",
       name: "Endüstriyel Makine & Ağır Teçhizat Üretimi",
       badge: "Makine / Mühendislik & Sipariş Modu",
       description: "Mühendislik katma değeri, sipariş teslimat döngüsü, ihracat payı ve Through-the-Cycle 5 yıllık tarihsel medyan marjı esastır.",
@@ -628,7 +628,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Endüstriyel Tekstil": {
-    archetype: "INDUSTRIAL",
+    archetype: "TEXTILE",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -655,7 +655,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1.1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "TEXTILE",
       name: "Endüstriyel & Teknik Tekstil, Kord Bezi",
       badge: "Teknik Tekstil / Kord Bezi & Kompozit Modu",
       description: "Lastik kord bezi, kompozit malzemeler, global OEM onayları, Through-the-Cycle marj normalizasyonu ve varlık tabanı koruması esastır.",
@@ -704,7 +704,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Gıda": {
-    archetype: "INDUSTRIAL",
+    archetype: "FOOD_BEVERAGE",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -731,7 +731,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1.1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "FOOD_BEVERAGE",
       name: "Gıda Üretimi & İşleme",
       badge: "Gıda / Defansif FMCG Hacim Modu",
       description: "Temel gıda defansif talep gücü, hammadde fiyat dalgalanmalarına karşı esneklik, nakit dönüşüm kalitesi ve tahakkuk riski denetimi esastır.",
@@ -818,7 +818,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Hayvancılık": {
-    archetype: "INDUSTRIAL",
+    archetype: "LIVESTOCK_AGRI",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -845,7 +845,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.8,"minLiquidityRatio":1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "LIVESTOCK_AGRI",
       name: "Hayvancılık, Yem & Entegre Et/Süt Üretimi",
       badge: "Tarım / Biyolojik Varlık & Hacim Modu",
       description: "Biyolojik varlık değerlemesi, yem maliyeti / süt ve et fiyat paritesi, soğuk zincir lojistiği ve nakit dönüşüm kalitesi esastır.",
@@ -970,7 +970,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "İnşaat Malzemeleri": {
-    archetype: "INDUSTRIAL",
+    archetype: "COMMODITY_HEAVY_IND",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -997,7 +997,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1.1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "COMMODITY_HEAVY_IND",
       name: "İnşaat Malzemeleri & Yalıtım Sanayii",
       badge: "Yapı / Varlık İkame & Döngü Modu",
       description: "İnşaat sektörü ruhsat ve konut döngüsü, ihracat pazarları, hammadde maliyet yönetimi ve Through-the-Cycle medyan normalizasyonu esastır.",
@@ -1008,7 +1008,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "İnşaat- Taahhüt": {
-    archetype: "INDUSTRIAL",
+    archetype: "CONSTRUCTION_EPC",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1035,7 +1035,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":2.5,"minLiquidityRatio":1.3,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "CONSTRUCTION_EPC",
       name: "Uluslararası İnşaat - Taahhüt & EPC",
       badge: "Müteahhitlik / EPC Backlog & Döviz Nakit Modu",
       description: "EPC sözleşme birikimi (Backlog), net nakit/peşin proje avansları köprüsü, döviz bazlı hakediş gücü ve jeopolitik risk yönetimi esastır.",
@@ -1046,7 +1046,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Kablo": {
-    archetype: "INDUSTRIAL",
+    archetype: "COMMODITY_HEAVY_IND",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1073,7 +1073,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1.1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "COMMODITY_HEAVY_IND",
       name: "Kablo & Enerji İletim Hatları Sanayii",
       badge: "Kablo / Bakır/Alüminyum Makası & Enerji Şebeke Modu",
       description: "Bakır/alüminyum hammadde fiyat koruması (hedging), enerji iletim ve fiber şebeke yatırımları, ihracat oranı ve Through-the-Cycle marjı esastır.",
@@ -1084,7 +1084,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Kağıt Ürünleri": {
-    archetype: "INDUSTRIAL",
+    archetype: "COMMODITY_HEAVY_IND",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1111,7 +1111,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1.1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "COMMODITY_HEAVY_IND",
       name: "Kağıt, Karton & Ambalaj Sanayii",
       badge: "Kağıt / Hamur Fiyatı & Geri Dönüşüm Modu",
       description: "Selüloz / atık kağıt hammadde fiyatları, enerji maliyeti, ambalaj talebi ve 5 yıllık Through-the-Cycle tarihsel medyan normalizasyonu esastır.",
@@ -1122,7 +1122,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Kırtasiye": {
-    archetype: "INDUSTRIAL",
+    archetype: "RETAIL",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1149,7 +1149,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1.1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "RETAIL",
       name: "Kırtasiye, Ofis & Eğitim Gereçleri",
       badge: "Kırtasiye / Sezonluk Talep & Dağıtım Modu",
       description: "Okula dönüş sezonluk nakit girişi, lisanslı ürün portföyü, döviz kuru koruması ve Through-the-Cycle kâr normalizasyonu esastır.",
@@ -1160,7 +1160,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Kimyasal Ürün": {
-    archetype: "INDUSTRIAL",
+    archetype: "COMMODITY_HEAVY_IND",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1187,7 +1187,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":4.5,"minLiquidityRatio":0.9,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "COMMODITY_HEAVY_IND",
       name: "Petrokimya & Temel Kimyasallar Sanayii",
       badge: "Petrokimya / Etilen-Nafta Yayılım Modu",
       description: "Etilen-nafta yayılımı, Akdeniz rafineri marjı korelasyonu, döngüsel dip (trough) FAVÖK normalizasyonu ve Merton opsiyonel varlık tabanı esastır.",
@@ -1198,7 +1198,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Madencilik": {
-    archetype: "INDUSTRIAL",
+    archetype: "COMMODITY_HEAVY_IND",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1225,7 +1225,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":2,"minLiquidityRatio":1.5,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "COMMODITY_HEAVY_IND",
       name: "Madencilik & Değerli Metaller",
       badge: "Maden / Rezerv & Üretim Maliyeti Modu",
       description: "Kanıtlanmış/Muhtemel rezerv büyüklüğü, Ons başına sürdürülebilir üretim maliyeti (AISC), metal fiyat döngüsü ve net nakit pozisyonu esastır.",
@@ -1236,7 +1236,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Medya": {
-    archetype: "INDUSTRIAL",
+    archetype: "MEDIA_ENTERTAINMENT",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1263,7 +1263,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1.1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "MEDIA_ENTERTAINMENT",
       name: "Medya, Yayıncılık & Dijital İletişim",
       badge: "Medya / Reklam & Dijital Dönüşüm Modu",
       description: "Dijital abonelik ve reklam gelirleri, içerik telif kütüphanesi, operasyonel nakit dönüşümü ve işletme sermayesi esastır.",
@@ -1274,7 +1274,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Meşrubat / İçecek": {
-    archetype: "INDUSTRIAL",
+    archetype: "FOOD_BEVERAGE",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1301,7 +1301,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1.1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "FOOD_BEVERAGE",
       name: "Meşrubat, İçecek & Bira Sanayii",
       badge: "İçecek / FMCG Fiyatlama Gücü Modu",
       description: "FMCG defansif tüketim hacmi, güçlü marka değeri ve fiyatlama gücü, hammadde (şeker, malt, alüminyum kutu) esnekliği ve nakit dönüşüm kalitesi esastır.",
@@ -1312,7 +1312,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Mobilya": {
-    archetype: "INDUSTRIAL",
+    archetype: "RETAIL",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1339,7 +1339,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1.1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "RETAIL",
       name: "Mobilya & Ev Eşyaları İmalatı",
       badge: "Mobilya / Perakende Şebekesi & İhracat Modu",
       description: "Mağaza dağıtım şebekesi, ihracat pazarları, sünger/ahşap/kumaş maliyetleri ve TFRS 16 borç düzeltmeli Through-the-Cycle normalizasyonu esastır.",
@@ -1350,7 +1350,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Otomotiv": {
-    archetype: "INDUSTRIAL",
+    archetype: "AUTOMOTIVE",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1377,7 +1377,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "AUTOMOTIVE",
       name: "Otomotiv Ana Sanayii (OEM)",
       badge: "Otomotiv / OEM Maliyet Artı Kâr & Dönüşüm Modu",
       description: "OEM maliyet-artı kâr sözleşmeleri, yeni model CapEx dönüşüm normalizasyonu, ihracat payı, FD/FAVÖK ve Justified P/B esastır.",
@@ -1388,7 +1388,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Otomotiv Lastiği": {
-    archetype: "INDUSTRIAL",
+    archetype: "AUTOMOTIVE",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1415,7 +1415,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1.1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "AUTOMOTIVE",
       name: "Otomotiv Lastiği & Kauçuk Sanayii",
       badge: "Lastik / Orijinal Ekipman & Yenileme Pazarı Modu",
       description: "Yenileme (Aftermarket) vs Orijinal Ekipman (OEM) miksi, kauçuk/petrol maliyet yönetimi, ihracat marjı ve Through-the-Cycle FAVÖK esastır.",
@@ -1426,7 +1426,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Otomotiv Parçası": {
-    archetype: "INDUSTRIAL",
+    archetype: "AUTOMOTIVE",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1453,7 +1453,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1.1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "AUTOMOTIVE",
       name: "Otomotiv Yan Sanayii & Komponent Üretimi",
       badge: "Oto Parça / Tier-1 Tedarik & İhracat Modu",
       description: "Tier-1 global OEM tedarik sözleşmeleri, parça başı katma değer, hammadde fiyat yansıtma gücü ve Through-the-Cycle marj normalizasyonu esastır.",
@@ -1540,7 +1540,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Petrol": {
-    archetype: "INDUSTRIAL",
+    archetype: "COMMODITY_HEAVY_IND",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1567,7 +1567,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1.1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "COMMODITY_HEAVY_IND",
       name: "Petrol, Rafineri & Akaryakıt Dağıtımı",
       badge: "Rafineri / Akdeniz Rafineri Marjı Modu",
       description: "Akdeniz kompleks rafineri marjı, beyaz ürün verimliliği, ham petrol stok değerleme etkisi ve USD bazlı döviz kalkanı esastır.",
@@ -1616,7 +1616,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Savunma": {
-    archetype: "INDUSTRIAL",
+    archetype: "DEFENSE",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1643,7 +1643,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":2.8,"minLiquidityRatio":1.3,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "DEFENSE",
       name: "Savunma Sanayii & Askeri Teknolojiler",
       badge: "Savunma / Backlog & Devlet Güvencesi Modu",
       description: "Sipariş birikimi (Backlog / Book-to-Bill > 1.2x), Ar-Ge teşvikleri, peşin proje avansları, savunma bütçesi görünürlüğü ve küresel savunma çarpanları esastır.",
@@ -1654,7 +1654,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Seramik": {
-    archetype: "INDUSTRIAL",
+    archetype: "COMMODITY_HEAVY_IND",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1681,7 +1681,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1.1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "COMMODITY_HEAVY_IND",
       name: "Seramik, Vitrifiye & Yapı Gereçleri",
       badge: "Seramik / Enerji Maliyeti & İhracat Modu",
       description: "Doğalgaz enerji maliyet yönetimi, katma değerli karo/vitrifiye ihracatı, konut inşaat döngüsü ve Through-the-Cycle medyan normalizasyonu esastır.",
@@ -1730,7 +1730,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Spor": {
-    archetype: "INDUSTRIAL",
+    archetype: "MEDIA_ENTERTAINMENT",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1757,7 +1757,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":4.5,"minLiquidityRatio":0.7,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "MEDIA_ENTERTAINMENT",
       name: "Spor Kulüpleri & Futbol Yatırımları",
       badge: "Spor / Yayın & Sponsorluk Gelirleri Modu",
       description: "Yayın gelirleri, sponsorluk ve stadyum hasılatı, sporcu transfer kârları, finansal borç yapılandırma disiplini ve TTK 376 özkaynak izlemi esastır.",
@@ -1768,7 +1768,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Tarım Kimyasalları": {
-    archetype: "INDUSTRIAL",
+    archetype: "LIVESTOCK_AGRI",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1795,7 +1795,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":4,"minLiquidityRatio":1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "LIVESTOCK_AGRI",
       name: "Tarım Kimyasalları, Gübre & Zirai İlaç",
       badge: "Gübre / Amonyak-Üre Yayılımı & Sübvansiyon Modu",
       description: "Global amonyak/üre yayılım marjı, tarımsal sübvansiyon politikaları, sezonluk ekim döngüsü ve Through-the-Cycle FAVÖK normalizasyonu esastır.",
@@ -1844,7 +1844,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Tekstil Entegre": {
-    archetype: "INDUSTRIAL",
+    archetype: "TEXTILE",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1871,7 +1871,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":3.5,"minLiquidityRatio":1.1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "TEXTILE",
       name: "Tekstil Entegre & İplik / Kumaş İmalatı",
       badge: "Tekstil / İhracat & Döngüsel Normalizasyon Modu",
       description: "İhracat oranı, pamuk/elyaf hammadde fiyat dalgalanması, enerji maliyet yönetimi, Through-the-Cycle medyan FAVÖK ve varlık tabanı koruması esastır.",
@@ -1882,7 +1882,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Turizm": {
-    archetype: "INDUSTRIAL",
+    archetype: "TOURISM",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1909,7 +1909,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":4,"minLiquidityRatio":0.9,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "TOURISM",
       name: "Turizm, Otelcilik & Konaklama Tesisleri",
       badge: "Turizm / RevPAR & Sezonluk Nakit Akışı Modu",
       description: "Oda Başına Gelir (RevPAR), yatak doluluk oranı, yaz mevsimselliği nakit üretimi, döviz gelirleri ve gayrimenkul varlık tabanı esastır.",
@@ -1920,7 +1920,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
     }
   },
   "Ulaştırma-Lojistik": {
-    archetype: "INDUSTRIAL",
+    archetype: "TRANSPORT_LOGISTICS",
     valuationSector: "INDUSTRIAL",
     definition: {
       id: "INDUSTRIAL",
@@ -1947,7 +1947,7 @@ export const OFFICIAL_53_SECTOR_CONFIGS: Record<string, {
       riskThresholds: {"criticalDebtRatio":4,"minLiquidityRatio":1,"minMarginOfSafety":20,"idealMarginOfSafety":30},
     },
     archetypeConfig: {
-      archetype: "INDUSTRIAL",
+      archetype: "TRANSPORT_LOGISTICS",
       name: "Ulaştırma, Lojistik & Liman İşletmeciliği",
       badge: "Lojistik / Filo Kapasitesi & Navlun Modu",
       description: "Filo taşıma kapasitesi, sözleşmeli navlun marjları, UFRS 16 kiralama borç köprüsü, transit ticaret hacmi ve operasyonel nakit üretimi esastır.",

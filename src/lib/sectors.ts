@@ -286,10 +286,10 @@ export function getCompanySectorDisplayName(ticker?: string, rawSector?: string)
 }
 
 export type FinancialArchetype =
-  | 'INDUSTRIAL'          // A) REEL SEKTÖR & SANAYİ (Otomotiv, Kimya, Çimento, Demir-Çelik)
-  | 'AVIATION'            // B) HAVACILIK & ULAŞTIRMA (TAVHL, THYAO, PGSUS)
+  | 'INDUSTRIAL'          // A) GENEL REEL SEKTÖR & İMALAT
+  | 'AVIATION'            // B) HAVACILIK & HAVALİMANI (TAVHL, THYAO, PGSUS)
   | 'BANKING'             // C) BANKACILIK (GARAN, AKBNK, ISCTR, YKBNK)
-  | 'INSURANCE'           // D) SİGORTACILIK (TURSG, AGESA, ANSGR)
+  | 'INSURANCE'           // D) SİGORTACILIK & BES (TURSG, AGESA, ANSGR)
   | 'HOLDING_REIT'        // E) GYO & HOLDİNGLER (Geriye Dönük Uyumluluk)
   | 'HOLDING'             // E1) HOLDİNGLER (KCHOL, SAHOL, AGHOL)
   | 'REIT'                // E2) GYO (EKGYO, TRGYO)
@@ -297,7 +297,17 @@ export type FinancialArchetype =
   | 'UTILITIES_TELCO'     // G) ENERJİ & TELEKOMÜNİKASYON (ENJSA, TCELL, TTKOM)
   | 'FINANCIAL_SERVICES'  // H) FACTORING, LEASING & GİRİŞİM (VAKFN, GSDHO)
   | 'TECH'                // I) TEKNOLOJİ, BİLİŞİM & YAZILIM
-  | 'HEALTHCARE';         // J) SAĞLIK, HASTANECİLİK & İLAÇ
+  | 'HEALTHCARE'          // J) SAĞLIK, HASTANECİLİK & İLAÇ
+  | 'AUTOMOTIVE'          // K) OTOMOTİV, YAN SANAYİ & LASTİK (FROTO, TOASO, EGEEN)
+  | 'DEFENSE'             // L) SAVUNMA SANAYİİ & BACKLOG (ASELS, SDTTR, ALTNY)
+  | 'TRANSPORT_LOGISTICS' // M) ULAŞTIRMA & LOJİSTİK FİLO (DOCO, RYSAS, BORLS)
+  | 'COMMODITY_HEAVY_IND' // N) DÖNGÜSEL AĞIR SANAYİ & EMTİA (EREGL, SISE, CIMSA, KOZAL)
+  | 'TEXTILE'             // O) ENTEGRE & TEKNİK TEKSTİL (KORDS, SASA, DESA, BOSSA)
+  | 'LIVESTOCK_AGRI'      // P) HAYVANCILIK & TARIM (BANVT, OZSUB, GUBRF)
+  | 'FOOD_BEVERAGE'       // Q) HIZLI TÜKETİM GIDA & İÇECEK (CCOLA, AEFES, ULKER)
+  | 'CONSTRUCTION_EPC'    // R) ULUSLARARASI İNŞAAT - TAAHHÜT (ENKAI, TKFEN)
+  | 'TOURISM'             // S) TURİZM, OTELCİLİK & KONAKLAMA (AYCES, MAALT, PKENT)
+  | 'MEDIA_ENTERTAINMENT';// T) MEDYA, SPOR & DİJİTAL YAYINCILIK (FENER, BJKAS, MACKO)
 
 export function getFinancialArchetype(sector: SectorType): FinancialArchetype {
   switch (sector) {
@@ -962,6 +972,156 @@ export const SECTOR_ARCHETYPE_CONFIGS: Record<FinancialArchetype, SectorArchetyp
       { key: 'leverage_ratio', name: 'Kaldıraç Oranı', unit: 'x', description: 'Toplam Varlıklar / Özkaynaklar' },
       { key: 'roe', name: 'Özkaynak Kârlılığı (ROE)', unit: '%', description: 'Finansal aracılık kârlılığı' },
       { key: 'pb', name: 'PD/DD & F/K', unit: 'x', description: 'Defter değeri ve kazanç çarpanları' },
+    ],
+    taxRate: 0.25,
+  },
+  AUTOMOTIVE: {
+    archetype: 'AUTOMOTIVE',
+    name: 'Otomotiv, Parça & Lastik Sanayii',
+    badge: 'Otomotiv / OEM Maliyet Artı Kâr Modu',
+    description: 'OEM ana ortak maliyet-artı kâr (Cost-Plus) sözleşmeleri, kapasite kullanım oranı (KKO), model dönüşümü ve Tier-1 dövizli ihracat marjı esastır.',
+    disabledMetrics: [],
+    featuredMetrics: [
+      { key: 'ebitda_margin', name: 'OEM Sözleşmeli FAVÖK Marjı', unit: '%', description: 'Ana ortak maliyet-artı kâr sözleşme marjı' },
+      { key: 'export_share', name: 'Dövizli İhracat Payı', unit: '%', description: 'Avrupa ve küresel OEM pazarlarına yapılan dövizli satış payı' },
+      { key: 'capacity_utilization', name: 'Kapasite Kullanım Oranı (KKO)', unit: '%', description: 'Fabrika montaj hatları doluluk ve ölçek verimi' },
+      { key: 'net_debt_ebitda', name: 'Net Borç / FAVÖK', unit: 'x', description: 'Model yatırımları ve fabrika modernizasyonu borç karşılama gücü' },
+      { key: 'roic', name: 'Sermaye Getirisi (ROIC vs WACC)', unit: '%', description: 'Yeni araç platformu yatırımlarının ekonomik katma değeri' },
+    ],
+    taxRate: 0.25,
+  },
+  DEFENSE: {
+    archetype: 'DEFENSE',
+    name: 'Savunma Sanayii & Stratejik Sistemler',
+    badge: 'Savunma / Backlog & Stratejik Ar-Ge Modu',
+    description: 'Yıllara sari kamu ve uluslararası savunma sözleşmeleri, Bakiye Sipariş Birikimi (Backlog / Book-to-Bill > 1.2x), peşin avanslar ve Ar-Ge teşvikleri esastır.',
+    disabledMetrics: [],
+    featuredMetrics: [
+      { key: 'backlog_to_revenue', name: 'Bakiye Siparişler (Backlog) / Satışlar', unit: 'x', description: 'Çok yıllık kesinleşmiş sipariş birikimi güvencesi (>1.5x)' },
+      { key: 'ebitda_margin', name: 'Stratejik FAVÖK Marjı', unit: '%', description: 'Katma değerli elektronik ve savunma sistemleri marjı' },
+      { key: 'advances_received', name: 'Peşin Proje Avansları', unit: 'TL', description: 'Faizsiz fonlama sağlayan müşteri hakediş avansları' },
+      { key: 'r_and_d_ratio', name: 'Ar-Ge / Satışlar Oranı', unit: '%', description: 'Gelecek nesil savunma teknolojileri yatırım yoğunluğu' },
+      { key: 'net_cash_cushion', name: 'Net Nakit / Borç Dengesi', unit: 'TL', description: 'Savunma projeleri nakit akış emniyeti' },
+    ],
+    taxRate: 0.25,
+  },
+  TRANSPORT_LOGISTICS: {
+    archetype: 'TRANSPORT_LOGISTICS',
+    name: 'Ulaştırma, Taşımacılık & Lojistik',
+    badge: 'Lojistik / Filo Kapasitesi & Navlun Modu',
+    description: 'Filo büyüklüğü, filo kiralama sözleşme vadeleri, UFRS 16 operasyonel kira borç köprüsü, navlun marjı ve akaryakıt esnekliği esastır.',
+    disabledMetrics: ['stock_turnover'],
+    featuredMetrics: [
+      { key: 'fleet_size', name: 'Filo Kapasitesi & Taşıma Hacmi', unit: 'Araç / TEU', description: 'Aktif araç filosu ve depo alanı kapasite verimi' },
+      { key: 'freight_margin', name: 'Navlun & Taşıma FAVÖK Marjı', unit: '%', description: 'Akaryakıt maliyet geçişkenliği sonrası faaliyet kârı' },
+      { key: 'ifrs16_debt', name: 'UFRS 16 Filo Kiralama Borçları', unit: 'TL', description: 'Operasyonel filo kira yükümlülükleri borç köprüsü' },
+      { key: 'free_cash_flow', name: 'Serbest Nakit Akışı (FCF)', unit: 'TL', description: 'Filo yenileme CapEx sonrası kalan nakit' },
+      { key: 'net_debt_ebitda', name: 'Net Borç / FAVÖK', unit: 'x', description: 'Uzun vadeli filo finansmanı borç ödeme kapasitesi' },
+    ],
+    taxRate: 0.25,
+  },
+  COMMODITY_HEAVY_IND: {
+    archetype: 'COMMODITY_HEAVY_IND',
+    name: 'Döngüsel Ağır Sanayi, Emtia & Yapı Malzemeleri',
+    badge: 'Ağır Sanayi / Through-the-Cycle & Varlık Tabanı Modu',
+    description: 'Demir-çelik, cam, çimento, madencilik ve seramikte tek çeyreklik dip FAVÖK distorsiyon yaratır; 5 yıllık tarihsel medyan marjı ile Through-the-Cycle normalizasyonu ve varlık ikame tabanı esastır.',
+    disabledMetrics: [],
+    featuredMetrics: [
+      { key: 'mid_cycle_margin', name: 'Döngü Ortası (Mid-Cycle) FAVÖK Marjı', unit: '%', description: '5 yıllık tarihsel medyan normalleştirilmiş operasyonel marj' },
+      { key: 'commodity_spread', name: 'Emtia / Hammadde Fiyat Makası', unit: 'USD', description: 'Nihai ürün ile hammadde/enerji arasındaki kâr makası' },
+      { key: 'asset_replacement_value', name: 'Varlık İkame Değeri Tabanı', unit: 'TL', description: 'Fabrika/fırın/rezerv ikame maliyeti varlık koruması' },
+      { key: 'roic', name: 'Sermaye Verimliliği (ROIC vs WACC)', unit: '%', description: 'Sermaye yoğun tesislerin döngüsel katma değeri' },
+      { key: 'net_debt_ebitda', name: 'Net Borç / FAVÖK', unit: 'x', description: 'Döngü dibinde borçluluk tavanı (<3.0x)' },
+    ],
+    taxRate: 0.25,
+  },
+  TEXTILE: {
+    archetype: 'TEXTILE',
+    name: 'Entegre Tekstil, Teknik Tekstil & Deri',
+    badge: 'Tekstil / İhracat & Pamuk/Elyaf Makası Modu',
+    description: 'Pamuk, polyester elyaf ve hammadde fiyat yayılımı, Avrupa hazır giyim sipariş döngüsü, katma değerli ihracat payı ve işletme sermayesi esastır.',
+    disabledMetrics: [],
+    featuredMetrics: [
+      { key: 'export_ratio', name: 'İhracat Gelir Payı', unit: '%', description: 'Döviz cinsi küresel marka tedarik oranı' },
+      { key: 'fiber_cotton_spread', name: 'Pamuk / Elyaf Hammadde Makası', unit: '%', description: 'İplik ve kumaş marjının girdi maliyetine oranı' },
+      { key: 'mid_cycle_margin', name: 'Through-the-Cycle FAVÖK Marjı', unit: '%', description: 'Tekstil sipariş döngüsünde medyan operasyonel marj' },
+      { key: 'stock_turnover', name: 'Stok Devir Hızı', unit: 'Gün', description: 'Hammadde ve mamul stok nakde dönüşüm süresi' },
+      { key: 'current_ratio', name: 'Cari Oran & Likidite', unit: 'x', description: 'Kısa vadeli işletme sermayesi güvenliği' },
+    ],
+    taxRate: 0.25,
+  },
+  LIVESTOCK_AGRI: {
+    archetype: 'LIVESTOCK_AGRI',
+    name: 'Hayvancılık & Tarımsal Üretim',
+    badge: 'Hayvancılık / Biyolojik Varlık & Yem Makası Modu',
+    description: 'TMS 41 Canlı Hayvan Biyolojik Varlık gerçeğe uygun değerlemesi, mısır/soya yem girdi maliyet makası, besleme çevrim süresi ve soğuk zincir esastır.',
+    disabledMetrics: [],
+    featuredMetrics: [
+      { key: 'feed_to_meat_spread', name: 'Yem / Et Fiyat Makası', unit: '%', description: 'Soya-mısır yem maliyeti ile piliç/et satış fiyatı yayılımı' },
+      { key: 'biological_asset_growth', name: 'Biyolojik Varlık Büyümesi', unit: 'TL', description: 'Canlı varlık stok gerçeğe uygun değer artışı' },
+      { key: 'operating_cash_conversion', name: 'Faaliyet Nakit Dönüşüm Oranı', unit: '%', description: 'Biyolojik değerleme farkı hariç reel nakit akışı' },
+      { key: 'export_share', name: 'İhracat & Soğuk Zincir Satışları', unit: '%', description: 'Bölgesel döviz cinsi et/süt ürünleri ihracatı' },
+      { key: 'net_debt_ebitda', name: 'Net Borç / FAVÖK', unit: 'x', description: 'Tarımsal işletme sermayesi ve tesis borçluluğu' },
+    ],
+    taxRate: 0.25,
+  },
+  FOOD_BEVERAGE: {
+    archetype: 'FOOD_BEVERAGE',
+    name: 'Hızlı Tüketim Gıda & Meşrubat (FMCG)',
+    badge: 'FMCG / Defansif Hacim & Nakit Kalitesi Modu',
+    description: 'Temel gıda ve meşrubatta defansif tüketim hacmi, enflasyonist fiyatlama gücü, ambalaj maliyeti esnekliği ve tahakkuk riski arındırılmış yüksek serbest nakit akışı esastır.',
+    disabledMetrics: [],
+    featuredMetrics: [
+      { key: 'volume_growth', name: 'Organik Kasa / Hacim Büyümesi', unit: '%', description: 'Fiyat artışlarından bağımsız reel tüketim genişlemesi' },
+      { key: 'pricing_power_margin', name: 'Brüt & FAVÖK Marjı Kalkanı', unit: '%', description: 'Ambalaj ve tarımsal hammadde şoklarını yansıtma gücü' },
+      { key: 'cash_conversion_ratio', name: 'Nakit Akış Kalitesi (OCF / Net Kâr)', unit: '%', description: 'Tahakkuk riski olmadan net kârın serbest nakde dönüşümü' },
+      { key: 'stock_turnover', name: 'Stok Devir Hızı', unit: 'Gün', description: 'Raf devri ve taze ürün stok verimliliği' },
+      { key: 'roic', name: 'Sermaye Verimliliği (ROIC vs WACC)', unit: '%', description: 'Marka değeri ve dağıtım ağının ekonomik katma değeri' },
+    ],
+    taxRate: 0.25,
+  },
+  CONSTRUCTION_EPC: {
+    archetype: 'CONSTRUCTION_EPC',
+    name: 'Uluslararası İnşaat, Taahhüt & EPC',
+    badge: 'İnşaat Taahhüt / EPC Backlog & Döviz Nakit Modu',
+    description: 'Yurt dışı ve yurt içi büyük ölçekli altyapı/endüstriyel EPC sözleşmeleri, Bakiye Sipariş Birikimi (Backlog), peşin avans nakit köprüsü ve döviz hakedişleri esastır.',
+    disabledMetrics: ['stock_turnover'],
+    featuredMetrics: [
+      { key: 'backlog_to_revenue', name: 'Sipariş Birikimi (Backlog) / Yıllık Satışlar', unit: 'x', description: 'İmzalanmış taahhüt projeleri bakiye büyüklüğü (>2.0x)' },
+      { key: 'net_cash_advances', name: 'Döviz Net Nakit & Avans Fazlası', unit: 'TL', description: 'Proje avanslarıyla oluşan güçlü solo döviz nakit tamponu' },
+      { key: 'ebitda_margin', name: 'Mühendislik & EPC FAVÖK Marjı', unit: '%', description: 'Maliyet aşımlarından korunmuş operasyonel kârlılık' },
+      { key: 'foreign_revenue_ratio', name: 'Yurt Dışı Hakediş Payı', unit: '%', description: 'Uluslararası projelerden sağlanan döviz geliri' },
+      { key: 'current_ratio', name: 'Cari Oran & Proje Likiditesi', unit: 'x', description: 'Büyük ölçekli şantiyeler işletme sermayesi güvenliği' },
+    ],
+    taxRate: 0.25,
+  },
+  TOURISM: {
+    archetype: 'TOURISM',
+    name: 'Turizm, Otelcilik & Konaklama Tesisleri',
+    badge: 'Turizm / RevPAR & Sezonluk Nakit Akışı Modu',
+    description: 'Mevcut Oda Başına Gelir (RevPAR), yatak doluluk oranları, yaz sezonu kümülatif döviz nakit akışı ve gayrimenkul varlık ikame tabanı esastır.',
+    disabledMetrics: ['stock_turnover'],
+    featuredMetrics: [
+      { key: 'revpar', name: 'Mevcut Oda Başı Gelir (RevPAR)', unit: 'EUR / TL', description: 'Ortalama günlük oda fiyatı (ADR) x Doluluk oranı' },
+      { key: 'occupancy_rate', name: 'Yatak Doluluk Oranı', unit: '%', description: 'Tesis sezonluk kapasite doluluk verimliliği' },
+      { key: 'foreign_currency_share', name: 'Döviz Gelir Oranı', unit: '%', description: 'Yabancı turist Euro/Dolar bazlı rezervasyon payı' },
+      { key: 'season_fcf', name: 'Sezonluk Serbest Nakit Akışı (FCF)', unit: 'TL', description: 'Yaz sezonunda üretilen serbest nakit ve borç azaltımı' },
+      { key: 'net_debt_ebitda', name: 'Net Borç / FAVÖK', unit: 'x', description: 'Otel yatırımı borç servis kabiliyeti' },
+    ],
+    taxRate: 0.25,
+  },
+  MEDIA_ENTERTAINMENT: {
+    archetype: 'MEDIA_ENTERTAINMENT',
+    name: 'Medya, Spor Kulüpleri & Dijital Yayıncılık',
+    badge: 'Medya & Spor / Yayın, Sponsorluk & Telif Modu',
+    description: 'Yayın hakları, sponsorluk ve reklam gelirleri, sporcu ücretleri bütçe disiplini, telif hakları arşivi ve nakit dönüşüm gücü esastır.',
+    disabledMetrics: ['stock_turnover'],
+    featuredMetrics: [
+      { key: 'broadcasting_sponsor_rev', name: 'Yayın & Sponsorluk Gelirleri', unit: 'TL', description: 'Naklen yayın, forma, stadyum ve dijital reklam gelirleri' },
+      { key: 'wage_to_revenue', name: 'Maaş / Hasılat Oranı', unit: '%', description: 'Sporcu ve personel giderlerinin ciroya oranı (UEFA FFP tavanı <%70)' },
+      { key: 'operating_fcf', name: 'Operasyonel Serbest Nakit Akışı', unit: 'TL', description: 'Bonservis ve lisans harcamaları sonrası nakit akışı' },
+      { key: 'financial_debt_service', name: 'Borç Yapılandırması & Faiz Yükü', unit: 'TL', description: 'Finansal borç faiz karşılama kapasitesi' },
+      { key: 'equity_cushion', name: 'Özkaynak Tamponu & Sermaye', unit: 'TL', description: 'TTK 376 sermaye kaybı koruması' },
     ],
     taxRate: 0.25,
   },
