@@ -3603,9 +3603,9 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
   // Borç Köprüsü ve Merton Yapısal Opsiyon Modeli:
   // Faal ve pozitif özkaynaklı bir şirkette, geçici döngüsel dip nedeniyle EV Borç Köprüsünün altında kalsa dahi,
   // fabrikaların ve operasyonun nakit üretim hakkı sıfırlanmaz (Merton Opsiyon Değeri asgari %20 EV tabanı):
-  let evEbitdaEquity = forwardEbitda > 0 ? Math.max(0, enterpriseVal - totalDebtBridge) : 0;
-  if (forwardEbitda > 0 && totalEquityFull > 0 && evEbitdaEquity <= 0) {
-    evEbitdaEquity = enterpriseVal * 0.20;
+  let evEbitdaEquity = forwardEbitda > 0 ? (enterpriseVal - totalDebtBridge) : 0;
+  if (forwardEbitda > 0 && totalEquityFull > 0) {
+    evEbitdaEquity = Math.max(evEbitdaEquity, enterpriseVal * 0.20);
   }
   const evEbitdaPerShare = evEbitdaEquity > 0 ? (evEbitdaEquity / effectiveShareCount) : 0;
 
@@ -6629,47 +6629,79 @@ export function computeSectorValuationAndDrivers(
         bearPrice = Math.min(bearD ?? fairValue, fairValue);
         bullPrice = Math.max(bullD ?? fairValue, fairValue);
       } else {
+        const isCustomSpecializedModel = modelName !== 'İleriye Dönük İskontolu FAVÖK, F/K & Özkaynak Hibrit Modeli (TFRS 16 Borç Köprülü)' &&
+          modelName !== 'Sıkıntılı Şirket / Varlık Tabanı İskonto Modeli (Distressed Turnaround Model)';
+
         // Ayı Senaryosu: Hedef Çarpan -%15, Ciro Büyümesi -8 puan
         const bearRes = computeIndustrialFairValue({
-        ebitdaFull: isCapExTransitionPhase ? effectiveEbitdaFull * 0.90 : ebF,
-        netFull: isCapExTransitionPhase ? effectiveNetFull * 0.85 : ntF,
-        totalEquityFull: eqF,
-        netDebt: nDb,
-        leaseLiabilities: lLi,
-        minorityInterests: mIn,
-        effectiveShareCount,
-        targetMultipleNum: Math.max(3.0, targetMultipleNum * 0.85),
-        clampedRevGrowth: isCapExTransitionPhase ? Math.max(-0.15, Math.max(0.04, rG) - 0.08) : Math.max(-0.50, rG - 0.08),
-        clampedNetGrowth: isCapExTransitionPhase ? Math.max(-0.20, Math.max(0.05, nG) - 0.10) : Math.max(-0.60, nG - 0.10),
-        currentRoic: cRoic,
-        currentWacc: cWacc,
-        roe,
-        currentRatio: parseFinancialNumber(latest?.current_ratio),
-        isCapExTransitionPhase,
-        isWorkingCapitalExempt: isExcludedLightSector || (sector as string) === 'RETAIL' || isRetailFloatSector(detectedOfficialSecName, currentTickerUpper)
-      });
-      bearPrice = bearRes.fairValue != null ? bearRes.fairValue : fairValue;
+          ebitdaFull: isCapExTransitionPhase ? effectiveEbitdaFull * 0.90 : ebF,
+          netFull: isCapExTransitionPhase ? effectiveNetFull * 0.85 : ntF,
+          totalEquityFull: eqF,
+          netDebt: nDb,
+          leaseLiabilities: lLi,
+          minorityInterests: mIn,
+          effectiveShareCount,
+          targetMultipleNum: Math.max(3.0, targetMultipleNum * 0.85),
+          clampedRevGrowth: isCapExTransitionPhase ? Math.max(-0.15, Math.max(0.04, rG) - 0.08) : Math.max(-0.50, rG - 0.08),
+          clampedNetGrowth: isCapExTransitionPhase ? Math.max(-0.20, Math.max(0.05, nG) - 0.10) : Math.max(-0.60, nG - 0.10),
+          currentRoic: cRoic,
+          currentWacc: cWacc,
+          roe,
+          currentRatio: parseFinancialNumber(latest?.current_ratio),
+          isCapExTransitionPhase,
+          isWorkingCapitalExempt: isExcludedLightSector || (sector as string) === 'RETAIL' || isRetailFloatSector(detectedOfficialSecName, currentTickerUpper)
+        });
 
-      // Boğa Senaryosu: Hedef Çarpan +%15, Ciro Büyümesi +8 puan
-      const bullRes = computeIndustrialFairValue({
-        ebitdaFull: isCapExTransitionPhase ? effectiveEbitdaFull * 1.10 : ebF,
-        netFull: isCapExTransitionPhase ? effectiveNetFull * 1.15 : ntF,
-        totalEquityFull: eqF,
-        netDebt: nDb,
-        leaseLiabilities: lLi,
-        minorityInterests: mIn,
-        effectiveShareCount,
-        targetMultipleNum: targetMultipleNum * 1.15,
-        clampedRevGrowth: isCapExTransitionPhase ? Math.min(0.35, Math.max(0.04, rG) + 0.08) : Math.min(0.85, rG + 0.08),
-        clampedNetGrowth: isCapExTransitionPhase ? Math.min(0.40, Math.max(0.05, nG) + 0.10) : Math.min(0.90, nG + 0.10),
-        currentRoic: cRoic,
-        currentWacc: cWacc,
-        roe,
-        currentRatio: parseFinancialNumber(latest?.current_ratio),
-        isCapExTransitionPhase,
-        isWorkingCapitalExempt: isExcludedLightSector || (sector as string) === 'RETAIL' || isRetailFloatSector(detectedOfficialSecName, currentTickerUpper)
-      });
-      bullPrice = bullRes.fairValue != null ? bullRes.fairValue : fairValue;
+        // Boğa Senaryosu: Hedef Çarpan +%15, Ciro Büyümesi +8 puan
+        const bullRes = computeIndustrialFairValue({
+          ebitdaFull: isCapExTransitionPhase ? effectiveEbitdaFull * 1.10 : ebF,
+          netFull: isCapExTransitionPhase ? effectiveNetFull * 1.15 : ntF,
+          totalEquityFull: eqF,
+          netDebt: nDb,
+          leaseLiabilities: lLi,
+          minorityInterests: mIn,
+          effectiveShareCount,
+          targetMultipleNum: targetMultipleNum * 1.15,
+          clampedRevGrowth: isCapExTransitionPhase ? Math.min(0.35, Math.max(0.04, rG) + 0.08) : Math.min(0.85, rG + 0.08),
+          clampedNetGrowth: isCapExTransitionPhase ? Math.min(0.40, Math.max(0.05, nG) + 0.10) : Math.min(0.90, nG + 0.10),
+          currentRoic: cRoic,
+          currentWacc: cWacc,
+          roe,
+          currentRatio: parseFinancialNumber(latest?.current_ratio),
+          isCapExTransitionPhase,
+          isWorkingCapitalExempt: isExcludedLightSector || (sector as string) === 'RETAIL' || isRetailFloatSector(detectedOfficialSecName, currentTickerUpper)
+        });
+
+        if (isCustomSpecializedModel) {
+          // Özel sektörel model çalışmışsa (örn: Elektrik Teçhizat, Sağlık, Teknoloji vb.),
+          // Ayı ve Boğa çarpan esnekliği (%-15 / %+15 ve büyüme şoku) doğrudan modelin kendi adil değerine (fairValue) oranlanmalıdır:
+          const indBase = computeIndustrialFairValue({
+            ebitdaFull: isCapExTransitionPhase ? effectiveEbitdaFull : ebF,
+            netFull: isCapExTransitionPhase ? effectiveNetFull : ntF,
+            totalEquityFull: eqF,
+            netDebt: nDb,
+            leaseLiabilities: lLi,
+            minorityInterests: mIn,
+            effectiveShareCount,
+            targetMultipleNum,
+            clampedRevGrowth: rG,
+            clampedNetGrowth: nG,
+            currentRoic: cRoic,
+            currentWacc: cWacc,
+            roe,
+            currentRatio: parseFinancialNumber(latest?.current_ratio),
+            isCapExTransitionPhase,
+            isWorkingCapitalExempt: isExcludedLightSector || (sector as string) === 'RETAIL' || isRetailFloatSector(detectedOfficialSecName, currentTickerUpper)
+          });
+          const indBaseFv = (indBase.fairValue && indBase.fairValue > 0) ? indBase.fairValue : 1;
+          const bearRatio = (bearRes.fairValue != null && indBaseFv > 0) ? Math.min(0.90, bearRes.fairValue / indBaseFv) : 0.80;
+          const bullRatio = (bullRes.fairValue != null && indBaseFv > 0) ? Math.max(1.10, bullRes.fairValue / indBaseFv) : 1.25;
+          bearPrice = Number((fairValue * bearRatio).toFixed(2));
+          bullPrice = Number((fairValue * bullRatio).toFixed(2));
+        } else {
+          bearPrice = bearRes.fairValue != null ? bearRes.fairValue : fairValue;
+          bullPrice = bullRes.fairValue != null ? bullRes.fairValue : fairValue;
+        }
       }
     } else {
       // Finansal / Holding / GYO: Değer = ileri defter/NAD x hedef çarpan olduğundan senaryo, çarpanın
@@ -6687,6 +6719,21 @@ export function computeSectorValuationAndDrivers(
       const bullRatio = baseM > 0 ? clampMult(targetMultipleNum * 1.15) / baseM : 1;
       bearPrice = Number((fairValue * Math.min(1, bearRatio)).toFixed(2));
       bullPrice = Number((fairValue * Math.max(1, bullRatio)).toFixed(2));
+    }
+
+    // Temel Finansal Aksiyom (Mathematical Invariant):
+    // Ayı Senaryosu (Taban) < Baz Senaryo (Adil Değer) < Boğa Senaryosu (Tavan)
+    // Boğa senaryosu asla Baz senaryodan düşük veya Ayı senaryosu Baz senaryodan yüksek olamaz!
+    if (fairValue !== null && fairValue > 0) {
+      if (!bearPrice || bearPrice <= 0 || bearPrice >= fairValue) {
+        bearPrice = Number((fairValue * 0.75).toFixed(2));
+      }
+      if (!bullPrice || bullPrice <= 0 || bullPrice <= fairValue) {
+        bullPrice = Number((fairValue * 1.25).toFixed(2));
+      }
+      // Kesin Monotonluk Emniyet Kilidi
+      bearPrice = Math.min(bearPrice, Number((fairValue * 0.95).toFixed(2)));
+      bullPrice = Math.max(bullPrice, Number((fairValue * 1.05).toFixed(2)));
     }
   }
   const marginOfSafety = discountPct > 0 ? discountPct : 0;

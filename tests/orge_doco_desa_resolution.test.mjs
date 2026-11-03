@@ -356,5 +356,91 @@ test('TBORG & FMCG: Accrual Risk and Sector Multiples Calibration', async (t) =>
   });
 });
 
+test('Valuation Scenario Monotonicity Invariant: Ayı < Baz < Boğa mathematically guaranteed', async (t) => {
+  await t.test('ORGE specialized model guarantees Bear (Ayı) < Base (Baz) < Bull (Boğa)', () => {
+    const mockOrgeHistory = [
+      {
+        period: '2026/06',
+        revenue: 2597519683,
+        ebitda: 1560458709,
+        net_income: 478166626,
+        net_income_ttm: 989743308,
+        equity: 5205533687,
+        total_assets: 8512771081,
+        net_debt: -389017699,
+        paid_in_capital: 400000000
+      }
+    ];
+
+    const valResult = computeSectorValuationAndDrivers({
+      extractedData: {
+        ticker: 'ORGE',
+        sector: 'INDUSTRIAL',
+        currency: 'TRY',
+        share_count: 400000000,
+        financial_history: mockOrgeHistory,
+        valuation: { current_price: 17.92 }
+      },
+      sector: 'INDUSTRIAL',
+      marketPrice: 17.92
+    });
+
+    const fv = valResult.valuation.fair_value;
+    const bear = valResult.valuation.bear_price;
+    const bull = valResult.valuation.bull_price;
+
+    assert.ok(fv > 0, `Fair value must be positive (got ${fv})`);
+    assert.ok(bear > 0, `Bear price must be positive (got ${bear})`);
+    assert.ok(bull > 0, `Bull price must be positive (got ${bull})`);
+
+    // Strict Monotonicity: Bear < Base < Bull
+    assert.ok(bear < fv, `Bear (${bear}) MUST be strictly lower than Base (${fv})`);
+    assert.ok(bull > fv, `Bull (${bull}) MUST be strictly higher than Base (${fv})`);
+    assert.ok(bear < bull, `Bear (${bear}) MUST be strictly lower than Bull (${bull})`);
+  });
+
+  await t.test('Healthcare / Software / Technology specialized models maintain strict scenario monotonicity', () => {
+    const sampleTickers = ['MPARK', 'LOGO', 'MIATK', 'TCELL'];
+    for (const ticker of sampleTickers) {
+      const mockHistory = [
+        {
+          period: '2026/06',
+          revenue: 10000000000,
+          ebitda: 2500000000,
+          net_income: 1200000000,
+          net_income_ttm: 1200000000,
+          equity: 8000000000,
+          total_assets: 15000000000,
+          net_debt: 2000000000,
+          paid_in_capital: 100000000
+        }
+      ];
+
+      const valResult = computeSectorValuationAndDrivers({
+        extractedData: {
+          ticker,
+          sector: 'INDUSTRIAL',
+          currency: 'TRY',
+          share_count: 100000000,
+          financial_history: mockHistory,
+          valuation: { current_price: 50.0 }
+        },
+        sector: 'INDUSTRIAL',
+        marketPrice: 50.0
+      });
+
+      const fv = valResult.valuation.fair_value;
+      const bear = valResult.valuation.bear_price;
+      const bull = valResult.valuation.bull_price;
+
+      if (fv && fv > 0) {
+        assert.ok(bear < fv, `[${ticker}] Bear (${bear}) MUST be < Base (${fv})`);
+        assert.ok(bull > fv, `[${ticker}] Bull (${bull}) MUST be > Base (${fv})`);
+      }
+    }
+  });
+});
+
+
 
 

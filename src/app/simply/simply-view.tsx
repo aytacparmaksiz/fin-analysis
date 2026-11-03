@@ -3925,7 +3925,10 @@ export default function SimplyView({
                     <span className="text-xs font-bold text-rose-400">Ayı Senaryosu</span>
                   </div>
                   <div className="text-2xl font-black font-mono text-white">
-                    ₺{valuationInfo?.bear_price ? Number(valuationInfo.bear_price).toFixed(2) : (fairValueNum * 0.75).toFixed(2)}
+                    ₺{(() => {
+                      const bp = valuationInfo?.bear_price ? Number(valuationInfo.bear_price) : 0;
+                      return (bp > 0 && bp < fairValueNum) ? bp.toFixed(2) : (fairValueNum * 0.75).toFixed(2);
+                    })()}
                   </div>
                   <p className="text-xs text-slate-400 leading-relaxed">
                     Yüksek iskonto oranı (+%4 WACC), daralan marjlar ve düşük büyüme varsayımı.
@@ -3949,7 +3952,10 @@ export default function SimplyView({
                     <span className="text-xs font-bold text-emerald-400">Boğa Senaryosu</span>
                   </div>
                   <div className="text-2xl font-black font-mono text-white">
-                    ₺{valuationInfo?.bull_price ? Number(valuationInfo.bull_price).toFixed(2) : (fairValueNum * 1.30).toFixed(2)}
+                    ₺{(() => {
+                      const bu = valuationInfo?.bull_price ? Number(valuationInfo.bull_price) : 0;
+                      return (bu > 0 && bu > fairValueNum) ? bu.toFixed(2) : (fairValueNum * 1.25).toFixed(2);
+                    })()}
                   </div>
                   <p className="text-xs text-slate-400 leading-relaxed">
                     Pazar payı genişlemesi, marj artışı ve risksiz faiz oranında normalleşme.

@@ -164,6 +164,12 @@ function reconcileSavedReportWithLatestEngine(rep: SavedReport): SavedReport {
       if (valRes?.valuation?.fair_value && valRes.valuation.fair_value > 0) {
         updatedReport.fairValue = `${valRes.valuation.fair_value.toFixed(2)} TL`;
       }
+      if (valRes?.valuation && updatedReport.extractedData) {
+        updatedReport.extractedData.valuation = {
+          ...(updatedReport.extractedData.valuation || {}),
+          ...valRes.valuation,
+        };
+      }
       if (valRes?.scoreResult?.totalScore != null) {
         updatedReport.score = `${valRes.scoreResult.totalScore}/100`;
       }
@@ -4098,14 +4104,20 @@ export default function ValuationTerminal({
     valuationInfo.fair_value = dynamicValuationResult.valuation.fair_value || reportValuation?.fair_value || 0;
   }
 
-  // Ayı Senaryosu taban fiyatı kontrolü: Modelin stres senaryosu hedef fiyatı (%30 iskonto, daima <= adil değer)
-  if (!valuationInfo.bear_price || valuationInfo.bear_price <= 0 || valuationInfo.bear_price > valuationInfo.fair_value) {
-    valuationInfo.bear_price = dynamicValuationResult.valuation.bear_price || Number((valuationInfo.fair_value * 0.70).toFixed(2));
+  // Ayı Senaryosu taban fiyatı kontrolü: Modelin stres senaryosu hedef fiyatı (daima < adil değer)
+  const rawDynBear = dynamicValuationResult.valuation?.bear_price;
+  if (!valuationInfo.bear_price || valuationInfo.bear_price <= 0 || valuationInfo.bear_price >= valuationInfo.fair_value) {
+    valuationInfo.bear_price = (rawDynBear && rawDynBear > 0 && rawDynBear < valuationInfo.fair_value)
+      ? rawDynBear
+      : Number((valuationInfo.fair_value * 0.75).toFixed(2));
   }
 
-  // Boğa Senaryosu tavan fiyatı kontrolü: Modelin iyimser senaryo hedef fiyatı (%30 prim, daima >= adil değer)
-  if (!valuationInfo.bull_price || valuationInfo.bull_price <= 0 || valuationInfo.bull_price < valuationInfo.fair_value) {
-    valuationInfo.bull_price = dynamicValuationResult.valuation.bull_price || Number((valuationInfo.fair_value * 1.30).toFixed(2));
+  // Boğa Senaryosu tavan fiyatı kontrolü: Modelin iyimser senaryo hedef fiyatı (daima > adil değer)
+  const rawDynBull = dynamicValuationResult.valuation?.bull_price;
+  if (!valuationInfo.bull_price || valuationInfo.bull_price <= 0 || valuationInfo.bull_price <= valuationInfo.fair_value) {
+    valuationInfo.bull_price = (rawDynBull && rawDynBull > 0 && rawDynBull > valuationInfo.fair_value)
+      ? rawDynBull
+      : Number((valuationInfo.fair_value * 1.25).toFixed(2));
   }
 
   // İskonto oranını ve güvenlik marjını matematiksel olarak tutarlı güncelle
