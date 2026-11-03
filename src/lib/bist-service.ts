@@ -1419,6 +1419,15 @@ export async function fetchAndAnalyzeBistCompany(
     : synthesizeDividendsFromFinancialHistory(sanitized.financial_history, effectiveShareCount, currentPrice);
 
   // 9. Tek Doğruluk Kaynağı: Merkezi Rasyo ve Metrik Motorunu Çalıştır
+  const multiplesPeriodKey = parsePeriodSortKey(finalMultiples?.lastPeriod || '');
+  const reportPeriodKey = parsePeriodSortKey(reportingPeriod || latestItem?.period || '');
+  const isMultiplesStale = Boolean(
+    finalMultiples && 
+    multiplesPeriodKey > 0 && 
+    reportPeriodKey > 0 && 
+    multiplesPeriodKey < reportPeriodKey
+  );
+
   const unifiedMetrics = FinancialRatioEngine.computeMetrics({
     ticker,
     history: sanitized.financial_history,
@@ -1426,10 +1435,11 @@ export async function fetchAndAnalyzeBistCompany(
     shareCount: effectiveShareCount,
     sector: meta.sector,
     marketMultiples: finalMultiples ? {
-      pe: finalMultiples.pe,
-      pb: finalMultiples.pb,
-      evEbitda: finalMultiples.evEbitda,
-      evSales: finalMultiples.evSales
+      pe: isMultiplesStale ? null : finalMultiples.pe,
+      pb: isMultiplesStale ? null : finalMultiples.pb,
+      evEbitda: isMultiplesStale ? null : finalMultiples.evEbitda,
+      evSales: isMultiplesStale ? null : finalMultiples.evSales,
+      lastPeriod: finalMultiples.lastPeriod
     } : null,
     currency: 'TRY'
   });
@@ -1452,15 +1462,15 @@ export async function fetchAndAnalyzeBistCompany(
     optimization: valuationEngineResult.optimization,
     unified_metrics: unifiedMetrics,
     market_multiples: finalMultiples ? {
-      pe: finalMultiples.pe,
-      pb: finalMultiples.pb,
-      ev_ebitda: finalMultiples.evEbitda,
-      ev_sales: finalMultiples.evSales,
-      market_cap_mn_tl: finalMultiples.marketCapMnTl,
+      pe: (isMultiplesStale && unifiedMetrics.valuation.pe != null) ? unifiedMetrics.valuation.pe : finalMultiples.pe,
+      pb: (isMultiplesStale && unifiedMetrics.valuation.pb != null) ? unifiedMetrics.valuation.pb : finalMultiples.pb,
+      ev_ebitda: (isMultiplesStale && unifiedMetrics.valuation.evEbitda != null) ? unifiedMetrics.valuation.evEbitda : finalMultiples.evEbitda,
+      ev_sales: (isMultiplesStale && unifiedMetrics.valuation.evSales != null) ? unifiedMetrics.valuation.evSales : finalMultiples.evSales,
+      market_cap_mn_tl: (isMultiplesStale && unifiedMetrics.valuation.marketCap != null && unifiedMetrics.valuation.marketCap > 0) ? Number((unifiedMetrics.valuation.marketCap / 1e6).toFixed(1)) : finalMultiples.marketCapMnTl,
       market_cap_mn_usd: finalMultiples.marketCapMnUsd,
       free_float_pct: finalMultiples.freeFloatPct,
       paid_in_capital_mn_tl: finalMultiples.paidInCapitalMnTl,
-      last_period: finalMultiples.lastPeriod,
+      last_period: isMultiplesStale ? reportingPeriod : finalMultiples.lastPeriod,
       sector_name: finalMultiples.sectorName,
       sector_code: finalMultiples.sectorCode,
       foreign_share_pct: finalMultiples.foreignSharePct ?? null,

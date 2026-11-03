@@ -7800,10 +7800,14 @@ export function calculateCompanyMultiples(
   const marketCap = currentPrice * safeShares;
   const enterpriseValue = marketCap + scaledNetDebt;
 
+  const multPeriodKey = parsePeriodSortKey(isYatirimMultiples?.last_period || isYatirimMultiples?.lastPeriod || '');
+  const latestPeriodKey = parsePeriodSortKey(latest?.period || '');
+  const isMultiplesStale = Boolean(multPeriodKey > 0 && latestPeriodKey > 0 && multPeriodKey < latestPeriodKey);
+
   // 1. F/K (P/E)
-  let peVal: number | null = isYatirimMultiples?.pe != null ? isYatirimMultiples.pe : null;
+  let peVal: number | null = (!isMultiplesStale && isYatirimMultiples?.pe != null) ? isYatirimMultiples.pe : null;
   // Eğer İş Yatırım'dan gelen F/K statik bir kapanış fiyatına aitse ve canlı hisse fiyatı değişmişse orantısal güncelle
-  if (peVal !== null && peVal > 0 && isYatirimMultiples?.lastPrice && isYatirimMultiples.lastPrice > 0 && currentPrice > 0) {
+  if (peVal !== null && peVal > 0 && !isMultiplesStale && isYatirimMultiples?.lastPrice && isYatirimMultiples.lastPrice > 0 && currentPrice > 0) {
     const priceRatio = currentPrice / isYatirimMultiples.lastPrice;
     if (Math.abs(priceRatio - 1) >= 0.02) {
       peVal = Number((peVal * priceRatio).toFixed(1));
@@ -7814,8 +7818,8 @@ export function calculateCompanyMultiples(
   }
 
   // 2. PD/DD (P/B)
-  let pbVal: number | null = isYatirimMultiples?.pb != null ? isYatirimMultiples.pb : null;
-  if (pbVal !== null && pbVal > 0 && isYatirimMultiples?.lastPrice && isYatirimMultiples.lastPrice > 0 && currentPrice > 0) {
+  let pbVal: number | null = (!isMultiplesStale && isYatirimMultiples?.pb != null) ? isYatirimMultiples.pb : null;
+  if (pbVal !== null && pbVal > 0 && !isMultiplesStale && isYatirimMultiples?.lastPrice && isYatirimMultiples.lastPrice > 0 && currentPrice > 0) {
     const priceRatio = currentPrice / isYatirimMultiples.lastPrice;
     if (Math.abs(priceRatio - 1) >= 0.02) {
       pbVal = Number((pbVal * priceRatio).toFixed(2));
@@ -7828,8 +7832,10 @@ export function calculateCompanyMultiples(
   // 3. FD/FAVÖK (EV/EBITDA)
   let evEbitdaVal: number | null = null;
   if (!isMetricDisabled('ev_ebitda', sector)) {
-    evEbitdaVal = isYatirimMultiples?.ev_ebitda != null ? isYatirimMultiples.ev_ebitda : (isYatirimMultiples?.evEbitda != null ? isYatirimMultiples.evEbitda : null);
-    if (evEbitdaVal === null && benchmark.evEbitdaMedian !== null && annualizedEbitda !== null && annualizedEbitda !== 0) {
+    if (!isMultiplesStale) {
+      evEbitdaVal = isYatirimMultiples?.ev_ebitda != null ? isYatirimMultiples.ev_ebitda : (isYatirimMultiples?.evEbitda != null ? isYatirimMultiples.evEbitda : null);
+    }
+    if (evEbitdaVal === null && annualizedEbitda !== null && annualizedEbitda !== 0) {
       evEbitdaVal = Number((enterpriseValue / annualizedEbitda).toFixed(2));
     }
   }
@@ -7837,8 +7843,10 @@ export function calculateCompanyMultiples(
   // 4. FD/Satışlar (EV/Sales)
   let evSalesVal: number | null = null;
   if (!isMetricDisabled('ev_sales', sector)) {
-    evSalesVal = isYatirimMultiples?.ev_sales != null ? isYatirimMultiples.ev_sales : (isYatirimMultiples?.evSales != null ? isYatirimMultiples.evSales : null);
-    if (evSalesVal === null && benchmark.evSalesMedian !== null && annualizedRev !== null && annualizedRev > 0) {
+    if (!isMultiplesStale) {
+      evSalesVal = isYatirimMultiples?.ev_sales != null ? isYatirimMultiples.ev_sales : (isYatirimMultiples?.evSales != null ? isYatirimMultiples.evSales : null);
+    }
+    if (evSalesVal === null && annualizedRev !== null && annualizedRev > 0) {
       evSalesVal = Number((enterpriseValue / annualizedRev).toFixed(2));
     }
   }

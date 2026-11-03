@@ -185,6 +185,46 @@ function reconcileSavedReportWithLatestEngine(rep: SavedReport): SavedReport {
           decision: valRes.optimization?.finalDecision || updatedReport.decision,
         });
       }
+
+      // İş Yatırım ve Piyasa Çarpanları Senkronizasyonu:
+      // Eğer rapordaki market_multiples daha eski bir çeyreğe aitse veya baseline'da güncel çeyrek varsa yenile
+      if (updatedReport.extractedData) {
+        const ext = updatedReport.extractedData;
+        const lastHistPeriod = ext.financial_history?.[ext.financial_history.length - 1]?.period;
+        const repPeriodKey = parsePeriodSortKey(ext.reporting_period || lastHistPeriod || '');
+        const multPeriodKey = parsePeriodSortKey(ext.market_multiples?.last_period || '');
+        const baselinePeriodKey = parsePeriodSortKey(isyBaseline?.lastPeriod || '');
+
+        if (isyBaseline && baselinePeriodKey >= repPeriodKey && (!multPeriodKey || baselinePeriodKey > multPeriodKey)) {
+          ext.market_multiples = {
+            ...(ext.market_multiples || {}),
+            pe: isyBaseline.pe,
+            pb: isyBaseline.pb,
+            ev_ebitda: isyBaseline.evEbitda,
+            ev_sales: isyBaseline.evSales,
+            market_cap_mn_tl: isyBaseline.marketCapMnTl,
+            last_period: isyBaseline.lastPeriod,
+            sector_name: isyBaseline.sectorName || ext.market_multiples?.sector_name
+          };
+        } else if (ext.market_multiples && repPeriodKey > 0 && multPeriodKey > 0 && multPeriodKey < repPeriodKey) {
+          const dynMultiples = FinancialRatioEngine.computeMetrics({
+            ticker: upperTicker,
+            history: ext.financial_history || [],
+            currentPrice: parseFinancialNumber(rep.price) || 0,
+            shareCount: Number(ext.share_count || ext.shares_outstanding || 0),
+            sector: canonicalSector,
+            marketMultiples: null,
+            currency: ext.currency || 'TRY'
+          });
+          if (dynMultiples?.valuation) {
+            ext.market_multiples.ev_ebitda = dynMultiples.valuation.evEbitda;
+            ext.market_multiples.pe = dynMultiples.valuation.pe;
+            ext.market_multiples.pb = dynMultiples.valuation.pb;
+            ext.market_multiples.ev_sales = dynMultiples.valuation.evSales;
+            ext.market_multiples.last_period = ext.reporting_period || lastHistPeriod;
+          }
+        }
+      }
     } catch (err) {
       console.warn('Reconcile error for', rep.ticker, err);
     }

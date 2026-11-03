@@ -238,16 +238,20 @@ export class FinancialRatioEngine {
     const marketCap = safePrice * safeShares;
     const enterpriseValue = netDebtTl !== null ? marketCap + netDebtTl : marketCap;
 
-    let pe = marketMultiples?.pe ?? (ttm.netIncome && ttm.netIncome > 0 ? Number((marketCap / ttm.netIncome).toFixed(2)) : null);
-    if (pe !== null && pe > 0 && (marketMultiples as any)?.lastPrice && (marketMultiples as any).lastPrice > 0 && safePrice > 0) {
+    const multPeriodKey = parsePeriodSortKey((marketMultiples as any)?.lastPeriod || (marketMultiples as any)?.last_period || '');
+    const latestPeriodKey = parsePeriodSortKey(latest?.period || '');
+    const isMultiplesStale = Boolean(multPeriodKey > 0 && latestPeriodKey > 0 && multPeriodKey < latestPeriodKey);
+
+    let pe = (!isMultiplesStale ? marketMultiples?.pe : null) ?? (ttm.netIncome && ttm.netIncome > 0 ? Number((marketCap / ttm.netIncome).toFixed(2)) : null);
+    if (pe !== null && pe > 0 && !isMultiplesStale && (marketMultiples as any)?.lastPrice && (marketMultiples as any).lastPrice > 0 && safePrice > 0) {
       const priceRatio = safePrice / (marketMultiples as any).lastPrice;
       if (Math.abs(priceRatio - 1) >= 0.02) {
         pe = Number((pe * priceRatio).toFixed(1));
       }
     }
 
-    let pb = marketMultiples?.pb ?? (equityTl && equityTl > 0 ? Number((marketCap / equityTl).toFixed(2)) : null);
-    if (pb !== null && pb > 0 && (marketMultiples as any)?.lastPrice && (marketMultiples as any).lastPrice > 0 && safePrice > 0) {
+    let pb = (!isMultiplesStale ? marketMultiples?.pb : null) ?? (equityTl && equityTl > 0 ? Number((marketCap / equityTl).toFixed(2)) : null);
+    if (pb !== null && pb > 0 && !isMultiplesStale && (marketMultiples as any)?.lastPrice && (marketMultiples as any).lastPrice > 0 && safePrice > 0) {
       const priceRatio = safePrice / (marketMultiples as any).lastPrice;
       if (Math.abs(priceRatio - 1) >= 0.02) {
         pb = Number((pb * priceRatio).toFixed(2));
@@ -256,10 +260,10 @@ export class FinancialRatioEngine {
 
     const evEbitda = (isMetricDisabled('ev_ebitda', sector) || isMetricDisabled('ebitda', sector))
       ? null
-      : (marketMultiples?.evEbitda ?? marketMultiples?.ev_ebitda ?? (ttm.ebitda && ttm.ebitda > 0 ? Number((enterpriseValue / ttm.ebitda).toFixed(2)) : null));
+      : ((!isMultiplesStale ? (marketMultiples?.evEbitda ?? marketMultiples?.ev_ebitda) : null) ?? (ttm.ebitda && ttm.ebitda > 0 ? Number((enterpriseValue / ttm.ebitda).toFixed(2)) : null));
     const evSales = isMetricDisabled('ev_sales', sector)
       ? null
-      : (marketMultiples?.evSales ?? marketMultiples?.ev_sales ?? (ttm.revenue && ttm.revenue > 0 ? Number((enterpriseValue / ttm.revenue).toFixed(2)) : null));
+      : ((!isMultiplesStale ? (marketMultiples?.evSales ?? marketMultiples?.ev_sales) : null) ?? (ttm.revenue && ttm.revenue > 0 ? Number((enterpriseValue / ttm.revenue).toFixed(2)) : null));
     const fcfYield = (ttm.freeCashFlow && marketCap > 0) ? Number(((ttm.freeCashFlow / marketCap) * 100).toFixed(1)) : null;
 
     const valuation: ValuationMultiples = {
