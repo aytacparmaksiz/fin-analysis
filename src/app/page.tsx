@@ -52,7 +52,7 @@ import {
   getScoreColorStyle
 } from '@/lib/sectors';
 
-import { SavedReport } from '@/lib/report-resolver';
+import { SavedReport, formatAnalysisDate } from '@/lib/report-resolver';
 export type { SavedReport };
 import { generateFullAuditMarkdown } from '@/lib/export-markdown';
 import {
@@ -1782,15 +1782,16 @@ export default function ValuationTerminal({
     if (e) e.stopPropagation();
     const reportToDelete = savedReports.find(r => r.id === id);
     const tickerName = reportToDelete?.ticker || 'bu';
-    if (confirm(`${tickerName} hissesine ait değerleme raporunu silmek istediğinize emin misiniz?`)) {
-      // 1. O hisseye ait TÜM kopyaları/kayıtları yerel hafızadan temizle (farklı tarihlerde yapılmış olsa bile)
-      const updated = savedReports.filter(r => r.id !== id && r.ticker?.toUpperCase() !== tickerName.toUpperCase());
+    const periodName = reportToDelete?.period ? ` (${reportToDelete.period})` : '';
+    if (confirm(`${tickerName}${periodName} hissesine ait değerleme raporunu silmek istediğinize emin misiniz?`)) {
+      // 1. O rapordan yalnızca bu ID'ye ait kaydı yerel hafızadan temizle (aynı hissenin diğer dönem raporları KORUNUR)
+      const updated = savedReports.filter(r => r.id !== id);
       setSavedReports(updated);
       try {
         localStorage.setItem('fin_valuation_reports', JSON.stringify(updated));
       } catch (err) {}
 
-      // 2. Buluttan hem ID hem de ticker bazında sil
+      // 2. Buluttan (Supabase) id bazında kesin eşitlikle sil
       try {
         await fetch(`/api/reports?id=${encodeURIComponent(id)}&ticker=${encodeURIComponent(tickerName)}`, {
           method: 'DELETE',
@@ -1800,9 +1801,18 @@ export default function ValuationTerminal({
       }
 
       // 3. Ekran ve URL senkronizasyonu:
-      if (activeReport?.ticker?.toUpperCase() === tickerName.toUpperCase() || activeReportId === id) {
-        if (updated.length > 0) {
-          // Listede kalan ilk raporu göster ve URL'yi güncelle
+      if (activeReport?.id === id || activeReportId === id) {
+        const remainingOfTicker = updated.filter(r => r.ticker?.toUpperCase() === tickerName.toUpperCase());
+        if (remainingOfTicker.length > 0) {
+          // Aynı hisseye ait başka bir çeyrek varsa onu aç
+          setActiveReportId(remainingOfTicker[0].id);
+          setTicker(remainingOfTicker[0].ticker);
+          setStep('report');
+          if (typeof window !== 'undefined') {
+            window.history.replaceState(null, '', `/analysis/${remainingOfTicker[0].ticker.toUpperCase()}`);
+          }
+        } else if (updated.length > 0) {
+          // Başka hisse raporu varsa ilkine geç
           setActiveReportId(updated[0].id);
           setTicker(updated[0].ticker);
           setStep('report');
@@ -1810,7 +1820,7 @@ export default function ValuationTerminal({
             window.history.replaceState(null, '', `/analysis/${updated[0].ticker.toUpperCase()}`);
           }
         } else {
-          // Başka rapor kalmadıysa DOĞRUDAN ANA SAYFAYA DÖN ve URL'yi '/' yap
+          // Hiç rapor kalmadıysa ana sayfaya dön
           setActiveReportId(null);
           setTicker('');
           setStep('input');
@@ -1997,17 +2007,16 @@ export default function ValuationTerminal({
           if (json) {
             setIsCloudConfigured(Boolean(json.isCloudConfigured));
             if (json.isCloudConfigured && Array.isArray(json.reports) && json.reports.length > 0) {
-              const tickerMap = new Map<string, SavedReport>();
+              const idMap = new Map<string, SavedReport>();
               const allReports = [...localData, ...json.reports].sort(
                 (a, b) => reportTimestamp(b) - reportTimestamp(a)
               );
               for (const rep of allReports) {
-                const sym = (rep.ticker || '').toUpperCase();
-                if (sym && !tickerMap.has(sym)) {
-                  tickerMap.set(sym, rep);
+                if (rep.id && !idMap.has(rep.id)) {
+                  idMap.set(rep.id, rep);
                 }
               }
-              const merged = Array.from(tickerMap.values()).map(reconcileSavedReportWithLatestEngine);
+              const merged = Array.from(idMap.values()).map(reconcileSavedReportWithLatestEngine);
               setSavedReports(merged);
               try {
                 localStorage.setItem('fin_valuation_reports', JSON.stringify(merged));
@@ -5125,18 +5134,61 @@ export default function ValuationTerminal({
           {/* ADIM 3: KURUMSAL HİSSE ANALİZİ (SIMPLY WALL ST MODU) */}
           {step === 'report' && activeReport && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between pb-1">
+              <div className="flex items-center justify-between gap-3 pb-1 flex-wrap sm:flex-nowrap">
                 <button
                   type="button"
                   onClick={handleGoBack}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-[#181b20] hover:bg-[#222731] border border-[#2b313d] rounded-lg transition cursor-pointer shadow-sm"
+                  className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-[#181b20] hover:bg-[#222731] border border-[#2b313d] rounded-lg transition cursor-pointer shadow-sm flex-shrink-0"
                   title="Geri Dön"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
                   <span>Geri Dön</span>
                 </button>
 
-                <div className="flex items-center gap-1.5">
+                {/* Aynı hisseye ait farklı çeyrek/analiz raporları seçici (Çoklu Bilanço / Tarih Hafızası) */}
+                {(() => {
+                  const currentTickerUpper = (activeReport?.ticker || '').toUpperCase();
+                  const tickerReports = savedReports
+                    .filter(r => (r.ticker || '').toUpperCase() === currentTickerUpper)
+                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+                  if (tickerReports.length <= 1) return null;
+
+                  return (
+                    <div className="flex items-center gap-1.5 overflow-x-auto max-w-[55vw] sm:max-w-[65vw] py-1 no-scrollbar">
+                      {tickerReports.map((r) => {
+                        const isCurrent = r.id === activeReport?.id;
+                        const periodText = r.period || 'Bilanço';
+                        const dateText = formatAnalysisDate(r.createdAt);
+                        const label = `${periodText} - Analiz: ${dateText}`;
+
+                        return (
+                          <button
+                            key={r.id}
+                            type="button"
+                            onClick={() => openReport(r.id, r.ticker)}
+                            onAuxClick={(e) => {
+                              if (e.button === 1) {
+                                e.preventDefault();
+                                window.open(`/analysis/${r.ticker.toUpperCase()}`, '_blank');
+                              }
+                            }}
+                            className={`px-2.5 py-1 text-xs font-mono rounded-lg transition whitespace-nowrap border cursor-pointer ${
+                              isCurrent
+                                ? 'bg-[#f5c242]/15 text-[#f5c242] border-[#f5c242]/50 font-bold shadow-sm'
+                                : 'bg-[#181b20] text-slate-400 hover:text-white hover:bg-[#222731] border-[#2b313d]'
+                            }`}
+                            title={`${r.ticker} ${label}`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+
+                <div className="flex items-center gap-1.5 flex-shrink-0">
                   <button
                     type="button"
                     onClick={handleCopyNotebookLM}
@@ -5197,7 +5249,19 @@ export default function ValuationTerminal({
               return renderAuthGate('Hisse Tarama');
             }
 
-            const ranked = sortReportsByRank(savedReports);
+            // Hisse Tarama için her şirketin en güncel dönem raporunu al (şirket başına tek satır)
+            const latestPerTickerMap = new Map<string, SavedReport>();
+            const sortedByTime = [...savedReports].sort(
+              (a, b) => reportTimestamp(b) - reportTimestamp(a)
+            );
+            for (const rep of sortedByTime) {
+              const sym = (rep.ticker || '').toUpperCase();
+              if (sym && !latestPerTickerMap.has(sym)) {
+                latestPerTickerMap.set(sym, rep);
+              }
+            }
+            const deduplicatedLatestReports = Array.from(latestPerTickerMap.values());
+            const ranked = sortReportsByRank(deduplicatedLatestReports);
             const filtered = ranked.filter(r => {
               const matchesSearch = !leaderboardSearch.trim() || 
                 r.ticker.toLowerCase().includes(leaderboardSearch.toLowerCase().trim()) ||
@@ -5209,7 +5273,7 @@ export default function ValuationTerminal({
 
             const indexCounts = (() => {
               let all = 0, b30 = 0, b50 = 0, b100 = 0, non100 = 0;
-              for (const r of savedReports) {
+              for (const r of deduplicatedLatestReports) {
                 all++;
                 const sym = r.ticker;
                 if (isBist30(sym)) b30++;
@@ -5225,7 +5289,17 @@ export default function ValuationTerminal({
               let valA: any = null;
               let valB: any = null;
               if (key === 'ticker') { valA = a.ticker || ''; valB = b.ticker || ''; }
-              else if (key === 'decision') { valA = a.decision || ''; valB = b.decision || ''; }
+              else if (key === 'decision') {
+                const rankDecision = (d: string) => {
+                  const norm = (d || '').trim().toUpperCase();
+                  if (norm === 'AL') return 1;
+                  if (norm === 'NÖTR' || norm === 'NOTR') return 2;
+                  if (norm === 'ALMA') return 3;
+                  return 4;
+                };
+                valA = rankDecision(a.decision);
+                valB = rankDecision(b.decision);
+              }
               else if (key === 'period') { valA = a.period || a.createdAt || ''; valB = b.period || b.createdAt || ''; }
               else if (key === 'price') { valA = parseFloat(a.price || '0') || 0; valB = parseFloat(b.price || '0') || 0; }
               else if (key === 'fairValue') { valA = parseFloat(a.fairValue || '0') || 0; valB = parseFloat(b.fairValue || '0') || 0; }
@@ -5240,6 +5314,15 @@ export default function ValuationTerminal({
                 const fvB = parseFloat(b.fairValue || '0') || 0;
                 const pB = parseFloat(b.price || '0') || 0;
                 valB = (fvB > 0 && pB > 0) ? ((fvB - pB) / pB) * 100 : -999;
+              }
+
+              if (key === 'decision') {
+                // AL-NÖTR-ALMA (asc) veya ALMA-NÖTR-AL (desc)
+                const diff = direction === 'asc' ? valA - valB : valB - valA;
+                if (diff !== 0) return diff;
+                const scoreA = parseInt(String(a.score || 0).split('/')[0].replace(/[^0-9]/g, ''), 10) || 0;
+                const scoreB = parseInt(String(b.score || 0).split('/')[0].replace(/[^0-9]/g, ''), 10) || 0;
+                return scoreB - scoreA;
               }
 
               if (typeof valA === 'string') {
@@ -5388,14 +5471,37 @@ export default function ValuationTerminal({
                             <div
                               key={item.id}
                               onClick={() => openReport(item.id, item.ticker)}
+                              onAuxClick={(e) => {
+                                if (e.button === 1) {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  window.open(`/analysis/${item.ticker.toUpperCase()}`, '_blank');
+                                }
+                              }}
                               className="bg-[#12151c] hover:bg-[#1a1f29] border border-[#2b313d] hover:border-emerald-500/50 rounded-xl p-3.5 flex flex-col justify-between gap-3 cursor-pointer transition shadow-sm group select-none"
                             >
                               <div className="flex items-start justify-between gap-1.5">
                                 <div>
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="font-mono font-black text-sm text-white group-hover:text-emerald-400 transition tracking-tight">
+                                    <a
+                                      href={`/analysis/${item.ticker.toUpperCase()}`}
+                                      onClick={(e) => {
+                                        if (e.button === 0 && !e.ctrlKey && !e.metaKey) {
+                                          e.preventDefault();
+                                          openReport(item.id, item.ticker);
+                                        }
+                                      }}
+                                      onAuxClick={(e) => {
+                                        if (e.button === 1) {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          window.open(`/analysis/${item.ticker.toUpperCase()}`, '_blank');
+                                        }
+                                      }}
+                                      className="font-mono font-black text-sm text-white group-hover:text-emerald-400 transition tracking-tight"
+                                    >
                                       {item.ticker}
-                                    </span>
+                                    </a>
                                     <span className={`text-[9px] font-mono px-1 py-0.5 rounded border leading-none font-bold ${indexBadge.badgeClass}`}>
                                       {indexBadge.label}
                                     </span>
@@ -5404,13 +5510,26 @@ export default function ValuationTerminal({
                                     {item.sector ? getCompanySectorDisplayName(item.ticker, item.sector) : 'BIST'}
                                   </div>
                                 </div>
-                                <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded ${
-                                  item.decision === 'AL' ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/80' :
-                                  item.decision === 'ALMA' ? 'bg-rose-950/80 text-rose-400 border border-rose-800/80' :
-                                  'bg-amber-950/80 text-amber-400 border border-amber-800/80'
-                                }`}>
-                                  {item.decision || '—'}
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleFavorite(item.ticker);
+                                    }}
+                                    className="p-1 rounded text-slate-500 hover:text-amber-400 hover:bg-slate-800 transition cursor-pointer"
+                                    title={favoriteTickers.includes(item.ticker) ? 'Favorilerden Çıkar' : 'Favorilere Ekle'}
+                                  >
+                                    <Star className={`w-3.5 h-3.5 ${favoriteTickers.includes(item.ticker) ? 'fill-amber-400 text-amber-400' : 'text-slate-500'}`} />
+                                  </button>
+                                  <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded ${
+                                    item.decision === 'AL' ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/80' :
+                                    item.decision === 'ALMA' ? 'bg-rose-950/80 text-rose-400 border border-rose-800/80' :
+                                    'bg-amber-950/80 text-amber-400 border border-amber-800/80'
+                                  }`}>
+                                    {item.decision || '—'}
+                                  </span>
+                                </div>
                               </div>
 
                               <div className="space-y-1.5 pt-2 border-t border-[#232834]">
@@ -5531,13 +5650,14 @@ export default function ValuationTerminal({
                               )}
                             </span>
                           </th>
+                          <th className="p-3.5 text-center">FAV</th>
                           <th className="p-3.5 text-right">İşlem</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800">
                         {sortedLeaderboard.length === 0 ? (
                           <tr>
-                            <td colSpan={9} className="p-8 text-center text-slate-500 text-xs">
+                            <td colSpan={10} className="p-8 text-center text-slate-500 text-xs">
                               Kriterlere uygun rapor bulunamadı.
                             </td>
                           </tr>
@@ -5551,6 +5671,13 @@ export default function ValuationTerminal({
                             <tr
                               key={item.id}
                               onClick={() => openReport(item.id, item.ticker)}
+                              onAuxClick={(e) => {
+                                if (e.button === 1) {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  window.open(`/analysis/${item.ticker.toUpperCase()}`, '_blank');
+                                }
+                              }}
                               className="hover:bg-slate-800/50 transition cursor-pointer"
                             >
                               <td className="p-3.5 pl-5 font-mono font-bold text-slate-400">
@@ -5558,7 +5685,25 @@ export default function ValuationTerminal({
                               </td>
                               <td className="p-3.5">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-bold text-sm text-white font-mono hover:text-[#f5c242] transition">{item.ticker}</span>
+                                  <a
+                                    href={`/analysis/${item.ticker.toUpperCase()}`}
+                                    onClick={(e) => {
+                                      if (e.button === 0 && !e.ctrlKey && !e.metaKey) {
+                                        e.preventDefault();
+                                        openReport(item.id, item.ticker);
+                                      }
+                                    }}
+                                    onAuxClick={(e) => {
+                                      if (e.button === 1) {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        window.open(`/analysis/${item.ticker.toUpperCase()}`, '_blank');
+                                      }
+                                    }}
+                                    className="font-bold text-sm text-white font-mono hover:text-[#f5c242] transition"
+                                  >
+                                    {item.ticker}
+                                  </a>
                                   {(() => {
                                     const badge = getBistIndexBadge(item.ticker);
                                     return (
@@ -5599,11 +5744,32 @@ export default function ValuationTerminal({
                               <td className="p-3.5 text-slate-400 font-mono text-[11px]">
                                 {item.period || item.createdAt}
                               </td>
+                              <td className="p-3.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleFavorite(item.ticker);
+                                  }}
+                                  className={`p-1.5 rounded transition cursor-pointer ${
+                                    favoriteTickers.includes(item.ticker)
+                                      ? 'text-amber-400 hover:text-amber-300 hover:bg-amber-400/10'
+                                      : 'text-slate-500 hover:text-amber-400 hover:bg-slate-800'
+                                  }`}
+                                  title={favoriteTickers.includes(item.ticker) ? 'Favorilerden Çıkar' : 'Favorilere Ekle'}
+                                >
+                                  <Star
+                                    className={`w-4 h-4 ${
+                                      favoriteTickers.includes(item.ticker) ? 'fill-amber-400 text-amber-400' : 'text-slate-500'
+                                    }`}
+                                  />
+                                </button>
+                              </td>
                               <td className="p-3.5 text-right">
                                 <button
                                   type="button"
                                   onClick={(e) => deleteReport(item.id, e)}
-                                  className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded transition"
+                                  className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded transition cursor-pointer"
                                   title="Sil"
                                 >
                                   <Trash2 className="w-4 h-4" />
@@ -5823,14 +5989,37 @@ export default function ValuationTerminal({
                                           <tr
                                             key={rep.id}
                                             onClick={() => openReport(rep.id, rep.ticker)}
+                                            onAuxClick={(e) => {
+                                              if (e.button === 1) {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                window.open(`/analysis/${rep.ticker.toUpperCase()}`, '_blank');
+                                              }
+                                            }}
                                             className="hover:bg-[#21262d] transition cursor-pointer group"
                                           >
                                             <td className="py-3 px-4 sticky left-0 bg-[#12151c] group-hover:bg-[#21262d] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] min-w-[110px]">
                                               <div className="flex items-center gap-1.5">
                                                 <span className="font-mono text-xs text-slate-500">#{idx + 1}</span>
-                                                <span className="font-mono font-bold text-white text-base group-hover:text-[#f5c242] transition">
+                                                <a
+                                                  href={`/analysis/${rep.ticker.toUpperCase()}`}
+                                                  onClick={(e) => {
+                                                    if (e.button === 0 && !e.ctrlKey && !e.metaKey) {
+                                                      e.preventDefault();
+                                                      openReport(rep.id, rep.ticker);
+                                                    }
+                                                  }}
+                                                  onAuxClick={(e) => {
+                                                    if (e.button === 1) {
+                                                      e.preventDefault();
+                                                      e.stopPropagation();
+                                                      window.open(`/analysis/${rep.ticker.toUpperCase()}`, '_blank');
+                                                    }
+                                                  }}
+                                                  className="font-mono font-bold text-white text-base group-hover:text-[#f5c242] transition"
+                                                >
                                                   {rep.ticker}
-                                                </span>
+                                                </a>
                                               </div>
                                             </td>
                                             <td className="py-3 px-4 text-xs text-slate-300 font-sans truncate max-w-[200px]">
@@ -6251,13 +6440,36 @@ export default function ValuationTerminal({
                               <tr
                                 key={`${report.id}-table-${idx}`}
                                 onClick={() => openReport(report.id, report.ticker)}
+                                onAuxClick={(e) => {
+                                  if (e.button === 1) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    window.open(`/analysis/${report.ticker.toUpperCase()}`, '_blank');
+                                  }
+                                }}
                                 className="hover:bg-[#21262d] transition cursor-pointer group"
                               >
                                 <td className="py-3 px-4 sticky left-0 bg-[#1a1e26] group-hover:bg-[#21262d] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] min-w-[120px]">
                                   <div className="flex items-center gap-2">
-                                    <span className="font-mono font-bold text-white group-hover:text-[#f5c242] transition">
+                                    <a
+                                      href={`/analysis/${report.ticker.toUpperCase()}`}
+                                      onClick={(e) => {
+                                        if (e.button === 0 && !e.ctrlKey && !e.metaKey) {
+                                          e.preventDefault();
+                                          openReport(report.id, report.ticker);
+                                        }
+                                      }}
+                                      onAuxClick={(e) => {
+                                        if (e.button === 1) {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          window.open(`/analysis/${report.ticker.toUpperCase()}`, '_blank');
+                                        }
+                                      }}
+                                      className="font-mono font-bold text-white group-hover:text-[#f5c242] transition"
+                                    >
                                       {report.ticker}
-                                    </span>
+                                    </a>
                                     {companyName && (
                                       <span className="text-xs text-slate-400 truncate max-w-[160px] hidden sm:inline">
                                         {companyName}

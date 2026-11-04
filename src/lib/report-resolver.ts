@@ -28,6 +28,25 @@ export interface SavedReport {
 }
 
 /**
+ * Rapor oluşturulma tarihini sadeleştirir ve saat bilgisini ayıklar.
+ * Örn: "04 Kasım 2026 16:14" -> "04 Kasım 2026"
+ * veya ISO string -> "04 Kasım 2026"
+ */
+export function formatAnalysisDate(rawDate?: string): string {
+  if (!rawDate) return '';
+  const cleaned = rawDate.replace(/\s+\d{1,2}:\d{2}(?::\d{2})?$/, '').trim();
+  if (cleaned.includes('T') || cleaned.match(/^\d{4}-\d{2}-\d{2}/)) {
+    try {
+      const d = new Date(cleaned);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' });
+      }
+    } catch {}
+  }
+  return cleaned;
+}
+
+/**
  * Statik olarak hazır model döndürmez; kullanıcı veya veritabanı haricinde suni rapor üretilmesini engeller.
  */
 export function getStaticReport(_ticker?: string): SavedReport | null {

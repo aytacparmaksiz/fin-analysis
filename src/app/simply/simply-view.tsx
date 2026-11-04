@@ -57,7 +57,7 @@ import {
   Legend,
   ReferenceLine
 } from 'recharts';
-import type { SavedReport } from '@/lib/report-resolver';
+import { formatAnalysisDate, type SavedReport } from '@/lib/report-resolver';
 import type { SectorType } from '@/lib/sectors';
 import {
   SECTOR_DEFINITIONS,
@@ -5458,17 +5458,22 @@ export default function SimplyView({
                       <div
                         key={hist.id}
                         onClick={() => onSelectReport && onSelectReport(hist.id)}
+                        onAuxClick={(e) => {
+                          if (e.button === 1) {
+                            e.preventDefault();
+                            if (typeof window !== 'undefined') {
+                              window.open(`/analysis/${hist.ticker.toUpperCase()}`, '_blank');
+                            }
+                          }
+                        }}
                         className="py-3.5 flex items-center justify-between hover:bg-[#21262d]/50 px-3 rounded-xl transition cursor-pointer group"
                       >
                         <div>
                           <div className="font-bold text-[15px] text-white flex items-center gap-2">
                             <span className="group-hover:text-emerald-400 transition">{hist.ticker}</span>
-                            <span className="text-sm font-mono text-slate-300 bg-[#21262d] px-2 py-0.5 rounded border border-[#2e3440]">
-                              {hist.period || '2025/12'}
-                            </span>
                           </div>
                           <div className="text-sm text-slate-400 mt-1 font-mono">
-                            Tarih: {hist.createdAt}
+                            {hist.period ? `${hist.period} - ` : ''}Analiz: {formatAnalysisDate(hist.createdAt)}
                           </div>
                         </div>
                         <div className="text-right">
