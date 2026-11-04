@@ -100,6 +100,15 @@ import {
   type FinancialChangeResult
 } from '@/lib/ratio-engine';
 import { extractSmartFinancialText, extractSmartDocumentText, splitScannedPdfIntoChunks, DocumentCategory } from '@/lib/pdf-filter';
+import {
+  isBist30,
+  isBist50,
+  isBist100,
+  isBistNon100,
+  matchesIndexFilter,
+  getBistIndexBadge,
+  type LeaderboardIndexFilter
+} from '@/lib/bist-indices';
 
 /**
  * Kayıtlı analizleri (SavedReport) en son matematiksel değerleme motoru, IVS 105 standartları
@@ -1445,6 +1454,7 @@ export default function ValuationTerminal({
   const [themeSearchTerm, setThemeSearchTerm] = useState<string>('');
   const [leaderboardSearch, setLeaderboardSearch] = useState('');
   const [leaderboardFilter, setLeaderboardFilter] = useState<'ALL' | 'AL' | 'NÖTR' | 'ALMA'>('ALL');
+  const [leaderboardIndexFilter, setLeaderboardIndexFilter] = useState<LeaderboardIndexFilter>('ALL');
   const [leaderboardSort, setLeaderboardSort] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'score', direction: 'desc' });
   const [leaderboardViewMode, setLeaderboardViewMode] = useState<'list' | 'icons'>('list');
   const [themesSort, setThemesSort] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'score', direction: 'desc' });
@@ -5174,10 +5184,25 @@ export default function ValuationTerminal({
             const ranked = sortReportsByRank(savedReports);
             const filtered = ranked.filter(r => {
               const matchesSearch = !leaderboardSearch.trim() || 
-                r.ticker.toLowerCase().includes(leaderboardSearch.toLowerCase().trim());
+                r.ticker.toLowerCase().includes(leaderboardSearch.toLowerCase().trim()) ||
+                ((r as any).companyName || r.extractedData?.company_name || '').toLowerCase().includes(leaderboardSearch.toLowerCase().trim());
               const matchesFilter = leaderboardFilter === 'ALL' || r.decision === leaderboardFilter;
-              return matchesSearch && matchesFilter;
+              const matchesIndex = matchesIndexFilter(r.ticker, leaderboardIndexFilter);
+              return matchesSearch && matchesFilter && matchesIndex;
             });
+
+            const indexCounts = (() => {
+              let all = 0, b30 = 0, b50 = 0, b100 = 0, non100 = 0;
+              for (const r of savedReports) {
+                all++;
+                const sym = r.ticker;
+                if (isBist30(sym)) b30++;
+                if (isBist50(sym)) b50++;
+                if (isBist100(sym)) b100++;
+                if (isBistNon100(sym)) non100++;
+              }
+              return { all, b30, b50, b100, non100 };
+            })();
 
             const sortedLeaderboard = [...filtered].sort((a, b) => {
               const { key, direction } = leaderboardSort;
@@ -5255,31 +5280,69 @@ export default function ValuationTerminal({
                 </div>
 
                 <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
-                  <div className="p-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-950/60">
+                  <div className="p-4 border-b border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-slate-950/60">
                     <div className="relative flex-1 min-w-[200px] max-w-xs">
                       <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
                       <input
                         type="text"
                         value={leaderboardSearch}
                         onChange={e => setLeaderboardSearch(e.target.value)}
-                        placeholder="Hisse kodu ara (Örn: AGESA)..."
+                        placeholder="Hisse kodu veya şirket ara (Örn: THYAO)..."
                         className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
                       />
                     </div>
 
-                    <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
-                      {(['ALL', 'AL', 'NÖTR', 'ALMA'] as const).map(f => (
-                        <button
-                          key={f}
-                          type="button"
-                          onClick={() => setLeaderboardFilter(f)}
-                          className={`px-2.5 py-1 rounded text-[11px] font-semibold transition cursor-pointer ${
-                            leaderboardFilter === f ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          {f === 'ALL' ? 'Tümü' : f}
-                        </button>
-                      ))}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* BIST Endeks Filtresi */}
+                      <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+                        <span className="text-[10px] uppercase font-bold text-slate-500 px-1.5 select-none hidden sm:inline">Endeks:</span>
+                        {([
+                          { key: 'ALL', label: 'Tümü', count: indexCounts.all, activeCls: 'bg-slate-700 text-white' },
+                          { key: 'BIST30', label: 'BIST 30', count: indexCounts.b30, activeCls: 'bg-indigo-600 text-white' },
+                          { key: 'BIST50', label: 'BIST 50', count: indexCounts.b50, activeCls: 'bg-cyan-600 text-white' },
+                          { key: 'BIST100', label: 'BIST 100', count: indexCounts.b100, activeCls: 'bg-sky-600 text-white' },
+                          { key: 'BIST_NON100', label: 'BIST 100 Dışı', count: indexCounts.non100, activeCls: 'bg-purple-600 text-white' }
+                        ] as const).map(f => (
+                          <button
+                            key={f.key}
+                            type="button"
+                            onClick={() => setLeaderboardIndexFilter(f.key)}
+                            className={`px-2 py-1 rounded text-[11px] font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                              leaderboardIndexFilter === f.key ? f.activeCls : 'text-slate-400 hover:text-white'
+                            }`}
+                            title={`${f.label} (${f.count} hisse)`}
+                          >
+                            <span>{f.label}</span>
+                            <span className={`text-[9px] px-1 py-0.2 rounded font-mono ${
+                              leaderboardIndexFilter === f.key ? 'bg-black/30 text-white' : 'text-slate-500'
+                            }`}>
+                              {f.count}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Karar Filtresi */}
+                      <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+                        <span className="text-[10px] uppercase font-bold text-slate-500 px-1.5 select-none hidden sm:inline">Karar:</span>
+                        {(['ALL', 'AL', 'NÖTR', 'ALMA'] as const).map(f => (
+                          <button
+                            key={f}
+                            type="button"
+                            onClick={() => setLeaderboardFilter(f)}
+                            className={`px-2.5 py-1 rounded text-[11px] font-semibold transition cursor-pointer ${
+                              leaderboardFilter === f
+                                ? f === 'AL' ? 'bg-emerald-600 text-white'
+                                  : f === 'ALMA' ? 'bg-rose-600 text-white'
+                                  : f === 'NÖTR' ? 'bg-amber-600 text-white'
+                                  : 'bg-slate-700 text-white'
+                                : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            {f === 'ALL' ? 'Tümü' : f}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
@@ -5295,6 +5358,7 @@ export default function ValuationTerminal({
                           const prNum = parseFloat(item.price || '0') || 0;
                           const discNum = (fvNum > 0 && prNum > 0) ? Number((((fvNum - prNum) / prNum) * 100).toFixed(1)) : null;
                           const isCheap = discNum != null && discNum >= 0;
+                          const indexBadge = getBistIndexBadge(item.ticker);
 
                           return (
                             <div
@@ -5304,9 +5368,14 @@ export default function ValuationTerminal({
                             >
                               <div className="flex items-start justify-between gap-1.5">
                                 <div>
-                                  <span className="font-mono font-black text-sm text-white group-hover:text-emerald-400 transition tracking-tight">
-                                    {item.ticker}
-                                  </span>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-mono font-black text-sm text-white group-hover:text-emerald-400 transition tracking-tight">
+                                      {item.ticker}
+                                    </span>
+                                    <span className={`text-[9px] font-mono px-1 py-0.5 rounded border leading-none font-bold ${indexBadge.badgeClass}`}>
+                                      {indexBadge.label}
+                                    </span>
+                                  </div>
                                   <div className="text-[10px] text-slate-400 font-sans truncate max-w-[95px]">
                                     {item.sector ? getCompanySectorDisplayName(item.ticker, item.sector) : 'BIST'}
                                   </div>
@@ -5464,7 +5533,17 @@ export default function ValuationTerminal({
                                 #{index + 1}
                               </td>
                               <td className="p-3.5">
-                                <span className="font-bold text-sm text-white font-mono hover:text-[#f5c242] transition">{item.ticker}</span>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-sm text-white font-mono hover:text-[#f5c242] transition">{item.ticker}</span>
+                                  {(() => {
+                                    const badge = getBistIndexBadge(item.ticker);
+                                    return (
+                                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border leading-none font-bold ${badge.badgeClass}`}>
+                                        {badge.label}
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
                               </td>
                               <td className="p-3.5 text-right font-mono font-semibold text-slate-200">
                                 {prNum > 0 ? `₺${prNum.toFixed(2)}` : '—'}
