@@ -10,6 +10,10 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
+// Sunucu İçi Önbellek (In-Memory Cache): PostgreSQL statement-timeout ve gereksiz sorguları önler
+let cachedReportsResponse: { data: { reports: any[]; isCloudConfigured: boolean }; timestamp: number } | null = null;
+const CACHE_TTL_MS = 60 * 1000; // 60 saniye önbellek
+
 // GET: Değerleme raporlarını buluttan veya ticker bazında çek
 export async function GET(req: NextRequest) {
   try {
@@ -68,13 +72,55 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const { data, error } = await supabase
-      .from('valuation_reports')
-      .select('*')
-      .order('updated_at', { ascending: false });
+    // 1. Sunucu İçi Önbellek (In-Memory Cache):
+    // Veritabanına gereksiz yük binmesini ve 57014 statement-timeout'u önler
+    const now = Date.now();
+    if (cachedReportsResponse && (now - cachedReportsResponse.timestamp) < CACHE_TTL_MS) {
+      return NextResponse.json(cachedReportsResponse.data, {
+        headers: {
+          'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
+          'X-Cache': 'HIT'
+        }
+      });
+    }
 
-    if (error) {
-      console.error('Supabase fetch error:', error);
+    // 2. Dayanıklı Sayfalı Çekim (Resilient Chunked Fetch):
+    // 145+ şirketi tek bir devasa sorguyla çekmek yerine, PostgreSQL'in statement timeout
+    // limitine takılmasını engellemek için 50'şerli güvenli pencereler halinde çeker.
+    const pageSize = 50;
+    let allRows: any[] = [];
+    let from = 0;
+    let hasMore = true;
+    let fetchError: any = null;
+
+    while (hasMore) {
+      const to = from + pageSize - 1;
+      const { data: pageData, error: pageErr } = await supabase
+        .from('valuation_reports')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .range(from, to);
+
+      if (pageErr) {
+        console.error(`[Reports] Sayfalı çekim hatası (${from}-${to}):`, pageErr);
+        fetchError = pageErr;
+        break;
+      }
+
+      if (!pageData || pageData.length === 0) {
+        break;
+      }
+
+      allRows = allRows.concat(pageData);
+      if (pageData.length < pageSize) {
+        hasMore = false;
+      } else {
+        from += pageSize;
+      }
+    }
+
+    if (fetchError && allRows.length === 0) {
+      console.error('Supabase fetch error:', fetchError);
       return NextResponse.json({ 
         reports: [], 
         isCloudConfigured: true, 
@@ -82,7 +128,7 @@ export async function GET(req: NextRequest) {
       }, { status: 500 });
     }
 
-    const reports = (data || []).map((row: any) => ({
+    const reports = allRows.map((row: any) => ({
       id: row.id,
       ticker: row.ticker,
       price: row.price,
@@ -95,7 +141,15 @@ export async function GET(req: NextRequest) {
       extractedData: row.extracted_data,
     }));
 
-    return NextResponse.json({ reports, isCloudConfigured: true });
+    const responsePayload = { reports, isCloudConfigured: true };
+    cachedReportsResponse = { data: responsePayload, timestamp: now };
+
+    return NextResponse.json(responsePayload, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
+        'X-Cache': 'MISS'
+      }
+    });
   } catch (err: any) {
     console.error('GET /api/reports handler error:', err);
     return NextResponse.json({ 
@@ -173,6 +227,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Rapor kaydedilirken veritabanı hatası oluştu.', isCloudConfigured: true }, { status: 500 });
     }
 
+    cachedReportsResponse = null;
     return NextResponse.json({ success: true, isCloudConfigured: true });
   } catch (err: any) {
     console.error('POST /api/reports handler error:', err);
@@ -248,6 +303,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Kayıt silinirken veritabanı hatası oluştu.', isCloudConfigured: true }, { status: 500 });
     }
 
+    cachedReportsResponse = null;
     return NextResponse.json({ success: true, isCloudConfigured: true });
   } catch (err: any) {
     console.error('DELETE /api/reports handler error:', err);

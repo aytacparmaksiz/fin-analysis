@@ -2009,7 +2009,23 @@ export default function ValuationTerminal({
               }
               const merged = Array.from(tickerMap.values()).map(reconcileSavedReportWithLatestEngine);
               setSavedReports(merged);
-              localStorage.setItem('fin_valuation_reports', JSON.stringify(merged));
+              try {
+                localStorage.setItem('fin_valuation_reports', JSON.stringify(merged));
+              } catch (storageErr) {
+                try {
+                  // Tarayıcı 5MB localStorage kotasını aşarsa rapor metinlerini arındırıp kompakt kaydet
+                  const compact = merged.map(r => ({
+                    ...r,
+                    report: '',
+                    extractedData: r.extractedData ? {
+                      ...r.extractedData,
+                      scoreResult: undefined,
+                      score_result: undefined
+                    } : undefined
+                  }));
+                  localStorage.setItem('fin_valuation_reports', JSON.stringify(compact));
+                } catch {}
+              }
             }
           }
         }
@@ -5247,9 +5263,17 @@ export default function ValuationTerminal({
               <div className="space-y-6">
                 <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
-                    <h2 className="text-xl font-bold text-white tracking-tight font-sans">
-                      Hisse Tarama ve Sıralama
-                    </h2>
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-xl font-bold text-white tracking-tight font-sans">
+                        Hisse Tarama ve Sıralama
+                      </h2>
+                      {isSyncing && (
+                        <span className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-0.5 rounded-full animate-pulse">
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <span>Bulut Güncelleniyor...</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-1 bg-[#12151c] p-1 rounded-lg border border-slate-800">
                     <button
