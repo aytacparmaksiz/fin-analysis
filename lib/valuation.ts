@@ -2196,7 +2196,19 @@ export function calculateSectorScore(
         const calcG = computeComparableIncomeGrowth((h) => h?.revenue);
         if (calcG !== null) revG = calcG;
       }
-      const fcfM = parseFinancialNumber(latest?.fcf_margin ?? latest?.ebitda_margin) ?? 15.0;
+      let fcfM: number | null = null;
+      const actualFcf = parseFinancialNumber(latest?.free_cash_flow ?? latest?.fcf);
+      const actualRev = parseFinancialNumber(latest?.revenue);
+      if (actualFcf != null && actualRev != null && actualRev > 0) {
+        fcfM = Number(((actualFcf / actualRev) * 100).toFixed(1));
+      } else {
+        const actualOcf = parseFinancialNumber(latest?.operating_cash_flow ?? latest?.ocf);
+        if (actualOcf != null && actualRev != null && actualRev > 0) {
+          fcfM = Number(((actualOcf / actualRev) * 100).toFixed(1));
+        } else {
+          fcfM = parseFinancialNumber(latest?.fcf_margin ?? latest?.ebitda_margin) ?? 15.0;
+        }
+      }
       const ruleOf40 = revG + fcfM;
       let s1 = 18;
       let r1 = 'Büyüme ve operasyonel nakit dengeli';
@@ -2204,7 +2216,7 @@ export function calculateSectorScore(
       if (ruleOf40 >= 50.0) { s1 = 25; r1 = `Seçkin Teknoloji Şirketi: Rule of 40 (%${ruleOf40.toFixed(1)}) dünya standartlarının oldukça üzerinde!`; st1 = 'good'; }
       else if (ruleOf40 >= 40.0) { s1 = 22; r1 = `Rule of 40 Başarılı: Büyüme + Nakit marjı (%${ruleOf40.toFixed(1)}) sağlıklı genişleme üretiyor.`; st1 = 'good'; }
       else if (ruleOf40 >= 20.0) { s1 = 14; r1 = `Rule of 40 (%${ruleOf40.toFixed(1)}) sektör ortalamasının altında, marj veya büyüme ivmesi gerek.`; st1 = 'warning'; }
-      else { s1 = 6; r1 = `Rule of 40 Zayıf: Büyüme ve kârlılık bileşimi (%${ruleOf40.toFixed(1)}) teknoloji normlarının gerisinde.`; st1 = 'danger'; anomalies.push(`Zayıf Rule of 40: %${ruleOf40.toFixed(1)}`); }
+      else { s1 = 6; r1 = `Rule of 40 Zayıf: Büyüme ve serbest nakit akımı bileşimi (%${ruleOf40.toFixed(1)}) teknoloji normlarının gerisinde (Tahakkuk Riski).`; st1 = 'danger'; anomalies.push(`Zayıf Rule of 40: %${ruleOf40.toFixed(1)}`); }
       breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
 
       // 2. Yüksek Brüt Kâr Marjı (Max 25)
@@ -4706,9 +4718,27 @@ export function computeSectorValuationAndDrivers(
       targetMultipleStr = 'P/NAV 0,75x (%25 İskonto)';
       targetMultipleExpl = 'Hedef Net Aktif Değeri (P/NAV) çarpanı (%25 iskonto bazlı)';
     } else if (sector === 'TECH') {
-      targetMultipleNum = 4.2;
-      targetMultipleStr = 'FD/Satışlar 4,2x (Rule of 40 Bazlı)';
-      targetMultipleExpl = 'Yüksek büyüme ve yazılım operasyonel nakit dönüşümüne göre FD/Satışlar çarpanı';
+      const secMult = resolveOfficialSectorMultiples('Teknoloji', { ev: 3.19, pe: 13.71, pb: 2.55 });
+      const baseSecEvSales = secMult.ev_sales ?? 3.19;
+      
+      const actualFcf = parseFinancialNumber(latest?.free_cash_flow ?? latest?.fcf);
+      const actualRev = parseFinancialNumber(latest?.revenue);
+      const actualFcfMargin = (actualFcf != null && actualRev != null && actualRev > 0) ? (actualFcf / actualRev) * 100 : null;
+      const effectiveTechRule40 = revGrowth + (actualFcfMargin ?? 15.0);
+
+      let dynamicTechEvSales = baseSecEvSales;
+      if (effectiveTechRule40 >= 40.0) {
+        dynamicTechEvSales = Math.min(5.5, Math.max(3.8, Number((baseSecEvSales * 1.30).toFixed(1))));
+        targetMultipleStr = `FD/Satışlar ${dynamicTechEvSales.toString().replace('.', ',')}x (Rule of 40 %${effectiveTechRule40.toFixed(1)} Primi)`;
+      } else if (effectiveTechRule40 >= 20.0) {
+        dynamicTechEvSales = Number(baseSecEvSales.toFixed(1));
+        targetMultipleStr = `FD/Satışlar ${dynamicTechEvSales.toString().replace('.', ',')}x (Sektör Ortalaması)`;
+      } else {
+        dynamicTechEvSales = Math.max(2.0, Number((baseSecEvSales * 0.85).toFixed(1)));
+        targetMultipleStr = `FD/Satışlar ${dynamicTechEvSales.toString().replace('.', ',')}x (Zayıf Rule of 40 %${effectiveTechRule40.toFixed(1)} İskontosu)`;
+      }
+      targetMultipleNum = dynamicTechEvSales;
+      targetMultipleExpl = `Reel büyüme (%${revGrowth.toFixed(1)}) ve serbest nakit marjı (%${(actualFcfMargin ?? 0).toFixed(1)}) bileşimine göre dinamik FD/Satışlar çarpanı`;
     } else if (sector === 'FINANCIAL_SERVICES') {
       const safeKe = Math.max(12.0, ke);
       const macroGrowth = 18.0;
@@ -5227,9 +5257,12 @@ export function computeSectorValuationAndDrivers(
     } else {
       const clampedRevGrowth = Math.min(0.85, Math.max(-0.40, revGrowth / 100));
       const forwardRev = revFull > 0 ? revFull * (1 + clampedRevGrowth) : 0;
-      const evSalesMult = Math.max(2.5, Math.min(6.5, targetMultipleNum));
+      const evSalesMult = Math.max(2.0, Math.min(6.5, targetMultipleNum));
       const firmValue = forwardRev * evSalesMult;
-      const equityValue = firmValue - netDebt;
+      const minInt = (parseFinancialNumber(latest?.minority_interests ?? latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+      const leaseLiab = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
+      const totalDebtBridge = netDebt + leaseLiab + minInt;
+      const equityValue = firmValue - totalDebtBridge;
       const salesPerShare = equityValue > 0 ? (equityValue / effectiveShareCount) : 0;
 
       const forwardNet = netFull > 0 ? netFull * (1 + Math.min(0.85, Math.max(-0.50, netGrowth / 100))) : 0;

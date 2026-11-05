@@ -62,7 +62,15 @@ export class IsYatirimApiAdapter {
         const v = dict[`code_${c}`];
         if (v !== undefined && v !== null && v !== 0) return v;
       }
-      // 2. Açıklama tam eşleşmesi üzerinde sıfır olmayan değeri ara
+      // 2. Eğer kodlardan biri açıkça dict içinde tanımlıysa (0 olsa dahi),
+      // bu kod tablonun resmi satırıdır. Başka alakasız satırların aynı isimli açıklamalarına (ör. 1BC vs 1AB)
+      // veya dönen/duran varlık karışımlarına asla atlama!
+      for (const c of codes) {
+        if (dict[`code_${c}`] !== undefined && dict[`code_${c}`] !== null) {
+          return dict[`code_${c}`];
+        }
+      }
+      // 3. Kodlar dict içinde hiç yoksa, açıklama tam eşleşmesi üzerinde sıfır olmayan değeri ara
       for (const sub of descSubstrings) {
         const target = norm(sub);
         for (const [k, v] of Object.entries(dict)) {
@@ -73,7 +81,7 @@ export class IsYatirimApiAdapter {
           }
         }
       }
-      // 3. Açıklama alt metin eşleşmesi üzerinde sıfır olmayan değeri ara
+      // 4. Açıklama alt metin eşleşmesi üzerinde sıfır olmayan değeri ara
       for (const sub of descSubstrings) {
         const target = norm(sub);
         for (const [k, v] of Object.entries(dict)) {
@@ -84,7 +92,7 @@ export class IsYatirimApiAdapter {
           }
         }
       }
-      // 4. Eğer hiçbirinde sıfır olmayan değer bulunamadıysa ve bir kodda açıkça 0 varsa 0 dön
+      // 5. Eğer hiçbirinde sıfır olmayan değer bulunamadıysa ve bir kodda açıkça 0 varsa 0 dön
       for (const c of codes) {
         if (dict[`code_${c}`] === 0) return 0;
       }

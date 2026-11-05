@@ -1,6 +1,7 @@
 import { test, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { computeSectorValuationAndDrivers, calculateSectorScore, calculateDuPont5Step } from '../lib/valuation.ts';
+import { IsYatirimApiAdapter } from '../lib/isyatirim-adapter.ts';
 
 describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
 
@@ -619,6 +620,75 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
       assert.ok(res.valuation.fair_value > 0, `${comp.ticker} fair value must be positive, got ${res.valuation.fair_value}`);
       assert.ok(['AL', 'ALMA', 'NÖTR'].includes(res.valuation.final_decision), `${comp.ticker} decision must be AL/ALMA/NÖTR, got ${res.valuation.final_decision}`);
     }
+  });
+
+  it('20. ATATP (Tech Data Integrity & Real Rule of 40): Separates non-current financial investment (1BC: 7.04B) from cash, uses real FCF in Rule of 40, and applies minority interests', () => {
+    // 1. Adapter mapping test: 1AB (short-term) is 0, 1BC (non-current) is 7.04B
+    const mockDict = {
+      code_1A: 1437456433,
+      code_1AA: 462086452,
+      desc_nakit_ve_nakit_benzerleri: 462086452,
+      code_1AB: 0,
+      desc_finansal_yatirimlar: 7039214187,
+      code_1BC: 7039214187,
+      code_2AA: 26215999,
+      code_2BA: 44411329,
+      code_3C: 3665488134,
+      desc_satis_gelirleri: 3665488134,
+      code_3Z: 1340871160,
+      code_4C: 559440738,
+      code_4CB: 76578357
+    };
+
+    const mapped = IsYatirimApiAdapter.mapPeriodDictionary('2026/06', mockDict, { ticker: 'ATATP', sector: 'TECH' });
+    assert.equal(mapped.financial_investments, 0, 'Short-term financial investments (1AB) must be 0, not polluted by 1BC');
+    assert.equal(mapped.non_current_financial_investments, 7039214187, 'Non-current financial investments (1BC) must be 7.04B');
+    assert.equal(mapped.net_debt, -391459124, 'Net debt must be -391.46M TL (real net cash), not -7.43B TL');
+
+    // 2. Valuation and Rule of 40 test
+    const atatpData = {
+      ticker: 'ATATP',
+      sector: 'TECH',
+      current_price: 206.10,
+      share_count: 93800000,
+      paid_in_capital: 93800000,
+      financial_history: [
+        {
+          period: '2025/06',
+          revenue: 3755911808,
+          operating_profit: 2641115833,
+          net_income: 1424882058,
+          equity: 3170728807,
+          roe: 46.8
+        },
+        {
+          period: '2026/06',
+          revenue: 3665488134,
+          gross_margin: 87.3,
+          ebitda: 2729492791,
+          ebitda_margin: 74.5,
+          net_income: 1340871160,
+          operating_cash_flow: 559440738,
+          free_cash_flow: 76578357,
+          equity: 6416509467,
+          minority_interests: 3868185316,
+          non_controlling_interests: 3868185316,
+          net_debt: -391459124,
+          roe: 41.78,
+          roic: 54.53
+        }
+      ]
+    };
+
+    const scoreRes = calculateSectorScore(atatpData, 'TECH');
+    const r40Item = scoreRes.breakdown.find(b => b.category.includes('Rule of 40'));
+    assert.ok(r40Item, 'Must have Rule of 40 category');
+    assert.ok(r40Item.reason.includes('Tahakkuk Riski') || r40Item.reason.includes('Zayıf'), `Rule of 40 score reason must reflect weak cash conversion: ${r40Item.reason}`);
+    assert.ok(r40Item.score <= 14, `Rule of 40 score (${r40Item.score}/25) must be penalised due to negative growth + 2.1% FCF margin`);
+
+    const valRes = computeSectorValuationAndDrivers(atatpData, 206.10);
+    assert.ok(valRes.valuation.fair_value < 350, `Fair value must be deflated and realistic (got ${valRes.valuation.fair_value} TL, was 404 TL)`);
+    assert.equal(valRes.valuation.final_decision, 'NÖTR', 'Decision must be NÖTR (not false AL) due to deflated multiple and bridge');
   });
 
 });
