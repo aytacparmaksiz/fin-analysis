@@ -1644,6 +1644,8 @@ export function syncReportTextWithValuation(reportText: string, valuation: any):
   const fvStr = fv.toFixed(2).replace('.', ',');
   const bearStr = bear ? bear.toFixed(2).replace('.', ',') : (fv * 0.7).toFixed(2).replace('.', ',');
   const bullStr = bull ? bull.toFixed(2).replace('.', ',') : (fv * 1.3).toFixed(2).replace('.', ',');
+  const disc = valuation.discount_pct != null ? valuation.discount_pct : null;
+  const discStr = disc !== null ? `${disc > 0 ? '+' : ''}${disc.toFixed(1).replace('.', ',')}` : '';
 
   // 1. Hisse Başı Adil Değer senkronizasyonu
   text = text.replace(/(?:hesapladığı|hesaplanan)\s+\*{0,2}\d+(?:[.,]\d+)?\s*TL\*{0,2}\s+adil\s+değer/gi, `hesapladığı **${fvStr} TL** adil değer`);
@@ -1654,15 +1656,20 @@ export function syncReportTextWithValuation(reportText: string, valuation: any):
     return `Adil Değer: **${fvStr} TL**`;
   });
   text = text.replace(/adil\s+değeri\s*\*{0,2}\d+(?:[.,]\d+)?\s*TL\*{0,2}/gi, `adil değeri **${fvStr} TL**`);
+  text = text.replace(/\\text\{Hedef\s+Adil\s+Değer\}\s*=\s*\d+(?:[.,]\d+)?\\text\{\s*TL\}/gi, `\\text{Hedef Adil Değer} = ${fv.toFixed(2)}\\text{ TL}`);
+  text = text.replace(/(?:\*{0,2}Baz\s+Senaryo\s*\(Adil\s+Değer\)\*{0,2}\s*[:=]?)\s*\*{0,2}\d+(?:[.,]\d+)?\s*TL\*{0,2}/gi, `- **Baz Senaryo (Adil Değer):** **${fvStr} TL**`);
+  if (discStr) {
+    text = text.replace(/\\text\{İskonto\}\s*=\s*\\%[+-]?\d+(?:[.,]\d+)?/gi, `\\text{İskonto} = \\%${discStr}`);
+  }
 
   // 2. Ayı Senaryosu taban fiyatı senkronizasyonu
-  text = text.replace(/(?:Ayı\s+Senaryosu|Taban\s+Hedef\s+Fiyat|Taban\s+Fiyat)\s*(?:\([^)]*\))?\s*[:=]?\s*\*{0,2}\d+(?:[.,]\d+)?\s*TL\*{0,2}/gi, () => {
-    return `Ayı Senaryosu (Taban Fiyat): **${bearStr} TL**`;
+  text = text.replace(/(?:\*{0,2}(?:Ayı\s+Senaryosu|Taban\s+Hedef\s+Fiyat|Taban\s+Fiyat)\s*(?:\([^)]*\))?\*{0,2}\s*[:=]?)\s*\*{0,2}\d+(?:[.,]\d+)?\s*TL\*{0,2}/gi, () => {
+    return `- **Ayı Senaryosu (Taban):** **${bearStr} TL**`;
   });
 
   // 3. Boğa Senaryosu tavan fiyatı senkronizasyonu
-  text = text.replace(/(?:Boğa\s+Senaryosu|Tavan\s+Hedef\s+Fiyat|Tavan\s+Fiyat)\s*(?:\([^)]*\))?\s*[:=]?\s*\*{0,2}\d+(?:[.,]\d+)?\s*TL\*{0,2}/gi, () => {
-    return `Boğa Senaryosu (Tavan Fiyat): **${bullStr} TL**`;
+  text = text.replace(/(?:\*{0,2}(?:Boğa\s+Senaryosu|Tavan\s+Hedef\s+Fiyat|Tavan\s+Fiyat)\s*(?:\([^)]*\))?\*{0,2}\s*[:=]?)\s*\*{0,2}\d+(?:[.,]\d+)?\s*TL\*{0,2}/gi, () => {
+    return `- **Boğa Senaryosu (Tavan):** **${bullStr} TL**`;
   });
 
   // 4. Formül eşitliği senkronizasyonu (örn. ... = 3,38 TL veya ... = 13,66 TL)
