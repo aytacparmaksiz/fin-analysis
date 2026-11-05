@@ -572,13 +572,13 @@ export function isDefenseSector(officialSectorName: string, ticker?: string): bo
 
 /**
  * Regüle Dağıtım Altyapısı (EPDK Düzenlemeye Tabi Varlık Tabanı - RAB Modeli):
- * ENJSA (Elektrik Dağıtım & Perakende), AKFYE.
+ * ENJSA (Elektrik Dağıtım & Perakende).
  */
 export function isRegulatedDistributionSector(officialSectorName: string, ticker?: string): boolean {
   const s = resolveOfficialSectorName(officialSectorName, ticker);
   if (s === 'Elektrik - Doğalgaz Dağıtım' || s.includes('Dağıtım')) return true;
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  return ['ENJSA', 'AKFYE'].includes(t);
+  return ['ENJSA'].includes(t);
 }
 
 /**
