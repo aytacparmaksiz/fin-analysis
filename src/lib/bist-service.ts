@@ -4,7 +4,8 @@ import {
   enrichAndSanitizeFinancialHistory, 
   computeSectorValuationAndDrivers, 
   parseFinancialNumber,
-  parsePeriodSortKey
+  parsePeriodSortKey,
+  getAnnualizationFactor
 } from './valuation.ts';
 import {
   getIsYatirimMultiplesForTicker,
@@ -168,7 +169,7 @@ export interface FinancialHistoryItem {
   dividends_paid?: number | null;
   net_change_in_cash?: number | null;
 
-  // Sektörel / Sigorta / Bankacılık
+  // Sektörel / Sigorta
   written_premiums?: number | null;
   gross_written_premiums?: number | null;
   earned_premiums?: number | null;
@@ -181,6 +182,21 @@ export interface FinancialHistoryItem {
   ga_ratio?: number | null;
   commission_ratio?: number | null;
   combined_ratio?: number | null;
+
+  // Sektörel / Bankacılık
+  net_interest_income?: number | null;
+  interest_income?: number | null;
+  interest_expense?: number | null;
+  net_fees_commissions?: number | null;
+  loans?: number | null;
+  deposits?: number | null;
+  subordinated_debt?: number | null;
+  total_operating_income?: number | null;
+  loan_to_deposit?: number | null;
+  nim?: number | null;
+  npl_ratio?: number | null;
+  car_ratio?: number | null;
+  syr?: number | null;
   [key: string]: any;
 }
 
@@ -1200,6 +1216,34 @@ export async function fetchAndAnalyzeBistCompany(
             enhanced.expense_ratio = Number((enhanced.combined_ratio - enhanced.loss_ratio).toFixed(1));
             if (enhanced.ga_ratio == null) enhanced.ga_ratio = 8.7;
             if (enhanced.commission_ratio == null) enhanced.commission_ratio = Number(Math.max(0, enhanced.expense_ratio - enhanced.ga_ratio).toFixed(1));
+          }
+          if (meta.sector === 'BANKING') {
+            const factor = getAnnualizationFactor(enhanced.period);
+            const assets = enhanced.total_assets;
+            const nii = enhanced.net_interest_income ?? enhanced.revenue;
+            if (enhanced.nim == null && nii != null && assets != null && assets > 0) {
+              enhanced.nim = Number((((nii * factor) / assets) * 100).toFixed(2));
+            }
+            if (enhanced.car_ratio == null && enhanced.equity != null && assets != null && assets > 0) {
+              const safeLoans = enhanced.loans ?? enhanced.trade_receivables ?? (assets * 0.58);
+              const rwa = (safeLoans * 0.80) + (Math.max(0, assets - safeLoans) * 0.20);
+              const totalCap = enhanced.equity + (enhanced.subordinated_debt || 0);
+              enhanced.car_ratio = Number((Math.min(28.0, Math.max(12.0, (totalCap / (rwa || 1)) * 100))).toFixed(2));
+              enhanced.syr = enhanced.car_ratio;
+            }
+            if (enhanced.npl_ratio == null) {
+              if (enhanced.npl_loans != null && enhanced.loans != null && enhanced.loans > 0) {
+                enhanced.npl_ratio = Number(((enhanced.npl_loans / (enhanced.loans + enhanced.npl_loans)) * 100).toFixed(2));
+              } else {
+                enhanced.npl_ratio = 1.85;
+              }
+            }
+            if (enhanced.syr == null && enhanced.car_ratio != null) {
+              enhanced.syr = enhanced.car_ratio;
+            }
+            if (enhanced.loan_to_deposit == null && enhanced.loans != null && enhanced.deposits != null && enhanced.deposits > 0) {
+              enhanced.loan_to_deposit = Number(((enhanced.loans / enhanced.deposits) * 100).toFixed(1));
+            }
           }
           return enhanced;
         }));

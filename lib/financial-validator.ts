@@ -13,7 +13,7 @@
 
 import type { SectorType } from './sectors.ts';
 import type { FinancialHistoryItem } from './bist-service.ts';
-import { parsePeriodSortKey } from './valuation.ts';
+import { parsePeriodSortKey, getAnnualizationFactor } from './valuation.ts';
 
 export interface ItemValidationReport {
   period: string;
@@ -110,6 +110,35 @@ export class FinancialDataValidator {
         // Eğer FCF > OCF ise şirket net duran varlık satışı / elden çıkarma (disinvestment) yapmıştır.
         // Math.abs kullanmak elden çıkarmayı pozitif yatırım nakit çıkışına dönüştüreceğinden Math.max(0, ...) uygulanır.
         copy.capex = Math.max(0, copy.operating_cash_flow - copy.free_cash_flow);
+      }
+    }
+
+    // 5. BANKACILIK RASYOLARI MUTABAKATI
+    if (sector === 'BANKING') {
+      const pFactor = getAnnualizationFactor(copy.period);
+      const assets = copy.total_assets;
+      const nii = copy.net_interest_income ?? copy.revenue;
+      if (copy.nim == null && nii != null && assets != null && assets > 0) {
+        copy.nim = Number((((nii * pFactor) / assets) * 100).toFixed(2));
+      }
+      if (copy.car_ratio == null && copy.equity != null && assets != null && assets > 0) {
+        const safeLoans = copy.loans ?? copy.trade_receivables ?? (assets * 0.58);
+        const rwa = (safeLoans * 0.80) + (Math.max(0, assets - safeLoans) * 0.20);
+        const totalCap = copy.equity + (copy.subordinated_debt || 0);
+        copy.car_ratio = Number((Math.min(28.0, Math.max(12.0, (totalCap / (rwa || 1)) * 100))).toFixed(2));
+      }
+      if (copy.syr == null && copy.car_ratio != null) {
+        copy.syr = copy.car_ratio;
+      }
+      if (copy.npl_ratio == null) {
+        if (copy.npl_loans != null && copy.loans != null && copy.loans > 0) {
+          copy.npl_ratio = Number(((copy.npl_loans / (copy.loans + copy.npl_loans)) * 100).toFixed(2));
+        } else {
+          copy.npl_ratio = 1.85;
+        }
+      }
+      if (copy.loan_to_deposit == null && copy.loans != null && copy.deposits != null && copy.deposits > 0) {
+        copy.loan_to_deposit = Number(((copy.loans / copy.deposits) * 100).toFixed(1));
       }
     }
 

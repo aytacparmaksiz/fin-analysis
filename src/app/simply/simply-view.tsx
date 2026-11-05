@@ -4551,7 +4551,9 @@ export default function SimplyView({
                 </div>
               </div>
               <p className="text-xs text-slate-400 font-mono">
-                ROE = Vergi Yükü (Net/EBT) × Faiz Yükü (EBT/EBIT) × Faaliyet Marjı (EBIT/Satış) × Varlık Devri (Satış/Aktif) × Finansal Kaldıraç (Aktif/Özkaynak)
+                {currentSector === 'BANKING'
+                  ? 'ROE = Vergi Yükü (Net/EBT) × Karşılık & Risk Yükü (EBT/Faaliyet Kârı) × Faaliyet Marjı (Kâr/Gelir) × Aktif Verimi (Gelir/Aktif) × Finansal Kaldıraç (Aktif/Özkaynak)'
+                  : 'ROE = Vergi Yükü (Net/EBT) × Faiz Yükü (EBT/EBIT) × Faaliyet Marjı (EBIT/Satış) × Varlık Devri (Satış/Aktif) × Finansal Kaldıraç (Aktif/Özkaynak)'}
               </p>
 
               <div className="grid grid-cols-2 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-[#2e3440] bg-[#21262d] border border-[#2e3440] rounded-xl overflow-hidden">
@@ -4564,27 +4566,39 @@ export default function SimplyView({
                 </div>
 
                 <div className="p-3 text-center">
-                  <div className="text-xs text-slate-400">Faiz Yükü</div>
+                  <div className="text-xs text-slate-400">
+                    {currentSector === 'BANKING' ? 'Karşılık Yükü' : 'Faiz Yükü'}
+                  </div>
                   <div className="text-base font-bold font-mono text-white mt-1">
                     {dupontResult.interestBurden != null ? `${dupontResult.interestBurden}x` : '—'}
                   </div>
-                  <div className="text-[11px] text-slate-500 font-mono">EBT/EBIT</div>
+                  <div className="text-[11px] text-slate-500 font-mono">
+                    {currentSector === 'BANKING' ? 'EBT/Faaliyet Kârı' : 'EBT/EBIT'}
+                  </div>
                 </div>
 
                 <div className="p-3 text-center">
-                  <div className="text-xs text-slate-400">EBIT Marjı</div>
+                  <div className="text-xs text-slate-400">
+                    {currentSector === 'BANKING' ? 'Faaliyet Marjı' : 'EBIT Marjı'}
+                  </div>
                   <div className="text-base font-bold font-mono text-[#f5c242] mt-1">
                     {dupontResult.ebitMargin != null ? `%${dupontResult.ebitMargin}` : '—'}
                   </div>
-                  <div className="text-[11px] text-slate-500 font-mono">EBIT/Satış</div>
+                  <div className="text-[11px] text-slate-500 font-mono">
+                    {currentSector === 'BANKING' ? 'Kâr/Toplam Gelir' : 'EBIT/Satış'}
+                  </div>
                 </div>
 
                 <div className="p-3 text-center">
-                  <div className="text-xs text-slate-400">Aktif Devri</div>
+                  <div className="text-xs text-slate-400">
+                    {currentSector === 'BANKING' ? 'Aktif Verimi' : 'Aktif Devri'}
+                  </div>
                   <div className="text-base font-bold font-mono text-cyan-400 mt-1">
                     {dupontResult.assetTurnover != null ? `${dupontResult.assetTurnover}x` : '—'}
                   </div>
-                  <div className="text-[11px] text-slate-500 font-mono">Satış/Aktif</div>
+                  <div className="text-[11px] text-slate-500 font-mono">
+                    {currentSector === 'BANKING' ? 'Gelir/Aktif' : 'Satış/Aktif'}
+                  </div>
                 </div>
 
                 <div className="p-3 text-center col-span-2 sm:col-span-1">

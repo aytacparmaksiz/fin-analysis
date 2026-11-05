@@ -1,6 +1,6 @@
 import { test, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeSectorValuationAndDrivers, calculateSectorScore } from '../lib/valuation.ts';
+import { computeSectorValuationAndDrivers, calculateSectorScore, calculateDuPont5Step } from '../lib/valuation.ts';
 
 describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
 
@@ -494,6 +494,131 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
     const res = computeSectorValuationAndDrivers(ahgazData, 14.50);
     assert.ok(res.valuation.formula_display.includes('RAB PD/DD'), `AHGAZ formula (${res.valuation.formula_display}) must include RAB PD/DD`);
     assert.ok(res.valuation.fair_value > 0);
+  });
+
+  it('16. DuPont 5-Step Banking Integrity: Bank deposit interest expense is not subtracted twice from EBIT', () => {
+    const bankItem = {
+      ticker: 'AKBNK',
+      sector: 'BANKING',
+      net_income: 15000000000,
+      total_operating_income: 45000000000,
+      operating_profit: 20000000000,
+      interest_expense: 50000000000,
+      total_assets: 1200000000000,
+      equity: 150000000000
+    };
+    const dupont = calculateDuPont5Step(bankItem, 'BANKING');
+    assert.equal(dupont.hasData, true);
+    assert.ok(dupont.taxBurden !== null && dupont.taxBurden > 0.5, `Tax burden (${dupont.taxBurden}) must be positive bank tax rate (~0.70x)`);
+    assert.ok(dupont.interestBurden !== null && dupont.interestBurden > 0.9, `Interest/Provision burden (${dupont.interestBurden}) must be > 0.9x`);
+    assert.ok(dupont.calculatedRoe !== null && dupont.calculatedRoe > 0, `Bank calculated ROE must be positive (${dupont.calculatedRoe}%)`);
+    assert.ok(dupont.driverSummary.includes('Bankacılık'), 'Driver summary must reflect banking context');
+  });
+
+  it('17. DGATE (Computer Hardware Wholesale): Low gross margin (~6.8%) does not trigger SaaS gm < 20% penalty', () => {
+    const dgateData = {
+      ticker: 'DGATE',
+      sector: 'TECH',
+      official_sector_name: 'Bilgisayar Toptancılığı',
+      current_price: 35.0,
+      share_count: 30000000,
+      paid_in_capital: 30000000,
+      financial_history: [
+        {
+          period: '2025/06',
+          revenue: 2000000000,
+          net_income: 30000000
+        },
+        {
+          period: '2026/06',
+          revenue: 2600000000,
+          gross_margin: 6.8,
+          operating_profit: 110000000,
+          ebitda: 120000000,
+          net_income: 45000000,
+          equity: 400000000,
+          net_debt: 50000000,
+          current_ratio: 1.25,
+          operating_cash_flow: 60000000,
+          roe: 22.0,
+          roic: 18.0
+        }
+      ]
+    };
+
+    const res = computeSectorValuationAndDrivers(dgateData, 35.0);
+    assert.notEqual(res.valuation.final_decision, 'ALMA', 'DGATE must not be overridden to ALMA due to 6.8% gross margin');
+    assert.ok(!res.valuation.safety_flags?.some(f => f.includes('Düşük Teknoloji Brüt Marjı')), 'Must not flag SaaS low gross margin');
+    const scoreRes = calculateSectorScore(dgateData, 'TECH', 'Bilgisayar Toptancılığı');
+    assert.ok(scoreRes.breakdown.some(b => b.reason.includes('Çalışma Sermayesi') || b.reason.includes('distribütör') || b.reason.includes('toptancı')), 'Must use wholesale distributor scoring');
+  });
+
+  it('18. DOHOL & AGHOL (Conglomerate Solo vs Consolidated Debt): Consolidating holding debt does not trigger false ALMA', () => {
+    const doholData = {
+      ticker: 'DOHOL',
+      sector: 'HOLDING',
+      current_price: 15.20,
+      share_count: 2616938288,
+      paid_in_capital: 2616938288,
+      financial_history: [
+        {
+          period: '2026/06',
+          revenue: 95000000000,
+          operating_profit: 12000000000,
+          net_income: 8500000000,
+          equity: 65000000000,
+          net_debt: 85000000000, // Consolidated debt of industrial/energy subs
+          holding_discount: 32.0,
+          roe: 19.5
+        }
+      ]
+    };
+
+    const scoreResult = calculateSectorScore(doholData, 'HOLDING');
+    const finHealth = scoreResult.breakdown.find(b => b.category.includes('Solo Nakit') || b.category.includes('Borçsuzluk'));
+    assert.ok(finHealth);
+    assert.ok(finHealth.score >= 20, `DOHOL leverage score (${finHealth.score}/25) must recognize holding structure`);
+  });
+
+  it('19. Comprehensive Multi-Sector 18-Company Stress Test: All sectors compute valid valuations without runtime exceptions', () => {
+    const multiSectorCompanies = [
+      // Banking
+      { ticker: 'ISCTR', sector: 'BANKING', current_price: 13.50, share_count: 10000000000, paid_in_capital: 10000000000, financial_history: [{ period: '2026/06', total_operating_income: 80000000000, net_income: 30000000000, equity: 280000000000, roe: 24.5, nim: 4.0, car_ratio: 18.5 }] },
+      // Insurance
+      { ticker: 'TURSG', sector: 'INSURANCE', current_price: 75.00, share_count: 1161523363, paid_in_capital: 1161523363, financial_history: [{ period: '2026/06', written_premiums: 45000000000, technical_balance: 6000000000, net_income: 8000000000, equity: 25000000000, roe: 38.0, combined_ratio: 92.5 }] },
+      { ticker: 'AGESA', sector: 'INSURANCE', current_price: 115.00, share_count: 180000000, paid_in_capital: 180000000, financial_history: [{ period: '2026/06', written_premiums: 12000000000, technical_balance: 2500000000, net_income: 3200000000, equity: 8500000000, roe: 45.0, combined_ratio: 88.0 }] },
+      // Retail
+      { ticker: 'BIMAS', sector: 'RETAIL', current_price: 520.00, share_count: 607200000, paid_in_capital: 607200000, financial_history: [{ period: '2026/06', revenue: 450000000000, ebitda: 32000000000, net_income: 18000000000, equity: 85000000000, net_debt: -12000000000, operating_cash_flow: 35000000000, working_capital_change: 8000000000, roic: 32.0, roe: 36.0 }] },
+      { ticker: 'MGROS', sector: 'RETAIL', current_price: 490.00, share_count: 181054233, paid_in_capital: 181054233, financial_history: [{ period: '2026/06', revenue: 260000000000, ebitda: 18000000000, net_income: 9000000000, equity: 48000000000, net_debt: -6000000000, operating_cash_flow: 20000000000, roic: 28.0, roe: 30.0 }] },
+      // Heavy / Steel
+      { ticker: 'EREGL', sector: 'INDUSTRIAL', current_price: 48.00, share_count: 3500000000, paid_in_capital: 3500000000, financial_history: [{ period: '2026/06', revenue: 180000000000, ebitda: 28000000000, net_income: 14000000000, equity: 220000000000, net_debt: 65000000000, roic: 11.0, roe: 12.0 }] },
+      { ticker: 'KRDMD', sector: 'INDUSTRIAL', current_price: 26.50, share_count: 780299698, paid_in_capital: 780299698, financial_history: [{ period: '2026/06', revenue: 42000000000, ebitda: 5800000000, net_income: 2600000000, equity: 35000000000, net_debt: 8000000000, roic: 9.5, roe: 10.2 }] },
+      // Petrochemical & Energy
+      { ticker: 'TUPRS', sector: 'INDUSTRIAL', current_price: 155.00, share_count: 1926795598, paid_in_capital: 1926795598, financial_history: [{ period: '2026/06', revenue: 680000000000, ebitda: 55000000000, net_income: 32000000000, equity: 180000000000, net_debt: -15000000000, roic: 26.0, roe: 28.0 }] },
+      { ticker: 'SISE', sector: 'INDUSTRIAL', current_price: 42.00, share_count: 3063214056, paid_in_capital: 3063214056, financial_history: [{ period: '2026/06', revenue: 190000000000, ebitda: 31000000000, net_income: 12000000000, equity: 160000000000, net_debt: 75000000000, roic: 12.5, roe: 13.0 }] },
+      { ticker: 'PETKM', sector: 'INDUSTRIAL', current_price: 18.20, share_count: 2534400000, paid_in_capital: 2534400000, financial_history: [{ period: '2026/06', revenue: 75000000000, ebitda: 4500000000, net_income: 1200000000, equity: 55000000000, net_debt: 28000000000, roic: 4.5, roe: 5.0 }] },
+      // Conglomerates
+      { ticker: 'SAHOL', sector: 'HOLDING', current_price: 92.00, share_count: 2040403931, paid_in_capital: 2040403931, financial_history: [{ period: '2026/06', revenue: 220000000000, operating_profit: 35000000000, net_income: 18000000000, equity: 190000000000, net_debt: 350000000000, holding_discount: 35.0, roe: 21.0 }] },
+      { ticker: 'AGHOL', sector: 'HOLDING', current_price: 310.00, share_count: 243534518, paid_in_capital: 243534518, financial_history: [{ period: '2026/06', revenue: 380000000000, operating_profit: 42000000000, net_income: 14000000000, equity: 120000000000, net_debt: 110000000000, holding_discount: 28.0, roe: 23.5 }] },
+      // Regulated Utilities
+      { ticker: 'ENJSA', sector: 'UTILITIES_TELCO', official_sector_name: 'Elektrik Dağıtım', current_price: 62.00, share_count: 1181068967, paid_in_capital: 1181068967, financial_history: [{ period: '2026/06', revenue: 150000000000, operating_profit: 22000000000, ebitda: 26000000000, net_income: 8500000000, equity: 75000000000, net_debt: 45000000000, roe: 22.0 }] },
+      // Technology
+      { ticker: 'INDES', sector: 'TECH', official_sector_name: 'Bilgisayar Toptancılığı', current_price: 8.50, share_count: 882000000, paid_in_capital: 882000000, financial_history: [{ period: '2026/06', revenue: 45000000000, gross_margin: 5.5, operating_profit: 1800000000, ebitda: 2000000000, net_income: 850000000, equity: 6500000000, net_debt: 1200000000, current_ratio: 1.20, operating_cash_flow: 900000000, roe: 20.5 }] },
+      { ticker: 'LOGO', sector: 'TECH', current_price: 110.00, share_count: 100000000, paid_in_capital: 100000000, financial_history: [{ period: '2026/06', revenue: 3500000000, gross_margin: 82.0, ebitda: 1400000000, net_income: 950000000, equity: 3200000000, net_debt: -450000000, roe: 38.0 }] },
+      // Aviation
+      { ticker: 'THYAO', sector: 'AVIATION', current_price: 295.00, share_count: 1380000000, paid_in_capital: 1380000000, financial_history: [{ period: '2026/06', revenue: 750000000000, ebitda: 175000000000, net_income: 65000000000, equity: 580000000000, net_debt: 280000000000, roic: 14.5, roe: 18.0 }] },
+      { ticker: 'PGSUS', sector: 'AVIATION', current_price: 240.00, share_count: 500000000, paid_in_capital: 500000000, financial_history: [{ period: '2026/06', revenue: 125000000000, ebitda: 38000000000, net_income: 16000000000, equity: 85000000000, net_debt: 65000000000, roic: 16.0, roe: 22.0 }] },
+      // Healthcare
+      { ticker: 'MPARK', sector: 'HEALTHCARE', current_price: 330.00, share_count: 208037202, paid_in_capital: 208037202, financial_history: [{ period: '2026/06', revenue: 32000000000, ebitda: 8500000000, net_income: 3800000000, equity: 18000000000, net_debt: 9500000000, roic: 22.0, roe: 28.0 }] }
+    ];
+
+    for (const comp of multiSectorCompanies) {
+      const res = computeSectorValuationAndDrivers(comp, comp.current_price);
+      assert.ok(res.valuation != null, `${comp.ticker} must produce a valuation object`);
+      assert.ok(typeof res.valuation.fair_value === 'number' && !isNaN(res.valuation.fair_value), `${comp.ticker} fair value must be a valid number, got ${res.valuation.fair_value}`);
+      assert.ok(res.valuation.fair_value > 0, `${comp.ticker} fair value must be positive, got ${res.valuation.fair_value}`);
+      assert.ok(['AL', 'ALMA', 'NÖTR'].includes(res.valuation.final_decision), `${comp.ticker} decision must be AL/ALMA/NÖTR, got ${res.valuation.final_decision}`);
+    }
   });
 
 });

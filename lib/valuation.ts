@@ -1932,7 +1932,7 @@ export function calculateSectorScore(
     // 2. Solo Bilanço Gücü & Kaldıraç (Max 25)
     const soloNetDebt = parseFinancialNumber(latest?.solo_net_debt);
     const tickerUpper = String(data?.ticker || latest?.ticker || '').toUpperCase();
-    const isBankConsolidatingHolding = ['KCHOL', 'SAHOL'].includes(tickerUpper);
+    const isBankConsolidatingHolding = ['KCHOL', 'SAHOL', 'AGHOL', 'DOHOL'].includes(tickerUpper);
     const netDebt = soloNetDebt ?? parseFinancialNumber(latest?.net_debt) ?? 0;
     const equity = parseFinancialNumber(latest?.equity) ?? 1;
     let s2 = 20;
@@ -1940,7 +1940,7 @@ export function calculateSectorScore(
     let st2: 'good' | 'warning' | 'danger' = 'good';
     if (isBankConsolidatingHolding && soloNetDebt === null) {
       s2 = 23;
-      r2 = 'Holding solo bilançosu güçlü net nakit pozisyonundadır; konsolide borçlar bankacılık ve sanayi iştiraklerinin operasyonel yükümlülükleridir (ana ortaklığa gayrikabili rücu).';
+      r2 = 'Holding solo bilançosu güçlü net nakit pozisyonundadır; konsolide borçlar bankacılık ve sanayi/ticaret iştiraklerinin operasyonel yükümlülükleridir (ana ortaklığa gayrikabili rücu).';
       st2 = 'good';
     } else if (netDebt <= 0) {
       if (hasHoldingSevereLoss) {
@@ -2112,63 +2112,142 @@ export function calculateSectorScore(
 
   } else if (sector === 'TECH') {
     // Teknoloji, Yazılım & Bilişim Puanlama Motoru
-    // 1. Rule of 40 (Büyüme + FCF Marjı) (Max 25)
-    let revG = 40.0;
-    if (sortedHistory.length >= 2) {
-      const calcG = computeComparableIncomeGrowth((h) => h?.revenue);
-      if (calcG !== null) revG = calcG;
-    }
-    const fcfM = parseFinancialNumber(latest?.fcf_margin ?? latest?.ebitda_margin) ?? 15.0;
-    const ruleOf40 = revG + fcfM;
-    let s1 = 18;
-    let r1 = 'Büyüme ve operasyonel nakit dengeli';
-    let st1: 'good' | 'warning' | 'danger' = 'good';
-    if (ruleOf40 >= 50.0) { s1 = 25; r1 = `Seçkin Teknoloji Şirketi: Rule of 40 (%${ruleOf40.toFixed(1)}) dünya standartlarının oldukça üzerinde!`; st1 = 'good'; }
-    else if (ruleOf40 >= 40.0) { s1 = 22; r1 = `Rule of 40 Başarılı: Büyüme + Nakit marjı (%${ruleOf40.toFixed(1)}) sağlıklı genişleme üretiyor.`; st1 = 'good'; }
-    else if (ruleOf40 >= 20.0) { s1 = 14; r1 = `Rule of 40 (%${ruleOf40.toFixed(1)}) sektör ortalamasının altında, marj veya büyüme ivmesi gerek.`; st1 = 'warning'; }
-    else { s1 = 6; r1 = `Rule of 40 Zayıf: Büyüme ve kârlılık bileşimi (%${ruleOf40.toFixed(1)}) teknoloji normlarının gerisinde.`; st1 = 'danger'; anomalies.push(`Zayıf Rule of 40: %${ruleOf40.toFixed(1)}`); }
-    breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
+    const tickerUpper = String(data?.ticker || latest?.ticker || '').toUpperCase();
+    const isComputerWholesale = targetSectorOrOfficial === 'Bilgisayar Toptancılığı' ||
+      ['DGATE', 'INDES', 'ARENA', 'PENTA'].includes(tickerUpper);
 
-    // 2. Yüksek Brüt Kâr Marjı (Max 25)
-    const gm = parseFinancialNumber(latest?.gross_margin);
-    let s2 = 18;
-    let r2 = 'Yazılım ve hizmet brüt marjı dengeli';
-    let st2: 'good' | 'warning' | 'danger' = 'good';
-    if (gm !== null) {
-      if (gm >= 55.0) { s2 = 25; r2 = `Yüksek Fiyatlama Gücü: Brüt kâr marjı (%${gm.toFixed(1)}) yazılım ve yüksek katma değerli iş modelini kanıtlıyor.`; st2 = 'good'; }
-      else if (gm >= 40.0) { s2 = 19; r2 = `Brüt kâr marjı (%${gm.toFixed(1)}) teknoloji sektörü ortalamalarında.`; st2 = 'good'; }
-      else if (gm >= 25.0) { s2 = 12; r2 = `Düşük Katma Değer: Brüt kâr marjı (%${gm.toFixed(1)}) donanım/distribütör ağırlıklı yapıya işaret ediyor.`; st2 = 'warning'; }
-      else { s2 = 5; r2 = `Kritik Düşük Brüt Marj (%${gm.toFixed(1)}); operasyonel kaldıraç potansiyeli zayıf.`; st2 = 'danger'; }
-    }
-    breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+    if (isComputerWholesale) {
+      // 1. İşletme Sermayesi & Nakit Dönüşüm Süresi (Max 25)
+      const cr = parseFinancialNumber(latest?.current_ratio);
+      const ocf = parseFinancialNumber(latest?.operating_cash_flow);
+      let s1 = 20;
+      let r1 = 'İşletme sermayesi ve alacak-borç vadeleri dengeli (<45 gün döngü).';
+      let st1: 'good' | 'warning' | 'danger' = 'good';
+      if ((cr !== null && cr >= 1.15) || (ocf !== null && ocf > 0)) {
+        s1 = 24;
+        r1 = `Güçlü Çalışma Sermayesi Devri: Cari oran (${cr != null ? cr.toFixed(2) : '1.20'}x) ve nakit dönüşümü toptancı distribütör normlarına tam uygun.`;
+        st1 = 'good';
+      } else if (cr !== null && cr >= 1.05) {
+        s1 = 19;
+        r1 = `Çalışma sermayesi dengeli (${cr.toFixed(2)}x), stok ve alacak devri sektör ortalamasında.`;
+        st1 = 'good';
+      } else {
+        s1 = 10;
+        r1 = 'İşletme sermayesi sıkışık; tedarikçi veya alacak vadeleri izlenmeli.';
+        st1 = 'warning';
+      }
+      breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
 
-    // 3. Net Nakit Pozisyonu & Likidite (Max 25)
-    const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
-    const cr = parseFinancialNumber(latest?.current_ratio);
-    let s3 = 20;
-    let r3 = 'Nakit ve borç dengesi koruma altında';
-    let st3: 'good' | 'warning' | 'danger' = 'good';
-    if (netDebt <= 0 && (cr === null || cr >= 1.5)) {
-      s3 = 25; r3 = 'Net Nakit Fazlası: Şirketin faiz taşıyan borcu yok, kasasındaki nakit Ar-Ge ve satın almalar için tam esneklik sunuyor.'; st3 = 'good';
-    } else if (netDebt <= 0) {
-      s3 = 22; r3 = 'Net Nakit Pozisyonunda, borç riski bulunmuyor.'; st3 = 'good';
+      // 2. Hasılat Büyümesi & Bayi Yaygınlığı (Max 25)
+      let s2 = 19;
+      let r2 = 'Distribütör hasılat büyümesi ve kurumsal bayi ağı dengeli.';
+      let st2: 'good' | 'warning' | 'danger' = 'good';
+      if (sortedHistory.length >= 2) {
+        const revGrowthVal = computeComparableIncomeGrowth((h) => h?.revenue);
+        if (revGrowthVal !== null) {
+          if (revGrowthVal >= 30.0) { s2 = 25; r2 = `Distribütör hasılat büyümesi (%${revGrowthVal.toFixed(1)}) ve kurumsal kanal genişlemesi güçlü.`; st2 = 'good'; }
+          else if (revGrowthVal >= 15.0) { s2 = 20; r2 = `Hasılat büyümesi (%${revGrowthVal.toFixed(1)}) sektör ortalamasında.`; st2 = 'good'; }
+          else if (revGrowthVal >= 0) { s2 = 15; r2 = `Hasılat artışı (%${revGrowthVal.toFixed(1)}) ılımlı.`; st2 = 'good'; }
+          else { s2 = 8; r2 = `Hasılat daralması (%${revGrowthVal.toFixed(1)}): Donanım talep döngüsü zayıf.`; st2 = 'warning'; }
+        }
+      }
+      breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+
+      // 3. Net Marj & Kur Riski Yönetimi (Max 25)
+      const rev = parseFinancialNumber(latest?.revenue);
+      const net = parseFinancialNumber(latest?.net_income);
+      const netMargin = (rev !== null && rev > 0 && net !== null) ? (net / rev) * 100 : parseFinancialNumber(latest?.net_margin);
+      const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
+      let s3 = 20;
+      let r3 = 'Distribütörlük kâr marjı ve kur hedging dengesi korunuyor.';
+      let st3: 'good' | 'warning' | 'danger' = 'good';
+      if (netMargin !== null && netMargin >= 2.0) {
+        s3 = 24; r3 = `Distribütörlük için yüksek net marj (%${netMargin.toFixed(1)}) ve başarılı kur riski yönetimi.`; st3 = 'good';
+      } else if (netMargin !== null && netMargin >= 1.0) {
+        s3 = 20; r3 = `Net marj (%${netMargin.toFixed(1)}) toptancı normlarına uygun (%1-%2 aralığı).`; st3 = 'good';
+      } else if (netMargin !== null && netMargin > 0) {
+        s3 = 15; r3 = `Düşük net marj (%${netMargin.toFixed(1)}), kur ve faiz dalgalanmaları izlenmeli.`; st3 = 'warning';
+      } else if (netDebt <= 0) {
+        s3 = 22; r3 = 'Net nakit pozisyonunda; finansman gideri baskısı bulunmuyor.'; st3 = 'good';
+      } else {
+        s3 = 6; r3 = 'Net dönem zararı: Donanım toptancılığında kur/finansman yükü operasyonel kârı aşmış.'; st3 = 'danger';
+      }
+      breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+
+      // 4. Sermaye Verimliliği (ROIC & ROE) (Max 25)
+      const roe = parseFinancialNumber(latest?.roe);
+      let s4 = 20;
+      let r4 = 'Yatırılan işletme sermayesi verimliliği dengeli.';
+      let st4: 'good' | 'warning' | 'danger' = 'good';
+      if (roe !== null && roe >= 25.0) {
+        s4 = 25; r4 = `Çalışma sermayesi getirisi ve ROE (%${roe.toFixed(1)}) toptancı modeli için mükemmel.`; st4 = 'good';
+      } else if (roe !== null && roe >= 15.0) {
+        s4 = 20; r4 = `Özkaynak kârlılığı (%${roe.toFixed(1)}) dengeli seviyede.`; st4 = 'good';
+      } else if (roe !== null && roe > 0) {
+        s4 = 14; r4 = `Özkaynak kârlılığı (%${roe.toFixed(1)}) sermaye maliyetinin altında.`; st4 = 'warning';
+      } else {
+        s4 = 6; r4 = 'Negatif sermaye getirisi; toptancı marjları erimiş.'; st4 = 'danger';
+      }
+      breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
     } else {
-      s3 = 10; r3 = `Teknoloji şirketinde borçluluk mevcut (Net Borç: ${netDebt.toLocaleString('tr-TR')} TL); faiz ortamı izlenmeli.`; st3 = 'warning';
-    }
-    breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+      // 1. Rule of 40 (Büyüme + FCF Marjı) (Max 25)
+      let revG = 40.0;
+      if (sortedHistory.length >= 2) {
+        const calcG = computeComparableIncomeGrowth((h) => h?.revenue);
+        if (calcG !== null) revG = calcG;
+      }
+      const fcfM = parseFinancialNumber(latest?.fcf_margin ?? latest?.ebitda_margin) ?? 15.0;
+      const ruleOf40 = revG + fcfM;
+      let s1 = 18;
+      let r1 = 'Büyüme ve operasyonel nakit dengeli';
+      let st1: 'good' | 'warning' | 'danger' = 'good';
+      if (ruleOf40 >= 50.0) { s1 = 25; r1 = `Seçkin Teknoloji Şirketi: Rule of 40 (%${ruleOf40.toFixed(1)}) dünya standartlarının oldukça üzerinde!`; st1 = 'good'; }
+      else if (ruleOf40 >= 40.0) { s1 = 22; r1 = `Rule of 40 Başarılı: Büyüme + Nakit marjı (%${ruleOf40.toFixed(1)}) sağlıklı genişleme üretiyor.`; st1 = 'good'; }
+      else if (ruleOf40 >= 20.0) { s1 = 14; r1 = `Rule of 40 (%${ruleOf40.toFixed(1)}) sektör ortalamasının altında, marj veya büyüme ivmesi gerek.`; st1 = 'warning'; }
+      else { s1 = 6; r1 = `Rule of 40 Zayıf: Büyüme ve kârlılık bileşimi (%${ruleOf40.toFixed(1)}) teknoloji normlarının gerisinde.`; st1 = 'danger'; anomalies.push(`Zayıf Rule of 40: %${ruleOf40.toFixed(1)}`); }
+      breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
 
-    // 4. Sermaye Verimliliği (ROIC & ROE) (Max 25)
-    const roe = parseFinancialNumber(latest?.roe);
-    let s4 = 18;
-    let r4 = 'Yatırılan sermaye verimliliği izleniyor';
-    let st4: 'good' | 'warning' | 'danger' = 'good';
-    if (roe !== null) {
-      if (roe >= 45.0) { s4 = 25; r4 = `Hafif Varlık Üstünlüğü: Özkaynak getirisi (%${roe.toFixed(1)}) çok yüksek sermaye verimliliğine işaret ediyor.`; st4 = 'good'; }
-      else if (roe >= 30.0) { s4 = 20; r4 = `Özkaynak kârlılığı (%${roe.toFixed(1)}) sermaye maliyetinin üzerinde.`; st4 = 'good'; }
-      else if (roe >= 15.0) { s4 = 12; r4 = `Özkaynak kârlılığı (%${roe.toFixed(1)}) teknoloji sektörü için ılımlı.`; st4 = 'warning'; }
-      else { s4 = 5; r4 = `Düşük Sermaye Verimliliği (%${roe.toFixed(1)}).`; st4 = 'danger'; anomalies.push(`Düşük Teknoloji ROE: %${roe.toFixed(1)}`); }
+      // 2. Yüksek Brüt Kâr Marjı (Max 25)
+      const gm = parseFinancialNumber(latest?.gross_margin);
+      let s2 = 18;
+      let r2 = 'Yazılım ve hizmet brüt marjı dengeli';
+      let st2: 'good' | 'warning' | 'danger' = 'good';
+      if (gm !== null) {
+        if (gm >= 55.0) { s2 = 25; r2 = `Yüksek Fiyatlama Gücü: Brüt kâr marjı (%${gm.toFixed(1)}) yazılım ve yüksek katma değerli iş modelini kanıtlıyor.`; st2 = 'good'; }
+        else if (gm >= 40.0) { s2 = 19; r2 = `Brüt kâr marjı (%${gm.toFixed(1)}) teknoloji sektörü ortalamalarında.`; st2 = 'good'; }
+        else if (gm >= 25.0) { s2 = 12; r2 = `Düşük Katma Değer: Brüt kâr marjı (%${gm.toFixed(1)}) donanım/distribütör ağırlıklı yapıya işaret ediyor.`; st2 = 'warning'; }
+        else { s2 = 5; r2 = `Kritik Düşük Brüt Marj (%${gm.toFixed(1)}); operasyonel kaldıraç potansiyeli zayıf.`; st2 = 'danger'; }
+      }
+      breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+
+      // 3. Net Nakit Pozisyonu & Likidite (Max 25)
+      const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
+      const cr = parseFinancialNumber(latest?.current_ratio);
+      let s3 = 20;
+      let r3 = 'Nakit ve borç dengesi koruma altında';
+      let st3: 'good' | 'warning' | 'danger' = 'good';
+      if (netDebt <= 0 && (cr === null || cr >= 1.5)) {
+        s3 = 25; r3 = 'Net Nakit Fazlası: Şirketin faiz taşıyan borcu yok, kasasındaki nakit Ar-Ge ve satın almalar için tam esneklik sunuyor.'; st3 = 'good';
+      } else if (netDebt <= 0) {
+        s3 = 22; r3 = 'Net Nakit Pozisyonunda, borç riski bulunmuyor.'; st3 = 'good';
+      } else {
+        s3 = 10; r3 = `Teknoloji şirketinde borçluluk mevcut (Net Borç: ${netDebt.toLocaleString('tr-TR')} TL); faiz ortamı izlenmeli.`; st3 = 'warning';
+      }
+      breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+
+      // 4. Sermaye Verimliliği (ROIC & ROE) (Max 25)
+      const roe = parseFinancialNumber(latest?.roe);
+      let s4 = 18;
+      let r4 = 'Yatırılan sermaye verimliliği izleniyor';
+      let st4: 'good' | 'warning' | 'danger' = 'good';
+      if (roe !== null) {
+        if (roe >= 45.0) { s4 = 25; r4 = `Hafif Varlık Üstünlüğü: Özkaynak getirisi (%${roe.toFixed(1)}) çok yüksek sermaye verimliliğine işaret ediyor.`; st4 = 'good'; }
+        else if (roe >= 30.0) { s4 = 20; r4 = `Özkaynak kârlılığı (%${roe.toFixed(1)}) sermaye maliyetinin üzerinde.`; st4 = 'good'; }
+        else if (roe >= 15.0) { s4 = 12; r4 = `Özkaynak kârlılığı (%${roe.toFixed(1)}) teknoloji sektörü için ılımlı.`; st4 = 'warning'; }
+        else { s4 = 5; r4 = `Düşük Sermaye Verimliliği (%${roe.toFixed(1)}).`; st4 = 'danger'; anomalies.push(`Düşük Teknoloji ROE: %${roe.toFixed(1)}`); }
+      }
+      breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
     }
-    breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
 
   } else if (sector === 'AVIATION') {
     // 1. Kapasite & Yolcu Büyümesi (Max 25)
@@ -3141,6 +3220,7 @@ export function optimizeFinalDecision({
   financialHistory,
   sector = 'INDUSTRIAL',
   scoreResult,
+  officialSectorName,
 }: {
   rawDecision: 'AL' | 'ALMA' | 'NÖTR';
   score?: number;
@@ -3151,6 +3231,7 @@ export function optimizeFinalDecision({
   financialHistory?: any[];
   sector?: SectorType;
   scoreResult?: SectorScoreResult;
+  officialSectorName?: string;
 }): FinalDecisionOptimization {
   let discount: number = valuation?.discount_pct ?? 0;
   if (valuation?.discount_pct == null) {
@@ -3249,6 +3330,14 @@ export function optimizeFinalDecision({
     finalDecision = 'NÖTR';
     overrideApplied = true;
     overrideReason = `Karar ve Değerleme Uyumu: Hisse güncel fiyata göre %${discount} adil değer iskontosu sunmaktadır. Şirketin borca batık olmaması ve pozitif özkaynakları doğrultusunda 'ALMA' tezatlığı engellenmiş, risk faktörleri gözetilerek karar 'NÖTR' (Koşullu İzleme) olarak dengelenmiştir.`;
+  }
+
+  // ZORUNLU FORENSIC PROTOKOL: Tedarikçi Borcu Değer Tuzağı (Net Zarar / Negatif ROIC) KESİNLİKLE ALMA'ya kilitlenir
+  if (!overrideApplied && isSupplierDebtTrap && ((parseFinancialNumber(effectiveLatestData?.net_income) ?? 0) < 0 || (parseFinancialNumber(effectiveLatestData?.roic) ?? 0) < 0 || (parseFinancialNumber(effectiveLatestData?.roe) ?? 0) < 0)) {
+    finalDecision = 'ALMA';
+    overrideApplied = true;
+    overrideReason = 'Tedarikçi Borcuyla Yaşayan Değer Tuzağı: Şirket net zarar veya negatif ROIC üretirken faaliyet nakit akışının büyük kısmı tedarikçi vadelerinin açılmasından beslenmektedir. Sermaye erozyonu nedeniyle karar ALMA olarak kilitlendi.';
+    safetyFlags.push('Tedarikçi Borcu Değer Tuzağı (ALMA Kilit)');
   }
 
   // FALSE POSITIVE (HATALI AL) ENGELLEME KURALLARI:
@@ -3369,7 +3458,10 @@ export function optimizeFinalDecision({
 
     // 6. Kural: Holding Sektörü Solo Borç, İskonto ve Kârlılık Filtresi
     if (!overrideApplied && effectiveSector === 'HOLDING') {
-      const holdingDebt = parseFinancialNumber(effectiveLatestData?.net_debt) ?? 0;
+      const tickerUpper = String(effectiveLatestData?.ticker || (valuation as any)?.ticker || '').toUpperCase();
+      const soloNetDebt = parseFinancialNumber(effectiveLatestData?.solo_net_debt);
+      const isBankConsolidatingHolding = ['KCHOL', 'SAHOL', 'AGHOL', 'DOHOL'].includes(tickerUpper);
+      const holdingDebt = soloNetDebt !== null ? soloNetDebt : (isBankConsolidatingHolding ? 0 : (parseFinancialNumber(effectiveLatestData?.net_debt) ?? 0));
       const holdingEq = parseFinancialNumber(effectiveLatestData?.parent_equity ?? effectiveLatestData?.equity) ?? 1;
       const disc = parseFinancialNumber(effectiveLatestData?.holding_discount ?? effectiveLatestData?.nav_discount);
       const holdingNet = parseFinancialNumber(effectiveLatestData?.net_income);
@@ -3463,17 +3555,35 @@ export function optimizeFinalDecision({
       const gm = parseFinancialNumber(effectiveLatestData?.gross_margin);
       const netDebt = parseFinancialNumber(effectiveLatestData?.net_debt) ?? 0;
       const ebitda = effectiveEbitda ?? 0;
+      const tickerUpper = String(effectiveLatestData?.ticker || (valuation as any)?.ticker || '').toUpperCase();
+      const officialName = officialSectorName || String(effectiveLatestData?.official_sector_name || effectiveLatestData?.sector_name || (valuation as any)?.official_sector_name || '');
+      const isComputerWholesale = officialName === 'Bilgisayar Toptancılığı' ||
+        ['DGATE', 'INDES', 'ARENA', 'PENTA'].includes(tickerUpper);
 
-      if (gm !== null && gm < 20.0) {
-        finalDecision = 'ALMA';
-        overrideApplied = true;
-        overrideReason = `Kritik Düşük Brüt Kâr Marjı: Brüt marj (%${gm.toFixed(1)}) teknoloji sektörü normlarının altındadır. AL kararı ALMA olarak revize edildi.`;
-        safetyFlags.push(`Düşük Teknoloji Brüt Marjı: %${gm.toFixed(1)}`);
-      } else if (ebitda > 0 && (netDebt / ebitda) > 3.0) {
-        finalDecision = 'ALMA';
-        overrideApplied = true;
-        overrideReason = `Teknoloji Şirketinde Yüksek Borçluluk: Net Borç / TTM FAVÖK çarpanı (${(netDebt / ebitda).toFixed(1)}x) emniyet sınırını aştı. AL kararı ALMA olarak revize edildi.`;
-        safetyFlags.push(`Yüksek Teknoloji Net Borç/TTM FAVÖK: ${(netDebt / ebitda).toFixed(1)}x`);
+      if (isComputerWholesale) {
+        if (gm !== null && gm < 3.0) {
+          finalDecision = 'ALMA';
+          overrideApplied = true;
+          overrideReason = `Kritik Düşük Distribütör Brüt Marjı: Donanım toptancılığında brüt marj (%${gm.toFixed(1)}) kritik %3.0 eşiğinin altındadır.`;
+          safetyFlags.push(`Kritik Düşük Distribütör Marjı: %${gm.toFixed(1)}`);
+        } else if (ebitda > 0 && (netDebt / ebitda) > 4.5) {
+          finalDecision = 'ALMA';
+          overrideApplied = true;
+          overrideReason = `Donanım Toptancısında Yüksek Borçluluk: Net Borç / TTM FAVÖK çarpanı (${(netDebt / ebitda).toFixed(1)}x) 4.5x emniyet sınırını aştı.`;
+          safetyFlags.push(`Yüksek Toptancı Net Borç/FAVÖK: ${(netDebt / ebitda).toFixed(1)}x`);
+        }
+      } else {
+        if (gm !== null && gm < 20.0) {
+          finalDecision = 'ALMA';
+          overrideApplied = true;
+          overrideReason = `Kritik Düşük Brüt Kâr Marjı: Brüt marj (%${gm.toFixed(1)}) teknoloji sektörü normlarının altındadır. AL kararı ALMA olarak revize edildi.`;
+          safetyFlags.push(`Düşük Teknoloji Brüt Marjı: %${gm.toFixed(1)}`);
+        } else if (ebitda > 0 && (netDebt / ebitda) > 3.0) {
+          finalDecision = 'ALMA';
+          overrideApplied = true;
+          overrideReason = `Teknoloji Şirketinde Yüksek Borçluluk: Net Borç / TTM FAVÖK çarpanı (${(netDebt / ebitda).toFixed(1)}x) emniyet sınırını aştı. AL kararı ALMA olarak revize edildi.`;
+          safetyFlags.push(`Yüksek Teknoloji Net Borç/TTM FAVÖK: ${(netDebt / ebitda).toFixed(1)}x`);
+        }
       }
     }
 
@@ -7382,6 +7492,7 @@ export function computeSectorValuationAndDrivers(
     financialHistory: Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : scoreResult.financialHistory,
     sector,
     scoreResult,
+    officialSectorName: detectedOfficialSecName,
   });
 
   valuation.final_decision = optimization.finalDecision;
@@ -7772,7 +7883,7 @@ export function calculateDuPont5Step(
     ebt = Number(ttmOpts.ebt);
   } else if (!isTtmMode && (item.ebt != null || item.profit_before_tax != null || item.pre_tax_profit != null)) {
     ebt = parseFinancialNumber(item.ebt ?? item.profit_before_tax ?? item.pre_tax_profit);
-  } else if (ebit !== null && interestExp !== null && resolvedSector !== 'INSURANCE') {
+  } else if (ebit !== null && interestExp !== null && resolvedSector !== 'INSURANCE' && resolvedSector !== 'BANKING') {
     ebt = ebit - interestExp;
   } else if (netIncome !== null) {
     const taxRate = resolvedSector === 'REIT' ? 0.0 : ((resolvedSector === 'BANKING' || resolvedSector === 'INSURANCE' || resolvedSector === 'FINANCIAL_SERVICES') ? 0.30 : 0.25);

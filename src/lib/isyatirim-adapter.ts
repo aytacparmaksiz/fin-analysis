@@ -323,11 +323,11 @@ export class IsYatirimApiAdapter {
 
       interest_income = getVal(['3A'], ['faiz gelirleri']);
       interest_expense = getVal(['3B'], ['faiz giderleri']);
-      net_interest_income = getVal(['3C', '3CA'], ['net faiz geliri veya gideri', 'net faiz geliri']);
-      net_fees_commissions = getVal(['3CA'], ['net ücret ve komisyon gelirleri/giderleri', 'net ücret ve komisyon gelirleri']);
+      net_interest_income = getVal(['3C'], ['net faiz geliri veya gideri', 'net faiz geliri']);
+      net_fees_commissions = getVal(['3CA', '3D', '3CB'], ['net ücret ve komisyon gelirleri/giderleri', 'net ücret ve komisyon gelirleri', 'ücret ve komisyon']);
       total_operating_income = getVal(['3CE'], ['faaliyet gelirleri/giderleri toplamı', 'faaliyet gelirleri toplamı']);
 
-      revenue = net_interest_income ?? total_operating_income;
+      revenue = total_operating_income ?? net_interest_income;
       gross_profit = total_operating_income ?? net_interest_income;
       cost_of_sales = interest_expense;
       operating_profit = getVal(['3CH', '3M', '3N'], ['net faaliyet karı/zararı', 'net faaliyet karı', 'sürdürülen faaliyetler vergi öncesi']);

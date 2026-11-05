@@ -497,9 +497,9 @@ export class FinancialRatioEngine {
     };
 
     return {
-      revenue: computeTtmMetric(i => i.revenue ?? i.gross_written_premiums),
+      revenue: computeTtmMetric(i => i.revenue ?? i.gross_written_premiums ?? (sector === 'BANKING' ? (i.total_operating_income ?? i.interest_income ?? i.net_interest_income) : null)),
       grossProfit: isMetricDisabled('gross_profit', sector) ? null : computeTtmMetric(i => i.gross_profit),
-      operatingProfit: computeTtmMetric(i => i.operating_profit ?? i.technical_profit),
+      operatingProfit: computeTtmMetric(i => i.operating_profit ?? i.technical_profit ?? (sector === 'BANKING' ? (i.operating_income ?? i.total_operating_income) : null)),
       ebitda: isMetricDisabled('ebitda', sector) ? null : computeTtmMetric(i => i.ebitda ?? i.technical_profit),
       ebt: computeTtmMetric(i => i.ebt ?? i.profit_before_tax),
       interestExpenses: computeTtmMetric(i => {
