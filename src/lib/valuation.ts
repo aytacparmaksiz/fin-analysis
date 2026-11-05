@@ -3357,17 +3357,34 @@ export function optimizeFinalDecision({
       const reitNet = parseFinancialNumber(effectiveLatestData?.net_income);
       const reitRoe = parseFinancialNumber(effectiveLatestData?.roe);
 
-      if (reitNet !== null && reitNet < 0) {
+      // Adli Nakit Kalkanı (Cash Flow Sentinel):
+      // Şirketin nakit kira ve tahsilat gücü (P/OCF <= 8.5x veya OCF/Varlıklar >= %5.5) ve düşük borçluluğu (LTV <= %40) varsa,
+      // muhasebesel net kâr / ROE enflasyon muhasebesi (TMS 29) kaynaklı baskılanmış olabilir.
+      const rawOcf = parseFinancialNumber(effectiveLatestData?.operating_cash_flow ?? effectiveLatestData?.net_operating_cash_flow) ?? 0;
+      const currentPriceNum = parseFinancialNumber(valuation?.current_price ?? marketPrice) ?? 0;
+      const sharesNum = parseFinancialNumber(effectiveLatestData?.shares_count ?? effectiveLatestData?.share_count) ?? 1;
+      const mcap = currentPriceNum * sharesNum;
+      const pOcf = (mcap > 0 && rawOcf > 0) ? (mcap / rawOcf) : null;
+      const ocfAssetYield = (totalAssets > 0 && rawOcf > 0) ? (rawOcf / totalAssets) : null;
+      const rawDividends = Math.abs(parseFinancialNumber(effectiveLatestData?.dividends_paid) ?? 0);
+      const divYield = (mcap > 0 && rawDividends > 0) ? (rawDividends / mcap) : 0;
+      const isCashCowReit = (
+        rawOcf > 0 &&
+        ltv <= 0.40 &&
+        ((pOcf !== null && pOcf <= 8.5) || (ocfAssetYield !== null && ocfAssetYield >= 0.055) || (divYield >= 0.045 && pOcf !== null && pOcf <= 12.0))
+      );
+
+      if (reitNet !== null && reitNet < 0 && !isCashCowReit) {
         finalDecision = 'ALMA';
         overrideApplied = true;
         overrideReason = `GYO Net Zarar: Şirket net dönem zararı açıklamıştır. Portföy sermayesini eriten GYO'lara AL kararı verilemez.`;
         safetyFlags.push('GYO Net Zarar');
-      } else if (reitRoe !== null && reitRoe <= 0) {
+      } else if (reitRoe !== null && reitRoe <= 0 && !isCashCowReit) {
         finalDecision = 'NÖTR';
         overrideApplied = true;
         overrideReason = `Negatif GYO Kârlılığı: Özkaynak getirisi (%${reitRoe.toFixed(1)}) negatiftir. Karar temkinli NÖTR olarak dengelendi.`;
         safetyFlags.push('Negatif GYO ROE');
-      } else if (reitRoe !== null && reitRoe < 5.0 && discount >= 45.0) {
+      } else if (reitRoe !== null && reitRoe < 5.0 && discount >= 45.0 && !isCashCowReit) {
         finalDecision = 'NÖTR';
         overrideApplied = true;
         overrideReason = `Düşük Varlık Getirisi & Koşullu İzleme: Portföy özkaynak kârlılığı (%${reitRoe.toFixed(1)}) mevduat ve enflasyonun oldukça altındadır. Kağıt üzerindeki iskonto sermaye getirisiyle desteklenene kadar karar NÖTR olarak dengelendi.`;
@@ -4847,15 +4864,56 @@ export function computeSectorValuationAndDrivers(
       const reitNetInc = parseFinancialNumber(latest?.net_income);
       const isDistressedReit = (reitRoe !== null && reitRoe <= 0) || (reitNetInc !== null && reitNetInc < 0);
 
+      // Nakit Kira Getirisi & FFO / OCF Adli Analizi:
+      // Gayrimenkulün gerçek değeri sadece muhasebe ROE'sinden değil, ürettiği operasyonel nakit akışından (Kira/NOI/FFO) ve temettüden gelir.
+      const rawOcf = parseFinancialNumber(
+        extractedData?.unified_metrics?.ttm?.operatingCashFlow ??
+        latest?.operating_cash_flow ??
+        latest?.net_operating_cash_flow ??
+        latest?.gross_operating_cash_flow
+      ) ?? 0;
+      const ocfFull = rawOcf * unitScale;
+      const totalAssetsFull = (parseFinancialNumber(latest?.total_assets) ?? 0) * unitScale;
+      const currentPriceNum = currentPrice ?? (rawPrice ?? 0);
+      const marketCapFull = (currentPriceNum > 0 && effectiveShareCount > 0) ? (currentPriceNum * effectiveShareCount) : 0;
+
+      // Fiyat / Faaliyet Nakit Akışı (Kira Amortisman Süresi):
+      const pOcf = (marketCapFull > 0 && ocfFull > 0) ? (marketCapFull / ocfFull) : null;
+      // Varlık Nakit Verimi (Cap Rate / NOI Yield):
+      const ocfAssetYield = (totalAssetsFull > 0 && ocfFull > 0) ? (ocfFull / totalAssetsFull) : null;
+
+      // Temettü Dağıtım Gücü:
+      const rawDividends = Math.abs(parseFinancialNumber(latest?.dividends_paid) ?? 0);
+      const dividendsPaidFull = rawDividends * unitScale;
+      const dividendYield = (marketCapFull > 0 && dividendsPaidFull > 0) ? (dividendsPaidFull / marketCapFull) : 0;
+
+      // Güçlü Nakit Akışı & Kira Makinesi Teyidi (TRGYO tipi nakit inekleri):
+      // 1) Şirket nakit akışıyla kendini <= 8.5 yılda amorti ediyorsa (P/OCF <= 8.5x)
+      // 2) VEYA Varlık nakit getirisi >= %5.5 ise
+      // 3) VEYA Temettü verimi >= %4.5 ve P/OCF <= 12.0x ise VE Net Borç/Varlık (LTV) <= %40 (sağlıklı borç)
+      const hasStrongCashRentalYield = (
+        ocfFull > 0 &&
+        (rawNetDebt <= 0 || (totalAssetsFull > 0 && rawNetDebt / totalAssetsFull <= 0.40)) &&
+        ((pOcf !== null && pOcf <= 8.5) || (ocfAssetYield !== null && ocfAssetYield >= 0.055) || (dividendYield >= 0.045 && pOcf !== null && pOcf <= 12.0))
+      );
+
       let reitMultiple: number;
       let forwardNavGrowth = 0.10;
-      if (isDistressedReit) {
+      let cashRentalNote = '';
+
+      if (isDistressedReit && !hasStrongCashRentalYield) {
         // Negatif Kârlılık / Varlık Değer Yıkımı (SNGYO tipi):
         // Gayrimenkul portföyü nakit üretemediği ve finansman maliyetine yenildiği için derin NAD iskontosu (%68-%72 iskonto -> 0.28x - 0.32x P/NAV)
         reitMultiple = 0.32;
         forwardNavGrowth = 0.04; // Enflasyon koruması zayıf
+      } else if (hasStrongCashRentalYield) {
+        // A Sınıfı Nakit Akışı & Kira Makinesi (TRGYO tipi - TMS 29 muhasebe ROE'si baskılanmış olsa bile güçlü kira ve temettü):
+        // P/OCF <= 8.5x veya güçlü temettü dağıtımı ile desteklenen portföy için hakkaniyetli NAD çarpanı (%28-%32 iskonto -> 0.68x - 0.72x P/NAV)
+        reitMultiple = Math.max(0.68, Math.min(0.75, targetMultipleNum > 0.85 ? 0.72 : Math.max(0.70, targetMultipleNum)));
+        forwardNavGrowth = 0.10;
+        cashRentalNote = pOcf ? ` [Kira Getirisi P/OCF: ${pOcf.toFixed(1)}x]` : ' [Kira/Temettü Akımı]';
       } else if (reitRoe !== null && reitRoe < 8.0) {
-        // Düşük Varlık Getirisi (EKGYO tipi - ROE %0.23 gibi mevduatın çok altında): %60-%65 iskonto -> 0.35x - 0.40x P/NAV
+        // Düşük Varlık Getirisi & Nakit Üretemeyen Portföy (EKGYO tipi - ROE %0.23 gibi mevduatın çok altında): %60-%65 iskonto -> 0.35x - 0.40x P/NAV
         reitMultiple = Number(Math.max(0.35, Math.min(0.42, 0.35 + (reitRoe / 100) * 0.9)).toFixed(2));
         forwardNavGrowth = 0.06;
       } else if (reitRoe !== null && reitRoe < 18.0) {
@@ -4871,7 +4929,7 @@ export function computeSectorValuationAndDrivers(
       const rawFair = totalFairEquity / effectiveShareCount;
       fairValue = Number(Math.max(0.5, rawFair).toFixed(2));
       const netCashNote = netCashFull > 0 ? ` + Net Nakit (${(netCashFull / effectiveShareCount).toFixed(2).replace('.', ',')} TL)` : '';
-      formulaStr = `12A İleri Portföy NAD: ${(discountedRealEstateValue / effectiveShareCount).toFixed(2).replace('.', ',')} TL (${clampedMultiple.toFixed(2).replace('.', ',')}x)${netCashNote} = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+      formulaStr = `12A İleri Portföy NAD: ${(discountedRealEstateValue / effectiveShareCount).toFixed(2).replace('.', ',')} TL (${clampedMultiple.toFixed(2).replace('.', ',')}x)${cashRentalNote}${netCashNote} = ${fairValue.toFixed(2).replace('.', ',')} TL`;
     }
   } else if (sector === 'TECH') {
     const isComputerWholesale = detectedOfficialSecName === 'Bilgisayar Toptancılığı';

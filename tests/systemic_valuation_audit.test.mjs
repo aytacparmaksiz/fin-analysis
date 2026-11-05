@@ -290,4 +290,40 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
     assert.ok(res.valuation.fair_value >= 95.0, `ARASE fair value (${res.valuation.fair_value}) must be >= 95 TL`);
   });
 
+  it('10. TRGYO (Cash Flow Rental REIT): High cash rental yield (P/OCF 5.8x, Net Cash) bypasses low accounting ROE penalty, awards 0.75x NAV and AL decision', () => {
+    const trgyoData = {
+      ticker: 'TRGYO',
+      sector: 'REIT',
+      current_price: 88.20,
+      share_count: 1000000000,
+      paid_in_capital: 1000000000,
+      unified_metrics: {
+        ttm: {
+          operatingCashFlow: 15083768973
+        }
+      },
+      financial_history: [
+        {
+          period: '2026/06',
+          revenue: 6991493000,
+          operating_profit: 4069730000,
+          ebitda: 4984011000,
+          net_income: 4806587000,
+          equity: 154004463000,
+          net_debt: -2896732000,
+          roe: 5.78,
+          operating_cash_flow: 12651819000,
+          dividends_paid: 5049273000,
+          total_assets: 196655058000
+        }
+      ]
+    };
+
+    const res = computeSectorValuationAndDrivers(trgyoData, 88.20);
+    assert.equal(res.valuation.final_decision, 'AL', 'TRGYO must be AL due to massive operating cash rental yield and net cash');
+    assert.ok(res.valuation.formula_display.includes('(0,75x)') || res.valuation.formula_display.includes('(0,70x)'), 'Must award prime REIT multiple ~0.70x-0.75x, NOT 0.40x!');
+    assert.ok(res.valuation.formula_display.includes('Kira Getirisi P/OCF'), 'Formula must explicitly state rental cash yield');
+    assert.ok(res.valuation.fair_value >= 115.0, `TRGYO fair value (${res.valuation.fair_value}) must be >= 115 TL`);
+  });
+
 });
