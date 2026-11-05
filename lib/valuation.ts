@@ -5940,6 +5940,7 @@ export function computeSectorValuationAndDrivers(
 
     const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
     const debtBridge = (rawNetDebt > 0 ? rawNetDebt : 0) + leaseLiabilities + minorityInterests;
+    const debtBridgeLabel = netCash > 0 ? ' + Net Nakit' : (debtBridge > 0 ? ' - Net Borç' : '');
 
     const rawRevG = revGrowth / 100;
     const clampedRevG = Math.min(0.25, Math.max(-0.15, rawRevG));
@@ -5972,8 +5973,8 @@ export function computeSectorValuationAndDrivers(
     }
     fairValue = Number(Math.max(1.0, rawFair).toFixed(2));
     formulaStr = pePerShare > 0
-      ? `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x + Net Nakit): ${evPerShare.toFixed(2).replace('.', ',')} TL (%45) + F/K (${targetPe.toFixed(1).replace('.', ',')}x): ${pePerShare.toFixed(2).replace('.', ',')} TL (%35) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%20) = ${fairValue.toFixed(2).replace('.', ',')} TL`
-      : `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x + Net Nakit): ${evPerShare.toFixed(2).replace('.', ',')} TL (%65) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%35) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+      ? `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x${debtBridgeLabel}): ${evPerShare.toFixed(2).replace('.', ',')} TL (%45) + F/K (${targetPe.toFixed(1).replace('.', ',')}x): ${pePerShare.toFixed(2).replace('.', ',')} TL (%35) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%20) = ${fairValue.toFixed(2).replace('.', ',')} TL`
+      : `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x${debtBridgeLabel}): ${evPerShare.toFixed(2).replace('.', ',')} TL (%65) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%35) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
   } else if (isBeverageSector(detectedOfficialSecName, currentTickerUpper)) {
     const latestEbitda = parseFinancialNumber(latest?.ebitda) ?? 0;
     const latestRev = parseFinancialNumber(latest?.revenue) ?? 0;
@@ -6373,6 +6374,7 @@ export function computeSectorValuationAndDrivers(
 
     const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
     const debtBridge = (rawNetDebt > 0 ? rawNetDebt : 0) + leaseLiabilities + minorityInterests;
+    const debtBridgeLabel = netCash > 0 ? ' + Net Nakit' : (debtBridge > 0 ? ' - Net Borç' : '');
 
     const rawRevG = revGrowth / 100;
     const clampedRevG = Math.min(0.25, Math.max(-0.15, rawRevG));
@@ -6413,8 +6415,8 @@ export function computeSectorValuationAndDrivers(
     }
     fairValue = Number(Math.max(1.0, rawFair).toFixed(2));
     formulaStr = pePerShare > 0
-      ? `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x + Net Nakit): ${evPerShare.toFixed(2).replace('.', ',')} TL (%45) + F/K (${targetPe.toFixed(1).replace('.', ',')}x): ${pePerShare.toFixed(2).replace('.', ',')} TL (%35) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%20) = ${fairValue.toFixed(2).replace('.', ',')} TL`
-      : `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x + Net Nakit): ${evPerShare.toFixed(2).replace('.', ',')} TL (%65) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%35) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+      ? `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x${debtBridgeLabel}): ${evPerShare.toFixed(2).replace('.', ',')} TL (%45) + F/K (${targetPe.toFixed(1).replace('.', ',')}x): ${pePerShare.toFixed(2).replace('.', ',')} TL (%35) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%20) = ${fairValue.toFixed(2).replace('.', ',')} TL`
+      : `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x${debtBridgeLabel}): ${evPerShare.toFixed(2).replace('.', ',')} TL (%65) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%35) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
   } else if (isAgroChemicalSector(detectedOfficialSecName, currentTickerUpper)) {
     modelName = 'Tarımsal Kimya, Gübre & Döngüsel Yayılım Modeli (Global Amonyak/Üre & Taban Marj)';
     const latestEbitda = parseFinancialNumber(latest?.ebitda) ?? 0;
