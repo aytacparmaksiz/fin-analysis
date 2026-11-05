@@ -2760,7 +2760,9 @@ export default function SimplyView({
                             </div>
                             <div className="text-sm text-slate-400 font-mono">
                               Skor: {comp.score != null ? (
-                                <span className={`font-bold ${getScoreColorStyle(comp.score).text}`}>{comp.score}/100</span>
+                                <span className={`font-bold ${getScoreColorStyle(comp.score).text}`}>
+                                  {String(comp.score).includes('/100') ? String(comp.score) : `${comp.score}/100`}
+                                </span>
                               ) : '—'}
                             </div>
                           </div>

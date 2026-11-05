@@ -6644,7 +6644,7 @@ export default function ValuationTerminal({
                                 </span>
                                 {report.score && (
                                   <span className="text-xs font-mono font-bold text-white bg-[#12151c] px-2.5 py-1 rounded-lg border border-[#2e3440]">
-                                    {report.score}/100
+                                    {formatScore(report.score)}
                                   </span>
                                 )}
                               </div>

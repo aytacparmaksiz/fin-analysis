@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, X, TrendingUp, Building2, ArrowRight } from 'lucide-react';
 import type { SavedReport } from '../page';
 
@@ -43,12 +43,53 @@ export default function SpotlightSearch({
     }
   }, [isOpen]);
 
+  // Her hisse (ticker) için YALNIZCA en son (en güncel) raporu filtreleyen tekilleştirme haritası
+  const latestSavedMap = useMemo(() => {
+    const map = new Map<string, SavedReport>();
+    const parsePeriod = (p?: string) => {
+      if (!p) return 0;
+      const parts = p.split('/');
+      if (parts.length === 2) {
+        const yr = parseInt(parts[0], 10) || 0;
+        const m = parseInt(parts[1], 10) || 0;
+        return yr * 100 + m;
+      }
+      return 0;
+    };
+
+    for (const r of savedReports) {
+      const sym = (r.ticker || '').trim().toUpperCase();
+      if (!sym) continue;
+      const existing = map.get(sym);
+      if (!existing) {
+        map.set(sym, r);
+      } else {
+        const pExisting = parsePeriod(existing.period);
+        const pCurrent = parsePeriod(r.period);
+        if (pCurrent > pExisting) {
+          map.set(sym, r);
+        } else if (pCurrent === pExisting) {
+          const idExisting = Number(existing.id) || 0;
+          const idCurrent = Number(r.id) || 0;
+          if (idCurrent > idExisting) {
+            map.set(sym, r);
+          }
+        }
+      }
+    }
+    return map;
+  }, [savedReports]);
+
+  const uniqueSavedReports = useMemo(() => {
+    return Array.from(latestSavedMap.values());
+  }, [latestSavedMap]);
+
   if (!isOpen) return null;
 
   const normalizedQuery = query.trim().toUpperCase();
 
-  // Filtreleme: Hem kayıtlı raporlar hem de popüler BIST şirketleri
-  const matchedSaved = savedReports.filter(r => 
+  // Filtreleme: Her şirketin yalnızca en son raporu gösterilir
+  const matchedSaved = uniqueSavedReports.filter(r => 
     (r.ticker || '').toUpperCase().includes(normalizedQuery) ||
     ((r as any).companyName || r.extractedData?.company_name || '').toUpperCase().includes(normalizedQuery)
   );
@@ -59,7 +100,7 @@ export default function SpotlightSearch({
   );
 
   const handleSelect = (ticker: string) => {
-    const existing = savedReports.find(r => r.ticker?.toUpperCase() === ticker.toUpperCase());
+    const existing = latestSavedMap.get(ticker.toUpperCase());
     if (existing) {
       onSelectReport(existing.id, existing.ticker);
     } else {
@@ -99,7 +140,7 @@ export default function SpotlightSearch({
             <button
               type="button"
               onClick={() => setQuery('')}
-              className="p-1 text-slate-400 hover:text-white"
+              className="p-1 text-slate-400 hover:text-white cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -112,37 +153,61 @@ export default function SpotlightSearch({
 
         {/* Sonuç Listesi */}
         <div className="max-h-80 overflow-y-auto p-2 divide-y divide-[#21262d]">
-          {/* Kayıtlı Analizler */}
+          {/* Kayıtlı Analizler (Tekilleştirilmiş - Yalnızca En Son Rapor) */}
           {matchedSaved.length > 0 && (
             <div className="py-2">
               <div className="text-[10px] font-mono text-slate-400 px-3 py-1 font-semibold uppercase tracking-wider flex items-center gap-1.5">
                 <Building2 className="w-3.5 h-3.5 text-emerald-400" />
-                Kayıtlı Analizler ({matchedSaved.length})
+                Kayıtlı Analizler ({matchedSaved.length} Şirket)
               </div>
               <div className="space-y-1 mt-1">
-                {matchedSaved.map(item => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => handleSelect(item.ticker)}
-                    className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-[#21262d] transition text-left cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono font-bold text-sm text-white group-hover:text-emerald-400 transition">
-                        {item.ticker}
-                      </span>
-                      <span className="text-xs text-slate-300 truncate max-w-[220px]">
-                        {(item as any).companyName || item.extractedData?.company_name || item.sector || 'BIST'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
-                        {item.decision} • {item.score}/100
-                      </span>
-                      <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-white transition" />
-                    </div>
-                  </button>
-                ))}
+                {matchedSaved.map(item => {
+                  const dec = (item.decision || '').trim().toUpperCase();
+                  const decStyle = dec === 'AL'
+                    ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                    : dec === 'ALMA'
+                    ? 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+                    : 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+
+                  // Skorun 83/100/100 gibi çift yazılmasını kesin olarak önler
+                  const cleanScore = (() => {
+                    if (!item.score) return '—';
+                    const numMatch = String(item.score).match(/\d+/);
+                    return numMatch ? `${numMatch[0]}/100` : '—';
+                  })();
+
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        onSelectReport(item.id, item.ticker);
+                        onClose();
+                      }}
+                      className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-[#21262d] transition text-left cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono font-bold text-sm text-white group-hover:text-emerald-400 transition">
+                          {item.ticker}
+                        </span>
+                        <span className="text-xs text-slate-300 truncate max-w-[200px]">
+                          {(item as any).companyName || item.extractedData?.company_name || item.sector || 'BIST'}
+                        </span>
+                        {item.period && (
+                          <span className="text-[10px] font-mono text-slate-400 bg-[#12151b] px-1.5 py-0.5 rounded border border-[#282d37]">
+                            {item.period}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[11px] font-mono font-bold border px-2 py-0.5 rounded ${decStyle}`}>
+                          {item.decision} • {cleanScore}
+                        </span>
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-white transition" />
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
