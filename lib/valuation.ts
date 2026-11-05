@@ -4867,7 +4867,6 @@ export function computeSectorValuationAndDrivers(
       // Nakit Kira Getirisi & FFO / OCF Adli Analizi:
       // Gayrimenkulün gerçek değeri sadece muhasebe ROE'sinden değil, ürettiği operasyonel nakit akışından (Kira/NOI/FFO) ve temettüden gelir.
       const rawOcf = parseFinancialNumber(
-        extractedData?.unified_metrics?.ttm?.operatingCashFlow ??
         latest?.operating_cash_flow ??
         latest?.net_operating_cash_flow ??
         latest?.gross_operating_cash_flow

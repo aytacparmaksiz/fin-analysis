@@ -462,13 +462,23 @@ export class FinancialRatioEngine {
     const isFallback = !isYearEnd && (!prevYearEndItem || !prevMatchingItem);
 
     const computeTtmMetric = (
-      getter: (item: FinancialHistoryItem) => number | null | undefined
+      getter: (item: FinancialHistoryItem) => number | null | undefined,
+      isCashFlow: boolean = false
     ): number | null => {
       const currVal = getter(latest) ?? null;
       if (currVal === null || currVal === undefined) return null;
 
       if (isYearEnd) {
         return Math.round(currVal * unitScale);
+      }
+
+      // TMS 29 Enflasyon Muhasebesi ve Nakit Akışı Koruması:
+      // Nakit akışında (OCF, FCF, CapEx) veya TMS 29 altında farklı yılların kümülatif nakit akışlarını
+      // endeksleme yapmadan düz matematiksel toplama/çıkarma (Cari + YılSonu - EşleşenÇeyrek) ile birleştirmek,
+      // paranın satın alma gücü farklı olduğu için KAP resmi tablosuyla çelişen yapay rakamlar üretir.
+      // Bu nedenle nakit akışı kalemlerinde veya TMS 29'da dönemsel katsayı (annualFactor) ile yıllıklandırma yapılır.
+      if (isCashFlow || Boolean(latest?.is_tms29)) {
+        return Math.round(currVal * unitScale * annualFactor);
       }
 
       if (prevYearEndItem && prevMatchingItem) {
@@ -497,9 +507,9 @@ export class FinancialRatioEngine {
         return raw !== undefined && raw !== null ? Math.abs(raw) : null;
       }),
       netIncome: computeTtmMetric(i => i.net_income),
-      operatingCashFlow: computeTtmMetric(i => i.operating_cash_flow),
-      freeCashFlow: computeTtmMetric(i => i.free_cash_flow),
-      capex: computeTtmMetric(i => i.capex),
+      operatingCashFlow: computeTtmMetric(i => i.operating_cash_flow, true),
+      freeCashFlow: computeTtmMetric(i => i.free_cash_flow, true),
+      capex: computeTtmMetric(i => i.capex, true),
       periodCount: sortedSeries.length,
       isAnnualizedFallback: isFallback
     };
