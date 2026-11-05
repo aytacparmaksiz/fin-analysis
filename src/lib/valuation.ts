@@ -5504,22 +5504,24 @@ export function computeSectorValuationAndDrivers(
       const qualityFactor = Math.min(1.15, Math.max(0.85, currentMargin >= 0.28 ? 1.15 : (currentMargin >= 0.20 ? 1.05 : 0.95)));
 
       const forwardEbitda = ebitdaFull > 0 ? ebitdaFull * (1 + clampedRevG) : 0;
-      const targetEvMultiple = Number((Math.min(12.0, secMult.ev) * qualityFactor).toFixed(2));
+      const targetEvMultiple = Number((Math.min(7.5, secMult.ev * 0.60) * qualityFactor).toFixed(2));
       const enterpriseVal = forwardEbitda * targetEvMultiple;
 
       let evEquity = enterpriseVal - totalDebtBridge;
       if (enterpriseVal > 0 && totalEquityFull > 0) {
-        evEquity = Math.max(evEquity, enterpriseVal * 0.40);
+        evEquity = Math.max(evEquity, enterpriseVal * 0.35);
       }
       const evPerShare = evEquity > 0 ? (evEquity / effectiveShareCount) : 0;
 
       const forwardNet = netFull > 0 ? netFull * (1 + clampedNetG) : 0;
-      const targetPe = Number((Math.min(15.0, secMult.pe * 0.85) * (qualityFactor >= 1.05 ? 1.05 : 0.95)).toFixed(2));
+      const targetPe = Number((Math.min(8.5, secMult.pe * 0.50) * (qualityFactor >= 1.05 ? 1.05 : 0.95)).toFixed(2));
       const pePerShare = forwardNet > 0 ? (forwardNet * targetPe) / effectiveShareCount : 0;
 
       const bvps = totalEquityFull > 0 ? (totalEquityFull / effectiveShareCount) : 0;
-      const forwardBvps = Math.max(0, bvps * (1 + ((roe !== null && roe > 0) ? Math.min(0.45, (roe / 100) * 0.75) : 0)));
-      const justifiedPb = Math.max(2.5, Math.min(4.8, (roe !== null && roe > 0) ? (roe / 12.0) : secMult.pb));
+      const forwardBvps = Math.max(0, bvps * (1 + ((roe !== null && roe > 0) ? Math.min(0.35, (roe / 100) * 0.65) : 0)));
+      const justifiedPb = (roe !== null && roe > 0)
+        ? Math.max(0.40, Math.min(2.20, (roe / 16.0) * (secMult.pb * 0.45)))
+        : Math.max(0.35, Math.min(0.75, secMult.pb * 0.30));
       const pbPerShare = forwardBvps * justifiedPb;
 
       const weights = pePerShare > 0 ? { ev: 0.50, pe: 0.35, pb: 0.15 } : { ev: 0.70, pe: 0.0, pb: 0.30 };
@@ -6156,22 +6158,24 @@ export function computeSectorValuationAndDrivers(
       const qualityFactor = Math.min(1.15, Math.max(0.85, currentMargin >= 0.18 ? 1.15 : (currentMargin >= 0.14 ? 1.05 : 0.95)));
 
       const forwardEbitda = effectiveEbitda > 0 ? effectiveEbitda * (1 + clampedRevG) : 0;
-      const targetEvMultiple = Number((Math.min(8.5, secMult.ev * 0.75) * qualityFactor).toFixed(2));
+      const targetEvMultiple = Number((Math.min(6.5, secMult.ev * 0.52) * qualityFactor).toFixed(2));
       const enterpriseVal = forwardEbitda * targetEvMultiple;
 
       let evEquity = enterpriseVal - totalDebtBridge;
       if (enterpriseVal > 0 && totalEquityFull > 0) {
-        evEquity = Math.max(evEquity, enterpriseVal * 0.35);
+        evEquity = Math.max(evEquity, enterpriseVal * 0.30);
       }
       const evPerShare = evEquity > 0 ? (evEquity / effectiveShareCount) : 0;
 
       const forwardNet = effectiveNet > 0 ? effectiveNet * (1 + clampedNetG) : 0;
-      const targetPe = Number((Math.min(11.5, secMult.pe * 0.75) * (qualityFactor >= 1.05 ? 1.05 : 0.95)).toFixed(2));
+      const targetPe = Number((Math.min(8.5, secMult.pe * 0.52) * (qualityFactor >= 1.05 ? 1.05 : 0.95)).toFixed(2));
       const pePerShare = forwardNet > 0 ? (forwardNet * targetPe) / effectiveShareCount : 0;
 
       const bvps = totalEquityFull > 0 ? (totalEquityFull / effectiveShareCount) : 0;
       const forwardBvps = Math.max(0, bvps * (1 + ((roe !== null && roe > 0) ? Math.min(0.35, (roe / 100) * 0.70) : 0)));
-      const justifiedPb = Math.max(1.60, Math.min(2.80, (roe !== null && roe > 0) ? (roe / 15.0) : secMult.pb));
+      const justifiedPb = (roe !== null && roe > 0)
+        ? Math.max(0.35, Math.min(2.00, (roe / 16.0) * (secMult.pb * 0.40)))
+        : Math.max(0.30, Math.min(0.65, secMult.pb * 0.30));
       const pbPerShare = forwardBvps * justifiedPb;
 
       const weights = pePerShare > 0 ? { ev: 0.45, pe: 0.35, pb: 0.20 } : { ev: 0.65, pe: 0.0, pb: 0.35 };
@@ -6498,22 +6502,24 @@ export function computeSectorValuationAndDrivers(
 
     const secMult = resolveOfficialSectorMultiples('Tekstil Entegre', { ev: 6.46, pe: 12.18, pb: 1.43 });
     const forwardEbitda = effectiveEbitda > 0 ? effectiveEbitda * (1 + clampedRevG) : 0;
-    const targetEvMultiple = Number(secMult.ev.toFixed(2));
+    const targetEvMultiple = Number((Math.min(5.5, secMult.ev * 0.75)).toFixed(2));
     const enterpriseVal = forwardEbitda * targetEvMultiple;
 
     let evEquity = enterpriseVal - totalDebtBridge;
     if (enterpriseVal > 0 && totalEquityFull > 0) {
-      evEquity = Math.max(evEquity, enterpriseVal * 0.35);
+      evEquity = Math.max(evEquity, enterpriseVal * 0.30);
     }
     const evPerShare = evEquity > 0 ? (evEquity / effectiveShareCount) : 0;
 
     const forwardNet = effectiveNet > 0 ? effectiveNet * (1 + clampedNetG) : 0;
-    const targetPe = Number(Math.min(9.8, secMult.pe * 0.75).toFixed(2));
+    const targetPe = Number(Math.min(8.0, secMult.pe * 0.55).toFixed(2));
     const pePerShare = forwardNet > 0 ? (forwardNet * targetPe) / effectiveShareCount : 0;
 
     const bvps = totalEquityFull > 0 ? (totalEquityFull / effectiveShareCount) : 0;
     const forwardBvps = Math.max(0, bvps * (1 + ((roe !== null && roe > 0) ? Math.min(0.25, (roe / 100) * 0.70) : 0)));
-    const justifiedPb = Math.max(1.25, Math.min(1.85, (roe !== null && roe > 0) ? (roe / 16.0) : secMult.pb));
+    const justifiedPb = (roe !== null && roe > 0)
+      ? Math.max(0.35, Math.min(1.85, (roe / 16.0) * secMult.pb))
+      : Math.max(0.30, Math.min(0.65, secMult.pb * 0.40));
     const pbPerShare = forwardBvps * justifiedPb;
 
     const weights = pePerShare > 0 ? { ev: 0.45, pe: 0.35, pb: 0.20 } : { ev: 0.65, pe: 0.0, pb: 0.35 };
@@ -7107,6 +7113,22 @@ export function computeSectorValuationAndDrivers(
 
   valuation.final_decision = optimization.finalDecision;
   valuation.decision = optimization.finalDecision;
+
+  // Finansal Değişmez Kural 1: ALMA kararı verilen bir değer tuzağında kâğıt üzerinde suni yüksek iskonto (> %20) gösterilemez
+  if (valuation.final_decision === 'ALMA' && valuation.fair_value !== null && safeCurrentPrice > 0) {
+    const rawDisc = ((valuation.fair_value - safeCurrentPrice) / safeCurrentPrice) * 100;
+    if (rawDisc > 20.0) {
+      const compressedFair = Number((safeCurrentPrice * 1.10).toFixed(2));
+      valuation.fair_value = compressedFair;
+      if (valuation.bear_price !== null && valuation.bear_price > compressedFair) {
+        valuation.bear_price = Number((safeCurrentPrice * 0.90).toFixed(2));
+      }
+      if (valuation.bull_price !== null && valuation.bull_price > compressedFair * 1.20) {
+        valuation.bull_price = Number((compressedFair * 1.15).toFixed(2));
+      }
+      valuation.discount_pct = Number((((compressedFair - safeCurrentPrice) / safeCurrentPrice) * 100).toFixed(1));
+    }
+  }
 
   return { drivers, valuation, scoreResult, optimization };
 }
