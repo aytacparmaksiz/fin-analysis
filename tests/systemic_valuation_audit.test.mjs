@@ -232,4 +232,62 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
     assert.ok(res.valuation.fair_value <= 4.50, `AKFYE fair value (${res.valuation.fair_value}) must be <= 4.50 TL (Gordon justified multiple)`);
   });
 
+  it('8. DGATE (Computer Hardware Wholesale): Uses official 0002 wholesale multiples, eliminating phantom 1820 TL target', () => {
+    const dgateData = {
+      ticker: 'DGATE',
+      sector: 'TECH',
+      current_price: 45.60,
+      share_count: 30000000,
+      paid_in_capital: 30000000,
+      financial_history: [
+        {
+          period: '2026/06',
+          revenue: 9991485490,
+          gross_profit: 804206851,
+          operating_profit: 535135154,
+          ebitda: 586205560,
+          net_income: 51104756,
+          equity: 436749231,
+          net_debt: -120779489,
+          financing_expenses: -471179556,
+          roe: 26.0
+        }
+      ]
+    };
+
+    const res = computeSectorValuationAndDrivers(dgateData, 45.60);
+    assert.ok(res.valuation.formula_display.includes('FD/Satışlar (0,10x)') || res.valuation.formula_display.includes('FD/Satışlar (0,09x)'), 'Must use ~0.10x wholesale EV/Sales, NOT SaaS 2.5x!');
+    assert.ok(res.valuation.fair_value <= 65.0, `DGATE fair value (${res.valuation.fair_value}) must be <= 65 TL (never 1820 TL!)`);
+    assert.ok(res.valuation.fair_value >= 40.0, `DGATE fair value (${res.valuation.fair_value}) must be >= 40 TL`);
+    assert.equal(res.valuation.final_decision, 'NÖTR', 'DGATE must be evaluated as NÖTR near its market price');
+  });
+
+  it('9. ARASE (Regulated Electricity Distribution): Uses EPDK RAB & interest-adjusted EV, eliminating 329 TL FD/FAVÖK balloon', () => {
+    const araseData = {
+      ticker: 'ARASE',
+      sector: 'UTILITIES_TELCO',
+      current_price: 77.00,
+      share_count: 250000000,
+      paid_in_capital: 250000000,
+      financial_history: [
+        {
+          period: '2026/06',
+          revenue: 19836730000,
+          operating_profit: 5655100000,
+          ebitda: 5875840000,
+          net_income: 1589220000,
+          equity: 24583420000,
+          net_debt: 942955724,
+          financing_expenses: -3267020000,
+          roe: 13.2
+        }
+      ]
+    };
+
+    const res = computeSectorValuationAndDrivers(araseData, 77.00);
+    assert.ok(res.valuation.formula_display.includes('RAB PD/DD'), 'Must use EPDK RAB PD/DD in regulated electricity distribution');
+    assert.ok(res.valuation.fair_value <= 145.0, `ARASE fair value (${res.valuation.fair_value}) must be <= 145 TL (never 221 TL!)`);
+    assert.ok(res.valuation.fair_value >= 95.0, `ARASE fair value (${res.valuation.fair_value}) must be >= 95 TL`);
+  });
+
 });
