@@ -578,7 +578,7 @@ export function isRegulatedDistributionSector(officialSectorName: string, ticker
   const s = resolveOfficialSectorName(officialSectorName, ticker);
   if (s === 'Elektrik - Doğalgaz Dağıtım' || s.includes('Dağıtım')) return true;
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  return ['ENJSA'].includes(t);
+  return ['ENJSA', 'AHGAZ', 'ARASE'].includes(t);
 }
 
 /**

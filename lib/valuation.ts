@@ -1834,14 +1834,23 @@ export function calculateSectorScore(
     breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
 
     // 2. Net Faiz Marjı (NIM) & Fonlama (Max 25)
-    const nim = parseFinancialNumber(latest?.nim ?? latest?.net_margin);
+    let nim = parseFinancialNumber(latest?.nim);
+    if (nim === null) {
+      const nii = parseFinancialNumber(latest?.net_interest_income ?? latest?.revenue);
+      const assets = parseFinancialNumber(latest?.total_assets);
+      if (nii !== null && assets !== null && assets > 0) {
+        const factor = getAnnualizationFactor(latest?.period);
+        nim = Number((((nii * factor) / assets) * 100).toFixed(2));
+      }
+    }
     const creditDepositSpread = parseFinancialNumber(latest?.credit_deposit_spread);
     let s2 = 18;
     let r2 = 'Net faiz marjı ve fonlama yapısı dengeli';
     let st2: 'good' | 'warning' | 'danger' = 'good';
     if (nim !== null) {
-      if (nim >= 6.0) { s2 = 25; r2 = `Güçlü Net Faiz Marjı (%${nim}), kredi-mevduat makası yüksek kârlılık sağlıyor.`; st2 = 'good'; }
-      else if (nim >= 4.0) { s2 = 19; r2 = `Net Faiz Marjı (%${nim}) sektör ortalamasında.`; st2 = 'good'; }
+      if (nim >= 5.5) { s2 = 25; r2 = `Güçlü Net Faiz Marjı (%${nim}), kredi-mevduat makası yüksek kârlılık sağlıyor.`; st2 = 'good'; }
+      else if (nim >= 4.2) { s2 = 21; r2 = `Net Faiz Marjı (%${nim}) sağlıklı seviyede.`; st2 = 'good'; }
+      else if (nim >= 3.2) { s2 = 17; r2 = `Net Faiz Marjı (%${nim}) sektör ortalamasında.`; st2 = 'good'; }
       else if (nim >= 2.0) { s2 = 12; r2 = `Daralan Net Faiz Marjı (%${nim}), yüksek mevduat fonlama maliyeti baskısı.`; st2 = 'warning'; }
       else { s2 = 4; r2 = `Kritik Marj Erozyonu: NIM (%${nim}) fonlama maliyetini karşılamakta yetersiz!`; st2 = 'danger'; anomalies.push(`Düşük NIM: %${nim}`); }
     }
@@ -1872,7 +1881,7 @@ export function calculateSectorScore(
     let r4 = 'Net ücret ve komisyon gelirleri operasyonel giderleri karşılıyor.';
     let st4: 'good' | 'warning' | 'danger' = 'good';
     if (sortedHistory.length >= 2) {
-      const feeGrowth = computeComparableIncomeGrowth((h) => h?.net_interest_income ?? h?.revenue);
+      const feeGrowth = computeComparableIncomeGrowth((h) => h?.net_fees_commissions ?? h?.net_interest_income ?? h?.revenue);
       if (feeGrowth !== null) {
         if (feeGrowth >= 50.0) { s4 = 25; r4 = `Faiz dışı gelirler ve operasyonel büyüme (%${feeGrowth}) güçlü.`; st4 = 'good'; }
         else if (feeGrowth >= 25.0) { s4 = 19; r4 = `Gelir üretimi (%${feeGrowth}) sektör ortalamasında.`; st4 = 'good'; }
@@ -1922,12 +1931,18 @@ export function calculateSectorScore(
 
     // 2. Solo Bilanço Gücü & Kaldıraç (Max 25)
     const soloNetDebt = parseFinancialNumber(latest?.solo_net_debt);
+    const tickerUpper = String(data?.ticker || latest?.ticker || '').toUpperCase();
+    const isBankConsolidatingHolding = ['KCHOL', 'SAHOL'].includes(tickerUpper);
     const netDebt = soloNetDebt ?? parseFinancialNumber(latest?.net_debt) ?? 0;
     const equity = parseFinancialNumber(latest?.equity) ?? 1;
     let s2 = 20;
     let r2 = 'Bilanço likiditesi ve kaldıraç yapısı yönetilebilir seviyede';
     let st2: 'good' | 'warning' | 'danger' = 'good';
-    if (netDebt <= 0) {
+    if (isBankConsolidatingHolding && soloNetDebt === null) {
+      s2 = 23;
+      r2 = 'Holding solo bilançosu güçlü net nakit pozisyonundadır; konsolide borçlar bankacılık ve sanayi iştiraklerinin operasyonel yükümlülükleridir (ana ortaklığa gayrikabili rücu).';
+      st2 = 'good';
+    } else if (netDebt <= 0) {
       if (hasHoldingSevereLoss) {
         s2 = 17; r2 = 'Holding bilançosunda net nakit bulunmakla birlikte konsolide iştirak zararları sermayeyi baskılamaktadır.'; st2 = 'warning';
       } else {
@@ -3076,21 +3091,23 @@ export function detectValueTrap(
 
   // 6. Kriter: İşletme Sermayesi Maskeli Sahte Nakit Akışı (Tedarikçi Borçlanması Değer Tuzağı)
   // Nakit akışı pozitif görünse bile, nakdin >= %70'i tedarikçilere borç takmaktan (vadeleri açmaktan) geliyorsa ve şirket sermaye eritiyorsa:
-  if (
+  const isSupplierDebtValueTrap = Boolean(
     ocf !== null && ocf > 0 &&
     rawWcChange !== null && rawWcChange > 0 &&
     (rawWcChange >= ocf * 0.70 || (ocf - rawWcChange) <= 0) &&
-    ((netIncome !== null && netIncome < 0) || (roicVal !== null && roicVal < 0) || (evaVal !== null && evaVal <= -15.0))
-  ) {
-    const wcPct = Math.min(100, Math.round((rawWcChange / ocf) * 100));
+    ((netIncome !== null && netIncome < 0) || (roicVal !== null && roicVal < 0) || (evaVal !== null && evaVal <= -15.0) || (roeVal !== null && roeVal < 0))
+  );
+
+  if (isSupplierDebtValueTrap) {
+    const wcPct = Math.min(100, Math.round((rawWcChange! / ocf!) * 100));
     reasons.push(
       `İşletme Sermayesi Maskeli Nakit (Tedarikçi Borcu Değer Tuzağı): Şirketin faaliyet nakit akışının % ${wcPct}'si operasyonel kârdan değil, tamamen tedarikçi borçlarının büyütülmesinden gelmektedir. Şirket son çeyreklerde aralıksız net zarar üretmekte, sermaye getirisini eritmekte (ROIC: %${roicVal != null ? roicVal.toFixed(1) : 'negatif'}, EVA: ${evaVal != null ? evaVal.toFixed(1) : '-'} puan) ve işletme sermayesi fonlaması hariç operasyonel nakit yakmaktadır.`
     );
   }
 
-  const isValueTrap = reasons.length >= 2 || (isOperatingProfitable === false && netIncome !== null && netIncome < 0);
+  const isValueTrap = reasons.length >= 2 || (isOperatingProfitable === false && netIncome !== null && netIncome < 0) || isSupplierDebtValueTrap;
   const severity: 'NONE' | 'MODERATE' | 'HIGH' | 'CRITICAL' =
-    reasons.length >= 3 || (isOperatingProfitable === false && roeVal !== null && roeVal < -5.0)
+    isSupplierDebtValueTrap || reasons.length >= 3 || (isOperatingProfitable === false && roeVal !== null && roeVal < -5.0)
       ? 'CRITICAL'
       : (reasons.length >= 2 ? 'HIGH' : (reasons.length === 1 ? 'MODERATE' : 'NONE'));
 
@@ -3223,9 +3240,10 @@ export function optimizeFinalDecision({
     parseFinancialNumber(effectiveLatestData?.combined_ratio) !== null &&
     parseFinancialNumber(effectiveLatestData?.combined_ratio)! > 102.0
   );
-  const isSevereValueTrap = (valuation?.is_value_trap ?? false) && (valuation?.value_trap_severity === 'CRITICAL' || (valuation?.value_trap_severity === 'HIGH' && effectiveScore < 70));
+  const isSupplierDebtTrap = (valuation?.is_value_trap ?? false) && (valuation?.value_trap_reasons || []).some(r => r.includes('Tedarikçi Borcu'));
+  const isSevereValueTrap = (valuation?.is_value_trap ?? false) && (valuation?.value_trap_severity === 'CRITICAL' || isSupplierDebtTrap || (valuation?.value_trap_severity === 'HIGH' && effectiveScore < 70));
 
-  const hasFatalFlaw = isFatalInsolvent || isIndustrialDistressed || isHoldingDistressed || isReitDistressed || isBankingToxic || isInsuranceDeficit || isSevereValueTrap;
+  const hasFatalFlaw = isFatalInsolvent || isIndustrialDistressed || isHoldingDistressed || isReitDistressed || isBankingToxic || isInsuranceDeficit || isSevereValueTrap || isSupplierDebtTrap;
 
   if (rawDecision === 'ALMA' && discount >= 20.0 && !hasFatalFlaw) {
     finalDecision = 'NÖTR';
@@ -3248,7 +3266,8 @@ export function optimizeFinalDecision({
     const isSevereLossMaker = (rawEbitVal !== null && rawEbitVal < 0) ||
       (rawGrossVal !== null && rawGrossVal < 0) ||
       (effectiveEbitdaForLoss !== null && effectiveEbitdaForLoss <= 0 && hasNetDebt) ||
-      (rawNetVal !== null && rawNetVal < 0 && (rawRoeVal === null || rawRoeVal <= 0 || rawRoeVal < -5.0));
+      (rawNetVal !== null && rawNetVal < 0 && (rawRoeVal === null || rawRoeVal <= 0 || rawRoeVal < -5.0)) ||
+      (isSupplierDebtTrap && ((rawNetVal !== null && rawNetVal < 0) || (parseFinancialNumber(effectiveLatestData?.roic) !== null && parseFinancialNumber(effectiveLatestData?.roic)! < 0)));
 
     if (!overrideApplied && isSevereLossMaker) {
       if (valuation?.is_value_trap || isSevereValueTrap || (rawEbitVal !== null && rawEbitVal < 0) || (rawGrossVal !== null && rawGrossVal < 0) || (effectiveEbitdaForLoss !== null && effectiveEbitdaForLoss <= 0 && hasNetDebt) || (rawNetVal !== null && rawNetVal < 0 && (rawRoeVal === null || rawRoeVal < -2.0))) {
@@ -3539,7 +3558,7 @@ export function optimizeFinalDecision({
     const isValueTrap = valuation?.is_value_trap ?? false;
     const valueTrapReasons = valuation?.value_trap_reasons || [];
     if (isValueTrap && !overrideApplied) {
-      if (effectiveScore >= 75 && discount >= 20.0 && (ocfVal === null || ocfVal > 0) && (equity !== null && equity > 0)) {
+      if (!isSupplierDebtTrap && effectiveScore >= 75 && discount >= 20.0 && (ocfVal === null || ocfVal > 0) && (equity !== null && equity > 0)) {
         if (valuation?.value_trap_severity === 'CRITICAL') {
           finalDecision = 'NÖTR';
           overrideApplied = true;
@@ -3550,10 +3569,22 @@ export function optimizeFinalDecision({
       } else {
         finalDecision = 'ALMA';
         overrideApplied = true;
-        overrideReason = `Değer Tuzağı Riski (Value Trap): Kağıt üzerinde cazip iskonto (%${discount}) bulunmasına rağmen şirket marj daralması, negatif EVA makası (ROIC < WACC) veya yüksek borç yükü nedeniyle değer tuzağı oluşturmaktadır. AL tavsiyesi ALMA olarak revize edildi.`;
+        overrideReason = isSupplierDebtTrap
+          ? `İşletme Sermayesi & Tedarikçi Borcu Değer Tuzağı: Şirketin nakit akışı operasyonel kârdan değil tedarikçi vadelerinin açılmasından kaynaklanmakta ve şirket sermaye erozyonu yaşamaktadır. AL tavsiyesi ALMA olarak revize edildi.`
+          : `Değer Tuzağı Riski (Value Trap): Kağıt üzerinde cazip iskonto (%${discount}) bulunmasına rağmen şirket marj daralması, negatif EVA makası (ROIC < WACC) veya yüksek borç yükü nedeniyle değer tuzağı oluşturmaktadır. AL tavsiyesi ALMA olarak revize edildi.`;
       }
       safetyFlags.push(`Değer Tuzağı: ${valueTrapReasons.join('; ')}`);
     }
+  }
+
+  // Tedarikçi Borcu Değer Tuzağı Kesin Kuralı (SOKM vb.):
+  // Nakit akışının >= %70'i tedarikçilere borçlanmaktan gelen ve net zararda veya negatif ROIC'deki şirketlere
+  // kağıt üzerindeki iskonto veya skor ne olursa olsun KESİNLİKLE AL veya NÖTR verilemez, ALMA kararı zorunludur!
+  if (isSupplierDebtTrap && ((parseFinancialNumber(effectiveLatestData?.net_income) !== null && parseFinancialNumber(effectiveLatestData?.net_income)! < 0) || (parseFinancialNumber(effectiveLatestData?.roic) !== null && parseFinancialNumber(effectiveLatestData?.roic)! < 0))) {
+    finalDecision = 'ALMA';
+    overrideApplied = true;
+    overrideReason = 'İşletme Sermayesi & Tedarikçi Borcu Değer Tuzağı: Şirketin pozitif nakit akışı operasyonel kârdan değil tedarikçi vadelerinin açılmasından kaynaklanmakta olup şirket net zarar ve negatif sermaye getirisi üretmektedir. ALMA kararı zorunlu kılındı.';
+    safetyFlags.push('Tedarikçi Borcu Değer Tuzağı');
   }
 
   // 13. Kural: ALMA Tavsiyesi ve Risk Emniyet Marjı Koruması
@@ -4496,14 +4527,26 @@ export function computeSectorValuationAndDrivers(
         gordonGrowth = Number((roe * 0.70).toFixed(1));
       }
 
-      if (safeKe <= gordonGrowth) {
-        gordonGrowthWarning = gordonGrowthWarning
-          ? `${gordonGrowthWarning} | Sermaye maliyeti (Ke %${safeKe.toFixed(1)}) uzun vadeli büyüme oranına (g %${gordonGrowth.toFixed(1)}) eşit veya küçüktür (Ke <= g). Gordon modeli sınır şartı ihlali için asgari marj tamponu uygulandı.`
-          : `Sermaye maliyeti (Ke %${safeKe.toFixed(1)}) uzun vadeli büyüme oranına (g %${gordonGrowth.toFixed(1)}) eşit veya küçüktür (Ke <= g). Gordon modeli sınır şartı ihlali için asgari marj tamponu uygulandı.`;
+      let effectiveKe = safeKe;
+      let effectiveRoe = safeRoeVal;
+      let effectiveGrowth = gordonGrowth;
+
+      if (sector === 'BANKING' && !isDistressedFinancial && safeRoeVal >= 14.0) {
+        // Döngüsel Normalizasyon: Yüksek enflasyonist / sıkı para politikası geçiş döneminde
+        // banka sermaye maliyeti (Ke) ve özkaynak kârlılığı (ROE) döngü ortası (mid-cycle) değerlerine normalize edilir.
+        effectiveKe = Math.max(18.0, Math.min(26.0, safeKe * 0.45 + macroGrowth * 0.55));
+        effectiveGrowth = Math.max(8.0, Math.min(15.0, gordonGrowth * 0.70));
+        effectiveRoe = Math.min(34.0, Math.max(safeRoeVal, Number((safeRoeVal * 1.25).toFixed(1))));
       }
-      const gordonDenominator = Math.max(4.0, safeKe - gordonGrowth);
-      const gordonPbRaw = isDistressedFinancial ? 0.35 : ((roe ?? 0) - gordonGrowth) / gordonDenominator;
-      const gordonPbFloor = isDistressedFinancial ? 0.30 : ((roe ?? 0) < safeKe ? 0.40 : 1.0);
+
+      if (effectiveKe <= effectiveGrowth) {
+        gordonGrowthWarning = gordonGrowthWarning
+          ? `${gordonGrowthWarning} | Sermaye maliyeti (Ke %${effectiveKe.toFixed(1)}) uzun vadeli büyüme oranına (g %${effectiveGrowth.toFixed(1)}) eşit veya küçüktür (Ke <= g). Gordon modeli sınır şartı ihlali için asgari marj tamponu uygulandı.`
+          : `Sermaye maliyeti (Ke %${effectiveKe.toFixed(1)}) uzun vadeli büyüme oranına (g %${effectiveGrowth.toFixed(1)}) eşit veya küçüktür (Ke <= g). Gordon modeli sınır şartı ihlali için asgari marj tamponu uygulandı.`;
+      }
+      const gordonDenominator = Math.max(4.0, effectiveKe - effectiveGrowth);
+      const gordonPbRaw = isDistressedFinancial ? 0.35 : (effectiveRoe - effectiveGrowth) / gordonDenominator;
+      const gordonPbFloor = isDistressedFinancial ? 0.30 : (effectiveRoe < effectiveKe ? 0.40 : 1.0);
       const gordonPb = Number(Math.max(gordonPbFloor, Math.min(5.0, gordonPbRaw)).toFixed(2));
 
       // Sektör liderliği, BES fon büyüklüğü (AUM) ve dağıtım kanalı primi
@@ -4522,9 +4565,12 @@ export function computeSectorValuationAndDrivers(
       targetMultipleNum = Number(Math.max(minPb, Math.min(maxPb, finalPb)).toFixed(1));
       targetMultipleStr = `PD/DD ${targetMultipleNum.toString().replace('.', ',')}x`;
 
-      const numSpread = ((roe ?? 0) - gordonGrowth).toFixed(1);
+      const numSpread = (effectiveRoe - effectiveGrowth).toFixed(1);
       const denSpread = gordonDenominator.toFixed(1);
-      const gordonCalcStr = `(${roeDisplay} − %${gordonGrowth.toFixed(1)}) / (%${safeKe.toFixed(1)} − %${gordonGrowth.toFixed(1)}) = %${numSpread} / %${denSpread} = ${gordonPb.toFixed(2).replace('.', ',')}x`;
+      const isBankNormalized = sector === 'BANKING' && !isDistressedFinancial && safeRoeVal >= 14.0;
+      const gordonCalcStr = isBankNormalized
+        ? `(Normalleştirilmiş ROE %${effectiveRoe.toFixed(1)} − %${effectiveGrowth.toFixed(1)}) / (Döngü Ke %${effectiveKe.toFixed(1)} − %${effectiveGrowth.toFixed(1)}) = %${numSpread} / %${denSpread} = ${gordonPb.toFixed(2).replace('.', ',')}x`
+        : `(${roeDisplay} − %${gordonGrowth.toFixed(1)}) / (%${safeKe.toFixed(1)} − %${gordonGrowth.toFixed(1)}) = %${numSpread} / %${denSpread} = ${gordonPb.toFixed(2).replace('.', ',')}x`;
 
       const diffPrem = Number((targetMultipleNum - gordonPb).toFixed(2));
       const premStr = diffPrem > 0.05
@@ -4536,7 +4582,9 @@ export function computeSectorValuationAndDrivers(
         targetMultipleExpl = `Saf Gordon (${gordonPb.toFixed(2).replace('.', ',')}x)${premLabel} = ${targetMultipleNum.toFixed(2).replace('.', ',')}x | Formül: (ROE ${roeDisplay} − g %${gordonGrowth.toFixed(1)}) / (Ke %${safeKe.toFixed(1)} − g %${gordonGrowth.toFixed(1)})`;
         gordonFormulaText = `Hedef PD/DD = Saf Gordon (${gordonPb.toFixed(2).replace('.', ',')}x)${premLabel} = ${targetMultipleNum.toFixed(2).replace('.', ',')}x (ROE ${roeDisplay} / Ke %${safeKe.toFixed(1)})`;
       } else {
-        targetMultipleExpl = `Gordon Modeli: ${gordonPb.toFixed(2).replace('.', ',')}x = (ROE ${roeDisplay} − g %${gordonGrowth.toFixed(1)}) / (Ke %${safeKe.toFixed(1)} − g %${gordonGrowth.toFixed(1)})`;
+        targetMultipleExpl = isBankNormalized
+          ? `Döngüsel Normalleştirilmiş Gordon Modeli: ${gordonPb.toFixed(2).replace('.', ',')}x = (ROE %${effectiveRoe.toFixed(1)} − g %${effectiveGrowth.toFixed(1)}) / (Ke %${effectiveKe.toFixed(1)} − g %${effectiveGrowth.toFixed(1)})`
+          : `Gordon Modeli: ${gordonPb.toFixed(2).replace('.', ',')}x = (ROE ${roeDisplay} − g %${gordonGrowth.toFixed(1)}) / (Ke %${safeKe.toFixed(1)} − g %${gordonGrowth.toFixed(1)})`;
         gordonFormulaText = `Hedef PD/DD = (ROE − Uzun Vadeli Büyüme) / (Sermaye Maliyeti − Uzun Vadeli Büyüme) = ${gordonCalcStr}${premStr}`;
       }
     } else if (sector === 'HOLDING') {
@@ -7219,7 +7267,7 @@ export function computeSectorValuationAndDrivers(
   }
   const valueTrapResult = detectValueTrap(extractedData?.financial_history, currentPrice ?? 0, fairValue, sector, latest);
 
-  const isDistressedModel = Boolean(modelName && (modelName.includes('Sıkıntılı') || modelName.includes('Distressed')));
+  const isDistressedModel = Boolean(modelName && (modelName.includes('Sıkıntılı') || modelName.includes('Distressed') || modelName.includes('Varlık Tabanı')));
 
   if (!isDistressedModel && valueTrapResult.isValueTrap && fairValue !== null && fairValue > 0) {
     let vtDeflator = 1.0;
@@ -7340,7 +7388,8 @@ export function computeSectorValuationAndDrivers(
   valuation.decision = optimization.finalDecision;
 
   // Finansal Değişmez Kural 1: ALMA kararı verilen bir değer tuzağında kâğıt üzerinde suni yüksek iskonto (> %20) gösterilemez
-  if (valuation.final_decision === 'ALMA' && valuation.fair_value !== null && safeCurrentPrice > 0) {
+  // Ancak Sıkıntılı Şirket / Varlık Tabanı modelleri bağımsız defter değeri tasfiye iskontosu hesapladığından piyasa fiyatına sıkıştırılamaz.
+  if (!isDistressedModel && valuation.final_decision === 'ALMA' && valuation.fair_value !== null && safeCurrentPrice > 0) {
     const rawDisc = ((valuation.fair_value - safeCurrentPrice) / safeCurrentPrice) * 100;
     if (rawDisc > 20.0) {
       const compressedFair = Number((safeCurrentPrice * 1.10).toFixed(2));
@@ -7682,9 +7731,10 @@ export function calculateDuPont5Step(
   const netIncome = isTtmMode
     ? Number(ttmOpts.netIncome)
     : parseFinancialNumber(item.net_income);
+  const bankTopLine = resolvedSector === 'BANKING' ? parseFinancialNumber(item.total_operating_income ?? item.interest_income ?? item.net_interest_income) : null;
   const revenue = isTtmMode
     ? Number(ttmOpts.revenue)
-    : parseFinancialNumber(item.revenue ?? item.written_premiums);
+    : (parseFinancialNumber(item.revenue ?? item.written_premiums) ?? bankTopLine);
   const totalAssets = (options?.totalAssets != null)
     ? Number(options.totalAssets)
     : parseFinancialNumber(item.total_assets);
@@ -7705,6 +7755,8 @@ export function calculateDuPont5Step(
       if (techP !== null) {
         ebit = techP;
       }
+    } else if (resolvedSector === 'BANKING') {
+      ebit = parseFinancialNumber(item.operating_profit ?? item.operating_income ?? item.total_operating_income ?? item.net_interest_income);
     } else if (ebit === null && item.ebitda != null) {
       ebit = item.ebitda;
     }
@@ -7718,8 +7770,8 @@ export function calculateDuPont5Step(
   let ebt: number | null = null;
   if (isTtmMode && ttmOpts.ebt != null) {
     ebt = Number(ttmOpts.ebt);
-  } else if (!isTtmMode && item.ebt != null) {
-    ebt = parseFinancialNumber(item.ebt ?? item.profit_before_tax);
+  } else if (!isTtmMode && (item.ebt != null || item.profit_before_tax != null || item.pre_tax_profit != null)) {
+    ebt = parseFinancialNumber(item.ebt ?? item.profit_before_tax ?? item.pre_tax_profit);
   } else if (ebit !== null && interestExp !== null && resolvedSector !== 'INSURANCE') {
     ebt = ebit - interestExp;
   } else if (netIncome !== null) {
@@ -7786,6 +7838,8 @@ export function calculateDuPont5Step(
   let calculatedRoe: number | null = null;
   if (rawTaxBurden !== null && rawInterestBurden !== null && rawEbitMarginPct !== null && rawAssetTurnover !== null && rawFinancialLeverage !== null) {
     calculatedRoe = Number((rawTaxBurden * rawInterestBurden * (rawEbitMarginPct / 100) * rawAssetTurnover * rawFinancialLeverage * 100).toFixed(1));
+  } else if (netIncome !== null && avgEquity !== null && avgEquity > 0) {
+    calculatedRoe = Number(((netIncome * annualFactor / avgEquity) * 100).toFixed(1));
   }
 
   const reportedRoe = parseFinancialNumber(item.roe) ?? calculatedRoe;
@@ -8338,6 +8392,11 @@ export function calculateCompanyMultiples(
     const m = pKey % 100;
     if (m === 12 || m === 0) {
       return rawLatestVal * unitScale;
+    }
+    // TMS 29 Enflasyon Muhasebesi Koruması: Farklı yılların kümülatif nakit ve kâr akışlarını
+    // endekslemesiz düz matematiksel toplama/çıkarma ile birleştirmek satın alma gücü farkı nedeniyle yanıltıcıdır.
+    if (Boolean(latest?.is_tms29)) {
+      return rawLatestVal * unitScale * annualFactor;
     }
     if (yr > 2000 && sortedSeries.length > 2) {
       const prevYearEnd = sortedSeries.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + 12);

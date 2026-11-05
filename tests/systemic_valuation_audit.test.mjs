@@ -326,4 +326,174 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
     assert.ok(res.valuation.fair_value >= 115.0, `TRGYO fair value (${res.valuation.fair_value}) must be >= 115 TL`);
   });
 
+  it('11. Banking Differentiated Scoring: AKBNK and GARAN receive distinct, non-blind scores based on real NIM and CAR', () => {
+    const akbnkData = {
+      ticker: 'AKBNK',
+      sector: 'BANKING',
+      current_price: 58.50,
+      share_count: 5200000000,
+      financial_history: [
+        {
+          period: '2026/06',
+          net_interest_income: 62000000000,
+          net_fees_commissions: 24000000000,
+          total_operating_income: 98000000000,
+          loans: 1450000000000,
+          deposits: 1700000000000,
+          total_assets: 2300000000000,
+          equity: 240000000000,
+          net_income: 41000000000,
+          nim: 4.18,
+          car_ratio: 20.89,
+          npl_ratio: 2.1,
+          roe: 22.3
+        }
+      ]
+    };
+
+    const garanData = {
+      ticker: 'GARAN',
+      sector: 'BANKING',
+      current_price: 118.00,
+      share_count: 4200000000,
+      financial_history: [
+        {
+          period: '2026/06',
+          net_interest_income: 88000000000,
+          net_fees_commissions: 38000000000,
+          total_operating_income: 140000000000,
+          loans: 1650000000000,
+          deposits: 1950000000000,
+          total_assets: 2600000000000,
+          equity: 290000000000,
+          net_income: 65000000000,
+          nim: 5.53,
+          car_ratio: 24.39,
+          npl_ratio: 1.8,
+          roe: 28.5
+        }
+      ]
+    };
+
+    const akbnkScore = calculateSectorScore(akbnkData, 'BANKING');
+    const garanScore = calculateSectorScore(garanData, 'BANKING');
+
+    assert.ok(akbnkScore.totalScore > 0 && garanScore.totalScore > 0);
+    assert.notEqual(akbnkScore.totalScore, 87, 'AKBNK score must not be stuck at blind 87/100 fallback');
+    assert.notEqual(garanScore.totalScore, 87, 'GARAN score must not be stuck at blind 87/100 fallback');
+    assert.ok(garanScore.totalScore >= akbnkScore.totalScore, 'GARAN score should be >= AKBNK due to higher NIM and ROE');
+  });
+
+  it('12. Banking Monetary Cycle Gordon Justified P/B: AKBNK and GARAN target multiple reflects normalized cost of equity (~1.1x - 1.9x), never trapped at 0.60x P/B', () => {
+    const akbnkData = {
+      ticker: 'AKBNK',
+      sector: 'BANKING',
+      current_price: 58.50,
+      share_count: 5200000000,
+      financial_history: [
+        {
+          period: '2026/06',
+          equity: 240000000000,
+          net_income: 41000000000,
+          total_assets: 2300000000000,
+          roe: 22.3,
+          nim: 4.18,
+          car_ratio: 20.89,
+          wacc: 44.0 // Nominal tight monetary policy WACC
+        }
+      ]
+    };
+
+    const res = computeSectorValuationAndDrivers(akbnkData, 58.50);
+    assert.ok(res.drivers.target_multiple.numericValue > 0.85, `AKBNK target multiple (${res.drivers.target_multiple.numericValue}) must be > 0.85x, not trapped at 0.60x floor!`);
+    assert.ok(res.valuation.fair_value > 0);
+    assert.ok(res.drivers.target_multiple.sourceExplanation?.includes('Döngüsel Normalleştirilmiş Gordon Modeli') || res.valuation.formula_display.includes('İleri HBDD'), 'Must use cycle-normalized Gordon formula');
+  });
+
+  it('13. SOKM (Retail Supplier Debt Value Trap): Cash flow funded 117% from supplier payable extensions with net loss & negative ROIC receives ALMA', () => {
+    const sokmData = {
+      ticker: 'SOKM',
+      sector: 'RETAIL',
+      current_price: 43.10,
+      share_count: 593290000,
+      paid_in_capital: 593290000,
+      financial_history: [
+        {
+          period: '2026/06',
+          revenue: 120000000000,
+          ebitda: 5500000000,
+          operating_profit: 1200000000,
+          net_income: -1350000000, // Net loss
+          equity: 28000000000,
+          net_debt: 12000000000,
+          operating_cash_flow: 16700000000, // Positive OCF: 16.7B TL
+          working_capital_change: 19600000000, // 19.6B TL (117%) from supplier debt!
+          roic: -42.5,
+          roe: -4.8,
+          wacc: 38.0
+        }
+      ]
+    };
+
+    const res = computeSectorValuationAndDrivers(sokmData, 43.10);
+    assert.equal(res.valuation.final_decision, 'ALMA', 'SOKM must be ALMA due to supplier debt value trap and net loss');
+    assert.ok(res.valuation.is_value_trap, 'Must be flagged as value trap');
+    assert.ok(res.valuation.value_trap_reasons?.some(r => r.includes('Tedarikçi Borcu')), 'Must identify Tedarikçi Borcu Değer Tuzağı in reasons');
+    assert.equal(res.valuation.margin_of_safety_status, 'UNSAFE');
+  });
+
+  it('14. KCHOL (Holding Solo vs Consolidated Debt): Holding consolidating bank (YKBNK) is not penalized with false 5/25 leverage score', () => {
+    const kcholData = {
+      ticker: 'KCHOL',
+      sector: 'HOLDING',
+      current_price: 215.00,
+      share_count: 2535897000,
+      paid_in_capital: 2535897000,
+      financial_history: [
+        {
+          period: '2026/06',
+          revenue: 850000000000,
+          net_income: 38000000000,
+          operating_profit: 65000000000,
+          equity: 520000000000,
+          net_debt: 1050000000000, // Consolidated 1.05 Trillion TL net debt due to YKBNK deposits!
+          holding_discount: 28.5,
+          roe: 18.5
+        }
+      ]
+    };
+
+    const scoreResult = calculateSectorScore(kcholData, 'HOLDING');
+    const finHealth = scoreResult.breakdown.find(b => b.category === 'Solo Nakit Gücü & Borçsuzluk' || b.category.includes('Solo Nakit') || b.category.includes('Borçsuzluk'));
+    assert.ok(finHealth);
+    assert.ok(finHealth.score >= 20, `KCHOL leverage score (${finHealth.score}/25) must be >= 20, not penalized to 5/25 for bank deposits`);
+    assert.doesNotMatch(finHealth.reason, /Solo holding bilançosunda yüksek kaldıraç riski/i);
+  });
+
+  it('15. AHGAZ (EPDK Regulated Distribution): Recognized as regulated distribution and valued via RAB framework', () => {
+    const ahgazData = {
+      ticker: 'AHGAZ',
+      sector: 'UTILITIES_TELCO',
+      current_price: 14.50,
+      share_count: 2600000000,
+      paid_in_capital: 2600000000,
+      financial_history: [
+        {
+          period: '2026/06',
+          revenue: 45000000000,
+          operating_profit: 8500000000,
+          ebitda: 9800000000,
+          net_income: 3200000000,
+          equity: 36000000000,
+          net_debt: 4200000000,
+          roe: 14.5
+        }
+      ]
+    };
+
+    const res = computeSectorValuationAndDrivers(ahgazData, 14.50);
+    assert.ok(res.valuation.formula_display.includes('RAB PD/DD'), `AHGAZ formula (${res.valuation.formula_display}) must include RAB PD/DD`);
+    assert.ok(res.valuation.fair_value > 0);
+  });
+
 });
