@@ -4546,7 +4546,7 @@ export default function SimplyView({
                 <div className="text-right">
                   <span className="text-sm text-slate-400 font-semibold mr-2">Yıllık ROE:</span>
                   <span className="text-xl font-black font-mono text-emerald-400">
-                    %{dupontResult.calculatedRoe?.toFixed(1) || '—'}
+                    %{((dupontResult.calculatedRoe ?? dupontResult.reportedRoe ?? latestData?.roe) as number)?.toFixed(1) || '—'}
                   </span>
                 </div>
               </div>
