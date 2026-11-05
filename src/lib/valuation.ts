@@ -1682,6 +1682,17 @@ export function syncReportTextWithValuation(reportText: string, valuation: any):
     text = text.replace(/Analist\s+Karar[ıi]\s*[:=-]\s*\[?\s*\*?\*?\s*(?:ALMA|SAT|AL|NÖTR|NOTR|TUT)\s*\*?\*?\s*\]?/gi, `Analist Kararı: **[${cleanDec}]**`);
   }
 
+  // 6. Adli Denetim & Değer Tuzağı Teşhisi Senkronizasyonu (Kalıcı Yatırım Tezi)
+  const trapReasons: string[] = Array.isArray(valuation.value_trap_reasons) ? valuation.value_trap_reasons : [];
+  if (trapReasons.length > 0 && !text.includes('Adli Denetim & Değer Tuzağı Teşhisi')) {
+    const alertBlock = `\n\n> ⚠️ **Adli Denetim & Değer Tuzağı Teşhisi (Forensic Red Team):**\n${trapReasons.map((r: string) => `> - ${r}`).join('\n')}\n`;
+    if (text.includes('## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ')) {
+      text = text.replace('## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ', `## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ${alertBlock}`);
+    } else {
+      text = alertBlock + '\n' + text;
+    }
+  }
+
   return text;
 }
 
@@ -3042,13 +3053,39 @@ export function detectValueTrap(
 
   // 5. Kriter: Kronik Zarar ve Özkaynak Erozyonu (Brüt Zarar, Esas Faaliyet Zararı veya Negatif ROE)
   const roeVal = parseFinancialNumber(latest?.roe);
+  const roicVal = parseFinancialNumber(latest?.roic);
+  const evaVal = parseFinancialNumber(latest?.eva_spread);
+  const rawWcChange = parseFinancialNumber(latest?.working_capital_change);
+  const latestEbitda = parseFinancialNumber(latest?.ebitda) ?? ttmEbitda;
+  const sectorDisplayName = getCompanySectorDisplayName(tickerStr, sector).toLowerCase();
+  const isRetailSector = sector === 'RETAIL' || sectorDisplayName.includes('perakende') || sectorDisplayName.includes('gıda');
+
   if (rawGross !== null && rawGross < 0) {
     reasons.push(`Brüt Satış Zararı: Şirket doğrudan üretim ve satış maliyetini karşılayamamakta (-${Math.abs(rawGross / 1e6).toFixed(1)}M TL) ve negatif brüt kâr üretmektedir.`);
   } else if (rawEbit !== null && rawEbit < 0) {
-    reasons.push(`Esas Faaliyet Zararı (Amortisman Yanılsaması): Şirket operasyonel olarak zarar etmektedir (-${Math.abs(rawEbit / 1e6).toFixed(1)}M TL). Pozitif görünen FAVÖK yalnızca yüksek amortisman giderlerinden kaynaklanmaktadır.`);
+    // Perakendede Brüt Kârı ve FAVÖK'ü yüksek, Net Kârı pozitif olan şirketlerde negatif EBIT ticari borç reeskontundan kaynaklanabilir.
+    // Ancak şirket net zarardaysa veya sermaye yıkıyorsa bu gerçek bir operasyonel erozyondur.
+    const isHarmlessRetailReeskont = isRetailSector && rawGross !== null && rawGross > 0 && latestEbitda !== null && latestEbitda > 0 && netIncome !== null && netIncome > 0 && (roicVal === null || roicVal > 0);
+    if (!isHarmlessRetailReeskont) {
+      reasons.push(`Esas Faaliyet Zararı (Amortisman Yanılsaması): Şirket operasyonel olarak zarar etmektedir (-${Math.abs(rawEbit / 1e6).toFixed(1)}M TL). Pozitif görünen FAVÖK yalnızca yüksek amortisman giderlerinden veya borçlanma reeskontundan kaynaklanmaktadır.`);
+    }
   }
   if (roeVal !== null && roeVal < -5.0 && netIncome !== null && netIncome < 0) {
     reasons.push(`Kronik Özkaynak Erozyonu: Şirket aralıksız net zarar açıklayarak özsermayesini eritmektedir (Yıllıklandırılmış ROE: %${roeVal.toFixed(1)}).`);
+  }
+
+  // 6. Kriter: İşletme Sermayesi Maskeli Sahte Nakit Akışı (Tedarikçi Borçlanması Değer Tuzağı)
+  // Nakit akışı pozitif görünse bile, nakdin >= %70'i tedarikçilere borç takmaktan (vadeleri açmaktan) geliyorsa ve şirket sermaye eritiyorsa:
+  if (
+    ocf !== null && ocf > 0 &&
+    rawWcChange !== null && rawWcChange > 0 &&
+    (rawWcChange >= ocf * 0.70 || (ocf - rawWcChange) <= 0) &&
+    ((netIncome !== null && netIncome < 0) || (roicVal !== null && roicVal < 0) || (evaVal !== null && evaVal <= -15.0))
+  ) {
+    const wcPct = Math.min(100, Math.round((rawWcChange / ocf) * 100));
+    reasons.push(
+      `İşletme Sermayesi Maskeli Nakit (Tedarikçi Borcu Değer Tuzağı): Şirketin faaliyet nakit akışının % ${wcPct}'si operasyonel kârdan değil, tamamen tedarikçi borçlarının büyütülmesinden gelmektedir. Şirket son çeyreklerde aralıksız net zarar üretmekte, sermaye getirisini eritmekte (ROIC: %${roicVal != null ? roicVal.toFixed(1) : 'negatif'}, EVA: ${evaVal != null ? evaVal.toFixed(1) : '-'} puan) ve işletme sermayesi fonlaması hariç operasyonel nakit yakmaktadır.`
+    );
   }
 
   const isValueTrap = reasons.length >= 2 || (isOperatingProfitable === false && netIncome !== null && netIncome < 0);

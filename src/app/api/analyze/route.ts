@@ -308,6 +308,10 @@ ${(scoreResult.breakdown || []).map((b: any) => `| ${b.category} | ${b.score} | 
 | **Toplam Puan** | **${scoreResult.totalScore}** | **100** | ${scoreResult.totalScore >= 75 ? 'Güçlü operasyonel performans ve yüksek iskonto.' : 'Sektörel standartlara uyum.'} |
 `.trim();
 
+    const activeValueTrapReasons: string[] = (valuation.value_trap_reasons && valuation.value_trap_reasons.length > 0)
+      ? valuation.value_trap_reasons
+      : (optimization.valueTrapReasons || []);
+
     let prompt = `Hisse Kodu: ${resolvedTicker}
 Rapor Tarihi: ${currentDateStr}
 Sektör Modu: ${sectorDef.title} (${sector})
@@ -348,6 +352,10 @@ ALGORİTMİK FİNANSAL SAĞLIK VE KARAR OPTİMİZASYONU:
 - Önerilen Karar: ${optimization.finalDecision}
 ${optimization.overrideApplied ? `- Emniyet Marjı Müdahalesi: ${optimization.overrideReason}\n` : ''}
 ${optimization.conditionalWarnings.length > 0 ? `- Sınır Koşulları ve Gri Alan: ${optimization.conditionalWarnings.join('; ')}\n` : ''}
+${activeValueTrapReasons.length > 0 ? `
+ADLİ DENETİM VE DEĞER TUZAĞI BULGULARI (I. BÖLÜMDE TEMEL YATIRIM TEZİ VE VI. BÖLÜMDE AYI SENARYOSU RİSKİ OLARAK ZORUNLU İŞLENECEK):
+${activeValueTrapReasons.map((r: string) => `- ${r}`).join('\n')}
+` : ''}
 
 ZORUNLU VE DOĞRULANMIŞ PUANLAMA TABLOSU (VI. BÖLÜMDE BU TABLOYU BİREBİR KOPYALAYACAKSIN):
 ${precomputedScorecardTable}
@@ -378,6 +386,7 @@ $$
 - Verilen JSON verisi dışındaki rakam, adet ve oranları yuvarlama, tahmin etme veya dışarıdan bilgi ekleme. JSON içindeki metrikler arasında ASLA çelişki üretme (örn. bir bölümde 37 hastane derken diğerinde 36 hastane yazma).
 - Tüm finansal oranlar ve büyüklükler için KESİNLİKLE aşağıdaki doğrulanmış merkezi JSON verilerini esas al.
 - NİHAİ ANALİST KARARI (ZORUNLU): Raporun sonundaki 'Analist Kararı:' satırı KESİNLİKLE [${optimization.finalDecision}] olacaktır. Modelin hesapladığı deterministik optimize karar [${optimization.finalDecision}] olup (Ham Karar: ${optimization.rawDecision}${optimization.overrideApplied ? ` -> Kural Revizyonu: ${optimization.overrideReason}` : ''}), bu karar raporda birebir korunmalıdır.
+15. ADLİ DENETİM VE SOMUT YATIRIM TEZİ ENTEGRASYONU: Yukarıda verilen 'ADLİ DENETİM VE DEĞER TUZAĞI BULGULARI' varsa (daralan marjlar, negatif ROIC/EVA, tedarikçi borcu maskeli nakit vb.), bu somut gerekçeleri I. Bölümdeki 'Temel Yatırım Tezi'ne ve VI. Bölümdeki 'Riskler & Emniyet Marjı'na açıkça, madde madde ve sayısal kanıtlarıyla işle. Şirket iskontolu görünse dahi bu riskleri asla hafifletme veya gizleme!
 ${optimization.finalDecision === 'NÖTR' ? `Eğer Nihai Yatırım Kararı 'NÖTR' ise:
     - Şirketin adil değer iskontosu (+%${valuation.discount_pct}) bulunsa dahi, finansal risk dinamikleri, sınır skorlar veya sektör temkinliliği nedeniyle karar temkinli 'NÖTR' (Koşullu İzleme) olarak dengelenmiştir.
     - Yatırımcıya nakit akışı ve operasyonel teyitler gelene kadar aceleci davranılmaması, kademeli veya koşullu izleme yapılması önerilmelidir.` : ''}
@@ -561,9 +570,17 @@ function generateAlgorithmicReportFallback(params: {
   const tangibleCapexVal = latestItem?.tangible_capex ?? latestItem?.capex;
   const freeCashFlowVal = latestItem?.free_cash_flow ?? (netOcfVal ? (netOcfVal - Math.abs(tangibleCapexVal || 0)) : null);
 
+  const trapReasons: string[] = Array.isArray(valuation?.value_trap_reasons) && valuation.value_trap_reasons.length > 0
+    ? valuation.value_trap_reasons
+    : (Array.isArray(optimization?.valueTrapReasons) ? optimization.valueTrapReasons : []);
+
+  const trapBlock = trapReasons.length > 0
+    ? `\n> ⚠️ **Adli Denetim & Değer Tuzağı Teşhisi (Forensic Red Team):**\n${trapReasons.map((r: string) => `> - ${r}`).join('\n')}\n`
+    : '';
+
   return `## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ
 > **Yönetici Özeti:** ${ticker} hissesi için hesaplanan adil değer ${valuation.fair_value} TL olup, güncel ${price} TL piyasa fiyatına göre %${valuation.discount_pct} getiri potansiyeli (${valuation.discount_pct >= 0 ? 'iskonto' : 'prim'}) taşımaktadır.
-
+${trapBlock}
 **Temel Yatırım Tezi:** ${ticker}, ${sectorDef.title} sektöründe faaliyet göstermektedir. Yapılan ${valuation.valuation_model_name} analizine göre hissenin hesaplanan adil değeri **${valuation.fair_value} TL** seviyesindedir. Piyasa fiyatı olan **${price} TL** üzerinden yapılan kurumsal emniyet marjı değerlendirmesi sonucunda model görünümü **${optimization.finalDecision}** yönünde şekillenmiştir.
 
 **Finansal Sağlık Skoru:** Şirket 100 üzerinden **${scoreResult.totalScore}** puan alarak sektörel finansal dayanıklılık ve sermaye verimliliği kriterlerini sağlamıştır.
@@ -614,5 +631,5 @@ ${(scoreResult.breakdown || []).map((b: any) => `| ${b.category} | ${b.score} | 
 
 **Kilit Katalizörler:** Operasyonel kârlılık artışı, ${drivers.revenue_growth?.label || 'gelir büyümesi'} performansı ve sektörel talep dinamikleri.
 
-**Riskler & Emniyet Marjı:** Ayı senaryosu taban hedefi ${valuation.bear_price} TL seviyesindedir. ${optimization.conditionalWarnings?.length > 0 ? optimization.conditionalWarnings.join('. ') : 'Makro oynaklık ve faiz seviyeleri izlenmelidir.'}`;
+**Riskler & Emniyet Marjı:** Ayı senaryosu taban hedefi ${valuation.bear_price} TL seviyesindedir. ${trapReasons.length > 0 ? `\n- **Adli Denetim Riskleri:** ${trapReasons.join('; ')}` : ''} ${optimization.conditionalWarnings?.length > 0 ? optimization.conditionalWarnings.join('. ') : 'Makro oynaklık ve faiz seviyeleri izlenmelidir.'}`;
 }
