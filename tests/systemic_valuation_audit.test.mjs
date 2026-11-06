@@ -918,4 +918,72 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
     assert.equal(snow.axes.dividend.score, 0, `ZOREN with only a single 2005 dividend and -8.03B net loss must score 0/6 on Dividend axis, got ${snow.axes.dividend.score}/6`);
   });
 
+  test('25. Cross-Sector Forensic Stress Audit: Chronic Loss, Negative ROE & Heavy Debt Across Retail, Healthcare & Agro-Chem Must Never Receive Artificial EV Floors or High P/B Multiples', () => {
+    const buildDistressedSectorMock = (ticker, officialSector) => ({
+      ticker,
+      company_name: `${ticker} Sanayi ve Ticaret A.Ş.`,
+      official_sector: officialSector,
+      current_price: 12.50,
+      share_count: 1_000_000_000,
+      paid_in_capital: 1_000_000_000,
+      financial_history: [
+        {
+          period: '2025/12',
+          revenue: 24_000_000_000,
+          gross_profit: 5_200_000_000,
+          operating_profit: 1_800_000_000,
+          ebitda: 2_600_000_000,
+          ebitda_margin: 10.8,
+          net_income: -1_900_000_000,
+          equity: 14_000_000_000,
+          net_debt: 22_000_000_000,
+          operating_cash_flow: 400_000_000,
+          free_cash_flow: -1_500_000_000,
+          roe: -13.5,
+          roic: 1.5,
+          real_wacc: 9.0,
+          eva_spread: -7.5,
+          is_tms29: true
+        },
+        {
+          period: '2026/12',
+          revenue: 18_000_000_000,
+          gross_profit: 2_800_000_000,
+          operating_profit: 350_000_000,
+          ebitda: 1_400_000_000,
+          ebitda_margin: 7.8,
+          financing_expenses: -4_200_000_000,
+          net_income: -3_400_000_000,
+          equity: 10_600_000_000,
+          net_debt: 25_500_000_000,
+          operating_cash_flow: -200_000_000,
+          free_cash_flow: -2_100_000_000,
+          capex: -1_900_000_000,
+          roe: -32.1,
+          roic: -1.8,
+          real_wacc: 9.0,
+          eva_spread: -10.8,
+          is_tms29: true
+        }
+      ]
+    });
+
+    const cases = [
+      { ticker: 'DIST_RET', officialSector: 'Perakande - Ticaret', engineSector: 'RETAIL' },
+      { ticker: 'DIST_HLTH', officialSector: 'Sağlık ve İlaç', engineSector: 'HEALTHCARE' },
+      { ticker: 'DIST_AGRO', officialSector: 'Tarım Kimyasalları', engineSector: 'INDUSTRIAL' }
+    ];
+
+    for (const c of cases) {
+      const mockData = buildDistressedSectorMock(c.ticker, c.officialSector);
+      const scoreRes = calculateSectorScore(mockData, c.engineSector);
+      assert.ok(scoreRes.totalScore <= 38, `${c.ticker} (${c.officialSector}) score (${scoreRes.totalScore}) must be <= 38 under severe net loss and negative ROE`);
+      assert.equal(scoreRes.suggestedDecision, 'ALMA', `${c.ticker} suggestedDecision must be ALMA`);
+
+      const valRes = computeSectorValuationAndDrivers(mockData, 12.50, c.engineSector);
+      assert.ok(valRes.valuation.fair_value < 5.0, `${c.ticker} (${c.officialSector}) fair value (${valRes.valuation.fair_value}) must not be inflated by artificial EV floor or sector P/B when net debt > EV and ROE is -32.1%`);
+      assert.equal(valRes.valuation.final_decision, 'ALMA', `${c.ticker} final_decision must be ALMA`);
+    }
+  });
+
 });
