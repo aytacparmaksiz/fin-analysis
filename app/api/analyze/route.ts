@@ -146,7 +146,6 @@ RAPOR FORMATI KESİNLİKLE ŞU BAŞLIKLARLA OLMALIDIR:
 | Portföy / Yatırım Getirisi & Nakit Gücü | X | 25 | ... |
 | Sermaye Yeterliliği & ROE Kârlılığı | X | 25 | ... |
 | Prim Büyümesi, Pazar Payı & Fon Genişlemesi | X | 25 | ... |
-| Prim Büyümesi, Pazar Payı & Fon Genişlemesi | X | 25 | ... |
 | **Toplam Puan** | **X** | **100** | ... |
 
 ### Analist Kararı: [AL / ALMA / NÖTR]
@@ -270,18 +269,6 @@ RAPOR FORMATI KESİNLİKLE ŞU BAŞLIKLARLA VE YAPIDA OLMALIDIR:
     const sortedHist = [...rawHistory].sort((a: any, b: any) => (a?.period || '').localeCompare(b?.period || ''));
     const latestItem = sortedHist.length > 0 ? sortedHist[sortedHist.length - 1] : null;
 
-    const nominalWaccVal = latestItem?.nominal_wacc ?? latestItem?.wacc ?? 29.6;
-    const realWaccVal = latestItem?.real_wacc ?? (latestItem?.is_tms29 ? Number((((1 + nominalWaccVal / 100) / (1 + (latestItem?.expected_inflation || 18) / 100) - 1) * 100).toFixed(1)) : nominalWaccVal);
-    const expectedInfVal = latestItem?.expected_inflation ?? 18.0;
-    const roicVal = latestItem?.roic ?? 15.64;
-    const evaSpreadVal = (roicVal - realWaccVal).toFixed(1);
-
-    const grossOcfVal = latestItem?.gross_operating_cash_flow;
-    const netOcfVal = latestItem?.net_operating_cash_flow ?? latestItem?.operating_cash_flow;
-    const tangibleCapexVal = latestItem?.tangible_capex ?? latestItem?.capex;
-    const totalCapexVal = latestItem?.total_investing_outflow;
-    const netIncomeVal = latestItem?.net_income;
-
     const shareCountNum = Number(extractedData?.shares_outstanding ?? extractedData?.share_count) || 0; // Pay adedi yoksa uydurma değer kullanılmaz
     const currentPriceNum = Number(activePrice) || 0; // Fiyat yoksa uydurma değer kullanılmaz
     const unifiedMetrics = FinancialRatioEngine.computeMetrics({
@@ -292,6 +279,22 @@ RAPOR FORMATI KESİNLİKLE ŞU BAŞLIKLARLA VE YAPIDA OLMALIDIR:
       sector,
       currency: extractedData?.currency || 'TRY'
     });
+
+    const nominalWaccVal = unifiedMetrics?.margins?.wacc ?? latestItem?.nominal_wacc ?? latestItem?.wacc ?? 29.6;
+    const realWaccVal = (latestItem?.is_tms29 && unifiedMetrics?.margins?.wacc == null)
+      ? Number((((1 + nominalWaccVal / 100) / (1 + (latestItem?.expected_inflation || 18) / 100) - 1) * 100).toFixed(1))
+      : (unifiedMetrics?.margins?.wacc ?? nominalWaccVal);
+    const expectedInfVal = latestItem?.expected_inflation ?? 18.0;
+    const roicVal = unifiedMetrics?.margins?.roic ?? latestItem?.roic ?? 15.64;
+    const evaSpreadVal = unifiedMetrics?.margins?.evaSpread != null
+      ? String(unifiedMetrics.margins.evaSpread)
+      : (roicVal - realWaccVal).toFixed(1);
+
+    const grossOcfVal = unifiedMetrics?.ttm?.operatingCashFlow ?? latestItem?.gross_operating_cash_flow;
+    const netOcfVal = unifiedMetrics?.ttm?.operatingCashFlow ?? latestItem?.net_operating_cash_flow ?? latestItem?.operating_cash_flow;
+    const tangibleCapexVal = unifiedMetrics?.ttm?.capex ?? latestItem?.tangible_capex ?? latestItem?.capex;
+    const totalCapexVal = latestItem?.total_investing_outflow;
+    const netIncomeVal = unifiedMetrics?.ttm?.netIncome ?? latestItem?.net_income;
 
     // Bütünlük Nöbetçisi (Invariant Sentinel): Değer sürücülerinin gerçekleşen mali tablolara uyumunu doğrula ve onar
     InvariantSentinel.validateAndHealDrivers(drivers, {
@@ -483,7 +486,8 @@ ZORUNLU TALİMAT (Önceki Raporla Karşılaştırma & Çeyreklik Hafıza):
         scoreResult,
         optimization,
         currentDateStr,
-        extractedData
+        extractedData,
+        unifiedMetrics
       });
     }
 
@@ -555,8 +559,9 @@ function generateAlgorithmicReportFallback(params: {
   optimization: any;
   currentDateStr: string;
   extractedData: any;
+  unifiedMetrics?: any;
 }): string {
-  const { ticker, sector, sectorDef, price, valuation, drivers, scoreResult, optimization, extractedData } = params;
+  const { ticker, sector, sectorDef, price, valuation, drivers, scoreResult, optimization, extractedData, unifiedMetrics } = params;
   const isIns = sector === 'INSURANCE';
   const isBank = sector === 'BANKING';
 
@@ -564,16 +569,20 @@ function generateAlgorithmicReportFallback(params: {
   const sortedHist = [...rawHistory].sort((a: any, b: any) => (a?.period || '').localeCompare(b?.period || ''));
   const latestItem = sortedHist.length > 0 ? sortedHist[sortedHist.length - 1] : null;
 
-  const nominalWaccVal = latestItem?.nominal_wacc ?? latestItem?.wacc ?? 29.6;
-  const realWaccVal = latestItem?.real_wacc ?? (latestItem?.is_tms29 ? Number((((1 + nominalWaccVal / 100) / (1 + (latestItem?.expected_inflation || 18) / 100) - 1) * 100).toFixed(1)) : nominalWaccVal);
+  const nominalWaccVal = unifiedMetrics?.margins?.wacc ?? latestItem?.nominal_wacc ?? latestItem?.wacc ?? 29.6;
+  const realWaccVal = (latestItem?.is_tms29 && unifiedMetrics?.margins?.wacc == null)
+    ? Number((((1 + nominalWaccVal / 100) / (1 + (latestItem?.expected_inflation || 18) / 100) - 1) * 100).toFixed(1))
+    : (unifiedMetrics?.margins?.wacc ?? nominalWaccVal);
   const expectedInfVal = latestItem?.expected_inflation ?? 18.0;
-  const roicVal = latestItem?.roic ?? 15.64;
-  const evaSpreadVal = (roicVal - realWaccVal).toFixed(1);
+  const roicVal = unifiedMetrics?.margins?.roic ?? latestItem?.roic ?? 15.64;
+  const evaSpreadVal = unifiedMetrics?.margins?.evaSpread != null
+    ? String(unifiedMetrics.margins.evaSpread)
+    : (roicVal - realWaccVal).toFixed(1);
 
-  const grossOcfVal = latestItem?.gross_operating_cash_flow;
-  const netOcfVal = latestItem?.net_operating_cash_flow ?? latestItem?.operating_cash_flow;
-  const tangibleCapexVal = latestItem?.tangible_capex ?? latestItem?.capex;
-  const freeCashFlowVal = latestItem?.free_cash_flow ?? (netOcfVal ? (netOcfVal - Math.abs(tangibleCapexVal || 0)) : null);
+  const grossOcfVal = unifiedMetrics?.ttm?.operatingCashFlow ?? latestItem?.gross_operating_cash_flow;
+  const netOcfVal = unifiedMetrics?.ttm?.operatingCashFlow ?? latestItem?.net_operating_cash_flow ?? latestItem?.operating_cash_flow;
+  const tangibleCapexVal = unifiedMetrics?.ttm?.capex ?? latestItem?.tangible_capex ?? latestItem?.capex;
+  const freeCashFlowVal = unifiedMetrics?.ttm?.freeCashFlow ?? latestItem?.free_cash_flow ?? (netOcfVal ? (netOcfVal - Math.abs(tangibleCapexVal || 0)) : null);
 
   const trapReasons: string[] = [
     ...(Array.isArray(valuation?.value_trap_reasons) && valuation.value_trap_reasons.length > 0
@@ -587,6 +596,16 @@ function generateAlgorithmicReportFallback(params: {
   const trapBlock = trapReasons.length > 0
     ? `\n> ⚠️ **Adli Denetim & Değer Tuzağı Teşhisi (Forensic Red Team):**\n${trapReasons.map((r: string) => `> - ${r}`).join('\n')}\n`
     : '';
+
+  const isPositiveEva = Number(evaSpreadVal) >= 0;
+  const evaNarrative = isPositiveEva
+    ? `Yıllıklandırılmış ROIC (%${roicVal}) reel sermaye maliyetinin üzerinde olup ekonomik katma değer (EVA Spread: +${evaSpreadVal} puan) oluşturmaktadır.`
+    : `Yıllıklandırılmış ROIC (%${roicVal}) reel sermaye maliyetinin altında kalmış olup sermaye erozyonuna (EVA Spread: ${evaSpreadVal} puan) işaret etmektedir.`;
+
+  const isAlmaDecision = optimization.finalDecision === 'ALMA';
+  const thesisNarrative = isAlmaDecision
+    ? `**Yatırım Tezi:** ${ticker} hissesi için hesaplanan adil değer ${valuation.fair_value} TL seviyesinde olmakla birlikte, güncel ${price} TL piyasa fiyatı üzerinden yapılan kurumsal denetimde sermaye erozyonu ve operasyonel riskler nedeniyle model görünümü ALMA yönünde şekillenmiştir.`
+    : `**Yatırım Tezi:** ${ticker} hissesi için hesaplanan adil değer ${valuation.fair_value} TL olup, güncel ${price} TL fiyatına kıyasla %${valuation.discount_pct} potansiyel (${valuation.discount_pct >= 0 ? 'iskonto' : 'prim'}) barındırmaktadır.`;
 
   return `## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ
 > **Yönetici Özeti:** ${ticker} hissesi için hesaplanan adil değer ${valuation.fair_value} TL olup, güncel ${price} TL piyasa fiyatına göre %${valuation.discount_pct} getiri potansiyeli (${valuation.discount_pct >= 0 ? 'iskonto' : 'prim'}) taşımaktadır.
@@ -616,7 +635,7 @@ $$
 \\text{Reel EVA Makası} = \\text{ROIC} - \\text{Reel WACC} = \\%${roicVal} - \\%${realWaccVal} = ${Number(evaSpreadVal) >= 0 ? '+' : ''}${evaSpreadVal}\\text{ puan}
 $$
 
-- **Sermaye Maliyeti (WACC):** Nominal Sermaye Maliyeti %${nominalWaccVal}, beklenen enflasyon %${expectedInfVal} ve Fisher denklemiyle hesaplanan Reel WACC %${realWaccVal} seviyesindedir. Yıllıklandırılmış ROIC (%${roicVal}) reel sermaye maliyetinin üzerinde olup ekonomik katma değer (EVA Spread: ${Number(evaSpreadVal) >= 0 ? '+' : ''}${evaSpreadVal} puan) oluşturmaktadır.
+- **Sermaye Maliyeti (WACC):** Nominal Sermaye Maliyeti %${nominalWaccVal}, beklenen enflasyon %${expectedInfVal} ve Fisher denklemiyle hesaplanan Reel WACC %${realWaccVal} seviyesindedir. ${evaNarrative}
 - **Uygulanan Değerleme Modeli:** ${valuation.valuation_model_name}
 - **Hedef Çarpan:** ${drivers.target_multiple?.label || 'Hedef Çarpan'} ${drivers.target_multiple?.value || '0'}x
 - **İskonto Oranı:** %${valuation.discount_pct} (${valuation.margin_of_safety_status || 'HESAPLANDI'})
@@ -637,7 +656,7 @@ ${(scoreResult.breakdown || []).map((b: any) => `| ${b.category} | ${b.score} | 
 
 ### Analist Kararı: [${optimization.finalDecision}]
 
-**Yatırım Tezi:** ${ticker} hissesi için hesaplanan adil değer ${valuation.fair_value} TL olup, güncel ${price} TL fiyatına kıyasla %${valuation.discount_pct} potansiyel barındırmaktadır.
+${thesisNarrative}
 
 **Kilit Katalizörler:** Operasyonel kârlılık artışı, ${drivers.revenue_growth?.label || 'gelir büyümesi'} performansı ve sektörel talep dinamikleri.
 

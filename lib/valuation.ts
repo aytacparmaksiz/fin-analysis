@@ -2972,7 +2972,6 @@ export function calculateSectorScore(
       else if (spread >= -5.0) { s2 = 10; r2 = `Negatif EVA Makası: Sermaye maliyetinin ${Math.abs(spread).toFixed(1)} puan gerisinde kalınıyor (${waccLabel}).`; st2 = 'warning'; }
       else { s2 = 2; r2 = `Ciddi Sermaye Erozyonu: ROIC (%${roic}) << ${waccLabel}, hissedar değeri eritiliyor!`; st2 = 'danger'; anomalies.push(`Negatif EVA Makası: ${spread.toFixed(1)} puan`); }
     }
-    breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
 
     // 3. Nakit Akış Kalitesi & Buffett Kazancı (Max 25)
     const ocf = parseFinancialNumber(latest?.operating_cash_flow);
@@ -3032,7 +3031,16 @@ export function calculateSectorScore(
       r3 = 'İşletme nakit üretiyor fakat yüksek CAPEX serbest nakit akışını sınırlıyor.';
       st3 = 'warning';
     }
-    breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+
+    // Sektörel Kategori Eşleştirmesi (Otomotiv gibi Sermaye Verimliliği 2. indekste olan sektörler için):
+    const isCapEffAtIdx2 = config.categories[2]?.key === 'capital_efficiency' || config.categories[2]?.name.includes('Sermaye Verimliliği');
+    if (isCapEffAtIdx2) {
+      breakdown.push({ category: config.categories[1].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+      breakdown.push({ category: config.categories[2].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+    } else {
+      breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+      breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+    }
 
     // 4. Büyüme & Rekabet Kalkanı (Moat) (Max 25)
     const margin = parseFinancialNumber(latest?.ebitda_margin);
@@ -3120,7 +3128,7 @@ export function calculateSectorScore(
   if (isGreyZone) {
     if (anomalies.length > 0) {
       conditionalWarnings.push(
-        `KOŞULLU ANALİZ: Şirket genel skor olarak değerlendirilebilir seviyede olsa da (${totalScore}/100), ${anomalies[0]} Yatırım tezi ancak nakit akışı ve borç dengesi düzelene kadar koşullu/temkinli izlenmelidir.`
+        `KOŞULLU ANALİZ: Şirket genel skor olarak değerlendirilebilir seviyede olsa da (${totalScore}/100), ${anomalies[0]} nedeniyle yatırım tezi ancak nakit akışı ve operasyonel göstergeler teyit edilene kadar koşullu/temkinli izlenmelidir.`
       );
     } else if (isScoreBorderline) {
       conditionalWarnings.push(
@@ -4499,8 +4507,12 @@ export function optimizeFinalDecision({
     valuation.margin_of_safety = discount;
     valuation.margin_of_safety_status = discount >= 25.0 ? 'SAFE' : 'BORDERLINE';
     marginOfSafetyStatus = valuation.margin_of_safety_status;
+    const cleanReason = (overrideReason || 'risk faktörleri').trim().replace(/\.+$/, '');
+    const reasonSuffix = cleanReason.includes('çekildi') || cleanReason.includes('revize edildi') || cleanReason.includes('kararı')
+      ? cleanReason
+      : `${cleanReason} nedeniyle nihai karar temkinli 'NÖTR' (Koşullu İzleme) olarak dengelenmiştir`;
     valuation.boundary_warning = (valuation.boundary_warning ? valuation.boundary_warning + ' | ' : '') +
-      `KOŞULLU EMNİYET MARJI: Hisse %${discount} iskonto potansiyeline sahiptir; ancak ${overrideReason || 'risk faktörleri'} nedeniyle nihai karar temkinli 'NÖTR' (Koşullu İzleme) olarak dengelenmiştir.`;
+      `KOŞULLU EMNİYET MARJI: Hisse %${discount} iskonto potansiyeline sahiptir; ancak ${reasonSuffix}.`;
   }
 
   // Sınır Koşulları ve Gri Alan Entegrasyonu

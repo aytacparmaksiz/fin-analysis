@@ -759,13 +759,15 @@ export function computeSnowflakeAnalysis(params: {
       id: 'accelerating_growth',
       title: 'Hızlanan Kâr Büyüme İvmesi',
       passed: historicalGrowth.profitGrowth >= 0 && (historicalGrowth.profitGrowth >= historicalGrowth.cagr3Y || historicalGrowth.profitGrowth >= 20.0),
-      metricValue: `+%${historicalGrowth.profitGrowth.toFixed(1)} Son Dönem`,
+      metricValue: `${fmtGrowthPct(historicalGrowth.profitGrowth)} Son Dönem`,
       threshold: `>= %${historicalGrowth.cagr3Y.toFixed(1)} 3Y Ortalama`,
-      detail: historicalGrowth.profitGrowth >= historicalGrowth.cagr3Y
-        ? (Math.abs(historicalGrowth.profitGrowth - historicalGrowth.cagr3Y) < 0.1
-            ? `Son dönem kâr artış hızı (%${historicalGrowth.profitGrowth.toFixed(1)}), çok yıllık tarihsel ortalama büyüme hızını (%${historicalGrowth.cagr3Y.toFixed(1)}) korumuştur.`
-            : `Son dönem kâr artış hızı (%${historicalGrowth.profitGrowth.toFixed(1)}), çok yıllık tarihsel ortalama büyüme hızını (%${historicalGrowth.cagr3Y.toFixed(1)}) aşmıştır.`)
-        : `Son dönem kâr artış ivmesi (%${historicalGrowth.profitGrowth.toFixed(1)}), geçmiş ortalamaların gerisinde yavaşlamıştır.`
+      detail: historicalGrowth.profitGrowth >= 0
+        ? (historicalGrowth.profitGrowth >= historicalGrowth.cagr3Y
+            ? (Math.abs(historicalGrowth.profitGrowth - historicalGrowth.cagr3Y) < 0.1
+                ? `Son dönem kâr artış hızı (+%${historicalGrowth.profitGrowth.toFixed(1)}), çok yıllık tarihsel ortalama büyüme hızını (%${historicalGrowth.cagr3Y.toFixed(1)}) korumuştur.`
+                : `Son dönem kâr artış hızı (+%${historicalGrowth.profitGrowth.toFixed(1)}), çok yıllık tarihsel ortalama büyüme hızını (%${historicalGrowth.cagr3Y.toFixed(1)}) aşmıştır.`)
+            : `Son dönem kâr artış ivmesi (+%${historicalGrowth.profitGrowth.toFixed(1)}), geçmiş ortalamaların gerisinde yavaşlamıştır.`)
+        : `Son dönemde net kârda daralma (%${historicalGrowth.profitGrowth.toFixed(1)}) kaydedilmiş olup kâr artış ivmesi hızlanamamıştır.`
     },
     // 3.5 Earnings vs Industry
     {
@@ -1022,11 +1024,19 @@ export function computeSnowflakeAnalysis(params: {
       id: 'growing_dividend',
       title: 'Büyüyen Hisse Başı Temettü',
       passed: hasGrowingPerShareDiv || (hasRecentDividend && divYield > 0 && profitGrowth > 0 && payoutCount >= 2) || isCompounder,
-      metricValue: hasGrowingPerShareDiv && perShareTl > 0 ? `₺${perShareTl.toFixed(3)} Hisse Başı` : (isCompounder ? 'Özkaynak Büyümesi' : 'Büyüme Yok'),
+      metricValue: hasGrowingPerShareDiv && perShareTl > 0
+        ? `₺${perShareTl.toFixed(3)} Hisse Başı`
+        : (isCompounder
+            ? 'Özkaynak Büyümesi'
+            : ((hasRecentDividend && divYield > 0 && profitGrowth > 0 && payoutCount >= 2)
+                ? 'Kâr Destekli'
+                : 'Büyüme Yok')),
       threshold: 'Artış Eğilimi',
       detail: hasGrowingPerShareDiv || isCompounder
         ? 'Hisse başına nakit temettü tutarı veya dağıtılmayan kârların yarattığı hisse başı özsermaye değeri büyüme trendindedir.'
-        : 'Son yıllarda birbirini izleyen ve büyüyen hisse başı temettü ödemesi tespit edilememiştir.'
+        : ((hasRecentDividend && divYield > 0 && profitGrowth > 0 && payoutCount >= 2)
+            ? `Şirketin yıllık kâr büyümesi (+%${profitGrowth.toFixed(1)}) ve düzenli nakit akışı, hisse başı temettü ödeme gücünü ve büyüme kapasitesini desteklemektedir.`
+            : 'Son yıllarda birbirini izleyen ve büyüyen hisse başı temettü ödemesi tespit edilememiştir.')
     },
     // 5.5 Earnings Coverage
     {
