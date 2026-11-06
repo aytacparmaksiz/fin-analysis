@@ -2571,13 +2571,18 @@ export function calculateSectorScore(
     const rawNet = parseFinancialNumber(latest?.net_income);
     const roeVal = parseFinancialNumber(latest?.roe);
     const roicVal = parseFinancialNumber(latest?.roic);
-    const waccVal = parseFinancialNumber(
+    let waccVal = parseFinancialNumber(
       (latest?.is_tms29 && latest?.real_wacc != null)
         ? latest.real_wacc
         : (latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc)
     );
-    const evaSpreadVal = parseFinancialNumber(latest?.eva_spread) ??
-      (roicVal !== null && waccVal !== null ? Number((roicVal - waccVal).toFixed(1)) : null);
+    if (latest?.is_tms29 && waccVal !== null && waccVal > 25.0) {
+      const expInf = parseFinancialNumber(latest?.expected_inflation) ?? 23.7;
+      waccVal = Number((((1 + waccVal / 100) / (1 + expInf / 100) - 1) * 100).toFixed(1));
+    }
+    const evaSpreadVal = (roicVal !== null && waccVal !== null)
+      ? Number((roicVal - waccVal).toFixed(1))
+      : parseFinancialNumber(latest?.eva_spread);
     const grossYoY = computeComparableIncomeGrowth(h => h?.gross_profit);
     const revYoY = computeComparableIncomeGrowth(h => h?.revenue) ?? parseFinancialNumber(latest?.revenue_growth);
     const isOperatingLoss = (rawGross !== null && rawGross < 0) || (rawEbit !== null && rawEbit < 0);
@@ -4471,7 +4476,7 @@ export function optimizeFinalDecision({
   // emniyet marjı tanınmaz (UNSAFE) ve risk uyarısı eklenir.
   // Temel Kural: Adil değer modelin hesapladığı saf matematiksel değerdir; asla cari piyasa fiyatına veya sabit bir katsayıya kilitlenemez.
   if (finalDecision === 'ALMA' && valuation) {
-    if (valuation.is_value_trap) {
+    if (valuation.is_value_trap && discount > 0) {
       valuation.boundary_warning = (valuation.boundary_warning ? valuation.boundary_warning + ' | ' : '') +
         `DEĞER TUZAĞI (VALUE TRAP): Şirket kağıt üzerinde %${discount} iskonto gösterse de eriyen marjlar ve sermaye değer yıkımı nedeniyle emniyet marjı geçersizdir (UNSAFE).`;
       valuation.margin_of_safety = 0;
@@ -5768,6 +5773,11 @@ export function computeSectorValuationAndDrivers(
   // EVRENSEL SEKTÖREL DEĞERLEME KORUMA YARDIMCILARI (53 Sektörün Tamamı İçin):
   // 1) Kronik Net Zarar + Özkaynak/EVA Erozyonu Tespiti
   const isChronicSectorLossDestroyer = (netFullVal: number): boolean => {
+    const ocfCheck = parseFinancialNumber(latest?.operating_cash_flow) ?? 0;
+    const ebitdaCheck = parseFinancialNumber(latest?.ebitda) ?? 0;
+    // Eğer şirket esas faaliyetlerinde nakit yakmıyorsa (OCF > 0) ve pozitif FAVÖK üretiyorsa,
+    // geçici muhasebesel/enflasyon zararı yaşayan sanayi devleri kronik yıkıcı sayılmaz (döngüsel normalizasyon uygulanır).
+    if (ocfCheck > 0 && ebitdaCheck > 0) return false;
     const evaCheck = parseFinancialNumber(latest?.eva_spread) ?? (
       parseFinancialNumber(latest?.roic) !== null && parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc) !== null
         ? (parseFinancialNumber(latest?.roic)! - parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc)!)
