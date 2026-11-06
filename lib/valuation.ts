@@ -2468,12 +2468,21 @@ export function calculateSectorScore(
     const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
     const ebitda = computeTtmEbitdaFromHistory(sortedHistory, latest) ?? parseFinancialNumber(latest?.ebitda) ?? 0;
     const ndEbitda = ebitda > 0 ? (netDebt / ebitda) : null;
+    const cr = parseFinancialNumber(latest?.current_ratio);
     let s3 = 18;
     let r3 = 'Döviz cinsi filo borçluluğu yönetilebilir seviyede.';
     let st3: 'good' | 'warning' | 'danger' = 'good';
     if (ndEbitda !== null) {
-      if (ndEbitda <= 2.5) { s3 = 25; r3 = `Güçlü Filo Bilanço Yapısı: Net Borç / TTM FAVÖK (${ndEbitda.toFixed(1)}x) havacılık için son derece güvenli.`; st3 = 'good'; }
-      else if (ndEbitda <= 3.8) { s3 = 19; r3 = `Sağlıklı Döviz Borçluluğu: Net Borç / TTM FAVÖK (${ndEbitda.toFixed(1)}x) filo leasing yapısıyla uyumlu.`; st3 = 'good'; }
+      if (ndEbitda <= 2.5) {
+        if (cr !== null && cr < 0.70) {
+          s3 = 15;
+          r3 = `Güçlü Filo Bilanço Yapısı (${ndEbitda.toFixed(1)}x) ancak Kısa Vadeli Likidite Sıkışıklığı: Cari oran (${cr.toFixed(2)}x) izlenmeli.`;
+          st3 = 'warning';
+          anomalies.push(`Havacılık Likidite Baskısı (Cari Oran: ${cr.toFixed(2)}x)`);
+        } else {
+          s3 = 25; r3 = `Güçlü Filo Bilanço Yapısı: Net Borç / TTM FAVÖK (${ndEbitda.toFixed(1)}x) havacılık için son derece güvenli.`; st3 = 'good';
+        }
+      } else if (ndEbitda <= 3.8) { s3 = 19; r3 = `Sağlıklı Döviz Borçluluğu: Net Borç / TTM FAVÖK (${ndEbitda.toFixed(1)}x) filo leasing yapısıyla uyumlu.`; st3 = 'good'; }
       else if (ndEbitda <= 5.0) { s3 = 11; r3 = `Yüksek Filo Kaldıracı: Net Borç / TTM FAVÖK (${ndEbitda.toFixed(1)}x) izlenmeli.`; st3 = 'warning'; }
       else { s3 = 3; r3 = `Kritik Döviz Borçluluğu: Net Borç / TTM FAVÖK (${ndEbitda.toFixed(1)}x) filo borç çevrimini zorlaştırabilir!`; st3 = 'danger'; anomalies.push(`Aşırı Filo Borçluluğu: ${ndEbitda.toFixed(1)}x`); }
     }
@@ -2622,6 +2631,13 @@ export function calculateSectorScore(
       r3 = `Operasyonel Daralma ve Amortisman Maskeli FAVÖK: Satış/brüt kâr hacmi sert daralırken ve şirket net zarar ile negatif EVA (${evaSpreadVal !== null ? `${evaSpreadVal.toFixed(1)} puan` : 'ROIC < WACC'}) üretirken, pozitif FAVÖK marjı yalnızca yüksek amortisman giderlerinden kaynaklanmaktadır.`;
       st3 = 'danger';
       anomalies.push('Daralan Brüt Kâr/Satışlar ve Negatif EVA (Amortisman Maskeli FAVÖK)');
+    } else if (evaSpreadVal !== null && evaSpreadVal <= -5.0) {
+      // Şirket net kârda olsa bile ROIC sermaye maliyetinin çok altındaysa kârlılık tam puan alamaz!
+      s3 = 12;
+      const waccTxt = waccVal !== null ? `%${waccVal.toFixed(1)}` : 'WACC';
+      r3 = `Kârlılık Sermaye Maliyetinin Gerisinde: Operasyonel marjlar pozitif olsa da ROIC (%${roicVal ? roicVal.toFixed(1) : '-'}) sermaye maliyetinin (${waccTxt}) gerisinde kalarak değer erozyonu üretmektedir (EVA Spread: ${evaSpreadVal.toFixed(1)} puan).`;
+      st3 = 'warning';
+      anomalies.push(`Negatif EVA Makası (${evaSpreadVal.toFixed(1)} puan)`);
     } else if (ebitdaM !== null) {
       if (ebitdaM >= 38.0) { s3 = 25; r3 = `Çok Güçlü Operasyonel Kârlılık: FAVÖK marjı (%${ebitdaM.toFixed(1)}) yüksek tarife gücü ve ölçek avantajını yansıtıyor.`; st3 = 'good'; }
       else if (ebitdaM >= 25.0) { s3 = 20; r3 = `Sağlıklı FAVÖK Marjı: %${ebitdaM.toFixed(1)}.`; st3 = 'good'; }
@@ -2633,6 +2649,8 @@ export function calculateSectorScore(
     const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
     const ebitda = computeTtmEbitdaFromHistory(sortedHistory, latest) ?? parseFinancialNumber(latest?.ebitda) ?? 0;
     const ndEbitda = ebitda > 0 ? (netDebt / ebitda) : null;
+    const cr = parseFinancialNumber(latest?.current_ratio);
+    const netFx = parseFinancialNumber(latest?.net_fx_position);
     let s4 = 18;
     let r4 = 'Uzun vadeli proje finansmanı borç seviyesi izleniyor.';
     let st4: 'good' | 'warning' | 'danger' = 'good';
@@ -2644,10 +2662,28 @@ export function calculateSectorScore(
       st4 = 'danger';
       anomalies.push('Finansman Gideri Kaynaklı Ağır Net Zarar ve Borç Baskısı');
     } else if (ndEbitda !== null) {
-      if (ndEbitda <= 2.2) { s4 = 25; r4 = `Düşük Altyapı Borçluluğu: Net Borç / FAVÖK (${ndEbitda.toFixed(1)}x) sermaye yoğun sektör için mükemmel.`; st4 = 'good'; }
-      else if (ndEbitda <= 3.8) { s4 = 19; r4 = `Yönetilebilir Proje Kaldıracı: Net Borç / FAVÖK (${ndEbitda.toFixed(1)}x) altyapı normlarında.`; st4 = 'good'; }
-      else if (ndEbitda <= 5.0) { s4 = 11; r4 = `Yüksek Borçluluk (%${ndEbitda.toFixed(1)}x): Faiz ortamı izlenmeli.`; st4 = 'warning'; }
-      else { s4 = 4; r4 = `Kritik Borçluluk: Net Borç / FAVÖK (${ndEbitda.toFixed(1)}x)!`; st4 = 'danger'; anomalies.push(`Aşırı Altyapı Borçluluğu: ${ndEbitda.toFixed(1)}x`); }
+      if (ndEbitda <= 2.2) {
+        if (cr !== null && cr < 0.80) {
+          s4 = 13;
+          r4 = `Düşük Altyapı Borçluluğu (${ndEbitda.toFixed(1)}x) ancak Kısa Vadeli Likidite Sıkışıklığı: Cari oran (${cr.toFixed(2)}x) kısa vadeli borç baskısına işaret ediyor.`;
+          st4 = 'warning';
+          anomalies.push(`Kısa Vadeli Likidite Baskısı (Cari Oran: ${cr.toFixed(2)}x)`);
+        } else if (netFx !== null && netFx < -5000000000) {
+          s4 = 16;
+          r4 = `Net Borç / FAVÖK (${ndEbitda.toFixed(1)}x) dengeli; ancak yüksek açık döviz pozisyonu (${Math.round(netFx / 1e6)}M TL) kur riski taşımaktadır.`;
+          st4 = 'warning';
+        } else {
+          s4 = 25; r4 = `Düşük Altyapı Borçluluğu: Net Borç / FAVÖK (${ndEbitda.toFixed(1)}x) sermaye yoğun sektör için mükemmel.`; st4 = 'good';
+        }
+      } else if (ndEbitda <= 3.8) {
+        s4 = (cr !== null && cr < 0.80) ? 12 : 19;
+        r4 = `Yönetilebilir Proje Kaldıracı: Net Borç / FAVÖK (${ndEbitda.toFixed(1)}x)${cr !== null && cr < 0.80 ? ` (Cari Oran: ${cr.toFixed(2)}x izlenmeli)` : ''}.`;
+        st4 = (cr !== null && cr < 0.80) ? 'warning' : 'good';
+      } else if (ndEbitda <= 5.0) {
+        s4 = 11; r4 = `Yüksek Borçluluk (%${ndEbitda.toFixed(1)}x): Faiz ortamı izlenmeli.`; st4 = 'warning';
+      } else {
+        s4 = 4; r4 = `Kritik Borçluluk: Net Borç / FAVÖK (${ndEbitda.toFixed(1)}x)!`; st4 = 'danger'; anomalies.push(`Aşırı Altyapı Borçluluğu: ${ndEbitda.toFixed(1)}x`);
+      }
     }
     breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
 
@@ -4365,15 +4401,11 @@ export function optimizeFinalDecision({
     const ocfVal = parseFinancialNumber(effectiveLatestData?.operating_cash_flow ?? effectiveLatestData?.ocf);
     const isFinancialOrHoldingSector = effectiveSector === 'HOLDING' || effectiveSector === 'BANKING' || effectiveSector === 'INSURANCE' || effectiveSector === 'REIT';
     if (!overrideApplied && !isFinancialOrHoldingSector && roic !== null && benchmarkWacc !== null && (roic - benchmarkWacc) < -5.0) {
-      if (effectiveScore >= 75 && discount >= 20.0 && (ocfVal === null || ocfVal > 0)) {
-        conditionalWarnings.push(`Negatif EVA Takibi: ROIC (%${roic.toFixed(1)}) sermaye maliyetinin (%${benchmarkWacc.toFixed(1)}) gerisindedir; ancak güçlü operasyonel nakit üretimi ve yüksek güvenlik marjı (%${discount}) yatırım tezini desteklemektedir.`);
-      } else {
-        finalDecision = 'NÖTR';
-        overrideApplied = true;
-        const waccTitle = isTms29 ? 'Reel WACC' : 'WACC';
-        overrideReason = `Negatif Sermaye Makası (EVA): Şirket sermaye maliyetinin altında getiri üreterek (ROIC %${roic} < ${waccTitle} %${benchmarkWacc}) değer erittiği için AL kararı NÖTR'e çekildi.`;
-        safetyFlags.push(`Negatif EVA Spread: ${(roic - benchmarkWacc).toFixed(1)} puan`);
-      }
+      finalDecision = 'NÖTR';
+      overrideApplied = true;
+      const waccTitle = isTms29 ? 'Reel WACC' : 'WACC';
+      overrideReason = `Negatif Sermaye Makası (EVA): Şirket sermaye maliyetinin altında getiri üreterek (ROIC %${roic.toFixed(1)} < ${waccTitle} %${benchmarkWacc.toFixed(1)}, Makas: ${(roic - benchmarkWacc).toFixed(1)} puan) değer erittiği için AL kararı NÖTR'e (Koşullu İzleme) çekildi.`;
+      safetyFlags.push(`Negatif EVA Spread: ${(roic - benchmarkWacc).toFixed(1)} puan`);
     }
 
     // 10. Kural: Emniyet Marjı Yetersizse Kesinlikle AL Verilemez (Max NÖTR)
@@ -4405,18 +4437,14 @@ export function optimizeFinalDecision({
     }
 
     // 12. Kural: Değer Tuzağı (Value Trap) Filtresi:
-    // Kağıt üzerinde cazip iskonto (%20+) görünmesine rağmen marj daralması, negatif ROIC/EVA veya yüksek borç varsa AL kararı ALMA'ya çekilir!
+    // Kağıt üzerinde cazip iskonto (%20+) görünmesine rağmen marj daralması, negatif ROIC/EVA veya yüksek borç varsa AL kararı ALMA'ya veya NÖTR'e çekilir!
     const isValueTrap = valuation?.is_value_trap ?? false;
     const valueTrapReasons = valuation?.value_trap_reasons || [];
     if (isValueTrap && !overrideApplied) {
-      if (!isSupplierDebtTrap && effectiveScore >= 75 && discount >= 20.0 && (ocfVal === null || ocfVal > 0) && (equity !== null && equity > 0)) {
-        if (valuation?.value_trap_severity === 'CRITICAL') {
-          finalDecision = 'NÖTR';
-          overrideApplied = true;
-          overrideReason = `Değer Tuzağı Takibi: Şirketin temel analiz skoru (${effectiveScore}/100) ve güvenlik marjı (%${discount}) yüksek olmasına rağmen, kritik sermaye/marj riskleri nedeniyle AL kararı NÖTR (Koşullu İzleme) olarak dengelendi.`;
-        } else {
-          conditionalWarnings.push(`Değer Tuzağı Riski Takibi: ${valueTrapReasons.join('; ')}`);
-        }
+      if (!isSupplierDebtTrap && (ocfVal === null || ocfVal > 0) && (equity !== null && equity > 0)) {
+        finalDecision = 'NÖTR';
+        overrideApplied = true;
+        overrideReason = `Değer Tuzağı Takibi: Şirketin güvenlik marjı (%${discount}) yüksek görünmesine rağmen, sermaye/marj riskleri (Değer Tuzağı Şüphesi: ${valueTrapReasons.join('; ')}) nedeniyle AL kararı NÖTR (Koşullu İzleme) olarak dengelendi.`;
       } else {
         finalDecision = 'ALMA';
         overrideApplied = true;
