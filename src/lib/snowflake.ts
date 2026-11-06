@@ -611,12 +611,12 @@ export function computeSnowflakeAnalysis(params: {
       id: 'analyst_forecast',
       title: 'Analist Konsensüs Hedef Potansiyeli',
       passed: targetPrice != null && targetPrice > 0 && consensusUpside >= 10.0,
-      metricValue: targetPrice != null && targetPrice > 0 ? `₺${targetPrice.toFixed(2)} (%+${consensusUpside.toFixed(1)})` : '—',
+      metricValue: targetPrice != null && targetPrice > 0 ? `₺${targetPrice.toFixed(2)} (${consensusUpside >= 0 ? '%+' : '%'}${consensusUpside.toFixed(1)})` : '—',
       threshold: '>= %+10.0 Prim Potansiyeli',
       detail: targetPrice != null && targetPrice > 0
         ? (consensusUpside >= 10.0
             ? `12 aylık analist konsensüs hedef fiyatı (₺${targetPrice.toFixed(2)}), cari seans fiyatına göre %+${consensusUpside.toFixed(1)} prim potansiyeli taşımaktadır.`
-            : `Analist konsensüs hedef fiyatı (₺${targetPrice.toFixed(2)}), cari fiyata yakın veya potansiyeli düşüktür (%+${consensusUpside.toFixed(1)}).`)
+            : `Analist konsensüs hedef fiyatı (₺${targetPrice.toFixed(2)}), cari fiyata yakın veya potansiyeli düşüktür (${consensusUpside >= 0 ? '%+' : '%'}${consensusUpside.toFixed(1)}).`)
         : 'Resmi aracı kurum konsensüs hedef fiyatı bulunamadı.'
     }
   ];
@@ -625,7 +625,7 @@ export function computeSnowflakeAnalysis(params: {
   // 2. EKSEN: GELECEK BÜYÜME (0 - 6 PUAN)
   // =========================================================================
   const savingsThreshold = isForeign ? 10.0 : 32.0;
-  const futureRoe = Math.min(65.0, Math.max(currentRoe, (currentRoe * 0.65 + roic * 0.35)));
+  const futureRoe = isFinancial ? currentRoe : Math.min(65.0, Math.max(currentRoe, (currentRoe * 0.65 + roic * 0.35)));
   const fmtGrowthPct = (val: number) => (val >= 0 ? `+%${val.toFixed(1)}` : `-%${Math.abs(val).toFixed(1)}`);
 
   const futureChecks: SnowflakeCheck[] = [
@@ -693,7 +693,9 @@ export function computeSnowflakeAnalysis(params: {
       threshold: `>= %${isFinancial ? '25.0' : '20.0'} Getiri Eşiği`,
       detail: futureRoe >= (isFinancial ? 25.0 : 20.0)
         ? `Şirketin gelecek dönem tahmini özsermaye kârlılığı (%${futureRoe.toFixed(1)}), sermaye maliyetini aşarak güçlü getiri potansiyelini desteklemektedir.`
-        : `Gelecek dönem özsermaye kârlılığı (%${futureRoe.toFixed(1)}), şirketin cari yıllıklandırılmış ROE'si (%${currentRoe.toFixed(1)}) ve ROIC (%${roic.toFixed(1)}) hibrit ağırlığıyla hesaplanmış olup sermaye maliyeti eşiğinin (%${isFinancial ? '25.0' : '20.0'}) gerisindedir.`
+        : (isFinancial
+            ? `Gelecek dönem tahmini özsermaye kârlılığı (%${futureRoe.toFixed(1)}), sektör sermaye maliyeti eşiğinin (%25.0) gerisindedir.`
+            : `Gelecek dönem özsermaye kârlılığı (%${futureRoe.toFixed(1)}), şirketin cari yıllıklandırılmış ROE'si (%${currentRoe.toFixed(1)}) ve ROIC (%${roic.toFixed(1)}) hibrit ağırlığıyla hesaplanmış olup sermaye maliyeti eşiğinin (%20.0) gerisindedir.`)
     }
   ];
 
@@ -807,6 +809,10 @@ export function computeSnowflakeAnalysis(params: {
   const totalLiabilities = Number(unifiedMetrics?.balanceSheet?.totalLiabilities ?? latestData?.total_liabilities ?? (totalAssets - Number(latestData?.equity ?? 0)));
   const equityRatio = totalAssets > 0 ? (Number(unifiedMetrics?.balanceSheet?.equity ?? latestData?.equity ?? 0) / totalAssets) * 100 : 0;
   
+  // Bankacılık & Finansal Kurumlar İçin BDDK SYR / NPL Değerleri
+  const syrVal = Number(latestData?.syr ?? latestData?.car_ratio ?? (unifiedMetrics as any)?.banking?.syr ?? 0);
+  const nplVal = Number(latestData?.npl_ratio ?? latestData?.npl ?? (unifiedMetrics as any)?.banking?.nplRatio ?? 0);
+
   // Net Borç / FAVÖK: Tek çeyreklik EBITDA yerine kurumsal TTM EBITDA esas alınır
   const ndRatio = unifiedMetrics?.liquidity?.netDebtToEbitda != null
     ? unifiedMetrics.liquidity.netDebtToEbitda
@@ -824,12 +830,14 @@ export function computeSnowflakeAnalysis(params: {
     // 4.1 Short Term Liabilities
     {
       id: 'short_term_liabilities',
-      title: 'Kısa Vadeli Borçları Karşılama',
-      passed: !isInsolventEquity && (isFinancial ? equityRatio >= 10.0 : currentRatio >= minCurrentRatio),
-      metricValue: isFinancial ? `Özkaynak Oranı: %${equityRatio.toFixed(1)}` : `Cari Oran: ${currentRatio.toFixed(2)}x`,
-      threshold: isFinancial ? '>= %10.0' : `>= ${minCurrentRatio.toFixed(2)}x`,
+      title: isFinancial ? 'Sermaye Yeterliliği ve Karşılık Gücü' : 'Kısa Vadeli Borçları Karşılama',
+      passed: !isInsolventEquity && (isFinancial ? (syrVal > 0 ? syrVal >= 12.0 : equityRatio >= 7.0) : currentRatio >= minCurrentRatio),
+      metricValue: isFinancial ? (syrVal > 0 ? `SYR: %${syrVal.toFixed(1)}` : `Özkaynak Oranı: %${equityRatio.toFixed(1)}`) : `Cari Oran: ${currentRatio.toFixed(2)}x`,
+      threshold: isFinancial ? (syrVal > 0 ? '>= %12.0 SYR' : '>= %7.0') : `>= ${minCurrentRatio.toFixed(2)}x`,
       detail: isFinancial
-        ? `Özkaynakların toplam aktiflere oranı (%${equityRatio.toFixed(1)}) yasal karşılık ve emniyet sınırını karşılamaktadır.`
+        ? (!isInsolventEquity && (syrVal > 0 ? syrVal >= 12.0 : equityRatio >= 7.0)
+            ? `Sermaye yeterliliği ${syrVal > 0 ? `(SYR: %${syrVal.toFixed(1)})` : `(Özkaynak Oranı: %${equityRatio.toFixed(1)})`} yasal karşılık ve Basel/BDDK emniyet sınırını (%12.0) güvenle karşılamaktadır.`
+            : `Sermaye yeterliliği ${syrVal > 0 ? `(SYR: %${syrVal.toFixed(1)})` : `(Özkaynak Oranı: %${equityRatio.toFixed(1)})`} yasal emniyet sınırının altında kalarak tampon baskısı yaratmaktadır.`)
         : (currentRatio >= minCurrentRatio
             ? `Dönen varlıklar (${formatCurrency(currentAssets)}), kısa vadeli borçları (${formatCurrency(currentLiabilities)}) sektörel normlarla emniyetle karşılamaktadır (Cari Oran: ${currentRatio.toFixed(2)}x).`
             : `Cari oran (${currentRatio.toFixed(2)}x) ${minCurrentRatio.toFixed(2)} seviyesinin altına inerek işletme sermayesi baskısı yaratmaktadır.`)
@@ -837,26 +845,30 @@ export function computeSnowflakeAnalysis(params: {
     // 4.2 Long Term Liabilities
     {
       id: 'long_term_liabilities',
-      title: 'Uzun Vadeli Yükümlülükleri Karşılama',
-      passed: !isInsolventEquity && (isFinancial ? equityRatio >= 12.0 : (totalAssets / Math.max(1, totalLiabilities) >= 1.30 || currentAssets > currentLiabilities)),
-      metricValue: isFinancial ? `Özkaynak/Aktif: %${equityRatio.toFixed(1)}` : `Varlık/Borç: ${(totalAssets / Math.max(1, totalLiabilities)).toFixed(2)}x`,
-      threshold: isFinancial ? '>= %12.0' : '>= 1.30x',
-      detail: (!isInsolventEquity && ((totalAssets / Math.max(1, totalLiabilities)) >= 1.30 || isFinancial))
-        ? 'Şirketin toplam aktif gücü ve özkaynak tabanı, uzun vadeli borçları karşılamak için güçlü bir teminat sunmaktadır.'
-        : 'Toplam borç yükü varlık tabanına oranla yüksek seyretmektedir.'
+      title: isFinancial ? 'Aktif Kalitesi ve Karşılama Oranı' : 'Uzun Vadeli Yükümlülükleri Karşılama',
+      passed: !isInsolventEquity && (isFinancial ? (nplVal > 0 ? nplVal <= 4.0 : equityRatio >= 7.0) : (totalAssets / Math.max(1, totalLiabilities) >= 1.30 || currentAssets > currentLiabilities)),
+      metricValue: isFinancial ? (nplVal > 0 ? `NPL: %${nplVal.toFixed(2)}` : `Özkaynak/Aktif: %${equityRatio.toFixed(1)}`) : `Varlık/Borç: ${(totalAssets / Math.max(1, totalLiabilities)).toFixed(2)}x`,
+      threshold: isFinancial ? (nplVal > 0 ? '<= %4.0 NPL' : '>= %7.0') : '>= 1.30x',
+      detail: !isInsolventEquity && (isFinancial ? (nplVal > 0 ? nplVal <= 4.0 : equityRatio >= 7.0) : totalAssets / Math.max(1, totalLiabilities) >= 1.30)
+        ? (isFinancial ? `Aktif kalitesi ve takipteki alacak oranı (NPL: %${nplVal.toFixed(2)}) BDDK risk limitlerinin altında sağlıklı yönetilmektedir.` : 'Şirketin toplam aktif gücü ve özkaynak tabanı, uzun vadeli borçları karşılamak için güçlü bir teminat sunmaktadır.')
+        : (isFinancial ? `Aktif kalitesinde bozulma veya yüksek takipteki alacak oranı (NPL: %${nplVal.toFixed(2)}) sermaye üzerinde risk oluşturmaktadır.` : 'Toplam borç yükü varlık tabanına oranla yüksek seyretmektedir.')
     },
     // 4.3 Debt Level
     {
       id: 'debt_level',
-      title: 'Muhafazakar Borçluluk Düzeyi',
-      passed: !isInsolventEquity && (isFinancial ? equityRatio >= 12.0 : (netDebt <= 0 || ndRatio <= 2.5)),
-      metricValue: isFinancial ? `Sermaye Gücü: %${equityRatio.toFixed(1)}` : (netDebt <= 0 ? 'Net Nakit Fazlası' : `Net Borç / FAVÖK: ${ndRatio.toFixed(1)}x`),
-      threshold: isFinancial ? '>= %12.0' : '<= 2.5x veya Net Nakit',
-      detail: netDebt <= 0 && !isInsolventEquity
-        ? 'Şirket kasasındaki nakit ve likit benzerleri toplam borçlarını aşarak net nakit pozisyonunda yer almaktadır.'
-        : (!isInsolventEquity && ndRatio <= 2.5
-            ? `Net Borç / FAVÖK çarpanı (${ndRatio.toFixed(1)}x), muhafazakar ve güvenli tavanın (2.5x) altındadır.`
-            : `Net Borç / FAVÖK çarpanı (${ndRatio.toFixed(1)}x), kritik eşiğin (2.5x) üzerindedir veya özkaynaklar negatiftir.`)
+      title: isFinancial ? 'Kaldıraç ve Mevduat Güvencesi' : 'Muhafazakar Borçluluk Düzeyi',
+      passed: !isInsolventEquity && (isFinancial ? equityRatio >= 7.0 : (netDebt <= 0 || ndRatio <= 2.5)),
+      metricValue: isFinancial ? `Özsermaye/Aktif: %${equityRatio.toFixed(1)}` : (netDebt <= 0 ? 'Net Nakit Fazlası' : `Net Borç / FAVÖK: ${ndRatio.toFixed(1)}x`),
+      threshold: isFinancial ? '>= %7.0' : '<= 2.5x veya Net Nakit',
+      detail: isFinancial
+        ? (!isInsolventEquity && equityRatio >= 7.0
+            ? `Banka kaldıraç oranı ve özkaynak tabanı (%${equityRatio.toFixed(1)}), mevduat ve yükümlülükleri koruyacak emniyetli düzeydedir.`
+            : `Özkaynakların toplam aktiflere oranı (%${equityRatio.toFixed(1)}) zayıflayarak aşırı bilanço kaldıracına işaret etmektedir.`)
+        : (netDebt <= 0 && !isInsolventEquity
+            ? 'Şirket kasasındaki nakit ve likit benzerleri toplam borçlarını aşarak net nakit pozisyonunda yer almaktadır.'
+            : (!isInsolventEquity && ndRatio <= 2.5
+                ? `Net Borç / FAVÖK çarpanı (${ndRatio.toFixed(1)}x), muhafazakar ve güvenli tavanın (2.5x) altındadır.`
+                : `Net Borç / FAVÖK çarpanı (${ndRatio.toFixed(1)}x), kritik eşiğin (2.5x) üzerindedir veya özkaynaklar negatiftir.`))
     },
     // 4.4 Reducing Debt
     {
@@ -1048,7 +1060,7 @@ export function computeSnowflakeAnalysis(params: {
       detail: netIncome <= 0
         ? 'Şirket net dönem zararı açıkladığı için kâr ile temettü karşılama kapasitesi bulunmamaktadır.'
         : (payoutRatio > 0 && payoutRatio <= 75.0
-            ? `Net kârın %${payoutRatio.toFixed(0)}'ı temettü olarak dağıtılmaktadır (sürdürülebilir güvenli koridor).`
+            ? `Net kârın %${payoutRatio.toFixed(0)}'lik kısmı temettü olarak dağıtılmaktadır (sürdürülebilir güvenli koridor).`
             : (divYield === 0 && currentRoe >= 18.0
                 ? 'Şirket kârını dağıtmayarak yüksek ROE ile yatırımlarına ve içsel büyümesine tahsis etmektedir.'
                 : (payoutRatio > 75.0

@@ -5,7 +5,11 @@ import {
   generateWithRateLimitAndBackoff, 
   computeContentHash 
 } from '@/lib/gemini';
-import { computeSectorValuationAndDrivers, syncReportTextWithValuation } from '@/lib/valuation';
+import { 
+  computeSectorValuationAndDrivers, 
+  syncReportTextWithValuation,
+  generateAlgorithmicReportFallback
+} from '@/lib/valuation';
 import { fetchLiveBistPrice } from '@/lib/bist-service';
 import { fetchIsYatirimCompanyDetails, synthesizeDividendsFromFinancialHistory } from '@/lib/isyatirim-service';
 import { FinancialRatioEngine } from '@/lib/ratio-engine';
@@ -544,121 +548,3 @@ ZORUNLU TALİMAT (Önceki Raporla Karşılaştırma & Çeyreklik Hafıza):
   }
 }
 
-/**
- * Gemini API erişilemediğinde veya hız sınırına takıldığında deterministik matematiksel
- * modeller ve sektörel normlardan beslenen eksiksiz kurumsal değerleme raporu üretir.
- */
-function generateAlgorithmicReportFallback(params: {
-  ticker: string;
-  sector: SectorType;
-  sectorDef: any;
-  price: string;
-  valuation: any;
-  drivers: any;
-  scoreResult: any;
-  optimization: any;
-  currentDateStr: string;
-  extractedData: any;
-  unifiedMetrics?: any;
-}): string {
-  const { ticker, sector, sectorDef, price, valuation, drivers, scoreResult, optimization, extractedData, unifiedMetrics } = params;
-  const isIns = sector === 'INSURANCE';
-  const isBank = sector === 'BANKING';
-
-  const rawHistory = Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : [];
-  const sortedHist = [...rawHistory].sort((a: any, b: any) => (a?.period || '').localeCompare(b?.period || ''));
-  const latestItem = sortedHist.length > 0 ? sortedHist[sortedHist.length - 1] : null;
-
-  const nominalWaccVal = unifiedMetrics?.margins?.wacc ?? latestItem?.nominal_wacc ?? latestItem?.wacc ?? 29.6;
-  const realWaccVal = (latestItem?.is_tms29 && unifiedMetrics?.margins?.wacc == null)
-    ? Number((((1 + nominalWaccVal / 100) / (1 + (latestItem?.expected_inflation || 18) / 100) - 1) * 100).toFixed(1))
-    : (unifiedMetrics?.margins?.wacc ?? nominalWaccVal);
-  const expectedInfVal = latestItem?.expected_inflation ?? 18.0;
-  const roicVal = unifiedMetrics?.margins?.roic ?? latestItem?.roic ?? 15.64;
-  const evaSpreadVal = unifiedMetrics?.margins?.evaSpread != null
-    ? String(unifiedMetrics.margins.evaSpread)
-    : (roicVal - realWaccVal).toFixed(1);
-
-  const grossOcfVal = unifiedMetrics?.ttm?.operatingCashFlow ?? latestItem?.gross_operating_cash_flow;
-  const netOcfVal = unifiedMetrics?.ttm?.operatingCashFlow ?? latestItem?.net_operating_cash_flow ?? latestItem?.operating_cash_flow;
-  const tangibleCapexVal = unifiedMetrics?.ttm?.capex ?? latestItem?.tangible_capex ?? latestItem?.capex;
-  const freeCashFlowVal = unifiedMetrics?.ttm?.freeCashFlow ?? latestItem?.free_cash_flow ?? (netOcfVal ? (netOcfVal - Math.abs(tangibleCapexVal || 0)) : null);
-
-  const trapReasons: string[] = [
-    ...(Array.isArray(valuation?.value_trap_reasons) && valuation.value_trap_reasons.length > 0
-      ? valuation.value_trap_reasons
-      : (Array.isArray(optimization?.valueTrapReasons) ? optimization.valueTrapReasons : [])),
-    ...(valuation?.capital_allocation_risk?.isRiskDetected && Array.isArray(valuation.capital_allocation_risk.reasons)
-      ? valuation.capital_allocation_risk.reasons
-      : [])
-  ];
-
-  const trapBlock = trapReasons.length > 0
-    ? `\n> ⚠️ **Adli Denetim & Değer Tuzağı Teşhisi (Forensic Red Team):**\n${trapReasons.map((r: string) => `> - ${r}`).join('\n')}\n`
-    : '';
-
-  const isPositiveEva = Number(evaSpreadVal) >= 0;
-  const evaNarrative = isPositiveEva
-    ? `Yıllıklandırılmış ROIC (%${roicVal}) reel sermaye maliyetinin üzerinde olup ekonomik katma değer (EVA Spread: +${evaSpreadVal} puan) oluşturmaktadır.`
-    : `Yıllıklandırılmış ROIC (%${roicVal}) reel sermaye maliyetinin altında kalmış olup sermaye erozyonuna (EVA Spread: ${evaSpreadVal} puan) işaret etmektedir.`;
-
-  const isAlmaDecision = optimization.finalDecision === 'ALMA';
-  const thesisNarrative = isAlmaDecision
-    ? `**Yatırım Tezi:** ${ticker} hissesi için hesaplanan adil değer ${valuation.fair_value} TL seviyesinde olmakla birlikte, güncel ${price} TL piyasa fiyatı üzerinden yapılan kurumsal denetimde sermaye erozyonu ve operasyonel riskler nedeniyle model görünümü ALMA yönünde şekillenmiştir.`
-    : `**Yatırım Tezi:** ${ticker} hissesi için hesaplanan adil değer ${valuation.fair_value} TL olup, güncel ${price} TL fiyatına kıyasla %${valuation.discount_pct} potansiyel (${valuation.discount_pct >= 0 ? 'iskonto' : 'prim'}) barındırmaktadır.`;
-
-  return `## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ
-> **Yönetici Özeti:** ${ticker} hissesi için hesaplanan adil değer ${valuation.fair_value} TL olup, güncel ${price} TL piyasa fiyatına göre %${valuation.discount_pct} getiri potansiyeli (${valuation.discount_pct >= 0 ? 'iskonto' : 'prim'}) taşımaktadır.
-${trapBlock}
-**Temel Yatırım Tezi:** ${ticker}, ${sectorDef.title} sektöründe faaliyet göstermektedir. Yapılan ${valuation.valuation_model_name} analizine göre hissenin hesaplanan adil değeri **${valuation.fair_value} TL** seviyesindedir. Piyasa fiyatı olan **${price} TL** üzerinden yapılan kurumsal emniyet marjı değerlendirmesi sonucunda model görünümü **${optimization.finalDecision}** yönünde şekillenmiştir.
-
-**Finansal Sağlık Skoru:** Şirket 100 üzerinden **${scoreResult.totalScore}** puan alarak sektörel finansal dayanıklılık ve sermaye verimliliği kriterlerini sağlamıştır.
-
-## II. KÂR KALİTESİ VE NAKİT AKIŞI TEŞHİSİ
-> **Nakit Akışı Teşhisi:** Şirketin operasyonel nakit üretimi, tahakkuk kalitesi ve serbest nakit akışı finansal tablolar bazında incelenmiştir.
-
-- **Kâr Kalitesi ve Nakit Üretimi:** Şirketin operasyonel kârının nakde dönüşüm kabiliyeti değerlendirilmiştir.${grossOcfVal ? ` Çalışma sermayesi öncesi brüt faaliyet nakit üretimi ${(grossOcfVal / 1e9).toFixed(2)} Milyar TL,` : ''}${netOcfVal ? ` vergi ve işletme sermayesi düzeltmeleri sonrası resmi Net İşletme Nakit Akışı ise ${(netOcfVal / 1e9).toFixed(2)} Milyar TL seviyesindedir.` : ' operasyonel nakit üretimi pozitiftir.'} Nakit dönüşüm oranı tahsilat kabiliyetine işaret etmektedir.
-- **Yatırım Harcamaları ve Serbest Nakit Akışı (FCF):** ${tangibleCapexVal ? `Maddi duran varlık yatırımları (Tangible CAPEX) ${(Math.abs(tangibleCapexVal) / 1e9).toFixed(2)} Milyar TL düzeyindedir.` : 'Yatırımlar operasyonel nakit ile karşılanmaktadır.'} ${freeCashFlowVal ? `Şirket ${(freeCashFlowVal / 1e9).toFixed(2)} Milyar TL tutarında güçlü serbest nakit akışı üreterek hissedar değerini büyütmektedir.` : 'Serbest nakit üretimi pozitiftir.'}
-- **Sermaye Verimliliği:** Şirketin sermaye maliyetini aşma gücü ve özkaynak kârlılığı ${drivers.margin?.label || 'Kârlılık Marjı'} (%${drivers.margin?.value || '0'}) seviyesindedir.
-
-## III. SEKTÖREL REKABET VE DU PONT ANALİZİ
-> **Sektörel Karne:** ${sectorDef.title} sektörü standartlarına göre 4 temel boyutta gerçekleştirilen detaylı karne analizi.
-
-- **Büyüme Dinamikleri:** ${drivers.revenue_growth?.label || 'Gelir Büyümesi'} baz varsayımı %${drivers.revenue_growth?.value || '0'} ve ${drivers.net_income_growth?.label || 'Net Kâr Büyümesi'} %${drivers.net_income_growth?.value || '0'} olarak gerçekleşmiştir.
-- **Pazar Konumu:** Sektörel çarpan ve kârlılık dinamikleri çerçevesinde rekabet gücü korunmaktadır.
-
-## IV. SERMAYE MALİYETİ (WACC) VE DEĞERLEME MODELİ
-$$
-\\text{Hedef Adil Değer} = ${valuation.fair_value}\\text{ TL} \\quad | \\quad \\text{İskonto} = \\%${valuation.discount_pct}
-$$
-$$
-\\text{Reel EVA Makası} = \\text{ROIC} - \\text{Reel WACC} = \\%${roicVal} - \\%${realWaccVal} = ${Number(evaSpreadVal) >= 0 ? '+' : ''}${evaSpreadVal}\\text{ puan}
-$$
-
-- **Sermaye Maliyeti (WACC):** Nominal Sermaye Maliyeti %${nominalWaccVal}, beklenen enflasyon %${expectedInfVal} ve Fisher denklemiyle hesaplanan Reel WACC %${realWaccVal} seviyesindedir. ${evaNarrative}
-- **Uygulanan Değerleme Modeli:** ${valuation.valuation_model_name}
-- **Hedef Çarpan:** ${drivers.target_multiple?.label || 'Hedef Çarpan'} ${drivers.target_multiple?.value || '0'}x
-- **İskonto Oranı:** %${valuation.discount_pct} (${valuation.margin_of_safety_status || 'HESAPLANDI'})
-
-## V. DEĞER SÜRÜCÜLERİ VE DUYARLILIK ANALİZİ
-> **Duyarlılık Matrisi:** Farklı piyasa ve marj koşullarına göre senaryo bazlı hedef fiyat aralığı.
-
-- **Ayı Senaryosu (Taban):** **${valuation.bear_price} TL** (Negatif makro koşullar ve daralan marjlar)
-- **Baz Senaryo (Adil Değer):** **${valuation.fair_value} TL** (Mevcut operasyonel gerçekleşmeler ve dengeli büyüme)
-- **Boğa Senaryosu (Tavan):** **${valuation.bull_price} TL** (Hedeflerin aşılması ve çarpan genişlemesi)
-
-## VI. YATIRIM RİSKLERİ, KATALİZÖRLER VE NİHAİ KARAR
-
-| Metrik | Puan | Max | Gerekçe |
-| :--- | :--- | :--- | :--- |
-${(scoreResult.breakdown || []).map((b: any) => `| ${b.category} | ${b.score} | ${b.maxScore} | ${b.reason} |`).join('\n')}
-| **Toplam Puan** | **${scoreResult.totalScore}** | **100** | ${scoreResult.totalScore >= 75 ? 'Güçlü operasyonel performans ve yüksek iskonto.' : 'Sektörel standartlara uyum.'} |
-
-### Analist Kararı: [${optimization.finalDecision}]
-
-${thesisNarrative}
-
-**Kilit Katalizörler:** Operasyonel kârlılık artışı, ${drivers.revenue_growth?.label || 'gelir büyümesi'} performansı ve sektörel talep dinamikleri.
-
-**Riskler & Emniyet Marjı:** Ayı senaryosu taban hedefi ${valuation.bear_price} TL seviyesindedir. ${trapReasons.length > 0 ? `\n- **Adli Denetim Riskleri:** ${trapReasons.join('; ')}` : ''} ${optimization.conditionalWarnings?.length > 0 ? optimization.conditionalWarnings.join('. ') : 'Makro oynaklık ve faiz seviyeleri izlenmelidir.'}`;
-}
