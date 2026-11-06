@@ -1,6 +1,6 @@
 import { test, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeSectorValuationAndDrivers, calculateSectorScore, calculateDuPont5Step, analyzeRelatedPartyAndCapitalAllocationRisk } from '../lib/valuation.ts';
+import { computeSectorValuationAndDrivers, calculateSectorScore, calculateDuPont5Step, analyzeRelatedPartyAndCapitalAllocationRisk, isTfrs10InvestmentEntity } from '../lib/valuation.ts';
 import { IsYatirimApiAdapter } from '../lib/isyatirim-adapter.ts';
 
 describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
@@ -723,6 +723,64 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
     // Holding companies must be exempt from shadow holding penalty
     const holdingAudit = analyzeRelatedPartyAndCapitalAllocationRisk(atatpLatest, 'HOLDING');
     assert.equal(holdingAudit.isRiskDetected, false, 'Holding sector must be exempt from shadow holding penalty');
+  });
+
+  it('22. ESCOM (TFRS 10 Tech Venture / Investment Entity): Distinguishes investment entity from related-party risk, eliminates fake %69930 Rule of 40, and values via P/NAV', () => {
+    const escomLatest = {
+      period: '2026/09',
+      revenue: 1275352396,
+      cost_of_sales: 0,
+      gross_margin: 100,
+      inventories: 0,
+      trade_receivables: 0,
+      net_income: 461758380,
+      operating_cash_flow: -362349,
+      free_cash_flow: -362001,
+      total_assets: 4673818687,
+      non_current_financial_investments: 4629663693,
+      equity: 4591067409,
+      parent_equity: 4591067409,
+      minority_interests: 0,
+      net_debt: -1183974,
+      roe: 9.93,
+      roic: 10.1
+    };
+
+    const escomData = {
+      ticker: 'ESCOM',
+      sector: 'TECH',
+      current_price: 3.56,
+      share_count: 704800000,
+      paid_in_capital: 704800000,
+      financial_history: [
+        {
+          period: '2025/09',
+          revenue: 1821000,
+          net_income: -120000000,
+          equity: 4100000000,
+          roe: -3.0
+        },
+        escomLatest
+      ]
+    };
+
+    assert.equal(isTfrs10InvestmentEntity(escomLatest, 'ESCOM'), true, 'Must detect ESCOM as a TFRS 10 Investment Entity');
+
+    const audit = analyzeRelatedPartyAndCapitalAllocationRisk(escomLatest, 'TECH');
+    assert.equal(audit.isRiskDetected, false, 'Must NOT accuse TFRS 10 investment entity of related-party shadow holding risk');
+    assert.equal(audit.isInvestmentEntity, true, 'Must flag as TFRS 10 Investment Entity');
+    assert.equal(audit.haircutPct, 0, 'Must not apply extra shadow holding haircut on top of P/NAV model');
+
+    const scoreRes = calculateSectorScore(escomData, 'TECH');
+    assert.ok(scoreRes.totalScore <= 65, `ESCOM score (${scoreRes.totalScore}/100) must reflect non-cash revaluation and low ROE, not 77/100 SaaS score`);
+    const firstCat = scoreRes.breakdown[0];
+    assert.ok(!firstCat.reason.includes('69930'), `Must not produce fake %69930 Rule of 40 reason: ${firstCat.reason}`);
+    assert.ok(firstCat.reason.includes('TFRS 10') || firstCat.reason.includes('Gayrinakdi'), `Must explain TFRS 10 non-cash revaluation: ${firstCat.reason}`);
+
+    const valRes = computeSectorValuationAndDrivers(escomData, 3.56);
+    assert.ok(valRes.valuation.valuation_model_name.includes('TFRS 10'), `Must use TFRS 10 P/NAV model: ${valRes.valuation.valuation_model_name}`);
+    assert.ok(valRes.valuation.fair_value >= 3.80 && valRes.valuation.fair_value <= 5.20, `ESCOM fair value must be P/NAV based (~4.42 TL), not inflated 10.24 TL EV/Sales (got ${valRes.valuation.fair_value} TL)`);
+    assert.equal(valRes.valuation.final_decision, 'NÖTR', 'ESCOM decision must be NÖTR due to non-cash OCF');
   });
 
 });

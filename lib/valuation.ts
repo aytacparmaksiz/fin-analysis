@@ -172,6 +172,7 @@ export interface CapitalAllocationIndicator {
 
 export interface CapitalAllocationAuditResult {
   isRiskDetected: boolean;
+  isInvestmentEntity?: boolean;
   severity: 'NONE' | 'MODERATE' | 'HIGH' | 'CRITICAL';
   triggeredCount: number;
   haircutPct: number;
@@ -1714,7 +1715,7 @@ export function syncReportTextWithValuation(reportText: string, valuation: any):
 
   // 6. Adli Denetim & Değer Tuzağı Teşhisi Senkronizasyonu (Kalıcı Yatırım Tezi)
   const trapReasons: string[] = Array.isArray(valuation.value_trap_reasons) ? [...valuation.value_trap_reasons] : [];
-  if (valuation.capital_allocation_risk?.isRiskDetected && Array.isArray(valuation.capital_allocation_risk.reasons)) {
+  if ((valuation.capital_allocation_risk?.isRiskDetected || valuation.capital_allocation_risk?.isInvestmentEntity) && Array.isArray(valuation.capital_allocation_risk.reasons)) {
     for (const r of valuation.capital_allocation_risk.reasons) {
       if (!trapReasons.includes(r)) trapReasons.push(r);
     }
@@ -2222,6 +2223,61 @@ export function calculateSectorScore(
         s4 = 14; r4 = `Özkaynak kârlılığı (%${roe.toFixed(1)}) sermaye maliyetinin altında.`; st4 = 'warning';
       } else {
         s4 = 6; r4 = 'Negatif sermaye getirisi; toptancı marjları erimiş.'; st4 = 'danger';
+      }
+      breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
+    } else if (isTfrs10InvestmentEntity(latest, data?.ticker, targetSectorOrOfficial)) {
+      // TFRS 10 Teknoloji Yatırım İşletmesi / Girişim Sermayesi Portföy Şirketi (ESCOM, VERTU, HUBVC vb.):
+      // Raporlanan hasılat operasyonel yazılım satışı değil, iştiraklerin gerçeğe uygun değerleme kârıdır (Satışların Maliyeti: 0 TL).
+      // 1. Nakit Dönüşümü & Değerleme Kalitesi (Max 25)
+      const actualOcf = parseFinancialNumber(latest?.operating_cash_flow ?? latest?.ocf);
+      const actualNet = parseFinancialNumber(latest?.net_income);
+      let s1 = 12;
+      let r1 = 'TFRS 10 İştirak Değerleme Yapısı: Kârlar portföy yeniden değerlemesinden kaynaklanmaktadır.';
+      let st1: 'good' | 'warning' | 'danger' = 'warning';
+      if (actualNet !== null && actualNet > 0 && (actualOcf === null || actualOcf <= 0)) {
+        s1 = 10;
+        r1 = 'Gayrinakdi Değerleme Kârı (TFRS 10): Raporlanan hasılat ve net kâr iştiraklerin gerçeğe uygun değer artışından kaynaklanmaktadır; operasyonel nakit akışı (OCF) negatiftir.';
+        st1 = 'warning';
+        anomalies.push('TFRS 10 Gayrinakdi Değerleme Kârı: Nakit akışı (OCF) negatif.');
+      } else if (actualOcf !== null && actualOcf > 0) {
+        s1 = 20;
+        r1 = 'İştirak temettü tahsilatı ve portföy çıkış (exit) nakit girişleri pozitif.';
+        st1 = 'good';
+      }
+      breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
+
+      // 2. İştirak Portföy Yapısı & Gelir Kalitesi (Max 25)
+      const s2 = 16;
+      const r2 = 'TFRS 10 Yatırım İşletmesi Yapısı: Satışların maliyeti (0 TL) bulunmadığından %100 görünen marj operasyonel yazılım marjı değil, iştirak değerleme artışıdır.';
+      const st2: 'good' | 'warning' | 'danger' = 'warning';
+      breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+
+      // 3. Net Nakit Pozisyonu & Borçsuzluk (Max 25)
+      const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
+      let s3 = 20;
+      let r3 = 'Nakit ve borç dengesi koruma altında.';
+      let st3: 'good' | 'warning' | 'danger' = 'good';
+      if (netDebt <= 0) {
+        s3 = 22;
+        r3 = 'Finansal Borçsuz Portföy: Şirketin faiz taşıyan finansal borcu bulunmamaktadır; ancak solo kasa nakdi temettü/çıkış işlemlerine bağımlıdır.';
+        st3 = 'good';
+      } else {
+        s3 = 10;
+        r3 = `İştirak portföy şirketinde net finansal borç mevcut (${netDebt.toLocaleString('tr-TR')} TL).`;
+        st3 = 'warning';
+      }
+      breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+
+      // 4. Sermaye Verimliliği (ROE & Portföy Getirisi) (Max 25)
+      const roe = parseFinancialNumber(latest?.roe);
+      let s4 = 14;
+      let r4 = 'İştirak portföyü özkaynak getirisi izleniyor.';
+      let st4: 'good' | 'warning' | 'danger' = 'warning';
+      if (roe !== null) {
+        if (roe >= 35.0) { s4 = 24; r4 = `Güçlü Portföy Değer Artışı: Özkaynak getirisi (%${roe.toFixed(1)}) yüksek girişim sermayesi değerlemesine işaret ediyor.`; st4 = 'good'; }
+        else if (roe >= 20.0) { s4 = 18; r4 = `İştirak Portföy Getirisi (%${roe.toFixed(1)}) dengeli seviyede.`; st4 = 'good'; }
+        else if (roe >= 8.0) { s4 = 10; r4 = `İştirak Portföy Getirisi (ROE %${roe.toFixed(1)}): Değerleme artış hızı alternatif sermaye maliyetinin gerisindedir.`; st4 = 'warning'; }
+        else { s4 = 5; r4 = `Düşük Portföy Verimliliği (ROE %${roe.toFixed(1)}).`; st4 = 'danger'; anomalies.push(`Düşük Portföy ROE: %${roe.toFixed(1)}`); }
       }
       breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
     } else {
@@ -2900,8 +2956,8 @@ export function computeFairValueTrend(
         ? (1 + (item.housing_price_annual_change / 200))
         : 1.0;
       periodFv = eq > 0 ? (eq / activeShareCount) * housingFactor * 0.75 : null;
-    } else if (sector === 'HOLDING') {
-      periodFv = eq > 0 ? (eq / activeShareCount) * 0.70 : null;
+    } else if (sector === 'HOLDING' || isTfrs10InvestmentEntity(item, latestHistoryItem?.ticker)) {
+      periodFv = eq > 0 ? (eq / activeShareCount) * 0.68 : null;
     } else if (!hasTargetMult) {
       periodFv = null;
     } else if (sector === 'AVIATION') {
@@ -3002,21 +3058,45 @@ export function computeFairValueTrend(
  * 3) Azınlık Payları Kâr ve Özkaynak Sızıntısı (Azınlık Dönem Kârı / Konsolide Kâr >= %25 veya Azınlık Özkaynak Payı >= %30)
  * 4) İşletme Sermayesi Nakit Emişi & Zayıf Serbest Nakit Dönüşümü (|4CAF| / 4CAE >= %65 ve FCF / Net Kâr < %20)
  */
+/**
+ * TFRS 10 Yatırım İşletmesi / Girişim Sermayesi Portföy Şirketi Tespiti:
+ * BIST'te Teknoloji veya Hizmet endeksinde yer almasına rağmen esas faaliyeti mal/yazılım üretip satmak değil,
+ * girişim sermayesi / teknoloji iştiraklerine yatırım yapmak ve bunları TFRS 10 / TMS 28 uyarınca gerçeğe uygun
+ * değer farkı üzerinden değerlemek olan şirketleri (örn. ESCOM, VERTU, HUBVC) tespit eder.
+ */
+export function isTfrs10InvestmentEntity(latest: any, ticker?: string, officialSectorName?: string): boolean {
+  const t = String(ticker || latest?.ticker || '').toUpperCase().replace(/\.IS$/i, '').trim();
+  if (['ESCOM', 'VERTU', 'HUBVC'].includes(t)) return true;
+  const normSec = String(officialSectorName || latest?.official_sector_name || '').toLowerCase();
+  if (normSec.includes('girişim sermayesi')) return true;
+  if (!latest || typeof latest !== 'object') return false;
+  const totalAssets = parseFinancialNumber(latest.total_assets) ?? 0;
+  const nonCurrFin = parseFinancialNumber(latest.non_current_financial_investments) ?? 0;
+  const costOfSales = Math.abs(parseFinancialNumber(latest.cost_of_sales) ?? 0);
+  const inventories = Math.abs(parseFinancialNumber(latest.inventories) ?? 0);
+  const tradeRec = Math.abs(parseFinancialNumber(latest.trade_receivables) ?? 0);
+  return totalAssets > 0 && (nonCurrFin / totalAssets) >= 0.85 && costOfSales === 0 && inventories === 0 && tradeRec === 0;
+}
+
 export function analyzeRelatedPartyAndCapitalAllocationRisk(
   latest: any,
   sector: SectorType = 'INDUSTRIAL',
   officialSectorName?: string
 ): CapitalAllocationAuditResult {
+  const investmentEntity = isTfrs10InvestmentEntity(latest, latest?.ticker, officialSectorName);
   const exemptSectors: SectorType[] = ['HOLDING', 'BANKING', 'INSURANCE', 'REIT', 'FINANCIAL_SERVICES'];
   const normOfficial = String(officialSectorName || latest?.official_sector_name || '').toLowerCase();
-  const isExempt = exemptSectors.includes(sector) ||
+  const isExempt = !investmentEntity && (
+    exemptSectors.includes(sector) ||
     normOfficial.includes('holding') ||
     normOfficial.includes('yatırım ortaklığı') ||
-    normOfficial.includes('girişim sermayesi');
+    normOfficial.includes('girişim sermayesi')
+  );
 
   if (!latest || isExempt) {
     return {
       isRiskDetected: false,
+      isInvestmentEntity: false,
       severity: 'NONE',
       triggeredCount: 0,
       haircutPct: 0,
@@ -3059,19 +3139,13 @@ export function analyzeRelatedPartyAndCapitalAllocationRisk(
   const fcf = parseFinancialNumber(latest.free_cash_flow);
   const annualFactor = getAnnualizationFactor(latest.period);
 
-  // 1. Gösterge: Gölge Holdingleşme & Faaliyet Dışı Duran Finansal Yatırım Şişkinliği
   const nonCurrentFinInvRatioAssets = (nonCurrentFinInv !== null && nonCurrentFinInv > 0 && totalAssets !== null && totalAssets > 0)
     ? Number(((nonCurrentFinInv / totalAssets) * 100).toFixed(1))
     : null;
   const nonCurrentFinInvRatioEquity = (nonCurrentFinInv !== null && nonCurrentFinInv > 0 && parentEquity !== null && parentEquity > 0)
     ? Number(((nonCurrentFinInv / parentEquity) * 100).toFixed(1))
     : null;
-  const ind1Triggered = Boolean(
-    (nonCurrentFinInvRatioAssets !== null && nonCurrentFinInvRatioAssets >= 30.0) ||
-    (nonCurrentFinInvRatioEquity !== null && nonCurrentFinInvRatioEquity >= 50.0)
-  );
 
-  // 2. Gösterge: Atıl Sermaye Transferi & Düşük Finansal Yatırım Getirisi (veya Yüksek Diğer Alacaklar)
   let annualizedInvYieldPct: number | null = null;
   if (nonCurrentFinInv !== null && nonCurrentFinInv > 0 && investmentIncome !== null) {
     annualizedInvYieldPct = Number((((investmentIncome * annualFactor) / nonCurrentFinInv) * 100).toFixed(2));
@@ -3079,12 +3153,7 @@ export function analyzeRelatedPartyAndCapitalAllocationRisk(
   const otherRecRatioAssets = (otherReceivables > 0 && totalAssets !== null && totalAssets > 0)
     ? Number(((otherReceivables / totalAssets) * 100).toFixed(1))
     : 0;
-  const ind2Triggered = Boolean(
-    (nonCurrentFinInvRatioAssets !== null && nonCurrentFinInvRatioAssets >= 20.0 && annualizedInvYieldPct !== null && annualizedInvYieldPct < 5.0) ||
-    otherRecRatioAssets >= 10.0
-  );
 
-  // 3. Gösterge: Azınlık Payları Kâr ve Özkaynak Sızıntısı
   let minorityProfitLeakagePct: number | null = null;
   if (minorityNetIncome !== null && minorityNetIncome > 0 && consolidatedNetIncome !== null && consolidatedNetIncome > 0) {
     minorityProfitLeakagePct = Number(((minorityNetIncome / consolidatedNetIncome) * 100).toFixed(1));
@@ -3093,12 +3162,7 @@ export function analyzeRelatedPartyAndCapitalAllocationRisk(
   if (minorityInterests !== null && minorityInterests > 0 && totalEquity !== null && totalEquity > 0) {
     minorityEquitySharePct = Number(((minorityInterests / totalEquity) * 100).toFixed(1));
   }
-  const ind3Triggered = Boolean(
-    (minorityProfitLeakagePct !== null && minorityProfitLeakagePct >= 25.0) ||
-    (minorityEquitySharePct !== null && minorityEquitySharePct >= 30.0)
-  );
 
-  // 4. Gösterge: İşletme Sermayesi Nakit Emişi & Zayıf Serbest Nakit Dönüşümü
   let wcCashDrainPct: number | null = null;
   if (grossOcf !== null && grossOcf > 0 && wcChange !== null && wcChange < 0) {
     wcCashDrainPct = Number(((Math.abs(wcChange) / grossOcf) * 100).toFixed(1));
@@ -3109,6 +3173,89 @@ export function analyzeRelatedPartyAndCapitalAllocationRisk(
   } else if (ocf !== null && netIncome !== null && netIncome > 0) {
     fcfConversionPct = Number(((ocf / netIncome) * 100).toFixed(1));
   }
+
+  // ÖZEL DURUM: TFRS 10 Yatırım İşletmesi / İştirak Şirketi (ESCOM, VERTU, HUBVC vb.)
+  if (investmentEntity) {
+    const invIndicators: CapitalAllocationIndicator[] = [
+      {
+        code: 'SHADOW_HOLDING_BLOAT',
+        title: 'TFRS 10 İştirak & Girişim Sermayesi Portföy Yoğunluğu',
+        triggered: true,
+        metricValueStr: nonCurrentFinInvRatioAssets !== null
+          ? `Aktifin %${nonCurrentFinInvRatioAssets}'i (${((nonCurrentFinInv || 0) / 1e9).toFixed(2)} Mr TL)`
+          : 'İştirak Portföyü',
+        thresholdStr: 'TFRS 10 Yatırım İşletmesi (>= %85)',
+        explanation: `Şirket operasyonel bir yazılım/sanayi üreticisi olmayıp TFRS 10 kapsamında bir İştirak / Girişim Sermayesi Yatırım Şirketidir. Toplam aktiflerin %${nonCurrentFinInvRatioAssets ?? 99}'i duran finansal yatırımlardan (girişim portföyünden) oluşmaktadır.`
+      },
+      {
+        code: 'IDLE_INVESTMENT_YIELD',
+        title: 'Gayrinakdi Değerleme Geliri vs. Nakit Temettü Verimi',
+        triggered: Boolean(annualizedInvYieldPct === null || annualizedInvYieldPct < 5.0),
+        metricValueStr: `Satış Maliyeti: 0 TL | Nakit Verim: %${annualizedInvYieldPct ?? 0}`,
+        thresholdStr: 'Nakit Temettü / Çıkış (Exit) Takibi',
+        explanation: 'Gelir tablosundaki hasılat kalemi mal/hizmet satışından değil, iştiraklerin gerçeğe uygun değerleme artışından (gayrinakdi yeniden değerleme) kaynaklanmaktadır.'
+      },
+      {
+        code: 'MINORITY_PROFIT_LEAKAGE',
+        title: 'Ana Ortaklık Özkaynak ve Portföy Sahipliği',
+        triggered: Boolean((minorityProfitLeakagePct !== null && minorityProfitLeakagePct >= 25.0) || (minorityEquitySharePct !== null && minorityEquitySharePct >= 30.0)),
+        metricValueStr: `Azınlık Payı: %${minorityEquitySharePct ?? 0}`,
+        thresholdStr: 'Azınlık Payı < %25',
+        explanation: (minorityEquitySharePct ?? 0) < 5
+          ? 'Portföy değer artışları ve özkaynakların %100\'ü doğrudan halka açık ana ortaklık hissedarlarına aittir; azınlık kâr sızıntısı yoktur.'
+          : `Portföy özkaynaklarının %${minorityEquitySharePct}'si kontrol gücü olmayan azınlık paylarına aittir.`
+      },
+      {
+        code: 'WORKING_CAPITAL_CASH_DRAIN',
+        title: 'Solo Kasa Nakit Akışı & Çıkış (Exit) Bağımlılığı',
+        triggered: Boolean(ocf === null || ocf <= 0 || (fcfConversionPct !== null && fcfConversionPct < 15.0)),
+        metricValueStr: `OCF: ${ocf !== null ? `${(ocf / 1e6).toFixed(2)} Mn TL` : 'Negatif'} | FCF/Kâr: %${fcfConversionPct ?? 0}`,
+        thresholdStr: 'Pozitif Nakit Girişi (Exit / Temettü)',
+        explanation: `Muhasebesel net kâr (${((netIncome || 0) / 1e6).toFixed(1)} Mn TL) kağıt üzerindeki iştirak değer artışından oluştuğu için solo kasaya sıcak nakit girişi (${ocf !== null ? `${(ocf / 1e6).toFixed(2)} Mn TL` : 'negatif'}) ancak iştirak satışı (exit) veya temettü tahsilatıyla gerçekleşir.`
+      }
+    ];
+
+    return {
+      isRiskDetected: false,
+      isInvestmentEntity: true,
+      severity: 'MODERATE',
+      triggeredCount: invIndicators.filter(i => i.triggered).length,
+      haircutPct: 0,
+      nonCurrentFinInvRatioAssets,
+      nonCurrentFinInvRatioEquity,
+      annualizedInvYieldPct,
+      minorityProfitLeakagePct,
+      minorityEquitySharePct,
+      wcCashDrainPct,
+      fcfConversionPct,
+      indicators: invIndicators,
+      summaryTitle: 'TFRS 10 İŞTİRAK & GİRİŞİM SERMAYESİ YATIRIM MODELİ (GAYRİNAKDİ DEĞERLEME YAPISI)',
+      summaryText: `Şirket faaliyet kolu olarak bir teknoloji iştirak / girişim sermayesi yatırım şirketidir (Aktiflerin %${nonCurrentFinInvRatioAssets ?? 99}'i duran finansal yatırımlardır; Satışların Maliyeti, Ticari Alacak ve Stok 0 TL'dir). Bu yapı bir ilişkili taraf suistimali değildir; ancak raporlanan kârlar gayrinakdi portföy değerleme artışından kaynaklandığı ve solo nakit akışı (OCF) negatif olduğu için değerleme SaaS çarpanlarıyla değil, doğrudan Net Aktif Değer (PD/NAD) İştirak Modeli ile yapılmıştır.`,
+      reasons: [
+        `TFRS 10 İştirak Değerleme Yapısı: Aktiflerin %${nonCurrentFinInvRatioAssets ?? 99}'i finansal yatırımlardan oluşmakta olup raporlanan kâr gayrinakdi değerleme kazancıdır (FCF/Net Kâr: %${fcfConversionPct ?? 0}).`
+      ]
+    };
+  }
+
+  // 1. Gösterge: Gölge Holdingleşme & Faaliyet Dışı Duran Finansal Yatırım Şişkinliği
+  const ind1Triggered = Boolean(
+    (nonCurrentFinInvRatioAssets !== null && nonCurrentFinInvRatioAssets >= 30.0) ||
+    (nonCurrentFinInvRatioEquity !== null && nonCurrentFinInvRatioEquity >= 50.0)
+  );
+
+  // 2. Gösterge: Atıl Sermaye Transferi & Düşük Finansal Yatırım Getirisi (veya Yüksek Diğer Alacaklar)
+  const ind2Triggered = Boolean(
+    (nonCurrentFinInvRatioAssets !== null && nonCurrentFinInvRatioAssets >= 20.0 && annualizedInvYieldPct !== null && annualizedInvYieldPct < 5.0) ||
+    otherRecRatioAssets >= 10.0
+  );
+
+  // 3. Gösterge: Azınlık Payları Kâr ve Özkaynak Sızıntısı
+  const ind3Triggered = Boolean(
+    (minorityProfitLeakagePct !== null && minorityProfitLeakagePct >= 25.0) ||
+    (minorityEquitySharePct !== null && minorityEquitySharePct >= 30.0)
+  );
+
+  // 4. Gösterge: İşletme Sermayesi Nakit Emişi & Zayıf Serbest Nakit Dönüşümü
   const ind4Triggered = Boolean(
     (wcCashDrainPct !== null && wcCashDrainPct >= 65.0 && (fcfConversionPct === null || fcfConversionPct < 20.0)) ||
     (ind1Triggered && fcfConversionPct !== null && fcfConversionPct < 15.0)
@@ -3263,6 +3410,19 @@ export function detectValueTrap(
   const reasons: string[] = [];
 
   const tickerStr = String(effectiveLatestData?.ticker || latest?.ticker || '').toUpperCase();
+  const isVentureHolding = isTfrs10InvestmentEntity(latest, tickerStr);
+  if (isVentureHolding) {
+    const netInc = parseFinancialNumber(latest?.net_income);
+    const roeV = parseFinancialNumber(latest?.roe);
+    const isDistressedVenture = (netInc !== null && netInc < 0) || (roeV !== null && roeV < 0);
+    return {
+      isValueTrap: isDistressedVenture,
+      severity: isDistressedVenture ? 'HIGH' : 'NONE',
+      reasons: isDistressedVenture ? ['İştirak Portföy Değer Kaybı: Net dönem zararı ve negatif ROE.'] : [],
+      warningTitle: isDistressedVenture ? 'DEĞER TUZAĞI (VALUE TRAP) RİSKİ' : '',
+      description: isDistressedVenture ? 'İştirak portföyü değer kaybetmektedir.' : ''
+    };
+  }
   const isTelecomOrUtil = sector === 'UTILITIES_TELCO' || isTelecomSector(getCompanySectorDisplayName(tickerStr, sector), tickerStr);
   const currentRatio = parseFinancialNumber(latest?.current_ratio);
   const ocfVal = parseFinancialNumber(latest?.operating_cash_flow ?? latest?.ocf);
@@ -4718,11 +4878,18 @@ export function computeSectorValuationAndDrivers(
       marginVal = 30.0;
       marginExpl = 'BIST GYO sektörü tarihsel ortalama NAD iskontosu tabanı (%30)';
     } else if (sector === 'TECH') {
-      marginLabel = 'Brüt Kâr Marjı (Gross Margin %)';
-      marginNote = 'Yazılım ve teknoloji şirketlerinin fiyatlama gücünü ve ölçek ekonomisi verimliliğini gösterir.';
-      const gm = parseFinancialNumber(latest?.gross_margin);
-      marginVal = gm !== null && gm > 0 ? Number(gm.toFixed(1)) : 52.0;
-      marginExpl = `Son dönem (${latest?.period || 'Son'}) gerçekleşen Brüt Kâr Marjı: %${marginVal}`;
+      if (isTfrs10InvestmentEntity(latest, extractedData?.ticker, extractedData?.official_sector_name)) {
+        marginLabel = 'Portföy Net Aktif Değeri (NAD) İskontosu (%)';
+        marginNote = 'TFRS 10 teknoloji iştirak ve girişim sermayesi portföyünün gayrinakdi değerleme ve çıkış (exit) likidite iskontosu.';
+        marginVal = 36.0;
+        marginExpl = 'TFRS 10 Teknoloji İştirak / Girişim Sermayesi portföyü NAD iskonto tabanı (%36)';
+      } else {
+        marginLabel = 'Brüt Kâr Marjı (Gross Margin %)';
+        marginNote = 'Yazılım ve teknoloji şirketlerinin fiyatlama gücünü ve ölçek ekonomisi verimliliğini gösterir.';
+        const gm = parseFinancialNumber(latest?.gross_margin);
+        marginVal = gm !== null && gm > 0 ? Number(gm.toFixed(1)) : 52.0;
+        marginExpl = `Son dönem (${latest?.period || 'Son'}) gerçekleşen Brüt Kâr Marjı: %${marginVal}`;
+      }
     } else if (sector === 'FINANCIAL_SERVICES') {
       marginLabel = 'Finansman Kâr Marjı (NIM / Spread %)';
       marginNote = 'Faktoring / leasing alacak getirisi ve aracılık komisyonları ile fonlama maliyeti arasındaki net faiz ve komisyon marjı.';
@@ -4993,27 +5160,44 @@ export function computeSectorValuationAndDrivers(
       targetMultipleStr = 'P/NAV 0,75x (%25 İskonto)';
       targetMultipleExpl = 'Hedef Net Aktif Değeri (P/NAV) çarpanı (%25 iskonto bazlı)';
     } else if (sector === 'TECH') {
-      const secMult = resolveOfficialSectorMultiples('Teknoloji', { ev: 3.19, pe: 13.71, pb: 2.55 });
-      const baseSecEvSales = secMult.ev_sales ?? 3.19;
-      
-      const actualFcf = parseFinancialNumber(latest?.free_cash_flow ?? latest?.fcf);
-      const actualRev = parseFinancialNumber(latest?.revenue);
-      const actualFcfMargin = (actualFcf != null && actualRev != null && actualRev > 0) ? (actualFcf / actualRev) * 100 : null;
-      const effectiveTechRule40 = revGrowth + (actualFcfMargin ?? 15.0);
-
-      let dynamicTechEvSales = baseSecEvSales;
-      if (effectiveTechRule40 >= 40.0) {
-        dynamicTechEvSales = Math.min(5.5, Math.max(3.8, Number((baseSecEvSales * 1.30).toFixed(1))));
-        targetMultipleStr = `FD/Satışlar ${dynamicTechEvSales.toString().replace('.', ',')}x (Rule of 40 %${effectiveTechRule40.toFixed(1)} Primi)`;
-      } else if (effectiveTechRule40 >= 20.0) {
-        dynamicTechEvSales = Number(baseSecEvSales.toFixed(1));
-        targetMultipleStr = `FD/Satışlar ${dynamicTechEvSales.toString().replace('.', ',')}x (Sektör Ortalaması)`;
+      if (isTfrs10InvestmentEntity(latest, extractedData?.ticker, extractedData?.official_sector_name)) {
+        const ventureRoe = roe !== null ? roe : 10.0;
+        const venturePNav = ventureRoe >= 25.0 ? 0.72 : (ventureRoe >= 8.0 ? 0.64 : 0.52);
+        const discPctLabel = Math.round((1 - venturePNav) * 100);
+        targetMultipleNum = venturePNav;
+        targetMultipleStr = `PD/NAD ${venturePNav.toFixed(2).replace('.', ',')}x (%${discPctLabel} İştirak İskontosu)`;
+        targetMultipleExpl = `TFRS 10 İştirak & Girişim Sermayesi Portföyü Net Aktif Değer (P/NAV) Çarpanı (%${discPctLabel} Gayrinakdi Değerleme & Çıkış İskontosu)`;
+        if (revGrowth > 60 || revGrowth < -40) {
+          revGrowth = Number(Math.min(25.0, Math.max(10.0, ventureRoe)).toFixed(1));
+          revGrowthExpl = `TFRS 10 iştirak portföyü normalize yıllık değerleme artış beklentisi (%${revGrowth})`;
+        }
+        if (netGrowth > 60 || netGrowth < -40) {
+          netGrowth = Number(Math.min(25.0, Math.max(10.0, ventureRoe)).toFixed(1));
+          netGrowthExpl = `TFRS 10 iştirak portföyü normalize yıllık net değerleme kârı beklentisi (%${netGrowth})`;
+        }
       } else {
-        dynamicTechEvSales = Math.max(2.0, Number((baseSecEvSales * 0.85).toFixed(1)));
-        targetMultipleStr = `FD/Satışlar ${dynamicTechEvSales.toString().replace('.', ',')}x (Zayıf Rule of 40 %${effectiveTechRule40.toFixed(1)} İskontosu)`;
+        const secMult = resolveOfficialSectorMultiples('Teknoloji', { ev: 3.19, pe: 13.71, pb: 2.55 });
+        const baseSecEvSales = secMult.ev_sales ?? 3.19;
+        
+        const actualFcf = parseFinancialNumber(latest?.free_cash_flow ?? latest?.fcf);
+        const actualRev = parseFinancialNumber(latest?.revenue);
+        const actualFcfMargin = (actualFcf != null && actualRev != null && actualRev > 0) ? (actualFcf / actualRev) * 100 : null;
+        const effectiveTechRule40 = revGrowth + (actualFcfMargin ?? 15.0);
+
+        let dynamicTechEvSales = baseSecEvSales;
+        if (effectiveTechRule40 >= 40.0) {
+          dynamicTechEvSales = Math.min(5.5, Math.max(3.8, Number((baseSecEvSales * 1.30).toFixed(1))));
+          targetMultipleStr = `FD/Satışlar ${dynamicTechEvSales.toString().replace('.', ',')}x (Rule of 40 %${effectiveTechRule40.toFixed(1)} Primi)`;
+        } else if (effectiveTechRule40 >= 20.0) {
+          dynamicTechEvSales = Number(baseSecEvSales.toFixed(1));
+          targetMultipleStr = `FD/Satışlar ${dynamicTechEvSales.toString().replace('.', ',')}x (Sektör Ortalaması)`;
+        } else {
+          dynamicTechEvSales = Math.max(2.0, Number((baseSecEvSales * 0.85).toFixed(1)));
+          targetMultipleStr = `FD/Satışlar ${dynamicTechEvSales.toString().replace('.', ',')}x (Zayıf Rule of 40 %${effectiveTechRule40.toFixed(1)} İskontosu)`;
+        }
+        targetMultipleNum = dynamicTechEvSales;
+        targetMultipleExpl = `Reel büyüme (%${revGrowth.toFixed(1)}) ve serbest nakit marjı (%${(actualFcfMargin ?? 0).toFixed(1)}) bileşimine göre dinamik FD/Satışlar çarpanı`;
       }
-      targetMultipleNum = dynamicTechEvSales;
-      targetMultipleExpl = `Reel büyüme (%${revGrowth.toFixed(1)}) ve serbest nakit marjı (%${(actualFcfMargin ?? 0).toFixed(1)}) bileşimine göre dinamik FD/Satışlar çarpanı`;
     } else if (sector === 'FINANCIAL_SERVICES') {
       const safeKe = Math.max(12.0, ke);
       const macroGrowth = 18.0;
@@ -5433,7 +5617,10 @@ export function computeSectorValuationAndDrivers(
   } else if (sector === 'TECH') {
     const isComputerWholesale = detectedOfficialSecName === 'Bilgisayar Toptancılığı';
     const isCommDevices = detectedOfficialSecName === 'İletişim Cihazları';
-    if (isComputerWholesale) {
+    const isTechVenture = isTfrs10InvestmentEntity(latest, currentTickerUpper, detectedOfficialSecName);
+    if (isTechVenture) {
+      modelName = 'TFRS 10 Teknoloji İştirak & Girişim Sermayesi Net Aktif Değer (NAD / P/NAV) Modeli';
+    } else if (isComputerWholesale) {
       modelName = 'Bilgisayar & Teknoloji Toptancılığı Modeli (İşletme Sermayesi Döngüsü, FD/Satışlar & F/K)';
     } else if (isCommDevices) {
       modelName = 'İletişim Cihazları & Şebeke Donanımı Modeli (Sipariş Backlog, Ar-Ge & FD/Satışlar)';
@@ -5449,7 +5636,20 @@ export function computeSectorValuationAndDrivers(
     const totalEquityFull = latestEq * unitScale;
     const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
 
-    if (isComputerWholesale) {
+    if (isTechVenture && totalEquityFull > 0) {
+      // TFRS 10 Teknoloji Yatırım İşletmesi / Girişim Sermayesi Portföy Şirketi (ESCOM, VERTU, HUBVC vb.):
+      // Raporlanan hasılat gayrinakdi iştirak değerleme artışından ibaret olduğu için (Satışların Maliyeti: 0 TL),
+      // yazılım/SaaS FD/Satışlar çarpanı uygulanamaz; doğrudan İştirak Portföyü Net Aktif Değeri (P/NAV) ile değerlenir.
+      const bvps = totalEquityFull / effectiveShareCount;
+      const ventureRoe = roe !== null ? roe : 10.0;
+      const forwardNavGrowth = ventureRoe > 0 ? Math.min(0.18, (ventureRoe / 100) * 0.60) : 0.04;
+      const forwardBvps = bvps * (1 + forwardNavGrowth);
+      const venturePNav = ventureRoe >= 25.0 ? 0.72 : (ventureRoe >= 8.0 ? 0.64 : 0.52);
+      const discLabel = Math.round((1 - venturePNav) * 100);
+      const rawFair = forwardBvps * venturePNav;
+      fairValue = Number(Math.max(0.5, rawFair).toFixed(2));
+      formulaStr = `Cari NAD/Pay = ${bvps.toFixed(2).replace('.', ',')} TL | 12A İleri Portföy NAD = ${forwardBvps.toFixed(2).replace('.', ',')} TL × ${venturePNav.toFixed(2).replace('.', ',')}x (%${discLabel} Gayrinakdi Değerleme & Çıkış İskontosu) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+    } else if (isComputerWholesale) {
       // 1. Bilgisayar & Donanım Toptancılığı (DGATE, INDES, ARENA, PENTA):
       // Düşük marjlı (%6-%8 brüt, %0.5-%1.0 net), yüksek cirolu toptancı distribütör modeli.
       // Asla SaaS minimum 2.5x FD/Satışlar uygulanmaz; resmi 0002 sektör çarpanları (0.08x - 0.12x) bağlanır.

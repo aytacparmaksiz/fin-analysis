@@ -2078,8 +2078,9 @@ export default function SimplyView({
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     {(() => {
                       const isTrap = Boolean(valuationInfo?.is_value_trap);
-                      const capAllocAudit = valuationInfo?.capital_allocation_risk ?? analyzeRelatedPartyAndCapitalAllocationRisk(latestData, currentSector);
+                      const capAllocAudit = valuationInfo?.capital_allocation_risk ?? analyzeRelatedPartyAndCapitalAllocationRisk(latestData, currentSector, officialSectorName);
                       const isCapAllocRisk = Boolean(capAllocAudit?.isRiskDetected);
+                      const isInvEntity = Boolean(capAllocAudit?.isInvestmentEntity);
                       const isAlma = Boolean(report.decision === 'ALMA' || (report as any)?.rawDecision === 'ALMA');
                       const rawScore = report?.score || valuationInfo?.score || (report as any)?.scoreResult?.totalScore;
                       const cleanNum = rawScore ? parseInt(String(rawScore).split('/')[0].replace(/[^0-9]/g, ''), 10) : null;
@@ -2089,7 +2090,7 @@ export default function SimplyView({
                       const isNearFairValue = Math.abs(upsidePct) < 1.0;
 
                       // Net, şeffaf ve analitik risk rozeti ve açıklaması
-                      let riskBadge: { label: string; tooltip: string } | null = null;
+                      let riskBadge: { label: string; tooltip: string; isInfo?: boolean } | null = null;
                       if (isTrap) {
                         riskBadge = {
                           label: 'Değer Tuzağı Riski',
@@ -2098,7 +2099,13 @@ export default function SimplyView({
                       } else if (isCapAllocRisk) {
                         riskBadge = {
                           label: 'Gölge Holdingleşme & Sermaye Tahsisi Riski',
-                          tooltip: capAllocAudit.summaryText || 'Şirket esas faaliyet dışı duran finansal yatırımlara yüksek kaynak bağlamış olup serbest nakit dönüşümü zayıftır.'
+                          tooltip: capAllocAudit.summaryText || 'Şirket esas faaliyet dışı duran finansal yatırımlara yüksek kaynak bağlamış olup serbest nakit dönüşümü zayıftır. Detaylar için Değerleme (Bölüm 4.7) paneline bakınız.'
+                        };
+                      } else if (isInvEntity) {
+                        riskBadge = {
+                          label: 'TFRS 10 İştirak & Değerleme Yapısı',
+                          tooltip: capAllocAudit.summaryText || 'Şirket TFRS 10 kapsamında bir iştirak / girişim sermayesi yatırım işletmesidir; kârlar gayrinakdi portföy değerlemesinden kaynaklanmaktadır.',
+                          isInfo: true
                         };
                       } else if (cleanNum !== null && cleanNum < 30) {
                         riskBadge = {
@@ -2116,13 +2123,22 @@ export default function SimplyView({
                         <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
                           {/* Risk uyarısı varsa, iskonto panelini silmeden YANINA şık bir etiket olarak eklenir */}
                           {riskBadge && (
-                            <span 
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const el = document.getElementById('sec-sermaye-tahsisi') || document.getElementById('sec-adildeger');
+                                el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                              }}
                               title={riskBadge.tooltip}
-                              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl font-sans text-xs font-bold border border-rose-500/40 bg-rose-500/15 text-rose-400 whitespace-nowrap shadow-sm cursor-help"
+                              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl font-sans text-xs font-bold border whitespace-nowrap shadow-sm cursor-pointer transition ${
+                                riskBadge.isInfo
+                                  ? 'border-amber-500/40 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
+                                  : 'border-rose-500/40 bg-rose-500/15 text-rose-400 hover:bg-rose-500/25'
+                              }`}
                             >
-                              <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+                              <AlertTriangle className={`w-3.5 h-3.5 shrink-0 ${riskBadge.isInfo ? 'text-amber-400' : 'text-rose-400'}`} />
                               <span>{riskBadge.label}</span>
-                            </span>
+                            </button>
                           )}
 
                           {/* İskonto & Potansiyel Paneli - ASLA KAYBOLMAZ, HER ZAMAN EKSİKSİZ GÖSTERİLİR */}
@@ -2273,63 +2289,6 @@ export default function SimplyView({
                 </div>
               </div>
             </div>
-
-            {/* Grup İçi Sermaye Aktarımı, İlişkili Taraf & Gölge Holdingleşme Riski (Bireysel Yatırımcı Koruma Kalkanı) */}
-            {(() => {
-              const capAlloc = valuationInfo?.capital_allocation_risk ?? analyzeRelatedPartyAndCapitalAllocationRisk(latestData, currentSector, officialSectorName);
-              if (!capAlloc?.isRiskDetected) return null;
-              return (
-                <div className="bg-gradient-to-br from-rose-950/35 via-[#181b20] to-amber-950/25 border border-rose-500/40 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rose-500/25 pb-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0" />
-                      <div>
-                        <h3 className="font-sans text-base sm:text-lg font-bold text-white">
-                          Grup İçi Sermaye Aktarımı & Gölge Holdingleşme Teşhisi
-                        </h3>
-                        <p className="text-xs text-rose-300/90 font-mono">
-                          Bireysel Yatırımcı Koruma Kalkanı • {capAlloc.triggeredCount}/4 Adli Gösterge Tetiklendi
-                        </p>
-                      </div>
-                    </div>
-                    <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
-                      {capAlloc.severity === 'CRITICAL' ? 'KRİTİK SERMAYE TAHSİS RİSKİ' : 'YÜKSEK SERMAYE TAHSİS RİSKİ'} (-%{Math.round((capAlloc.haircutPct || 0) * 100)} İskonto)
-                    </span>
-                  </div>
-
-                  <p className="text-sm text-slate-200 leading-relaxed font-sans">
-                    {capAlloc.summaryText}
-                  </p>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                    {(capAlloc.indicators || []).map((ind: any) => (
-                      <div
-                        key={ind.code}
-                        className={`p-3.5 rounded-xl border space-y-1.5 ${
-                          ind.triggered
-                            ? 'bg-rose-950/25 border-rose-500/35'
-                            : 'bg-[#151821] border-[#282d37]'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-bold text-white font-sans">{ind.title}</span>
-                          <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
-                            ind.triggered
-                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                              : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                          }`}>
-                            {ind.metricValueStr}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-300 leading-relaxed font-sans">
-                          {ind.explanation}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
 
             {/* About the Company (Şirket Hakkında) */}
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
@@ -4680,6 +4639,171 @@ export default function SimplyView({
                 </p>
               )}
             </div>
+
+            {/* 4.7 Sermaye Tahsisi, İştirak Yapısı ve İlişkili Taraf Denetimi */}
+            {(() => {
+              const capAlloc = valuationInfo?.capital_allocation_risk ?? analyzeRelatedPartyAndCapitalAllocationRisk(latestData, currentSector, officialSectorName);
+              const indicators = capAlloc?.indicators || [];
+              if (indicators.length === 0) return null;
+              const isRisk = Boolean(capAlloc?.isRiskDetected);
+              const isInvEntity = Boolean(capAlloc?.isInvestmentEntity);
+
+              return (
+                <div id="sec-sermaye-tahsisi" className="scroll-mt-6 bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#282d37] pb-3">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <h3 className="text-base sm:text-lg font-sans font-bold text-white">
+                        4.7 Sermaye Tahsisi, İştirak Yapısı ve İlişkili Taraf Denetimi
+                      </h3>
+                      <span className={`text-xs sm:text-sm font-mono font-bold px-2.5 py-0.5 rounded border ${
+                        isInvEntity
+                          ? 'bg-amber-950/70 border-amber-800/60 text-amber-300'
+                          : isRisk
+                            ? 'bg-rose-950/70 border-rose-800/60 text-rose-400'
+                            : 'bg-emerald-950/70 border-emerald-800/60 text-emerald-400'
+                      }`}>
+                        {isInvEntity
+                          ? 'TFRS 10 İştirak & Girişim Sermayesi Yapısı (PD/NAD)'
+                          : isRisk
+                            ? `Gölge Holdingleşme Riski (-%${Math.round((capAlloc.haircutPct || 0) * 100)} Değerleme İskontosu)`
+                            : 'Operasyonel Sermaye Tahsisi Dengeli'}
+                      </span>
+                    </div>
+                    <span className="text-xs font-mono text-slate-400 bg-[#21262d] px-2.5 py-1 rounded-lg border border-[#2e3440]">
+                      {isInvEntity
+                        ? 'TFRS 10 Portföy Değerleme Denetimi'
+                        : `${capAlloc.triggeredCount}/4 Adli Kriter Sinyali`}
+                    </span>
+                  </div>
+
+                  {/* 4 Temel Sermaye Tahsisi Metrik Şeridi */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-[#21262d] rounded-xl p-3.5 border border-[#2e3440]">
+                      <span className="text-[10.5px] text-slate-400 block">Duran Finansal Yatırım / Aktif</span>
+                      <div className={`text-base font-black font-mono mt-1 ${
+                        isInvEntity
+                          ? 'text-amber-300'
+                          : (capAlloc.nonCurrentFinInvRatioAssets != null && capAlloc.nonCurrentFinInvRatioAssets >= 30.0)
+                            ? 'text-rose-400'
+                            : 'text-white'
+                      }`}>
+                        {capAlloc.nonCurrentFinInvRatioAssets != null ? `%${capAlloc.nonCurrentFinInvRatioAssets}` : '%0'}
+                      </div>
+                      <span className="text-[9.5px] text-slate-500 font-mono">
+                        {isInvEntity ? 'TFRS 10 Portföy (>= %85)' : 'Normal Eşik: < %30'}
+                      </span>
+                    </div>
+
+                    <div className="bg-[#21262d] rounded-xl p-3.5 border border-[#2e3440]">
+                      <span className="text-[10.5px] text-slate-400 block">Yıllık Nakit Yatırım Getirisi</span>
+                      <div className={`text-base font-black font-mono mt-1 ${
+                        capAlloc.annualizedInvYieldPct != null && capAlloc.annualizedInvYieldPct < 5.0 && (capAlloc.nonCurrentFinInvRatioAssets ?? 0) >= 20.0
+                          ? 'text-amber-400'
+                          : 'text-emerald-400'
+                      }`}>
+                        {capAlloc.annualizedInvYieldPct != null ? `%${capAlloc.annualizedInvYieldPct}` : '—'}
+                      </div>
+                      <span className="text-[9.5px] text-slate-500 font-mono">Hedef: &gt;= %5,0 Nakit Verim</span>
+                    </div>
+
+                    <div className="bg-[#21262d] rounded-xl p-3.5 border border-[#2e3440]">
+                      <span className="text-[10.5px] text-slate-400 block">Azınlık Payı Kâr / Özkaynak</span>
+                      <div className={`text-base font-black font-mono mt-1 ${
+                        (capAlloc.minorityProfitLeakagePct != null && capAlloc.minorityProfitLeakagePct >= 25.0) ||
+                        (capAlloc.minorityEquitySharePct != null && capAlloc.minorityEquitySharePct >= 30.0)
+                          ? 'text-rose-400'
+                          : 'text-emerald-400'
+                      }`}>
+                        {capAlloc.minorityProfitLeakagePct != null
+                          ? `%${capAlloc.minorityProfitLeakagePct}`
+                          : (capAlloc.minorityEquitySharePct != null ? `%${capAlloc.minorityEquitySharePct}` : '%0')}
+                      </div>
+                      <span className="text-[9.5px] text-slate-500 font-mono">Hedef: &lt; %25 Azınlık Payı</span>
+                    </div>
+
+                    <div className="bg-[#21262d] rounded-xl p-3.5 border border-[#2e3440]">
+                      <span className="text-[10.5px] text-slate-400 block">Serbest Nakit Dönüşümü (FCF/Kâr)</span>
+                      <div className={`text-base font-black font-mono mt-1 ${
+                        capAlloc.fcfConversionPct != null && capAlloc.fcfConversionPct < 15.0
+                          ? 'text-amber-400'
+                          : 'text-white'
+                      }`}>
+                        {capAlloc.fcfConversionPct != null ? `%${capAlloc.fcfConversionPct}` : '—'}
+                      </div>
+                      <span className="text-[9.5px] text-slate-500 font-mono">Hedef: &gt;= %20 FCF/Kâr</span>
+                    </div>
+                  </div>
+
+                  {/* Yönetici Teşhis ve Değerleme Etkisi Kartı */}
+                  <div className="rounded-xl bg-[#21262d]/90 border border-[#2e3440] p-4 space-y-2 text-sm">
+                    <div className="flex items-start gap-2.5">
+                      <div className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${
+                        isInvEntity ? 'bg-amber-400' : isRisk ? 'bg-rose-400' : 'bg-emerald-400'
+                      }`} />
+                      <p className="text-slate-200 leading-relaxed font-normal flex-1 text-sm">
+                        {capAlloc.summaryText || 'Şirketin bilanço ve nakit akış kalemlerinde esas faaliyet dışı finansal yatırım şişkinliği, grup içi atıl fon transferi veya yüksek azınlık kâr sızıntısı tespit edilmemiştir. Üretilen kaynak ana ortaklık operasyonlarında kalmaktadır.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 4 Boyutlu Sermaye Tahsisi ve İlişkili Taraf Kırılımı */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    {indicators.map((ind: any) => {
+                      const isTriggered = Boolean(ind.triggered);
+                      return (
+                        <div
+                          key={ind.code}
+                          className={`rounded-xl p-4 border flex flex-col justify-between space-y-2.5 transition ${
+                            isTriggered
+                              ? isInvEntity
+                                ? 'bg-[#1a1e26] border-amber-500/30'
+                                : 'bg-[#1a1820] border-rose-500/30'
+                              : 'bg-[#14171d] border-[#282d37]'
+                          }`}
+                        >
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${
+                                  isTriggered
+                                    ? isInvEntity ? 'bg-amber-400' : 'bg-rose-400'
+                                    : 'bg-emerald-400'
+                                }`} />
+                                <span className="text-xs sm:text-[13px] font-bold text-white font-sans">
+                                  {ind.title}
+                                </span>
+                              </div>
+                              <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold whitespace-nowrap border ${
+                                isTriggered
+                                  ? isInvEntity
+                                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                    : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                                  : 'bg-[#21262d] text-emerald-400 border-[#2e3440]'
+                              }`}>
+                                {ind.metricValueStr}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-300 leading-relaxed font-sans pl-4">
+                              {ind.explanation}
+                            </p>
+                          </div>
+                          <div className="flex items-center justify-between pt-2 border-t border-[#252a34] pl-4 text-[11px] font-mono text-slate-400">
+                            <span>Referans Kriter: {ind.thresholdStr}</span>
+                            <span className={
+                              isTriggered
+                                ? isInvEntity ? 'text-amber-400 font-semibold' : 'text-rose-400 font-semibold'
+                                : 'text-emerald-400 font-semibold'
+                            }>
+                              {isTriggered ? (isInvEntity ? 'İştirak Yapısı' : 'Dikkat / Sinyal') : 'Uyumlu'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </section>
           </ComponentErrorBoundary>
 
