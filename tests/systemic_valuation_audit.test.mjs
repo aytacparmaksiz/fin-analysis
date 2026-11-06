@@ -1,6 +1,7 @@
 import { test, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { computeSectorValuationAndDrivers, calculateSectorScore, calculateDuPont5Step, analyzeRelatedPartyAndCapitalAllocationRisk, isTfrs10InvestmentEntity } from '../lib/valuation.ts';
+import { synthesizeInvestmentThesis } from '../lib/investment-thesis-synthesizer.ts';
 import { IsYatirimApiAdapter } from '../lib/isyatirim-adapter.ts';
 
 describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
@@ -781,6 +782,51 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
     assert.ok(valRes.valuation.valuation_model_name.includes('TFRS 10'), `Must use TFRS 10 P/NAV model: ${valRes.valuation.valuation_model_name}`);
     assert.ok(valRes.valuation.fair_value >= 3.80 && valRes.valuation.fair_value <= 5.20, `ESCOM fair value must be P/NAV based (~4.42 TL), not inflated 10.24 TL EV/Sales (got ${valRes.valuation.fair_value} TL)`);
     assert.equal(valRes.valuation.final_decision, 'NÖTR', 'ESCOM decision must be NÖTR due to non-cash OCF');
+  });
+
+  it('23. Kurumsal Yatırım Tezi Sentezleyicisi (8.1 Panel): Synthesizes multi-criteria why-buy, sectoral edge, 4 pillars, and thesis breakers', () => {
+    const maviDossier = synthesizeInvestmentThesis({
+      ticker: 'MAVI',
+      decision: 'AL',
+      currentSector: 'RETAIL',
+      officialSectorName: 'Giyim ve Tekstil Perakendeciliği',
+      currentPrice: 82.0,
+      fairValue: 118.5,
+      discountPct: 30.8,
+      latestData: {
+        revenue: 34_000_000_000,
+        gross_profit: 17_500_000_000,
+        ebitda: 7_200_000_000,
+        net_income: 3_600_000_000,
+        operating_cash_flow: 5_100_000_000,
+        free_cash_flow: 4_000_000_000,
+        equity: 11_000_000_000,
+        total_assets: 21_000_000_000,
+        net_debt: -3_200_000_000,
+        current_assets: 14_000_000_000,
+        current_liabilities: 9_000_000_000,
+        trade_payables: 6_500_000_000,
+        trade_receivables: 1_200_000_000,
+        inventories: 5_000_000_000
+      },
+      roic: 26.4,
+      wacc: 4.8,
+      evaSpread: 21.6,
+      isTms29: true,
+      sameSectorPeers: [
+        { ticker: 'VAKKO', name: 'Vakko', marketCapMnTl: 15000 },
+        { ticker: 'SUWEN', name: 'Suwen', marketCapMnTl: 5000 }
+      ]
+    });
+
+    assert.equal(maviDossier.decisionMode, 'AL');
+    assert.equal(maviDossier.pillars.length, 4, 'Must synthesize 4 core conviction pillars');
+    assert.equal(maviDossier.standoutHighlights.length, 4, 'Must synthesize 4 standout highlights');
+    assert.equal(maviDossier.sectoralComparisonBadges.length, 4, 'Must synthesize 4 sectoral comparison badges');
+    assert.equal(maviDossier.catalysts.length, 3, 'Must provide 3 concrete catalysts');
+    assert.equal(maviDossier.thesisBreakers.length, 3, 'Must provide 3 forensic thesis breakers');
+    assert.ok(maviDossier.whyActionParagraphs.length >= 2, 'Must provide multi-paragraph synthesized investment thesis');
+    assert.ok(maviDossier.sectoralEdgeNarrative.includes('VAKKO'), 'Must reference sector peers in sectoral edge narrative');
   });
 
 });
