@@ -161,6 +161,33 @@ export interface ValuationSensitivityMatrixResult {
   summary: string;
 }
 
+export interface CapitalAllocationIndicator {
+  code: 'SHADOW_HOLDING_BLOAT' | 'IDLE_INVESTMENT_YIELD' | 'MINORITY_PROFIT_LEAKAGE' | 'WORKING_CAPITAL_CASH_DRAIN';
+  title: string;
+  triggered: boolean;
+  metricValueStr: string;
+  thresholdStr: string;
+  explanation: string;
+}
+
+export interface CapitalAllocationAuditResult {
+  isRiskDetected: boolean;
+  severity: 'NONE' | 'MODERATE' | 'HIGH' | 'CRITICAL';
+  triggeredCount: number;
+  haircutPct: number;
+  nonCurrentFinInvRatioAssets: number | null;
+  nonCurrentFinInvRatioEquity: number | null;
+  annualizedInvYieldPct: number | null;
+  minorityProfitLeakagePct: number | null;
+  minorityEquitySharePct: number | null;
+  wcCashDrainPct: number | null;
+  fcfConversionPct: number | null;
+  indicators: CapitalAllocationIndicator[];
+  summaryTitle: string;
+  summaryText: string;
+  reasons: string[];
+}
+
 export interface ValuationMetrics {
   current_price: number;
   fair_value: number;
@@ -182,6 +209,7 @@ export interface ValuationMetrics {
   is_value_trap?: boolean;
   value_trap_severity?: 'NONE' | 'MODERATE' | 'HIGH' | 'CRITICAL';
   value_trap_reasons?: string[];
+  capital_allocation_risk?: CapitalAllocationAuditResult;
   fair_value_trend?: FairValueTrendPoint[];
   eva_haircut_applied?: boolean;
   eva_discount_pct?: number;
@@ -682,12 +710,13 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
       'equity', 'parent_equity', 'minority_interests', 'non_controlling_interests', 'azinlik_paylari', 'total_equity', 'paid_in_capital', 'retained_earnings',
       'total_assets', 'current_assets', 'cash_and_equivalents', 'cash', 'financial_investments', 'financial_assets_insured',
       'trade_receivables', 'other_receivables', 'derivative_instruments', 'inventories', 'prepaid_expenses', 'other_current_assets',
-      'non_current_assets', 'non_current_financial_investments', 'non_current_trade_receivables', 'tangible_assets', 'intangible_assets', 'right_of_use_assets', 'deferred_tax_assets', 'other_non_current_assets',
+      'non_current_assets', 'non_current_financial_investments', 'non_current_trade_receivables', 'non_current_other_receivables', 'tangible_assets', 'intangible_assets', 'right_of_use_assets', 'deferred_tax_assets', 'other_non_current_assets',
       'current_liabilities', 'trade_payables', 'employee_benefit_obligations', 'lease_liabilities', 'kiralama_borclari', 'other_current_liabilities',
       'long_term_liabilities', 'other_long_term_liabilities', 'total_liabilities',
       'written_premiums', 'gross_written_premiums', 'earned_premiums', 'technical_profit', 'technical_balance',
       'investment_income', 'pension_aum', 'net_interest_income',
-      'gross_operating_cash_flow', 'net_operating_cash_flow', 'total_investing_outflow'
+      'gross_operating_cash_flow', 'net_operating_cash_flow', 'total_investing_outflow',
+      'minority_net_income', 'consolidated_net_income'
     ];
 
     for (let i = 0; i < history.length; i++) {
@@ -880,12 +909,13 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
       'equity', 'parent_equity', 'minority_interests', 'non_controlling_interests', 'azinlik_paylari', 'total_equity', 'paid_in_capital', 'retained_earnings',
       'total_assets', 'current_assets', 'cash_and_equivalents', 'cash', 'financial_investments', 'financial_assets_insured',
       'trade_receivables', 'other_receivables', 'derivative_instruments', 'inventories', 'prepaid_expenses', 'other_current_assets',
-      'non_current_assets', 'non_current_financial_investments', 'non_current_trade_receivables', 'tangible_assets', 'intangible_assets', 'right_of_use_assets', 'deferred_tax_assets', 'other_non_current_assets',
+      'non_current_assets', 'non_current_financial_investments', 'non_current_trade_receivables', 'non_current_other_receivables', 'tangible_assets', 'intangible_assets', 'right_of_use_assets', 'deferred_tax_assets', 'other_non_current_assets',
       'current_liabilities', 'trade_payables', 'employee_benefit_obligations', 'lease_liabilities', 'kiralama_borclari', 'other_current_liabilities',
       'long_term_liabilities', 'other_long_term_liabilities', 'total_liabilities',
       'written_premiums', 'gross_written_premiums', 'earned_premiums', 'technical_profit', 'technical_balance',
       'investment_income', 'pension_aum', 'net_interest_income',
-      'gross_operating_cash_flow', 'net_operating_cash_flow', 'total_investing_outflow'
+      'gross_operating_cash_flow', 'net_operating_cash_flow', 'total_investing_outflow',
+      'minority_net_income', 'consolidated_net_income'
     ];
     // Standart Kural: Sistemimizdeki tüm finansal zaman serisi tutarları tek tip 'Tam TL' (TRY) olarak normalize edilir.
     // Eğer girdi 'Bin TRY' olarak gelmişse (örn. KAP PDF tablosundan 15.448.698 olarak), 1000 ile çarparak Tam TL'ye yükseltilir.
@@ -1683,7 +1713,12 @@ export function syncReportTextWithValuation(reportText: string, valuation: any):
   }
 
   // 6. Adli Denetim & Değer Tuzağı Teşhisi Senkronizasyonu (Kalıcı Yatırım Tezi)
-  const trapReasons: string[] = Array.isArray(valuation.value_trap_reasons) ? valuation.value_trap_reasons : [];
+  const trapReasons: string[] = Array.isArray(valuation.value_trap_reasons) ? [...valuation.value_trap_reasons] : [];
+  if (valuation.capital_allocation_risk?.isRiskDetected && Array.isArray(valuation.capital_allocation_risk.reasons)) {
+    for (const r of valuation.capital_allocation_risk.reasons) {
+      if (!trapReasons.includes(r)) trapReasons.push(r);
+    }
+  }
   if (trapReasons.length > 0 && !text.includes('Adli Denetim & Değer Tuzağı Teşhisi')) {
     const alertBlock = `\n\n> ⚠️ **Adli Denetim & Değer Tuzağı Teşhisi (Forensic Red Team):**\n${trapReasons.map((r: string) => `> - ${r}`).join('\n')}\n`;
     if (text.includes('## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ')) {
@@ -2955,6 +2990,232 @@ export function computeFairValueTrend(
 }
 
 /**
+ * GRUP İÇİ SERMAYE AKTARIMI, İLİŞKİLİ TARAF VE GÖLGE HOLDİNGLEŞME RİSKİ DEDEKTÖRÜ
+ * (Related-Party & Shadow Holding Forensic Audit Engine)
+ *
+ * Bireysel yatırımcıyı korumak üzere, ana faaliyet konusu Holding/Banka/Sigorta/GYO olmayan
+ * reel sektör ve teknoloji şirketlerinde üretilen kaynağın esas faaliyete dönmek yerine
+ * grup içi finansal yatırımlara, ilişkili taraflara veya azınlık ortaklara sızıp sızmadığını
+ * 4 kantitatif adli göstergeyle denetler:
+ * 1) Gölge Holdingleşme & Duran Finansal Yatırım Şişkinliği (1BC + 1BD / Toplam Varlıklar >= %30 veya / Ana Özkaynak >= %50)
+ * 2) Atıl Sermaye Transferi & Düşük Yatırım Getirisi (Yıllıklandırılmış Yatırım Geliri / Duran Finansal Yatırımlar < %5)
+ * 3) Azınlık Payları Kâr ve Özkaynak Sızıntısı (Azınlık Dönem Kârı / Konsolide Kâr >= %25 veya Azınlık Özkaynak Payı >= %30)
+ * 4) İşletme Sermayesi Nakit Emişi & Zayıf Serbest Nakit Dönüşümü (|4CAF| / 4CAE >= %65 ve FCF / Net Kâr < %20)
+ */
+export function analyzeRelatedPartyAndCapitalAllocationRisk(
+  latest: any,
+  sector: SectorType = 'INDUSTRIAL',
+  officialSectorName?: string
+): CapitalAllocationAuditResult {
+  const exemptSectors: SectorType[] = ['HOLDING', 'BANKING', 'INSURANCE', 'REIT', 'FINANCIAL_SERVICES'];
+  const normOfficial = String(officialSectorName || latest?.official_sector_name || '').toLowerCase();
+  const isExempt = exemptSectors.includes(sector) ||
+    normOfficial.includes('holding') ||
+    normOfficial.includes('yatırım ortaklığı') ||
+    normOfficial.includes('girişim sermayesi');
+
+  if (!latest || isExempt) {
+    return {
+      isRiskDetected: false,
+      severity: 'NONE',
+      triggeredCount: 0,
+      haircutPct: 0,
+      nonCurrentFinInvRatioAssets: null,
+      nonCurrentFinInvRatioEquity: null,
+      annualizedInvYieldPct: null,
+      minorityProfitLeakagePct: null,
+      minorityEquitySharePct: null,
+      wcCashDrainPct: null,
+      fcfConversionPct: null,
+      indicators: [],
+      summaryTitle: '',
+      summaryText: '',
+      reasons: []
+    };
+  }
+
+  const totalAssets = parseFinancialNumber(latest.total_assets);
+  const parentEquity = parseFinancialNumber(latest.parent_equity ?? latest.equity);
+  const minorityInterests = parseFinancialNumber(latest.minority_interests ?? latest.non_controlling_interests ?? latest.azinlik_paylari);
+  const totalEquityRaw = parseFinancialNumber(latest.total_equity);
+  const totalEquity = (totalEquityRaw !== null && totalEquityRaw > 0)
+    ? totalEquityRaw
+    : ((parentEquity !== null && parentEquity > 0) ? parentEquity + Math.max(0, minorityInterests ?? 0) : null);
+
+  const nonCurrentFinInv = parseFinancialNumber(latest.non_current_financial_investments);
+  const investmentIncome = parseFinancialNumber(latest.investment_income);
+  const otherReceivables = (parseFinancialNumber(latest.other_receivables) ?? 0) + (parseFinancialNumber(latest.non_current_other_receivables) ?? 0);
+
+  const netIncome = parseFinancialNumber(latest.net_income);
+  const minorityNetIncome = parseFinancialNumber(latest.minority_net_income);
+  const consolidatedNetRaw = parseFinancialNumber(latest.consolidated_net_income);
+  const consolidatedNetIncome = (consolidatedNetRaw !== null && consolidatedNetRaw > 0)
+    ? consolidatedNetRaw
+    : ((netIncome !== null && minorityNetIncome !== null) ? (netIncome + minorityNetIncome) : null);
+
+  const grossOcf = parseFinancialNumber(latest.gross_operating_cash_flow);
+  const wcChange = parseFinancialNumber(latest.working_capital_change);
+  const ocf = parseFinancialNumber(latest.operating_cash_flow ?? latest.net_operating_cash_flow);
+  const fcf = parseFinancialNumber(latest.free_cash_flow);
+  const annualFactor = getAnnualizationFactor(latest.period);
+
+  // 1. Gösterge: Gölge Holdingleşme & Faaliyet Dışı Duran Finansal Yatırım Şişkinliği
+  const nonCurrentFinInvRatioAssets = (nonCurrentFinInv !== null && nonCurrentFinInv > 0 && totalAssets !== null && totalAssets > 0)
+    ? Number(((nonCurrentFinInv / totalAssets) * 100).toFixed(1))
+    : null;
+  const nonCurrentFinInvRatioEquity = (nonCurrentFinInv !== null && nonCurrentFinInv > 0 && parentEquity !== null && parentEquity > 0)
+    ? Number(((nonCurrentFinInv / parentEquity) * 100).toFixed(1))
+    : null;
+  const ind1Triggered = Boolean(
+    (nonCurrentFinInvRatioAssets !== null && nonCurrentFinInvRatioAssets >= 30.0) ||
+    (nonCurrentFinInvRatioEquity !== null && nonCurrentFinInvRatioEquity >= 50.0)
+  );
+
+  // 2. Gösterge: Atıl Sermaye Transferi & Düşük Finansal Yatırım Getirisi (veya Yüksek Diğer Alacaklar)
+  let annualizedInvYieldPct: number | null = null;
+  if (nonCurrentFinInv !== null && nonCurrentFinInv > 0 && investmentIncome !== null) {
+    annualizedInvYieldPct = Number((((investmentIncome * annualFactor) / nonCurrentFinInv) * 100).toFixed(2));
+  }
+  const otherRecRatioAssets = (otherReceivables > 0 && totalAssets !== null && totalAssets > 0)
+    ? Number(((otherReceivables / totalAssets) * 100).toFixed(1))
+    : 0;
+  const ind2Triggered = Boolean(
+    (nonCurrentFinInvRatioAssets !== null && nonCurrentFinInvRatioAssets >= 20.0 && annualizedInvYieldPct !== null && annualizedInvYieldPct < 5.0) ||
+    otherRecRatioAssets >= 10.0
+  );
+
+  // 3. Gösterge: Azınlık Payları Kâr ve Özkaynak Sızıntısı
+  let minorityProfitLeakagePct: number | null = null;
+  if (minorityNetIncome !== null && minorityNetIncome > 0 && consolidatedNetIncome !== null && consolidatedNetIncome > 0) {
+    minorityProfitLeakagePct = Number(((minorityNetIncome / consolidatedNetIncome) * 100).toFixed(1));
+  }
+  let minorityEquitySharePct: number | null = null;
+  if (minorityInterests !== null && minorityInterests > 0 && totalEquity !== null && totalEquity > 0) {
+    minorityEquitySharePct = Number(((minorityInterests / totalEquity) * 100).toFixed(1));
+  }
+  const ind3Triggered = Boolean(
+    (minorityProfitLeakagePct !== null && minorityProfitLeakagePct >= 25.0) ||
+    (minorityEquitySharePct !== null && minorityEquitySharePct >= 30.0)
+  );
+
+  // 4. Gösterge: İşletme Sermayesi Nakit Emişi & Zayıf Serbest Nakit Dönüşümü
+  let wcCashDrainPct: number | null = null;
+  if (grossOcf !== null && grossOcf > 0 && wcChange !== null && wcChange < 0) {
+    wcCashDrainPct = Number(((Math.abs(wcChange) / grossOcf) * 100).toFixed(1));
+  }
+  let fcfConversionPct: number | null = null;
+  if (fcf !== null && netIncome !== null && netIncome > 0) {
+    fcfConversionPct = Number(((fcf / netIncome) * 100).toFixed(1));
+  } else if (ocf !== null && netIncome !== null && netIncome > 0) {
+    fcfConversionPct = Number(((ocf / netIncome) * 100).toFixed(1));
+  }
+  const ind4Triggered = Boolean(
+    (wcCashDrainPct !== null && wcCashDrainPct >= 65.0 && (fcfConversionPct === null || fcfConversionPct < 20.0)) ||
+    (ind1Triggered && fcfConversionPct !== null && fcfConversionPct < 15.0)
+  );
+
+  const indicators: CapitalAllocationIndicator[] = [
+    {
+      code: 'SHADOW_HOLDING_BLOAT',
+      title: 'Gölge Holdingleşme (Duran Finansal Yatırım Yoğunluğu)',
+      triggered: ind1Triggered,
+      metricValueStr: nonCurrentFinInvRatioAssets !== null
+        ? `Aktifin %${nonCurrentFinInvRatioAssets}'i${nonCurrentFinInvRatioEquity !== null ? ` (Ana Özkaynağın %${nonCurrentFinInvRatioEquity}'si)` : ''}`
+        : '0%',
+      thresholdStr: 'Aktif >= %30 veya Özkaynak >= %50',
+      explanation: ind1Triggered
+        ? `Şirket faaliyet konusu dışında duran finansal yatırımlara (${((nonCurrentFinInv || 0) / 1e9).toFixed(2)} Milyar TL) toplam varlıklarının %${nonCurrentFinInvRatioAssets}'ini bağlayarak fiilen bir iştirak/holding yapısına dönüşmüştür.`
+        : 'Duran finansal yatırımların toplam aktif içindeki payı makul sınırlar içindedir.'
+    },
+    {
+      code: 'IDLE_INVESTMENT_YIELD',
+      title: 'Grup İçi / Finansal Yatırım Nakit Getiri Verimsizliği',
+      triggered: ind2Triggered,
+      metricValueStr: annualizedInvYieldPct !== null
+        ? `Yıllık Getiri: %${annualizedInvYieldPct}`
+        : (otherRecRatioAssets > 0 ? `Diğer Alacak/Aktif: %${otherRecRatioAssets}` : 'Veri Yok'),
+      thresholdStr: 'Yıllık Getiri >= %5.0',
+      explanation: ind2Triggered
+        ? (annualizedInvYieldPct !== null && annualizedInvYieldPct < 5.0
+            ? `Duran varlıklara bağlanan ${((nonCurrentFinInv || 0) / 1e9).toFixed(2)} Milyar TL sermayeden elde edilen yıllıklandırılmış yatırım geliri yalnızca %${annualizedInvYieldPct} düzeyindedir; aktarılan kaynak halka açık şirkete nakit temettü/faiz döndürmemektedir.`
+            : `Ticari olmayan diğer alacaklar toplam aktiflerin %${otherRecRatioAssets}'ine ulaşmıştır; grup içi fon kullandırma riski izlenmelidir.`)
+        : 'Finansal yatırımlardan ve diğer alacaklardan kaynaklanan atıl getiri anomalisi saptanmadı.'
+    },
+    {
+      code: 'MINORITY_PROFIT_LEAKAGE',
+      title: 'Azınlık Payları Kâr & Özkaynak Sızıntısı',
+      triggered: ind3Triggered,
+      metricValueStr: minorityProfitLeakagePct !== null
+        ? `Kâr Payı: %${minorityProfitLeakagePct}${minorityEquitySharePct !== null ? ` | Özkaynak Payı: %${minorityEquitySharePct}` : ''}`
+        : (minorityEquitySharePct !== null ? `Özkaynak Payı: %${minorityEquitySharePct}` : '0%'),
+      thresholdStr: 'Azınlık Kâr Payı < %25 / Özkaynak < %30',
+      explanation: ind3Triggered
+        ? `Konsolide bilançoda üretilen kâr ve özkaynağın önemli bir bölümü (${minorityProfitLeakagePct !== null ? `konsolide kârın %${minorityProfitLeakagePct}'si, ` : ''}toplam özkaynağın %${minorityEquitySharePct ?? 0}'si) kontrol gücü olmayan azınlık ortaklara gitmektedir.`
+        : 'Konsolide kâr ve özkaynakların tamamına yakını ana ortaklık hissedarlarına aittir.'
+    },
+    {
+      code: 'WORKING_CAPITAL_CASH_DRAIN',
+      title: 'İşletme Sermayesi Nakit Emişi & Düşük FCF Dönüşümü',
+      triggered: ind4Triggered,
+      metricValueStr: wcCashDrainPct !== null
+        ? `Nakit Emişi: %${wcCashDrainPct} | FCF/Net Kâr: %${fcfConversionPct ?? 0}`
+        : (fcfConversionPct !== null ? `FCF/Net Kâr: %${fcfConversionPct}` : 'Veri Yok'),
+      thresholdStr: 'İşletme Sermayesi Emişi < %65 ve FCF/Kâr >= %20',
+      explanation: ind4Triggered
+        ? `Operasyonlardan üretilen brüt nakdin ${wcCashDrainPct !== null ? `%${wcCashDrainPct}'si işletme sermayesi (alacak/stok/diğer varlık) artışıyla emilmiş, ` : ''}net kârın yalnızca %${fcfConversionPct ?? 0}'si serbest nakit akışına (FCF) dönüşebilmiştir.`
+        : 'Operasyonel kârın serbest nakit akışına dönüşümü sağlıklıdır.'
+    }
+  ];
+
+  const triggeredList = indicators.filter(i => i.triggered);
+  const triggeredCount = triggeredList.length;
+  const isRiskDetected = (ind1Triggered && triggeredCount >= 2) || triggeredCount >= 3;
+
+  let severity: 'NONE' | 'MODERATE' | 'HIGH' | 'CRITICAL' = 'NONE';
+  let haircutPct = 0;
+  if (isRiskDetected) {
+    if (triggeredCount >= 3) {
+      severity = 'CRITICAL';
+      haircutPct = 0.18;
+    } else {
+      severity = 'HIGH';
+      haircutPct = 0.12;
+    }
+  } else if (triggeredCount === 1) {
+    severity = 'MODERATE';
+  }
+
+  const reasons = isRiskDetected
+    ? triggeredList.map(i => `${i.title}: ${i.explanation}`)
+    : [];
+
+  const summaryTitle = isRiskDetected
+    ? 'GRUP İÇİ SERMAYE AKTARIMI & GÖLGE HOLDİNGLEŞME RİSKİ'
+    : '';
+  const summaryText = isRiskDetected
+    ? `Şirket faaliyet kolu bir holding olmamasına rağmen bilançosunda yüksek tutarda duran finansal yatırım (%${nonCurrentFinInvRatioAssets ?? 0} aktif payı) taşımakta ve üretilen kârın serbest nakde dönüşümü (%${fcfConversionPct ?? 0}) zayıf kalmaktadır. Bireysel yatırımcıyı korumak amacıyla hedef değerlemeye %${Math.round(haircutPct * 100)} Kurumsal Yönetim & Holdingleşme İskontosu uygulanmıştır.`
+    : '';
+
+  return {
+    isRiskDetected,
+    severity,
+    triggeredCount,
+    haircutPct,
+    nonCurrentFinInvRatioAssets,
+    nonCurrentFinInvRatioEquity,
+    annualizedInvYieldPct,
+    minorityProfitLeakagePct,
+    minorityEquitySharePct,
+    wcCashDrainPct,
+    fcfConversionPct,
+    indicators,
+    summaryTitle,
+    summaryText,
+    reasons
+  };
+}
+
+/**
  * Otomatik "Değer Tuzağı (Value Trap)" Erken Uyarı Algoritması:
  * Hisse fiyatı kağıt üzerinde iskontolu (%20+) görünmesine rağmen;
  * 1) Aralıksız marj daralması (son 2 çeyrektir düşen FAVÖK/Faaliyet marjı),
@@ -3673,6 +3934,20 @@ export function optimizeFinalDecision({
       finalDecision = 'NÖTR';
       overrideApplied = true;
       overrideReason = `Skor Tabanı Filtresi: Temel analiz skoru (${effectiveScore}/100) AL eşiğinin (65) altındadır.`;
+    }
+
+    // 11.5 Kural: Grup İçi Sermaye Aktarımı, İlişkili Taraf ve Gölge Holdingleşme Koruması
+    const capAllocRisk = valuation?.capital_allocation_risk ?? analyzeRelatedPartyAndCapitalAllocationRisk(effectiveLatestData, effectiveSector, officialSectorName);
+    if (capAllocRisk?.isRiskDetected) {
+      for (const r of capAllocRisk.reasons) {
+        if (!conditionalWarnings.includes(r)) conditionalWarnings.push(r);
+      }
+      safetyFlags.push(`Gölge Holdingleşme & Sermaye Aktarım Riski (${capAllocRisk.severity})`);
+      if (!overrideApplied && finalDecision === 'AL') {
+        finalDecision = 'NÖTR';
+        overrideApplied = true;
+        overrideReason = `Grup İçi Sermaye Aktarımı & Gölge Holdingleşme Riski: Şirketin faaliyet konusu holding olmamasına rağmen duran finansal yatırımları aktiflerin %${capAllocRisk.nonCurrentFinInvRatioAssets ?? 0}'ine ulaşmış ve serbest nakit dönüşümü (%${capAllocRisk.fcfConversionPct ?? 0}) zayıf kalmıştır. Bireysel yatırımcıyı korumak adına AL kararı NÖTR (Koşullu İzleme) olarak sınırlandırıldı.`;
+      }
     }
 
     // 12. Kural: Değer Tuzağı (Value Trap) Filtresi:
@@ -7409,6 +7684,7 @@ export function computeSectorValuationAndDrivers(
     }
   }
   const valueTrapResult = detectValueTrap(extractedData?.financial_history, currentPrice ?? 0, fairValue, sector, latest);
+  const capAllocAudit = analyzeRelatedPartyAndCapitalAllocationRisk(latest, sector, detectedOfficialSecName);
 
   const isDistressedModel = Boolean(modelName && (modelName.includes('Sıkıntılı') || modelName.includes('Distressed') || modelName.includes('Varlık Tabanı')));
 
@@ -7426,6 +7702,13 @@ export function computeSectorValuationAndDrivers(
     if (bullPrice !== null) bullPrice = Number((bullPrice * vtDeflator).toFixed(2));
     discountPct = safeCurrentPrice > 0 ? Number((((fairValue - safeCurrentPrice) / safeCurrentPrice) * 100).toFixed(1)) : 0;
     formulaStr += ` × Değer Tuzağı Sermaye Koruması (${vtDeflator.toFixed(2).replace('.', ',')}x) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+  } else if (!isDistressedModel && capAllocAudit.isRiskDetected && capAllocAudit.haircutPct > 0 && fairValue !== null && fairValue > 0) {
+    const capDeflator = Number((1 - capAllocAudit.haircutPct).toFixed(2));
+    fairValue = Number((fairValue * capDeflator).toFixed(2));
+    if (bearPrice !== null) bearPrice = Number((bearPrice * capDeflator).toFixed(2));
+    if (bullPrice !== null) bullPrice = Number((bullPrice * capDeflator).toFixed(2));
+    discountPct = safeCurrentPrice > 0 ? Number((((fairValue - safeCurrentPrice) / safeCurrentPrice) * 100).toFixed(1)) : 0;
+    formulaStr += ` × Gölge Holdingleşme & Sermaye Tahsisi İskontosu (${capDeflator.toFixed(2).replace('.', ',')}x) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
   }
 
   const marginOfSafety = discountPct > 0 ? discountPct : 0;
@@ -7472,6 +7755,7 @@ export function computeSectorValuationAndDrivers(
     is_value_trap: valueTrapResult.isValueTrap,
     value_trap_severity: valueTrapResult.severity,
     value_trap_reasons: valueTrapResult.reasons,
+    capital_allocation_risk: capAllocAudit,
     fair_value_trend: fairValueTrend,
     eva_haircut_applied: evaHaircutApplied,
     eva_discount_pct: evaDiscountPct > 0 ? Number((evaDiscountPct * 100).toFixed(1)) : undefined,

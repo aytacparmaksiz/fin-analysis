@@ -308,9 +308,14 @@ ${(scoreResult.breakdown || []).map((b: any) => `| ${b.category} | ${b.score} | 
 | **Toplam Puan** | **${scoreResult.totalScore}** | **100** | ${scoreResult.totalScore >= 75 ? 'Güçlü operasyonel performans ve yüksek iskonto.' : 'Sektörel standartlara uyum.'} |
 `.trim();
 
-    const activeValueTrapReasons: string[] = (valuation.value_trap_reasons && valuation.value_trap_reasons.length > 0)
-      ? valuation.value_trap_reasons
-      : (optimization.valueTrapReasons || []);
+    const activeValueTrapReasons: string[] = [
+      ...((valuation.value_trap_reasons && valuation.value_trap_reasons.length > 0)
+        ? valuation.value_trap_reasons
+        : (optimization.valueTrapReasons || [])),
+      ...((valuation.capital_allocation_risk?.isRiskDetected && Array.isArray(valuation.capital_allocation_risk.reasons))
+        ? valuation.capital_allocation_risk.reasons
+        : [])
+    ];
 
     let prompt = `Hisse Kodu: ${resolvedTicker}
 Rapor Tarihi: ${currentDateStr}
@@ -570,9 +575,14 @@ function generateAlgorithmicReportFallback(params: {
   const tangibleCapexVal = latestItem?.tangible_capex ?? latestItem?.capex;
   const freeCashFlowVal = latestItem?.free_cash_flow ?? (netOcfVal ? (netOcfVal - Math.abs(tangibleCapexVal || 0)) : null);
 
-  const trapReasons: string[] = Array.isArray(valuation?.value_trap_reasons) && valuation.value_trap_reasons.length > 0
-    ? valuation.value_trap_reasons
-    : (Array.isArray(optimization?.valueTrapReasons) ? optimization.valueTrapReasons : []);
+  const trapReasons: string[] = [
+    ...(Array.isArray(valuation?.value_trap_reasons) && valuation.value_trap_reasons.length > 0
+      ? valuation.value_trap_reasons
+      : (Array.isArray(optimization?.valueTrapReasons) ? optimization.valueTrapReasons : [])),
+    ...(valuation?.capital_allocation_risk?.isRiskDetected && Array.isArray(valuation.capital_allocation_risk.reasons)
+      ? valuation.capital_allocation_risk.reasons
+      : [])
+  ];
 
   const trapBlock = trapReasons.length > 0
     ? `\n> ⚠️ **Adli Denetim & Değer Tuzağı Teşhisi (Forensic Red Team):**\n${trapReasons.map((r: string) => `> - ${r}`).join('\n')}\n`

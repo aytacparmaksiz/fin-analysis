@@ -148,6 +148,7 @@ export class IsYatirimApiAdapter {
     let right_of_use_assets: number | null = null;
     let deferred_tax_assets: number | null = null;
     let other_non_current_assets: number | null = null;
+    let non_current_other_receivables: number | null = null;
     let total_assets: number | null = null;
 
     let current_liabilities: number | null = null;
@@ -162,6 +163,8 @@ export class IsYatirimApiAdapter {
     let equity: number | null = null;
     let parent_equity: number | null = null;
     let minority_interests: number | null = null;
+    let minority_net_income: number | null = null;
+    let consolidated_net_income: number | null = null;
     let total_equity: number | null = null;
     let lease_liabilities: number | null = null;
     let paid_in_capital: number | null = null;
@@ -399,7 +402,12 @@ export class IsYatirimApiAdapter {
       // 2. DURAN VARLIKLAR (TOP-LEVEL 1AK)
       non_current_assets = getVal(['1AK'], ['toplam duran varlıklar', 'duran varlıklar']);
       non_current_trade_receivables = getVal(['1B'], ['ticari alacaklar']);
-      non_current_financial_investments = getVal(['1BC', '1BD'], ['finansal yatırımlar', 'özkaynak yöntemiyle değerlenen yatırımlar']);
+      non_current_other_receivables = getVal(['1BB'], ['diğer alacaklar']);
+      const finInv1BC = getVal(['1BC'], ['finansal yatırımlar']);
+      const finInv1BD = getVal(['1BD'], ['özkaynak yöntemiyle değerlenen yatırımlar']);
+      non_current_financial_investments = (finInv1BC !== null || finInv1BD !== null)
+        ? ((finInv1BC || 0) + (finInv1BD || 0))
+        : null;
       tangible_assets = getVal(['1BG'], ['maddi duran varlıklar']);
       intangible_assets = getVal(['1BH', '1BGA'], ['maddi olmayan duran varlıklar', 'şerefiye']);
       right_of_use_assets = getVal(['1BFAA'], ['kullanım hakkı varlıkları']);
@@ -429,10 +437,10 @@ export class IsYatirimApiAdapter {
       // Özkaynaklar ve Azınlık Payları Ayrıştırması:
       // İş Yatırım XI_29 standardı:
       // '2O': Ana Ortaklığa Ait Özkaynaklar (Parent Equity)
-      // '2ODA' / '2OD': Azınlık Payları (Non-controlling / Minority Interests)
+      // '2ODA': Azınlık Payları (Non-controlling / Minority Interests) [Not: '2OD' Diğer Özsermaye Kalemleri olup azınlık payı DEĞİLDİR!]
       // '2N': Toplam Özkaynaklar (Konsolide: 2O + 2ODA)
       parent_equity = getVal(['2O'], ['ana ortaklığa ait özkaynaklar', 'ana ortaklık payları']);
-      minority_interests = getVal(['2ODA', '2OD', '3LB'], ['azınlık payları', 'kontrol gücü olmayan paylar']);
+      minority_interests = getVal(['2ODA'], ['azınlık payları', 'kontrol gücü olmayan paylar']);
       total_equity = getVal(['2N'], ['özkaynaklar', 'toplam özkaynaklar', 'özkaynaklar toplamı']);
 
       if (parent_equity !== null && parent_equity > 0) {
@@ -502,6 +510,13 @@ export class IsYatirimApiAdapter {
         operating_profit = getVal(['3M', '3N', '3L', '3G', '3I'], ['sürdürülen faaliyetler vergi öncesi karı', 'vergi öncesi kar']);
       }
 
+      const invIncome3HA = getVal(['3HA'], ['yatırım faaliyetlerinden gelirler']);
+      const invExpense3HAA = getVal(['3HAA'], ['yatırım faaliyetlerinden giderler']);
+      const eqPickUp3HAC = getVal(['3HAC'], ['özkaynak yöntemiyle değerlenen yatırımların kar/zararlarındaki paylar']);
+      if (invIncome3HA !== null || invExpense3HAA !== null || eqPickUp3HAC !== null) {
+        investment_income = (invIncome3HA || 0) - Math.abs(invExpense3HAA || 0) + (eqPickUp3HAC || 0);
+      }
+
       financing_income = getVal(['3GA', '3HB', '3FA'], ['finansman gelirleri', '(esas faaliyet dışı) finansal gelirler', 'finansal gelirler']);
       financing_expenses = getVal(['3HC', '4BB', '3FB', '3G', '3F'], ['finansman giderleri (-)', '(esas faaliyet dışı) finansal giderler (-)', 'finansman giderleri']);
 
@@ -509,6 +524,8 @@ export class IsYatirimApiAdapter {
       ebt = profit_before_tax;
 
       tax_expense = getVal(['3IA', '3IB', '3IC', '3J', '3N'], ['sürdürülen faaliyetler vergi geliri (gideri)', 'dönem vergi geliri (gideri)', 'vergi gideri']);
+      minority_net_income = getVal(['3LB'], ['azınlık payları', 'kontrol gücü olmayan paylar']);
+      consolidated_net_income = getVal(['3L', '3J'], ['sürdürülen faaliyetler dönem karı', 'dönem karı (zararı)']);
       net_income = getVal(['2OCF', '3Z', '3K', '3L', '3U', '2MEZ'], ['ana ortaklık payları', 'dönem net karı veya zararı', 'dönem karı (zararı)', 'dönem net kar']);
 
       depreciation = getVal(['4CAAA', '4B', '4CAB'], ['amortisman giderleri', 'amortisman & itfa payları', 'amortisman ve itfa gideri ile ilgili düzeltmeler', 'amortisman']);
@@ -590,6 +607,8 @@ export class IsYatirimApiAdapter {
       profit_before_tax: profit_before_tax ?? ebt,
       tax_expense,
       net_income,
+      minority_net_income,
+      consolidated_net_income,
 
       // Bilanço - Varlıklar
       current_assets,
@@ -606,6 +625,7 @@ export class IsYatirimApiAdapter {
       non_current_assets,
       non_current_financial_investments,
       non_current_trade_receivables,
+      non_current_other_receivables,
       tangible_assets,
       intangible_assets,
       right_of_use_assets,

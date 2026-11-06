@@ -102,6 +102,15 @@ export const PRIMARY_STATEMENT_KEYWORDS = [
 
 // 2. İkincil Finansal Kalem ve Bilanço/Gelir Göstergeleri (+4 Puan)
 export const SECONDARY_FINANCIAL_KEYWORDS = [
+  'ilişkili taraf',
+  'ilişkili taraflar',
+  'iliskili taraf',
+  'tms 24',
+  'grup şirketleri',
+  'ilişkili taraflardan alacaklar',
+  'finansal yatırımlar',
+  'azınlık payları',
+  'kontrol gücü olmayan paylar',
   'satış gelirleri',
   'hasılat',
   'satışların maliyeti',

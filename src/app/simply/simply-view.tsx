@@ -81,7 +81,7 @@ import {
   type SnowflakeAnalysisResult,
   type SnowflakeCheck
 } from '@/lib/snowflake';
-import { calculateDuPont5Step, calculateEarningsQuality, parseFinancialNumber, parsePeriodSortKey } from '@/lib/valuation';
+import { analyzeRelatedPartyAndCapitalAllocationRisk, calculateDuPont5Step, calculateEarningsQuality, parseFinancialNumber, parsePeriodSortKey } from '@/lib/valuation';
 
 export type SimplySectionId =
   | 'sec-ozet'
@@ -2078,6 +2078,8 @@ export default function SimplyView({
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     {(() => {
                       const isTrap = Boolean(valuationInfo?.is_value_trap);
+                      const capAllocAudit = valuationInfo?.capital_allocation_risk ?? analyzeRelatedPartyAndCapitalAllocationRisk(latestData, currentSector);
+                      const isCapAllocRisk = Boolean(capAllocAudit?.isRiskDetected);
                       const isAlma = Boolean(report.decision === 'ALMA' || (report as any)?.rawDecision === 'ALMA');
                       const rawScore = report?.score || valuationInfo?.score || (report as any)?.scoreResult?.totalScore;
                       const cleanNum = rawScore ? parseInt(String(rawScore).split('/')[0].replace(/[^0-9]/g, ''), 10) : null;
@@ -2092,6 +2094,11 @@ export default function SimplyView({
                         riskBadge = {
                           label: 'Değer Tuzağı Riski',
                           tooltip: 'Hisse çarpan bazında ucuz görünse de operasyonel nakit akışı veya kâr kalitesi bozulması nedeniyle değer tuzağı riski taşımaktadır.'
+                        };
+                      } else if (isCapAllocRisk) {
+                        riskBadge = {
+                          label: 'Gölge Holdingleşme & Sermaye Tahsisi Riski',
+                          tooltip: capAllocAudit.summaryText || 'Şirket esas faaliyet dışı duran finansal yatırımlara yüksek kaynak bağlamış olup serbest nakit dönüşümü zayıftır.'
                         };
                       } else if (cleanNum !== null && cleanNum < 30) {
                         riskBadge = {
@@ -2266,6 +2273,63 @@ export default function SimplyView({
                 </div>
               </div>
             </div>
+
+            {/* Grup İçi Sermaye Aktarımı, İlişkili Taraf & Gölge Holdingleşme Riski (Bireysel Yatırımcı Koruma Kalkanı) */}
+            {(() => {
+              const capAlloc = valuationInfo?.capital_allocation_risk ?? analyzeRelatedPartyAndCapitalAllocationRisk(latestData, currentSector, officialSectorName);
+              if (!capAlloc?.isRiskDetected) return null;
+              return (
+                <div className="bg-gradient-to-br from-rose-950/35 via-[#181b20] to-amber-950/25 border border-rose-500/40 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rose-500/25 pb-3.5">
+                    <div className="flex items-center gap-2.5">
+                      <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0" />
+                      <div>
+                        <h3 className="font-sans text-base sm:text-lg font-bold text-white">
+                          Grup İçi Sermaye Aktarımı & Gölge Holdingleşme Teşhisi
+                        </h3>
+                        <p className="text-xs text-rose-300/90 font-mono">
+                          Bireysel Yatırımcı Koruma Kalkanı • {capAlloc.triggeredCount}/4 Adli Gösterge Tetiklendi
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                      {capAlloc.severity === 'CRITICAL' ? 'KRİTİK SERMAYE TAHSİS RİSKİ' : 'YÜKSEK SERMAYE TAHSİS RİSKİ'} (-%{Math.round((capAlloc.haircutPct || 0) * 100)} İskonto)
+                    </span>
+                  </div>
+
+                  <p className="text-sm text-slate-200 leading-relaxed font-sans">
+                    {capAlloc.summaryText}
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    {(capAlloc.indicators || []).map((ind: any) => (
+                      <div
+                        key={ind.code}
+                        className={`p-3.5 rounded-xl border space-y-1.5 ${
+                          ind.triggered
+                            ? 'bg-rose-950/25 border-rose-500/35'
+                            : 'bg-[#151821] border-[#282d37]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-white font-sans">{ind.title}</span>
+                          <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
+                            ind.triggered
+                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                              : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                          }`}>
+                            {ind.metricValueStr}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                          {ind.explanation}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* About the Company (Şirket Hakkında) */}
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">

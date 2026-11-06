@@ -1,6 +1,6 @@
 import { test, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeSectorValuationAndDrivers, calculateSectorScore, calculateDuPont5Step } from '../lib/valuation.ts';
+import { computeSectorValuationAndDrivers, calculateSectorScore, calculateDuPont5Step, analyzeRelatedPartyAndCapitalAllocationRisk } from '../lib/valuation.ts';
 import { IsYatirimApiAdapter } from '../lib/isyatirim-adapter.ts';
 
 describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
@@ -689,6 +689,40 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
     const valRes = computeSectorValuationAndDrivers(atatpData, 206.10);
     assert.ok(valRes.valuation.fair_value < 350, `Fair value must be deflated and realistic (got ${valRes.valuation.fair_value} TL, was 404 TL)`);
     assert.equal(valRes.valuation.final_decision, 'NÖTR', 'Decision must be NÖTR (not false AL) due to deflated multiple and bridge');
+  });
+
+  it('21. Related-Party & Shadow Holding Audit Engine (Grup İçi Sermaye Aktarımı & Gölge Holdingleşme Dedektörü): Flags all 4 indicators on ATATP and exempts Holding companies', () => {
+    const atatpLatest = {
+      period: '2026/06',
+      revenue: 3665488134,
+      net_income: 1340871160,
+      minority_net_income: 1201429107,
+      consolidated_net_income: 2542300267,
+      investment_income: 42233752,
+      total_assets: 11048966888,
+      non_current_financial_investments: 7039214187,
+      equity: 6416509467,
+      parent_equity: 6416509467,
+      minority_interests: 3868185316,
+      total_equity: 10284694783,
+      gross_operating_cash_flow: 2950194559,
+      working_capital_change: -2427571882,
+      operating_cash_flow: 559440738,
+      free_cash_flow: 76578357
+    };
+
+    const audit = analyzeRelatedPartyAndCapitalAllocationRisk(atatpLatest, 'TECH');
+    assert.equal(audit.isRiskDetected, true, 'Must detect capital allocation & shadow holding risk on ATATP');
+    assert.equal(audit.severity, 'CRITICAL', 'Severity must be CRITICAL with 4/4 indicators triggered');
+    assert.equal(audit.triggeredCount, 4, 'All 4 quantitative forensic indicators must trigger on ATATP');
+    assert.ok(audit.nonCurrentFinInvRatioAssets >= 60, `Non-current financial investments ratio to assets must be ~63.7% (got ${audit.nonCurrentFinInvRatioAssets}%)`);
+    assert.ok(audit.annualizedInvYieldPct < 2.0, `Annualized investment yield must be ~1.2% (got ${audit.annualizedInvYieldPct}%)`);
+    assert.ok(audit.minorityProfitLeakagePct >= 45.0, `Minority profit leakage must be ~47.3% (got ${audit.minorityProfitLeakagePct}%)`);
+    assert.ok(audit.wcCashDrainPct >= 80.0, `Working capital cash drain must be ~82.3% (got ${audit.wcCashDrainPct}%)`);
+
+    // Holding companies must be exempt from shadow holding penalty
+    const holdingAudit = analyzeRelatedPartyAndCapitalAllocationRisk(atatpLatest, 'HOLDING');
+    assert.equal(holdingAudit.isRiskDetected, false, 'Holding sector must be exempt from shadow holding penalty');
   });
 
 });

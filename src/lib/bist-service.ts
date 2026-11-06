@@ -111,6 +111,8 @@ export interface FinancialHistoryItem {
   profit_before_tax?: number | null;
   tax_expense?: number | null;
   net_income: number | null;
+  minority_net_income?: number | null;
+  consolidated_net_income?: number | null;
 
   // Bilanço - Varlıklar
   current_assets: number | null;
@@ -127,6 +129,7 @@ export interface FinancialHistoryItem {
   non_current_assets: number | null;
   non_current_financial_investments?: number | null;
   non_current_trade_receivables?: number | null;
+  non_current_other_receivables?: number | null;
   tangible_assets?: number | null;
   intangible_assets?: number | null;
   right_of_use_assets?: number | null;
