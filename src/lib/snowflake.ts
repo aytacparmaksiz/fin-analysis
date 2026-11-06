@@ -920,50 +920,84 @@ export function computeSnowflakeAnalysis(params: {
       );
   const annualDividends = aggregateDividendsByYear(rawDividends);
   const latestDiv = annualDividends.length > 0 ? annualDividends[0] : (rawDividends.length > 0 ? rawDividends[0] : null);
+  const currentCalendarYear = new Date().getFullYear();
+  const latestDivYear = Number(
+    latestDiv?.year ||
+    (latestDiv?.date ? String(latestDiv.date).slice(0, 4) : 0) ||
+    0
+  );
+  const hasRecentDividend = latestDivYear >= currentCalendarYear - 3 || (
+    latestDivYear === 0 && (
+      Number(marketMultiples?.dividend_yield ?? latestData?.dividend_yield ?? 0) > 0 ||
+      Number(latestData?.dividends?.[0]?.perShareTl ?? 0) > 0
+    )
+  );
+  const recentDividends10Y = annualDividends.filter(d => {
+    const yr = Number(d?.year || 0);
+    return yr === 0 || yr >= currentCalendarYear - 10;
+  });
 
-  const divYield = Number(
+  const rawDivYield = Number(
     latestDiv?.yieldPct ??
     marketMultiples?.dividend_yield ??
     latestData?.dividend_yield ??
     0
   );
-  const payoutRatio = Number(
+  const divYield = hasRecentDividend ? rawDivYield : 0;
+  const rawPayoutRatio = Number(
     latestDiv?.payoutRatioPct ??
     latestData?.payout_ratio ??
     0
   );
-  const perShareTl = Number(
+  const payoutRatio = hasRecentDividend ? rawPayoutRatio : 0;
+  const rawPerShareTl = Number(
     latestDiv?.perShareTl ??
     latestData?.dividends?.[0]?.perShareTl ??
     0
   );
-  const payoutCount = rawDividends.length > 0
-    ? rawDividends.length
-    : (Array.isArray(params.latestData?.dividends) ? params.latestData.dividends.length : (divYield > 0 ? 3 : 0));
+  const perShareTl = hasRecentDividend ? rawPerShareTl : 0;
+  const payoutCount = recentDividends10Y.length > 0
+    ? recentDividends10Y.length
+    : (hasRecentDividend && (divYield > 0 || perShareTl > 0) ? (Array.isArray(params.latestData?.dividends) && params.latestData.dividends.length > 0 ? params.latestData.dividends.length : 3) : 0);
+  const totalHistoricalPayoutCount = annualDividends.length > 0
+    ? annualDividends.length
+    : rawDividends.length;
+  const hasGrowingPerShareDiv = hasRecentDividend && (
+    (recentDividends10Y.length >= 2 && Number(recentDividends10Y[0]?.perShareTl || 0) > Number(recentDividends10Y[1]?.perShareTl || 0)) ||
+    (annualDividends.length === 0 && perShareTl > 0 && profitGrowth > 0)
+  );
   const fcf = Number(latestData?.free_cash_flow ?? (ocf > 0 ? ocf - Number(latestData?.capex ?? 0) : 0));
-  const isCompounder = currentRoe >= 25.0 && evaSpread > 0;
+  const isCompounder = currentRoe >= 25.0 && evaSpread > 0 && netIncome > 0;
 
   const dividendChecks: SnowflakeCheck[] = [
     // 5.1 Notable Dividend
     {
       id: 'notable_dividend',
       title: 'Dikkate Değer Temettü Getirisi',
-      passed: divYield >= 1.0 || isCompounder || payoutCount >= 3,
-      metricValue: divYield > 0 ? `Verim: %${divYield.toFixed(2)}` : (payoutCount > 0 ? `${payoutCount} Dağıtım` : `Bileşik ROE: %${currentRoe.toFixed(1)}`),
+      passed: (hasRecentDividend && divYield >= 1.0) || isCompounder || payoutCount >= 3,
+      metricValue: divYield > 0
+        ? `Verim: %${divYield.toFixed(2)}`
+        : (payoutCount > 0
+            ? `${payoutCount} Dağıtım`
+            : (totalHistoricalPayoutCount > 0 && latestDivYear > 0
+                ? `Son Ödeme: ${latestDivYear}`
+                : `Bileşik ROE: %${currentRoe.toFixed(1)}`)),
       threshold: '>= %1.0 veya Düzenli Ödeme',
       detail: divYield > 0
         ? `Yıllık %${divYield.toFixed(2)} temettü verimi ile yatırımcısına düzenli nakit akışı sağlamaktadır.`
-        : (payoutCount > 0
-            ? `Şirket ${payoutCount} dönem boyunca düzenli nakit temettü dağıtımı gerçekleştirmiştir.`
+        : (payoutCount >= 3
+            ? `Şirket son yıllarda ${payoutCount} dönem boyunca düzenli nakit temettü dağıtımı gerçekleştirmiştir.`
             : (isCompounder
                 ? `Şirket kârını dağıtmak yerine %${currentRoe.toFixed(1)} ROE ile şirkette tutarak özkaynak değerini katlayan bileşik büyüme modelini uygulamaktadır.`
-                : 'Güncel dönemde temettü ödemesi bulunmamaktadır.'))
+                : (totalHistoricalPayoutCount > 0 && latestDivYear > 0
+                    ? `Şirketin son temettü ödemesi ${latestDivYear} yılında kalmıştır; güncel dönemde düzenli temettü ödemesi bulunmamaktadır.`
+                    : 'Güncel dönemde temettü ödemesi bulunmamaktadır.')))
     },
     // 5.2 High Dividend
     {
       id: 'high_dividend',
       title: 'Piyasa Üzerinde Yüksek Temettü Verimi',
-      passed: divYield >= 3.0 || (divYield >= 1.5 && payoutRatio >= 30.0),
+      passed: hasRecentDividend && (divYield >= 3.0 || (divYield >= 1.5 && payoutRatio >= 30.0)),
       metricValue: `Verim: %${divYield.toFixed(2)}`,
       threshold: '>= %3.0 Piyasa Üstü',
       detail: divYield >= 3.0
@@ -976,49 +1010,51 @@ export function computeSnowflakeAnalysis(params: {
     {
       id: 'stable_dividend',
       title: 'Geçmiş Temettü Ödeme Sürekliliği',
-      passed: payoutCount >= 3 || (divYield > 0 && currentRoe >= 18.0) || payoutCount > 0,
-      metricValue: `${payoutCount} Dağıtım Kaydı`,
-      threshold: 'Düzenli Temettü Dağıtımı',
-      detail: payoutCount >= 3 || divYield > 0
-        ? `Şirket ${payoutCount > 0 ? `${payoutCount} dağıtım kaydı ile` : ''} geçmiş yıllarda temettü dağıtımı gerçekleştirerek hissedar dostu bir kâr dağıtım politikası izlemiştir.`
-        : 'Geçmiş temettü dağıtım kayıtları sınırlıdır veya düzenli temettü ödenmemiştir.'
+      passed: payoutCount >= 3 || (hasRecentDividend && divYield > 0 && currentRoe >= 18.0),
+      metricValue: payoutCount > 0 ? `${payoutCount} Dağıtım Kaydı` : (totalHistoricalPayoutCount > 0 && latestDivYear > 0 ? `Sadece ${latestDivYear} (${totalHistoricalPayoutCount} Kayıt)` : '0 Dağıtım Kaydı'),
+      threshold: 'En Az 3 Düzenli Dağıtım',
+      detail: payoutCount >= 3 || (hasRecentDividend && divYield > 0 && currentRoe >= 18.0)
+        ? `Şirket ${payoutCount > 0 ? `${payoutCount} dağıtım kaydı ile` : ''} geçmiş yıllarda düzenli temettü dağıtımı gerçekleştirerek hissedar dostu bir kâr dağıtım politikası izlemiştir.`
+        : 'Son 10 yılda düzenli temettü dağıtım sürekliliği (en az 3 dönem) bulunmamaktadır.'
     },
     // 5.4 Growing Dividend
     {
       id: 'growing_dividend',
       title: 'Büyüyen Hisse Başı Temettü',
-      passed: perShareTl > 0 || (divYield > 0 && profitGrowth > 0) || isCompounder,
-      metricValue: perShareTl > 0 ? `₺${perShareTl.toFixed(3)} Hisse Başı` : (isCompounder ? 'Özkaynak Büyümesi' : '—'),
+      passed: hasGrowingPerShareDiv || (hasRecentDividend && divYield > 0 && profitGrowth > 0 && payoutCount >= 2) || isCompounder,
+      metricValue: hasGrowingPerShareDiv && perShareTl > 0 ? `₺${perShareTl.toFixed(3)} Hisse Başı` : (isCompounder ? 'Özkaynak Büyümesi' : 'Büyüme Yok'),
       threshold: 'Artış Eğilimi',
-      detail: perShareTl > 0 || isCompounder
+      detail: hasGrowingPerShareDiv || isCompounder
         ? 'Hisse başına nakit temettü tutarı veya dağıtılmayan kârların yarattığı hisse başı özsermaye değeri büyüme trendindedir.'
-        : 'Hisse başı temettü büyümesi tespit edilememiştir.'
+        : 'Son yıllarda birbirini izleyen ve büyüyen hisse başı temettü ödemesi tespit edilememiştir.'
     },
     // 5.5 Earnings Coverage
     {
       id: 'earnings_coverage',
       title: 'Kâr ile Karşılama ve Güvenli Dağıtım Oranı',
-      passed: (payoutRatio > 0 && payoutRatio <= 75.0) || (divYield === 0 && currentRoe >= 18.0) || (payoutRatio === 0 && ocf > 0),
-      metricValue: payoutRatio > 0 ? `Dağıtma Oranı: %${payoutRatio.toFixed(0)}` : 'İçsel Büyüme',
+      passed: netIncome > 0 && ((hasRecentDividend && payoutRatio > 0 && payoutRatio <= 75.0) || (!hasRecentDividend && currentRoe >= 18.0 && evaSpread >= 0) || (hasRecentDividend && payoutRatio === 0 && ocf > 0 && currentRoe > 0)),
+      metricValue: netIncome <= 0 ? 'Net Zarar' : (payoutRatio > 0 ? `Dağıtma Oranı: %${payoutRatio.toFixed(0)}` : 'İçsel Büyüme'),
       threshold: '%15 - %75 Güvenli Koridor',
-      detail: payoutRatio > 0 && payoutRatio <= 75.0
-        ? `Net kârın %${payoutRatio.toFixed(0)}'ı temettü olarak dağıtılmaktadır (sürdürülebilir güvenli koridor).`
-        : (divYield === 0
-            ? 'Şirket kârını dağıtmayarak yatırımlarına ve içsel büyümesine tahsis etmektedir.'
-            : (payoutRatio > 75.0
-                ? `Kâr dağıtım oranı (%${payoutRatio.toFixed(0)}) yüksektir; kârın büyük kısmı dışarı aktarılmaktadır.`
-                : 'Temettü dağıtım oranı güvenli koridordadır.'))
+      detail: netIncome <= 0
+        ? 'Şirket net dönem zararı açıkladığı için kâr ile temettü karşılama kapasitesi bulunmamaktadır.'
+        : (payoutRatio > 0 && payoutRatio <= 75.0
+            ? `Net kârın %${payoutRatio.toFixed(0)}'ı temettü olarak dağıtılmaktadır (sürdürülebilir güvenli koridor).`
+            : (divYield === 0 && currentRoe >= 18.0
+                ? 'Şirket kârını dağıtmayarak yüksek ROE ile yatırımlarına ve içsel büyümesine tahsis etmektedir.'
+                : (payoutRatio > 75.0
+                    ? `Kâr dağıtım oranı (%${payoutRatio.toFixed(0)}) yüksektir; kârın büyük kısmı dışarı aktarılmaktadır.`
+                    : 'Aktif temettü dağıtımı veya yüksek içsel sermaye getirisi bulunmamaktadır.')))
     },
     // 5.6 Cash Flow Coverage
     {
       id: 'cash_flow_coverage',
       title: 'Serbest Nakit Akışıyla Temettü Karşılama',
-      passed: netDebt <= 0 || fcf > 0 || ocf >= netIncome * 0.70,
-      metricValue: netDebt <= 0 ? 'Net Nakit Fazlası' : (fcf > 0 ? formatCurrency(fcf) : 'Operasyonel Nakit'),
-      threshold: 'Pozitif Nakit Akışı',
-      detail: netDebt <= 0 || fcf > 0
+      passed: netIncome > 0 && ((hasRecentDividend && (fcf > 0 || ocf >= netIncome * 0.70 || netDebt <= 0)) || (!hasRecentDividend && isCompounder && (fcf > 0 || netDebt <= 0))),
+      metricValue: netIncome <= 0 ? 'Net Zarar / Nakit Baskısı' : (netDebt <= 0 ? 'Net Nakit Fazlası' : (fcf > 0 ? formatCurrency(fcf) : 'Operasyonel Nakit')),
+      threshold: 'Pozitif Kâr ve Serbest Nakit',
+      detail: netIncome > 0 && (hasRecentDividend || isCompounder) && (netDebt <= 0 || fcf > 0)
         ? 'Temettü ödemeleri veya nakit rezervleri, operasyonel serbest nakit akışıyla emniyetle desteklenmektedir.'
-        : 'Nakit akışı temettü kapasitesini karşılamada dönemsel baskı altındadır.'
+        : 'Net zarar, negatif serbest nakit akışı veya aktif temettü/bileşik getiri eksikliği nedeniyle nakit karşılama kriteri sağlanamamaktadır.'
     }
   ];
 

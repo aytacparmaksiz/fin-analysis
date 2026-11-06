@@ -1,7 +1,8 @@
 import { test, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeSectorValuationAndDrivers, calculateSectorScore, calculateDuPont5Step, analyzeRelatedPartyAndCapitalAllocationRisk, isTfrs10InvestmentEntity } from '../lib/valuation.ts';
+import { computeSectorValuationAndDrivers, calculateSectorScore, calculateDuPont5Step, analyzeRelatedPartyAndCapitalAllocationRisk, isTfrs10InvestmentEntity, optimizeFinalDecision } from '../lib/valuation.ts';
 import { synthesizeInvestmentThesis } from '../lib/investment-thesis-synthesizer.ts';
+import { computeSnowflakeAnalysis } from '../lib/snowflake.ts';
 import { IsYatirimApiAdapter } from '../lib/isyatirim-adapter.ts';
 
 describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
@@ -827,6 +828,94 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
     assert.equal(maviDossier.thesisBreakers.length, 3, 'Must provide 3 forensic thesis breakers');
     assert.ok(maviDossier.whyActionParagraphs.length >= 2, 'Must provide multi-paragraph synthesized investment thesis');
     assert.ok(maviDossier.sectoralEdgeNarrative.includes('VAKKO'), 'Must reference sector peers in sectoral edge narrative');
+  });
+
+  it('24. ZOREN (Chronic Utility Loss-Maker & Stale 2005 Dividend): Snowflake Dividend 0/6, Sector Score <= 35, Value Trap = true, Decision ALMA', () => {
+    const zorenData = {
+      ticker: 'ZOREN',
+      sector: 'UTILITIES_TELCO',
+      official_sector_name: 'Elektrik Üretim',
+      current_price: 1.77,
+      share_count: 5_000_000_000,
+      paid_in_capital: 5_000_000_000,
+      financial_history: [
+        {
+          period: '2025/06',
+          revenue: 16_500_000_000,
+          gross_profit: 4_778_638_000,
+          operating_profit: 2_100_000_000,
+          ebitda: 5_200_000_000,
+          ebitda_margin: 31.5,
+          net_income: -4_502_522_000,
+          equity: 54_000_000_000,
+          net_debt: 52_000_000_000,
+          operating_cash_flow: 3_100_000_000,
+          free_cash_flow: -2_400_000_000,
+          roe: -14.2,
+          roic: 1.2,
+          real_wacc: 8.6,
+          eva_spread: -7.4,
+          is_tms29: true
+        },
+        {
+          period: '2026/06',
+          revenue: 11_368_500_000,
+          gross_profit: 1_994_262_000,
+          operating_profit: 420_000_000,
+          ebitda: 3_650_000_000,
+          ebitda_margin: 32.1,
+          financing_expenses: -6_800_000_000,
+          net_income: -8_033_804_000,
+          equity: 48_300_000_000,
+          net_debt: 58_500_000_000,
+          operating_cash_flow: 2_200_000_000,
+          free_cash_flow: -3_500_000_000,
+          capex: -5_700_000_000,
+          roe: -16.6,
+          roic: -0.8,
+          real_wacc: 8.6,
+          eva_spread: -9.4,
+          is_tms29: true
+        }
+      ]
+    };
+
+    const scoreRes = calculateSectorScore(zorenData, 'UTILITIES_TELCO');
+    assert.ok(scoreRes.totalScore <= 35, `ZOREN sector score (${scoreRes.totalScore}) must be <= 35 due to -8.03B net loss, -58.3% gross profit collapse and -9.4 EVA`);
+    assert.equal(scoreRes.suggestedDecision, 'ALMA', 'ZOREN suggestedDecision must be ALMA');
+
+    const valRes = computeSectorValuationAndDrivers(zorenData, 1.77, 'UTILITIES_TELCO');
+    assert.equal(valRes.valuation.is_value_trap, true, 'ZOREN must be flagged as a value trap');
+    assert.ok(valRes.valuation.fair_value < 1.77, `ZOREN fair value (${valRes.valuation.fair_value}) must not exceed current price (1.77 TL) when net debt swallows EV and ROE is -16.6%`);
+    assert.equal(valRes.valuation.final_decision, 'ALMA', 'ZOREN computed decision must be ALMA');
+
+    const optDecision = optimizeFinalDecision({
+      rawDecision: scoreRes.suggestedDecision,
+      score: scoreRes.totalScore,
+      valuation: valRes.valuation,
+      latestData: zorenData.financial_history[1],
+      sector: 'UTILITIES_TELCO',
+      financialHistory: zorenData.financial_history
+    });
+    assert.equal(optDecision.finalDecision, 'ALMA', 'ZOREN final optimized decision must be ALMA');
+
+    const snow = computeSnowflakeAnalysis({
+      ticker: 'ZOREN',
+      sector: 'UTILITIES_TELCO',
+      currentPrice: 1.77,
+      fairValue: valRes.valuation.fair_value,
+      discountPct: valRes.valuation.discount_pct,
+      financialHistory: zorenData.financial_history,
+      latestData: zorenData.financial_history[1],
+      dividends: [
+        { year: 2005, date: '2005-05-25', perShareTl: 0.08, yieldPct: 4.2, payoutRatioPct: 35.0 }
+      ],
+      roic: -0.8,
+      wacc: 8.6,
+      evaSpread: -9.4
+    });
+
+    assert.equal(snow.axes.dividend.score, 0, `ZOREN with only a single 2005 dividend and -8.03B net loss must score 0/6 on Dividend axis, got ${snow.axes.dividend.score}/6`);
   });
 
 });

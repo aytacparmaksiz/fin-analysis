@@ -4758,9 +4758,13 @@ export default function SimplyView({
                     <div className="bg-[#21262d] rounded-xl p-3.5 border border-[#2e3440]">
                       <span className="text-[10.5px] text-slate-400 block">Yıllık Nakit Yatırım Getirisi</span>
                       <div className={`text-base font-black font-mono mt-1 ${
-                        capAlloc.annualizedInvYieldPct != null && capAlloc.annualizedInvYieldPct < 5.0 && (capAlloc.nonCurrentFinInvRatioAssets ?? 0) >= 20.0
-                          ? 'text-amber-400'
-                          : 'text-emerald-400'
+                        capAlloc.annualizedInvYieldPct == null
+                          ? 'text-slate-400'
+                          : capAlloc.annualizedInvYieldPct < 0
+                            ? 'text-rose-400'
+                            : capAlloc.annualizedInvYieldPct < 5.0
+                              ? 'text-amber-400'
+                              : 'text-emerald-400'
                       }`}>
                         {capAlloc.annualizedInvYieldPct != null ? `%${capAlloc.annualizedInvYieldPct}` : '—'}
                       </div>
