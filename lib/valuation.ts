@@ -2302,6 +2302,68 @@ export function calculateSectorScore(
         else { s4 = 5; r4 = `Düşük Portföy Verimliliği (ROE %${roe.toFixed(1)}).`; st4 = 'danger'; anomalies.push(`Düşük Portföy ROE: %${roe.toFixed(1)}`); }
       }
       breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
+    } else if (targetSectorOrOfficial === 'Bilgisayar Toptancılığı') {
+      // Bilgisayar Toptancılığı & Teknoloji Dağıtımı (INDES, ARENA, PENTA, DESPC, DGATE):
+      // Düşük brüt marjlı distribütörlük modelinde SaaS Rule of 40 ve %55 brüt kâr marjı aranmaz;
+      // İşletme sermayesi döngüsü, hasılat artışı, net marj/hedging ve sermaye verimi esastır.
+      // 1. İşletme Sermayesi & Nakit Dönüşüm Süresi (Max 25)
+      const cr = parseFinancialNumber(latest?.current_ratio);
+      const qr = parseFinancialNumber(latest?.quick_ratio);
+      let s1 = 18;
+      let r1 = 'İşletme sermayesi ve likidite dengesi makul.';
+      let st1: 'good' | 'warning' | 'danger' = 'good';
+      if (cr !== null && cr >= 1.25 && (qr === null || qr >= 0.85)) {
+        s1 = 25; r1 = `Sağlıklı İşletme Sermayesi: Cari oran (${cr.toFixed(2)}) ve likidite tamponu distribütörlük için güçlü.`; st1 = 'good';
+      } else if (cr !== null && cr >= 1.05) {
+        s1 = 19; r1 = `İşletme sermayesi dengeli seviyede (Cari Oran: ${cr.toFixed(2)}).`; st1 = 'good';
+      } else {
+        s1 = 10; r1 = `İşletme sermayesi sınırda (Cari Oran: ${cr ? cr.toFixed(2) : '-'}), kısa vadeli borçlanma izlenmeli.`; st1 = 'warning';
+      }
+      breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
+
+      // 2. Hasılat Büyümesi & Bayi Yaygınlığı (Max 25)
+      let revG = 30.0;
+      if (sortedHistory.length >= 2) {
+        const calcG = computeComparableIncomeGrowth((h) => h?.revenue);
+        if (calcG !== null) revG = calcG;
+      }
+      let s2 = 18;
+      let r2 = 'Distribütörlük satış büyümesi dengeli.';
+      let st2: 'good' | 'warning' | 'danger' = 'good';
+      if (revG >= 45.0) { s2 = 25; r2 = `Güçlü Dağıtım Büyümesi: Hasılat artışı (%${revG.toFixed(1)}) pazar payı genişlemesine işaret ediyor.`; st2 = 'good'; }
+      else if (revG >= 25.0) { s2 = 20; r2 = `Hasılat büyümesi (%${revG.toFixed(1)}) sektör normlarında.`; st2 = 'good'; }
+      else { s2 = 12; r2 = `Satış büyümesi (%${revG.toFixed(1)}) yavaşlamış.`; st2 = 'warning'; }
+      breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+
+      // 3. Net Marj & Kur Riski Yönetimi (Max 25)
+      const netDebt = parseFinancialNumber(latest?.net_debt) ?? 0;
+      const netMargin = parseFinancialNumber(latest?.net_margin);
+      let s3 = 19;
+      let r3 = 'Finansman ve kur riski dengesi korunuyor.';
+      let st3: 'good' | 'warning' | 'danger' = 'good';
+      if (netDebt <= 0) {
+        s3 = 25; r3 = 'Net Nakit Pozisyonu: Şirketin faiz taşıyan borcu yok, distribütörlük finansman gideri yükü taşımıyor.'; st3 = 'good';
+      } else if (netMargin !== null && netMargin >= 2.5) {
+        s3 = 20; r3 = `Net kâr marjı (%${netMargin.toFixed(1)}) distribütörlük normlarının üzerinde, kur ve faiz yönetimi başarılı.`; st3 = 'good';
+      } else if (netMargin !== null && netMargin >= 1.0) {
+        s3 = 15; r3 = `Net kâr marjı (%${netMargin.toFixed(1)}) sektör ortalamasında.`; st3 = 'good';
+      } else {
+        s3 = 8; r3 = 'Düşük net marj veya kur/faiz gideri baskısı mevcut.'; st3 = 'warning';
+      }
+      breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+
+      // 4. Sermaye Verimliliği (ROIC & ROE) (Max 25)
+      const roe = parseFinancialNumber(latest?.roe);
+      let s4 = 18;
+      let r4 = 'Yatırılan sermaye verimliliği izleniyor.';
+      let st4: 'good' | 'warning' | 'danger' = 'good';
+      if (roe !== null) {
+        if (roe >= 35.0) { s4 = 25; r4 = `Yüksek Sermaye Verimi: Özkaynak kârlılığı (%${roe.toFixed(1)}) distribütörlük sermaye dönüşümünün gücünü kanıtlıyor.`; st4 = 'good'; }
+        else if (roe >= 20.0) { s4 = 19; r4 = `Özkaynak kârlılığı (%${roe.toFixed(1)}) sağlıklı seviyede.`; st4 = 'good'; }
+        else if (roe >= 5.0) { s4 = 12; r4 = `Özkaynak kârlılığı (%${roe.toFixed(1)}) ılımlı.`; st4 = 'warning'; }
+        else { s4 = 4; r4 = `Düşük Sermaye Verimliliği (ROE: %${roe.toFixed(1)}).`; st4 = 'danger'; anomalies.push(`Düşük Dağıtım ROE: %${roe.toFixed(1)}`); }
+      }
+      breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
     } else {
       // 1. Rule of 40 (Büyüme + FCF Marjı) (Max 25)
       let revG = 40.0;
@@ -2590,51 +2652,150 @@ export function calculateSectorScore(
     breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
 
   } else if (sector === 'FINANCIAL_SERVICES') {
-    // 1. Alacak Kalitesi & NPL (Max 25)
-    const npl = parseFinancialNumber(latest?.npl_ratio ?? latest?.npl);
-    let s1 = 19;
-    let r1 = 'Alacak portföyü ve karşılık yapısı dengeli.';
-    let st1: 'good' | 'warning' | 'danger' = 'good';
-    if (npl !== null) {
-      if (npl <= 2.5) { s1 = 25; r1 = `Seçkin Alacak Kalitesi: Takipteki alacaklar (%${npl}) sektör ortalamasının altında.`; st1 = 'good'; }
-      else if (npl <= 4.0) { s1 = 20; r1 = `Alacak kalitesi sağlıklı (%${npl}).`; st1 = 'good'; }
-      else if (npl <= 6.0) { s1 = 12; r1 = `Takipteki alacaklar sınırda (%${npl}).`; st1 = 'warning'; }
-      else { s1 = 4; r1 = `Kritik Alacak Riski (%${npl})!`; st1 = 'danger'; anomalies.push(`Yüksek NPL: %${npl}`); }
-    }
-    breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
+    if (targetSectorOrOfficial === 'Aracı Kurumlar') {
+      // 1. BIST İşlem Hacmi & Pazar Payı (Max 25)
+      let s1 = 20;
+      let r1 = 'BIST pay piyasası işlem hacmi pazar payı dengeli.';
+      let st1: 'good' | 'warning' | 'danger' = 'good';
+      const revG = computeComparableIncomeGrowth((h) => h?.revenue ?? h?.komisyon_gelirleri);
+      if (revG !== null && revG >= 50.0) { s1 = 25; r1 = `Güçlü İşlem Hacmi & Aracılık Büyümesi (%${revG.toFixed(1)}): BIST pay pazarında güçlü genişleme.`; st1 = 'good'; }
+      else if (revG !== null && revG >= 25.0) { s1 = 20; r1 = `İşlem hacmi büyümesi (%${revG.toFixed(1)}) sektör normlarında.`; st1 = 'good'; }
+      else if (revG !== null) { s1 = 12; r1 = `İşlem hacmi büyümesi (%${revG.toFixed(1)}) piyasa ortalamasının altında.`; st1 = 'warning'; }
+      breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
 
-    // 2. Finansman Geliri & Faiz Marjı (Max 25)
-    const s2 = 19;
-    const r2 = 'Net faiz ve faktoring komisyon marjı dengeli.';
-    const st2: 'good' | 'warning' | 'danger' = 'good';
-    breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+      // 2. Komisyon & Kredili Faiz Marjı (Max 25)
+      let s2 = 21;
+      let r2 = 'Komisyon marjı ve kredili müşteri faiz getirisi dengeli.';
+      let st2: 'good' | 'warning' | 'danger' = 'good';
+      breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
 
-    // 3. Sermaye Yeterliliği & Kaldıraç (Max 25)
-    const assets = parseFinancialNumber(latest?.total_assets);
-    const eq = parseFinancialNumber(latest?.equity);
-    const lev = (assets && eq && eq > 0) ? (assets / eq) : null;
-    let s3 = 19;
-    let r3 = 'Özkaynak sermaye tamponu yeterli.';
-    let st3: 'good' | 'warning' | 'danger' = 'good';
-    if (lev !== null) {
-      if (lev <= 4.0) { s3 = 25; r3 = `Güçlü Sermaye Tamponu: Aktif / Özkaynak (${lev.toFixed(1)}x) çok güvenli.`; st3 = 'good'; }
-      else if (lev <= 6.5) { s3 = 19; r3 = `Kaldıraç (${lev.toFixed(1)}x) sektör normlarında.`; st3 = 'good'; }
-      else { s3 = 10; r3 = `Yüksek Kaldıraç (${lev.toFixed(1)}x): Fonlama maliyeti izlenmeli.`; st3 = 'warning'; }
-    }
-    breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+      // 3. Sermaye Yeterliliği & Özkaynak Tamponu (Max 25)
+      const eq = parseFinancialNumber(latest?.equity);
+      const assets = parseFinancialNumber(latest?.total_assets);
+      const eqRatio = (eq && assets && assets > 0) ? (eq / assets) : null;
+      let s3 = 20;
+      let r3 = 'SPK yasal sermaye yeterliliği ve özkaynak tamponu güçlü.';
+      let st3: 'good' | 'warning' | 'danger' = 'good';
+      if (eqRatio !== null && eqRatio >= 0.35) { s3 = 25; r3 = `Güçlü Sermaye Tamponu: Özkaynak / Aktif oranı (%${(eqRatio * 100).toFixed(1)}) aracı kurum için yüksek şok emici kapasite sağlıyor.`; st3 = 'good'; }
+      else if (eqRatio !== null && eqRatio >= 0.20) { s3 = 19; r3 = `Sermaye oranı (%${(eqRatio * 100).toFixed(1)}) SPK gereksinimlerine uygun.`; st3 = 'good'; }
+      breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
 
-    // 4. İşlem Hacmi & ROE (Max 25)
-    const roe = parseFinancialNumber(latest?.roe);
-    let s4 = 18;
-    let r4 = 'Özkaynak kârlılığı takip ediliyor.';
-    let st4: 'good' | 'warning' | 'danger' = 'good';
-    if (roe !== null) {
-      if (roe >= 45.0) { s4 = 25; r4 = `Yüksek ROE (%${roe.toFixed(1)}): Güçlü sermaye getirisi.`; st4 = 'good'; }
-      else if (roe >= 28.0) { s4 = 19; r4 = `Sağlıklı ROE: %${roe.toFixed(1)}.`; st4 = 'good'; }
-      else if (roe >= 0.0) { s4 = 10; r4 = `Ilımlı ROE: %${roe.toFixed(1)}.`; st4 = 'warning'; }
-      else { s4 = 4; r4 = `Negatif ROE (%${roe.toFixed(1)}): Şirket net zarar açıklayarak özsermayesini eritmektedir.`; st4 = 'danger'; anomalies.push(`Negatif ROE: %${roe.toFixed(1)}`); }
+      // 4. Portföy Yönetimi (AUM) & ROE (Max 25)
+      const roe = parseFinancialNumber(latest?.roe);
+      let s4 = 18;
+      let r4 = 'Özkaynak kârlılığı takip ediliyor.';
+      let st4: 'good' | 'warning' | 'danger' = 'good';
+      if (roe !== null) {
+        if (roe >= 45.0) { s4 = 25; r4 = `Yüksek Sermaye Kârlılığı: Özkaynak getirisi (%${roe.toFixed(1)}) aracı kurum için seçkin düzeyde.`; st4 = 'good'; }
+        else if (roe >= 28.0) { s4 = 20; r4 = `Sağlıklı ROE: %${roe.toFixed(1)}.`; st4 = 'good'; }
+        else if (roe >= 10.0) { s4 = 13; r4 = `Ilımlı ROE: %${roe.toFixed(1)}.`; st4 = 'warning'; }
+        else { s4 = 4; r4 = `Düşük ROE (%${roe.toFixed(1)}).`; st4 = 'danger'; anomalies.push(`Düşük Aracı Kurum ROE: %${roe.toFixed(1)}`); }
+      }
+      breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
+    } else if (targetSectorOrOfficial === 'Varlık Yönetim') {
+      // 1. NPL Portföy Tahsilat Çarpanı (Max 25)
+      let s1 = 22;
+      let r1 = 'Banka takipteki alacaklar (NPL) portföy tahsilat performansı dengeli.';
+      let st1: 'good' | 'warning' | 'danger' = 'good';
+      breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
+
+      // 2. Nakit Akış Dönüşüm Verimi (Max 25)
+      let s2 = 20;
+      let r2 = 'Tahsilat nakit akışı ve operasyonel nakit üretimi güçlü.';
+      let st2: 'good' | 'warning' | 'danger' = 'good';
+      breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+
+      // 3. Özkaynak Kârlılığı (ROE) & Kaldıraç (Max 25)
+      const roe = parseFinancialNumber(latest?.roe);
+      let s3 = 19;
+      let r3 = 'Varlık yönetimi sermaye verimliliği ve kaldıraç dengesi izleniyor.';
+      let st3: 'good' | 'warning' | 'danger' = 'good';
+      if (roe !== null) {
+        if (roe >= 40.0) { s3 = 25; r3 = `Güçlü Sermaye Verimi: Portföy tahsilat getirisi ile ROE (%${roe.toFixed(1)}) yüksek katma değer üretiyor.`; st3 = 'good'; }
+        else if (roe >= 25.0) { s3 = 19; r3 = `Sağlıklı ROE (%${roe.toFixed(1)}).`; st3 = 'good'; }
+        else { s3 = 10; r3 = `Ilımlı ROE (%${roe.toFixed(1)}).`; st3 = 'warning'; }
+      }
+      breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+
+      // 4. Yeni Portföy Alım Gücü & Likidite (Max 25)
+      let s4 = 21;
+      let r4 = 'Bankalardan yeni NPL portföyü satın alma likiditesi ve ihale katılım gücü yüksek.';
+      let st4: 'good' | 'warning' | 'danger' = 'good';
+      breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
+    } else if (targetSectorOrOfficial === 'Yatırım Ortaklıkları') {
+      // 1. Menkul Kıymet Portföy NAD İskontosu (Max 25)
+      let s1 = 20;
+      let r1 = 'Portföy net aktif değeri ve borsa fiyatı dengesi izleniyor.';
+      let st1: 'good' | 'warning' | 'danger' = 'good';
+      breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
+
+      // 2. Portföy Getirisi vs BIST 100 Karşılaştırması (Max 25)
+      let s2 = 19;
+      let r2 = 'Yatırım portföy getirisi BIST endeks performansına paralel.';
+      let st2: 'good' | 'warning' | 'danger' = 'good';
+      breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+
+      // 3. Temettü Dağıtım Gücü & Likidite (Max 25)
+      let s3 = 20;
+      let r3 = 'Temettü dağıtım kapasitesi ve likidite dengeli.';
+      let st3: 'good' | 'warning' | 'danger' = 'good';
+      breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+
+      // 4. Yönetim Gider Oranı & Özkaynak Sağlığı (Max 25)
+      const roe = parseFinancialNumber(latest?.roe);
+      let s4 = 18;
+      let r4 = 'Özkaynak kârlılığı ve portföy yönetim gider rasyosu dengeli.';
+      let st4: 'good' | 'warning' | 'danger' = 'good';
+      if (roe !== null && roe >= 30.0) { s4 = 25; r4 = `Güçlü Portföy Getirisi: ROE (%${roe.toFixed(1)}) yüksek portföy verimliliğini yansıtıyor.`; st4 = 'good'; }
+      else if (roe !== null && roe >= 15.0) { s4 = 19; r4 = `Dengeli Portföy Kârlılığı: ROE %${roe.toFixed(1)}.`; st4 = 'good'; }
+      breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
+    } else {
+      // 1. Alacak Kalitesi & NPL (Max 25)
+      const npl = parseFinancialNumber(latest?.npl_ratio ?? latest?.npl);
+      let s1 = 19;
+      let r1 = 'Alacak portföyü ve karşılık yapısı dengeli.';
+      let st1: 'good' | 'warning' | 'danger' = 'good';
+      if (npl !== null) {
+        if (npl <= 2.5) { s1 = 25; r1 = `Seçkin Alacak Kalitesi: Takipteki alacaklar (%${npl}) sektör ortalamasının altında.`; st1 = 'good'; }
+        else if (npl <= 4.0) { s1 = 20; r1 = `Alacak kalitesi sağlıklı (%${npl}).`; st1 = 'good'; }
+        else if (npl <= 6.0) { s1 = 12; r1 = `Takipteki alacaklar sınırda (%${npl}).`; st1 = 'warning'; }
+        else { s1 = 4; r1 = `Kritik Alacak Riski (%${npl})!`; st1 = 'danger'; anomalies.push(`Yüksek NPL: %${npl}`); }
+      }
+      breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
+
+      // 2. Finansman Geliri & Faiz Marjı (Max 25)
+      const s2 = 19;
+      const r2 = 'Net faiz ve faktoring komisyon marjı dengeli.';
+      const st2: 'good' | 'warning' | 'danger' = 'good';
+      breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
+
+      // 3. Sermaye Yeterliliği & Kaldıraç (Max 25)
+      const assets = parseFinancialNumber(latest?.total_assets);
+      const eq = parseFinancialNumber(latest?.equity);
+      const lev = (assets && eq && eq > 0) ? (assets / eq) : null;
+      let s3 = 19;
+      let r3 = 'Özkaynak sermaye tamponu yeterli.';
+      let st3: 'good' | 'warning' | 'danger' = 'good';
+      if (lev !== null) {
+        if (lev <= 4.0) { s3 = 25; r3 = `Güçlü Sermaye Tamponu: Aktif / Özkaynak (${lev.toFixed(1)}x) çok güvenli.`; st3 = 'good'; }
+        else if (lev <= 6.5) { s3 = 19; r3 = `Kaldıraç (${lev.toFixed(1)}x) sektör normlarında.`; st3 = 'good'; }
+        else { s3 = 10; r3 = `Yüksek Kaldıraç (${lev.toFixed(1)}x): Fonlama maliyeti izlenmeli.`; st3 = 'warning'; }
+      }
+      breakdown.push({ category: config.categories[2].name, score: s3, maxScore: 25, reason: r3, status: st3 });
+
+      // 4. İşlem Hacmi & ROE (Max 25)
+      const roe = parseFinancialNumber(latest?.roe);
+      let s4 = 18;
+      let r4 = 'Özkaynak kârlılığı takip ediliyor.';
+      let st4: 'good' | 'warning' | 'danger' = 'good';
+      if (roe !== null) {
+        if (roe >= 45.0) { s4 = 25; r4 = `Yüksek ROE (%${roe.toFixed(1)}): Güçlü sermaye getirisi.`; st4 = 'good'; }
+        else if (roe >= 28.0) { s4 = 19; r4 = `Sağlıklı ROE: %${roe.toFixed(1)}.`; st4 = 'good'; }
+        else if (roe >= 0.0) { s4 = 10; r4 = `Ilımlı ROE: %${roe.toFixed(1)}.`; st4 = 'warning'; }
+        else { s4 = 4; r4 = `Negatif ROE (%${roe.toFixed(1)}): Şirket net zarar açıklayarak özsermayesini eritmektedir.`; st4 = 'danger'; anomalies.push(`Negatif ROE: %${roe.toFixed(1)}`); }
+      }
+      breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
     }
-    breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
 
   } else if (sector === 'HEALTHCARE') {
     // Sağlık Hizmetleri & Medikal Sektör:

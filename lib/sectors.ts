@@ -487,18 +487,24 @@ export function isTransportationLogisticsSector(officialSectorName: string, tick
   const s = resolveOfficialSectorName(officialSectorName, ticker);
   if (s === 'Ulaştırma-Lojistik' || s.includes('Lojistik') || s.includes('Ulaştırma') || s.includes('Liman')) return true;
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  return ['TLMAN', 'AYCES', 'CLEBI', 'GSDDE', 'RYSAS', 'DOCO', 'HOROZ'].includes(t);
+  if (s && s !== 'Sanayi & İmalat' && s !== 'Sanayi' && s !== 'Diğer' && s !== 'BIST') {
+    return false;
+  }
+  return ['TLMAN', 'CLEBI', 'GSDDE', 'RYSAS', 'DOCO', 'HOROZ'].includes(t);
 }
 
 /**
  * Turizm & Otelcilik:
- * AYCES, MAALT, PKENT, TEZOL, MARTI, KSTUR.
+ * AYCES, MAALT, PKENT, MARTI, KSTUR.
  */
 export function isTourismHospitalitySector(officialSectorName: string, ticker?: string): boolean {
   const s = resolveOfficialSectorName(officialSectorName, ticker);
   if (s === 'Turizm' || s.includes('Turizm') || s.includes('Otel') || s.includes('Konaklama')) return true;
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  return ['AYCES', 'MAALT', 'PKENT', 'TEZOL', 'MARTI', 'KSTUR'].includes(t);
+  if (s && s !== 'Sanayi & İmalat' && s !== 'Sanayi' && s !== 'Diğer' && s !== 'BIST') {
+    return false;
+  }
+  return ['AYCES', 'MAALT', 'PKENT', 'MARTI', 'KSTUR'].includes(t);
 }
 
 /**
@@ -538,7 +544,7 @@ export function isPaperStationeryPackagingSector(officialSectorName: string, tic
     return true;
   }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  return ['ADEL', 'KARTN', 'ALKA', 'BAKAB', 'DURDO', 'GENTS', 'SARKY'].includes(t);
+  return ['ADEL', 'KARTN', 'ALKA', 'BAKAB', 'DURDO', 'GENTS', 'SARKY', 'TEZOL', 'BARMA', 'LILAK'].includes(t);
 }
 
 /**
@@ -608,12 +614,15 @@ export function isRetailFloatSector(officialSectorName: string, ticker?: string)
     return true;
   }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  return ['BIMAS', 'MGROS', 'SOKM', 'BIZIM', 'MAVI', 'DESA', 'VAKKO', 'EBEBK', 'TKNSA', 'SUWEN'].includes(t);
+  if (s && s !== 'Sanayi & İmalat' && s !== 'Sanayi' && s !== 'Diğer' && s !== 'BIST') {
+    return false;
+  }
+  return ['BIMAS', 'MGROS', 'SOKM', 'BIZIM', 'VAKKO', 'EBEBK', 'TKNSA'].includes(t);
 }
 
 /**
  * Otomotiv & Ağır Sanayi İhracat Üreticileri (OEM Maliyet Artı Kâr Sözleşmeleri & CapEx Dönüşümü):
- * FROTO, TOASO, TTRAK, DOAS, OTKAR, BRISA, BFREN, GOODY, TMSN, ASUZU.
+ * FROTO, TOASO, TTRAK, DOAS, OTKAR, BRISA, BFREN, GOODY, TMSN, ASUZU, KARSN, PARSN.
  */
 export function isAutomotiveSector(officialSectorName: string, ticker?: string): boolean {
   const s = resolveOfficialSectorName(officialSectorName, ticker);
@@ -627,7 +636,10 @@ export function isAutomotiveSector(officialSectorName: string, ticker?: string):
     return true;
   }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  return ['FROTO', 'TOASO', 'TTRAK', 'DOAS', 'OTKAR', 'BRISA', 'BFREN', 'GOODY', 'TMSN', 'ASUZU', 'KARTN', 'PARSN'].includes(t);
+  if (s && s !== 'Sanayi & İmalat' && s !== 'Sanayi' && s !== 'Diğer' && s !== 'BIST') {
+    return false;
+  }
+  return ['FROTO', 'TOASO', 'TTRAK', 'DOAS', 'OTKAR', 'BRISA', 'BFREN', 'GOODY', 'TMSN', 'ASUZU', 'KARSN', 'PARSN'].includes(t);
 }
 
 /**
@@ -1715,6 +1727,11 @@ export const BIST_HEALTHCARE_TICKERS = [
 export function detectSector(ticker: string, contextText = ''): SectorType {
   const normTicker = (ticker || '').toUpperCase().trim();
   const cleanTicker = normTicker.replace(/\.IS$/i, '').trim();
+
+  // BDDK Tasarruf Finansman ve Finansal Teknoloji Şirketleri (Resmi sektör 'Diğer' olsa bile Finansal Hizmetler modeline tabi)
+  if (cleanTicker === 'KTLEV' || cleanTicker === 'SKYLP') {
+    return 'FINANCIAL_SERVICES';
+  }
 
   // 1. Kullanıcı 53 Resmi Sektör ve 630 Şirket Master Listesi (Birincil Yetkili Kaynak)
   const userSec = USER_OFFICIAL_BIST_COMPANY_SECTORS[cleanTicker];
