@@ -971,7 +971,13 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
     const cases = [
       { ticker: 'DIST_RET', officialSector: 'Perakande - Ticaret', engineSector: 'RETAIL' },
       { ticker: 'DIST_HLTH', officialSector: 'Sağlık ve İlaç', engineSector: 'HEALTHCARE' },
-      { ticker: 'DIST_AGRO', officialSector: 'Tarım Kimyasalları', engineSector: 'INDUSTRIAL' }
+      { ticker: 'DIST_AGRO', officialSector: 'Tarım Kimyasalları', engineSector: 'INDUSTRIAL' },
+      { ticker: 'DIST_TECH_WH', officialSector: 'Bilgisayar Toptancılığı', engineSector: 'TECH' },
+      { ticker: 'DIST_DEF', officialSector: 'Savunma', engineSector: 'INDUSTRIAL' },
+      { ticker: 'DIST_AVIA', officialSector: 'Hava Yolu ve Hizmetleri', engineSector: 'AVIATION' },
+      { ticker: 'DIST_REIT', officialSector: 'Gayrimenkul Yatırım Ortaklığı', engineSector: 'REIT' },
+      { ticker: 'DIST_BANK', officialSector: 'Bankacılık', engineSector: 'BANKING' },
+      { ticker: 'DIST_INS', officialSector: 'Sigorta', engineSector: 'INSURANCE' }
     ];
 
     for (const c of cases) {
