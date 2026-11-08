@@ -82,6 +82,7 @@ import {
   type SnowflakeCheck
 } from '@/lib/snowflake';
 import { analyzeRelatedPartyAndCapitalAllocationRisk, calculateDuPont5Step, calculateEarningsQuality, parseFinancialNumber, parsePeriodSortKey } from '@/lib/valuation';
+import { FinancialRatioEngine } from '@/lib/ratio-engine';
 import { synthesizeInvestmentThesis } from '@/lib/investment-thesis-synthesizer';
 
 export type SimplySectionId =
@@ -1047,10 +1048,33 @@ export default function SimplyView({
       .map(p => p.ticker);
   }, [sameSectorPeers, savedReports]);
 
-  // DuPont 5 Aşamalı Hesaplama
+  // DuPont 5 Aşamalı Hesaplama (Gerçek TTM Akımları ve Özkaynak Verisi ile)
   const dupontResult = useMemo(() => {
-    return calculateDuPont5Step(latestData, currentSector);
-  }, [latestData, currentSector]);
+    if (!latestData) return calculateDuPont5Step(latestData, currentSector);
+    let ttmMetrics: any = null;
+    if (chartData && chartData.length > 0) {
+      try {
+        const calculatedTtm = FinancialRatioEngine.calculateTtmFinancials(chartData, latestData, currentSector, 1.0);
+        if (calculatedTtm && calculatedTtm.revenue != null && calculatedTtm.netIncome != null) {
+          ttmMetrics = {
+            revenue: calculatedTtm.revenue,
+            ebitda: calculatedTtm.ebitda,
+            operatingProfit: calculatedTtm.operatingProfit,
+            ebt: calculatedTtm.ebt,
+            interestExpense: calculatedTtm.interestExpenses,
+            netIncome: calculatedTtm.netIncome
+          };
+        }
+      } catch (err) {
+        console.warn('DuPont TTM hesaplama uyarısı:', err);
+      }
+    }
+    return calculateDuPont5Step(latestData, currentSector, undefined, {
+      ttm: ttmMetrics,
+      equity: latestData.equity,
+      totalAssets: latestData.total_assets
+    });
+  }, [latestData, chartData, currentSector]);
 
   // 12A Konsensüs Analist Hedef Fiyatı
   const consensusTargetPrice = useMemo(() => {
@@ -1421,6 +1445,12 @@ export default function SimplyView({
             return {
               period: d.period ? d.period.slice(2) : '',
               val: dupontResult.calculatedRoe
+            };
+          }
+          if (d.roe != null && !isNaN(d.roe)) {
+            return {
+              period: d.period ? d.period.slice(2) : '',
+              val: Number(Number(d.roe).toFixed(1))
             };
           }
           const pStr = String(d.period || '').toLowerCase();
@@ -4465,11 +4495,17 @@ export default function SimplyView({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                 <div className="bg-[#21262d] rounded-xl p-3 text-center border border-emerald-500/30">
                   <div className="text-sm font-semibold text-emerald-400">Reel ROIC</div>
                   <div className="text-base font-bold font-mono text-emerald-400 mt-1">
                     %{roicNum.toFixed(1)}
+                  </div>
+                </div>
+                <div className="bg-[#21262d] rounded-xl p-3 text-center border border-amber-500/30">
+                  <div className="text-sm font-semibold text-[#f5c242]">Reel WACC (Fisher)</div>
+                  <div className="text-base font-bold font-mono text-[#f5c242] mt-1">
+                    %{realWaccNum.toFixed(1)}
                   </div>
                 </div>
                 <div className="bg-[#21262d] rounded-xl p-3 text-center border border-[#2e3440]">
@@ -4486,7 +4522,7 @@ export default function SimplyView({
                 </div>
                 <div className="bg-[#21262d] rounded-xl p-3 text-center border border-[#2e3440]">
                   <div className="text-sm text-slate-400">Nominal WACC</div>
-                  <div className="text-sm font-bold font-mono text-[#f5c242] mt-1">
+                  <div className="text-sm font-bold font-mono text-slate-300 mt-1">
                     %{nominalWaccNum.toFixed(1)}
                   </div>
                 </div>

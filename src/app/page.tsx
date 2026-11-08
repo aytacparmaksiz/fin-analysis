@@ -198,6 +198,7 @@ function reconcileSavedReportWithLatestEngine(rep: SavedReport): SavedReport {
           ...(valRes.valuation || {}),
           final_decision: valRes.optimization?.finalDecision || updatedReport.decision,
           decision: valRes.optimization?.finalDecision || updatedReport.decision,
+          scoreResult: valRes.scoreResult
         });
       }
 
@@ -3554,17 +3555,17 @@ export default function ValuationTerminal({
         break;
       }
       case 'roa': {
+        if (typeof d.roa === 'number' && !isNaN(d.roa)) return d.roa;
         if (d.net_income != null && d.total_assets && d.total_assets > 0) {
           return Number(((d.net_income * annualFactor / d.total_assets) * 100).toFixed(2));
         }
-        if (typeof d.roa === 'number' && !isNaN(d.roa)) return d.roa;
         break;
       }
       case 'roe': {
+        if (typeof d.roe === 'number' && !isNaN(d.roe)) return d.roe;
         if (d.net_income != null && d.equity && d.equity > 0) {
           return Number(((d.net_income * annualFactor / d.equity) * 100).toFixed(2));
         }
-        if (typeof d.roe === 'number' && !isNaN(d.roe)) return d.roe;
         break;
       }
       case 'roic': {

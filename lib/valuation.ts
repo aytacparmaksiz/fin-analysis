@@ -1713,6 +1713,13 @@ export function syncReportTextWithValuation(reportText: string, valuation: any):
     text = text.replace(/Analist\s+Karar[ıi]\s*[:=-]\s*\[?\s*\*?\*?\s*(?:ALMA|SAT|AL|NÖTR|NOTR|TUT)\s*\*?\*?\s*\]?/gi, `Analist Kararı: **[${cleanDec}]**`);
   }
 
+  // 5.1 Sektörel Karne Skoru senkronizasyonu
+  const targetScore = valuation?.scoreResult?.totalScore ?? valuation?.sectorScorecard?.totalScore;
+  if (typeof targetScore === 'number' && !isNaN(targetScore) && targetScore > 0) {
+    text = text.replace(/Sektörel\s+(?:Karne\s+Skoru|Analiz\s+Skoru|Skor)\s*[:=]\s*\*{0,2}\d+\s*\/\s*100\*{0,2}/gi, `Sektörel Karne Skoru: **${targetScore}/100**`);
+    text = text.replace(/\|\s*\*\*Toplam\s+Puan\*\*\s*\|\s*\*\*\d+\*\*\s*\|\s*\*\*100\*\*/gi, `| **Toplam Puan** | **${targetScore}** | **100**`);
+  }
+
   // 6. Adli Denetim & Değer Tuzağı Teşhisi Senkronizasyonu (Kalıcı Yatırım Tezi)
   const trapReasons: string[] = Array.isArray(valuation.value_trap_reasons) ? [...valuation.value_trap_reasons] : [];
   if ((valuation.capital_allocation_risk?.isRiskDetected || valuation.capital_allocation_risk?.isInvestmentEntity) && Array.isArray(valuation.capital_allocation_risk.reasons)) {
