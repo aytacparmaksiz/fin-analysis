@@ -120,7 +120,14 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
   const currentRatio = currentLiabilities > 0 ? currentAssets / currentLiabilities : 1.5;
   const netDebtToEbitda = ebitda > 0 ? netDebt / ebitda : (netDebt <= 0 ? -0.5 : 4.5);
   const isNetCash = netDebt <= 0;
-  const cashConv = input.earningsQuality?.cashConversionRatio ?? (netIncome > 0 ? ocf / netIncome : (ocf > 0 ? 1.2 : 0));
+  // Nakit Kalitesi ve Çalışma Sermayesi
+  // input.earningsQuality.cashConversionRatio zaten yüzde olarak (örn. 172.2) gelir.
+  // Eğer doğrudan ocf / netIncome üzerinden hesaplanırsa oran (1.72) çıkar, 100 ile çarpılarak normalize edilir.
+  const rawEqRatio = input.earningsQuality?.cashConversionRatio;
+  const cashConvPct = rawEqRatio != null
+    ? Number(rawEqRatio)
+    : (netIncome > 0 ? (ocf / netIncome) * 100 : (ocf > 0 ? 120 : 0));
+  const cashConv = cashConvPct / 100; // 0.8 / 1.0 / 1.72 gibi oran karşılaştırmaları için
   const isSupplierDebtDrivenOcf = ocf > 0 && wcChange > 0 && (wcChange / ocf) >= 0.70 && netIncome < 0;
   const hasNegativeWorkingCapitalFloat = tradePayables > 0 && tradePayables > (tradeReceivables + inventories * 0.85) && ocf > 0 && netIncome > 0;
 
