@@ -5884,12 +5884,106 @@ export function computeSectorValuationAndDrivers(
       const debtErosionFactor = (enterpriseVal > 0 && debtBridge >= enterpriseVal)
         ? Math.max(0.25, Math.min(0.55, enterpriseVal / (debtBridge * 1.25)))
         : 0.65;
-      return Number(Math.max(0.10, Math.min(0.32, secPb * 0.28 * debtErosionFactor)).toFixed(2));
+      return Number(Math.max(0.15, Math.min(0.35, secPb * 0.28 * debtErosionFactor)).toFixed(2));
     }
     if (roe !== null && roe <= 0) {
       return Number(Math.max(0.25, Math.min(0.65, secPb * 0.35)).toFixed(2));
     }
     return positiveRoePb;
+  };
+
+  // 5) Evrensel Çoklu Çarpan Harmanlama & Dinamik Ağırlık Normalizasyonu (Universal Multiple Blending):
+  // Hiçbir bacak sıfır ile çarpılarak kalan geçerli bacaklar seyreltilemez (sıfıra ağırlık verilmez).
+  // Hem EV/FAVÖK hem F/K sıfırlanırsa (Dual Operational Failure), ciro ve pazar payı üzerinden FD/Satışlar (EV/Sales) devreye girer.
+  let isFallbackSalesUsed = false;
+  let isAssetFloorUsed = false;
+
+  const resolveSafeBlendedMultiples = (
+    legs: { key: 'ev' | 'pe' | 'pb' | 'sales'; label: string; multipleStr: string; val: number; baseWeight: number }[],
+    options: {
+      revFull: number;
+      clampedRevGrowth: number;
+      totalDebtBridge: number;
+      totalEquityFull: number;
+      secEvSalesMultiple?: number;
+      qualityFactor?: number;
+    }
+  ): { fairValue: number; formulaStr: string } => {
+    let validLegs = legs.filter(l => l.val > 0);
+    const hasOperationalLeg = validLegs.some(l => (l.key === 'ev' || l.key === 'pe') && l.val > 0);
+
+    // Çift Kriz / Operasyonel Bacakların Çökmesi Durumu (Dual Operational Failure):
+    // Şirket faal bir işletme (going-concern) ve cirosu > 0 ise, kurumsal finans standartları gereği FD/Satışlar devreye girer.
+    if (!hasOperationalLeg && options.revFull > 0 && effectiveShareCount != null && effectiveShareCount > 0) {
+      const safeShareCount = effectiveShareCount;
+      const qf = options.qualityFactor ?? 1.0;
+      const secEvSales = Math.min(2.0, Math.max(0.70, (options.secEvSalesMultiple ?? 1.10) * Math.min(1.0, qf)));
+      const forwardRev = options.revFull * (1 + options.clampedRevGrowth);
+      const evSales = forwardRev * secEvSales;
+      const debtBridge = options.totalDebtBridge ?? 0;
+      const totalEq = options.totalEquityFull ?? 0;
+
+      // Merton Yapısal Opsiyon Modeli: Faal ve pozitif özkaynaklı bir şirkette özkaynak
+      // firma varlıkları üzerinde bir alım opsiyonudur (asgari %20 EV tabanı):
+      let eqSales = evSales - debtBridge;
+      if (totalEq > 0) {
+        eqSales = Math.max(eqSales, evSales * 0.20);
+      }
+      const salesPerShare = eqSales > 0 ? Number((eqSales / safeShareCount).toFixed(2)) : 0;
+
+      if (salesPerShare > 0) {
+        isFallbackSalesUsed = true;
+        const pbLeg = legs.find(l => l.key === 'pb' && l.val > 0);
+        validLegs = [
+          {
+            key: 'sales',
+            label: 'FD/Satışlar',
+            multipleStr: `${secEvSales.toFixed(1).replace('.', ',')}x`,
+            val: salesPerShare,
+            baseWeight: 0.55
+          }
+        ];
+        if (pbLeg) {
+          validLegs.push({
+            ...pbLeg,
+            baseWeight: 0.45
+          });
+        }
+      }
+    }
+
+    if (validLegs.length === 1 && validLegs[0].key === 'pb') {
+      isAssetFloorUsed = true;
+    }
+
+    if (validLegs.length === 0) {
+      return {
+        fairValue: 0.10,
+        formulaStr: 'İçsel değer bileşenleri borç yükü nedeniyle hesaplanamadı (Asgari Taban: 0,10 TL)'
+      };
+    }
+
+    // Dinamik Ağırlık Normalizasyonu: Geçerli bacakların ağırlık toplamı %100'e ölçeklenir
+    const totalBaseWeight = validLegs.reduce((sum, l) => sum + l.baseWeight, 0);
+    let rawFair = 0;
+    const formulaParts: string[] = [];
+
+    for (const l of validLegs) {
+      const normalizedWeight = totalBaseWeight > 0 ? (l.baseWeight / totalBaseWeight) : (1 / validLegs.length);
+      rawFair += l.val * normalizedWeight;
+      const weightPct = Math.round(normalizedWeight * 100);
+      formulaParts.push(`${l.label} (${l.multipleStr}): ${l.val.toFixed(2).replace('.', ',')} TL (%${weightPct})`);
+    }
+
+    const fairValue = Number(Math.max(0.10, rawFair).toFixed(2));
+    let formulaStr = `${formulaParts.join(' + ')} = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+    if (isFallbackSalesUsed) {
+      formulaStr += ' [Döngüsel Kriz & Hasılat Çarpanı Modeli]';
+    } else if (isAssetFloorUsed) {
+      formulaStr += ' [Asgari Varlık Tabanı Modeli]';
+    }
+
+    return { fairValue, formulaStr };
   };
 
   // Pay adedi (ödenmiş sermaye) doğrulaması: Pay adedi yoksa hisse başı içsel değer uydurulamaz!
@@ -6605,8 +6699,8 @@ export function computeSectorValuationAndDrivers(
     const forwardEbitda = effectiveEbitda > 0 ? effectiveEbitda * (1 + clampedRevG) : 0;
     const targetEvMultiple = Number((Math.min(7.5, secMult.ev * 0.70) * qualityFactor).toFixed(2));
     const enterpriseVal = forwardEbitda * targetEvMultiple;
-    const evEquity = Math.max(0, enterpriseVal - totalDebtBridge);
-    const evPerShare = evEquity / effectiveShareCount;
+    const evEquity = resolveSafeEvEquity(enterpriseVal, totalDebtBridge, totalEquityFull, 0.25, netFull);
+    const evPerShare = evEquity > 0 ? (evEquity / effectiveShareCount) : 0;
 
     // İleri F/K (İş Yatırım resmi Otomotiv çarpanı bazlı)
     const forwardNet = effectiveNet > 0 ? effectiveNet * (1 + clampedNetG) : 0;
@@ -6622,15 +6716,23 @@ export function computeSectorValuationAndDrivers(
     const justifiedPb = resolveSafeJustifiedPb(normalAutoPb, secMult.pb, enterpriseVal, totalDebtBridge, netFull);
     const pbPerShare = forwardBvps * justifiedPb;
 
-    const weights = { ev: 0.45, pe: 0.35, pb: 0.20 };
-    let rawFair = 0;
-    if (pePerShare > 0) {
-      rawFair = (evPerShare * weights.ev) + (pePerShare * weights.pe) + (pbPerShare * weights.pb);
-    } else {
-      rawFair = (evPerShare * 0.65) + (pbPerShare * 0.35);
-    }
-    fairValue = Number(Math.max(0.10, rawFair).toFixed(2));
-    formulaStr = `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x): ${evPerShare.toFixed(2).replace('.', ',')} TL (%45) + F/K (${targetPe.toFixed(1).replace('.', ',')}x): ${pePerShare.toFixed(2).replace('.', ',')} TL (%35) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%20) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+    const blended = resolveSafeBlendedMultiples(
+      [
+        { key: 'ev', label: 'FD/FAVÖK', multipleStr: `${targetEvMultiple.toFixed(1).replace('.', ',')}x`, val: evPerShare, baseWeight: 0.45 },
+        { key: 'pe', label: 'F/K', multipleStr: `${targetPe.toFixed(1).replace('.', ',')}x`, val: pePerShare, baseWeight: 0.35 },
+        { key: 'pb', label: 'PD/DD', multipleStr: `${justifiedPb.toFixed(2).replace('.', ',')}x`, val: pbPerShare, baseWeight: 0.20 }
+      ],
+      {
+        revFull,
+        clampedRevGrowth: clampedRevG,
+        totalDebtBridge,
+        totalEquityFull,
+        secEvSalesMultiple: secMult.ev_sales ?? 1.20,
+        qualityFactor
+      }
+    );
+    fairValue = blended.fairValue;
+    formulaStr = blended.formulaStr;
   } else if (isEnergyUtilitiesSector(detectedOfficialSecName, currentTickerUpper)) {
     modelName = isRegulatedDistributionSector(detectedOfficialSecName, currentTickerUpper)
       ? 'Regüle Elektrik Dağıtım & Perakende Değerleme Modeli (EPDK RAB & Varlık Getirisi)'
@@ -8332,7 +8434,11 @@ export function computeSectorValuationAndDrivers(
   const valueTrapResult = detectValueTrap(extractedData?.financial_history, currentPrice ?? 0, fairValue, sector, latest);
   const capAllocAudit = analyzeRelatedPartyAndCapitalAllocationRisk(latest, sector, detectedOfficialSecName);
 
-  const isDistressedModel = Boolean(modelName && (modelName.includes('Sıkıntılı') || modelName.includes('Distressed') || modelName.includes('Varlık Tabanı')));
+  const isDistressedModel = Boolean(
+    (modelName && (modelName.includes('Sıkıntılı') || modelName.includes('Distressed') || modelName.includes('Varlık Tabanı'))) ||
+    isFallbackSalesUsed ||
+    isAssetFloorUsed
+  );
 
   if (!isDistressedModel && valueTrapResult.isValueTrap && fairValue !== null && fairValue > 0) {
     let vtDeflator = 1.0;
