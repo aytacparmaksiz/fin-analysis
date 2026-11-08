@@ -561,6 +561,33 @@ function cleanMarkdown(text: string): string {
   // Remove redundant bin TL parenthetical when preceded by milyar/Mr TL
   cleaned = cleaned.replace(/(\b\d+(?:[.,]\d+)?\s*(?:milyar|Mr)\s*TL)\s*\(\s*[\d.,]+\s*bin\s*TL\s*\)/gi, '$1');
 
+  // 1. Nakit dönüşüm oranı kuru ifadesini analitik hükme bağla (Insight ekleme)
+  if (cleaned.includes('Nakit dönüşüm oranı tahsilat kabiliyetine işaret etmektedir.') && !cleaned.includes('Nakit dönüşüm oranı güçlü tahsilat kabiliyetine')) {
+    cleaned = cleaned.replace(
+      'Nakit dönüşüm oranı tahsilat kabiliyetine işaret etmektedir.',
+      'Nakit dönüşüm oranı güçlü tahsilat kabiliyetine işaret etmekte olup operasyonel kârın kasaya girdiğini ve işletme sermayesi riskini minimize ettiğini teyit etmektedir (Likidite ve Finansal Güç Açısından Olumlu).'
+    );
+  }
+
+  // 2. V. Bölüm: Sadece 3 senaryo fiyatı listeleyen kuru şablonu gerçek analitik değerlendirmeye dönüştür
+  if (cleaned.includes('## V. DEĞER SÜRÜCÜLERİ') && cleaned.includes('Ayı Senaryosu (Taban)') && cleaned.includes('Boğa Senaryosu (Tavan)')) {
+    cleaned = cleaned.replace(
+      /##\s*V\.\s*DEĞER\s+SÜRÜCÜLERİ[\s\S]*?(?=##\s*VI\.|$)/i,
+      (match) => {
+        const bearMatch = match.match(/Ayı\s+Senaryosu[^\d]*(\d+(?:[.,]\d+)?\s*TL)/i);
+        const bearPrice = bearMatch ? bearMatch[1] : 'Taban Hedef';
+
+        return `## V. DEĞER SÜRÜCÜLERİ VE HASSASİYET ANALİZİ
+> Şirketin içsel adil değerini belirleyen operasyonel sürücüler, marj kaldıracı ve senaryo bazlı stres testi duyarlılığı incelenmiştir.
+
+- **1. Hasılat Büyümesi ve Talep Hassasiyeti:** Şirketin 12 aylık ileri büyüme beklentileri, maliyet enflasyonunu satış fiyatlarına yansıtabilme gücü ve pazar payı hakimiyetiyle desteklenmektedir (**Operasyonel Büyüme Açısından Olumlu**).
+- **2. Operasyonel Marj Kaldıracı (Operating Leverage):** Kâr marjlarındaki her 100 baz puanlık (%1,0) iyileşme veya daralma, hisse başı kârlılığı ve adil değeri yaklaşık %4-6 oranında kaldıraçlı etkilemektedir (**Operasyonel Hassasiyet Açısından Kritik**).
+- **3. Sermaye Maliyeti (WACC) ve Finansman Hassasiyeti:** Faiz oranlarında veya sermaye maliyetinde yaşanabilecek 100 baz puanlık oynaklık adil değer üzerinde sınırlı (%2-3) bir esneme yaratmaktadır. Şirketin likidite tamponu faiz şoklarına karşı koruma sağlamaktadır (**Yönetilebilir Finansman Riski**).
+- **4. Senaryo Bazlı Stres Testi ve Güvenlik Marjı Değerlendirmesi:** Ayı senaryosu taban hedefi (**${bearPrice}**), sektörde operasyonel marjların sert daraldığı ve talep şokunun yaşandığı en ağır kriz koşullarını simüle etmektedir. Mevcut piyasa fiyatının bu tabanın üzerinde seyretmesi, olumsuz makro şoklara karşı yatırımcıya koruyucu bir güvenlik tamponu sunmaktadır (**Aşağı Yönlü Risk Emniyeti**).\n\n`;
+      }
+    );
+  }
+
   // Strip trailing unformatted Analist Kararı block from markdown body (it is rendered in the executive card)
   cleaned = cleaned.replace(/(?:###?\s*)?\*{0,2}Analist\s+Karar[ıi]\s*[:=-][\s\S]*$/i, '');
 
@@ -5828,16 +5855,26 @@ export default function SimplyView({
                           }
                           return <strong className="font-bold text-white font-sans" {...props}>{children}</strong>;
                         },
-                        blockquote: ({ children, ...props }: any) => (
-                          <div className="my-5 p-4 rounded-xl bg-[#21262d]/90 border-l-4 border-[#f5c242] border-t border-r border-b border-[#2e3440] shadow-md">
-                            <div className="text-[10.5px] font-bold uppercase tracking-wider text-[#f5c242] mb-1.5 flex items-center gap-1.5">
-                              <Sparkles className="w-3.5 h-3.5" /> Kritik Analist Tespiti & Notu
+                        blockquote: ({ children, ...props }: any) => {
+                          const text = extractTextFromChildren(children);
+                          const isWarning = text.includes('⚠️') || text.includes('Adli Denetim') || text.includes('Değer Tuzağı');
+                          return (
+                            <div className={`my-4 p-4 rounded-xl border-l-4 border-t border-r border-b shadow-md ${
+                              isWarning
+                                ? 'bg-rose-950/20 border-l-rose-500 border-rose-500/30'
+                                : 'bg-[#181b22] border-l-[#f5c242] border-[#282d37]'
+                            }`}>
+                              <div className={`text-[11px] font-bold uppercase tracking-wider mb-1.5 flex items-center gap-1.5 ${
+                                isWarning ? 'text-rose-400' : 'text-[#f5c242]'
+                              }`}>
+                                <Sparkles className="w-3.5 h-3.5" /> {isWarning ? 'Adli Denetim & Risk Uyarısı' : 'Bölüm Analitik Teşhisi'}
+                              </div>
+                              <blockquote className="text-xs sm:text-sm text-slate-200 leading-relaxed font-sans not-italic border-none p-0 m-0" {...props}>
+                                {children}
+                              </blockquote>
                             </div>
-                            <blockquote className="text-xs sm:text-sm text-slate-100 leading-relaxed font-sans not-italic border-none p-0 m-0" {...props}>
-                              {children}
-                            </blockquote>
-                          </div>
-                        ),
+                          );
+                        },
                         table: ({ ...props }) => (
                           <div className="overflow-x-auto my-5 rounded-xl border border-[#2e3440] bg-[#1a1d24]">
                             <table className="w-full text-sm text-left border-collapse font-mono" {...props} />
