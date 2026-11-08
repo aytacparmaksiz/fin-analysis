@@ -92,7 +92,6 @@ export type SimplySectionId =
   | 'sec-carpanlar'
   | 'sec-adildeger'
   | 'sec-temettu'
-  | 'sec-gucluzayif'
   | 'sec-rehberlik'
   | 'sec-analist'
   | 'sec-gecmis';
@@ -1301,7 +1300,6 @@ export default function SimplyView({
         { id: 'sec-tablolar', el: document.getElementById('sec-tablolar') },
         { id: 'sec-carpanlar', el: document.getElementById('sec-carpanlar') },
         { id: 'sec-adildeger', el: document.getElementById('sec-adildeger') },
-        { id: 'sec-gucluzayif', el: document.getElementById('sec-gucluzayif') },
         { id: 'sec-rehberlik', el: document.getElementById('sec-rehberlik') },
         { id: 'sec-analist', el: document.getElementById('sec-analist') },
         { id: 'sec-gecmis', el: document.getElementById('sec-gecmis') },
@@ -1502,10 +1500,9 @@ export default function SimplyView({
     { id: 'sec-carpanlar', num: '3', label: 'Çarpanlar', icon: Percent },
     { id: 'sec-adildeger', num: '4', label: 'Değerleme', icon: Target },
     { id: 'sec-temettu', num: '5', label: 'Temettü', icon: Coins },
-    { id: 'sec-gucluzayif', num: '6', label: 'Güçlü & Zayıf', icon: Scale },
-    { id: 'sec-rehberlik', num: '7', label: 'Rehberlik & Sunum', icon: Target },
-    { id: 'sec-analist', num: '8', label: 'Analist Raporu', icon: FileText },
-    { id: 'sec-gecmis', num: '9', label: 'Geçmiş', icon: History }
+    { id: 'sec-rehberlik', num: '6', label: 'Rehberlik & Sunum', icon: Target },
+    { id: 'sec-analist', num: '7', label: 'Analist Raporu', icon: FileText },
+    { id: 'sec-gecmis', num: '8', label: 'Geçmiş', icon: History }
   ];
 
   const handleCopyReportText = async () => {
@@ -5174,77 +5171,22 @@ export default function SimplyView({
           </ComponentErrorBoundary>
 
           {/* ----------------------------------------------------------------------- */}
-          {/* BÖLÜM 6: GÜÇLÜ & ZAYIF (#sec-gucluzayif)                                */}
-          {/* ----------------------------------------------------------------------- */}
-          <ComponentErrorBoundary fallbackTitle="Güçlü/Zayıf Yönler Hatası">
-          <section id="sec-gucluzayif" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
-            <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
-              <div className="flex items-center gap-2.5">
-                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">6</span>
-                <h2 className="font-sans text-xl sm:text-2xl font-bold text-white">Güçlü & Zayıf</h2>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* Güçlü Yönler (Pros) */}
-              <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
-                <div className="flex items-center gap-2 border-b border-[#282d37] pb-3">
-                  <h3 className="font-sans text-[15px] font-bold text-white">6.1 Temel Güçlü Yönler</h3>
-                </div>
-                <div className="space-y-3">
-                  {(((report as any).pros && (report as any).pros.length > 0) ? (report as any).pros : [
-                    'Sermaye maliyetinin üzerinde getiri üreten güçlü ROIC performansı',
-                    'Düşük borçluluk ve yüksek serbest nakit akışı dönüşüm kabiliyeti',
-                    'Sektör medyanlarına kıyasla cazip içsel değerleme iskontosu',
-                    'Enflasyonist ortamda güçlü fiyatlama ve pazar payı koruma gücü'
-                  ]).map((pro: string, i: number) => (
-                    <div key={i} className="flex items-start gap-2.5 text-sm text-slate-200 leading-relaxed bg-[#21262d]/50 p-3 rounded-xl border border-[#2e3440]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 flex-shrink-0" />
-                      <span>{pro}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Zayıf Yönler & Riskler (Cons) */}
-              <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
-                <div className="flex items-center gap-2 border-b border-[#282d37] pb-3">
-                  <h3 className="font-sans text-[15px] font-bold text-white">6.2 Zayıf Yönler ve Temel Riskler</h3>
-                </div>
-                <div className="space-y-3">
-                  {(((report as any).cons && (report as any).cons.length > 0) ? (report as any).cons : [
-                    'Makroekonomik faiz oynaklığı ve borçlanma maliyeti baskısı',
-                    'İşletme sermayesi döngüsünde dönemsel alacak vadeleri takibi ihtiyacı',
-                    'Sektörel regülasyon ve asgari ücret artışlarının operasyonel marj etkisi'
-                  ]).map((con: string, i: number) => (
-                    <div key={i} className="flex items-start gap-2.5 text-sm text-slate-200 leading-relaxed bg-[#21262d]/50 p-3 rounded-xl border border-[#2e3440]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-rose-400 mt-1.5 flex-shrink-0" />
-                      <span>{con}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
-          </ComponentErrorBoundary>
-
-          {/* ----------------------------------------------------------------------- */}
-          {/* BÖLÜM 7: REHBERLİK & SUNUM (#sec-rehberlik)                              */}
+          {/* BÖLÜM 6: REHBERLİK & SUNUM (#sec-rehberlik)                              */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Yönetim Hedefleri Hatası">
           <section id="sec-rehberlik" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
               <div className="flex items-center gap-2.5">
-                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">7</span>
+                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">6</span>
                 <h2 className="font-sans text-xl sm:text-2xl font-bold text-white">Rehberlik & Sunum</h2>
               </div>
             </div>
 
-            {/* 1. KISIM (PAST): Şirket Yönetiminin Çok Yıllı Hedef Tutturma Karnesi */}
+            {/* 1. KISIM: Şirket Yönetiminin Hedef Karnesi */}
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
               <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-sans text-base sm:text-lg font-bold text-white">7.1 Şirket Yönetiminin Çok Yıllı Hedef Tutturma Karnesi</h3>
+                  <h3 className="font-sans text-base sm:text-lg font-bold text-white">6.1 Şirket Yönetiminin Hedef Karnesi</h3>
                 </div>
               </div>
 
@@ -5315,7 +5257,7 @@ export default function SimplyView({
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
               <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-sans text-base sm:text-lg font-bold text-white">7.2 Gelecek Dönem Hedefleri & Fırsatlar</h3>
+                  <h3 className="font-sans text-base sm:text-lg font-bold text-white">6.2 Gelecek Dönem Hedefleri & Fırsatlar</h3>
                 </div>
               </div>
 
@@ -5405,13 +5347,13 @@ export default function SimplyView({
           </ComponentErrorBoundary>
 
           {/* ----------------------------------------------------------------------- */}
-          {/* BÖLÜM 8: ANALİST RAPORU (#sec-analist)                                  */}
+          {/* BÖLÜM 7: ANALİST RAPORU (#sec-analist)                                  */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Değerleme Raporu Hatası">
           <section id="sec-analist" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3 flex-wrap gap-3">
               <div className="flex items-center gap-2.5">
-                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">8</span>
+                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">7</span>
                 <h2 className="font-sans text-xl sm:text-2xl font-bold text-white">Analist Raporu</h2>
               </div>
               <button
@@ -5425,13 +5367,13 @@ export default function SimplyView({
               </button>
             </div>
 
-            {/* 8.1 Kurumsal Yatırım Tezi, Sektörel Ayrışma ve Fırsat Sentezi Paneli */}
+            {/* 7.1 Stratejik Yatırım Tezi & Sektörel Konum */}
             <div id="sec-yatirim-tezi" className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 sm:p-7 shadow-xl space-y-6">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#282d37] pb-3.5">
                 <div className="flex items-center gap-2.5">
                   <Target className="w-5 h-5 text-[#f5c242]" />
                   <span className="font-sans text-base sm:text-lg font-bold text-white">
-                    8.1 Kurumsal Yatırım Tezi, Sektörel Ayrışma ve Fırsat Sentezi Paneli
+                    7.1 Stratejik Yatırım Tezi & Sektörel Konum
                   </span>
                 </div>
                 <span className="text-xs font-mono text-slate-300 bg-[#21262d] px-3 py-1 rounded-lg border border-[#2e3440]">
@@ -5638,83 +5580,83 @@ export default function SimplyView({
                 </div>
               </div>
 
-              {/* BLOK 3: Harmanlanmış 4 Boyutlu Karar Matrisi (Çoklu Kriter Sentezi) */}
+              {/* BLOK 3: 4 Temel Yatırım Kriteri */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2">
                     <Layers className="w-4 h-4 text-[#f5c242]" />
                     <h4 className="font-sans font-bold text-white text-[15px] sm:text-base">
-                      Harmanlanmış 4 Boyutlu Karar Matrisi (Kriterlerin Birlikte Çalışma Mekanizması)
+                      Temel Değerleme Kriterleri
                     </h4>
                   </div>
                   <span className="text-xs font-mono text-slate-400">
-                    Moat • Sermaye Verimliliği • Nakit Kalesi • Çarpan Asimetrisi
+                    Kârlılık • Sermaye Verimi • Nakit Gücü • Çarpanlar
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {synthesizedThesis.pillars.map((pillar) => (
-                    <div
-                      key={pillar.id}
-                      className="bg-[#21262d]/80 border border-[#2e3440] rounded-xl p-4 sm:p-5 space-y-3 flex flex-col justify-between"
-                    >
-                      <div className="space-y-2.5">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
+                  {synthesizedThesis.pillars.map((pillar) => {
+                    const tone = pillar.badgeTone || (pillar.status === 'GÜÇLÜ' ? 'positive' : pillar.status === 'DENGELİ' ? 'neutral' : 'negative');
+                    return (
+                      <div
+                        key={pillar.id}
+                        className="bg-[#181b22] border border-[#282d37] rounded-xl p-4 sm:p-5 space-y-3 flex flex-col justify-between"
+                      >
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
                             <div className="font-sans font-bold text-white text-sm sm:text-[15px]">
                               {pillar.title}
                             </div>
-                            <div className="text-xs text-slate-400 font-mono">{pillar.subtitle}</div>
+                            <span className={`px-2.5 py-0.5 rounded text-xs font-mono font-bold border shrink-0 ${
+                              tone === 'positive'
+                                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
+                                : tone === 'neutral'
+                                ? 'bg-amber-950/80 text-amber-300 border-amber-500/40'
+                                : 'bg-rose-950/80 text-rose-300 border-rose-500/40'
+                            }`}>
+                              {pillar.badgeText}
+                            </span>
                           </div>
-                          <span className={`px-2.5 py-0.5 rounded text-xs font-mono font-bold border shrink-0 ${
-                            pillar.status === 'GÜÇLÜ'
-                              ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
-                              : pillar.status === 'DENGELİ'
-                              ? 'bg-amber-950/80 text-amber-300 border-amber-500/40'
-                              : 'bg-rose-950/80 text-rose-300 border-rose-500/40'
-                          }`}>
-                            {pillar.badgeText}
-                          </span>
-                        </div>
 
-                        {/* Harmanlanan 3 Metrik */}
-                        <div className="grid grid-cols-3 gap-2 bg-[#161920] p-2.5 rounded-lg border border-[#282d37]">
-                          {pillar.metrics.map((m, mIdx) => (
-                            <div key={mIdx} className="text-center">
-                              <div className="text-[10.5px] text-slate-400 truncate">{m.label}</div>
-                              <div className={`text-xs sm:text-sm font-bold font-mono mt-0.5 ${
-                                m.isPositive ? 'text-emerald-400' : 'text-slate-200'
-                              }`}>
-                                {m.value}
+                          {/* Harmanlanan 3 Metrik */}
+                          <div className="grid grid-cols-3 gap-2 bg-[#13161c] p-2.5 rounded-lg border border-[#232731]">
+                            {pillar.metrics.map((m, mIdx) => (
+                              <div key={mIdx} className="text-center">
+                                <div className="text-[10.5px] text-slate-400 truncate">{m.label}</div>
+                                <div className={`text-xs sm:text-sm font-bold font-mono mt-0.5 ${
+                                  m.isPositive ? 'text-emerald-400' : 'text-slate-200'
+                                }`}>
+                                  {m.value}
+                                </div>
                               </div>
-                            </div>
-                          ))}
-                        </div>
+                            ))}
+                          </div>
 
-                        <p className="text-xs sm:text-[13.5px] text-slate-200 leading-relaxed font-sans">
-                          {pillar.narrative}
-                        </p>
+                          <p className="text-xs sm:text-[13px] text-slate-200 leading-relaxed font-sans">
+                            {pillar.narrative}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* BLOK 4: Değer Kilidini Açacak Katalizörler vs. Tezi Geçersiz Kılacak Kırmızı Çizgiler (Thesis Breakers) */}
+              {/* BLOK 4: Fiyat Katalizörleri vs. Tezi Bozan Riskler */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                 {/* Sol: Kilit Katalizörler */}
-                <div className="bg-[#21262d] border border-cyan-500/30 rounded-xl p-4 sm:p-5 space-y-3">
-                  <div className="flex items-center justify-between border-b border-[#2e3440] pb-2">
+                <div className="bg-[#181b22] border border-[#282d37] rounded-xl p-4 sm:p-5 space-y-3">
+                  <div className="flex items-center justify-between border-b border-[#232731] pb-2.5">
                     <div className="flex items-center gap-2">
                       <TrendingUp className="w-4 h-4 text-cyan-400 shrink-0" />
                       <span className="font-sans font-bold text-white text-sm sm:text-[15px]">
-                        12 Aylık Değer Kilidi Katalizörleri (Neler Fiyatı Yukarı Taşır?)
+                        Neler Fiyatı Yukarı Taşır?
                       </span>
                     </div>
                   </div>
-                  <ul className="space-y-2.5">
+                  <ul className="space-y-2">
                     {synthesizedThesis.catalysts.map((cat, idx) => (
-                      <li key={idx} className="flex items-start gap-2.5 text-xs sm:text-[13.5px] text-slate-200 leading-relaxed font-sans">
+                      <li key={idx} className="flex items-start gap-2.5 bg-[#14171d]/60 p-2.5 rounded-lg border border-[#232731] text-xs sm:text-[13px] text-slate-200 leading-relaxed font-sans">
                         <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-1.5 shrink-0" />
                         <span>{cat}</span>
                       </li>
@@ -5722,19 +5664,19 @@ export default function SimplyView({
                   </ul>
                 </div>
 
-                {/* Sağ: Adli Kırmızı Takım & Tezi Bozan Koşullar */}
-                <div className="bg-[#21262d] border border-rose-500/30 rounded-xl p-4 sm:p-5 space-y-3">
-                  <div className="flex items-center justify-between border-b border-[#2e3440] pb-2">
+                {/* Sağ: Tezi Bozan Riskler */}
+                <div className="bg-[#181b22] border border-[#282d37] rounded-xl p-4 sm:p-5 space-y-3">
+                  <div className="flex items-center justify-between border-b border-[#232731] pb-2.5">
                     <div className="flex items-center gap-2">
                       <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
                       <span className="font-sans font-bold text-white text-sm sm:text-[15px]">
-                        Adli Kırmızı Çizgiler & Tezi Bozan Risk Sınırları (Thesis Breakers)
+                        Tezi Bozan Temel Riskler
                       </span>
                     </div>
                   </div>
-                  <ul className="space-y-2.5">
+                  <ul className="space-y-2">
                     {synthesizedThesis.thesisBreakers.map((tb, idx) => (
-                      <li key={idx} className="flex items-start gap-2.5 text-xs sm:text-[13.5px] text-slate-200 leading-relaxed font-sans">
+                      <li key={idx} className="flex items-start gap-2.5 bg-[#14171d]/60 p-2.5 rounded-lg border border-[#232731] text-xs sm:text-[13px] text-slate-200 leading-relaxed font-sans">
                         <span className="w-1.5 h-1.5 rounded-full bg-rose-400 mt-1.5 shrink-0" />
                         <span>{tb}</span>
                       </li>
@@ -5744,13 +5686,13 @@ export default function SimplyView({
               </div>
             </div>
 
-            {/* 8.2 BİST Kurumsal Araştırma Raporu (Birleşik Tek Kart) */}
+            {/* 7.2 Kurumsal Araştırma Raporu (Birleşik Tek Kart) */}
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl shadow-xl overflow-hidden divide-y divide-[#282d37]">
               {/* Rapor Üst Bilgi & Hızlı Atlama Çubuğu */}
               <div className="p-5 sm:p-6 space-y-3 bg-[#181b20]">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <span className="font-sans text-base sm:text-lg font-bold text-white">8.2 BİST Kurumsal Araştırma Raporu</span>
+                    <span className="font-sans text-base sm:text-lg font-bold text-white">7.2 Kurumsal Araştırma Raporu</span>
                   </div>
                   <div className="text-xs font-mono text-slate-400 bg-[#21262d] px-2.5 py-1 rounded-md border border-[#2e3440]">
                     Model: Gordon Büyüme & İNA • Reel WACC
@@ -5919,13 +5861,13 @@ export default function SimplyView({
           </ComponentErrorBoundary>
 
           {/* ----------------------------------------------------------------------- */}
-          {/* BÖLÜM 9: GEÇMİŞ (#sec-gecmis)                                            */}
+          {/* BÖLÜM 8: GEÇMİŞ (#sec-gecmis)                                            */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Geçmiş Raporlar Hatası">
           <section id="sec-gecmis" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3 flex-wrap gap-2">
               <div className="flex items-center gap-2.5">
-                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">9</span>
+                <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">8</span>
                 <h2 className="font-sans text-xl sm:text-2xl font-bold text-white">Geçmiş</h2>
               </div>
               {(onAnalyzeTicker || onSelectTicker) && (

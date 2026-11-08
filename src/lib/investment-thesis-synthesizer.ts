@@ -3,8 +3,9 @@ import type { SectorType } from './sectors';
 export interface SynthesizedPillar {
   id: 'moat' | 'capital' | 'cash_fortress' | 'asymmetry';
   title: string;
-  subtitle: string;
+  subtitle?: string;
   status: 'GÜÇLÜ' | 'DENGELİ' | 'ZAYIF';
+  badgeTone?: 'positive' | 'neutral' | 'negative';
   badgeText: string;
   metrics: Array<{ label: string; value: string; isPositive?: boolean }>;
   narrative: string;
@@ -226,10 +227,10 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
   // ---------------------------------------------------------------------------
   const whyActionTitle =
     decisionMode === 'AL'
-      ? `Neden ${ticker} Almalıyız? — Kriterleri Harmanlayan Ana Yatırım Tezi`
+      ? `Neden ${ticker}? — Yatırım Tezi`
       : decisionMode === 'ALMA'
-      ? `Neden ${ticker} Hissesinden Uzak Durmalıyız? — Adli Kriter Sentezi`
-      : `Neden ${ticker} İzlenmeli? — Mevcut Denge ve Karar Kriterleri Sentezi`;
+      ? `Neden Uzak Durulmalı? — Risk Tezi`
+      : `Neden ${ticker} İzlenmeli? — Bekleme Tezi`;
 
   const whyActionParagraphs: string[] = [];
 
@@ -291,10 +292,10 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
   // ---------------------------------------------------------------------------
   let opportunitySourceTitle =
     decisionMode === 'AL'
-      ? 'Neden Burada Bir Fırsat Var? — Piyasa Neyi Eksik Fiyatlıyor?'
+      ? 'Piyasa Neyi Eksik Fiyatlıyor?'
       : decisionMode === 'ALMA'
-      ? 'Neden Ucuzluk Görünümü Bir Fırsat Değil? — Değer Tuzağı Mekanizması'
-      : 'Fırsat Penceresi Nasıl Açılır? — Piyasa Fiyatlaması ve Beklenen Kırılım';
+      ? 'Değer Tuzağı Riski Nerede?'
+      : 'Fırsat İçin Ne Bekleniyor?';
 
   let opportunityMechanismTag = 'ÇOKLU KRİTER ASİMETRİSİ';
   let opportunitySourceNarrative = '';
@@ -339,7 +340,7 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
   // ---------------------------------------------------------------------------
   // 4. SEKTÖREL REKABET AVANTAJI (BU SEKTÖRDE NEDEN ÖNE ÇIKIYOR?)
   // ---------------------------------------------------------------------------
-  const sectoralEdgeTitle = `${sectorName} Sektöründe Konumu — Bu Sektörde Neleriyle Öne Çıkıyor?`;
+  const sectoralEdgeTitle = `${sectorName} Sektöründeki Konumu`;
   let sectoralEdgeNarrative = '';
 
   if (sec === 'RETAIL') {
@@ -465,29 +466,31 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
   const pillars: SynthesizedPillar[] = [
     {
       id: 'moat',
-      title: '1. Operasyonel Hendek & Fiyatlama Gücü',
-      subtitle: `${sectorName} İş Modeli & Marj Kalitesi`,
+      title: '1. Fiyatlama Gücü ve Marjlar',
+      subtitle: `${sectorName} Sektörel Marj Kalitesi`,
       status: moatGood ? 'GÜÇLÜ' : ebitdaMargin >= 8 ? 'DENGELİ' : 'ZAYIF',
-      badgeText: moatGood ? 'Yüksek Rekabet Kalkanı' : ebitdaMargin >= 8 ? 'Standart Sektör Marjı' : 'Daralan Marj Baskısı',
+      badgeTone: moatGood ? 'positive' : ebitdaMargin >= 8 ? 'neutral' : 'negative',
+      badgeText: moatGood ? 'Yüksek Kalkan' : ebitdaMargin >= 8 ? 'Sektörel Standart' : 'Marj Baskısı',
       metrics: [
         { label: 'Brüt Marj', value: `%${grossMargin.toFixed(1)}`, isPositive: grossMargin >= 22 },
         { label: 'FAVÖK Marjı', value: `%${ebitdaMargin.toFixed(1)}`, isPositive: ebitdaMargin >= 14 },
         { label: 'Aktif Devir', value: `${assetTurnover.toFixed(2)}x`, isPositive: assetTurnover >= 0.7 }
       ],
       narrative: moatGood
-        ? `Şirket, maliyet enflasyonunu satış fiyatlarına yansıtabilme kabiliyeti (%${grossMargin.toFixed(1)} brüt marj) ve %${ebitdaMargin.toFixed(1)} FAVÖK marjı ile sektörde güçlü bir operasyonel hendek (moat) sergilemektedir.`
+        ? `Şirket, maliyet enflasyonunu satış fiyatlarına yansıtabilme kabiliyeti (%${grossMargin.toFixed(1)} brüt marj) ve %${ebitdaMargin.toFixed(1)} FAVÖK marjı ile sektörde güçlü bir rekabet avantajı sergilemektedir.`
         : `Artan üretim ve faaliyet giderleri operasyonel marjları (%${ebitdaMargin.toFixed(1)} FAVÖK marjı) sınırlamakta olup, kârlılık için hacim artışı ve maliyet disiplini kritik önemdedir.`
     },
     {
       id: 'capital',
-      title: '2. Sermaye Verimliliği & Değer Üretimi',
-      subtitle: 'Reel ROIC vs. WACC (EVA) & DuPont ROE',
+      title: '2. Sermaye Getirisi & Değer Üretimi',
+      subtitle: 'Sermaye Maliyetine Göre Reel Getiri',
       status: capGood ? 'GÜÇLÜ' : isPositiveEva ? 'DENGELİ' : 'ZAYIF',
-      badgeText: isPositiveEva ? `+${evaSpread.toFixed(1)} Puan Pozitif EVA` : `${evaSpread.toFixed(1)} Puan Negatif EVA`,
+      badgeTone: isPositiveEva ? 'positive' : evaSpread >= -2 ? 'neutral' : 'negative',
+      badgeText: isPositiveEva ? `+${evaSpread.toFixed(1)} Puan EVA` : `${evaSpread.toFixed(1)} Puan Negatif EVA`,
       metrics: [
         { label: 'Reel ROIC', value: `%${roic.toFixed(1)}`, isPositive: roic > wacc },
         { label: 'Reel WACC', value: `%${wacc.toFixed(1)}`, isPositive: true },
-        { label: 'DuPont ROE', value: `%${roe.toFixed(1)}`, isPositive: roe >= 25 }
+        { label: 'ROE', value: `%${roe.toFixed(1)}`, isPositive: roe >= 25 }
       ],
       narrative: isPositiveEva
         ? `Yatırılan sermaye üzerinden elde edilen %${roic.toFixed(1)} reel getiri, %${wacc.toFixed(1)}'lik sermaye maliyetini aşarak hissedarlar için her çeyrek reel ekonomik katma değer (EVA) yaratmaktadır.`
@@ -495,9 +498,10 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
     },
     {
       id: 'cash_fortress',
-      title: '3. Nakit Dönüşüm & Bilanço Kalesi',
-      subtitle: 'Sıcak Nakit (OCF), FCF ve Sermaye Tahsisi',
-      status: cashGood ? 'GÜÇLÜ' : (ocf > 0 && !hasShadowHoldingRisk) ? 'DENGELİ' : 'ZAYIF',
+      title: '3. Nakit Üretimi & Bilanço Gücü',
+      subtitle: 'Operasyonel Nakit & Borçluluk',
+      status: (isNetCash && ocf > 0) || (ocf > 0 && cashGood) ? 'GÜÇLÜ' : (ocf > 0 && !hasShadowHoldingRisk) ? 'DENGELİ' : 'ZAYIF',
+      badgeTone: hasShadowHoldingRisk ? 'negative' : (ocf > 0) ? 'positive' : 'negative',
       badgeText: hasShadowHoldingRisk
         ? 'Sermaye Tahsisi Uyarısı'
         : isNetCash && ocf > 0
@@ -506,7 +510,7 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
         ? 'Pozitif İşletme Nakdi'
         : 'Nakit Çıkışı / Borç Baskısı',
       metrics: [
-        { label: 'OCF / Net Kâr', value: `${(cashConv * 100).toFixed(0)}%`, isPositive: cashConv >= 0.8 && ocf > 0 },
+        { label: 'OCF / Net Kâr', value: `${cashConvPct.toFixed(0)}%`, isPositive: cashConv >= 0.8 && ocf > 0 },
         { label: 'Net Borç/FAVÖK', value: isNetCash ? 'Net Nakit' : `${netDebtToEbitda.toFixed(2)}x`, isPositive: isNetCash || netDebtToEbitda <= 1.8 },
         { label: 'Cari Oran', value: `${currentRatio.toFixed(2)}x`, isPositive: currentRatio >= 1.2 }
       ],
@@ -518,10 +522,11 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
     },
     {
       id: 'asymmetry',
-      title: '4. Sektörel Çarpan & Büyüme Asimetrisi',
-      subtitle: 'Göreceli Değerleme & 12A İleri Projeksiyon',
+      title: '4. Çarpan İskontosu & Büyüme Potansiyeli',
+      subtitle: 'Sektörel Çarpanlar & İleri Projeksiyon',
       status: valGood ? 'GÜÇLÜ' : upsidePct >= 5 ? 'DENGELİ' : 'ZAYIF',
-      badgeText: upsidePct >= 0 ? `+%${upsidePct.toFixed(1)} Getiri Potansiyeli` : `%${upsidePct.toFixed(1)} Primli Görünüm`,
+      badgeTone: valGood ? 'positive' : upsidePct >= 0 ? 'neutral' : 'negative',
+      badgeText: upsidePct >= 0 ? `+%${upsidePct.toFixed(1)} Potansiyel` : `%${upsidePct.toFixed(1)} Primli`,
       metrics: [
         { label: 'F/K vs Sektör', value: compPe > 0 ? `${compPe.toFixed(1)}x / ${secPe.toFixed(1)}x` : `— / ${secPe.toFixed(1)}x`, isPositive: compPe > 0 && compPe <= secPe },
         { label: '12A Kâr Büyüme', value: `%${netGrowthProj.toFixed(0)}`, isPositive: netGrowthProj >= 25 },
