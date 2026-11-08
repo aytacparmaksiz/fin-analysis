@@ -440,23 +440,24 @@ export class FinancialRatioEngine {
     unitScale: number
   ): TtmFinancials {
     const annualFactor = getAnnualizationFactor(latest.period);
-    const isYearEnd = String(latest.period || '').endsWith('12');
-
-    const periodStr = String(latest.period || '');
-    const parts = periodStr.split('/');
-    const currentYear = parts.length === 2 ? parseInt(parts[0], 10) : NaN;
-    const currentQuarter = parts.length === 2 ? parts[1] : '';
+    const pKey = parsePeriodSortKey(latest.period);
+    const currentYear = Math.floor(pKey / 100);
+    const currentMonth = pKey % 100;
+    const isYearEnd = currentMonth === 12 || currentMonth === 0;
 
     let prevYearEndItem: FinancialHistoryItem | undefined;
     let prevMatchingItem: FinancialHistoryItem | undefined;
 
-    if (!isYearEnd && !isNaN(currentYear) && currentQuarter) {
+    if (!isYearEnd && currentYear > 2000) {
       const prevYear = currentYear - 1;
-      const prevYearEndPeriod = `${prevYear}/12`;
-      const prevMatchingPeriod = `${prevYear}/${currentQuarter}`;
+      const targetEndKey = prevYear * 100 + 12;
+      const targetMatchKey = prevYear * 100 + currentMonth;
 
-      prevYearEndItem = sortedSeries.find(i => i.period === prevYearEndPeriod);
-      prevMatchingItem = sortedSeries.find(i => i.period === prevMatchingPeriod);
+      prevYearEndItem = sortedSeries.find(i => {
+        const k = parsePeriodSortKey(i.period);
+        return k === targetEndKey || (currentMonth !== 12 && k === prevYear * 100);
+      });
+      prevMatchingItem = sortedSeries.find(i => parsePeriodSortKey(i.period) === targetMatchKey);
     }
 
     const isFallback = !isYearEnd && (!prevYearEndItem || !prevMatchingItem);
@@ -472,27 +473,21 @@ export class FinancialRatioEngine {
         return Math.round(currVal * unitScale);
       }
 
-      // TMS 29 Enflasyon Muhasebesi ve Nakit Akışı Koruması:
-      // Nakit akışında (OCF, FCF, CapEx) veya TMS 29 altında farklı yılların kümülatif nakit akışlarını
-      // endeksleme yapmadan düz matematiksel toplama/çıkarma (Cari + YılSonu - EşleşenÇeyrek) ile birleştirmek,
-      // paranın satın alma gücü farklı olduğu için KAP resmi tablosuyla çelişen yapay rakamlar üretir.
-      // Bu nedenle nakit akışı kalemlerinde veya TMS 29'da dönemsel katsayı (annualFactor) ile yıllıklandırma yapılır.
-      if (isCashFlow || Boolean(latest?.is_tms29)) {
-        return Math.round(currVal * unitScale * annualFactor);
-      }
-
+      // Standart Kurumsal TTM Formülü: Cari Ara Dönem + Önceki Yıl Sonu - Önceki Yıl Eşleşen Çeyrek
+      // Tüm şirketlerde ve tüm sektörlerde (TMS 29 dahil) geçmiş dönem eşleşmesi mevcutsa
+      // 6 aylık rakamı x 2 veya 3 aylık rakamı x 4 yapmak yerine gerçek 12 aylık kümülatif toplam kullanılır.
+      // Bu sayede mevsimsellik (örn. havacılık Q3 yaz kârı, otomotiv/perakende yıl sonu artışları) %100 korunur.
       if (prevYearEndItem && prevMatchingItem) {
         const prevEndVal = getter(prevYearEndItem) ?? null;
         const prevMatchVal = getter(prevMatchingItem) ?? null;
 
         if (prevEndVal !== null && prevMatchVal !== null) {
-          // Standart TTM Formülü: Cari + Önceki Yıl Sonu - Önceki Yıl Eşleşen Çeyrek
           const ttmRaw = currVal + prevEndVal - prevMatchVal;
           return Math.round(ttmRaw * unitScale);
         }
       }
 
-      // Fallback: Yıllıklandırma katsayısı
+      // Sadece ve sadece geçmiş dönem eşleşmesi bulunamadığında (örn. yeni halka arzlar) fallback katsayısı
       return Math.round(currVal * unitScale * annualFactor);
     };
 

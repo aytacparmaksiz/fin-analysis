@@ -819,6 +819,8 @@ export function computeSnowflakeAnalysis(params: {
     : (unifiedMetrics?.ttm?.ebitda && unifiedMetrics.ttm.ebitda > 0
         ? netDebt / unifiedMetrics.ttm.ebitda
         : (ebitda > 0 ? netDebt / ebitda : (netDebt <= 0 ? 0 : 5.0)));
+  const maxSafeNd = (sector === 'AVIATION' || sector === 'UTILITIES_TELCO') ? 4.0 : 2.5;
+  const maxControlledNd = (sector === 'AVIATION' || sector === 'UTILITIES_TELCO') ? 4.8 : 3.0;
   const ebit = Number(unifiedMetrics?.ttm?.operatingProfit ?? latestData?.operating_profit ?? latestData?.operating_income ?? latestData?.ebit ?? ebitda * 0.8);
   const rawInterestExp = unifiedMetrics?.ttm?.interestExpenses ?? latestData?.interest_expenses ?? latestData?.financing_expenses ?? latestData?.finance_costs ?? 0;
   const interestExpense = Math.abs(Number(rawInterestExp));
@@ -857,29 +859,29 @@ export function computeSnowflakeAnalysis(params: {
     {
       id: 'debt_level',
       title: isFinancial ? 'Kaldıraç ve Mevduat Güvencesi' : 'Muhafazakar Borçluluk Düzeyi',
-      passed: !isInsolventEquity && (isFinancial ? equityRatio >= 7.0 : (netDebt <= 0 || ndRatio <= 2.5)),
+      passed: !isInsolventEquity && (isFinancial ? equityRatio >= 7.0 : (netDebt <= 0 || ndRatio <= maxSafeNd)),
       metricValue: isFinancial ? `Özsermaye/Aktif: %${equityRatio.toFixed(1)}` : (netDebt <= 0 ? 'Net Nakit Fazlası' : `Net Borç / FAVÖK: ${ndRatio.toFixed(1)}x`),
-      threshold: isFinancial ? '>= %7.0' : '<= 2.5x veya Net Nakit',
+      threshold: isFinancial ? '>= %7.0' : `<= ${maxSafeNd.toFixed(1)}x veya Net Nakit`,
       detail: isFinancial
         ? (!isInsolventEquity && equityRatio >= 7.0
             ? `Banka kaldıraç oranı ve özkaynak tabanı (%${equityRatio.toFixed(1)}), mevduat ve yükümlülükleri koruyacak emniyetli düzeydedir.`
             : `Özkaynakların toplam aktiflere oranı (%${equityRatio.toFixed(1)}) zayıflayarak aşırı bilanço kaldıracına işaret etmektedir.`)
         : (netDebt <= 0 && !isInsolventEquity
             ? 'Şirket kasasındaki nakit ve likit benzerleri toplam borçlarını aşarak net nakit pozisyonunda yer almaktadır.'
-            : (!isInsolventEquity && ndRatio <= 2.5
-                ? `Net Borç / FAVÖK çarpanı (${ndRatio.toFixed(1)}x), muhafazakar ve güvenli tavanın (2.5x) altındadır.`
-                : `Net Borç / FAVÖK çarpanı (${ndRatio.toFixed(1)}x), kritik eşiğin (2.5x) üzerindedir veya özkaynaklar negatiftir.`))
+            : (!isInsolventEquity && ndRatio <= maxSafeNd
+                ? `Net Borç / FAVÖK çarpanı (${ndRatio.toFixed(1)}x), ${sector === 'AVIATION' ? 'filo finansmanı ve sektör' : 'muhafazakar ve güvenli'} tavanın (${maxSafeNd.toFixed(1)}x) altındadır.`
+                : `Net Borç / FAVÖK çarpanı (${ndRatio.toFixed(1)}x), kritik eşiğin (${maxSafeNd.toFixed(1)}x) üzerindedir veya özkaynaklar negatiftir.`))
     },
     // 4.4 Reducing Debt
     {
       id: 'reducing_debt',
       title: 'Borç Azaltımı ve Finansal Denge',
-      passed: !isInsolventEquity && (netDebt <= 0 || ndRatio <= 3.0 || financialDebt === 0),
+      passed: !isInsolventEquity && (netDebt <= 0 || ndRatio <= maxControlledNd || financialDebt === 0),
       metricValue: netDebt <= 0 ? 'Net Nakit Pozisyonu' : `Kontrollü Borç: ${ndRatio.toFixed(1)}x`,
-      threshold: 'Kontrollü / Düşen Borç',
+      threshold: `Kontrollü Borç (<= ${maxControlledNd.toFixed(1)}x)`,
       detail: netDebt <= 0 && !isInsolventEquity
         ? 'Şirket net nakit fazlasını korumakta olup borçlanma kaynaklı bir bilanço riski taşımamaktadır.'
-        : (!isInsolventEquity && ndRatio <= 3.0
+        : (!isInsolventEquity && ndRatio <= maxControlledNd
             ? 'Finansal borç düzeyi operasyonel nakit üretimiyle dengeli ve kontrol edilebilir seviyede yönetilmektedir.'
             : 'Finansal borçluluk seviyesi yüksek kalmaya devam etmektedir.')
     },
@@ -1123,8 +1125,8 @@ export function computeSnowflakeAnalysis(params: {
   if (evaSpread < -1.0) {
     risks.push(`Sermaye Değer Yıkımı: Yatırılan sermaye getirisi (%${roic.toFixed(1)}) sermaye maliyetinin gerisinde kalarak değer erozyonuna işaret etmektedir.`);
   }
-  if (!isFinancial && ndRatio > 3.0) {
-    risks.push(`Yüksek Borçluluk Baskısı: Net Borç / FAVÖK çarpanı (${ndRatio.toFixed(1)}x) emniyet sınırının (3.0x) üzerindedir.`);
+  if (!isFinancial && ndRatio > maxControlledNd) {
+    risks.push(`Yüksek Borçluluk Baskısı: Net Borç / FAVÖK çarpanı (${ndRatio.toFixed(1)}x) emniyet sınırının (${maxControlledNd.toFixed(1)}x) üzerindedir.`);
   }
   if (currentRatio < minCurrentRatio && !isFinancial) {
     risks.push(`Düşük Likidite: Cari oran (${currentRatio.toFixed(2)}x) ${minCurrentRatio.toFixed(2)} seviyesinin altında olup işletme sermayesi takibi gerektirir.`);

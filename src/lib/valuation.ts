@@ -2452,15 +2452,28 @@ export function calculateSectorScore(
     breakdown.push({ category: config.categories[0].name, score: s1, maxScore: 25, reason: r1, status: st1 });
 
     // 2. TTM FAVÖK & Faaliyet Marjı (Max 25)
-    const ebitdaM = parseFinancialNumber(latest?.ebitda_margin);
+    const ttmEb = computeTtmEbitdaFromHistory(sortedHistory, latest);
+    const ttmRev = computeTtmMetricFromHistory(sortedHistory, latest, 'revenue');
+    const ebitdaM = (ttmEb !== null && ttmRev !== null && ttmRev > 0)
+      ? Number(((ttmEb / ttmRev) * 100).toFixed(1))
+      : parseFinancialNumber(latest?.ebitda_margin);
+    const tickerUpper = String(data?.ticker || latest?.ticker || '').toUpperCase();
+    const isNetwork = tickerUpper === 'THYAO' || tickerUpper.includes('THY');
     let s2 = 18;
     let r2 = 'TTM operasyonel kârlılık takibi yapılıyor.';
     let st2: 'good' | 'warning' | 'danger' = 'good';
     if (ebitdaM !== null) {
-      if (ebitdaM >= 26.0) { s2 = 25; r2 = `Seçkin Operasyonel Verim: TTM FAVÖK marjı (%${ebitdaM.toFixed(1)}) küresel havacılık ortalamasının üzerinde.`; st2 = 'good'; }
-      else if (ebitdaM >= 18.0) { s2 = 20; r2 = `Sağlıklı Havacılık Kârlılığı: TTM FAVÖK marjı %${ebitdaM.toFixed(1)}.`; st2 = 'good'; }
-      else if (ebitdaM >= 10.0) { s2 = 12; r2 = `Daralan Faaliyet Marjı (%${ebitdaM.toFixed(1)}): Yakıt ve filo giderleri baskı yaratıyor.`; st2 = 'warning'; }
-      else { s2 = 4; r2 = `Kritik Kârlılık Baskısı: TTM FAVÖK marjı %${ebitdaM.toFixed(1)}!`; st2 = 'danger'; anomalies.push(`Zayıf Havacılık FAVÖK Marjı: %${ebitdaM.toFixed(1)}`); }
+      if (isNetwork) {
+        if (ebitdaM >= 18.0) { s2 = 25; r2 = `Seçkin Operasyonel Verim: TTM FAVÖK marjı (%${ebitdaM.toFixed(1)}) küresel ağ taşıyıcısı ortalamasının üzerinde.`; st2 = 'good'; }
+        else if (ebitdaM >= 12.0) { s2 = 20; r2 = `Sağlıklı Havacılık Kârlılığı: TTM FAVÖK marjı %${ebitdaM.toFixed(1)} bayrak/ağ taşıyıcısı standartlarında dengeli.`; st2 = 'good'; }
+        else if (ebitdaM >= 8.0) { s2 = 12; r2 = `Daralan Faaliyet Marjı (%${ebitdaM.toFixed(1)}): Yakıt ve filo giderleri baskı yaratıyor.`; st2 = 'warning'; }
+        else { s2 = 4; r2 = `Kritik Kârlılık Baskısı: TTM FAVÖK marjı %${ebitdaM.toFixed(1)}!`; st2 = 'danger'; anomalies.push(`Zayıf Havacılık FAVÖK Marjı: %${ebitdaM.toFixed(1)}`); }
+      } else {
+        if (ebitdaM >= 26.0) { s2 = 25; r2 = `Seçkin Operasyonel Verim: TTM FAVÖK marjı (%${ebitdaM.toFixed(1)}) küresel havacılık ortalamasının üzerinde.`; st2 = 'good'; }
+        else if (ebitdaM >= 18.0) { s2 = 20; r2 = `Sağlıklı Havacılık Kârlılığı: TTM FAVÖK marjı %${ebitdaM.toFixed(1)}.`; st2 = 'good'; }
+        else if (ebitdaM >= 10.0) { s2 = 12; r2 = `Daralan Faaliyet Marjı (%${ebitdaM.toFixed(1)}): Yakıt ve filo giderleri baskı yaratıyor.`; st2 = 'warning'; }
+        else { s2 = 4; r2 = `Kritik Kârlılık Baskısı: TTM FAVÖK marjı %${ebitdaM.toFixed(1)}!`; st2 = 'danger'; anomalies.push(`Zayıf Havacılık FAVÖK Marjı: %${ebitdaM.toFixed(1)}`); }
+      }
     }
     breakdown.push({ category: config.categories[1].name, score: s2, maxScore: 25, reason: r2, status: st2 });
 
@@ -6307,8 +6320,8 @@ export function computeSectorValuationAndDrivers(
     const enterpriseVal = forwardEbitda * evMultiple;
 
     // Borç kaldıracı güvenlik yastığı (Debt leverage safety cushion):
-    let evEbitdaEquity = isLcc
-      ? resolveSafeEvEquity(enterpriseVal, totalDebtBridge, totalEquityFull, 0.28, netFull)
+    let evEbitdaEquity = (isLcc || isNetworkCarrier || isAirport)
+      ? resolveSafeEvEquity(enterpriseVal, totalDebtBridge, totalEquityFull, isNetworkCarrier ? 0.30 : (isLcc ? 0.28 : 0.35), netFull)
       : Math.max(0, enterpriseVal - totalDebtBridge);
     const evEbitdaPerShare = evEbitdaEquity > 0 ? (evEbitdaEquity / effectiveShareCount) : 0;
 
@@ -9422,11 +9435,6 @@ export function calculateCompanyMultiples(
     if (m === 12 || m === 0) {
       return rawLatestVal * unitScale;
     }
-    // TMS 29 Enflasyon Muhasebesi Koruması: Farklı yılların kümülatif nakit ve kâr akışlarını
-    // endekslemesiz düz matematiksel toplama/çıkarma ile birleştirmek satın alma gücü farkı nedeniyle yanıltıcıdır.
-    if (Boolean(latest?.is_tms29)) {
-      return rawLatestVal * unitScale * annualFactor;
-    }
     if (yr > 2000 && sortedSeries.length > 2) {
       const prevYearEnd = sortedSeries.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + 12);
       const prevYearMatch = sortedSeries.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + m);
@@ -9643,11 +9651,11 @@ export function generateAlgorithmicReportFallback(params: {
   const sortedHist = [...rawHistory].sort((a: any, b: any) => (a?.period || '').localeCompare(b?.period || ''));
   const latestItem = sortedHist.length > 0 ? sortedHist[sortedHist.length - 1] : null;
 
-  const nominalWaccVal = unifiedMetrics?.margins?.wacc ?? latestItem?.nominal_wacc ?? latestItem?.wacc ?? 29.6;
-  const realWaccVal = (latestItem?.is_tms29 && unifiedMetrics?.margins?.wacc == null)
-    ? Number((((1 + nominalWaccVal / 100) / (1 + (latestItem?.expected_inflation || 18) / 100) - 1) * 100).toFixed(1))
-    : (unifiedMetrics?.margins?.wacc ?? nominalWaccVal);
-  const expectedInfVal = latestItem?.expected_inflation ?? 18.0;
+  const expectedInfVal = latestItem?.expected_inflation ?? 23.8;
+  const nominalWaccVal = latestItem?.nominal_wacc ?? latestItem?.wacc ?? 49.3;
+  const realWaccVal = (latestItem?.is_tms29 ? (latestItem?.real_wacc ?? latestItem?.benchmark_wacc) : null)
+    ?? unifiedMetrics?.margins?.wacc
+    ?? Number((((1 + nominalWaccVal / 100) / (1 + expectedInfVal / 100) - 1) * 100).toFixed(1));
   const roicVal = unifiedMetrics?.margins?.roic ?? latestItem?.roic ?? 15.64;
   const evaSpreadVal = unifiedMetrics?.margins?.evaSpread != null
     ? String(unifiedMetrics.margins.evaSpread)
@@ -9723,7 +9731,7 @@ ${trapBlock}
 
 - **Kâr Kalitesi ve Nakit Üretimi:** Şirketin operasyonel kârının nakde dönüşüm kabiliyeti değerlendirilmiştir.${grossOcfVal ? ` Çalışma sermayesi öncesi brüt faaliyet nakit üretimi ${(grossOcfVal / 1e9).toFixed(2)} Milyar TL,` : ''}${netOcfVal ? ` vergi ve işletme sermayesi düzeltmeleri sonrası resmi Net İşletme Nakit Akışı ise ${(netOcfVal / 1e9).toFixed(2)} Milyar TL seviyesindedir.` : (isBank || isIns ? ' Finansal varlık ve float nakit akışı operasyonel kârı desteklemektedir.' : ' operasyonel nakit üretimi dengelidir.')} Nakit dönüşüm oranı tahsilat kabiliyetine işaret etmektedir.
 - **Yatırım Harcamaları ve Serbest Nakit Akışı (FCF):** ${tangibleCapexVal ? `Maddi duran varlık yatırımları (Tangible CAPEX) ${(Math.abs(tangibleCapexVal) / 1e9).toFixed(2)} Milyar TL düzeyindedir. ` : ''}${fcfNarrative}
-- **Sermaye Verimliliği:** Şirketin sermaye maliyetini aşma gücü ve özkaynak kârlılığı ${drivers.margin?.label || 'Kârlılık Marjı'} (%${drivers.margin?.value || '0'}) seviyesindedir.
+- **Sermaye Verimliliği:** Şirketin özkaynak kârlılığı (ROE) %${roeVal} seviyesindedir.${drivers.margin?.label ? ` Operasyonel kârlılık göstergesi (${drivers.margin.label}) ise %${drivers.margin.value} olarak gerçekleşmiştir.` : ''}
 
 ## III. SEKTÖREL REKABET VE DU PONT ANALİZİ
 > **Sektörel Karne:** ${sectorDef.title} sektörü standartlarına göre 4 temel boyutta gerçekleştirilen detaylı karne analizi.
@@ -9736,7 +9744,7 @@ ${formulaBlock}
 
 ${capitalCostNarrative}
 - **Uygulanan Değerleme Modeli:** ${valuation.valuation_model_name}
-- **Hedef Çarpan:** ${drivers.target_multiple?.label || 'Hedef Çarpan'} ${drivers.target_multiple?.value || '0'}x
+- **Hedef Çarpan:** ${drivers.target_multiple?.value ? (String(drivers.target_multiple.value).endsWith('x') || String(drivers.target_multiple.value).includes('x (') ? drivers.target_multiple.value : `${drivers.target_multiple.value}x`) : '-'}
 - **İskonto Oranı:** %${valuation.discount_pct} (${valuation.margin_of_safety_status || 'HESAPLANDI'})
 
 ## V. DEĞER SÜRÜCÜLERİ VE DUYARLILIK ANALİZİ
