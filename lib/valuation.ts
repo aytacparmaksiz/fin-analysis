@@ -4852,8 +4852,7 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
     // 3. Operasyonel nakit yakımı (OCF < 0 ve Net Kâr < 0) ve (ROE < 0 veya yüksek borçluluk)
     const isOperatingDistress = ebitdaFull <= 0 ||
       inputs.isDistressed === true ||
-      (totalEquityFull <= 0 && evEbitdaEquity <= 0) ||
-      ((inputs.operatingCashFlow != null && inputs.operatingCashFlow < 0) && netFull < 0 && (activeRoe != null && activeRoe < 0));
+      (totalEquityFull <= 0 && evEbitdaEquity <= 0);
 
     if (isOperatingDistress) {
       modelName = 'Sıkıntılı Şirket / Varlık Tabanı İskonto Modeli (Distressed Turnaround Model)';
@@ -4868,8 +4867,8 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
       const liquidityBuffer = isWorkingCapitalExempt ? 1.0 : Math.min(1.0, Math.max(0.20, (currentRatio ?? 1.0) / 1.5));
       const baseMultiple = 0.378;
       let justifiedPb: number;
-      if (ebitdaFull <= 0 || (inputs.operatingCashFlow != null && inputs.operatingCashFlow < 0 && netFull < 0) || inputs.isDistressed) {
-        // Kademe 1: Operasyonel Nakit Yakımı (VESBE Tipi - Negatif FAVÖK / Nakit Yakımı)
+      if (ebitdaFull <= 0 || inputs.isDistressed) {
+        // Kademe 1: Operasyonel Nakit Yakımı (Negatif FAVÖK / İflas Sınırı)
         // Şirket esas faaliyet düzeyinde zarar ettiği ve nakit yaktığı için derin varlık iskontosu (0.10x - 0.22x)
         justifiedPb = Number((baseMultiple * capitalRetentionFactor * equityWeight * liquidityBuffer).toFixed(3));
         justifiedPb = Math.max(0.10, Math.min(0.22, justifiedPb));
@@ -5009,18 +5008,21 @@ export function computeSectorValuationAndDrivers(
   const effectivePriceStr = isOptsObj
     ? (extractedDataOrOpts.inputPriceStr ?? extractedDataOrOpts.marketPrice ?? inputPriceStr)
     : inputPriceStr;
+  const resolvedTicker = (Array.isArray(extractedData) ? extractedData[0]?.ticker : extractedData?.ticker) || '';
   const sector: SectorType = isOptsObj
-    ? (extractedDataOrOpts.sector ?? extractedDataOrOpts.sectorOverride ?? sectorOverride ?? extractedData?.sector ?? (extractedData?.ticker ? detectSector(extractedData.ticker) : 'INDUSTRIAL'))
-    : (sectorOverride || extractedData?.sector || (extractedData?.ticker ? detectSector(extractedData.ticker) : 'INDUSTRIAL'));
+    ? (extractedDataOrOpts.sector ?? extractedDataOrOpts.sectorOverride ?? sectorOverride ?? extractedData?.sector ?? (resolvedTicker ? detectSector(resolvedTicker) : 'INDUSTRIAL'))
+    : (sectorOverride || extractedData?.sector || (resolvedTicker ? detectSector(resolvedTicker) : 'INDUSTRIAL'));
   const resolvedMacro = isOptsObj
     ? (extractedDataOrOpts.macroSnapshot ?? extractedDataOrOpts.macro ?? macroSnapshot ?? extractedData?.macro ?? extractedData?.macro_snapshot)
     : (macroSnapshot ?? extractedData?.macro ?? extractedData?.macro_snapshot);
 
   // Güvenlik ve Tutarlılık: Finansal geçmişi TMS 29, Fisher Reel WACC ve sektörel rasyolarla zenginleştir ve doğrula
   enrichAndSanitizeFinancialHistory(extractedData, sector, resolvedMacro);
-  const history: any[] = Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : [];
+  const history: any[] = Array.isArray(extractedData)
+    ? extractedData
+    : (Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : []);
 
-  const rawPrice = parseFinancialNumber(effectivePriceStr || extractedData?.valuation?.current_price);
+  const rawPrice = parseFinancialNumber(effectivePriceStr || extractedData?.valuation?.current_price || (Array.isArray(extractedData) && extractedData.length > 0 ? extractedData[extractedData.length - 1]?.share_price : null));
   const currentPrice = (rawPrice !== null && rawPrice > 0) ? rawPrice : null;
 
   // TMS 29 Homojenizasyonunu çalıştır
@@ -5335,8 +5337,8 @@ export function computeSectorValuationAndDrivers(
   let normalizedMidCycleMargin: number | null = null;
   let histMedianMargin: number | null = null;
 
-  const currentTickerUpper = String(extractedData?.ticker || '').toUpperCase();
-  const detectedOfficialSecName = resolveOfficialSectorName(extractedData?.official_sector_name, currentTickerUpper) || getCompanySectorDisplayName(currentTickerUpper, sector);
+  const currentTickerUpper = String(resolvedTicker || extractedData?.ticker || (Array.isArray(extractedData) ? extractedData[0]?.ticker : '') || '').toUpperCase();
+  const detectedOfficialSecName = resolveOfficialSectorName(extractedData?.official_sector_name || (Array.isArray(extractedData) ? extractedData[0]?.official_sector_name : undefined), currentTickerUpper) || getCompanySectorDisplayName(currentTickerUpper, sector);
   const isExcludedLightSector = 
     detectedOfficialSecName === 'Gıda' || 
     detectedOfficialSecName === 'İçecek' || 
@@ -5369,31 +5371,36 @@ export function computeSectorValuationAndDrivers(
   const rawLatestEbitVal = parseFinancialNumber(latest?.operating_profit ?? latest?.ebit);
   const ttmEbitVal = rawLatestEbitVal !== null ? computeTtmField('operating_profit', rawLatestEbitVal) : null;
 
-  // IVS 105 & Kurumsal Finans İlkesi: Operasyonel zarar eden, nakit yakan ve sermaye erozyonuna uğrayan
-  // sıkıntılı şirketler (VESBE, CANTE gibi) geçici yatırım/kapasite evresi veya mid-cycle kâr normalleştirmesine sokulamaz.
+  // Kurumsal Finans & IVS 105 Standardı:
+  // Şirket ancak 12 aylık kümülatif operasyonel düzeyde nakit yakıyorsa (TTM FAVÖK <= 0) veya
+  // brüt kâr üretemiyorsa (Gross Loss) operasyonel sıkıntılı (Distressed) kabul edilir.
+  // Tek bir ara çeyrekte nakit akışı dalgalanan ama TTM FAVÖK'ü ve cirosu pozitif olan solvent sanayi devleri
+  // döngü ortası (mid-cycle) marj normalizasyonuna tabidir; tasfiye çarpanına ezilemez.
   const isSevereOperationalDistress = (
     ttmEbVal <= 0 ||
-    rawLatestEbitdaVal <= 0 ||
-    (rawLatestGrossVal !== null && rawLatestGrossVal < 0) ||
-    (rawLatestEbitVal !== null && rawLatestEbitVal < 0 && (roe !== null && roe < 0)) ||
-    (ttmNetVal !== null && ttmNetVal < 0 && roe !== null && roe < -5.0 && (rawLatestEbitVal !== null && rawLatestEbitVal < 0)) ||
-    ((rawLatestOcfVal < 0 || ttmOcfVal < 0) && (rawLatestNetVal < 0 || ttmNetVal < 0) && (
-      (roe !== null && roe < 0) ||
-      (ttmRvVal > 0 && ttmEbVal > 0 && (ttmEbVal / ttmRvVal) < 0.04) ||
-      (rawNetDebtVal > 0 && ttmEbVal > 0 && (rawNetDebtVal / ttmEbVal) > 6.0)
-    ))
+    (rawLatestGrossVal !== null && rawLatestGrossVal < 0 && ttmEbVal <= 0)
   );
 
-  if (!isSevereOperationalDistress && !isExcludedLightSector && (sector === 'INDUSTRIAL' || sector === 'UTILITIES_TELCO')) {
-    const latestTangible = parseFinancialNumber(latest?.tangible_assets ?? latest?.maddi_duran_varliklar ?? latest?.property_plant_equipment) ?? 0;
-    const latestEq = parseFinancialNumber(latest?.equity) ?? 0;
-    const rawCapex = parseFinancialNumber(latest?.capex ?? latest?.maddi_duran_varlik_alimlari) ?? 0;
-    const latestCapex = Math.abs(rawCapex);
-    const latestRev = parseFinancialNumber(latest?.revenue) ?? 0;
-    const isCyclicalCommodity = isCyclicalCommoditySector(detectedOfficialSecName, currentTickerUpper);
-    const hasActiveHeavyCapex = (latestRev > 0 && (latestCapex / latestRev) >= 0.08) || latestCapex >= 3_500_000_000;
-    const isAssetHeavy = (latestEq > 0 && latestTangible > 0 && (latestTangible / latestEq) > 0.60 && hasActiveHeavyCapex) || isCyclicalCommodity;
+  const isUniversalCyclicalOrCapitalSector = (
+    sector === 'INDUSTRIAL' ||
+    sector === 'UTILITIES_TELCO' ||
+    sector === 'AVIATION' ||
+    isAutomotiveSector(detectedOfficialSecName, currentTickerUpper) ||
+    isDefenseSector(detectedOfficialSecName, currentTickerUpper) ||
+    isSteelSector(detectedOfficialSecName, currentTickerUpper) ||
+    isGlassSector(detectedOfficialSecName, currentTickerUpper) ||
+    isDurablesSector(detectedOfficialSecName, currentTickerUpper) ||
+    isCementBuildingSector(detectedOfficialSecName, currentTickerUpper) ||
+    isEnergyUtilitiesSector(detectedOfficialSecName, currentTickerUpper) ||
+    isPetroleumRefinerySector(detectedOfficialSecName, currentTickerUpper) ||
+    isElectricalEquipmentSector(detectedOfficialSecName, currentTickerUpper) ||
+    isAgroChemicalSector(detectedOfficialSecName, currentTickerUpper) ||
+    isConstructionContractingSector(detectedOfficialSecName, currentTickerUpper) ||
+    isPaperStationeryPackagingSector(detectedOfficialSecName, currentTickerUpper) ||
+    isCyclicalCommoditySector(detectedOfficialSecName, currentTickerUpper)
+  );
 
+  if (!isSevereOperationalDistress && !isExcludedLightSector && isUniversalCyclicalOrCapitalSector) {
     const histMargins: number[] = [];
     for (const h of sortedHistory) {
       const hRev = parseFinancialNumber(h?.revenue);
@@ -5403,7 +5410,7 @@ export function computeSectorValuationAndDrivers(
       }
     }
 
-    if (isAssetHeavy && histMargins.length >= 3) {
+    if (histMargins.length >= 3) {
       const sortedM = [...histMargins].sort((a, b) => a - b);
       const mid = Math.floor(sortedM.length / 2);
       histMedianMargin = sortedM.length % 2 !== 0 ? sortedM[mid] : (sortedM[mid - 1] + sortedM[mid]) / 2;
@@ -5414,10 +5421,10 @@ export function computeSectorValuationAndDrivers(
       const ttmRv = computeTtmField('revenue', rawLatestRev);
       const currentObservedMargin = (ttmRv > 0 && ttmEb > 0) ? (ttmEb / ttmRv) * 100 : marginVal;
 
-      if (histMedianMargin > 0 && (currentObservedMargin < histMedianMargin * 0.90 || isCyclicalCommodity)) {
+      if (histMedianMargin > 0 && currentObservedMargin < histMedianMargin * 0.90) {
         isCapExTransitionPhase = true;
-        const cappedMedian = Math.min(14.0, histMedianMargin);
-        normalizedMidCycleMargin = Number(((Math.max(currentObservedMargin, 0) * 0.40) + (cappedMedian * 0.60)).toFixed(2));
+        const cappedMedian = Math.min(22.0, Math.max(8.0, histMedianMargin));
+        normalizedMidCycleMargin = Number(cappedMedian.toFixed(2));
       }
     }
   }
@@ -5425,7 +5432,7 @@ export function computeSectorValuationAndDrivers(
   if (isCapExTransitionPhase && normalizedMidCycleMargin !== null) {
     marginVal = Number(normalizedMidCycleMargin.toFixed(1));
     marginLabel = 'Normalleştirilmiş Döngü FAVÖK Marjı';
-    marginExpl = `Yatırım evresi ve yeni kapasite entegrasyonu nedeniyle son 12A marjı tarihsel medyan (%${histMedianMargin?.toFixed(1)}) ile normalize edildi: %${marginVal}`;
+    marginExpl = `Sektörel döngü dibi ve kapasite entegrasyonu nedeniyle son 12A marjı tarihsel medyan (%${histMedianMargin?.toFixed(1)}) ile normalize edildi: %${marginVal}`;
   }
 
   // 4. DİNAMİK SÜRÜCÜ: HEDEF ÇARPAN (GORDON / ROE MODELİ & SAFE DIVISION)
@@ -5833,17 +5840,15 @@ export function computeSectorValuationAndDrivers(
   // EVRENSEL SEKTÖREL DEĞERLEME KORUMA YARDIMCILARI (53 Sektörün Tamamı İçin):
   // 1) Kronik Net Zarar + Özkaynak/EVA Erozyonu Tespiti
   const isChronicSectorLossDestroyer = (netFullVal: number): boolean => {
-    const ocfCheck = parseFinancialNumber(latest?.operating_cash_flow) ?? 0;
+    if (isCapExTransitionPhase) return false;
     const ebitdaCheck = parseFinancialNumber(latest?.ebitda) ?? 0;
-    // Eğer şirket esas faaliyetlerinde nakit yakmıyorsa (OCF > 0) ve pozitif FAVÖK üretiyorsa,
-    // geçici muhasebesel/enflasyon zararı yaşayan sanayi devleri kronik yıkıcı sayılmaz (döngüsel normalizasyon uygulanır).
-    if (ocfCheck > 0 && ebitdaCheck > 0) return false;
+    if (ebitdaCheck > 0 || ttmEbVal > 0) return false;
     const evaCheck = parseFinancialNumber(latest?.eva_spread) ?? (
       parseFinancialNumber(latest?.roic) !== null && parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc) !== null
         ? (parseFinancialNumber(latest?.roic)! - parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc)!)
         : 0
     );
-    return netFullVal < 0 && ((roe !== null && roe < -5.0) || evaCheck < -5.0);
+    return netFullVal < 0 && ttmEbVal <= 0 && ((roe !== null && roe < -5.0) || evaCheck < -5.0);
   };
 
   // 2) Sanal %22-%40 Firma Değeri (EV) Tabanı Koruması:
@@ -8440,7 +8445,7 @@ export function computeSectorValuationAndDrivers(
     isAssetFloorUsed
   );
 
-  if (!isDistressedModel && valueTrapResult.isValueTrap && fairValue !== null && fairValue > 0) {
+  if (!isDistressedModel && !isCapExTransitionPhase && !evaHaircutApplied && valueTrapResult.isValueTrap && fairValue !== null && fairValue > 0) {
     let vtDeflator = 1.0;
     if (valueTrapResult.severity === 'CRITICAL') {
       vtDeflator = 0.58; // %42 sermaye erozyonu ve nakit yakımı terminal iskontosu
