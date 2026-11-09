@@ -1473,5 +1473,71 @@ test('RED TEAM MATHEMATICAL AUDIT & INVARIANT TEST SUITE', async (t) => {
       `Negatif özkaynaklı ve negatif brüt kârlı zombi şirkete değer atanamaz, tasfiye seviyesinde kalmalıdır (Got: ${bankruptVal.valuation.fair_value})`
     );
   });
+
+  await t.test('REGRESYON 27: Düşük Baz Yanılsaması ve Aşırı Kâr Büyümesi Normalizasyonu (+%1656.7 Sıçrama Tavan Koruması)', async () => {
+    const { InvariantSentinel } = await import('../lib/invariant-sentinel.ts');
+    const { computeSectorValuationAndDrivers, enrichAndSanitizeFinancialHistory } = await import('../lib/valuation.ts');
+
+    // EBEBK benzeri tek çeyreklik düşük baz sıçraması (40.75M -> 715.87M, YoY: %1656.7)
+    const mockDrivers = {
+      net_income_growth: { value: 1656.7, label: 'Net Kâr Büyümesi (12 ay ileri)' },
+      revenue_growth: { value: 19.0, label: 'Satış Büyümesi (12 ay ileri)' }
+    };
+
+    const mockCtx = {
+      ticker: 'EBEBK_TEST',
+      unifiedMetrics: {
+        growth: {
+          netIncomeGrowthYoY: 1656.7,
+          revenueGrowthYoY: 19.0
+        }
+      },
+      financialHistory: [
+        { period: '2024/09', net_income: 193_908_485, revenue: 15_000_000_000 },
+        { period: '2025/09', net_income: 40_750_791, revenue: 25_000_000_000 },
+        { period: '2026/09', net_income: 715_869_492, revenue: 29_794_221_372 }
+      ]
+    };
+
+    // 1. InvariantSentinel: Validate & Heal Drivers testi
+    const healed = InvariantSentinel.validateAndHealDrivers(mockDrivers, mockCtx);
+    assert.ok(
+      healed.net_income_growth.value <= 75.0,
+      `Tek çeyreklik dip baz sıçraması (+%1656.7) forward değerleme sürücüsünde sürdürülebilir üst sınıra normalize edilmelidir (Got: ${healed.net_income_growth.value})`
+    );
+    assert.ok(
+      healed.net_income_growth.value >= 40.0,
+      `EBEBK 2 yıllık CAGR (~%46.0) veya kurumsal tavan (%75.0) normalize edilmelidir (Got: ${healed.net_income_growth.value})`
+    );
+    assert.ok(
+      healed.net_income_growth.sourceExplanation.includes('normalize') || healed.net_income_growth.sourceExplanation.includes('CAGR'),
+      'Açıklamada normalizasyon veya CAGR şerhi bulunmalıdır'
+    );
+
+    // 2. computeSectorValuationAndDrivers testi (direkt veri tablosundan hesaplama)
+    const ebebkHistory = [
+      { period: '2024/09', net_income: 193_908_485, revenue: 15_000_000_000, equity: 2_000_000_000 },
+      { period: '2025/09', net_income: 40_750_791, revenue: 25_000_000_000, equity: 3_000_000_000 },
+      { period: '2026/09', net_income: 715_869_492, revenue: 29_794_221_372, equity: 5_000_000_000 }
+    ];
+
+    const payload = enrichAndSanitizeFinancialHistory({
+      ticker: 'EBEBK',
+      sector: 'RETAIL',
+      currency: 'TRY',
+      reporting_period: '2026/09',
+      share_count: 160_000_000,
+      current_price: 50.0,
+      financial_history: ebebkHistory,
+      valuation: { current_price: 50.0 }
+    });
+
+    const valResult = computeSectorValuationAndDrivers(payload, '50.0', 'RETAIL');
+    const computedNetGrowth = valResult.drivers.net_income_growth.value;
+    assert.ok(
+      computedNetGrowth <= 75.0,
+      `computeSectorValuationAndDrivers düşük baz sıçramasını (%1656.7) asla ham olarak sürücüye atamamalıdır (Got: ${computedNetGrowth})`
+    );
+  });
 });
 

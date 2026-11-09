@@ -381,25 +381,99 @@ export class InvariantSentinel {
 
   /**
    * Değerleme sürücülerini (valuation drivers) mali tablolara göre doğrular ve iyileştirir
+   * KURUMSAL DEĞERLEME İLKESİ (FORENSIC VALUATION STANDARDS):
+   * 1. 'drivers.net_income_growth' İLERİYE DÖNÜK 12 AYLIK İÇSEL DEĞERLEME SÜRÜCÜSÜDÜR (Forward 12M Growth Driver).
+   * 2. Düşük Baz Yanılsaması Koruması (Small Base Distortion Guard):
+   *    Geçmiş dönem net kârı bir kerelik çukur çeyrek / dip seviyede kaldığında (örn. EBEBK'de 40M -> 715M),
+   *    gerçekleşen matematiksel artış (+%1656.7) ileriye dönük sürdürülebilir bir büyüme oranı DEĞİLDİR.
+   * 3. İleriye dönük kâr büyümesi için kurumsal tavan: Türkiye enflasyon dinamiklerinde bile sürdürülebilir
+   *    nominal kâr artışı üst tavanı %75.0 bandıdır. Tek çeyreklik baz sıçramaları CAGR veya normalize
+   *    tavan ile sınırlandırılmalı, açıklama notuna baz etkisi şerhi düşülmelidir.
    */
   public static validateAndHealDrivers(drivers: any, ctx: InvariantValidationContext): any {
     if (!drivers) return drivers;
     const ticker = ctx.ticker || 'BIST';
 
-    // Net Kâr Büyümesi Sürücüsü Kontrolü
+    // 1. Net Kâr Büyümesi Sürücüsü Kontrolü ve Normalizasyonu
+    const latestNetVal = ctx.latestData?.net_income != null ? Number(ctx.latestData.net_income) : null;
+    const isNetLoss = latestNetVal !== null && latestNetVal <= 0;
+
     const trueProfitGrowth = ctx.unifiedMetrics?.growth?.netIncomeGrowthYoY;
-    if (trueProfitGrowth != null && !isNaN(trueProfitGrowth)) {
+    if (!isNetLoss && trueProfitGrowth != null && !isNaN(trueProfitGrowth)) {
       const currentDriverVal = Number(drivers?.net_income_growth?.value);
-      if (!isNaN(currentDriverVal) && Math.abs(currentDriverVal - trueProfitGrowth) >= 5.0 && !drivers.net_income_growth?.isCustomGuidance) {
+
+      let targetGrowth = trueProfitGrowth;
+      let targetExplanation = `Mali tablolardan tescilli gerçekleşen YoY net kâr büyümesi: %${trueProfitGrowth.toFixed(1)}`;
+
+      // Düşük Baz Yanılsaması / Aşırı Sıçrama Koruması (YoY > %75.0)
+      if (trueProfitGrowth > 75.0) {
+        // Çok yıllı (2-3 yıllık) CAGR hesaplamayı dene
+        let normalizedViaCagr = false;
+        const hist = Array.isArray(ctx.financialHistory) ? ctx.financialHistory : [];
+        if (hist.length >= 3) {
+          const sorted = [...hist].sort((a, b) => String(a.period || '').localeCompare(String(b.period || '')));
+          const latest = sorted[sorted.length - 1];
+          const latestNet = Number(latest?.net_income ?? 0);
+
+          // 2 yıl önceki aynı çeyreği bul
+          if (latest?.period && latestNet > 0) {
+            const yrMatch = String(latest.period).match(/(20\d{2})/);
+            if (yrMatch) {
+              const target2Yr = parseInt(yrMatch[1], 10) - 2;
+              const qStr = latest.period.slice(4);
+              const twoYearsAgoItem = sorted.find(h => String(h?.period || '').includes(String(target2Yr)) && String(h?.period || '').includes(qStr));
+              const prev2Net = Number(twoYearsAgoItem?.net_income ?? 0);
+              if (prev2Net > 0) {
+                const cagr2 = (Math.pow(latestNet / prev2Net, 1 / 2) - 1) * 100;
+                if (cagr2 > 0 && cagr2 <= 75.0) {
+                  targetGrowth = Number(cagr2.toFixed(1));
+                  targetExplanation = `Düşük baz etkisi (+%${trueProfitGrowth.toFixed(1)}) normalize edildi; 2 yıllık bileşik büyüme (CAGR): %${targetGrowth.toFixed(1)}`;
+                  normalizedViaCagr = true;
+                }
+              }
+            }
+          }
+        }
+
+        if (!normalizedViaCagr) {
+          targetGrowth = 75.0;
+          targetExplanation = `Geçmiş dönem düşük baz etkisi (+%${trueProfitGrowth.toFixed(1)}) nedeniyle ileriye dönük büyüme sürdürülebilir kurumsal üst sınıra (%75.0) normalize edildi.`;
+        }
+      } else if (trueProfitGrowth < -60.0) {
+        // Aşırı sert döngüsel çöküş koruması (ileriye dönük sıfırlanma varsayımı engeli)
+        targetGrowth = -50.0;
+        targetExplanation = `Dönemsel sert daralma (-%${Math.abs(trueProfitGrowth).toFixed(1)}) normalize edilerek model tabanı %-50.0 olarak sınırlandı.`;
+      }
+
+      if (!isNaN(currentDriverVal) && Math.abs(currentDriverVal - targetGrowth) >= 1.0 && !drivers.net_income_growth?.isCustomGuidance) {
         this.logViolation(
           ticker,
           'Net Kâr Büyümesi Değer Sürücüsü',
           `%${currentDriverVal}`,
-          `%${trueProfitGrowth}`,
-          'Değer sürücüsü baz değeri, mali tablodaki gerçekleşen büyümeden kopmuş.'
+          `%${targetGrowth}`,
+          trueProfitGrowth > 75.0
+            ? `Düşük baz sıçraması (+%${trueProfitGrowth.toFixed(1)}) ileriye dönük değerleme sürücüsünde sürdürülebilir üst sınıra (%${targetGrowth}) normalize edildi.`
+            : 'Değer sürücüsü baz değeri, mali tablodaki gerçekleşen büyümeden kopmuş.'
         );
-        drivers.net_income_growth.value = trueProfitGrowth;
-        drivers.net_income_growth.sourceExplanation = `Mali tablolardan tescilli gerçekleşen YoY net kâr büyümesi: %${trueProfitGrowth.toFixed(1)}`;
+        drivers.net_income_growth.value = targetGrowth;
+        drivers.net_income_growth.sourceExplanation = targetExplanation;
+        if (drivers.net_income_growth.note && trueProfitGrowth > 75.0) {
+          drivers.net_income_growth.note = targetExplanation;
+        }
+      }
+    }
+
+    // 2. Ciro / Hasılat Büyümesi Sürücüsü Kontrolü ve Normalizasyonu
+    const trueRevGrowth = ctx.unifiedMetrics?.growth?.revenueGrowthYoY;
+    if (trueRevGrowth != null && !isNaN(trueRevGrowth)) {
+      const currentRevVal = Number(drivers?.revenue_growth?.value);
+      if (currentRevVal > 80.0 && !drivers.revenue_growth?.isCustomGuidance) {
+        const targetRev = 75.0;
+        drivers.revenue_growth.value = targetRev;
+        drivers.revenue_growth.sourceExplanation = `Aşırı baz etkisi (+%${currentRevVal.toFixed(1)}) nedeniyle sürdürülebilir kurumsal ciro büyüme tavanına (%75.0) normalize edildi.`;
+        if (drivers.revenue_growth.note) {
+          drivers.revenue_growth.note = drivers.revenue_growth.sourceExplanation;
+        }
       }
     }
 

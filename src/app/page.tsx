@@ -4091,18 +4091,36 @@ export default function ValuationTerminal({
   const baseDrivers = dynamicValuationResult.drivers;
   const customDrivers = currentExtractedData?.fair_value_drivers;
   const drivers: FairValueDrivers = useMemo(() => {
+    let rawRev = typeof customDrivers?.revenue_growth?.value === 'number' ? customDrivers.revenue_growth.value : baseDrivers.revenue_growth.value;
+    let revNote = customDrivers?.revenue_growth?.sourceExplanation || baseDrivers.revenue_growth.sourceExplanation;
+    if (rawRev > 80.0) {
+      rawRev = 75.0;
+      revNote = `Aşırı baz etkisi nedeniyle kurumsal sürdürülebilir ciro büyüme tavanına (%75.0) normalize edilmiştir.`;
+    }
+
+    let rawNet = typeof customDrivers?.net_income_growth?.value === 'number' ? customDrivers.net_income_growth.value : baseDrivers.net_income_growth.value;
+    let netNote = customDrivers?.net_income_growth?.sourceExplanation || baseDrivers.net_income_growth.sourceExplanation;
+    if (rawNet > 80.0) {
+      const origJump = rawNet;
+      rawNet = 75.0;
+      netNote = `Geçmiş dönemdeki düşük baz etkisi (+%${origJump.toFixed(1)}) nedeniyle ileriye dönük kâr büyümesi sürdürülebilir kurumsal üst sınıra (%75.0) normalize edilmiştir.`;
+    } else if (rawNet < -60.0) {
+      rawNet = -50.0;
+      netNote = `Dönemsel sert daralma normalize edilerek değerleme tabanı %-50.0 olarak sınırlandırılmıştır.`;
+    }
+
     return {
       revenue_growth: {
         ...baseDrivers.revenue_growth,
         ...(customDrivers?.revenue_growth || {}),
-        value: typeof customDrivers?.revenue_growth?.value === 'number' ? customDrivers.revenue_growth.value : baseDrivers.revenue_growth.value,
-        sourceExplanation: customDrivers?.revenue_growth?.sourceExplanation || baseDrivers.revenue_growth.sourceExplanation,
+        value: rawRev,
+        sourceExplanation: revNote,
       },
       net_income_growth: {
         ...baseDrivers.net_income_growth,
         ...(customDrivers?.net_income_growth || {}),
-        value: typeof customDrivers?.net_income_growth?.value === 'number' ? customDrivers.net_income_growth.value : baseDrivers.net_income_growth.value,
-        sourceExplanation: customDrivers?.net_income_growth?.sourceExplanation || baseDrivers.net_income_growth.sourceExplanation,
+        value: rawNet,
+        sourceExplanation: netNote,
       },
       margin: {
         ...baseDrivers.margin,

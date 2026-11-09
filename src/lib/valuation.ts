@@ -5317,14 +5317,19 @@ export function computeSectorValuationAndDrivers(
       if (isCagr && yearDiff > 1) {
         const cagr = (Math.pow(latestRev / prevRev, 1 / yearDiff) - 1) * 100;
         if (cagr > -50 && cagr < 500) {
-          revGrowth = Number(cagr.toFixed(1));
+          revGrowth = Number(Math.min(cagr, 75.0).toFixed(1));
           revGrowthExpl = `${prevYearItem.period || 'Başlangıç'} -> ${latest.period || 'Son Dönem'} (${yearDiff} Yıllık Yıllıklandırılmış Bileşik Prim/Hasılat Artışı - CAGR): %${revGrowth}`;
         }
       } else {
         const calculatedGrowth = safeGrowthRate(latestRev, prevRev);
-        if (calculatedGrowth !== null && calculatedGrowth > -80 && calculatedGrowth < 800) {
-          revGrowth = calculatedGrowth;
-          revGrowthExpl = `${prevYearItem.period || 'Önceki Yıl'} -> ${latest.period || 'Son Dönem'} gerçekleşen yıllık (YoY) prim/hasılat artışı: %${revGrowth}`;
+        if (calculatedGrowth !== null && calculatedGrowth > -80) {
+          if (calculatedGrowth > 80.0) {
+            revGrowth = 75.0;
+            revGrowthExpl = `Aşırı baz etkisi (+%${calculatedGrowth.toFixed(1)}) nedeniyle sürdürülebilir kurumsal ciro büyüme tavanına (%75.0) normalize edildi`;
+          } else {
+            revGrowth = calculatedGrowth;
+            revGrowthExpl = `${prevYearItem.period || 'Önceki Yıl'} -> ${latest.period || 'Son Dönem'} gerçekleşen yıllık (YoY) prim/hasılat artışı: %${revGrowth}`;
+          }
         }
       }
     }
@@ -5337,9 +5342,14 @@ export function computeSectorValuationAndDrivers(
 
   if (isPresentationTarget(presentationDrivers?.net_income_growth)) {
     const val = Number(presentationDrivers.net_income_growth.value);
-    if (!isNaN(val) && val > -100 && val < 1000) {
-      netGrowth = Number(val.toFixed(1));
-      netGrowthExpl = presentationDrivers.net_income_growth.sourceExplanation || presentationDrivers.net_income_growth.note || `${latest?.period || 'Son Dönem'} Yatırımcı Sunumu Hedefi: %${netGrowth}`;
+    if (!isNaN(val) && val > -100) {
+      if (val > 75.0) {
+        netGrowth = 75.0;
+        netGrowthExpl = `Sunum hedefi / baz sıçraması (+%${val.toFixed(1)}) sürdürülebilir kurumsal üst sınıra (%75.0) normalize edildi`;
+      } else {
+        netGrowth = Number(val.toFixed(1));
+        netGrowthExpl = presentationDrivers.net_income_growth.sourceExplanation || presentationDrivers.net_income_growth.note || `${latest?.period || 'Son Dönem'} Yatırımcı Sunumu Hedefi: %${netGrowth}`;
+      }
       hasPresentationNet = true;
     }
   }
@@ -5351,19 +5361,52 @@ export function computeSectorValuationAndDrivers(
     const prevNet = rawPrevNet !== null ? rawPrevNet * prevFlowFactor : null;
 
     if (latestNet !== null && prevNet !== null && prevNet !== 0) {
-      if (isCagr && yearDiff > 1 && latestNet > 0 && prevNet > 0) {
-        const cagr = (Math.pow(latestNet / prevNet, 1 / yearDiff) - 1) * 100;
-        if (cagr > -80 && cagr < 800) {
-          netGrowth = Number(cagr.toFixed(1));
-          netGrowthExpl = `${prevYearItem.period || 'Başlangıç'} -> ${latest.period || 'Son Dönem'} (${yearDiff} Yıllık Yıllıklandırılmış Bileşik Net Kâr Artışı - CAGR): %${netGrowth}`;
+      if (latestNet > 0 && prevNet > 0) {
+        if (isCagr && yearDiff > 1) {
+          const cagr = (Math.pow(latestNet / prevNet, 1 / yearDiff) - 1) * 100;
+          if (cagr > -80) {
+            netGrowth = Number(Math.min(cagr, 75.0).toFixed(1));
+            netGrowthExpl = `${prevYearItem.period || 'Başlangıç'} -> ${latest.period || 'Son Dönem'} (${yearDiff} Yıllık Yıllıklandırılmış Bileşik Net Kâr Artışı - CAGR): %${netGrowth}`;
+          }
+        } else {
+          // safeGrowthRate iki pozitif değer arasında büyüme oranını hesaplar
+          const calculatedNetGrowth = safeGrowthRate(latestNet, prevNet);
+          if (calculatedNetGrowth !== null) {
+            if (calculatedNetGrowth > 75.0) {
+              // Düşük baz yanılsaması (Small Base Distortion): 2 yıllık geçmiş varsa CAGR hesapla, yoksa 75.0 ile sınırla
+              let normalized = false;
+              if (sortedHistory.length >= 3) {
+                const target2Yr = (parseInt(String(latest?.period || '').slice(0, 4), 10) - 2);
+                const qStr = String(latest?.period || '').slice(4);
+                const twoYearsAgo = sortedHistory.find(h => String(h?.period || '').includes(String(target2Yr)) && String(h?.period || '').includes(qStr));
+                const prev2Net = parseFinancialNumber(twoYearsAgo?.net_income);
+                if (prev2Net !== null && prev2Net > 0) {
+                  const cagr2 = (Math.pow(latestNet / prev2Net, 1 / 2) - 1) * 100;
+                  if (cagr2 > 0 && cagr2 <= 75.0) {
+                    netGrowth = Number(cagr2.toFixed(1));
+                    netGrowthExpl = `Düşük baz etkisi (+%${calculatedNetGrowth.toFixed(1)}) normalize edildi; 2 yıllık bileşik büyüme (CAGR): %${netGrowth}`;
+                    normalized = true;
+                  }
+                }
+              }
+              if (!normalized) {
+                netGrowth = 75.0;
+                netGrowthExpl = `Düşük baz sıçraması (+%${calculatedNetGrowth.toFixed(1)}) nedeniyle kurumsal sürdürülebilir tavan (%75.0) olarak normalize edildi`;
+              }
+            } else if (calculatedNetGrowth < -50.0) {
+              netGrowth = -50.0;
+              netGrowthExpl = `Dönemsel sert daralma (-%${Math.abs(calculatedNetGrowth).toFixed(1)}) normalize edilerek model tabanı %-50.0 olarak sınırlandı`;
+            } else {
+              netGrowth = calculatedNetGrowth;
+              netGrowthExpl = `${prevYearItem.period || 'Önceki Yıl'} -> ${latest.period || 'Son Dönem'} gerçekleşen yıllık net kâr artışı: %${netGrowth}`;
+            }
+          }
         }
       } else {
-        // safeGrowthRate negatif baz değerde (|prevNet|) doğru yönlü büyümeyi hesaplar
-        const calculatedNetGrowth = safeGrowthRate(latestNet, prevNet);
-        if (calculatedNetGrowth !== null && calculatedNetGrowth > -100 && calculatedNetGrowth < 1000) {
-          netGrowth = calculatedNetGrowth;
-          netGrowthExpl = `${prevYearItem.period || 'Önceki Yıl'} -> ${latest.period || 'Son Dönem'} gerçekleşen yıllık net kâr artışı: %${netGrowth}`;
-        }
+        // Çukur kâr / net zarar durumunda (latestNet <= 0 veya prevNet < 0)
+        // Negatif baz veya zarar durumunda büyüme yüzdesi anlamını yitirir; döngüsel toparlanma normu (%35.0) kullanılır
+        netGrowth = 35.0;
+        netGrowthExpl = 'Döngüsel kâr toparlanması ve normalizasyon beklentisi (Sektör baz varsayımı: %35.0)';
       }
     }
   }

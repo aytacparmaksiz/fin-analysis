@@ -835,20 +835,39 @@ export default function SimplyView({
   // Değer Sürücüleri (12 Ay İleri Hasılat ve Net Kâr Büyümesi vb.)
   const drivers = useMemo(() => {
     const raw = valuationInfo?.drivers || report.extractedData?.fair_value_drivers;
+
+    let rawRevVal = typeof raw?.revenue_growth?.value === 'number' ? raw.revenue_growth.value : 45.0;
+    let revNote = raw?.revenue_growth?.note || raw?.revenue_growth?.sourceExplanation || 'Enflasyon ve pazar payı projeksiyonu';
+    if (rawRevVal > 80.0) {
+      rawRevVal = 75.0;
+      revNote = `Aşırı baz etkisi nedeniyle kurumsal sürdürülebilir ciro büyüme tavanına (%75.0) normalize edilmiştir.`;
+    }
+
+    let rawNetVal = typeof raw?.net_income_growth?.value === 'number' ? raw.net_income_growth.value : 50.0;
+    let netNote = raw?.net_income_growth?.note || raw?.net_income_growth?.sourceExplanation || 'Operasyonel kârlılık ve içsel sermaye üretimi';
+    if (rawNetVal > 80.0) {
+      const origJump = rawNetVal;
+      rawNetVal = 75.0;
+      netNote = `Geçmiş dönemdeki düşük baz etkisi (+%${origJump.toFixed(1)}) nedeniyle ileriye dönük kâr büyümesi sürdürülebilir kurumsal üst sınıra (%75.0) normalize edilmiştir.`;
+    } else if (rawNetVal < -60.0) {
+      rawNetVal = -50.0;
+      netNote = `Dönemsel sert daralma normalize edilerek değerleme tabanı %-50.0 olarak sınırlandırılmıştır.`;
+    }
+
     return {
       revenue_growth: {
         label: raw?.revenue_growth?.label || (currentSector === 'INSURANCE' ? 'Prim Büyümesi' : 'Hasılat Büyümesi'),
-        value: typeof raw?.revenue_growth?.value === 'number' ? raw.revenue_growth.value : 45.0,
+        value: rawRevVal,
         bearLabel: raw?.revenue_growth?.bearLabel || 'Düşük Büyüme',
         bullLabel: raw?.revenue_growth?.bullLabel || 'Yüksek Büyüme',
-        note: raw?.revenue_growth?.note || raw?.revenue_growth?.sourceExplanation || 'Enflasyon ve pazar payı projeksiyonu'
+        note: revNote
       },
       net_income_growth: {
         label: raw?.net_income_growth?.label || 'Net Kâr Büyümesi',
-        value: typeof raw?.net_income_growth?.value === 'number' ? raw.net_income_growth.value : 50.0,
+        value: rawNetVal,
         bearLabel: raw?.net_income_growth?.bearLabel || 'Düşük Kârlılık',
         bullLabel: raw?.net_income_growth?.bullLabel || 'Yüksek Verimlilik',
-        note: raw?.net_income_growth?.note || raw?.net_income_growth?.sourceExplanation || 'Operasyonel kârlılık ve içsel sermaye üretimi'
+        note: netNote
       },
       margin: {
         label: raw?.margin?.label || (currentSector === 'INSURANCE' ? 'Kombine Oran Beklentisi' : 'Operasyonel Marj'),
