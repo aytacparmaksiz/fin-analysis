@@ -749,6 +749,22 @@ export default function SimplyView({
     };
   }, [liveCompanyDetails, marketMultiples]);
 
+  // Kanonik Halka Açıklık Oranı (Fiili Dolaşım Oranı / Free Float)
+  const canonicalFreeFloatPct = useMemo(() => {
+    const raw = (liveCompanyDetails as any)?.liveMultiples?.freeFloatPct ??
+      (liveCompanyDetails as any)?.freeFloatPct ??
+      marketMultiples?.free_float_pct ??
+      report.extractedData?.market_multiples?.free_float_pct ??
+      report.extractedData?.free_float_pct ??
+      report.extractedData?.free_float ??
+      (report as any)?.free_float_pct ??
+      null;
+    if (raw != null && !isNaN(Number(raw)) && Number(raw) > 0) {
+      return Number(Number(raw).toFixed(1));
+    }
+    return null;
+  }, [liveCompanyDetails, marketMultiples, report.extractedData]);
+
   // Kurumsal Şirket Profili
   const profile = useMemo(() => {
     return getCompanyProfile(report.ticker, sectorMeta?.title);
@@ -3718,12 +3734,12 @@ export default function SimplyView({
                   customType: 'multiple' as const
                 },
                 {
-                  label: 'Yabancı Payı',
-                  rawVal: canonicalForeignShare.currentPct,
-                  benchNum: 30.0,
-                  format: (v: number) => `%${v.toFixed(2)}`,
+                  label: 'Halka Açıklık',
+                  rawVal: canonicalFreeFloatPct,
+                  benchNum: 35.0,
+                  format: (v: number) => `%${v.toFixed(1)}`,
                   isMultiple: false,
-                  customType: 'foreign' as const
+                  customType: 'float' as const
                 },
                 {
                   label: 'Piyasa Değeri',
@@ -3748,16 +3764,19 @@ export default function SimplyView({
                   );
                 }
 
-                if (c.customType === 'foreign') {
-                  const val = c.rawVal != null ? Number(c.rawVal) : 28.4;
+                if (c.customType === 'float') {
+                  const val = c.rawVal != null ? Number(c.rawVal) : 35.0;
+                  const isOptimal = val >= 20 && val <= 50;
                   return (
                     <div key={i} className="bg-[#12151b] border border-[#232834] rounded-xl p-3.5 text-center space-y-1">
                       <div className="text-[11px] uppercase font-bold text-slate-400">{c.label}</div>
-                      <div className="text-lg font-black font-mono text-cyan-400 mt-1">{c.format(val)}</div>
-                      <div className="text-[10px] text-slate-500 font-mono">Ref: BIST 100 (%30)</div>
+                      <div className={`text-lg font-black font-mono mt-1 ${isOptimal ? 'text-emerald-400' : 'text-amber-400'}`}>{c.format(val)}</div>
+                      <div className="text-[10px] text-slate-500 font-mono">Ref: %20–%50 Optimal</div>
                       <div className="pt-1">
-                        <span className="inline-block text-[9.5px] font-mono font-medium px-2 py-0.5 rounded-md bg-cyan-950/40 text-cyan-300 border border-cyan-800/40">
-                          {val >= 25 ? 'Kurumsal İlgi' : 'Ortalama Pay'}
+                        <span className={`inline-block text-[9.5px] font-mono font-medium px-2 py-0.5 rounded-md ${
+                          isOptimal ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-800/40' : 'bg-amber-950/40 text-amber-300 border border-amber-800/40'
+                        }`}>
+                          {isOptimal ? 'Optimal Aralık' : val < 20 ? 'Sığ Dolaşım' : 'Yüksek Dolaşım'}
                         </span>
                       </div>
                     </div>
@@ -3992,49 +4011,118 @@ export default function SimplyView({
               </div>
             </div>
 
-            {/* 3.4 Yabancı Takas Payı */}
+            {/* 3.4 Halka Açıklık Oranı (Fiili Dolaşım Oranı) */}
             {(() => {
-              const foreignPct = canonicalForeignShare.currentPct;
-              const prevForeignPct = canonicalForeignShare.prevPct;
-              const changeBps = canonicalForeignShare.changeBps;
+              const floatPct = canonicalFreeFloatPct;
+              if (floatPct == null) return null;
 
-              if (foreignPct == null) return null;
+              // Finansal piyasalarda kabul gören kurumsal standartlar:
+              // Optimal Aralık: %20 - %50 (Sağlıklı likidite + kurumsal fon girişi + hakim ortak sahiplik dengesi)
+              // Sığ / Düşük: < %15 (Yüksek manipülasyon riski, sığ tahta, likidite kısıtı)
+              // Ilımlı Düşük: %15 - %20
+              // Ilımlı Yüksek: %50 - %65
+              // Aşırı Dağınık: > %65 - %70 (Sahipsiz tahta riski, ana hissedar bağlılığında zayıflama)
+              const isOptimal = floatPct >= 20 && floatPct <= 50;
+              const isLow = floatPct < 15;
+              const isBorderlineLow = floatPct >= 15 && floatPct < 20;
+              const isBorderlineHigh = floatPct > 50 && floatPct <= 65;
+              const isExcessive = floatPct > 65;
+
+              const statusColor = isOptimal
+                ? 'text-emerald-400'
+                : (isBorderlineLow || isBorderlineHigh)
+                  ? 'text-amber-400'
+                  : 'text-rose-400';
+
+              const statusBg = isOptimal
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                : (isBorderlineLow || isBorderlineHigh)
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-400';
+
+              const statusLabel = isOptimal
+                ? 'Optimal Likidite & Hakim Kontrol'
+                : isLow
+                  ? 'Sığ Tahta / Yüksek Spekülasyon Riski'
+                  : isBorderlineLow
+                    ? 'Ilımlı Düşük / Sınırlı Derinlik'
+                    : isBorderlineHigh
+                      ? 'Ilımlı Yüksek / Geniş Dolaşım'
+                      : 'Aşırı Dağınık / Zayıf Ana Ortak Bağı';
+
+              const statusDesc = isOptimal
+                ? 'Fiili dolaşım oranı Borsa İstanbul ve küresel kurumsal fon normlarında ideal aralıktadır (%20–%50). Şirkette hem yeterli piyasa derinliği ve likidite bulunmakta hem de kurucu/hakim ortağın sermaye sahipliği kontrolü güçlü kalmaktadır.'
+                : isLow
+                  ? 'Halka açıklık oranının %15’in altında olması tahtada derinlik yetersizliğine ve yüksek volatiliteye yol açar. Az sayıda lotla fiyat manipüle edilebildiğinden spekülatif fiyatlama ve likidite kilitlenmesi riski yüksektir.'
+                  : isBorderlineLow
+                    ? 'Halka açıklık %15–%20 sınırındadır. BIST Yıldız Pazar normlarına yakın olsa da büyük kurumsal fonların rahat giriş-çıkış yapabilmesi için likidite derinliği takip edilmelidir.'
+                    : isBorderlineHigh
+                      ? 'Halka açıklık %50–%65 bandında olup piyasa likiditesi oldukça yüksektir. Ancak hakim ortağın şirket üzerindeki payı azalmaya başlamıştır.'
+                      : 'Halka açıklığın %65’in üzerinde (özellikle %70+) olması, sermayenin büyük ölçüde piyasaya dağıldığını gösterir. Şirkette ana hissedar sahiplenme ve bağlılığının zayıflaması ("Sahipsiz Şirket" riski) ve yönetim kontrolü kırılganlığı doğurabilir.';
 
               return (
                 <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#282d37] pb-3">
                     <div className="flex items-center gap-2">
-                      <span className="font-sans text-base sm:text-lg font-bold text-white">3.4 Yabancı Takas Payı</span>
+                      <span className="font-sans text-base sm:text-lg font-bold text-white">3.4 Halka Açıklık Oranı (Fiili Dolaşım)</span>
+                      <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold border ${statusBg}`}>
+                        {statusLabel}
+                      </span>
                     </div>
-                    <span className="text-xs font-mono text-slate-400">Resmi Günlük Takas Verisi</span>
+                    <span className="text-xs font-mono text-slate-400">Resmi BIST / MKK Fiili Dolaşım Verisi</span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="bg-[#12151b] border border-[#232834] rounded-xl p-4 space-y-1">
-                      <div className="text-xs text-slate-400">Güncel Yabancı Payı</div>
-                      <div className="text-2xl font-bold font-mono text-cyan-400">%{Number(foreignPct).toFixed(2)}</div>
-                      <div className="text-[11px] text-slate-500">MKK saklama takasındaki pay</div>
+                      <div className="text-xs text-slate-400">Güncel Halka Açıklık</div>
+                      <div className={`text-2xl font-bold font-mono ${statusColor}`}>%{floatPct.toFixed(1)}</div>
+                      <div className="text-[11px] text-slate-500">MKK fiili dolaşımdaki pay oranı</div>
                     </div>
 
                     <div className="bg-[#12151b] border border-[#232834] rounded-xl p-4 space-y-1">
-                      <div className="text-xs text-slate-400">Önceki Gün</div>
-                      <div className="text-2xl font-bold font-mono text-slate-200">
-                        {prevForeignPct != null ? `%${Number(prevForeignPct).toFixed(2)}` : '—'}
-                      </div>
-                      <div className="text-[11px] text-slate-500">Önceki seans kapanış saklaması</div>
+                      <div className="text-xs text-slate-400">Piyasa Standardı & Optimal Aralık</div>
+                      <div className="text-2xl font-bold font-mono text-cyan-400">%20 – %50</div>
+                      <div className="text-[11px] text-slate-500">Kurumsal fon likidite & kontrol normu</div>
                     </div>
 
                     <div className="bg-[#12151b] border border-[#232834] rounded-xl p-4 space-y-1">
-                      <div className="text-xs text-slate-400">Günlük Değişim</div>
-                      <div className={`text-2xl font-bold font-mono ${
-                        (changeBps ?? 0) > 0 ? 'text-emerald-400' : (changeBps ?? 0) < 0 ? 'text-rose-400' : 'text-slate-300'
-                      }`}>
-                        {changeBps != null ? `${changeBps > 0 ? '+' : ''}${changeBps.toFixed(2)} bps` : '—'}
+                      <div className="text-xs text-slate-400">Optimal Konum Durumu</div>
+                      <div className={`text-base font-bold font-mono ${statusColor} truncate`}>
+                        {isOptimal ? 'Optimal Aralıkta' : floatPct < 20 ? 'Optimalin Altında (Düşük)' : 'Optimalin Üstünde (Yüksek)'}
                       </div>
-                      <div className="text-[11px] text-slate-500">
-                        {(changeBps ?? 0) > 0 ? 'Yabancı para girişi pozitif' : (changeBps ?? 0) < 0 ? 'Yabancı kâr satışı / çıkışı' : 'Yatay saklama'}
+                      <div className="text-[11px] text-slate-400 leading-snug">
+                        {isOptimal ? 'Mükemmel likidite ve sahiplik dengesi' : floatPct < 20 ? 'Sığ dolaşım / Oynaklık riski' : 'Dağınık mülkiyet yapısı'}
                       </div>
                     </div>
+                  </div>
+
+                  {/* Görsel Aralık Çubuğu (Range Bar Indicator) */}
+                  <div className="bg-[#12151b] border border-[#232834] rounded-xl p-4 space-y-2.5">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-400 font-medium">Fiili Dolaşım Skalası & Karşılaştırma:</span>
+                      <span className="font-mono text-slate-300">
+                        Şirket: <strong className={statusColor}>%{floatPct.toFixed(1)}</strong> | Hedef: <strong className="text-cyan-400">%20–%50</strong>
+                      </span>
+                    </div>
+
+                    <div className="relative h-3 w-full bg-[#1b2029] rounded-full overflow-hidden flex">
+                      <div style={{ width: '20%' }} className="bg-rose-500/40 h-full border-r border-[#12151b]" title="Sığ Bölge (%0-%20)" />
+                      <div style={{ width: '30%' }} className="bg-emerald-500/50 h-full border-r border-[#12151b]" title="Optimal Bölge (%20-%50)" />
+                      <div style={{ width: '20%' }} className="bg-amber-500/40 h-full border-r border-[#12151b]" title="Geniş Bölge (%50-%70)" />
+                      <div style={{ width: '30%' }} className="bg-rose-500/40 h-full" title="Aşırı Dağınık Bölge (%70-%100)" />
+                    </div>
+
+                    <div className="flex justify-between text-[10px] font-mono text-slate-500 pt-0.5">
+                      <span>%0 (Aşırı Sığ)</span>
+                      <span className="text-emerald-400 font-semibold">%20 (Optimal Tabanı)</span>
+                      <span className="text-emerald-400 font-semibold">%50 (Optimal Tavanı)</span>
+                      <span>%70</span>
+                      <span>%100 (Tam Dağınık)</span>
+                    </div>
+
+                    <p className="text-xs text-slate-400 leading-relaxed pt-1 border-t border-[#232834]/60">
+                      {statusDesc}
+                    </p>
                   </div>
                 </div>
               );
@@ -4989,7 +5077,17 @@ export default function SimplyView({
               const latestDiv = uniqueDividends[0] || dividends[0];
               const latestYield = latestDiv.yieldPct ?? 0;
               const latestPerShare = latestDiv.perShareTl ?? 0;
-              const latestPayout = latestDiv.payoutRatioPct ?? 0;
+              const rawPayout = Number(latestDiv.payoutRatioPct ?? 0);
+              const computedPayout = (() => {
+                if (rawPayout > 0) return rawPayout;
+                const totDiv = Number(latestDiv.totalAmountTl ?? 0);
+                const netInc = Number(latestData?.net_income_ttm ?? latestData?.net_income ?? 0);
+                if (totDiv > 0 && netInc > 0) {
+                  return Number(((totDiv / netInc) * 100).toFixed(1));
+                }
+                return 0;
+              })();
+              const latestPayout = computedPayout;
               const totalPayoutCount = uniqueDividends.length;
 
               // Yıllık Dağıtım Döngüsü (Aynı yıl içindeki taksitleri topla ve yılı tekilleştir)
@@ -5292,32 +5390,57 @@ export default function SimplyView({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {(Array.isArray(report.extractedData?.positive_outlook_highlights) && report.extractedData.positive_outlook_highlights.length > 0
                   ? report.extractedData.positive_outlook_highlights
-                  : [
-                      {
-                        title: `${drivers.revenue_growth.label} ve Pazar Konumu`,
-                        desc: `${drivers.revenue_growth.note || 'Resmi finansal zaman serisi dinamiklerine göre'} şirketin yıllık bazda %${Number(drivers.revenue_growth.value).toFixed(1)} seviyesindeki büyüme projeksiyonu, gelecek dönem ciro ve nakit üretimini güçlü desteklemektedir.`,
-                        period_or_target: `Baz Projeksiyon: %${Number(drivers.revenue_growth.value).toFixed(1)}`,
-                        category: 'BÜYÜME'
-                      },
-                      {
-                        title: `${drivers.net_income_growth.label} İvmesi`,
-                        desc: `Net kâr büyümesinin %${Number(drivers.net_income_growth.value).toFixed(1)} seviyesinde hedeflenmesi ve sermaye getirisinin (Reel ROIC: %${roicNum.toFixed(1)}) korunması, içsel sermaye üretimini desteklemektedir.`,
-                        period_or_target: `12A Kâr Hedefi: %${Number(drivers.net_income_growth.value).toFixed(1)}`,
-                        category: 'NAKİT ÜRETİMİ'
-                      },
-                      {
+                  : (() => {
+                      const revVal = Number(drivers.revenue_growth?.value ?? 0);
+                      const netVal = Number(drivers.net_income_growth?.value ?? 0);
+                      const marginVal = Number(drivers.margin?.value ?? 0);
+
+                      const revHighlight = revVal >= 0
+                        ? {
+                            title: `${drivers.revenue_growth.label} ve Pazar Payı`,
+                            desc: `Yıllık bazda gerçekleşen %${revVal.toFixed(1)} ciro büyümesi, talep canlılığını ve pazar payı kazanımını teyit etmekte; operasyonel nakit akışını güçlendirmektedir.`,
+                            period_or_target: `Büyüme Hızı: +%${revVal.toFixed(1)}`,
+                            category: 'BÜYÜME'
+                          }
+                        : {
+                            title: `Satış Hacmi ve Sektörel Döngü Dengesi`,
+                            desc: `Yıllık bazda gerçekleşen %${Math.abs(revVal).toFixed(1)} daralma, yüksek baz etkisi ve sektörel talep normalleşmesini yansıtmaktadır. Şirketin bölgesel pazar hakimiyeti ve fiyatlama disiplini, hacim kaybının gelirler üzerindeki baskısını dengelemektedir.`,
+                            period_or_target: `Döngüsel Değişim: %${revVal.toFixed(1)}`,
+                            category: 'SEKTÖREL DÖNGÜ'
+                          };
+
+                      const netHighlight = netVal >= 0
+                        ? {
+                            title: `${drivers.net_income_growth.label} İvmesi`,
+                            desc: `Net kârın yıllık %${netVal.toFixed(1)} artış kaydetmesi ve sermaye getirisinin (Reel ROIC: %${roicNum.toFixed(1)}) sermaye maliyetini aşması, içsel sermaye üretimini ve temettü kapasitesini desteklemektedir.`,
+                            period_or_target: `12A Kâr Hedefi: +%${netVal.toFixed(1)}`,
+                            category: 'NAKİT ÜRETİMİ'
+                          }
+                        : {
+                            title: `Net Kârlılık Trendi ve Marj Direnci`,
+                            desc: `Net kârda yıllık bazda görülen %${Math.abs(netVal).toFixed(1)} daralmaya rağmen, şirketin %${roicNum.toFixed(1)} seviyesindeki yüksek sermaye getirisi (ROIC) ve pozitif EVA üretimi, döngüsel daralma evrelerinde dahi sermaye birikimini korumaktadır.`,
+                            period_or_target: `Döngüsel Kâr Değişimi: %${netVal.toFixed(1)}`,
+                            category: 'KÂR DİRENCİ'
+                          };
+
+                      const marginHighlight = {
                         title: `Operasyonel Verimlilik & ${drivers.margin.label}`,
-                        desc: `Şirketin esas faaliyetlerinde hedeflediği %${Number(drivers.margin.value).toFixed(1)} marj düzeyi, maliyet yönetimi ve fiyatlama gücü açısından gelecek dönem kârlılığını emniyete almaktadır.`,
-                        period_or_target: `Hedef Marj: %${Number(drivers.margin.value).toFixed(1)}`,
+                        desc: `Şirketin esas faaliyetlerinde ulaştığı %${marginVal.toFixed(1)} marj düzeyi, maliyet enflasyonuna karşı operasyonel disiplinini ve girdi şoklarını fiyata yansıtma kabiliyetini göstermektedir.`,
+                        period_or_target: `Gerçekleşen / Hedef Marj: %${marginVal.toFixed(1)}`,
                         category: 'MARJ DİSİPLİNİ'
-                      },
-                      {
-                        title: `Sermaye Verimliliği ve Değerleme Hedefi`,
-                        desc: `Sermaye getirisinin sermaye maliyetini aşması (+${evaSpreadNum.toFixed(1)} Puan EVA) ve ${drivers.target_multiple.value} hedef çarpanı, orta vadeli adil değer potansiyelini (₺${fairValueNum.toFixed(2)}) desteklemektedir.`,
+                      };
+
+                      const catalystHighlight = {
+                        title: `Sermaye Verimliliği ve Değerleme Potansiyeli`,
+                        desc: evaSpreadNum > 0
+                          ? `Sermaye getirisinin sermaye maliyetini aşması (+${evaSpreadNum.toFixed(1)} Puan EVA) ve ${drivers.target_multiple.value} hedef çarpanı, şirketin borçsuz nakit yapısıyla birlikte orta vadeli ₺${fairValueNum.toFixed(2)} adil değer potansiyelini desteklemektedir.`
+                          : `Mevcut varlık tabanı, ${drivers.target_multiple.value} hedef çarpanı ve bilanço likiditesi, orta vadeli ₺${fairValueNum.toFixed(2)} adil değer potansiyelini desteklemektedir.`,
                         period_or_target: `Hedef Çarpan: ${drivers.target_multiple.value}`,
                         category: 'STRATEJİK KATALİZÖR'
-                      }
-                    ]
+                      };
+
+                      return [revHighlight, netHighlight, marginHighlight, catalystHighlight];
+                    })()
                 ).map((item: any, idx: number) => (
                   <div
                     key={idx}

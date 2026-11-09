@@ -1321,5 +1321,157 @@ test('RED TEAM MATHEMATICAL AUDIT & INVARIANT TEST SUITE', async (t) => {
     assert.ok(!savingsChk.metricValue.includes('+-'), `Negatif büyümede '+-' bulunmamalıdır, got: ${savingsChk.metricValue}`);
     assert.ok(savingsChk.metricValue.startsWith('-'), `Negatif büyüme '-' ile başlamalıdır, got: ${savingsChk.metricValue}`);
   });
+
+  await t.test('REGRESYON 26: İktisadi Rasyonellik, Süreklilik Tabanı (Going-Concern Floor) ve Çukur Kâr Tuzağı Denetimi', () => {
+    // 1. OTKAR Benzeri Döngüsel Sanayi Devi: Yüksek ciro, pozitif brüt kâr, geçici çukur marj ve yüksek işletme sermayesi borcu
+    const otkarLikeHistory = [
+      {
+        period: '2024/12',
+        revenue: 35_000_000_000,
+        gross_profit: 6_000_000_000,
+        operating_profit: 3_200_000_000,
+        ebitda: 3_939_183_000,
+        net_income: 1_500_000_000,
+        net_debt: 20_000_000_000,
+        equity: 12_000_000_000,
+        total_assets: 65_000_000_000,
+        nominal_wacc: 35.0,
+        real_wacc: 9.5,
+        expected_inflation: 23.5
+      },
+      {
+        period: '2025/09',
+        revenue: 40_135_107_000,
+        gross_profit: 8_451_700_000,
+        operating_profit: 1_815_452_000,
+        ebitda: 3_691_698_000,
+        net_income: -436_338_000,
+        net_debt: 23_838_742_000,
+        equity: 9_412_900_000,
+        total_assets: 61_509_068_000,
+        nominal_wacc: 35.0,
+        real_wacc: 9.5,
+        expected_inflation: 23.5
+      },
+      {
+        period: '2025/12',
+        revenue: 64_598_183_000,
+        gross_profit: 12_354_734_000,
+        operating_profit: 2_616_300_000,
+        ebitda: 5_135_848_000,
+        net_income: -1_813_737_000,
+        net_debt: 34_585_854_000,
+        equity: 10_627_638_000,
+        total_assets: 81_533_123_000,
+        nominal_wacc: 35.0,
+        real_wacc: 9.5,
+        expected_inflation: 23.5
+      },
+      {
+        period: '2026/03',
+        revenue: 9_546_905_000,
+        gross_profit: 431_999_000,
+        operating_profit: -1_839_241_000,
+        ebitda: -1_148_355_000,
+        net_income: -1_601_211_000,
+        net_debt: 32_442_525_000,
+        equity: 7_824_461_000,
+        total_assets: 70_261_356_000,
+        nominal_wacc: 35.5,
+        real_wacc: 9.5,
+        expected_inflation: 23.7
+      },
+      {
+        period: '2026/06',
+        revenue: 21_169_889_000,
+        gross_profit: 1_887_934_000,
+        operating_profit: -3_114_999_000,
+        ebitda: -1_634_856_000,
+        net_income: -4_493_317_000,
+        net_debt: 42_900_883_000,
+        equity: 5_508_500_000,
+        total_assets: 76_765_085_000,
+        nominal_wacc: 35.6,
+        real_wacc: 9.5,
+        expected_inflation: 23.8
+      },
+      {
+        period: '2026/09',
+        revenue: 36_142_952_000,
+        gross_profit: 4_467_813_000,
+        operating_profit: -3_389_437_000,
+        ebitda: -1_057_091_000, // Çukur marj
+        net_income: -6_696_057_000,
+        net_debt: 52_013_794_000, // Zirve işletme sermayesi borcu
+        equity: 3_535_811_000,
+        total_assets: 78_144_975_000,
+        working_capital_change: -6_780_318_000,
+        nominal_wacc: 35.5,
+        real_wacc: 9.5,
+        expected_inflation: 23.7
+      }
+    ];
+
+    const payload = enrichAndSanitizeFinancialHistory({
+      ticker: 'OTKAR',
+      company_name: 'OTOKAR OTOMOTIV VE SAVUNMA SANAYI A.S.',
+      sector: 'AUTOMOTIVE',
+      currency: 'TRY',
+      reporting_period: '2026/09',
+      share_count: 120_000_000,
+      current_price: 306.5,
+      financial_history: otkarLikeHistory,
+      valuation: { current_price: 306.5 }
+    });
+
+    const valResult = computeSectorValuationAndDrivers(payload, '306.5', 'AUTOMOTIVE');
+    const fairVal = valResult.valuation.fair_value;
+
+    // İKTİSADİ MANTIK SINIRI 1: 36 Milyar TL cirolu, pozitif brüt kâr üreten faal sanayi devine 36 TL veya 0.50 TL tasfiye değeri biçilemez!
+    assert.ok(
+      fairVal >= 80.0,
+      `Döngü dibi yaşayan sanayi devinin normalize adil değeri (${fairVal.toFixed(2)} TL), en az 80.0 TL tabanını korumalıdır. Eski hatalı çukur tasfiye değeri (36.33 TL) iktisadi olarak geçersizdir.`
+    );
+
+    // İKTİSADİ MANTIK SINIRI 2: Aşırı tasfiye tırpanı (vtDeflator 0.58x) faal ve pozitif brüt kârlı şirkete çifte ceza kesmemelidir
+    const vtReasons = valResult.valuation?.value_trap_reasons || [];
+    assert.ok(
+      !vtReasons.some(d => d.includes('Ağır Operasyonel Darboğaz') || d.includes('0.58x')),
+      'Geçici marj daralması yaşayan faal dev, Ağır Operasyonel Darboğaz (Tasfiye) olarak sınıflandırılamaz.'
+    );
+
+    // İKTİSADİ MANTIK SINIRI 3: Gerçek batık zombi şirket (Negatif Özkaynak, Negatif Brüt Kâr) kesinlikle ayrıştırılmalı ve tasfiye uyarısı almalıdır
+    const bankruptHistory = [
+      {
+        period: '2026/09',
+        revenue: 100_000_000,
+        gross_profit: -50_000_000, // Negatif brüt kâr (satış maliyetini dahi karşılayamıyor)
+        operating_profit: -120_000_000,
+        ebitda: -90_000_000,
+        net_income: -200_000_000,
+        net_debt: 800_000_000,
+        equity: -500_000_000, // Negatif özkaynak (TTK 376 Borca Batıklık)
+        total_assets: 600_000_000,
+        working_capital_change: -80_000_000
+      }
+    ];
+
+    const bankruptPayload = enrichAndSanitizeFinancialHistory({
+      ticker: 'ZOMBI_BATIK',
+      sector: 'AUTOMOTIVE',
+      currency: 'TRY',
+      reporting_period: '2026/09',
+      share_count: 50_000_000,
+      current_price: 2.0,
+      financial_history: bankruptHistory,
+      valuation: { current_price: 2.0 }
+    });
+
+    const bankruptVal = computeSectorValuationAndDrivers(bankruptPayload, '2.0', 'AUTOMOTIVE');
+    assert.ok(
+      bankruptVal.valuation.fair_value <= 1.0,
+      `Negatif özkaynaklı ve negatif brüt kârlı zombi şirkete değer atanamaz, tasfiye seviyesinde kalmalıdır (Got: ${bankruptVal.valuation.fair_value})`
+    );
+  });
 });
 

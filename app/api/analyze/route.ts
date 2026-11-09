@@ -405,7 +405,17 @@ $$
 15. ADLİ DENETİM VE SOMUT YATIRIM TEZİ ENTEGRASYONU: Yukarıda verilen 'ADLİ DENETİM VE DEĞER TUZAĞI BULGULARI' varsa (daralan marjlar, negatif ROIC/EVA, tedarikçi borcu maskeli nakit vb.), bu somut gerekçeleri I. Bölümdeki 'Temel Yatırım Tezi'ne ve VI. Bölümdeki 'Riskler & Emniyet Marjı'na açıkça, madde madde ve sayısal kanıtlarıyla işle. Şirket iskontolu görünse dahi bu riskleri asla hafifletme veya gizleme!
 ${optimization.finalDecision === 'NÖTR' ? `Eğer Nihai Yatırım Kararı 'NÖTR' ise:
     - Şirketin adil değer iskontosu (+%${valuation.discount_pct}) bulunsa dahi, finansal risk dinamikleri, sınır skorlar veya sektör temkinliliği nedeniyle karar temkinli 'NÖTR' (Koşullu İzleme) olarak dengelenmiştir.
-    - Yatırımcıya nakit akışı ve operasyonel teyitler gelene kadar aceleci davranılmaması, kademeli veya koşullu izleme yapılması önerilmelidir.` : ''}
+    - Yatırımcıya nakit akışı ve operasyonel teyitler gelene kadar aceleci davranılmaması, kademeli veya koşullu izleme yapılması önerilmelidir.
+    ${Number(valuation.discount_pct) >= 15 ? `
+    🚨 ZORUNLU İSKONTOYA RAĞMEN FREN BÖLÜMÜ (ADLİ GERÇEKLER):
+    Hisse senedi kağıt üzerinde %${valuation.discount_pct} iskonto / potansiyel göstermesine rağmen Nihai Karar [NÖTR] olarak belirlenmiştir.
+    Raporunun 'I. YÖNETİCİ ÖZETİ' bölümünde hemen Yönetici Özetinin altına KESİNLİKLE şu başlığı ve altındaki somut gerekçeleri ekle:
+    "### ⚠️ 2. Adli Gerçekler: Neden \"AL\" Verilmedi? (Büyük Riskler & İskontoya Rağmen Fren Nedenleri)"
+    Bu başlığın altında:
+    1) Yüksek Net Borç / Kaldıraç durumunu (Net Borç, Net Borç/FAVÖK),
+    2) Serbest Nakit Akışı / İşletme Sermayesi (stoklar/alacaklar nakit yutumu),
+    3) Kâr marjı / sermaye erozyonu (negatif EVA veya düşük brüt marj)
+    gerekçelerini sayısal kanıtlarıyla tek tek açıkla ki okuyucu "demek bu sebeple iskontoya rağmen AL değil NÖTR denmiş" diyebilsin.` : ''}` : ''}
 ${optimization.finalDecision === 'ALMA' ? `Eğer Nihai Yatırım Kararı 'ALMA' ise:
     a) Eğer hisse fiyatı (${activePrice} TL) adil değerin (${valuation.fair_value} TL) üzerindeyse (${valuation.discount_pct < 0 ? `%${Math.abs(valuation.discount_pct)} primli` : ''}), hissenin piyasada adil değerinin üzerinde primli işlem gördüğü (İskonto Yok / Primli) ve operasyonel riskler nedeniyle sermaye kaybı riski taşıdığı net olarak vurgulanmalıdır. Emniyet marjı durumu 'UNSAFE' (Güvensiz / İskonto Yok) olarak belirtilmelidir.
     b) Ayı Senaryosu taban hedefi ${valuation.bear_price} TL olup, ağır nakit sıkıntısı ve kriz koşullarını yansıtmaktadır.
@@ -500,7 +510,7 @@ ZORUNLU TALİMAT (Önceki Raporla Karşılaştırma & Çeyreklik Hafıza):
     }
 
     // Rapor metnindeki tüm hedef fiyat ve senaryo sayılarını hesaplanan model çıktılarıyla %100 senkronize et
-    reportText = syncReportTextWithValuation(reportText, valuation);
+    reportText = syncReportTextWithValuation(reportText, valuation, scoreResult, drivers, Number(activePrice), extractedData);
 
     let dividendHistory = Array.isArray(extractedData?.dividend_history) && extractedData.dividend_history.length > 0
       ? extractedData.dividend_history

@@ -560,7 +560,7 @@ export class IsYatirimApiAdapter {
 
       investing_cash_flow = totalCapex ?? getVal(['4B', '4CAK'], ['yatırım faaliyetlerinden kaynaklanan nakit']);
       financing_cash_flow = getVal(['4CBE'], ['finansman faaliyetlerden kaynaklanan nakit', 'finansman faaliyetlerinden kaynaklanan nakit']);
-      dividends_paid = getVal(['4CBB'], ['temettü ödemeleri']);
+      dividends_paid = getVal(['4CBB', '4CBA', '4CBC'], ['temettü ödemeleri', 'ödenen temettüler', 'ödenen kar payları', 'ödenen kâr payları', 'kar payı ödemeleri', 'kâr payı ödemeleri']);
       net_change_in_cash = getVal(['4D', '4CC', '4CBI'], ['nakit ve nakit benzerlerindeki net artış', 'nakit ve benzerlerindeki değişim']);
 
       if (officialFcf !== null) {

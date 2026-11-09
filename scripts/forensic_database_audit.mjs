@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import fs from 'fs';
 import path from 'path';
-import { computeSectorValuationAndDrivers, calculateSectorScore } from '../lib/valuation.ts';
+import { computeSectorValuationAndDrivers, calculateSectorScore, syncReportTextWithValuation } from '../lib/valuation.ts';
 
 // Ignore TLS certificate validation in development environment
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -32,15 +32,16 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Parse CLI flags: --fix (auto-correct detected anomalies in DB), --ticker=XXXX (single ticker audit)
+// Parse CLI flags: --fix (auto-correct detected anomalies in DB), --all (refresh & upgrade ALL records in DB), --ticker=XXXX (single ticker audit)
 const args = process.argv.slice(2);
 const shouldFix = args.includes('--fix');
+const shouldUpgradeAll = args.includes('--all');
 const tickerFilter = args.find(a => a.startsWith('--ticker='))?.split('=')[1]?.toUpperCase();
 
 export async function runForensicAudit() {
   console.log(`\n` + `=`.repeat(85));
-  console.log(`🔎 KURUMSAL ADLİ FİNANSAL DENETİM VE ANOMALİ TARAMA SİSTEMİ (FORENSIC AUDIT)`);
-  console.log(`Mod: ${shouldFix ? 'OTOMATİK DÜZELTME & GÜNCELLEME (--fix aktif)' : 'YALNIZCA TARAMA VE RAPORLAMA (Dry Run)'}`);
+  console.log(`🔎 KURUMSAL ADLİ FİNANSAL DENETİM VE ANOMALİ ONARIM SİSTEMİ (FORENSIC AUDIT & HEALER)`);
+  console.log(`Mod: ${shouldUpgradeAll ? 'TÜM VERİTABANINI YENİ MOTORLA TOPLU GÜNCELLEME (--all aktif)' : (shouldFix ? 'OTOMATİK ANOMALİ ONARIMI (--fix aktif)' : 'YALNIZCA TARAMA VE RAPORLAMA (Dry Run)')}`);
   if (tickerFilter) console.log(`Filtre: Yalnızca ${tickerFilter} hissesi denetleniyor.`);
   console.log(`=`.repeat(85) + `\n`);
 
@@ -117,8 +118,10 @@ export async function runForensicAudit() {
       });
     }
 
-    // Invariant 3: Extreme discount balloon (> 150%)
-    if (discount !== null && discount >= 150.0 && dec !== 'ALMA') {
+    // Invariant 3: Extreme discount balloon (> 150% for standard industrial/service; > 400% for REIT & Holding NAV models)
+    const isReitOrHolding = ext?.sector === 'REIT' || ext?.sector === 'HOLDING' || ['RGYAS', 'SNGYO', 'TRGYO', 'EKGYO', 'ISGYO', 'VKGYO', 'KGYO', 'PSGYO'].includes(r.ticker);
+    const maxDiscountThreshold = isReitOrHolding ? 400.0 : 150.0;
+    if (discount !== null && discount >= maxDiscountThreshold && dec !== 'ALMA') {
       flags.push({
         rule: 'INV-3: EXTREME_DISCOUNT_BALLOON',
         message: `Aşırı İskonto Balonu (%${discount}). Olası sermaye artırımı/lot uyumsuzluğu veya model kalibrasyonu gereksinimi.`
@@ -198,7 +201,7 @@ export async function runForensicAudit() {
         console.log(`   └─ ${f.rule}: ${f.message}`);
       }
 
-      if (shouldFix) {
+      if (shouldFix && !shouldUpgradeAll) {
         try {
           console.log(`   🔄 ${a.ticker} için güncel değerleme motoru çalıştırılıyor...`);
           const newValResult = computeSectorValuationAndDrivers(a.extractedData, a.price);
@@ -222,12 +225,15 @@ export async function runForensicAudit() {
             }
           };
 
+          const syncedReport = syncReportTextWithValuation(a.report, newValResult.valuation);
+
           const { error: updErr } = await supabase
             .from('valuation_reports')
             .update({
               decision: newDec,
               score: newScore,
               extracted_data: updatedExtracted,
+              report: syncedReport,
               updated_at: new Date().toISOString()
             })
             .eq('id', a.id);
@@ -244,6 +250,64 @@ export async function runForensicAudit() {
     }
   } else {
     console.log(`\n🎉 Tebrikler! Veritabanındaki tüm raporlar 7 Finansal Değişmez Kuralına %100 uygundur.`);
+  }
+
+  if (shouldUpgradeAll) {
+    console.log(`\n🚀 TÜM VERİTABANI (${allData.length} RAPOR) YENİ MOTORLA GÜNCELLENİYOR...\n`);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < allData.length; i++) {
+      const r = allData[i];
+      try {
+        const curPrice = Number(r.price) || 0;
+        const ext = r.extracted_data || {};
+        const newValResult = computeSectorValuationAndDrivers(ext, curPrice);
+        const newScoreResult = calculateSectorScore(ext, ext.sector || 'INDUSTRIAL');
+
+        const newDec = newValResult.valuation.final_decision;
+        const newFairValue = newValResult.valuation.fair_value;
+        const newScore = `${newScoreResult.totalScore}/100`;
+
+        const updatedExtracted = {
+          ...ext,
+          fair_value: newFairValue,
+          target_price: newFairValue,
+          valuation: {
+            ...(ext.valuation || {}),
+            ...newValResult.valuation,
+            fair_value: newFairValue
+          }
+        };
+
+        const syncedReport = syncReportTextWithValuation(r.report, newValResult.valuation);
+
+        const { error: updErr } = await supabase
+          .from('valuation_reports')
+          .update({
+            decision: newDec,
+            score: newScore,
+            extracted_data: updatedExtracted,
+            report: syncedReport,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', r.id);
+
+        if (updErr) {
+          console.error(`   ❌ [${i + 1}/${allData.length}] ${r.ticker} güncelleme hatası:`, updErr.message);
+          failCount++;
+        } else {
+          successCount++;
+          if ((i + 1) % 15 === 0 || i === allData.length - 1) {
+            console.log(`   ✅ [${i + 1}/${allData.length}] ${r.ticker} (${r.period}) güncellendi -> Karar: ${newDec} | Hedef: ${newFairValue} TL | Skor: ${newScore}`);
+          }
+        }
+      } catch (err) {
+        console.error(`   ❌ [${i + 1}/${allData.length}] ${r.ticker} hesaplama hatası:`, err.message);
+        failCount++;
+      }
+    }
+    console.log(`\n🎉 Toplu Güncelleme Tamamlandı! Başarılı: ${successCount}, Hata: ${failCount}`);
   }
 
   console.log(`\n` + `=`.repeat(85) + `\n`);

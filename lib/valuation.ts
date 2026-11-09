@@ -1660,11 +1660,122 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
 }
 
 /**
+ * İskontolu olmasına rağmen "AL" verilmeyen (NÖTR veya ALMA) şirketlerde,
+ * yatırımcının "neden AL verilmediğini" raporda açıkça görmesini sağlayan
+ * adli büyük riskler ve fren gerekçeleri bölümünü deterministik olarak üretir.
+ */
+export function buildForensicRedFlagsSection(params: {
+  ticker?: string;
+  valuation: any;
+  scoreResult?: any;
+  optimization?: any;
+  extractedData?: any;
+  latestItem?: any;
+}): string {
+  const { ticker, valuation, scoreResult, optimization, extractedData } = params;
+  const discountPct = Number(valuation?.discount_pct || 0);
+  const potentialPct = valuation?.potential_return != null ? Number(valuation.potential_return) : discountPct;
+  const finalDecision = optimization?.finalDecision || valuation?.final_decision || valuation?.decision;
+
+  if (discountPct < 15 && potentialPct < 15) return '';
+  if (finalDecision === 'AL') return '';
+
+  const hist = Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : [];
+  const latestItem = params.latestItem || (hist.length > 0 ? hist[hist.length - 1] : {});
+
+  const reasons: string[] = [];
+
+  // 1. Borçluluk ve Kaldıraç Baskısı
+  const netDebt = Number(latestItem?.net_debt ?? extractedData?.net_debt ?? 0);
+  const ebitda = Number(latestItem?.ebitda ?? extractedData?.ebitda ?? 0);
+  const netDebtToEbitda = ebitda > 0 ? Number((netDebt / ebitda).toFixed(2)) : (netDebt > 0 ? 99 : 0);
+  const finDebt = Number(latestItem?.financial_debt ?? 0);
+  const cash = Number(latestItem?.cash ?? 0);
+
+  if (netDebt > 0 && (netDebtToEbitda >= 1.5 || netDebt >= 500e6)) {
+    const netDebtStr = netDebt >= 1e9 ? `${(netDebt / 1e9).toFixed(2)} Milyar TL` : `${(netDebt / 1e6).toFixed(0)} Milyon TL`;
+    const finDebtStr = finDebt >= 1e9 ? `${(finDebt / 1e9).toFixed(2)} Mr TL` : `${(finDebt / 1e6).toFixed(0)} Mn TL`;
+    const cashStr = cash >= 1e9 ? `${(cash / 1e9).toFixed(2)} Mr TL` : `${(cash / 1e6).toFixed(0)} Mn TL`;
+    reasons.push(
+      `**Yüksek Finansal Borç ve Kaldıraç Baskısı:** Şirketin Net Borcu **${netDebtStr}** seviyesindedir (Net Borç / FAVÖK: **${netDebtToEbitda}x** | Toplam Finansal Borç: ${finDebtStr} vs Nakit: ${cashStr}). Yüksek faiz ortamında bu borç yükü ciddi finansman gideri baskısı yaratarak özkaynak değerini aşındırmaktadır.`
+    );
+  }
+
+  // 2. Kâr Var, Sıcak Nakit Yok (İşletme Sermayesi & Serbest Nakit Kıtlığı)
+  const cfo = Number(latestItem?.operating_cash_flow ?? extractedData?.cfo ?? 0);
+  const fcf = Number(latestItem?.free_cash_flow ?? extractedData?.fcf ?? 0);
+  const netInc = Number(latestItem?.net_income ?? extractedData?.net_income ?? 0);
+  const wcChange = Number(latestItem?.working_capital_change ?? 0);
+  const inventories = Number(latestItem?.inventories ?? 0);
+  const receivables = Number(latestItem?.trade_receivables ?? 0);
+
+  if (netInc > 0 && (fcf < netInc * 0.3 || cfo < netInc * 0.6 || wcChange < -100e6)) {
+    const fcfStr = Math.abs(fcf) >= 1e9 ? `${(fcf / 1e9).toFixed(2)} Milyar TL` : `${(fcf / 1e6).toFixed(1)} Milyon TL`;
+    const wcDrainStr = wcChange < 0 ? ` (İşletme sermayesi ${(Math.abs(wcChange) / 1e6).toFixed(0)} Milyon TL nakit yutmuştur)` : '';
+    const invStr = inventories > 100e6 ? ` (Stoklar: ${(inventories / 1e9).toFixed(2)} Mr TL, Alacaklar: ${(receivables / 1e9).toFixed(2)} Mr TL)` : '';
+    reasons.push(
+      `**Kâr Var, Sıcak Nakit Yok (İşletme Sermayesi Tuzağı):** Şirket kâğıt üzerinde ${netInc >= 1e9 ? `${(netInc / 1e9).toFixed(2)} Milyar TL` : `${(netInc / 1e6).toFixed(0)} Milyon TL`} net kâr açıklasa da, kasaya kalan Serbest Nakit Akışı (FCF) yalnızca **${fcfStr}** düzeyindedir${wcDrainStr}${invStr}. Üretilen kâr sıcak nakde dönememekte, şirketi dış borçlanmaya muhtaç bırakmaktadır.`
+    );
+  } else if (cfo <= 0) {
+    reasons.push(
+      `**Negatif Faaliyet Nakit Akışı (Nakit Yakımı):** Şirket ana faaliyetlerinden nakit üretememekte; operasyonlarını sürdürebilmek için sıcak nakit yakmaktadır.`
+    );
+  }
+
+  // 3. Sermaye Verimliliği / Negatif EVA
+  const roic = Number(latestItem?.roic ?? extractedData?.roic ?? 0);
+  const wacc = Number(latestItem?.real_wacc ?? latestItem?.wacc ?? extractedData?.real_wacc ?? extractedData?.wacc ?? 15);
+  const eva = roic && wacc ? Number((roic - wacc).toFixed(1)) : 0;
+  if (eva < 0) {
+    reasons.push(
+      `**Sermaye Erozyonu (Negatif EVA Makası):** Yatırılan sermaye getirisi (Reel ROIC %${roic.toFixed(1)}), sermaye maliyetinin (Reel WACC %${wacc.toFixed(1)}) altında kalarak **${eva} puan negatif EVA** üretmektedir. Şirket faaliyet kârıyla sermayesinin maliyetini karşılayamamakta ve hissedar değerini aşındırmaktadır.`
+    );
+  }
+
+  // 4. Marj & Katma Değer Kırılganlığı
+  const grossMargin = Number(latestItem?.gross_margin ?? extractedData?.gross_margin ?? 0);
+  if (grossMargin > 0 && grossMargin < 30) {
+    reasons.push(
+      `**Düşük Katma Değer ve Marj Kırılganlığı:** Brüt kâr marjının **%${grossMargin.toFixed(1)}** seviyesinde kalması, iş modelinin saf yüksek katma değerli üretim/yazılım yerine donanım/ticaret ve taşeron maliyetleri ağırlıklı olduğuna işaret etmektedir. Maliyet şokları karşısında kâr marjları hızla daralma riski taşımaktadır.`
+    );
+  }
+
+  // 5. Skor ve Sektörel Uyarılar
+  const warnings = (scoreResult?.breakdown || [])
+    .filter((b: any) => b.status === 'warning' || b.status === 'danger')
+    .slice(0, 2);
+  for (const w of warnings) {
+    if (!reasons.some(r => r.includes(w.category))) {
+      reasons.push(`**${w.category}:** ${w.reason}`);
+    }
+  }
+
+  if (reasons.length === 0) {
+    reasons.push(
+      `**Sınır Koşulları ve Katalizör İhtiyacı:** Model skoru (${scoreResult?.totalScore || 72}/100) AL eşiğinin (80 Puan) altında kalmış olup, ciro ve nakit akışında yeni çeyrek teyitleri görülmeden aceleci pozisyon açılmamalıdır.`
+    );
+  }
+
+  const potDisplay = potentialPct > discountPct ? `+%${potentialPct.toFixed(1)} getiri potansiyeli / ` : '';
+
+  return `\n\n> ⚠️ **2. Adli Gerçekler: Neden "AL" Verilmedi? (Büyük Riskler & İskontoya Rağmen Fren Nedenleri)**\n` +
+    `> Hisse senedi model hesaplamasında kağıt üzerinde **${potDisplay}%${discountPct.toFixed(1)} iskonto** sunmasına rağmen, aşağıdaki somut finansal gerekçeler nedeniyle "AL" kararı verilmemiş; sermaye kaybı riskine karşı karar temkinli **[${finalDecision}]** olarak dengelenmiştir:\n>\n` +
+    reasons.map((r, i) => `> ${i + 1}. ${r}`).join('\n>\n') + `\n`;
+}
+
+/**
  * Rapor metni ile hesaplanan model adil değerini ve senaryo hedef fiyatlarını
  * %100 senkronize eder. LLM halüsinasyonlarını veya eski şablon sayılarını (örn: 13.66 TL, 3.38 TL)
  * modelin gerçek çıktılarıyla (örn: 2.46 TL, Ayı: 1.57 TL, Boğa: 3.81 TL) tam uyumlu hale getirir.
  */
-export function syncReportTextWithValuation(reportText: string, valuation: any): string {
+export function syncReportTextWithValuation(
+  reportText: string,
+  valuation: any,
+  scoreResult?: any,
+  drivers?: any,
+  activePrice?: number,
+  extractedData?: any
+): string {
   if (!reportText || !valuation) return reportText || '';
   const fv = valuation.fair_value;
   const bear = valuation.bear_price;
@@ -1733,6 +1844,26 @@ export function syncReportTextWithValuation(reportText: string, valuation: any):
       text = text.replace('## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ', `## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ${alertBlock}`);
     } else {
       text = alertBlock + '\n' + text;
+    }
+  }
+
+  // 6.1 İskontoya Rağmen AL Verilmeme Gerekçeleri (Büyük Riskler) Senkronizasyonu
+  const effDiscount = disc != null ? disc : (valuation.potential_return != null ? Number(valuation.potential_return) : 0);
+  const effDecision = targetDecision || valuation?.final_decision;
+  if (effDiscount >= 15 && effDecision && effDecision !== 'AL' && !text.includes('Neden "AL" Verilmedi?')) {
+    const redFlagsBlock = buildForensicRedFlagsSection({
+      ticker: valuation?.ticker,
+      valuation,
+      scoreResult: scoreResult || valuation?.scoreResult,
+      optimization: { finalDecision: effDecision },
+      extractedData: extractedData || valuation?.extractedData
+    });
+    if (redFlagsBlock) {
+      if (text.includes('## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ')) {
+        text = text.replace('## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ', `## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ${redFlagsBlock}`);
+      } else {
+        text = redFlagsBlock + '\n' + text;
+      }
     }
   }
 
@@ -3500,7 +3631,10 @@ export function analyzeRelatedPartyAndCapitalAllocationRisk(
     : null;
 
   let annualizedInvYieldPct: number | null = null;
-  if (nonCurrentFinInv !== null && nonCurrentFinInv > 0 && investmentIncome !== null) {
+  // Maddi önemlilik (Materiality): Duran finansal yatırımlar toplam aktifin en az %1.0'ı veya 10 Milyon TL üzerinde olmalıdır.
+  // Sembolik nominal bakiyeler genel yatırım faaliyet gelir/giderine bölünerek astronomik %200.000 gibi bozuk oranlar üretilemez.
+  const isMaterialFinInv = nonCurrentFinInv !== null && nonCurrentFinInv >= 10_000_000 && (nonCurrentFinInvRatioAssets !== null && nonCurrentFinInvRatioAssets >= 1.0);
+  if (isMaterialFinInv && investmentIncome !== null) {
     annualizedInvYieldPct = Number((((investmentIncome * annualFactor) / nonCurrentFinInv) * 100).toFixed(2));
   }
   const otherRecRatioAssets = (otherReceivables > 0 && totalAssets !== null && totalAssets > 0)
@@ -3521,8 +3655,33 @@ export function analyzeRelatedPartyAndCapitalAllocationRisk(
     wcCashDrainPct = Number(((Math.abs(wcChange) / grossOcf) * 100).toFixed(1));
   }
   let fcfConversionPct: number | null = null;
-  if (fcf !== null && netIncome !== null && netIncome > 0) {
-    fcfConversionPct = Number(((fcf / netIncome) * 100).toFixed(1));
+  // IFRS 16 Post-Lease FCF ve Sezonluk Düzeltme:
+  // Havacılık, yer hizmetleri ve perakende gibi kira yoğun sektörlerde ham TFRS FCF kiralama borç servislerini içermez.
+  // Bu nedenle finansman nakit akışındaki temettü harici borç ve kiralama çıkışları düşülerek Post-Lease FCF türetilir.
+  const normOfficialForLease = String(officialSectorName || latest?.official_sector_name || '').toLowerCase();
+  const tickerUpperForLease = String(latest?.ticker || '').toUpperCase().replace(/\.IS$/i, '');
+  const isAviationOrLogistics = normOfficialForLease.includes('hava') ||
+    normOfficialForLease.includes('ulaştırma') ||
+    normOfficialForLease.includes('lojistik') ||
+    normOfficialForLease.includes('meydan') ||
+    normOfficialForLease.includes('liman') ||
+    ['THYAO', 'PGSUS', 'TAVHL', 'CLEBI', 'TLMAN', 'GSDDE', 'RYSAS', 'DOCO', 'HOROZ'].includes(tickerUpperForLease) ||
+    isTransportationLogisticsSector(officialSectorName || '', latest?.ticker);
+
+  const isRetail = sector === 'RETAIL' || normOfficialForLease.includes('perakende') || normOfficialForLease.includes('mağaza') || normOfficialForLease.includes('ticaret');
+  const isLeaseHeavySector = sector === 'AVIATION' || isRetail || isAviationOrLogistics;
+  let adjustedFcf = fcf;
+  if (isLeaseHeavySector && fcf !== null && fcf > 0) {
+    const finCashOutflow = typeof latest.financing_cash_flow === 'number' && latest.financing_cash_flow < 0 ? Math.abs(latest.financing_cash_flow) : 0;
+    const divPaid = typeof latest.dividends_paid === 'number' ? Math.abs(latest.dividends_paid) : 0;
+    const debtLeaseService = Math.max(0, finCashOutflow - divPaid);
+    if (debtLeaseService > 0) {
+      adjustedFcf = Math.max(fcf * 0.25, fcf - debtLeaseService);
+    }
+  }
+
+  if (adjustedFcf !== null && netIncome !== null && netIncome > 0) {
+    fcfConversionPct = Number(((adjustedFcf / netIncome) * 100).toFixed(1));
   } else if (ocf !== null && netIncome !== null && netIncome > 0) {
     fcfConversionPct = Number(((ocf / netIncome) * 100).toFixed(1));
   }
@@ -3597,10 +3756,11 @@ export function analyzeRelatedPartyAndCapitalAllocationRisk(
   );
 
   // 2. Gösterge: Atıl Sermaye Transferi & Düşük Finansal Yatırım Getirisi (veya Yüksek Diğer Alacaklar)
-  const ind2Triggered = Boolean(
-    (nonCurrentFinInvRatioAssets !== null && nonCurrentFinInvRatioAssets >= 20.0 && annualizedInvYieldPct !== null && annualizedInvYieldPct < 5.0) ||
-    otherRecRatioAssets >= 10.0
+  const ind2FinInvTriggered = Boolean(
+    nonCurrentFinInvRatioAssets !== null && nonCurrentFinInvRatioAssets >= 20.0 && annualizedInvYieldPct !== null && annualizedInvYieldPct < 5.0
   );
+  const ind2OtherRecTriggered = Boolean(otherRecRatioAssets >= 10.0);
+  const ind2Triggered = ind2FinInvTriggered || ind2OtherRecTriggered;
 
   // 3. Gösterge: Azınlık Payları Kâr ve Özkaynak Sızıntısı
   const ind3Triggered = Boolean(
@@ -3629,16 +3789,20 @@ export function analyzeRelatedPartyAndCapitalAllocationRisk(
     },
     {
       code: 'IDLE_INVESTMENT_YIELD',
-      title: 'Grup İçi / Finansal Yatırım Nakit Getiri Verimsizliği',
+      title: ind2OtherRecTriggered && !ind2FinInvTriggered
+        ? 'İlişkili Taraf / Diğer Alacak Yoğunluğu'
+        : 'Grup İçi / Finansal Yatırım Nakit Getiri Verimsizliği',
       triggered: ind2Triggered,
-      metricValueStr: annualizedInvYieldPct !== null
+      metricValueStr: ind2FinInvTriggered && annualizedInvYieldPct !== null
         ? `Yıllık Getiri: %${annualizedInvYieldPct}`
-        : (otherRecRatioAssets > 0 ? `Diğer Alacak/Aktif: %${otherRecRatioAssets}` : 'Veri Yok'),
-      thresholdStr: 'Yıllık Getiri >= %5.0',
+        : (otherRecRatioAssets > 0 ? `Diğer Alacak/Aktif: %${otherRecRatioAssets}` : (annualizedInvYieldPct !== null ? `Yıllık Getiri: %${annualizedInvYieldPct}` : 'Makul Seviyede')),
+      thresholdStr: ind2OtherRecTriggered && !ind2FinInvTriggered ? 'Diğer Alacak < %10' : 'Yıllık Getiri >= %5.0',
       explanation: ind2Triggered
-        ? (annualizedInvYieldPct !== null && annualizedInvYieldPct < 5.0
-            ? `Duran varlıklara bağlanan ${((nonCurrentFinInv || 0) / 1e9).toFixed(2)} Milyar TL sermayeden elde edilen yıllıklandırılmış yatırım geliri yalnızca %${annualizedInvYieldPct} düzeyindedir; aktarılan kaynak halka açık şirkete nakit temettü/faiz döndürmemektedir.`
-            : `Ticari olmayan diğer alacaklar toplam aktiflerin %${otherRecRatioAssets}'ine ulaşmıştır; grup içi fon kullandırma riski izlenmelidir.`)
+        ? (ind2OtherRecTriggered && !ind2FinInvTriggered
+            ? `Ticari olmayan diğer alacaklar toplam aktiflerin %${otherRecRatioAssets}'ine ulaşmıştır; grup içi/ilişkili taraf fon kullandırma riski izlenmelidir.`
+            : (annualizedInvYieldPct !== null && annualizedInvYieldPct < 5.0
+                ? `Duran varlıklara bağlanan ${((nonCurrentFinInv || 0) / 1e9).toFixed(2)} Milyar TL sermayeden elde edilen yıllıklandırılmış yatırım geliri yalnızca %${annualizedInvYieldPct} düzeyindedir; aktarılan kaynak halka açık şirkete nakit temettü/faiz döndürmemektedir.`
+                : `Ticari olmayan diğer alacaklar toplam aktiflerin %${otherRecRatioAssets}'ine ulaşmıştır; grup içi fon kullandırma riski izlenmelidir.`))
         : 'Finansal yatırımlardan ve diğer alacaklardan kaynaklanan atıl getiri anomalisi saptanmadı.'
     },
     {
@@ -3655,15 +3819,17 @@ export function analyzeRelatedPartyAndCapitalAllocationRisk(
     },
     {
       code: 'WORKING_CAPITAL_CASH_DRAIN',
-      title: 'İşletme Sermayesi Nakit Emişi & Düşük FCF Dönüşümü',
+      title: isLeaseHeavySector ? 'İşletme Sermayesi Emişi & Kira Sonrası FCF Dönüşümü' : 'İşletme Sermayesi Nakit Emişi & Düşük FCF Dönüşümü',
       triggered: ind4Triggered,
       metricValueStr: wcCashDrainPct !== null
-        ? `Nakit Emişi: %${wcCashDrainPct} | FCF/Net Kâr: %${fcfConversionPct ?? 0}`
-        : (fcfConversionPct !== null ? `FCF/Net Kâr: %${fcfConversionPct}` : 'Veri Yok'),
+        ? `Nakit Emişi: %${wcCashDrainPct} | ${isLeaseHeavySector ? 'Kira Sonrası FCF/Kâr' : 'FCF/Net Kâr'}: %${fcfConversionPct ?? 0}`
+        : (fcfConversionPct !== null ? `${isLeaseHeavySector ? 'Kira Sonrası FCF/Kâr' : 'FCF/Net Kâr'}: %${fcfConversionPct}` : 'Veri Yok'),
       thresholdStr: 'İşletme Sermayesi Emişi < %65 ve FCF/Kâr >= %20',
       explanation: ind4Triggered
         ? `Operasyonlardan üretilen brüt nakdin ${wcCashDrainPct !== null ? `%${wcCashDrainPct}'si işletme sermayesi (alacak/stok/diğer varlık) artışıyla emilmiş, ` : ''}net kârın yalnızca %${fcfConversionPct ?? 0}'si serbest nakit akışına (FCF) dönüşebilmiştir.`
-        : 'Operasyonel kârın serbest nakit akışına dönüşümü sağlıklıdır.'
+        : (isLeaseHeavySector
+          ? 'Operasyonel kârın kira ve borç servisi sonrası serbest nakit akışına (Post-Lease FCF) dönüşümü hesaplanmış ve doğrulanmıştır.'
+          : 'Operasyonel kârın serbest nakit akışına dönüşümü sağlıklıdır.')
     }
   ];
 
@@ -4034,6 +4200,7 @@ export function optimizeFinalDecision({
   sector = 'INDUSTRIAL',
   scoreResult,
   officialSectorName,
+  ticker,
 }: {
   rawDecision: 'AL' | 'ALMA' | 'NÖTR';
   score?: number;
@@ -4045,6 +4212,7 @@ export function optimizeFinalDecision({
   sector?: SectorType;
   scoreResult?: SectorScoreResult;
   officialSectorName?: string;
+  ticker?: string;
 }): FinalDecisionOptimization {
   let discount: number = valuation?.discount_pct ?? 0;
   if (valuation?.discount_pct == null) {
@@ -4282,7 +4450,7 @@ export function optimizeFinalDecision({
 
     // 6. Kural: Holding Sektörü Solo Borç, İskonto ve Kârlılık Filtresi
     if (!overrideApplied && effectiveSector === 'HOLDING') {
-      const tickerUpper = String(effectiveLatestData?.ticker || (valuation as any)?.ticker || '').toUpperCase();
+      const tickerUpper = String(ticker || effectiveLatestData?.ticker || (valuation as any)?.ticker || '').toUpperCase();
       const soloNetDebt = parseFinancialNumber(effectiveLatestData?.solo_net_debt);
       const isBankConsolidatingHolding = ['KCHOL', 'SAHOL', 'AGHOL', 'DOHOL'].includes(tickerUpper);
       const holdingDebt = soloNetDebt !== null ? soloNetDebt : (isBankConsolidatingHolding ? 0 : (parseFinancialNumber(effectiveLatestData?.net_debt) ?? 0));
@@ -5094,6 +5262,13 @@ export function computeSectorValuationAndDrivers(
       note.includes('şirketin prim üretimi') ||
       note.includes('şirketin kârlılık marjlarını') ||
       note.includes('reel ciro büyümesi') ||
+      note.includes("türkiye'nin risk primi") ||
+      note.includes('türkiye’nin risk primi') ||
+      note.includes('gelecekteki nakit akışlarının bugünkü değerini') ||
+      note.includes('iskonto oranını etkiler') ||
+      note.includes('şirket hedef çarpanı') ||
+      note.includes('yatırımcı sunumu / şirket hedef çarpanı') ||
+      note.includes('gordon büyüme modeli') ||
       (label.endsWith('(12 ay ileri)') && !note && !expl);
 
     if (isGenericTemplate) return false;
@@ -5442,7 +5617,7 @@ export function computeSectorValuationAndDrivers(
   let gordonFormulaText: string | undefined;
   let hasPresentationMultiple = false;
 
-  if (presentationDrivers?.target_multiple?.value) {
+  if (presentationDrivers?.target_multiple?.value && isPresentationTarget(presentationDrivers.target_multiple)) {
     targetMultipleStr = String(presentationDrivers.target_multiple.value);
     const rawVal = presentationDrivers.target_multiple.numericValue != null
       ? Number(presentationDrivers.target_multiple.numericValue)
@@ -5851,8 +6026,9 @@ export function computeSectorValuationAndDrivers(
     return netFullVal < 0 && ttmEbVal <= 0 && ((roe !== null && roe < -5.0) || evaCheck < -5.0);
   };
 
-  // 2) Sanal %22-%40 Firma Değeri (EV) Tabanı Koruması:
+  // 2) Sanal %22-%40 Firma Değeri (EV) Tabanı Koruması & Net Nakit / Azınlık Payı Köprüsü:
   // Kronik zarar ve sermaye yıkımı yaşayan borçlu şirketlerde Net Borç > Firma Değeri ise sanal EV tabanı uygulanmaz (0 TL).
+  // Net nakitteki şirketlerde kasa nakdi özkaynak değerine eklenir; konsolide azınlık payları ise firma değerinin %35'ini aşamaz.
   const resolveSafeEvEquity = (
     enterpriseVal: number,
     debtBridge: number,
@@ -5860,7 +6036,15 @@ export function computeSectorValuationAndDrivers(
     floorRatio: number,
     netFullVal: number
   ): number => {
-    const rawEq = enterpriseVal - debtBridge;
+    const rawNetDebtValFull = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCashVal = rawNetDebtValFull < 0 ? Math.abs(rawNetDebtValFull) : 0;
+    const rawMinorityVal = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const cappedMinority = enterpriseVal > 0 ? Math.min(rawMinorityVal, enterpriseVal * 0.35) : rawMinorityVal;
+    
+    // debtBridge parametresi (effectiveNetDebt + leaseLiabilities + rawMinority) içerir.
+    // Azınlık payı tavanı uygulanır ve kasadaki net nakit özkaynak değerine ilave edilir:
+    const adjustedDebt = (debtBridge - rawMinorityVal + cappedMinority) - netCashVal;
+    const rawEq = enterpriseVal - adjustedDebt;
     if (!isChronicSectorLossDestroyer(netFullVal) && enterpriseVal > 0 && equityFull > 0) {
       return Math.max(rawEq, enterpriseVal * floorRatio);
     }
@@ -5892,6 +6076,14 @@ export function computeSectorValuationAndDrivers(
       return Number(Math.max(0.15, Math.min(0.35, secPb * 0.28 * debtErosionFactor)).toFixed(2));
     }
     if (roe !== null && roe <= 0) {
+      // Borçsuz ve esas faaliyet kârı üreten şirketler (örneğin EGEEN):
+      // Net borcu olmayan (net nakitteki) ve faaliyet kârı / FAVÖK üreten şirketler
+      // yalnızca TMS 29 veya geçici döngü dibi nedeniyle net zarardadır. Tasfiye iskontosuna (0.25x-0.65x) ezilemez.
+      const hasNetCash = rawNetDebtVal <= 0;
+      const isOperatingProfitable = (rawLatestEbitVal !== null && rawLatestEbitVal > 0) || (ttmEbVal > 0);
+      if (hasNetCash && isOperatingProfitable) {
+        return Number(Math.max(1.0, Math.min(secPb * 0.80, 1.40)).toFixed(2));
+      }
       return Number(Math.max(0.25, Math.min(0.65, secPb * 0.35)).toFixed(2));
     }
     return positiveRoePb;
@@ -6056,18 +6248,25 @@ export function computeSectorValuationAndDrivers(
         : (roe !== null ? Math.max(-0.25, (roe / 100) * periodAnnualFactor) : 0);
       const forwardNavPerShare = Math.max(0, navPerShare * (1 + forwardEquityGrowth));
 
+      const isTier1Holding = ['KCHOL', 'SAHOL', 'AGHOL', 'ALARK', 'SISE', 'TKFEN'].includes(currentTickerUpper);
       let holdingMultiple: number;
-      if (isDistressedHolding) {
-        // Sıkıntılı / Zarar Eden Holding (PAHOL, ECZYT tipi):
+      if (isTier1Holding) {
+        // Kurumsal Holdingler (Koç, Sabancı, Anadolu Grubu, Alarko, Şişecam, Tekfen): 
+        // BIST tarihsel kurumsal hedef NAD iskontosu %22 - %32 aralığındadır (0.68x - 0.78x P/NAV).
+        // TMS 29 enflasyon muhasebesiyle şişen özkaynak üzerinden ayrıca %65 tasfiye iskontosu uygulanması mükerrer cezalandırmadır.
+        const tier1RoeFactor = roe !== null ? Math.max(-0.04, Math.min(0.08, (roe / 100) * 0.4)) : 0;
+        holdingMultiple = Number((0.70 + tier1RoeFactor).toFixed(2));
+      } else if (isDistressedHolding) {
+        // Sıkıntılı / Zarar Eden İkinci Kademe Holding (PAHOL tipi):
         // Konglomera maliyetleri ve iştirak zararları nedeniyle derin holding iskontosu (%65-%72 iskonto -> 0.28x - 0.35x P/NAV)
         holdingMultiple = (roe !== null && roe < -2.0) ? 0.32 : 0.35;
       } else if (roe !== null && roe < 10.0) {
-        // Düşük Kârlılık (BERA, ALARK tipi): %52-%58 iskonto -> 0.42x - 0.48x P/NAV
-        holdingMultiple = Number(Math.max(0.42, Math.min(0.50, 0.40 + (roe / 100) * 0.8)).toFixed(2));
+        // Düşük Kârlılık (BERA tipi): %48-%55 iskonto -> 0.45x - 0.52x P/NAV
+        holdingMultiple = Number(Math.max(0.45, Math.min(0.55, 0.42 + (roe / 100) * 0.8)).toFixed(2));
       } else if (roe !== null && roe >= 25.0) {
-        holdingMultiple = Math.max(0.68, Math.min(0.78, targetMultipleNum > 0.85 ? 0.72 : targetMultipleNum));
+        holdingMultiple = Math.max(0.70, Math.min(0.80, targetMultipleNum > 0.85 ? 0.75 : targetMultipleNum));
       } else {
-        holdingMultiple = Math.max(0.55, Math.min(0.70, targetMultipleNum > 0.85 ? 0.65 : targetMultipleNum));
+        holdingMultiple = Math.max(0.60, Math.min(0.72, targetMultipleNum > 0.85 ? 0.65 : targetMultipleNum));
       }
       const clampedMultiple = holdingMultiple;
       const rawFair = forwardNavPerShare * clampedMultiple;
@@ -6412,10 +6611,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     const rawRevG = revGrowth / 100;
     const rawNetG = netGrowth / 100;
@@ -6543,10 +6746,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     // Telekomünikasyonda Altyapı CapEx'i (Fiber, 5G, Baz İstasyonları) Cironun %20-%25'i bandındadır
     const annualCapexFull = rawCapex !== null && Math.abs(rawCapex) > 0
@@ -6617,10 +6824,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     const rawRevG = revGrowth / 100;
     const clampedRevG = Math.min(0.20, Math.max(-0.20, rawRevG));
@@ -6678,10 +6889,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     const rawRevG = revGrowth / 100;
     const clampedRevG = Math.min(0.20, Math.max(-0.15, rawRevG));
@@ -6752,10 +6967,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     if (isSevereOperationalDistress || ebitdaFull <= 0) {
       const indResult = computeIndustrialFairValue({
@@ -6814,13 +7033,8 @@ export function computeSectorValuationAndDrivers(
       ).toFixed(2));
       const enterpriseVal = forwardEbitda * targetEvMultiple;
 
-      // Regüle altyapı nakit akışı koruması (Kronik zarar ve sermaye erozyonu olan borçlu şirketlerde sanal %28 EV tabanı uygulanmaz!)
-      let evEquity = enterpriseVal - totalDebtBridge;
-      if (!isChronicValueDestroyer && enterpriseVal > 0 && totalEquityFull > 0) {
-        evEquity = Math.max(evEquity, enterpriseVal * 0.28);
-      } else {
-        evEquity = Math.max(0, evEquity);
-      }
+      // Regüle altyapı nakit akışı koruması & Net Nakit / Azınlık Payı Köprüsü:
+      const evEquity = resolveSafeEvEquity(enterpriseVal, totalDebtBridge, totalEquityFull, 0.28, netFull);
       const evPerShare = evEquity > 0 ? (evEquity / effectiveShareCount) : 0;
 
       // İleri F/K
@@ -6885,10 +7099,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     if (isSevereOperationalDistress || ebitdaFull <= 0) {
       const indResult = computeIndustrialFairValue({
@@ -6992,10 +7210,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     if (isSevereOperationalDistress || ebitdaFull <= 0) {
       const indResult = computeIndustrialFairValue({
@@ -7083,10 +7305,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     if (isSevereOperationalDistress || ebitdaFull <= 0) {
       const indResult = computeIndustrialFairValue({
@@ -7174,10 +7400,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     if (isSevereOperationalDistress || ebitdaFull <= 0) {
       const indResult = computeIndustrialFairValue({
@@ -7278,10 +7508,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     if (isSevereOperationalDistress || ebitdaFull <= 0) {
       const indResult = computeIndustrialFairValue({
@@ -7424,10 +7658,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     if (isSevereOperationalDistress || ebitdaFull <= 0) {
       const indResult = computeIndustrialFairValue({
@@ -7542,10 +7780,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     if (ebitdaFull <= 0) {
       const indResult = computeIndustrialFairValue({
@@ -7635,10 +7877,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     if (ebitdaFull <= 0) {
       const indResult = computeIndustrialFairValue({
@@ -7716,10 +7962,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     if (ebitdaFull <= 0) {
       const indResult = computeIndustrialFairValue({
@@ -7876,10 +8126,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     const rawRevG = revGrowth / 100;
     const clampedRevG = Math.min(0.20, Math.max(-0.20, rawRevG));
@@ -7934,10 +8188,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     const rawRevG = revGrowth / 100;
     const clampedRevG = Math.min(0.20, Math.max(-0.20, rawRevG));
@@ -7994,10 +8252,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     const rawRevG = revGrowth / 100;
     const clampedRevG = Math.min(0.25, Math.max(-0.15, rawRevG));
@@ -8044,10 +8306,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     const rawRevG = revGrowth / 100;
     const clampedRevG = Math.min(0.25, Math.max(-0.15, rawRevG));
@@ -8094,10 +8360,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     const rawRevG = revGrowth / 100;
     const clampedRevG = Math.min(0.20, Math.max(-0.20, rawRevG));
@@ -8147,10 +8417,14 @@ export function computeSectorValuationAndDrivers(
     const revFull = computeTtmField('revenue', latestRev) * unitScale;
     const netFull = computeTtmField('net_income', latestNet) * unitScale;
     const totalEquityFull = latestEq * unitScale;
-    const netDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+    const netCash = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+    const effectiveNetDebt = rawNetDebt > 0 ? rawNetDebt : 0;
+    const netDebt = rawNetDebt;
     const leaseLiabilities = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
-    const minorityInterests = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
-    const totalDebtBridge = netDebt + leaseLiabilities + minorityInterests;
+    const rawMinority = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const minorityInterests = rawMinority;
+    const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     const rawRevG = revGrowth / 100;
     const clampedRevG = Math.min(0.20, Math.max(-0.15, rawRevG));
@@ -8567,6 +8841,7 @@ export function computeSectorValuationAndDrivers(
     sector,
     scoreResult,
     officialSectorName: detectedOfficialSecName,
+    ticker: currentTickerUpper,
   });
 
   valuation.final_decision = optimization.finalDecision;
@@ -9900,8 +10175,19 @@ export function generateAlgorithmicReportFallback(params: {
   } else if (optimization.finalDecision === 'ALMA') {
     thesisVerdict = `Hesaplanan **${valuation.fair_value} TL** adil değere rağmen, hisse fiyatı üzerindeki baskı, sermaye maliyetinin altında kalan getiri (negatif EVA) ve operasyonel kırılganlıklar nedeniyle model görünümü **ALMA** yönündedir. Yüzeysel çarpan iskontoları operasyonel riskler teyit edilmeden alım fırsatı olarak değerlendirilmemelidir (**Sermaye Koruma Açısından Olumsuz / Yüksek Risk**).`;
   } else {
-    thesisVerdict = `Mevcut **${price} TL** piyasa fiyatı, hesaplanan **${valuation.fair_value} TL** adil değerimizle büyük ölçüde dengelenmiştir (%${discountPct >= 0 ? `+${discountPct}` : discountPct} makas). Yüksek faiz ve maliyet ortamında yeni bir katalizör teyit edilene veya daha derin bir güvenlik marjı oluşana kadar hisse senedinde **seçici ve temkinli izleme stratejisi önerilmektedir (Nötr / Bekle-Gör)**.`;
+    thesisVerdict = discountPct >= 20
+      ? `Hesaplanan **${valuation.fair_value} TL** adil değerimiz kağıt üzerinde **%${discountPct} iskonto** gösterse de; bilançodaki borç yükü, serbest nakit akışı kıtlığı veya sektörel marj kırılganlıkları nedeniyle hisse senedinde aceleci olunmamalı, **temkinli izleme stratejisi uygulanmalıdır (Nötr / Koşullu İzleme)**.`
+      : `Mevcut **${price} TL** piyasa fiyatı, hesaplanan **${valuation.fair_value} TL** adil değerimizle büyük ölçüde dengelenmiştir (%${discountPct >= 0 ? `+${discountPct}` : discountPct} makas). Yüksek faiz ve maliyet ortamında yeni bir katalizör teyit edilene veya daha derin bir güvenlik marjı oluşana kadar hisse senedinde **seçici ve temkinli izleme stratejisi önerilmektedir (Nötr / Bekle-Gör)**.`;
   }
+
+  const redFlagsBlock = buildForensicRedFlagsSection({
+    ticker,
+    valuation,
+    scoreResult,
+    optimization,
+    extractedData,
+    latestItem
+  });
 
   // 7. V. Bölüm Değer Sürücüleri ve Hassasiyet Analizi
   const opLeverageSensitivity = Math.max(3.2, Math.min(8.5, (100 / Math.max(ebitdaMarginVal, 8)))).toFixed(1);
@@ -9939,7 +10225,7 @@ $$`;
 
   return `## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ
 > ${ticker} hissesi için hesaplanan adil değer **${valuation.fair_value} TL** olup, güncel **${price} TL** piyasa fiyatına göre **%${valuation.discount_pct} getiri potansiyeli** (${valuation.discount_pct >= 0 ? 'iskonto' : 'prim'}) taşımaktadır.
-${trapBlock}
+${trapBlock}${redFlagsBlock}
 **Temel Yatırım Tezi:** ${thesisVerdict}
 
 **Finansal Sağlık Skoru:** ${scoreSummaryText}
