@@ -11,7 +11,10 @@ import {
   optimizeFinalDecision,
   calculateSectorScore,
   enrichAndSanitizeFinancialHistory,
-  calculateValuationSensitivityMatrix
+  calculateValuationSensitivityMatrix,
+  getDynamicRiskTitle,
+  buildForensicRedFlagsSection,
+  syncReportTextWithValuation
 } from '../lib/valuation.ts';
 import { FinancialRatioEngine } from '../lib/ratio-engine.ts';
 import { computeSnowflakeAnalysis as calculateSnowflake } from '../lib/snowflake.ts';
@@ -1687,6 +1690,53 @@ test('RED TEAM MATHEMATICAL AUDIT & INVARIANT TEST SUITE', async (t) => {
     // Test c: CLEBI için döviz operasyon ve TMS 29 bağışıklığı üretilmelidir
     assert.equal(thesisDossier.opportunityMechanismTag, 'DÖVİZ BAZLI OPERASYONEL GÜÇ & TMS 29 BAĞIŞIKLIĞI');
     assert.ok(thesisDossier.opportunitySourceNarrative.includes('TMS 29 enflasyon muhasebesi uygulamayan'), 'Döviz fonksiyonlu havacılık şirketlerinde TMS 29 muafiyeti açıklanmalıdır');
+  });
+
+  await t.test('REGRESYON 30: Dinamik Risk Başlığı & "Neden AL Verilmedi?" Başlık Sadeleştirmesi', () => {
+    // 1. Dinamik Risk Başlığı Üretimi:
+    // a) Gölge Holdingleşme
+    const titleShadow = getDynamicRiskTitle([], { isRiskDetected: true, summaryTitle: 'Gölge Holdingleşme' });
+    assert.equal(titleShadow, 'Gölge Holdingleşme & Sermaye Tahsisi Riski');
+
+    // b) Tedarikçi Borcu
+    const titleSupplier = getDynamicRiskTitle(['İşletme Sermayesi Maskeli Nakit (Tedarikçi Borcu Değer Tuzağı): Şirketin faaliyet nakit akışı tedarikçilerden geliyor.']);
+    assert.equal(titleSupplier, 'Tedarikçi Borcuyla Finanse Edilen Nakit Riski');
+
+    // c) Negatif EVA / Özkaynak Erozyonu
+    const titleEva = getDynamicRiskTitle(['Sermaye Değer Yıkımı: Negatif EVA spread ve ROIC sermaye maliyetinin altında.']);
+    assert.equal(titleEva, 'Sermaye Verimliliği & Özkaynak Erozyonu Riski');
+
+    // d) Marj Daralması / Operasyonel Zarar
+    const titleMargin = getDynamicRiskTitle(['Esas Faaliyet Zararı ve aralıksız marj daralması']);
+    assert.equal(titleMargin, 'Operasyonel Kârlılık ve Marj Daralması Riski');
+
+    // e) Kritik Borç / Kaldıraç
+    const titleDebt = getDynamicRiskTitle(['Kritik Net Borç / FAVÖK baskısı']);
+    assert.equal(titleDebt, 'Kritik Borç Yükü ve Kaldıraç Riski');
+
+    // 2. buildForensicRedFlagsSection: "2. Adli Gerçekler:" yerine doğrudan "Neden 'AL' Verilmedi?" üretmelidir
+    const redFlagsText = buildForensicRedFlagsSection({
+      ticker: 'TEST_STOCK',
+      valuation: { discount_pct: 25.0, potential_return: 35.0, roic: 5.0, wacc: 20.0, final_decision: 'NÖTR' },
+      scoreResult: { totalScore: 68 },
+      optimization: { finalDecision: 'NÖTR' }
+    });
+    assert.ok(redFlagsText.includes('> ⚠️ **Neden "AL" Verilmedi?**'), 'Başlık doğrudan "Neden AL Verilmedi?" olmalıdır');
+    assert.ok(!redFlagsText.includes('2. Adli Gerçekler:'), 'Eski "2. Adli Gerçekler:" etiketi kesinlikle yer almamalıdır');
+
+    // 3. syncReportTextWithValuation: Eski statik başlıkları dinamik başlığa dönüştürmelidir
+    const legacyReport = `## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ\n\n> ⚠️ **2. Adli Gerçekler: Neden "AL" Verilmedi? (Büyük Riskler & İskontoya Rağmen Fren Nedenleri)**\n> Eski metin.\n\n> ⚠️ **Adli Denetim & Değer Tuzağı Teşhisi (Forensic Red Team):**\n> - Şirket faaliyet kolu bir holding olmamasına rağmen bilançosunda yüksek tutarda duran finansal yatırım (Gölge Holdingleşme) taşımaktadır.`;
+    
+    const synced = syncReportTextWithValuation(legacyReport, {
+      fair_value: 100.0,
+      discount_pct: 20.0,
+      capital_allocation_risk: { isRiskDetected: true }
+    });
+
+    assert.ok(synced.includes('> ⚠️ **Neden "AL" Verilmedi?**'), 'Legacy başlık "Neden AL Verilmedi?" olarak modernize edilmelidir');
+    assert.ok(!synced.includes('2. Adli Gerçekler: Neden "AL" Verilmedi?'), 'Eski uzun başlık temizlenmelidir');
+    assert.ok(synced.includes('> ⚠️ **Gölge Holdingleşme & Sermaye Tahsisi Riski:**'), 'Eski statik "Adli Denetim & Değer Tuzağı Teşhisi" başlığı dinamik başlığa dönüştürülmelidir');
+    assert.ok(!synced.includes('Adli Denetim & Değer Tuzağı Teşhisi (Forensic Red Team):'), 'Eski statik Red Team başlığı temizlenmelidir');
   });
 });
 

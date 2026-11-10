@@ -1696,6 +1696,34 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
 }
 
 /**
+ * Adli denetim ve değer tuzağı teşhisinde, tespit edilen ana risk kaynağını
+ * başlığa yansıtan dinamik başlık üreticisi (örn: Gölge Holdingleşme, Tedarikçi Borcu).
+ */
+export function getDynamicRiskTitle(trapReasons: string[], capAlloc?: any): string {
+  const isCapAlloc = Boolean(capAlloc?.isRiskDetected || capAlloc?.isInvestmentEntity);
+  const reasonsText = (Array.isArray(trapReasons) ? trapReasons : []).join(' ').toLowerCase();
+
+  if (isCapAlloc || reasonsText.includes('gölge holding') || reasonsText.includes('sermaye aktarım') || reasonsText.includes('finansal yatırım')) {
+    return capAlloc?.isInvestmentEntity
+      ? 'TFRS 10 İştirak & Gayrinakdi Portföy Değerleme Yapısı'
+      : 'Gölge Holdingleşme & Sermaye Tahsisi Riski';
+  }
+  if (reasonsText.includes('tedarikçi borcu') || reasonsText.includes('işletme sermayesi maskeli') || reasonsText.includes('tedarikçi')) {
+    return 'Tedarikçi Borcuyla Finanse Edilen Nakit Riski';
+  }
+  if (reasonsText.includes('sermaye değer yıkımı') || reasonsText.includes('negatif eva') || reasonsText.includes('özkaynak erozyonu') || reasonsText.includes('kronik zarar') || reasonsText.includes('roic')) {
+    return 'Sermaye Verimliliği & Özkaynak Erozyonu Riski';
+  }
+  if (reasonsText.includes('esas faaliyet zararı') || reasonsText.includes('brüt satış zararı') || reasonsText.includes('marj daralması') || reasonsText.includes('operasyonel zarar')) {
+    return 'Operasyonel Kârlılık ve Marj Daralması Riski';
+  }
+  if (reasonsText.includes('net borç') || reasonsText.includes('kaldıraç') || reasonsText.includes('finansal borç') || reasonsText.includes('borçluluk')) {
+    return 'Kritik Borç Yükü ve Kaldıraç Riski';
+  }
+  return 'Temel Finansal Riskler & Değer Tuzağı Uyarısı';
+}
+
+/**
  * İskontolu olmasına rağmen "AL" verilmeyen (NÖTR veya ALMA) şirketlerde,
  * yatırımcının "neden AL verilmediğini" raporda açıkça görmesini sağlayan
  * adli büyük riskler ve fren gerekçeleri bölümünü deterministik olarak üretir.
@@ -1794,7 +1822,7 @@ export function buildForensicRedFlagsSection(params: {
 
   const potDisplay = potentialPct > discountPct ? `+%${potentialPct.toFixed(1)} getiri potansiyeli / ` : '';
 
-  return `\n\n> ⚠️ **2. Adli Gerçekler: Neden "AL" Verilmedi? (Büyük Riskler & İskontoya Rağmen Fren Nedenleri)**\n` +
+  return `\n\n> ⚠️ **Neden "AL" Verilmedi?**\n` +
     `> Hisse senedi model hesaplamasında kağıt üzerinde **${potDisplay}%${discountPct.toFixed(1)} iskonto** sunmasına rağmen, aşağıdaki somut finansal gerekçeler nedeniyle "AL" kararı verilmemiş; sermaye kaybı riskine karşı karar temkinli **[${finalDecision}]** olarak dengelenmiştir:\n>\n` +
     reasons.map((r, i) => `> ${i + 1}. ${r}`).join('\n>\n') + `\n`;
 }
@@ -1867,15 +1895,32 @@ export function syncReportTextWithValuation(
     text = text.replace(/\|\s*\*\*Toplam\s+Puan\*\*\s*\|\s*\*\*\d+\*\*\s*\|\s*\*\*100\*\*/gi, `| **Toplam Puan** | **${targetScore}** | **100**`);
   }
 
-  // 6. Adli Denetim & Değer Tuzağı Teşhisi Senkronizasyonu (Kalıcı Yatırım Tezi)
+  // 6. Dinamik Risk Teşhisi Senkronizasyonu (Kalıcı Yatırım Tezi)
   const trapReasons: string[] = Array.isArray(valuation.value_trap_reasons) ? [...valuation.value_trap_reasons] : [];
   if ((valuation.capital_allocation_risk?.isRiskDetected || valuation.capital_allocation_risk?.isInvestmentEntity) && Array.isArray(valuation.capital_allocation_risk.reasons)) {
     for (const r of valuation.capital_allocation_risk.reasons) {
       if (!trapReasons.includes(r)) trapReasons.push(r);
     }
   }
-  if (trapReasons.length > 0 && !text.includes('Adli Denetim & Değer Tuzağı Teşhisi')) {
-    const alertBlock = `\n\n> ⚠️ **Adli Denetim & Değer Tuzağı Teşhisi (Forensic Red Team):**\n${trapReasons.map((r: string) => `> - ${r}`).join('\n')}\n`;
+
+  const dynamicRiskTitle = getDynamicRiskTitle(trapReasons, valuation.capital_allocation_risk);
+
+  // 6.0 Eski / Statik Başlıkların Dinamik Başlıklara Temizlenmesi
+  text = text.replace(
+    /(?:>\s*)?#{0,3}\s*⚠️\s*\*{0,2}2\.\s*Adli\s+Gerçekler\s*:\s*Neden\s*"AL"\s*Verilmedi\?\s*\([^)]*\)\*{0,2}/gi,
+    '> ⚠️ **Neden "AL" Verilmedi?**'
+  );
+  text = text.replace(
+    /(?:>\s*)?#{0,3}\s*⚠️\s*\*{0,2}2\.\s*Adli\s+Gerçekler\s*:\s*/gi,
+    '> ⚠️ **Neden "AL" Verilmedi?**\n> '
+  );
+  text = text.replace(
+    /(?:>\s*)?#{0,3}\s*⚠️\s*\*{0,2}Adli\s+Denetim\s*&\s*Değer\s+Tuzağı\s+Teşhisi(?:\s*\(Forensic\s+Red\s+Team\))?\s*:?\*{0,2}/gi,
+    `> ⚠️ **${dynamicRiskTitle}:**`
+  );
+
+  if (trapReasons.length > 0 && !text.includes(dynamicRiskTitle) && !text.includes('Değer Tuzağı Teşhisi')) {
+    const alertBlock = `\n\n> ⚠️ **${dynamicRiskTitle}:**\n${trapReasons.map((r: string) => `> - ${r}`).join('\n')}\n`;
     if (text.includes('## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ')) {
       text = text.replace('## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ', `## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ${alertBlock}`);
     } else {
@@ -10243,8 +10288,9 @@ export function generateAlgorithmicReportFallback(params: {
       : [])
   ];
 
+  const dynamicRiskTitle = getDynamicRiskTitle(trapReasons, valuation?.capital_allocation_risk);
   const trapBlock = trapReasons.length > 0
-    ? `\n> ⚠️ **Adli Denetim & Değer Tuzağı Teşhisi:**\n${trapReasons.map((r: string) => `> - ${r}`).join('\n')}\n`
+    ? `\n> ⚠️ **${dynamicRiskTitle}:**\n${trapReasons.map((r: string) => `> - ${r}`).join('\n')}\n`
     : '';
 
   // 6. Karar ve Yatırım Tezi Yorumu
@@ -10356,6 +10402,6 @@ ${thesisVerdict}
 **Riskler & Emniyet Sınırları:**
 - Operasyonel marjların %${(ebitdaMarginVal * 0.75).toFixed(1)} seviyesinin altına gerilemesi temel yatırım tezini zedeleyebilir.
 - Makroekonomik faiz ve döviz oynaklığı borçlanma maliyetlerini artırabilir.
-${trapReasons.length > 0 ? `- **Adli Denetim Bulguları:** ${trapReasons.join('; ')}\n` : ''}
+${trapReasons.length > 0 ? `- **${dynamicRiskTitle}:** ${trapReasons.join('; ')}\n` : ''}
 ${optimization.conditionalWarnings?.length > 0 ? optimization.conditionalWarnings.join('. ') : 'Makro oynaklık ve faiz seviyeleri izlenmelidir.'}`;
 }

@@ -8,7 +8,8 @@ import {
 import { 
   computeSectorValuationAndDrivers, 
   syncReportTextWithValuation,
-  generateAlgorithmicReportFallback
+  generateAlgorithmicReportFallback,
+  getDynamicRiskTitle
 } from '@/lib/valuation';
 import { fetchLiveBistPrice } from '@/lib/bist-service';
 import { fetchIsYatirimCompanyDetails, synthesizeDividendsFromFinancialHistory } from '@/lib/isyatirim-service';
@@ -327,6 +328,7 @@ ${(scoreResult.breakdown || []).map((b: any) => `| ${b.category} | ${b.score} | 
         ? valuation.capital_allocation_risk.reasons
         : [])
     ];
+    const dynamicRiskTitle = getDynamicRiskTitle(activeValueTrapReasons, valuation?.capital_allocation_risk);
 
     let prompt = `Hisse Kodu: ${resolvedTicker}
 Rapor Tarihi: ${currentDateStr}
@@ -369,7 +371,7 @@ ALGORİTMİK FİNANSAL SAĞLIK VE KARAR OPTİMİZASYONU:
 ${optimization.overrideApplied ? `- Emniyet Marjı Müdahalesi: ${optimization.overrideReason}\n` : ''}
 ${optimization.conditionalWarnings.length > 0 ? `- Sınır Koşulları ve Gri Alan: ${optimization.conditionalWarnings.join('; ')}\n` : ''}
 ${activeValueTrapReasons.length > 0 ? `
-ADLİ DENETİM VE DEĞER TUZAĞI BULGULARI (I. BÖLÜMDE TEMEL YATIRIM TEZİ VE VI. BÖLÜMDE AYI SENARYOSU RİSKİ OLARAK ZORUNLU İŞLENECEK):
+TEMEL FİNANSAL RİSK BULGULARI (${dynamicRiskTitle.toUpperCase()} - I. BÖLÜMDE TEMEL YATIRIM TEZİ VE VI. BÖLÜMDE AYI SENARYOSU RİSKİ OLARAK ZORUNLU İŞLENECEK):
 ${activeValueTrapReasons.map((r: string) => `- ${r}`).join('\n')}
 ` : ''}
 
@@ -402,15 +404,15 @@ $$
 - Verilen JSON verisi dışındaki rakam, adet ve oranları yuvarlama, tahmin etme veya dışarıdan bilgi ekleme. JSON içindeki metrikler arasında ASLA çelişki üretme (örn. bir bölümde 37 hastane derken diğerinde 36 hastane yazma).
 - Tüm finansal oranlar ve büyüklükler için KESİNLİKLE aşağıdaki doğrulanmış merkezi JSON verilerini esas al.
 - NİHAİ ANALİST KARARI (ZORUNLU): Raporun sonundaki 'Analist Kararı:' satırı KESİNLİKLE [${optimization.finalDecision}] olacaktır. Modelin hesapladığı deterministik optimize karar [${optimization.finalDecision}] olup (Ham Karar: ${optimization.rawDecision}${optimization.overrideApplied ? ` -> Kural Revizyonu: ${optimization.overrideReason}` : ''}), bu karar raporda birebir korunmalıdır.
-15. ADLİ DENETİM VE SOMUT YATIRIM TEZİ ENTEGRASYONU: Yukarıda verilen 'ADLİ DENETİM VE DEĞER TUZAĞI BULGULARI' varsa (daralan marjlar, negatif ROIC/EVA, tedarikçi borcu maskeli nakit vb.), bu somut gerekçeleri I. Bölümdeki 'Temel Yatırım Tezi'ne ve VI. Bölümdeki 'Riskler & Emniyet Marjı'na açıkça, madde madde ve sayısal kanıtlarıyla işle. Şirket iskontolu görünse dahi bu riskleri asla hafifletme veya gizleme!
+15. SOMUT FİNANSAL RİSKLER VE YATIRIM TEZİ ENTEGRASYONU: Yukarıda verilen 'TEMEL FİNANSAL RİSK BULGULARI' (${dynamicRiskTitle}) varsa (daralan marjlar, negatif ROIC/EVA, tedarikçi borcu maskeli nakit, gölge holdingleşme vb.), bu somut gerekçeleri I. Bölümdeki 'Temel Yatırım Tezi'ne "### ⚠️ ${dynamicRiskTitle}" başlığı altında ve VI. Bölümdeki 'Riskler & Emniyet Marjı'na açıkça, madde madde ve sayısal kanıtlarıyla işle. Şirket iskontolu görünse dahi bu riskleri asla hafifletme veya gizleme!
 ${optimization.finalDecision === 'NÖTR' ? `Eğer Nihai Yatırım Kararı 'NÖTR' ise:
     - Şirketin adil değer iskontosu (+%${valuation.discount_pct}) bulunsa dahi, finansal risk dinamikleri, sınır skorlar veya sektör temkinliliği nedeniyle karar temkinli 'NÖTR' (Koşullu İzleme) olarak dengelenmiştir.
     - Yatırımcıya nakit akışı ve operasyonel teyitler gelene kadar aceleci davranılmaması, kademeli veya koşullu izleme yapılması önerilmelidir.
     ${Number(valuation.discount_pct) >= 15 ? `
-    🚨 ZORUNLU İSKONTOYA RAĞMEN FREN BÖLÜMÜ (ADLİ GERÇEKLER):
+    🚨 ZORUNLU İSKONTOYA RAĞMEN FREN BÖLÜMÜ:
     Hisse senedi kağıt üzerinde %${valuation.discount_pct} iskonto / potansiyel göstermesine rağmen Nihai Karar [NÖTR] olarak belirlenmiştir.
     Raporunun 'I. YÖNETİCİ ÖZETİ' bölümünde hemen Yönetici Özetinin altına KESİNLİKLE şu başlığı ve altındaki somut gerekçeleri ekle:
-    "### ⚠️ 2. Adli Gerçekler: Neden \"AL\" Verilmedi? (Büyük Riskler & İskontoya Rağmen Fren Nedenleri)"
+    "### ⚠️ Neden \"AL\" Verilmedi?"
     Bu başlığın altında:
     1) Yüksek Net Borç / Kaldıraç durumunu (Net Borç, Net Borç/FAVÖK),
     2) Serbest Nakit Akışı / İşletme Sermayesi (stoklar/alacaklar nakit yutumu),

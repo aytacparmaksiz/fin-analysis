@@ -588,6 +588,38 @@ function cleanMarkdown(text: string): string {
     );
   }
 
+  // 3. Eski / Statik Başlıkların Dinamik Başlıklara Temizlenmesi
+  cleaned = cleaned.replace(
+    /(?:>\s*)?#{0,3}\s*⚠️\s*\*{0,2}2\.\s*Adli\s+Gerçekler\s*:\s*Neden\s*"AL"\s*Verilmedi\?\s*\([^)]*\)\*{0,2}/gi,
+    '> ⚠️ **Neden "AL" Verilmedi?**'
+  );
+  cleaned = cleaned.replace(
+    /(?:>\s*)?#{0,3}\s*⚠️\s*\*{0,2}2\.\s*Adli\s+Gerçekler\s*:\s*/gi,
+    '> ⚠️ **Neden "AL" Verilmedi?**\n> '
+  );
+  cleaned = cleaned.replace(
+    /(?:>\s*)?#{0,3}\s*⚠️\s*\*{0,2}Adli\s+Denetim\s*&\s*Değer\s+Tuzağı\s+Teşhisi(?:\s*\(Forensic\s+Red\s+Team\))?\s*:?\*{0,2}/gi,
+    () => {
+      const lower = cleaned.toLowerCase();
+      if (lower.includes('gölge holding') || lower.includes('sermaye aktarım') || lower.includes('finansal yatırım')) {
+        return '> ⚠️ **Gölge Holdingleşme & Sermaye Tahsisi Riski:**';
+      }
+      if (lower.includes('tedarikçi borcu') || lower.includes('işletme sermayesi maskeli')) {
+        return '> ⚠️ **Tedarikçi Borcuyla Finanse Edilen Nakit Riski:**';
+      }
+      if (lower.includes('sermaye değer yıkımı') || lower.includes('özkaynak erozyonu') || lower.includes('negatif eva')) {
+        return '> ⚠️ **Sermaye Verimliliği & Özkaynak Erozyonu Riski:**';
+      }
+      if (lower.includes('esas faaliyet zararı') || lower.includes('marj daralması')) {
+        return '> ⚠️ **Operasyonel Kârlılık ve Marj Daralması Riski:**';
+      }
+      if (lower.includes('kaldıraç') || lower.includes('net borç')) {
+        return '> ⚠️ **Kritik Borç Yükü ve Kaldıraç Riski:**';
+      }
+      return '> ⚠️ **Temel Finansal Riskler & Değer Tuzağı Uyarısı:**';
+    }
+  );
+
   // Strip trailing unformatted Analist Kararı block from markdown body (it is rendered in the executive card)
   cleaned = cleaned.replace(/(?:###?\s*)?\*{0,2}Analist\s+Karar[ıi]\s*[:=-][\s\S]*$/i, '');
 
@@ -5878,18 +5910,13 @@ export default function SimplyView({
                         },
                         blockquote: ({ children, ...props }: any) => {
                           const text = extractTextFromChildren(children);
-                          const isWarning = text.includes('⚠️') || text.includes('Adli Denetim') || text.includes('Değer Tuzağı');
+                          const isWarning = text.includes('⚠️') || text.includes('Adli Denetim') || text.includes('Değer Tuzağı') || text.includes('Risk') || text.includes('Fren');
                           return (
                             <div className={`my-4 p-4 rounded-xl border-l-4 border-t border-r border-b shadow-md ${
                               isWarning
                                 ? 'bg-rose-950/20 border-l-rose-500 border-rose-500/30'
                                 : 'bg-[#181b22] border-l-[#f5c242] border-[#282d37]'
                             }`}>
-                              <div className={`text-[11px] font-bold uppercase tracking-wider mb-1.5 flex items-center gap-1.5 ${
-                                isWarning ? 'text-rose-400' : 'text-[#f5c242]'
-                              }`}>
-                                <Sparkles className="w-3.5 h-3.5" /> {isWarning ? 'Adli Denetim & Risk Uyarısı' : 'Bölüm Analitik Teşhisi'}
-                              </div>
                               <blockquote className="text-xs sm:text-sm text-slate-200 leading-relaxed font-sans not-italic border-none p-0 m-0" {...props}>
                                 {children}
                               </blockquote>
