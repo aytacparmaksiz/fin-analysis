@@ -69,6 +69,7 @@ import {
   extractValuationFromReportText,
   parseFinancialNumber,
   parsePeriodSortKey,
+  getLatestReportsPerTicker,
   safeDivide,
   safeRoe,
   safeMargin,
@@ -5269,17 +5270,7 @@ export default function ValuationTerminal({
             }
 
             // Hisse Tarama için her şirketin en güncel dönem raporunu al (şirket başına tek satır)
-            const latestPerTickerMap = new Map<string, SavedReport>();
-            const sortedByTime = [...savedReports].sort(
-              (a, b) => reportTimestamp(b) - reportTimestamp(a)
-            );
-            for (const rep of sortedByTime) {
-              const sym = (rep.ticker || '').toUpperCase();
-              if (sym && !latestPerTickerMap.has(sym)) {
-                latestPerTickerMap.set(sym, rep);
-              }
-            }
-            const deduplicatedLatestReports = Array.from(latestPerTickerMap.values());
+            const deduplicatedLatestReports = getLatestReportsPerTicker(savedReports);
             const ranked = sortReportsByRank(deduplicatedLatestReports);
             const filtered = ranked.filter(r => {
               const matchesSearch = !leaderboardSearch.trim() || 
@@ -6108,18 +6099,19 @@ export default function ValuationTerminal({
             }
 
             const allThemesList = Object.values(INVESTMENT_THEMES);
-            const themeSummary = getThemeSummary(savedReports);
+            const deduplicatedForThemes = getLatestReportsPerTicker(savedReports);
+            const themeSummary = getThemeSummary(deduplicatedForThemes);
 
             // Kesişim (Intersection / AND) Filtrelemesi
             let displayedItems: Array<{ report: SavedReport; matches: CompanyThemeMatch[] }> = [];
 
             if (selectedThemeFilters.length === 0) {
-              displayedItems = savedReports.map(report => ({
+              displayedItems = deduplicatedForThemes.map(report => ({
                 report,
                 matches: categorizeCompany(report)
               }));
             } else {
-              displayedItems = savedReports
+              displayedItems = deduplicatedForThemes
                 .map(report => {
                   const matches = categorizeCompany(report);
                   const matchIds = matches.map(m => m.themeId);
@@ -7308,16 +7300,17 @@ export default function ValuationTerminal({
             }
 
             // ==========================================
-            // 2. PORTFÖY & FAVORİLER LİSTESİ
+            // 2. PORTFÖY & FAVORİLER LİSTESİ (Şirket Başına En Güncel Tek Rapor)
             // ==========================================
-            const portAll = savedReports.filter(r => portfolioTickers.includes((r.ticker || '').toUpperCase()));
+            const deduplicatedSaved = getLatestReportsPerTicker(savedReports);
+            const portAll = deduplicatedSaved.filter(r => portfolioTickers.includes((r.ticker || '').toUpperCase()));
             const portAl = portAll.filter(r => (r.decision || '').trim().toUpperCase() === 'AL');
             const portNotr = portAll.filter(r => {
               const d = (r.decision || '').trim().toUpperCase();
               return d === 'NÖTR' || d === 'NOTR';
             });
             const portAlma = portAll.filter(r => (r.decision || '').trim().toUpperCase() === 'ALMA');
-            const favReports = savedReports.filter(r => favoriteTickers.includes((r.ticker || '').toUpperCase()));
+            const favReports = deduplicatedSaved.filter(r => favoriteTickers.includes((r.ticker || '').toUpperCase()));
 
             let baseList = isPortfolio
               ? (portfolioDecisionFilter === 'AL' 

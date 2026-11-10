@@ -81,7 +81,7 @@ import {
   type SnowflakeAnalysisResult,
   type SnowflakeCheck
 } from '@/lib/snowflake';
-import { analyzeRelatedPartyAndCapitalAllocationRisk, calculateDuPont5Step, calculateEarningsQuality, parseFinancialNumber, parsePeriodSortKey } from '@/lib/valuation';
+import { analyzeRelatedPartyAndCapitalAllocationRisk, calculateDuPont5Step, calculateEarningsQuality, parseFinancialNumber, parsePeriodSortKey, getLatestReportsPerTicker } from '@/lib/valuation';
 import { FinancialRatioEngine } from '@/lib/ratio-engine';
 import { synthesizeInvestmentThesis } from '@/lib/investment-thesis-synthesizer';
 
@@ -1091,13 +1091,14 @@ export default function SimplyView({
     return allInSector;
   }, [rawOfficialSector, currentSector, report.ticker]);
 
-  // Kullanıcının daha önce analiz ettiği akran şirketler
+  // Kullanıcının daha önce analiz ettiği akran şirketler (şirket başına en güncel tek rapor)
   const analyzedCompetitors = useMemo(() => {
     const peerTickers = new Set(sameSectorPeers.map(p => p.ticker.toUpperCase()));
-    return savedReports.filter(
+    const matching = savedReports.filter(
       r => (peerTickers.has(r.ticker?.toUpperCase()) || (r.sector === currentSector && sameSectorPeers.length === 0)) &&
            r.ticker?.toUpperCase() !== report.ticker?.toUpperCase()
     );
+    return getLatestReportsPerTicker(matching);
   }, [savedReports, sameSectorPeers, currentSector, report.ticker]);
 
   // Henüz analiz edilmemiş en büyük 6 akran hisse adayı

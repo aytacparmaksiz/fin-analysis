@@ -568,6 +568,37 @@ export function parsePeriodSortKey(period: string | number): number {
 }
 
 /**
+ * Aynı şirkete ait birden fazla çeyrek veya tekrar analiz edilmiş rapor varsa,
+ * her hisse senedi için sadece en güncel (en son dönem ve en yeni kayıt) tek raporu döner.
+ * Portföy, Favoriler ve Akran Firmalar listelerindeki mükerrerliği ortadan kaldırır.
+ */
+export function getLatestReportsPerTicker<T extends { ticker?: string; period?: string; extractedData?: any; updatedAt?: string; createdAt?: string }>(reports: T[]): T[] {
+  if (!Array.isArray(reports) || reports.length === 0) return [];
+  const map = new Map<string, T>();
+
+  const sorted = [...reports].sort((a, b) => {
+    // 1. Öncelik: En güncel finansal dönem (örn: 2026/09 > 2026/06)
+    const pA = parsePeriodSortKey(a?.period || a?.extractedData?.reporting_period);
+    const pB = parsePeriodSortKey(b?.period || b?.extractedData?.reporting_period);
+    if (pB !== pA) return pB - pA;
+
+    // 2. Öncelik: Kayıt / Güncelleme zaman damgası (ISO Date)
+    const tA = Date.parse(a?.extractedData?.saved_at || a?.updatedAt || a?.createdAt || '') || 0;
+    const tB = Date.parse(b?.extractedData?.saved_at || b?.updatedAt || b?.createdAt || '') || 0;
+    return tB - tA;
+  });
+
+  for (const rep of sorted) {
+    const sym = (rep.ticker || '').trim().toUpperCase();
+    if (sym && !map.has(sym)) {
+      map.set(sym, rep);
+    }
+  }
+
+  return Array.from(map.values());
+}
+
+/**
  * Ara dönem finansallarını (3A, 6A, 9A) yıllıklandırma çarpanı (Annualization Factor).
  */
 export function getAnnualizationFactor(period: string | number): number {

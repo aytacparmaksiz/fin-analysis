@@ -1539,5 +1539,84 @@ test('RED TEAM MATHEMATICAL AUDIT & INVARIANT TEST SUITE', async (t) => {
       `computeSectorValuationAndDrivers düşük baz sıçramasını (%1656.7) asla ham olarak sürücüye atamamalıdır (Got: ${computedNetGrowth})`
     );
   });
+
+  await t.test('REGRESYON 28: getLatestReportsPerTicker mükerrer hisse raporlarını eler ve en güncel tek raporu döner (Portföy, Favoriler ve Akran Şirketler)', async () => {
+    const { getLatestReportsPerTicker } = await import('../lib/valuation.ts');
+
+    // TAVHL için 3 farklı dönem ve tarih raporu simülasyonu
+    const mockReports = [
+      {
+        id: 'rep-tavhl-old',
+        ticker: 'TAVHL',
+        period: '2026/03',
+        createdAt: '2026-04-10T10:00:00Z',
+        price: 240.0,
+        score: 65,
+        decision: 'NÖTR'
+      },
+      {
+        id: 'rep-thyao-1',
+        ticker: 'THYAO',
+        period: '2026/09',
+        createdAt: '2026-11-01T12:00:00Z',
+        price: 310.0,
+        score: 82,
+        decision: 'AL'
+      },
+      {
+        id: 'rep-tavhl-latest',
+        ticker: 'TAVHL',
+        period: '2026/09',
+        createdAt: '2026-11-08T15:00:00Z',
+        price: 295.0,
+        score: 78,
+        decision: 'AL'
+      },
+      {
+        id: 'rep-tavhl-mid',
+        ticker: 'TAVHL',
+        period: '2026/06',
+        createdAt: '2026-08-15T09:00:00Z',
+        price: 260.0,
+        score: 70,
+        decision: 'AL'
+      },
+      {
+        id: 'rep-froto-1',
+        ticker: 'FROTO',
+        period: '2026/09',
+        createdAt: '2026-11-05T11:00:00Z',
+        price: 1100.0,
+        score: 85,
+        decision: 'AL'
+      }
+    ];
+
+    // getLatestReportsPerTicker çağrısı
+    const deduplicated = getLatestReportsPerTicker(mockReports);
+
+    // 1. Toplam benzersiz hisse sayısı 3 olmalıdır (TAVHL, THYAO, FROTO)
+    assert.equal(deduplicated.length, 3, `5 rapordan tam olarak 3 tekil şirket dönmelidir (Got: ${deduplicated.length})`);
+
+    // 2. TAVHL için seçilen rapor '2026/09' dönemli ve en güncel tarihli rapor olmalıdır
+    const tavhlRep = deduplicated.find(r => r.ticker === 'TAVHL');
+    assert.ok(tavhlRep, 'TAVHL raporda bulunmalıdır');
+    assert.equal(tavhlRep.id, 'rep-tavhl-latest', `TAVHL için en güncel 2026/09 raporu seçilmelidir (Got id: ${tavhlRep.id})`);
+    assert.equal(tavhlRep.period, '2026/09', 'TAVHL dönemi 2026/09 olmalıdır');
+    assert.equal(tavhlRep.price, 295.0, 'TAVHL fiyatı güncel rapordan gelmelidir');
+
+    // 3. Portföy filtreleme simülasyonu
+    const portfolioTickers = ['TAVHL', 'FROTO'];
+    const portAll = deduplicated.filter(r => portfolioTickers.includes(r.ticker));
+    assert.equal(portAll.length, 2, `Portföyde 2 şirket olmalıdır, TAVHL mükerrer 3 kez çıkmamalıdır (Got: ${portAll.length})`);
+
+    // 4. Akran şirketler simülasyonu (Havacılık akranları: TAVHL, THYAO)
+    const peerTickers = new Set(['TAVHL', 'THYAO']);
+    const currentReportTicker = 'PGSUS';
+    const peers = deduplicated.filter(r => peerTickers.has(r.ticker) && r.ticker !== currentReportTicker);
+    assert.equal(peers.length, 2, `Akran listesinde tam olarak 2 şirket olmalıdır (Got: ${peers.length})`);
+    const tavhlPeers = peers.filter(p => p.ticker === 'TAVHL');
+    assert.equal(tavhlPeers.length, 1, 'TAVHL akran listesinde kesinlikle 1 kez görünmelidir');
+  });
 });
 
