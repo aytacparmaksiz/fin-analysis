@@ -254,8 +254,14 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
       ? `Sektör ortalaması ${secEvEbitda.toFixed(1)}x FD/FAVÖK seviyesindeyken şirketin ${compEvEbitda.toFixed(1)}x FD/FAVÖK çarpanıyla fiyatlanması`
       : `Mevcut ₺${input.currentPrice.toFixed(2)} fiyat seviyesinin 12 aylık ₺${input.fairValue.toFixed(2)} içsel değer hedefimize göre %${Math.abs(upsidePct).toFixed(1)} getiri potansiyeli taşıması`;
 
+    const growthSentence = (netGrowthProj > 0 && revGrowthProj > 0)
+      ? `ve önümüzdeki 12 ayda beklenen %${revGrowthProj.toFixed(0)} hasılat / %${netGrowthProj.toFixed(0)} net kâr büyüme projeksiyonu birleştiğinde, yatırımcıya hem çarpan genişlemesi (re-rating) hem de içsel özkaynak büyümesi sunan çift motorlu bir fırsat penceresi açılmaktadır.`
+      : netGrowthProj < 0
+      ? `ile birleştiğinde; önümüzdeki 12 ayda yüksek baz etkisi veya sektörel döngü normalleşmesi kaynaklı beklenen net kâr daralmasına (%${netGrowthProj.toFixed(0)}) rağmen, %${revGrowthProj.toFixed(0)} hasılat direnci ve cazip değerleme marjı, kârdaki döngüsel dip seviyesinin hisse fiyatında fazlasıyla iskonto edildiğini ve yeniden değerleme (re-rating) potansiyelini desteklemektedir.`
+      : `ve önümüzdeki 12 ayda beklenen %${revGrowthProj.toFixed(0)} hasılat büyümesi ile birleştiğinde, çarpan genişlemesi (re-rating) ve adil değere yakınsama potansiyeli sunmaktadır.`;
+
     whyActionParagraphs.push(
-      `İkinci temel dayanak noktası, şirketin yatırdığı her 100 TL'lik sermayeden enflasyondan arındırılmış bazda %${roic.toFixed(1)} Reel ROIC üreterek %${wacc.toFixed(1)}'lik reel sermaye maliyetinin üzerinde (+${evaSpread.toFixed(1)} puan EVA) gerçek ekonomik değer yaratmasıdır. ${multComparison} ve önümüzdeki 12 ayda beklenen %${revGrowthProj.toFixed(0)} hasılat / %${netGrowthProj.toFixed(0)} net kâr büyüme projeksiyonu birleştiğinde, yatırımcıya hem çarpan genişlemesi (re-rating) hem de içsel özkaynak büyümesi sunan çift motorlu bir fırsat penceresi açılmaktadır.`
+      `İkinci temel dayanak noktası, şirketin yatırdığı her 100 TL'lik sermayeden enflasyondan arındırılmış bazda %${roic.toFixed(1)} Reel ROIC üreterek %${wacc.toFixed(1)}'lik reel sermaye maliyetinin üzerinde (+${evaSpread.toFixed(1)} puan EVA) gerçek ekonomik değer yaratmasıdır. ${multComparison} ${growthSentence}`
     );
   } else if (decisionMode === 'ALMA') {
     whyActionParagraphs.push(
@@ -300,8 +306,13 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
   let opportunityMechanismTag = 'ÇOKLU KRİTER ASİMETRİSİ';
   let opportunitySourceNarrative = '';
 
+  const isFxFunctional = ['THYAO', 'PGSUS', 'TAVHL', 'CLEBI', 'DOCO', 'ENKAI'].includes(ticker.toUpperCase());
+
   if (decisionMode === 'AL') {
-    if (input.isTms29 && ocf > netIncome && netIncome >= 0) {
+    if (isFxFunctional) {
+      opportunityMechanismTag = 'DÖVİZ BAZLI OPERASYONEL GÜÇ & TMS 29 BAĞIŞIKLIĞI';
+      opportunitySourceNarrative = `Piyasa oyuncuları, Türkiye'deki yüksek yerel enflasyon ve kârları törpüleyen TMS 29 enflasyon muhasebesi baskısını toptancı bir yaklaşımla tüm hisselere teşmil etme yanılgısına düşmektedir. Oysa ${ticker}, fonksiyonel para birimi yabancı para (EUR/USD) olan ve SPK/KGK mevzuatı gereği TMS 29 enflasyon muhasebesi uygulamayan; gelirlerinin ezici çoğunluğu döviz bazlı uluslararası havacılık/hizmet tarifelerine dayalı bir şirkettir. TL enflasyonundan bağımsız döviz nakit yaratma gücü (${(cashConv * 100).toFixed(0)}% nakit dönüşümü) ve bilanço dayanıklılığı, hissenin ₺${input.fairValue.toFixed(2)} adil değerine ulaşmasındaki en kuvvetli katalizördür.`;
+    } else if (input.isTms29 && ocf > netIncome && netIncome >= 0) {
       opportunityMechanismTag = 'TMS 29 MUHASEBE PERDESİ vs. GÜÇLÜ NAKİT KASASI';
       opportunitySourceNarrative = `Piyasa şu an ${ticker} hissesini yalnızca gelir tablosunun en alt satırındaki TMS 29 enflasyon muhasebesi (parasallık düzeltmesi ve stok endekslemesi) baskısıyla değerlendirme yanılgısına düşmektedir. Oysa nakit akış tablosu incelendiğinde, şirketin net kârının ${(cashConv * 100).toFixed(0)}% üzerinde gerçek sıcak işletme nakdi (OCF) ürettiği görülmektedir. Muhasebesel ve nakit çıkışı gerektirmeyen düzeltmeler geçici olarak kârı törpülerken, kasaya giren gerçek nakit şirketin içsel değerini ₺${input.fairValue.toFixed(2)} seviyesine taşımaktadır.`;
     } else if (isNetCash && isPositiveEva) {
@@ -309,13 +320,21 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
       opportunitySourceNarrative = `Borsa İstanbul'da yüksek faiz politikası nedeniyle sanayi ve hizmet şirketlerinin tamamına piyasa tarafından toptancı bir 'finansman gideri iskontosu' uygulanmaktadır. Ancak piyasanın gözden kaçırdığı kritik ayrım şudur: ${ticker} borçlu bir şirket değil, bilançosunda Net Nakit taşıyan ve +%${evaSpread.toFixed(1)} pozitif EVA üreten bir nakit kalesidir. Yüksek faiz ortamı borçlu rakiplerini zayıflatırken ${ticker}'in pazar payını ve finansal gelirlerini beslemekte; bu da mevcut fiyatlamada belirgin bir piyasa verimsizliği (fırsat) yaratmaktadır.`;
     } else if (capex > 0 && ocf > 0 && (capex / Math.max(ocf, 1)) >= 0.45) {
       opportunityMechanismTag = 'YATIRIM (CAPEX) EVRESİNDEN NAKİT HASADI EVRESİNE GEÇİŞ';
-      opportunitySourceNarrative = `Şirket son dönemlerde kapasite ve verimlilik yatırımları (CapEx) nedeniyle nakit akışının önemli bir bölümünü büyümeye yönlendirmiştir. Kısa vadeli düşünen piyasa oyuncuları yatırım harcamaları nedeniyle baskılanan serbest nakit akışına odaklanırken, bu yatırımların devreye girmesiyle oluşacak %${revGrowthProj.toFixed(0)} hasılat ve %${netGrowthProj.toFixed(0)} net kâr sıçramasını henüz fiyatlamamıştır. Yatırım döngüsünün tamamlanıp 'Nakit Hasadı' evresine geçilmesi ana yeniden değerleme (re-rating) kaynağıdır.`;
+      const capexGrowthNote = (netGrowthProj > 0 && revGrowthProj > 0)
+        ? `oluşacak %${revGrowthProj.toFixed(0)} hasılat ve %${netGrowthProj.toFixed(0)} net kâr sıçramasını henüz fiyatlamamıştır.`
+        : `oluşacak operasyonel kapasite artışını ve nakit akışı ivmesini henüz fiyatlamamıştır.`;
+      opportunitySourceNarrative = `Şirket son dönemlerde kapasite ve verimlilik yatırımları (CapEx) nedeniyle nakit akışının önemli bir bölümünü büyümeye yönlendirmiştir. Kısa vadeli düşünen piyasa oyuncuları yatırım harcamaları nedeniyle baskılanan serbest nakit akışına odaklanırken, bu yatırımların devreye girmesiyle ${capexGrowthNote} Yatırım döngüsünün tamamlanıp 'Nakit Hasadı' evresine geçilmesi ana yeniden değerleme (re-rating) kaynağıdır.`;
     } else if ((compPe > 0 && compPe < secPe * 0.85) || (compEvEbitda > 0 && compEvEbitda < secEvEbitda * 0.85)) {
       opportunityMechanismTag = 'KALİTE - ÇARPAN ANOMALİSİ (SEKTÖR ÜSTÜ GETİRİ, SEKTÖR ALTI ÇARPAN)';
       opportunitySourceNarrative = `Finansal teoride özkaynak kârlılığı (%${roe.toFixed(1)} ROE) ve sermaye getirisi (%${roic.toFixed(1)} ROIC) sektör ortalamasının üzerinde olan şirketlerin sektöre göre primli işlem görmesi gerekir. Ancak ${ticker}, üstün sermaye verimliliğine rağmen ${sectorName} sektör medyanının altında (${compPe > 0 ? `${compPe.toFixed(1)}x F/K vs Sektör ${secPe.toFixed(1)}x` : `${compEvEbitda.toFixed(1)}x FD/FAVÖK vs Sektör ${secEvEbitda.toFixed(1)}x`}) fiyatlanmaktadır. Bu kalite-çarpan anomalisi, hisse başına ₺${input.fairValue.toFixed(2)} hedef değerimize giden en somut güvenlik marjını oluşturmaktadır.`;
     } else {
-      opportunityMechanismTag = 'İÇSEL SERMAYE BİRİKİMİ & GELECEK KÂR İVMESİ';
-      opportunitySourceNarrative = `Piyasa, şirketin geçmiş çeyreklerdeki baz etkisini ileriye doğrusal olarak taşırken; şirketin maliyet optimizasyonu, %${ebitdaMargin.toFixed(1)} FAVÖK marjı disiplini ve 12 aylık ileri projeksiyondaki %${netGrowthProj.toFixed(0)} kâr büyüme kapasitesini iskonto etmektedir. Sermaye maliyetini aşan (+${evaSpread.toFixed(1)} puan) değer üretimi korundukça, içsel özkaynak birikimi hisse fiyatını adil değerine (₺${input.fairValue.toFixed(2)}) yakınsatacaktır.`;
+      const growthLabel = netGrowthProj >= 0
+        ? `12 aylık ileri projeksiyondaki %${netGrowthProj.toFixed(0)} kâr büyüme kapasitesini`
+        : `döngüsel dip sonrası toparlanma potansiyelini ve %${revGrowthProj.toFixed(0)} ciro direncini`;
+      opportunityMechanismTag = netGrowthProj >= 0
+        ? 'İÇSEL SERMAYE BİRİKİMİ & GELECEK KÂR İVMESİ'
+        : 'DÖNGÜSEL DİP & SERMAYE VERİMLİLİĞİ ASİMETRİSİ';
+      opportunitySourceNarrative = `Piyasa, şirketin geçmiş çeyreklerdeki baz etkisini ileriye doğrusal olarak taşırken; şirketin maliyet optimizasyonu, %${ebitdaMargin.toFixed(1)} FAVÖK marjı disiplini ve ${growthLabel} iskonto etmektedir. Sermaye maliyetini aşan (+${evaSpread.toFixed(1)} puan) değer üretimi korundukça, içsel özkaynak birikimi hisse fiyatını adil değerine (₺${input.fairValue.toFixed(2)}) yakınsatacaktır.`;
     }
   } else if (decisionMode === 'ALMA') {
     opportunityMechanismTag = hasShadowHoldingRisk
@@ -446,7 +465,7 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
         : upsidePct >= 0
         ? `İçsel Değerine Yakın Dengeli Fiyatlama (+%${upsidePct.toFixed(1)})`
         : `İçsel Değerinin Üzerinde Primli Fiyatlama (%${upsidePct.toFixed(1)})`,
-      detail: `${targetMultLabel} ve %${netGrowthProj.toFixed(0)} ileri kâr büyümesi baz alındığında ${
+      detail: `${targetMultLabel} ve ${netGrowthProj >= 0 ? `%${netGrowthProj.toFixed(0)} ileri kâr büyümesi` : `%${Math.abs(netGrowthProj).toFixed(0)} kâr normalleşmesi`} baz alındığında ${
         input.consensusTargetPrice
           ? `model hedefimiz ₺${input.fairValue.toFixed(2)} (Piyasa Konsensüsü: ₺${input.consensusTargetPrice.toFixed(2)}) seviyesindedir.`
           : `12 aylık ağırlıklı adil değerimiz ₺${input.fairValue.toFixed(2)} olarak hesaplanmıştır.`
@@ -533,8 +552,10 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
         { label: 'Adil Değer', value: `₺${input.fairValue.toFixed(2)}`, isPositive: input.fairValue > input.currentPrice }
       ],
       narrative: valGood
-        ? `Şirket hem sektör çarpanlarına göre cazip bir iskontoyla işlem görmekte hem de %${revGrowthProj.toFixed(0)} hasılat / %${netGrowthProj.toFixed(0)} kâr büyüme beklentisiyle ₺${input.fairValue.toFixed(2)} adil değere güçlü bir asimetri sunmaktadır.`
-        : `Mevcut ₺${input.currentPrice.toFixed(2)} fiyat seviyesi, ${sectorName} sektörü çarpanları ve %${netGrowthProj.toFixed(0)} ileri kâr büyüme beklentisiyle kıyaslandığında ${upsidePct >= 0 ? 'sınırlı bir güvenlik marjı' : 'primli bir fiyatlama'} sunmaktadır.`
+        ? (netGrowthProj >= 0
+            ? `Şirket hem sektör çarpanlarına göre cazip bir iskontoyla işlem görmekte hem de %${revGrowthProj.toFixed(0)} hasılat / %${netGrowthProj.toFixed(0)} kâr büyüme beklentisiyle ₺${input.fairValue.toFixed(2)} adil değere güçlü bir asimetri sunmaktadır.`
+            : `Şirket sektör çarpanlarına göre cazip bir iskontoyla işlem görmekte; %${revGrowthProj.toFixed(0)} hasılat direnci ve sermaye verimliliğiyle (%${roic.toFixed(1)} ROIC) kâr döngüsünün dip noktasında ₺${input.fairValue.toFixed(2)} adil değere güçlü bir asimetri sunmaktadır.`)
+        : `Mevcut ₺${input.currentPrice.toFixed(2)} fiyat seviyesi, ${sectorName} sektörü çarpanları ve ${netGrowthProj >= 0 ? `%${netGrowthProj.toFixed(0)} ileri kâr büyüme beklentisiyle` : `%${Math.abs(netGrowthProj).toFixed(0)} kâr daralması beklentisiyle`} kıyaslandığında ${upsidePct >= 0 ? 'sınırlı bir güvenlik marjı' : 'primli bir fiyatlama'} sunmaktadır.`
     }
   ];
 
@@ -542,7 +563,9 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
   // 7. KİLİT KATALİZÖRLER VS. TEZİ BOZACAK KIRMIZI ÇİZGİLER (THESIS BREAKERS)
   // ---------------------------------------------------------------------------
   const catalysts: string[] = [
-    `12 aylık ileri projeksiyonda beklenen %${revGrowthProj.toFixed(1)} hasılat büyümesi ve %${netGrowthProj.toFixed(1)} net kâr artışının çeyreklik bilançolarda teyit edilmesiyle çarpanların ${targetMultLabel} hedefine yakınsaması.`,
+    netGrowthProj >= 0
+      ? `12 aylık ileri projeksiyonda beklenen %${revGrowthProj.toFixed(1)} hasılat büyümesi ve %${netGrowthProj.toFixed(1)} net kâr artışının çeyreklik bilançolarda teyit edilmesiyle çarpanların ${targetMultLabel} hedefine yakınsaması.`
+      : `12 aylık ileri projeksiyonda %${revGrowthProj.toFixed(1)} hasılat büyümesi ve döngüsel dip sonrası marj toparlanmasının teyit edilmesiyle çarpanların ${targetMultLabel} hedefine yakınsaması.`,
     isNetCash
       ? `Net Nakit bilançonun yüksek faiz ortamında ürettiği finansal gelir katkısı ve olası temettü / kapasite artırım hamlelerinin özkaynak kârlılığını (%${roe.toFixed(1)}) desteklemesi.`
       : `Dezenflasyon sürecinde politika faizlerinde başlayacak kademeli indirim döngüsünün şirketin finansman giderlerini düşürerek net kâr marjını (%${netMargin.toFixed(1)}) hızla genişletmesi.`,

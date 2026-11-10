@@ -19,6 +19,7 @@ import { FinancialDataValidator } from '../lib/financial-validator.ts';
 import { isMetricDisabled, mapIsYatirimSectorToValuationSector } from '../lib/sectors.ts';
 import { IsYatirimApiAdapter } from '../lib/isyatirim-adapter.ts';
 import { synthesizeDividendsFromFinancialHistory } from '../lib/isyatirim-service.ts';
+import { synthesizeInvestmentThesis } from '../lib/investment-thesis-synthesizer.ts';
 import { OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE } from '../lib/isyatirim-company-details-cache.ts';
 import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from '../lib/isyatirim-multiples-cache.ts';
 import { OFFICIAL_ISYATIRIM_CACHE } from '../lib/isyatirim-official-cache.ts';
@@ -1617,6 +1618,75 @@ test('RED TEAM MATHEMATICAL AUDIT & INVARIANT TEST SUITE', async (t) => {
     assert.equal(peers.length, 2, `Akran listesinde tam olarak 2 şirket olmalıdır (Got: ${peers.length})`);
     const tavhlPeers = peers.filter(p => p.ticker === 'TAVHL');
     assert.equal(tavhlPeers.length, 1, 'TAVHL akran listesinde kesinlikle 1 kez görünmelidir');
+  });
+
+  await t.test('REGRESYON 29: Fonksiyonel Döviz Para Birimli Şirketler (CLEBI/THYAO/TAVHL) TMS 29 Muafiyeti ve Negatif Kârda Çift Motor Çelişkisi Koruması', () => {
+    // 1. CLEBI TMS 29 Muafiyet Denetimi:
+    // Fonksiyonel para birimi EUR olan CLEBI için finansal geçmiş zenginleştirildiğinde is_tms29 kesinlikle false olmalıdır
+    const rawClebiHistory = [
+      {
+        ticker: 'CLEBI',
+        period: '2024/09',
+        currency: 'TRY', // BIST KAP tablosu TL'ye çevrilmiş gelse dahi
+        net_income: 1_200_000_000,
+        revenue: 12_000_000_000,
+        ebitda: 3_500_000_000,
+        operating_cash_flow: 3_800_000_000,
+        equity: 6_000_000_000,
+        capex: 500_000_000,
+        cash: 2_000_000_000,
+        short_term_debt: 300_000_000,
+        long_term_debt: 200_000_000
+      }
+    ];
+
+    const enriched = enrichAndSanitizeFinancialHistory(rawClebiHistory, 'AVIATION');
+    assert.equal(enriched[0].is_tms29, false, 'CLEBI fonksiyonel para birimi EUR olduğu için TMS 29 uygulanamaz (is_tms29 === false olmalıdır)');
+
+    // 2. CLEBI Yatırım Tezi Sentezi Denetimi:
+    // net_income_growth: -24% ve revenue_growth: +35% verildiğinde AL kararı çıksa bile:
+    // a) "çift motorlu" ifadesi ASLA yer almamalıdır (net kâr daralırken çift motor iddia edilemez)
+    // b) "TMS 29 enflasyon muhasebesi" fırsat mekanizması ASLA üretilmemelidir (CLEBI TMS 29'a tabi değildir)
+    // c) Döviz bazlı operasyonel güç ve TMS 29 bağışıklığı vurgulanmalıdır.
+    const thesisDossier = synthesizeInvestmentThesis({
+      ticker: 'CLEBI',
+      companyName: 'Çelebi Hava Servisi A.Ş.',
+      decision: 'AL',
+      score: 75,
+      currentSector: 'AVIATION',
+      officialSectorName: 'Havacılık & Yer Hizmetleri',
+      currentPrice: 2000.0,
+      fairValue: 2600.0,
+      discountPct: 23.0,
+      latestData: enriched[0],
+      roic: 28.5,
+      wacc: 14.0,
+      evaSpread: 14.5,
+      isTms29: false,
+      drivers: {
+        revenue_growth: { label: 'Hasılat Büyümesi', value: 35.0 },
+        net_income_growth: { label: 'Net Kâr Büyümesi', value: -24.0 },
+        margin: { label: 'FAVÖK Marjı', value: 29.1 },
+        target_multiple: { label: 'Hedef Çarpan', value: '7.5x FD/FAVÖK' }
+      }
+    });
+
+    const allThesisText = [
+      ...thesisDossier.whyActionParagraphs,
+      thesisDossier.opportunitySourceNarrative,
+      ...thesisDossier.catalysts,
+      ...thesisDossier.pillars.map(p => p.narrative)
+    ].join(' ');
+
+    // Test a: Çift motor çelişkisi bulunmamalıdır
+    assert.ok(!allThesisText.includes('çift motorlu'), 'Negatif net kâr projeksiyonunda (-%24) "çift motorlu" çelişkisi kesinlikle yer almamalıdır');
+
+    // Test b: CLEBI için TMS 29 yanılgısı üretilmemelidir
+    assert.ok(!allThesisText.includes('TMS 29 enflasyon muhasebesi baskısıyla'), 'CLEBI için hatalı "TMS 29 enflasyon muhasebesi baskısıyla" fırsat açıklaması üretilmemelidir');
+
+    // Test c: CLEBI için döviz operasyon ve TMS 29 bağışıklığı üretilmelidir
+    assert.equal(thesisDossier.opportunityMechanismTag, 'DÖVİZ BAZLI OPERASYONEL GÜÇ & TMS 29 BAĞIŞIKLIĞI');
+    assert.ok(thesisDossier.opportunitySourceNarrative.includes('TMS 29 enflasyon muhasebesi uygulamayan'), 'Döviz fonksiyonlu havacılık şirketlerinde TMS 29 muafiyeti açıklanmalıdır');
   });
 });
 

@@ -803,7 +803,8 @@ export default function SimplyView({
   }, [liveCompanyDetails?.tvConsensus, chartData, currentPriceNum]);
 
   // WACC, ROIC ve EVA Çözümü (TMS 29 Reel WACC ve Terminal ile %100 Senkronize)
-  const isTms29 = Boolean(latestData?.is_tms29 ?? report.extractedData?.is_tms29 ?? true);
+  const isFxFunctional = ['THYAO', 'PGSUS', 'TAVHL', 'CLEBI', 'DOCO', 'ENKAI'].includes(String(report.ticker || '').toUpperCase());
+  const isTms29 = isFxFunctional ? false : Boolean(latestData?.is_tms29 ?? report.extractedData?.is_tms29 ?? true);
   const realWaccNum = Number(latestData?.real_wacc ?? valuationInfo?.real_wacc ?? (latestData?.wacc ? latestData.wacc - 18 : 4.7));
   const nominalWaccNum = Number(latestData?.nominal_wacc ?? latestData?.wacc ?? valuationInfo?.wacc ?? 22.8);
   const benchmarkWacc = isTms29 && realWaccNum ? realWaccNum : nominalWaccNum;
@@ -1563,7 +1564,7 @@ export default function SimplyView({
     { id: 'sec-carpanlar', num: '3', label: 'Çarpanlar', icon: Percent },
     { id: 'sec-adildeger', num: '4', label: 'Değerleme', icon: Target },
     { id: 'sec-temettu', num: '5', label: 'Temettü', icon: Coins },
-    { id: 'sec-rehberlik', num: '6', label: 'Rehberlik & Sunum', icon: Target },
+    { id: 'sec-rehberlik', num: '6', label: 'Yönetim Karnesi', icon: Target },
     { id: 'sec-analist', num: '7', label: 'Analist Raporu', icon: FileText },
     { id: 'sec-gecmis', num: '8', label: 'Geçmiş', icon: History }
   ];
@@ -5316,25 +5317,18 @@ export default function SimplyView({
           </ComponentErrorBoundary>
 
           {/* ----------------------------------------------------------------------- */}
-          {/* BÖLÜM 6: REHBERLİK & SUNUM (#sec-rehberlik)                              */}
+          {/* BÖLÜM 6: ŞİRKET YÖNETİMİNİN HEDEF KARNESİ (#sec-rehberlik)               */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Yönetim Hedefleri Hatası">
           <section id="sec-rehberlik" className="scroll-mt-6 rounded-2xl border border-[#282d37] bg-[#12151b] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
               <div className="flex items-center gap-2.5">
                 <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">6</span>
-                <h2 className="font-sans text-xl sm:text-2xl font-bold text-white">Rehberlik & Sunum</h2>
+                <h2 className="font-sans text-xl sm:text-2xl font-bold text-white">Şirket Yönetiminin Hedef Karnesi</h2>
               </div>
             </div>
 
-            {/* 1. KISIM: Şirket Yönetiminin Hedef Karnesi */}
             <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-sans text-base sm:text-lg font-bold text-white">6.1 Şirket Yönetiminin Hedef Karnesi</h3>
-                </div>
-              </div>
-
               {Array.isArray(report.extractedData?.guidance_track_record) && report.extractedData.guidance_track_record.length > 0 ? (
                 <div className="overflow-x-auto border border-[#2e3440] rounded-xl">
                   <table className="w-full table-fixed text-sm sm:text-[15px] text-left border-collapse font-sans">
@@ -5394,122 +5388,6 @@ export default function SimplyView({
                   <p className="text-sm text-slate-300 max-w-xl mx-auto leading-relaxed">
                     Şirketin geçmiş faaliyet raporu ve yatırımcı sunumlarında açıklanan hedefler ile gerçekleşmelerin kıyası için yeni analiz ekranındaki <strong className="text-white">Alan 2 (Faaliyet Raporları)</strong> veya <strong className="text-white">Alan 3 (Yatırımcı Sunumu)</strong> bölümlerine PDF belgelerini ekleyebilirsiniz.
                   </p>
-                </div>
-              )}
-            </div>
-
-            {/* 2. KISIM (FUTURE): Gelecek Dönem Hedefleri & Fırsatlar */}
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-sans text-base sm:text-lg font-bold text-white">6.2 Gelecek Dönem Hedefleri & Fırsatlar</h3>
-                </div>
-              </div>
-
-              {/* 2x2 Grid: Gelecek Fırsatlar */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {(Array.isArray(report.extractedData?.positive_outlook_highlights) && report.extractedData.positive_outlook_highlights.length > 0
-                  ? report.extractedData.positive_outlook_highlights
-                  : (() => {
-                      const revVal = Number(drivers.revenue_growth?.value ?? 0);
-                      const netVal = Number(drivers.net_income_growth?.value ?? 0);
-                      const marginVal = Number(drivers.margin?.value ?? 0);
-
-                      const revHighlight = revVal >= 0
-                        ? {
-                            title: `${drivers.revenue_growth.label} ve Pazar Payı`,
-                            desc: `Yıllık bazda gerçekleşen %${revVal.toFixed(1)} ciro büyümesi, talep canlılığını ve pazar payı kazanımını teyit etmekte; operasyonel nakit akışını güçlendirmektedir.`,
-                            period_or_target: `Büyüme Hızı: +%${revVal.toFixed(1)}`,
-                            category: 'BÜYÜME'
-                          }
-                        : {
-                            title: `Satış Hacmi ve Sektörel Döngü Dengesi`,
-                            desc: `Yıllık bazda gerçekleşen %${Math.abs(revVal).toFixed(1)} daralma, yüksek baz etkisi ve sektörel talep normalleşmesini yansıtmaktadır. Şirketin bölgesel pazar hakimiyeti ve fiyatlama disiplini, hacim kaybının gelirler üzerindeki baskısını dengelemektedir.`,
-                            period_or_target: `Döngüsel Değişim: %${revVal.toFixed(1)}`,
-                            category: 'SEKTÖREL DÖNGÜ'
-                          };
-
-                      const netHighlight = netVal >= 0
-                        ? {
-                            title: `${drivers.net_income_growth.label} İvmesi`,
-                            desc: `Net kârın yıllık %${netVal.toFixed(1)} artış kaydetmesi ve sermaye getirisinin (Reel ROIC: %${roicNum.toFixed(1)}) sermaye maliyetini aşması, içsel sermaye üretimini ve temettü kapasitesini desteklemektedir.`,
-                            period_or_target: `12A Kâr Hedefi: +%${netVal.toFixed(1)}`,
-                            category: 'NAKİT ÜRETİMİ'
-                          }
-                        : {
-                            title: `Net Kârlılık Trendi ve Marj Direnci`,
-                            desc: `Net kârda yıllık bazda görülen %${Math.abs(netVal).toFixed(1)} daralmaya rağmen, şirketin %${roicNum.toFixed(1)} seviyesindeki yüksek sermaye getirisi (ROIC) ve pozitif EVA üretimi, döngüsel daralma evrelerinde dahi sermaye birikimini korumaktadır.`,
-                            period_or_target: `Döngüsel Kâr Değişimi: %${netVal.toFixed(1)}`,
-                            category: 'KÂR DİRENCİ'
-                          };
-
-                      const marginHighlight = {
-                        title: `Operasyonel Verimlilik & ${drivers.margin.label}`,
-                        desc: `Şirketin esas faaliyetlerinde ulaştığı %${marginVal.toFixed(1)} marj düzeyi, maliyet enflasyonuna karşı operasyonel disiplinini ve girdi şoklarını fiyata yansıtma kabiliyetini göstermektedir.`,
-                        period_or_target: `Gerçekleşen / Hedef Marj: %${marginVal.toFixed(1)}`,
-                        category: 'MARJ DİSİPLİNİ'
-                      };
-
-                      const catalystHighlight = {
-                        title: `Sermaye Verimliliği ve Değerleme Potansiyeli`,
-                        desc: evaSpreadNum > 0
-                          ? `Sermaye getirisinin sermaye maliyetini aşması (+${evaSpreadNum.toFixed(1)} Puan EVA) ve ${drivers.target_multiple.value} hedef çarpanı, şirketin borçsuz nakit yapısıyla birlikte orta vadeli ₺${fairValueNum.toFixed(2)} adil değer potansiyelini desteklemektedir.`
-                          : `Mevcut varlık tabanı, ${drivers.target_multiple.value} hedef çarpanı ve bilanço likiditesi, orta vadeli ₺${fairValueNum.toFixed(2)} adil değer potansiyelini desteklemektedir.`,
-                        period_or_target: `Hedef Çarpan: ${drivers.target_multiple.value}`,
-                        category: 'STRATEJİK KATALİZÖR'
-                      };
-
-                      return [revHighlight, netHighlight, marginHighlight, catalystHighlight];
-                    })()
-                ).map((item: any, idx: number) => (
-                  <div
-                    key={idx}
-                    className="bg-[#21262d] border border-[#2e3440] hover:border-emerald-500/40 rounded-xl p-4 sm:p-5 space-y-2.5 transition flex flex-col justify-between"
-                  >
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="px-3 py-0.5 rounded text-sm font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                          {item.category || 'STRATEJİK KATALİZÖR'}
-                        </span>
-                        {item.period_or_target && (
-                          <span className="text-sm font-mono font-semibold text-cyan-300 bg-cyan-950/50 border border-cyan-800/50 px-2.5 py-0.5 rounded">
-                            {item.period_or_target}
-                          </span>
-                        )}
-                      </div>
-                      <h4 className="text-base font-bold text-white leading-snug flex items-start gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                        <span>{String(item.title || '').replace(/\bbancassurance\b/gi, 'banka sigortacılığı')}</span>
-                      </h4>
-                      <p className="text-sm sm:text-[15px] text-slate-200 leading-relaxed pl-6">
-                        {String(item.desc || '').replace(/\bbancassurance\b/gi, 'banka sigortacılığı')}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Yatırım & Bütçe KPI Notları (Varsa) */}
-              {report.extractedData?.capex_and_kpi && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
-                  {report.extractedData.capex_and_kpi.management_guidance && (
-                    <div className="bg-[#21262d]/60 border border-[#2e3440] p-3.5 rounded-xl space-y-1">
-                      <div className="text-[15px] font-bold text-cyan-400">Yönetim Beklentileri</div>
-                      <p className="text-sm sm:text-[15px] text-slate-200 leading-relaxed">{report.extractedData.capex_and_kpi.management_guidance}</p>
-                    </div>
-                  )}
-                  {report.extractedData.capex_and_kpi.planned_capex_budget && (
-                    <div className="bg-[#21262d]/60 border border-[#2e3440] p-3.5 rounded-xl space-y-1">
-                      <div className="text-[15px] font-bold text-emerald-400">Planlanan Yatırım & Büyüme</div>
-                      <p className="text-sm sm:text-[15px] text-slate-200 leading-relaxed">{report.extractedData.capex_and_kpi.planned_capex_budget}</p>
-                    </div>
-                  )}
-                  {report.extractedData.capex_and_kpi.sectoral_kpis && (
-                    <div className="bg-[#21262d]/60 border border-[#2e3440] p-3.5 rounded-xl space-y-1">
-                      <div className="text-[15px] font-bold text-amber-400">Sektörel Operasyonel KPI</div>
-                      <p className="text-sm sm:text-[15px] text-slate-200 leading-relaxed">{report.extractedData.capex_and_kpi.sectoral_kpis}</p>
-                    </div>
-                  )}
                 </div>
               )}
             </div>

@@ -512,9 +512,11 @@ export function homogenizeTms29Series(
     const yrMatch = periodStr.match(/(20\d{2})/);
     const yr = yrMatch ? parseInt(yrMatch[1], 10) : 2024;
 
-    // Bankacılık ve Sigorta BDDK/SEDDK kararıyla TMS 29 enflasyon muhasebesinden muaftır
-    if (copy.is_tms29 === undefined) {
-      if (isFinancialSector) {
+    // Bankacılık, Sigorta ve Fonksiyonel Para Birimi Döviz olan şirketler (THYAO, PGSUS, TAVHL, CLEBI, DOCO, ENKAI) TMS 29 enflasyon muhasebesinden muaftır
+    const itemTicker = String(copy.ticker || '').toUpperCase();
+    const isFxFunctional = ['THYAO', 'PGSUS', 'TAVHL', 'CLEBI', 'DOCO', 'ENKAI'].includes(itemTicker);
+    if (copy.is_tms29 === undefined || isFxFunctional) {
+      if (isFinancialSector || isFxFunctional) {
         copy.is_tms29 = false;
       } else {
         copy.is_tms29 = yr >= 2024 || (yr === 2023 && (periodStr.includes('12') || periodStr.includes('Q4')));
@@ -843,9 +845,11 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     const yrMatch = periodStr.match(/(20\d{2})/);
     const yr = yrMatch ? parseInt(yrMatch[1], 10) : 2024;
     const annualFactor = getAnnualizationFactor(item.period);
-    if (item.is_tms29 === undefined) {
+    const itemTicker = String(item.ticker || container?.ticker || '').toUpperCase();
+    const isFxFunctional = ['THYAO', 'PGSUS', 'TAVHL', 'CLEBI', 'DOCO', 'ENKAI'].includes(itemTicker);
+    if (item.is_tms29 === undefined || isFxFunctional) {
       const isFinSec = detectedSector === 'BANKING' || detectedSector === 'INSURANCE' || detectedSector === 'FINANCIAL_SERVICES';
-      item.is_tms29 = isFinSec ? false : (yr >= 2024 || (yr === 2023 && (periodStr.includes('12') || periodStr.includes('Q4'))));
+      item.is_tms29 = (isFinSec || isFxFunctional) ? false : (yr >= 2024 || (yr === 2023 && (periodStr.includes('12') || periodStr.includes('Q4'))));
     }
 
     // Sigorta sektörü özel alan eşleştirmeleri ve Emeklilik Fonu (AUM) Kalkanı
@@ -1238,9 +1242,10 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     // 1. Dönem Bazlı Makro Parametreler (10Y TR Tahvil Risksiz Faiz Rf, ERP ve Borçlanma Faizi Kd)
     // Kural 6: Çoklu Currency ve Döviz Ağırlıklı Borç Yapısı Standardı
     const tickerStr = String(item.ticker || container?.ticker || '').toUpperCase();
+    const isFxFunctionalCompany = ['THYAO', 'PGSUS', 'TAVHL', 'CLEBI', 'DOCO', 'ENKAI'].includes(tickerStr);
     const isAviationTicker = ['THYAO', 'PGSUS', 'TAVHL', 'CLEBI'].includes(tickerStr);
-    const reportCurrency = String(item.currency || container?.currency || 'TRY').toUpperCase();
-    const isForeignCurrency = ['USD', 'EUR', 'GBP'].includes(reportCurrency);
+    const reportCurrency = String(item.currency || container?.currency || (isFxFunctionalCompany ? (['THYAO', 'ENKAI'].includes(tickerStr) ? 'USD' : 'EUR') : 'TRY')).toUpperCase();
+    const isForeignCurrency = ['USD', 'EUR', 'GBP'].includes(reportCurrency) || isFxFunctionalCompany;
 
     let rf = 38.0; // Risksiz faiz oranı (TR 10Y/Gösterge Devlet Tahvili güncel piyasa bileşiği: %38.0)
     let erp = 8.56; // Damodaran Güncel Türkiye Hisse Senedi Risk Primi (ABD Mature ERP %4.60 + CDS/Country Risk %3.96)
@@ -1401,7 +1406,7 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
     // Döviz fonksiyonel para birimine sahip şirketlerde (AVIATION veya isForeignCurrency) Türkiye'nin %18-36 TÜFE'si değil,
     // para birimine uygun enflasyon (USD %2.5 / EUR %2.2) kullanılır.
     const periodYr = parseInt(String(item.period || '').slice(0, 4), 10);
-    const isEffectivelyTms29 = Boolean(item.is_tms29) || (!isForeignCurrency && !isNaN(periodYr) && periodYr >= 2024 && detectedSector !== 'BANKING' && detectedSector !== 'INSURANCE' && detectedSector !== 'FINANCIAL_SERVICES');
+    const isEffectivelyTms29 = !isFxFunctionalCompany && (Boolean(item.is_tms29) || (!isForeignCurrency && !isNaN(periodYr) && periodYr >= 2024 && detectedSector !== 'BANKING' && detectedSector !== 'INSURANCE' && detectedSector !== 'FINANCIAL_SERVICES'));
     item.is_tms29 = isEffectivelyTms29;
 
     const expectedInflation = isForeignCurrency
