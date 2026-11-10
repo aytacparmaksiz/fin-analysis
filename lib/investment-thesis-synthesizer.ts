@@ -284,12 +284,21 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
         `Şirketin ${formatMoneyCompact(equity)} büyüklüğündeki borçsuz özkaynak (Net Aktif Değer) tabanı ve ${compPb > 0 ? `${compPb.toFixed(2)}x PD/DD çarpanı` : 'mevcut piyasa fiyatlaması'}, holding/girişim sermayesi iskonto normlarıyla uyumlu bir denge sunmaktadır. Yeni bir iştirak halka arzı veya nakit temettü/çıkış katalizörü gerçekleşene kadar NÖTR (İzle) duruşu korunmaktadır.`
       );
     } else {
-      whyActionParagraphs.push(
-        `${ticker}, ${sectorName} sektöründe %${ebitdaMargin.toFixed(1)} FAVÖK marjı ve %${roic.toFixed(1)} Reel ROIC ile faaliyet göstermesine karşın, mevcut ₺${input.currentPrice.toFixed(2)} piyasa fiyatı ile ₺${input.fairValue.toFixed(2)} içsel adil değerimiz arasındaki makas (%${upsidePct >= 0 ? `+${upsidePct.toFixed(1)}` : upsidePct.toFixed(1)}), yüksek enflasyon ve faiz ortamında talep ettiğimiz asgari güvenlik marjı eşiğini henüz tam olarak aşamamaktadır.`
-      );
-      whyActionParagraphs.push(
-        `Kriterler harmanlandığında; şirketin ${isPositiveEva ? 'pozitif EVA üretimi ve operasyonel duruşu olumlu olmakla birlikte' : 'sermaye maliyeti baskısı ve marj dengesi gözetildiğinde'}, agresif alım için ya çarpanlarda geri çekilme (daha derin iskonto) ya da serbest nakit akışı dönüşümünde (${(cashConv * 100).toFixed(0)}%) ve çeyreklik marjlarda yukarı yönlü bir kırılım beklenmelidir.`
-      );
+      if (upsidePct >= 15) {
+        whyActionParagraphs.push(
+          `${ticker}, ${sectorName} sektöründe %${ebitdaMargin.toFixed(1)} FAVÖK marjı ve hesaplanan ₺${input.fairValue.toFixed(2)} adil değerimiz ile güncel ₺${input.currentPrice.toFixed(2)} fiyat seviyesine kıyasla kağıt üzerinde %${upsidePct.toFixed(1)} yükseliş potansiyeli (%${input.discountPct.toFixed(0)} iskonto) sunmaktadır. Ancak modelimizin agresif bir 'AL' yerine 'NÖTR (Temkinli İzleme)' duruşu benimsemesi; kâğıt üzerindeki iskontonun sermaye getirisinde (ROIC: %${roic.toFixed(1)}), serbest nakit akışı dönüşümünde (${(cashConv * 100).toFixed(0)}%) ve bilanço dinamiklerinde yeni çeyrek teyitlerine ihtiyaç duymasından kaynaklanmaktadır.`
+        );
+        whyActionParagraphs.push(
+          `Kriterler harmanlandığında; derin iskontoya rağmen sermaye koruma disiplini önceliklendirilmiştir. Şirketin adil değerine doğru kalıcı bir yeniden değerleme (re-rating) başlatabilmesi için yalnızca ucuz çarpanlar yetersiz olup; nakit tahsilat kabiliyetinin güçlenmesi ve kârın operasyonel serbest nakde (FCF) dönüştüğünün teyit edilmesi beklenmektedir.`
+        );
+      } else {
+        whyActionParagraphs.push(
+          `${ticker}, ${sectorName} sektöründe %${ebitdaMargin.toFixed(1)} FAVÖK marjı ve %${roic.toFixed(1)} Reel ROIC ile faaliyet göstermesine karşın, mevcut ₺${input.currentPrice.toFixed(2)} piyasa fiyatı ile ₺${input.fairValue.toFixed(2)} içsel adil değerimiz arasındaki makas (%${upsidePct >= 0 ? `+${upsidePct.toFixed(1)}` : upsidePct.toFixed(1)}), yüksek enflasyon ve faiz ortamında talep ettiğimiz asgari güvenlik marjı eşiğini henüz tam olarak aşamamaktadır.`
+        );
+        whyActionParagraphs.push(
+          `Kriterler harmanlandığında; şirketin ${isPositiveEva ? 'pozitif EVA üretimi ve operasyonel duruşu olumlu olmakla birlikte' : 'sermaye maliyeti baskısı ve marj dengesi gözetildiğinde'}, agresif alım için ya çarpanlarda geri çekilme (daha derin iskonto) ya da serbest nakit akışı dönüşümünde (${(cashConv * 100).toFixed(0)}%) ve çeyreklik marjlarda yukarı yönlü bir kırılım beklenmelidir.`
+        );
+      }
     }
   }
 
@@ -350,10 +359,21 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
         : `şirketin sermaye maliyetinin (%${wacc.toFixed(1)}) altında getiri (%${roic.toFixed(1)} ROIC) üreterek her çeyrek reel özkaynak erozyonu yaşadığını`
     } ortaya koymaktadır. Kalite ve nakit doğrulaması olmayan ucuzluk bir fırsat değil, değer tuzağıdır.`;
   } else {
-    opportunityMechanismTag = isTfrs10 ? 'TFRS 10 NET AKTİF DEĞER & ÇIKIŞ (EXIT) OPSİYONU' : 'TAM FİYATLANMIŞ KALİTE / KATALİZÖR BEKLENTİSİ';
-    opportunitySourceNarrative = isTfrs10
-      ? `${ticker} için esas fırsat mekanizması klasik ürün satışı değil, portföyündeki teknoloji ve girişim iştiraklerinin büyümesi, yeni yatırım turlarında daha yüksek değerlemeye ulaşması veya halka arz (IPO) yoluyla nakde dönmesidir. Mevcut ${compPb > 0 ? `${compPb.toFixed(2)}x PD/NAD` : 'çarpan'} seviyesi portföyün defter değerini makul bir holding iskontosuyla yansıtmaktadır.`
-      : `Piyasa, ${ticker} hissesinin mevcut operasyonel kalitesini ve %${ebitdaMargin.toFixed(1)} FAVÖK marjını güncel ₺${input.currentPrice.toFixed(2)} fiyat seviyesinde büyük ölçüde doğru fiyatlamaktadır. Burada yeni ve güçlü bir alım fırsatı doğması için ya önümüzdeki çeyreklerde FAVÖK marjının ve serbest nakit akışının beklentileri aşması ya da piyasa dalgalanmalarında hissenin ₺${(input.fairValue * 0.80).toFixed(2)} ve altındaki güvenlik marjı bölgesine çekilmesi gerekmektedir.`;
+    // NÖTR
+    if (isTfrs10) {
+      opportunityMechanismTag = 'TFRS 10 NET AKTİF DEĞER & ÇIKIŞ (EXIT) OPSİYONU';
+      opportunitySourceNarrative = `${ticker} için esas fırsat mekanizması klasik ürün satışı değil, portföyündeki teknoloji ve girişim iştiraklerinin büyümesi, yeni yatırım turlarında daha yüksek değerlemeye ulaşması veya halka arz (IPO) yoluyla nakde dönmesidir. Mevcut ${compPb > 0 ? `${compPb.toFixed(2)}x PD/NAD` : 'çarpan'} seviyesi portföyün defter değerini makul bir holding iskontosuyla yansıtmaktadır.`;
+    } else if (upsidePct >= 15) {
+      opportunityMechanismTag = 'YÜKSEK İSKONTOYA RAĞMEN FİNANSAL TEYİT BEKLENTİSİ';
+      opportunitySourceNarrative = `Piyasa şu an ${ticker} hissesini ₺${input.currentPrice.toFixed(2)} seviyesinde hesaplanan ₺${input.fairValue.toFixed(2)} adil değerine göre %${input.discountPct.toFixed(0)} gibi derin bir iskontoyla fiyatlamaktadır. Ancak modelimizin temkinli bekle-gör (NÖTR) tutumu alım için hisse fiyatının daha da düşmesini değil; kâğıt üzerinde görünen yüksek kârlılığın (%${ebitdaMargin.toFixed(1)} FAVÖK marjı) serbest nakit akışına (FCF) dönüştüğünün ve işletme sermayesi/tahsilat döngüsünün çeyreklik bilançolarda kanıtlanmasını beklemektedir. Bu teyitler gerçekleştiğinde iskonto makasının hızla kapanması ana getiri katalizörü olacaktır.`;
+    } else {
+      const targetDiscountPrice = Number((input.fairValue * 0.80).toFixed(2));
+      const priceDropNeeded = input.currentPrice > targetDiscountPrice;
+      opportunityMechanismTag = 'TAM FİYATLANMIŞ KALİTE / KATALİZÖR BEKLENTİSİ';
+      opportunitySourceNarrative = priceDropNeeded
+        ? `Piyasa, ${ticker} hissesinin mevcut operasyonel kalitesini ve %${ebitdaMargin.toFixed(1)} FAVÖK marjını güncel ₺${input.currentPrice.toFixed(2)} fiyat seviyesinde büyük ölçüde dengeli fiyatlamaktadır. Burada yeni ve güçlü bir alım fırsatı doğması için ya önümüzdeki çeyreklerde FAVÖK marjının ve serbest nakit akışının beklentileri aşması ya da piyasa dalgalanmalarında hissenin ₺${targetDiscountPrice.toFixed(2)} ve altındaki güvenlik marjı bölgesine çekilmesi gerekmektedir.`
+        : `Piyasa, ${ticker} hissesini içsel değerine yakın (${upsidePct >= 0 ? `+${upsidePct.toFixed(1)}%` : `${upsidePct.toFixed(1)}%`} makas) dengeli bir bantta fiyatlamaktadır. Güçlü bir alım döngüsünün tetiklenmesi için serbest nakit akışı dönüşümünün (${(cashConv * 100).toFixed(0)}%) güçlenmesi ve yeni büyüme katalizörlerinin bilançoda teyit edilmesi beklenmektedir.`;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -555,7 +575,7 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
         ? (netGrowthProj >= 0
             ? `Şirket hem sektör çarpanlarına göre cazip bir iskontoyla işlem görmekte hem de %${revGrowthProj.toFixed(0)} hasılat / %${netGrowthProj.toFixed(0)} kâr büyüme beklentisiyle ₺${input.fairValue.toFixed(2)} adil değere güçlü bir asimetri sunmaktadır.`
             : `Şirket sektör çarpanlarına göre cazip bir iskontoyla işlem görmekte; %${revGrowthProj.toFixed(0)} hasılat direnci ve sermaye verimliliğiyle (%${roic.toFixed(1)} ROIC) kâr döngüsünün dip noktasında ₺${input.fairValue.toFixed(2)} adil değere güçlü bir asimetri sunmaktadır.`)
-        : `Mevcut ₺${input.currentPrice.toFixed(2)} fiyat seviyesi, ${sectorName} sektörü çarpanları ve ${netGrowthProj >= 0 ? `%${netGrowthProj.toFixed(0)} ileri kâr büyüme beklentisiyle` : `%${Math.abs(netGrowthProj).toFixed(0)} kâr daralması beklentisiyle`} kıyaslandığında ${upsidePct >= 0 ? 'sınırlı bir güvenlik marjı' : 'primli bir fiyatlama'} sunmaktadır.`
+        : `Mevcut ₺${input.currentPrice.toFixed(2)} fiyat seviyesi, ${sectorName} sektörü çarpanları ve ${netGrowthProj >= 0 ? `%${netGrowthProj.toFixed(0)} ileri kâr büyüme beklentisiyle` : `%${Math.abs(netGrowthProj).toFixed(0)} kâr daralması beklentisiyle`} kıyaslandığında ${upsidePct >= 15 ? `kağıt üzerinde %${upsidePct.toFixed(0)} iskonto potansiyeli sunsa da operasyonel/nakit teyidi ihtiyacı nedeniyle temkinli bir görünüm` : upsidePct >= 0 ? 'sınırlı bir güvenlik marjı' : 'primli bir fiyatlama'} sunmaktadır.`
     }
   ];
 

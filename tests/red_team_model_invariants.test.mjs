@@ -1738,5 +1738,49 @@ test('RED TEAM MATHEMATICAL AUDIT & INVARIANT TEST SUITE', async (t) => {
     assert.ok(synced.includes('> ⚠️ **Gölge Holdingleşme & Sermaye Tahsisi Riski:**'), 'Eski statik "Adli Denetim & Değer Tuzağı Teşhisi" başlığı dinamik başlığa dönüştürülmelidir');
     assert.ok(!synced.includes('Adli Denetim & Değer Tuzağı Teşhisi (Forensic Red Team):'), 'Eski statik Red Team başlığı temizlenmelidir');
   });
+
+  await t.test('REGRESYON 31: Derin İskontolu NÖTR Şirketlerde (ARDYZ) "Doğru Fiyatlanmaktadır" ve "Daha Düşmeli" Çelişkisi Koruması', () => {
+    // ARDYZ senaryosu: Fiyat 57.30 TL, Adil Değer 165.07 TL (%65 iskonto / +%188 potansiyel), Karar: NÖTR
+    const ardyzThesis = synthesizeInvestmentThesis({
+      ticker: 'ARDYZ',
+      companyName: 'ARD Grup Bilişim Teknolojileri A.Ş.',
+      decision: 'NÖTR',
+      score: 72,
+      currentSector: 'TECH_SW',
+      officialSectorName: 'Yazılım & Bilişim',
+      currentPrice: 57.30,
+      fairValue: 165.07,
+      discountPct: 65.0,
+      latestData: {
+        revenue: 1_200_000_000,
+        ebitda: 620_000_000,
+        net_income: 500_000_000,
+        operating_cash_flow: 150_000_000
+      },
+      roic: 25.0,
+      wacc: 15.0,
+      evaSpread: 10.0,
+      drivers: {
+        revenue_growth: { label: 'Hasılat Büyümesi', value: 45.0 },
+        net_income_growth: { label: 'Net Kâr Büyümesi', value: 35.0 },
+        margin: { label: 'FAVÖK Marjı', value: 51.7 },
+        target_multiple: { label: 'Hedef Çarpan', value: '12.0x F/K' }
+      }
+    });
+
+    const narrative = ardyzThesis.opportunitySourceNarrative;
+    const whyAction = ardyzThesis.whyActionParagraphs.join(' ');
+
+    // 1. "TAM FİYATLANMIŞ KALİTE" yerine "YÜKSEK İSKONTOYA RAĞMEN FİNANSAL TEYİT BEKLENTİSİ" olmalıdır
+    assert.equal(ardyzThesis.opportunityMechanismTag, 'YÜKSEK İSKONTOYA RAĞMEN FİNANSAL TEYİT BEKLENTİSİ');
+
+    // 2. 57.30 TL'deki hisseye "132.06 TL'nin altına çekilmesi gerekmektedir" saçmalığı yazılmamalıdır
+    assert.ok(!narrative.includes('132.06'), '57.30 TL fiyatındaki hisseye 132.06 TL ve altına çekilmeli denilemez');
+    assert.ok(!narrative.includes('büyük ölçüde doğru fiyatlamaktadır'), '%65 iskontolu hisseye "piyasa doğru fiyatlamaktadır" denilemez');
+
+    // 3. Yatırım tezi metninde +%188 potansiyele "asgari güvenlik marjı eşiğini aşamamaktadır" denilemez
+    assert.ok(!whyAction.includes('asgari güvenlik marjı eşiğini henüz tam olarak aşamamaktadır'), '+%188 potansiyelde eşiği aşamadı iddiası yer alamaz');
+    assert.ok(whyAction.includes('yükseliş potansiyeli'), 'Derin iskonto ve yükseliş potansiyeli dürüstçe açıklanmalıdır');
+  });
 });
 
