@@ -54,6 +54,7 @@ import {
 
 import { SavedReport, formatAnalysisDate } from '@/lib/report-resolver';
 export type { SavedReport };
+import { loadReportsCache, saveReportsCache } from '@/lib/report-cache';
 import { generateFullAuditMarkdown } from '@/lib/export-markdown';
 import {
   categorizeCompany,
@@ -1796,6 +1797,7 @@ export default function ValuationTerminal({
       // 1. O rapordan yalnızca bu ID'ye ait kaydı yerel hafızadan temizle (aynı hissenin diğer dönem raporları KORUNUR)
       const updated = savedReports.filter(r => r.id !== id);
       setSavedReports(updated);
+      saveReportsCache(updated);
       try {
         localStorage.setItem('fin_valuation_reports', JSON.stringify(updated));
       } catch (err) {}
@@ -1872,6 +1874,7 @@ export default function ValuationTerminal({
           setSavedReports(prev => {
             const has = prev.some(r => r.id === apiReport.id || r.ticker?.toUpperCase() === t);
             const next = has ? prev : [apiReport, ...prev];
+            saveReportsCache(next);
             try { localStorage.setItem('fin_valuation_reports', JSON.stringify(next)); } catch {}
             return next;
           });
@@ -1940,11 +1943,20 @@ export default function ValuationTerminal({
     }
 
     localData = localData.map(reconcileSavedReportWithLatestEngine);
-    try {
-      localStorage.setItem('fin_valuation_reports', JSON.stringify(localData));
-    } catch (e) {}
-
     setSavedReports(localData);
+
+    // IndexedDB kalıcı önbelleğinden tam listeyi yükle (5MB localStorage kotasına takılmadan)
+    loadReportsCache<SavedReport>().then(cached => {
+      if (Array.isArray(cached) && cached.length > 0) {
+        const reconciled = cached.map(reconcileSavedReportWithLatestEngine);
+        setSavedReports(prev => {
+          if (reconciled.length >= prev.length) {
+            return reconciled;
+          }
+          return prev;
+        });
+      }
+    }).catch(() => {});
 
     // Doğrudan URL veya initialTicker kontrolü (/analysis/VESBE veya query params)
     let pathTicker = '';
@@ -2016,34 +2028,21 @@ export default function ValuationTerminal({
           if (json) {
             setIsCloudConfigured(Boolean(json.isCloudConfigured));
             if (json.isCloudConfigured && Array.isArray(json.reports) && json.reports.length > 0) {
-              const idMap = new Map<string, SavedReport>();
-              const allReports = [...localData, ...json.reports].sort(
-                (a, b) => reportTimestamp(b) - reportTimestamp(a)
-              );
-              for (const rep of allReports) {
-                if (rep.id && !idMap.has(rep.id)) {
-                  idMap.set(rep.id, rep);
+              // Ticker bazında kesin tekilleştirme: Her cihazda birebir aynı ve eksiksiz 164 şirket yer almalıdır.
+              const tickerMap = new Map<string, SavedReport>();
+              for (const rep of json.reports) {
+                const t = (rep.ticker || '').trim().toUpperCase();
+                if (!t) continue;
+                if (!tickerMap.has(t)) {
+                  tickerMap.set(t, rep);
                 }
               }
-              const merged = Array.from(idMap.values()).map(reconcileSavedReportWithLatestEngine);
-              setSavedReports(merged);
+              const cloudList = Array.from(tickerMap.values()).map(reconcileSavedReportWithLatestEngine);
+              setSavedReports(cloudList);
+              saveReportsCache(cloudList);
               try {
-                localStorage.setItem('fin_valuation_reports', JSON.stringify(merged));
-              } catch (storageErr) {
-                try {
-                  // Tarayıcı 5MB localStorage kotasını aşarsa rapor metinlerini arındırıp kompakt kaydet
-                  const compact = merged.map(r => ({
-                    ...r,
-                    report: '',
-                    extractedData: r.extractedData ? {
-                      ...r.extractedData,
-                      scoreResult: undefined,
-                      score_result: undefined
-                    } : undefined
-                  }));
-                  localStorage.setItem('fin_valuation_reports', JSON.stringify(compact));
-                } catch {}
-              }
+                localStorage.setItem('fin_valuation_reports', JSON.stringify(cloudList.slice(0, 30)));
+              } catch {}
             }
           }
         }
@@ -2184,6 +2183,7 @@ export default function ValuationTerminal({
           });
           setSavedReports(prev => {
             const next = prev.map(r => (r.id === rep.id ? refreshed : r));
+            saveReportsCache(next);
             try { localStorage.setItem('fin_valuation_reports', JSON.stringify(next)); } catch {}
             return next;
           });
@@ -2242,6 +2242,7 @@ export default function ValuationTerminal({
     newReport = { ...newReport, extractedData: { ...(newReport.extractedData || {}), saved_at: new Date().toISOString() } };
     const updated = [newReport, ...savedReports.filter(r => r.id !== newReport.id && !isSameQuarter(r, newReport))];
     setSavedReports(updated);
+    saveReportsCache(updated);
     try {
       localStorage.setItem('fin_valuation_reports', JSON.stringify(updated));
     } catch (e) {}
@@ -2293,7 +2294,10 @@ export default function ValuationTerminal({
           const newEntries = reportsList.filter((r: any) => r.id && r.ticker);
           const merged = [...newEntries.filter((r: any) => !existingIds.has(r.id)), ...savedReports].map(reconcileSavedReportWithLatestEngine);
           setSavedReports(merged);
-          localStorage.setItem('fin_valuation_reports', JSON.stringify(merged));
+          saveReportsCache(merged);
+          try {
+            localStorage.setItem('fin_valuation_reports', JSON.stringify(merged));
+          } catch (e) {}
 
           if (Array.isArray(parsed?.portfolio)) {
             const mergedPort = Array.from(new Set([...portfolioTickers, ...parsed.portfolio]));

@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 2. Dayanıklı Sayfalı Çekim (Resilient Chunked Fetch):
-    // 145+ şirketi tek bir devasa sorguyla çekmek yerine, PostgreSQL'in statement timeout
+    // 164+ şirketi tek bir devasa sorguyla çekmek yerine, PostgreSQL'in statement timeout
     // limitine takılmasını engellemek için 50'şerli güvenli pencereler halinde çeker.
     const pageSize = 50;
     let allRows: any[] = [];
@@ -95,11 +95,21 @@ export async function GET(req: NextRequest) {
 
     while (hasMore) {
       const to = from + pageSize - 1;
-      const { data: pageData, error: pageErr } = await supabase
-        .from('valuation_reports')
-        .select('*')
-        .order('updated_at', { ascending: false })
-        .range(from, to);
+      let pageData: any[] | null = null;
+      let pageErr: any = null;
+
+      // Geçici ağ aksamalarına karşı 1 defa yeniden deneme (retry)
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const res = await supabase
+          .from('valuation_reports')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .range(from, to);
+        pageData = res.data;
+        pageErr = res.error;
+        if (!pageErr) break;
+        await new Promise(r => setTimeout(r, 400));
+      }
 
       if (pageErr) {
         console.error(`[Reports] Sayfalı çekim hatası (${from}-${to}):`, pageErr);
@@ -119,8 +129,14 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    if (fetchError && allRows.length === 0) {
-      console.error('Supabase fetch error:', fetchError);
+    // Herhangi bir sayfada hata alındıysa KESİNLİKLE kısmi veri önbelleğe alınmaz veya dönülmez
+    if (fetchError) {
+      console.error('Supabase fetch error during pagination:', fetchError);
+      if (cachedReportsResponse && cachedReportsResponse.data.reports.length > 0) {
+        return NextResponse.json(cachedReportsResponse.data, {
+          headers: { 'Cache-Control': 'public, s-maxage=10', 'X-Cache': 'STALE' }
+        });
+      }
       return NextResponse.json({ 
         reports: [], 
         isCloudConfigured: true, 
@@ -128,7 +144,18 @@ export async function GET(req: NextRequest) {
       }, { status: 500 });
     }
 
-    const reports = allRows.map((row: any) => ({
+    // Ticker bazında kesin tekilleştirme: Her şirketin yalnızca en son güncellenen raporunu al
+    const tickerMap = new Map<string, any>();
+    for (const row of allRows) {
+      const t = (row.ticker || '').trim().toUpperCase();
+      if (!t) continue;
+      if (!tickerMap.has(t)) {
+        tickerMap.set(t, row);
+      }
+    }
+    const uniqueRows = Array.from(tickerMap.values());
+
+    const reports = uniqueRows.map((row: any) => ({
       id: row.id,
       ticker: row.ticker,
       price: row.price,
@@ -205,6 +232,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Extracted data optimizasyonu: scoreResult veya score_result gibi yüzlerce KB'lık gereksiz kopyaları filtrele
+    let cleanExtractedData = report.extractedData || null;
+    if (cleanExtractedData && typeof cleanExtractedData === 'object') {
+      const { scoreResult, score_result, ...restExtracted } = cleanExtractedData;
+      cleanExtractedData = restExtracted;
+    }
+
     const payload = {
       id: cleanId,
       ticker: cleanTicker,
@@ -214,7 +248,7 @@ export async function POST(req: NextRequest) {
       report: report.report || '',
       decision: report.decision || 'NÖTR',
       score: report.score ? String(report.score).slice(0, 16) : '',
-      extracted_data: report.extractedData || null,
+      extracted_data: cleanExtractedData,
       updated_at: new Date().toISOString(),
     };
 
@@ -225,6 +259,17 @@ export async function POST(req: NextRequest) {
     if (error) {
       console.error('Supabase upsert error:', error);
       return NextResponse.json({ success: false, error: 'Rapor kaydedilirken veritabanı hatası oluştu.', isCloudConfigured: true }, { status: 500 });
+    }
+
+    // Ticker tekilliği garantisi: Aynı hisseye ait eski farklı ID'li mükerrer satırları temizle
+    try {
+      await supabase
+        .from('valuation_reports')
+        .delete()
+        .eq('ticker', cleanTicker)
+        .neq('id', cleanId);
+    } catch (cleanupErr) {
+      console.warn('Eski mükerrer kayıt temizliği hatası (kritik değil):', cleanupErr);
     }
 
     cachedReportsResponse = null;
