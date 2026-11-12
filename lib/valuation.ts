@@ -14,6 +14,9 @@ import {
   isTelecomSector,
   isRetailFloatSector,
   isAutomotiveSector,
+  isAutomotivePartsSector,
+  isAutomotiveTireSector,
+  isAutomotiveOemSector,
   isPetroleumRefinerySector,
   isRefinerySector,
   isPetrochemicalSector,
@@ -7072,7 +7075,17 @@ export function computeSectorValuationAndDrivers(
     fairValue = Number(Math.max(0.10, rawFair).toFixed(2));
     formulaStr = `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x): ${evPerShare.toFixed(2).replace('.', ',')} TL (%${Math.round(weights.ev * 100)}) + F/K (${targetPe.toFixed(1).replace('.', ',')}x): ${pePerShare.toFixed(2).replace('.', ',')} TL (%${Math.round(weights.pe * 100)}) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%${Math.round(weights.pb * 100)}) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
   } else if (isAutomotiveSector(detectedOfficialSecName, currentTickerUpper)) {
-    modelName = 'Uluslararası Otomotiv & OEM Değerleme Modeli (Maliyet Artı Kâr & Model Dönüşüm Uyarlamalı)';
+    const isAutoParts = isAutomotivePartsSector(detectedOfficialSecName, currentTickerUpper);
+    const isAutoTire = isAutomotiveTireSector(detectedOfficialSecName, currentTickerUpper);
+
+    if (isAutoParts) {
+      modelName = 'Otomotiv Yan Sanayii & Komponent Değerleme Modeli (Tier-1 Tedarik & Katma Değerli İhracat Modu)';
+    } else if (isAutoTire) {
+      modelName = 'Otomotiv Lastik Sanayii Değerleme Modeli (Döngüsel Kauçuk & OEM Tedarik Modu)';
+    } else {
+      modelName = 'Uluslararası Otomotiv & OEM Değerleme Modeli (Maliyet Artı Kâr & Model Dönüşüm Uyarlamalı)';
+    }
+
     const latestEbitda = parseFinancialNumber(latest?.ebitda) ?? 0;
     const latestRev = parseFinancialNumber(latest?.revenue) ?? 0;
     const latestNet = parseFinancialNumber(latest?.net_income) ?? 0;
@@ -7096,36 +7109,64 @@ export function computeSectorValuationAndDrivers(
     const rawNetG = netGrowth / 100;
     const clampedNetG = Math.min(0.25, Math.max(-0.25, rawNetG));
 
-    // Otomotiv Model Geçişi Normalizasyonu (TOASO / FROTO):
+    // Otomotiv Model Geçişi Normalizasyonu (TOASO / FROTO OEM fabrikaları için):
     let effectiveEbitda = ebitdaFull;
     let effectiveNet = netFull;
-    if (isCapExTransitionPhase && normalizedMidCycleMargin !== null) {
+    if (!isAutoParts && !isAutoTire && isCapExTransitionPhase && normalizedMidCycleMargin !== null) {
       const clampedMargin = Math.min(9.5, normalizedMidCycleMargin);
       effectiveEbitda = Math.max(ebitdaFull, revFull * (clampedMargin / 100));
       effectiveNet = Math.max(netFull, effectiveEbitda * 0.35);
     }
 
-    const secMult = resolveOfficialSectorMultiples('Otomotiv', { ev: 9.92, pe: 9.19, pb: 1.98 });
+    const secMult = resolveOfficialSectorMultiples(
+      isAutoParts ? 'Otomotiv Parçası' : (isAutoTire ? 'Otomotiv Lastiği' : 'Otomotiv'),
+      isAutoParts 
+        ? { ev: 22.67, pe: 16.64, pb: 3.49, ev_sales: 2.31 }
+        : (isAutoTire ? { ev: 5.32, pe: 9.50, pb: 1.06, ev_sales: 0.95 } : { ev: 9.92, pe: 9.19, pb: 1.98, ev_sales: 0.59 })
+    );
+
     const currentMargin = (revFull > 0 && effectiveEbitda > 0) ? (effectiveEbitda / revFull) : 0.08;
     const qualityFactor = Math.min(1.15, Math.max(0.85, 1.0 + (currentMargin - 0.08) * 1.5));
 
     const forwardEbitda = effectiveEbitda > 0 ? effectiveEbitda * (1 + clampedRevG) : 0;
-    const targetEvMultiple = Number((Math.min(7.5, secMult.ev * 0.70) * qualityFactor).toFixed(2));
+    let targetEvMultiple: number;
+    let targetPe: number;
+    let normalAutoPb: number;
+
+    if (isAutoParts) {
+      // Tier-1 Otomotiv Parçası: Yüksek marj, net nakit pozisyonu ve küresel OEM kontratları
+      // Sektör ortalaması 22.67x olup faiz/döngü normalizasyonuyla 10.0x - 13.5x bandında fiyatlanır.
+      targetEvMultiple = Number((Math.max(8.5, Math.min(13.5, secMult.ev * 0.55)) * qualityFactor).toFixed(2));
+      targetPe = Number((Math.max(10.5, Math.min(14.5, secMult.pe * 0.75)) * (qualityFactor >= 1.0 ? Math.min(1.10, qualityFactor) : 0.95)).toFixed(2));
+      normalAutoPb = (roe !== null && roe > 0)
+        ? Number(Math.max(1.20, Math.min(3.50, (roe / 16.0) * (secMult.pb / 1.35))).toFixed(2))
+        : 0.65;
+    } else if (isAutoTire) {
+      targetEvMultiple = Number((Math.max(4.5, Math.min(7.0, secMult.ev)) * qualityFactor).toFixed(2));
+      targetPe = Number((Math.max(6.0, Math.min(9.0, (secMult.pe || 9.5) * 0.80))).toFixed(2));
+      normalAutoPb = (roe !== null && roe > 0)
+        ? Number(Math.max(0.60, Math.min(1.80, (roe / 16.0) * secMult.pb)).toFixed(2))
+        : 0.45;
+    } else {
+      // Araç / Traktör Montaj (OEM): Model geçişi / fabrika duruşu riskleri nedeniyle tavanlar geçerlidir
+      targetEvMultiple = Number((Math.min(7.5, secMult.ev * 0.70) * qualityFactor).toFixed(2));
+      targetPe = Number((Math.min(9.0, secMult.pe) * (qualityFactor >= 1.0 ? Math.min(1.10, qualityFactor) : 0.95)).toFixed(2));
+      normalAutoPb = (roe !== null && roe > 0)
+        ? Number(Math.max(0.35, Math.min(2.40, (roe / 16.0) * (secMult.pb / 1.5))).toFixed(2))
+        : 0.35;
+    }
+
     const enterpriseVal = forwardEbitda * targetEvMultiple;
     const evEquity = resolveSafeEvEquity(enterpriseVal, totalDebtBridge, totalEquityFull, 0.25, netFull);
     const evPerShare = evEquity > 0 ? (evEquity / effectiveShareCount) : 0;
 
-    // İleri F/K (İş Yatırım resmi Otomotiv çarpanı bazlı)
+    // İleri F/K
     const forwardNet = effectiveNet > 0 ? effectiveNet * (1 + clampedNetG) : 0;
-    const targetPe = Number((Math.min(9.0, secMult.pe) * (qualityFactor >= 1.0 ? Math.min(1.10, qualityFactor) : 0.95)).toFixed(2));
     const pePerShare = forwardNet > 0 ? (forwardNet * targetPe) / effectiveShareCount : 0;
 
-    // İleri PD/DD (İş Yatırım resmi sektör çarpanı bazlı)
+    // İleri PD/DD
     const bvps = totalEquityFull > 0 ? (totalEquityFull / effectiveShareCount) : 0;
     const forwardBvps = resolveSafeForwardBvps(bvps, 0.35, 0.70);
-    const normalAutoPb = (roe !== null && roe > 0)
-      ? Number(Math.max(0.35, Math.min(2.40, (roe / 16.0) * (secMult.pb / 1.5))).toFixed(2))
-      : 0.35;
     const justifiedPb = resolveSafeJustifiedPb(normalAutoPb, secMult.pb, enterpriseVal, totalDebtBridge, netFull);
     const pbPerShare = forwardBvps * justifiedPb;
 
@@ -7457,7 +7498,8 @@ export function computeSectorValuationAndDrivers(
       }
       const effectiveNet = netFull;
 
-      const secMult = resolveOfficialSectorMultiples('Dayanıklı Tüketim', { ev: 7.04, pe: 12.50, pb: 0.79 });
+      const durablesSecName = detectedOfficialSecName === 'Mobilya' ? 'Mobilya' : 'Dayanıklı Tüketim';
+      const secMult = resolveOfficialSectorMultiples(durablesSecName, durablesSecName === 'Mobilya' ? { ev: 8.00, pe: 5.49, pb: 0.90 } : { ev: 7.04, pe: 12.50, pb: 0.79 });
       const forwardEbitda = effectiveEbitda > 0 ? effectiveEbitda * (1 + clampedRevG) : 0;
       const targetEvMultiple = Number(Math.min(7.5, secMult.ev).toFixed(2));
       const enterpriseVal = forwardEbitda * targetEvMultiple;
@@ -7756,7 +7798,13 @@ export function computeSectorValuationAndDrivers(
       }
       const effectiveNet = netFull;
 
-      const secMult = resolveOfficialSectorMultiples('Çimento', { ev: 7.68, pe: 10.82, pb: 1.24 });
+      const cementSecName = (detectedOfficialSecName === 'İnşaat Malzemeleri' || detectedOfficialSecName === 'Seramik') ? detectedOfficialSecName : 'Çimento';
+      const secMult = resolveOfficialSectorMultiples(
+        cementSecName, 
+        cementSecName === 'İnşaat Malzemeleri' 
+          ? { ev: 8.50, pe: 12.59, pb: 2.46 } 
+          : (cementSecName === 'Seramik' ? { ev: 9.63, pe: 18.59, pb: 1.26 } : { ev: 7.68, pe: 10.82, pb: 1.24 })
+      );
       const forwardEbitda = effectiveEbitda > 0 ? effectiveEbitda * (1 + clampedRevG) : 0;
       const targetEvMultiple = Number(Math.min(7.5, secMult.ev * 0.90).toFixed(2));
       const enterpriseVal = forwardEbitda * targetEvMultiple;
@@ -8026,7 +8074,13 @@ export function computeSectorValuationAndDrivers(
       }
       const effectiveNet = netFull;
 
-      const secMult = resolveOfficialSectorMultiples('Gıda', { ev: 11.08, pe: 14.75, pb: 2.42 });
+      const foodSecName = (detectedOfficialSecName === 'Meşrubat / İçecek' || detectedOfficialSecName === 'Hayvancılık') ? detectedOfficialSecName : 'Gıda';
+      const secMult = resolveOfficialSectorMultiples(
+        foodSecName,
+        foodSecName === 'Meşrubat / İçecek'
+          ? { ev: 5.00, pe: 10.47, pb: 1.86 }
+          : (foodSecName === 'Hayvancılık' ? { ev: 7.58, pe: 9.21, pb: 2.26 } : { ev: 11.08, pe: 14.75, pb: 2.42 })
+      );
       const currentMargin = (revFull > 0 && effectiveEbitda > 0) ? (effectiveEbitda / revFull) : 0.14;
       const qualityFactor = Math.min(1.15, Math.max(0.85, currentMargin >= 0.18 ? 1.15 : (currentMargin >= 0.14 ? 1.05 : 0.95)));
 
@@ -8342,7 +8396,13 @@ export function computeSectorValuationAndDrivers(
       ? netFull
       : Math.max(netFull, effectiveEbitda * 0.28);
 
-    const secMult = resolveOfficialSectorMultiples('Tarım Kimyasalları', { ev: 8.56, pe: 15.71, pb: 2.46 });
+    const agroSecName = (detectedOfficialSecName === 'Boya' || detectedOfficialSecName === 'Kimyasal Ürün') ? detectedOfficialSecName : 'Tarım Kimyasalları';
+    const secMult = resolveOfficialSectorMultiples(
+      agroSecName,
+      agroSecName === 'Boya'
+        ? { ev: 12.73, pe: 21.99, pb: 6.64 }
+        : (agroSecName === 'Kimyasal Ürün' ? { ev: 9.90, pe: 16.51, pb: 1.89 } : { ev: 8.56, pe: 15.71, pb: 2.46 })
+    );
     const forwardEbitda = effectiveEbitda > 0 ? effectiveEbitda * (1 + clampedRevG) : 0;
     const targetEvMultiple = Number(Math.min(7.5, secMult.ev * 0.82).toFixed(2));
     const enterpriseVal = forwardEbitda * targetEvMultiple;
@@ -8404,7 +8464,13 @@ export function computeSectorValuationAndDrivers(
       ? netFull
       : Math.max(netFull, effectiveEbitda * 0.25);
 
-    const secMult = resolveOfficialSectorMultiples('Tekstil Entegre', { ev: 6.46, pe: 12.18, pb: 1.43 });
+    const textSecName = (detectedOfficialSecName === 'Endüstriyel Tekstil' || detectedOfficialSecName === 'Deri Giyim') ? detectedOfficialSecName : 'Tekstil Entegre';
+    const secMult = resolveOfficialSectorMultiples(
+      textSecName,
+      textSecName === 'Endüstriyel Tekstil'
+        ? { ev: 15.11, pe: 6.66, pb: 0.62 }
+        : (textSecName === 'Deri Giyim' ? { ev: 3.06, pe: 8.26, pb: 0.95 } : { ev: 6.46, pe: 12.18, pb: 1.43 })
+    );
     const forwardEbitda = effectiveEbitda > 0 ? effectiveEbitda * (1 + clampedRevG) : 0;
     const targetEvMultiple = Number((Math.min(5.5, secMult.ev * 0.75)).toFixed(2));
     const enterpriseVal = forwardEbitda * targetEvMultiple;

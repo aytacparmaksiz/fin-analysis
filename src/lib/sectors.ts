@@ -643,6 +643,45 @@ export function isAutomotiveSector(officialSectorName: string, ticker?: string):
 }
 
 /**
+ * Otomotiv Yan Sanayii & Komponent Üreticileri (Tier-1 Parça Tedariki):
+ * FMIZP, BFREN, EGEEN, DITAS, PARSN, JANTS, DOKTA, BALAT.
+ */
+export function isAutomotivePartsSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (s === 'Otomotiv Parçası' || s.includes('Otomotiv Parça') || s.includes('Oto Parça')) {
+    return true;
+  }
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  return ['FMIZP', 'BFREN', 'EGEEN', 'DITAS', 'PARSN', 'JANTS', 'DOKTA', 'BALAT'].includes(t);
+}
+
+/**
+ * Otomotiv Lastik Sanayii (Döngüsel Kauçuk & Lastik İmalatı):
+ * BRISA, GOODY.
+ */
+export function isAutomotiveTireSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (s === 'Otomotiv Lastiği' || s.includes('Lastik')) {
+    return true;
+  }
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  return ['BRISA', 'GOODY'].includes(t);
+}
+
+/**
+ * Komple Araç / Traktör Montaj Üreticileri (OEM Assemblers):
+ * FROTO, TOASO, TTRAK, OTKAR, ASUZU, KARSN, TMSN.
+ */
+export function isAutomotiveOemSector(officialSectorName: string, ticker?: string): boolean {
+  const s = resolveOfficialSectorName(officialSectorName, ticker);
+  if (s === 'Otomotiv' || s.includes('Traktör')) {
+    return true;
+  }
+  const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
+  return ['FROTO', 'TOASO', 'TTRAK', 'OTKAR', 'ASUZU', 'KARSN', 'TMSN'].includes(t);
+}
+
+/**
  * Petrol, Rafineri & Petrokimya Sektörü:
  * TUPRS, PETKM, AYGAZ, SASA, ALKIM, DYOBY, POLHO.
  */
