@@ -1931,7 +1931,12 @@ export function syncReportTextWithValuation(
   // 6.1 İskontoya Rağmen AL Verilmeme Gerekçeleri (Büyük Riskler) Senkronizasyonu
   const effDiscount = disc != null ? disc : (valuation.potential_return != null ? Number(valuation.potential_return) : 0);
   const effDecision = targetDecision || valuation?.final_decision;
-  if (effDiscount >= 15 && effDecision && effDecision !== 'AL' && !text.includes('Neden "AL" Verilmedi?')) {
+  const nedenAlBlockRegex = /(?:^|\n)(?:[ \t]*>)+[ \t]*(?:⚠️\s*)?\*{0,2}(?:2\.\s*Adli\s+Gerçekler\s*:\s*)?Neden\s*"AL"\s*Verilmedi\?[\s\S]*?(?=(?:\n[ \t]*\n[ \t]*(?:[ \t]*>[ \t]*\*{0,2}Yönetici|##|#|\*\*))|(?:\n[ \t]*##)|$)/gi;
+
+  if (effDecision === 'AL') {
+    // Kurumsal Değişmez: Karar AL iken raporda asla "Neden AL Verilmedi?" bloğu bulunamaz!
+    text = text.replace(nedenAlBlockRegex, '\n\n');
+  } else if (effDiscount >= 15 && effDecision && effDecision !== 'AL') {
     const redFlagsBlock = buildForensicRedFlagsSection({
       ticker: valuation?.ticker,
       valuation,
@@ -1940,12 +1945,17 @@ export function syncReportTextWithValuation(
       extractedData: extractedData || valuation?.extractedData
     });
     if (redFlagsBlock) {
-      if (text.includes('## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ')) {
+      if (text.match(nedenAlBlockRegex)) {
+        text = text.replace(nedenAlBlockRegex, redFlagsBlock);
+      } else if (text.includes('## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ')) {
         text = text.replace('## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ', `## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ${redFlagsBlock}`);
       } else {
         text = redFlagsBlock + '\n' + text;
       }
     }
+  } else if (effDiscount < 15 || !effDecision) {
+    // İskonto %15'in altına düşmüşse eski fren uyarısı kaldırılır
+    text = text.replace(nedenAlBlockRegex, '\n\n');
   }
 
   // 7. Kâr Kalitesi ve Nakit Üretimi Analitik Yorum Zenginleştirmesi (Insight Ekleme)
@@ -2925,11 +2935,16 @@ export function calculateSectorScore(
       anomalies.push('Finansman Gideri Kaynaklı Ağır Net Zarar ve Borç Baskısı');
     } else if (ndEbitda !== null) {
       if (ndEbitda <= 2.2) {
-        if (cr !== null && cr < 0.80) {
+        const isRegulatedGrid = isRegulatedDistributionSector(targetSectorOrOfficial, data?.ticker);
+        if (cr !== null && cr < 0.80 && !isRegulatedGrid) {
           s4 = 13;
           r4 = `Düşük Altyapı Borçluluğu (${ndEbitda.toFixed(1)}x) ancak Kısa Vadeli Likidite Sıkışıklığı: Cari oran (${cr.toFixed(2)}x) kısa vadeli borç baskısına işaret ediyor.`;
           st4 = 'warning';
           anomalies.push(`Kısa Vadeli Likidite Baskısı (Cari Oran: ${cr.toFixed(2)}x)`);
+        } else if (cr !== null && cr < 0.80 && isRegulatedGrid) {
+          s4 = 22;
+          r4 = `Düşük Altyapı Borçluluğu (${ndEbitda.toFixed(1)}x): Regüle tekel şebeke nakit akışları ve EPDK tarife tahsilatı sayesinde işletme sermayesi döngüsü güvenlidir.`;
+          st4 = 'good';
         } else if (netFx !== null && netFx < -5000000000) {
           s4 = 16;
           r4 = `Net Borç / FAVÖK (${ndEbitda.toFixed(1)}x) dengeli; ancak yüksek açık döviz pozisyonu (${Math.round(netFx / 1e6)}M TL) kur riski taşımaktadır.`;
@@ -3216,7 +3231,11 @@ export function calculateSectorScore(
     // 2. Sermaye Verimliliği (ROIC vs WACC Makası - EVA) (Max 25)
     const roic = parseFinancialNumber(latest?.roic);
     const nominalWacc = parseFinancialNumber(latest?.nominal_wacc ?? latest?.wacc);
-    const benchmarkWacc = parseFinancialNumber((latest?.is_tms29 && latest?.real_wacc != null) ? latest.real_wacc : (latest?.wacc ?? nominalWacc));
+    let benchmarkWacc = parseFinancialNumber((latest?.is_tms29 && latest?.real_wacc != null) ? latest.real_wacc : (latest?.wacc ?? nominalWacc));
+    if (latest?.is_tms29 && benchmarkWacc !== null && benchmarkWacc > 22.0) {
+      const expInf = parseFinancialNumber(latest?.expected_inflation) ?? 23.7;
+      benchmarkWacc = Number((((1 + benchmarkWacc / 100) / (1 + expInf / 100) - 1) * 100).toFixed(1));
+    }
     let s2 = 15;
     let r2 = 'ROIC ve WACC sermaye dengesi izleniyor';
     let st2: 'good' | 'warning' | 'danger' = 'warning';
@@ -3397,9 +3416,14 @@ export function calculateSectorScore(
     }
   }
 
+  const isNetCashProfitable = (equity !== null && equity > 0) &&
+    (parseFinancialNumber(latest?.net_income) ?? 0) > 0 &&
+    (parseFinancialNumber(latest?.operating_profit ?? latest?.ebit) ?? 0) > 0 &&
+    (parseFinancialNumber(latest?.net_debt) ?? 0) <= 0;
+
   let suggestedDecision: 'AL' | 'ALMA' | 'NÖTR' = 'NÖTR';
-  if (totalScore >= 75 && anomalies.length === 0) suggestedDecision = 'AL';
-  else if (totalScore < 50 || anomalies.length >= 2 || (equity !== null && equity <= 0)) suggestedDecision = 'ALMA';
+  if (totalScore >= 75 && (anomalies.length === 0 || (isNetCashProfitable && anomalies.length === 1 && !anomalies[0].toLowerCase().includes('operasyonel zarar')))) suggestedDecision = 'AL';
+  else if ((equity !== null && equity <= 0) || totalScore < 45 || (!isNetCashProfitable && (totalScore < 50 || anomalies.length >= 2))) suggestedDecision = 'ALMA';
   else suggestedDecision = 'NÖTR';
 
   return {
@@ -4453,12 +4477,17 @@ export function optimizeFinalDecision({
     // 2. Kural: Reel Sektör Makyajlı Bilanço Koruması (Net Kâr pozitif ama İşletme Nakit Akışı negatif)
     const netIncome = parseFinancialNumber(effectiveLatestData?.net_income);
     const ocf = parseFinancialNumber(effectiveLatestData?.operating_cash_flow);
+    const rawNetDebt = (parseFinancialNumber(effectiveLatestData?.net_debt) ?? 0);
+    const hasNetCashBuffer = rawNetDebt <= 0;
+    const isHighQualityRoic = (parseFinancialNumber(effectiveLatestData?.roic) ?? 0) >= 25.0;
+    const isExemptFromCashConvVeto = hasNetCashBuffer && isHighQualityRoic && (score != null && score >= 75);
+
     if (!overrideApplied && isOperatingSector && netIncome !== null && netIncome > 0 && ocf !== null && ocf < 0) {
       finalDecision = 'ALMA';
       overrideApplied = true;
       overrideReason = 'Makyajlı Bilanço Koruması: Net kâr pozitif olmasına rağmen işletme nakit akışı (OCF) negatiftir. Şirketin kâr kalitesi zayıf ve tahsilat/stok riski bulunduğu için AL kararı engellendi.';
       safetyFlags.push('Bilanço Makyajı: OCF negatif, net kâr pozitif.');
-    } else if (!overrideApplied && isOperatingSector && netIncome !== null && netIncome > 0 && ocf !== null && ocf > 0 && (ocf / netIncome) < 0.35) {
+    } else if (!overrideApplied && isOperatingSector && netIncome !== null && netIncome > 0 && ocf !== null && ocf > 0 && (ocf / netIncome) < 0.35 && !isExemptFromCashConvVeto) {
       finalDecision = 'NÖTR';
       overrideApplied = true;
       overrideReason = `Zayıf Nakit Dönüşümü (Tahakkuk Riski): İşletme nakit akışı net kârın yalnızca %${((ocf / netIncome) * 100).toFixed(0)} seviyesindedir. Kârın büyük kısmının nakde dönmemesi ve alacak/stoklarda bağlı kalması nedeniyle karar temkinli 'NÖTR' (Koşullu İzleme) olarak dengelendi.`;
@@ -5088,7 +5117,7 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
     const baseTargetPe = isWorkingCapitalExempt 
       ? Math.max(14.0, targetMultipleNum * 2.0)
       : Math.max(7.5, targetMultipleNum * 1.35);
-    const targetPe = evaHaircutApplied ? Math.max(4.0, baseTargetPe * (1 - evaDiscountPct * 0.7)) : baseTargetPe;
+    const targetPe = evaHaircutApplied ? Math.max(5.5, baseTargetPe * (1 - evaDiscountPct * 0.7)) : baseTargetPe;
     const pePerShare = forwardNet > 0 ? ((forwardNet * targetPe) / effectiveShareCount) : 0;
 
     // 12A İleri PD/DD
@@ -5160,7 +5189,13 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
         // Negatif EVA Durumu: Gerekçeli PD/DD paydası şirketin gerçek sermaye maliyetine dinamik duyarlıdır.
         // Gordon Büyüme tekillik koruması olarak reel sermaye maliyeti alt sınırı %10.0'dır.
         const effectiveCostOfCapital = Math.max(10.0, currentWacc);
-        justifiedPb = Math.max(0.40, Math.min(0.95, (Math.max(0, activeRoe) / effectiveCostOfCapital) * 0.90));
+        if (activeRoe > 25) {
+          justifiedPb = Math.min(2.80, Math.max(1.20, activeRoe / 18));
+        } else if (activeRoe > 15) {
+          justifiedPb = Math.min(1.80, Math.max(1.00, activeRoe / 20));
+        } else {
+          justifiedPb = Math.max(0.40, Math.min(0.95, (Math.max(0, activeRoe) / effectiveCostOfCapital) * 0.90));
+        }
       } else if ((evaHaircutApplied || activeRoe < 8) && currentWacc != null) {
         justifiedPb = Math.max(0.32, Math.min(0.85, (Math.max(0, activeRoe) / Math.max(15, currentWacc)) * 0.85));
       } else if (activeRoe < 8) {
@@ -5637,7 +5672,12 @@ export function computeSectorValuationAndDrivers(
   let histMedianMargin: number | null = null;
 
   const currentTickerUpper = String(resolvedTicker || extractedData?.ticker || (Array.isArray(extractedData) ? extractedData[0]?.ticker : '') || '').toUpperCase();
-  const detectedOfficialSecName = resolveOfficialSectorName(extractedData?.official_sector_name || (Array.isArray(extractedData) ? extractedData[0]?.official_sector_name : undefined), currentTickerUpper) || getCompanySectorDisplayName(currentTickerUpper, sector);
+  const rawExtractedSecName = extractedData?.official_sector_name ||
+    extractedData?.official_sector ||
+    extractedData?.officialSectorName ||
+    extractedData?.sector_name ||
+    (Array.isArray(extractedData) ? (extractedData[0]?.official_sector_name || extractedData[0]?.official_sector) : undefined);
+  const detectedOfficialSecName = resolveOfficialSectorName(rawExtractedSecName, currentTickerUpper) || getCompanySectorDisplayName(currentTickerUpper, sector);
   const isExcludedLightSector = 
     detectedOfficialSecName === 'Gıda' || 
     detectedOfficialSecName === 'İçecek' || 
@@ -5892,8 +5932,14 @@ export function computeSectorValuationAndDrivers(
         targetMultipleExpl = `Reel büyüme (%${revGrowth.toFixed(1)}) ve serbest nakit marjı (%${(actualFcfMargin ?? 0).toFixed(1)}) bileşimine göre dinamik FD/Satışlar çarpanı`;
       }
     } else if (sector === 'FINANCIAL_SERVICES') {
-      const safeKe = Math.max(12.0, ke);
-      const macroGrowth = 18.0;
+      const isBrokerage = detectedOfficialSecName === 'Aracı Kurumlar' || ['ISMEN', 'OYYAT', 'INFO', 'OSMEN', 'GEDIK'].includes(currentTickerUpper);
+      // Döngüsel Ke Normalizasyonu: Yüksek nominal faiz ortamında (%45-%50 Ke),
+      // kârlı aracı kurumlarda sermaye maliyetini tekillik koruması ve sürdürülebilir sermaye maliyetiyle (%18-%25) normalize et
+      const effectiveKe = isBrokerage
+        ? Math.max(16.0, Math.min(24.0, (ke ? ke * 0.50 : 20.0)))
+        : Math.max(12.0, ke);
+      const safeKe = effectiveKe;
+      const macroGrowth = 16.0;
       let gordonGrowth = macroGrowth;
       let isDistressedFinancial = false;
       const safeRoeVal = (roe !== null && !isNaN(roe)) ? roe : 0;
@@ -5911,7 +5957,7 @@ export function computeSectorValuationAndDrivers(
       }
       const gordonDenominator = Math.max(4.0, safeKe - gordonGrowth);
       const gordonPbRaw = isDistressedFinancial ? 0.45 : ((roe ?? 0) - gordonGrowth) / gordonDenominator;
-      const gordonPbFloor = isDistressedFinancial ? 0.35 : ((roe ?? 0) < safeKe ? 0.50 : 0.85);
+      const gordonPbFloor = isDistressedFinancial ? 0.35 : ((roe ?? 0) < safeKe ? (isBrokerage ? 0.85 : 0.50) : (isBrokerage ? 1.25 : 0.85));
       const justifiedPb = Number(Math.max(gordonPbFloor, Math.min(3.5, gordonPbRaw)).toFixed(2));
 
       targetMultipleNum = Number(Math.max(0.5, Math.min(3.5, justifiedPb)).toFixed(1));
@@ -6362,6 +6408,9 @@ export function computeSectorValuationAndDrivers(
       fairValue = null as any;
       formulaStr = `Ana Ortaklık Özkaynakları Negatif = ${totalEquityFull.toLocaleString('tr-TR')} TL (NAD: N/A)`;
     } else {
+      const rawNetDebt = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
+      const netCashFull = rawNetDebt < 0 ? Math.abs(rawNetDebt) : 0;
+      const operatingEquityFull = Math.max(0, totalEquityFull - netCashFull);
       const navPerShare = totalEquityFull / effectiveShareCount;
       const holdingNetInc = parseFinancialNumber(latest?.net_income);
       const holdingEbit = parseFinancialNumber(latest?.operating_profit ?? latest?.ebit);
@@ -6372,18 +6421,20 @@ export function computeSectorValuationAndDrivers(
         : (roe !== null ? Math.max(-0.25, (roe / 100) * periodAnnualFactor) : 0);
       const forwardNavPerShare = Math.max(0, navPerShare * (1 + forwardEquityGrowth));
 
-      const isTier1Holding = ['KCHOL', 'SAHOL', 'AGHOL', 'ALARK', 'SISE', 'TKFEN'].includes(currentTickerUpper);
+      const isTier1Holding = ['KCHOL', 'SAHOL', 'AGHOL', 'ALARK', 'SISE', 'TKFEN', 'ENKAI', 'DOHOL', 'VERUS', 'GOZDE', 'GLYHO', 'GSDHO', 'POLHO'].includes(currentTickerUpper);
       let holdingMultiple: number;
-      if (isTier1Holding) {
-        // Kurumsal Holdingler (Koç, Sabancı, Anadolu Grubu, Alarko, Şişecam, Tekfen): 
+      if (isDistressedHolding) {
+        // Sıkıntılı / Zarar Eden İkinci Kademe Holding (PAHOL / ECZYT tipi):
+        // Konglomera maliyetleri ve iştirak zararları nedeniyle derin holding iskontosu (%65-%72 iskonto -> 0.28x - 0.35x P/NAV)
+        holdingMultiple = (roe !== null && roe < -2.0) ? 0.32 : 0.35;
+      } else if (targetMultipleNum > 0 && targetMultipleNum <= 0.85) {
+        holdingMultiple = targetMultipleNum;
+      } else if (isTier1Holding) {
+        // Kurumsal Holdingler (Koç, Sabancı, Anadolu Grubu, Alarko, Şişecam, Tekfen, Enka vb.): 
         // BIST tarihsel kurumsal hedef NAD iskontosu %22 - %32 aralığındadır (0.68x - 0.78x P/NAV).
         // TMS 29 enflasyon muhasebesiyle şişen özkaynak üzerinden ayrıca %65 tasfiye iskontosu uygulanması mükerrer cezalandırmadır.
         const tier1RoeFactor = roe !== null ? Math.max(-0.04, Math.min(0.08, (roe / 100) * 0.4)) : 0;
         holdingMultiple = Number((0.70 + tier1RoeFactor).toFixed(2));
-      } else if (isDistressedHolding) {
-        // Sıkıntılı / Zarar Eden İkinci Kademe Holding (PAHOL tipi):
-        // Konglomera maliyetleri ve iştirak zararları nedeniyle derin holding iskontosu (%65-%72 iskonto -> 0.28x - 0.35x P/NAV)
-        holdingMultiple = (roe !== null && roe < -2.0) ? 0.32 : 0.35;
       } else if (roe !== null && roe < 10.0) {
         // Düşük Kârlılık (BERA tipi): %48-%55 iskonto -> 0.45x - 0.52x P/NAV
         holdingMultiple = Number(Math.max(0.45, Math.min(0.55, 0.42 + (roe / 100) * 0.8)).toFixed(2));
@@ -6393,9 +6444,23 @@ export function computeSectorValuationAndDrivers(
         holdingMultiple = Math.max(0.60, Math.min(0.72, targetMultipleNum > 0.85 ? 0.65 : targetMultipleNum));
       }
       const clampedMultiple = holdingMultiple;
-      const rawFair = forwardNavPerShare * clampedMultiple;
-      fairValue = Number(Math.max(0.5, rawFair).toFixed(2));
-      formulaStr = `12A İleri NAD/Pay = ${forwardNavPerShare.toFixed(2).replace('.', ',')} TL × ${clampedMultiple.toFixed(2).replace('.', ',')} = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+      
+      // EPRA / Kurumsal SOTP Standartı:
+      // Kârlı kurumsal holdinglerde kasadaki net nakit 1.0x tam değerle korunurken, operasyonel portföy hedef iskonto ile değerlenir.
+      // Kronik zarar veya negatif kârlılıktaki sıkıntılı holdinglerde ise sermaye erimesi nedeniyle tüm NAD iskontolanır.
+      if (netCashFull > 0 && !isDistressedHolding) {
+        const forwardOperatingNav = operatingEquityFull * (1 + forwardEquityGrowth);
+        const discountedOperatingNav = forwardOperatingNav * clampedMultiple;
+        const totalFairEquity = discountedOperatingNav + netCashFull;
+        const rawFair = totalFairEquity / effectiveShareCount;
+        fairValue = Number(Math.max(0.5, rawFair).toFixed(2));
+        const netCashNote = ` + Net Nakit (${(netCashFull / effectiveShareCount).toFixed(2).replace('.', ',')} TL)`;
+        formulaStr = `12A İleri Portföy NAD: ${(discountedOperatingNav / effectiveShareCount).toFixed(2).replace('.', ',')} TL (${clampedMultiple.toFixed(2).replace('.', ',')}x)${netCashNote} = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+      } else {
+        const rawFair = forwardNavPerShare * clampedMultiple;
+        fairValue = Number(Math.max(0.5, rawFair).toFixed(2));
+        formulaStr = `12A İleri NAD/Pay = ${forwardNavPerShare.toFixed(2).replace('.', ',')} TL × ${clampedMultiple.toFixed(2).replace('.', ',')} = ${fairValue.toFixed(2).replace('.', ',')} TL`;
+      }
     }
   } else if (sector === 'REIT') {
     modelName = '12 Aylık İleriye Dönük Net Aktif Değeri (NAD) & Portföy Ekspertiz İskonto Modeli';
@@ -6595,11 +6660,12 @@ export function computeSectorValuationAndDrivers(
         formulaStr = `12A İleri FD/Satışlar: ${salesPerShare.toFixed(2).replace('.', ',')} TL (Özkaynak Negatif, PD/DD: N/A) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
       }
     } else {
-      const clampedRevGrowth = Math.min(0.85, Math.max(-0.40, revGrowth / 100));
+      const clampedRevGrowth = Math.min(0.35, Math.max(-0.25, revGrowth / 100));
       const forwardRev = revFull > 0 ? revFull * (1 + clampedRevGrowth) : 0;
+      const rawTargetMultiple = parseFinancialNumber(drivers?.target_multiple) || targetMultipleNum || 2.2;
       const evSalesMult = isChronicSectorLossDestroyer(netFull)
-        ? Math.max(0.8, Math.min(1.8, targetMultipleNum * 0.45))
-        : Math.max(2.0, Math.min(6.5, targetMultipleNum));
+        ? Math.max(0.8, Math.min(1.5, rawTargetMultiple * 0.45))
+        : Math.max(1.2, Math.min(2.5, rawTargetMultiple));
       const firmValue = forwardRev * evSalesMult;
       const minInt = (parseFinancialNumber(latest?.minority_interests ?? latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
       const leaseLiab = (parseFinancialNumber(latest?.lease_liabilities ?? latest?.kiralama_borclari) ?? 0) * unitScale;
@@ -6607,21 +6673,21 @@ export function computeSectorValuationAndDrivers(
       const equityValue = Math.max(0, firmValue - totalDebtBridge);
       const salesPerShare = equityValue > 0 ? (equityValue / effectiveShareCount) : 0;
 
-      const forwardNet = netFull > 0 ? netFull * (1 + Math.min(0.85, Math.max(-0.50, netGrowth / 100))) : 0;
-      const targetPe = Math.max(12.0, Math.min(25.0, evSalesMult * 3.5));
+      const forwardNet = netFull > 0 ? netFull * (1 + Math.min(0.35, Math.max(-0.35, netGrowth / 100))) : 0;
+      const targetPe = Math.max(9.0, Math.min(14.5, evSalesMult * 5.0));
       const pePerShare = forwardNet > 0 ? ((forwardNet * targetPe) / effectiveShareCount) : 0;
 
       const bvps = totalEquityFull > 0 ? (totalEquityFull / effectiveShareCount) : 0;
-      const forwardBvps = resolveSafeForwardBvps(bvps, 0.50, 0.85);
-      const positiveTechPb = (roe !== null && roe > 0) ? Math.max(1.5, Math.min(6.0, roe / 15)) : 1.5;
+      const forwardBvps = resolveSafeForwardBvps(bvps, 0.35, 0.70);
+      const positiveTechPb = (roe !== null && roe > 0) ? Math.max(1.2, Math.min(2.8, roe / 18)) : 1.2;
       const justifiedTechPb = resolveSafeJustifiedPb(positiveTechPb, 2.55, firmValue, totalDebtBridge, netFull);
       const pbPerShare = forwardBvps * justifiedTechPb;
 
-      const weights = pePerShare > 0 ? { sales: 0.50, pe: 0.35, pb: 0.15 } : { sales: 0.65, pe: 0.0, pb: 0.35 };
+      const weights = pePerShare > 0 ? { sales: 0.40, pe: 0.40, pb: 0.20 } : { sales: 0.65, pe: 0.0, pb: 0.35 };
       const rawFair = (salesPerShare * weights.sales) + (pePerShare * weights.pe) + (pbPerShare * weights.pb);
       fairValue = Number(Math.max(0.10, rawFair).toFixed(2));
       formulaStr = pePerShare > 0
-        ? `12A İleri FD/Satışlar: ${salesPerShare.toFixed(2).replace('.', ',')} TL (%50) + F/K: ${pePerShare.toFixed(2).replace('.', ',')} TL (%35) + PD/DD: ${pbPerShare.toFixed(2).replace('.', ',')} TL (%15) = ${fairValue.toFixed(2).replace('.', ',')} TL`
+        ? `12A İleri FD/Satışlar: ${salesPerShare.toFixed(2).replace('.', ',')} TL (%40) + F/K: ${pePerShare.toFixed(2).replace('.', ',')} TL (%40) + PD/DD: ${pbPerShare.toFixed(2).replace('.', ',')} TL (%20) = ${fairValue.toFixed(2).replace('.', ',')} TL`
         : `12A İleri FD/Satışlar: ${salesPerShare.toFixed(2).replace('.', ',')} TL (%65) + PD/DD (${justifiedTechPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%35) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
     }
   } else if (sector === 'FINANCIAL_SERVICES') {
@@ -6667,7 +6733,10 @@ export function computeSectorValuationAndDrivers(
       const rawNetG = netGrowth / 100;
       const clampedNetG = Math.min(0.60, Math.max(-0.40, rawNetG));
       const forwardNet = netFull > 0 ? netFull * (1 + clampedNetG) : 0;
-      const targetPe = Math.max(3.5, Math.min(8.5, (roe !== null && roe > 25 ? 5.5 : 4.5)));
+      const isBrokerage = detectedOfficialSecName === 'Aracı Kurumlar' || ['ISMEN', 'OYYAT', 'INFO', 'OSMEN', 'GEDIK'].includes(currentTickerUpper);
+      const targetPe = isBrokerage
+        ? Math.max(6.0, Math.min(9.5, (roe !== null && roe > 25 ? 8.5 : (roe !== null && roe > 15 ? 7.5 : 6.5))))
+        : Math.max(3.5, Math.min(8.5, (roe !== null && roe > 25 ? 5.5 : 4.5)));
       const peFairPerShare = forwardNet > 0 ? (forwardNet * targetPe) / effectiveShareCount : 0;
 
       let rawFair = 0;
@@ -7681,7 +7750,8 @@ export function computeSectorValuationAndDrivers(
 
       let effectiveEbitda = ebitdaFull;
       const midCycleMargin = 0.21;
-      if (!isChronicSectorLossDestroyer(netFull) && revFull > 0 && (ebitdaFull / revFull) < 0.15) {
+      const isPureCementClinker = ['OYAKC', 'CIMSA', 'AKCNS', 'NUHCM', 'BUCIM', 'BOBET', 'BSOKE', 'GOLTS', 'AFYON', 'BTCIM', 'KONYA'].includes(currentTickerUpper);
+      if (isPureCementClinker && !isChronicSectorLossDestroyer(netFull) && revFull > 0 && (ebitdaFull / revFull) < 0.15) {
         effectiveEbitda = Math.max(ebitdaFull, revFull * midCycleMargin);
       }
       const effectiveNet = netFull;
@@ -7744,19 +7814,19 @@ export function computeSectorValuationAndDrivers(
 
     const secMult = resolveOfficialSectorMultiples('Madencilik', { ev: 13.20, pe: 24.00, pb: 2.44 });
     const forwardEbitda = ebitdaFull > 0 ? ebitdaFull * (1 + clampedRevG) : 0;
-    const targetEvMultiple = Number(Math.max(5.5, Math.min(7.0, secMult.ev * 0.48)).toFixed(2));
+    const targetEvMultiple = Number(Math.max(6.5, Math.min(10.5, secMult.ev * 0.70)).toFixed(2));
     const enterpriseVal = forwardEbitda * targetEvMultiple;
 
     let evEquity = Math.max(0, enterpriseVal - debtBridge) + netCash;
     const evPerShare = evEquity > 0 ? (evEquity / effectiveShareCount) : 0;
 
     const forwardNet = netFull > 0 ? netFull * (1 + clampedNetG) : 0;
-    const targetPe = Number(Math.max(7.8, Math.min(9.5, secMult.pe * 0.38)).toFixed(2));
+    const targetPe = Number(Math.max(9.0, Math.min(14.5, secMult.pe * 0.55)).toFixed(2));
     const pePerShare = forwardNet > 0 ? (forwardNet * targetPe) / effectiveShareCount : 0;
 
     const bvps = totalEquityFull > 0 ? (totalEquityFull / effectiveShareCount) : 0;
     const forwardBvps = resolveSafeForwardBvps(bvps, 0.25, 0.70);
-    const positiveMiningPb = Math.max(1.35, Math.min(1.95, (roe !== null && roe > 0) ? (roe / 16.0) : secMult.pb));
+    const positiveMiningPb = Math.max(1.50, Math.min(2.80, (roe !== null && roe > 0) ? (roe / 12.0) : secMult.pb));
     const justifiedPb = resolveSafeJustifiedPb(positiveMiningPb, secMult.pb, enterpriseVal, debtBridge, netFull);
     const pbPerShare = forwardBvps * justifiedPb;
 
@@ -8133,19 +8203,19 @@ export function computeSectorValuationAndDrivers(
 
       const secMult = resolveOfficialSectorMultiples('Sağlık ve İlaç', { ev: 5.58, pe: 14.88, pb: 1.67 });
       const forwardEbitda = ebitdaFull > 0 ? ebitdaFull * (1 + clampedRevG) : 0;
-      const targetEvMultiple = Number(Math.max(6.8, Math.min(8.0, secMult.ev * 1.30)).toFixed(2));
+      const targetEvMultiple = Number(Math.max(7.0, Math.min(10.5, secMult.ev * 1.50)).toFixed(2));
       const enterpriseVal = forwardEbitda * targetEvMultiple;
 
       let evEquity = resolveSafeEvEquity(enterpriseVal, totalDebtBridge, totalEquityFull, 0.35, netFull);
       const evPerShare = evEquity > 0 ? (evEquity / effectiveShareCount) : 0;
 
       const forwardNet = netFull > 0 ? netFull * (1 + clampedNetG) : 0;
-      const targetPe = Number(Math.min(12.5, secMult.pe * 0.80).toFixed(2));
+      const targetPe = Number(Math.max(8.5, Math.min(16.0, secMult.pe * 0.90)).toFixed(2));
       const pePerShare = forwardNet > 0 ? (forwardNet * targetPe) / effectiveShareCount : 0;
 
       const bvps = totalEquityFull > 0 ? (totalEquityFull / effectiveShareCount) : 0;
       const forwardBvps = resolveSafeForwardBvps(bvps, 0.35, 0.70);
-      const positiveHealthcarePb = Math.max(1.80, Math.min(2.80, (roe !== null && roe > 0) ? (roe / 15.0) : secMult.pb));
+      const positiveHealthcarePb = Math.max(2.0, Math.min(4.20, (roe !== null && roe > 0) ? (roe / 12.0) : secMult.pb));
       const justifiedPb = resolveSafeJustifiedPb(positiveHealthcarePb, secMult.pb, enterpriseVal, totalDebtBridge, netFull);
       const pbPerShare = forwardBvps * justifiedPb;
 

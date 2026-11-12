@@ -424,7 +424,7 @@ export function isElectricalEquipmentSector(officialSectorName: string, ticker?:
     return true;
   }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  return ['ASTOR', 'CWENE', 'EUPWR', 'GESAN', 'KONTR', 'ALFAS', 'SMRTG', 'KAREL', 'ORGE', 'BETAE', 'EMKEL', 'KLYPV', 'MAGEN', 'MASFN', 'MOGAN', 'NATEN', 'SARAE', 'SAYAS', 'ULUSE'].includes(t);
+  return ['ASTOR', 'CWENE', 'EUPWR', 'GESAN', 'KONTR', 'ALFAS', 'SMRTG', 'KAREL', 'ORGE', 'BETAE', 'EMKEL', 'KLYPV', 'MAGEN', 'MASFN', 'MOGAN', 'NATEN', 'SARAE', 'SAYAS', 'ULUSE', 'SARKY'].includes(t);
 }
 
 /**
@@ -544,7 +544,7 @@ export function isPaperStationeryPackagingSector(officialSectorName: string, tic
     return true;
   }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  return ['ADEL', 'KARTN', 'ALKA', 'BAKAB', 'DURDO', 'GENTS', 'SARKY', 'TEZOL', 'BARMA', 'LILAK'].includes(t);
+  return ['ADEL', 'KARTN', 'ALKA', 'BAKAB', 'DURDO', 'GENTS', 'TEZOL', 'BARMA', 'LILAK'].includes(t);
 }
 
 /**

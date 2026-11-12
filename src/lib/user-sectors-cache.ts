@@ -2100,7 +2100,7 @@ export const USER_OFFICIAL_BIST_COMPANY_SECTORS: Record<string, UserBistCompanyS
   },
   "SARKY": {
     "name": "Sarkuysan",
-    "sector": "İnşaat Malzemeleri"
+    "sector": "Elektrik Enerji Ürt.Teçh/Tesis Kurulum"
   },
   "SASA": {
     "name": "Sasa Polyester Sanayi A.Ş.",

@@ -195,12 +195,19 @@ function reconcileSavedReportWithLatestEngine(rep: SavedReport): SavedReport {
         updatedReport.fairValueTrend = valRes.valuation.fair_value_trend;
       }
       if (valRes?.valuation && updatedReport.report) {
-        updatedReport.report = syncReportTextWithValuation(updatedReport.report, {
-          ...(valRes.valuation || {}),
-          final_decision: valRes.optimization?.finalDecision || updatedReport.decision,
-          decision: valRes.optimization?.finalDecision || updatedReport.decision,
-          scoreResult: valRes.scoreResult
-        });
+        updatedReport.report = syncReportTextWithValuation(
+          updatedReport.report,
+          {
+            ...(valRes.valuation || {}),
+            final_decision: valRes.optimization?.finalDecision || updatedReport.decision,
+            decision: valRes.optimization?.finalDecision || updatedReport.decision,
+            scoreResult: valRes.scoreResult
+          },
+          valRes.scoreResult,
+          valRes.drivers,
+          Number(rep.price || 0),
+          updatedReport.extractedData
+        );
       }
 
       // İş Yatırım ve Piyasa Çarpanları Senkronizasyonu:

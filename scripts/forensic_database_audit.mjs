@@ -94,23 +94,26 @@ export async function runForensicAudit() {
     const ocf = latest.operating_cash_flow;
     const equity = latest.equity;
 
-    let discount = null;
+    let upsidePct = null;
+    let discountPct = null;
     if (curP > 0 && tgtP > 0) {
-      discount = Number((((tgtP - curP) / curP) * 100).toFixed(1));
+      upsidePct = Number((((tgtP - curP) / curP) * 100).toFixed(1));
+      discountPct = Number((((tgtP - curP) / tgtP) * 100).toFixed(1));
     }
 
     const flags = [];
 
     // Invariant 1: ALMA with excessive upside (> 30%)
-    if (dec === 'ALMA' && discount !== null && discount > 30.0) {
+    if (dec === 'ALMA' && upsidePct !== null && upsidePct > 30.0) {
       flags.push({
         rule: 'INV-1: ALMA_EXCESSIVE_UPSIDE',
-        message: `Karar ALMA olmasına rağmen kâğıt üzerinde %${discount} iskonto görünüyor (Fiyat: ${curP}, Hedef: ${tgtP}). Değer Kapanı Deflatörü uygulanmalı.`
+        message: `Karar ALMA olmasına rağmen kâğıt üzerinde +%${upsidePct} potansiyel (%${discountPct} iskonto) görünüyor (Fiyat: ${curP}, Hedef: ${tgtP}). Değer Kapanı Deflatörü uygulanmalı.`
       });
     }
 
     // Invariant 2: Loss maker with AL decision
-    const isLossMaker = (netIncome != null && netIncome < 0) || (ebit != null && ebit < 0) || (grossProfit != null && grossProfit < 0) || (roe != null && roe < -2.0);
+    const netIncomeTTM = latest.net_income_ttm;
+    const isLossMaker = ((netIncome != null && netIncome < 0 && (netIncomeTTM == null || netIncomeTTM < 0)) || (ebit != null && ebit < 0) || (grossProfit != null && grossProfit < 0) || (roe != null && roe < -2.0));
     if (dec === 'AL' && isLossMaker) {
       flags.push({
         rule: 'INV-2: LOSS_MAKER_RECOMMENDED_AS_BUY',
@@ -118,13 +121,13 @@ export async function runForensicAudit() {
       });
     }
 
-    // Invariant 3: Extreme discount balloon (> 150% for standard industrial/service; > 400% for REIT & Holding NAV models)
+    // Invariant 3: Extreme upside balloon (> 250% upside / > 71% discount for standard industrial/service; > 400% for REIT & Holding NAV models)
     const isReitOrHolding = ext?.sector === 'REIT' || ext?.sector === 'HOLDING' || ['RGYAS', 'SNGYO', 'TRGYO', 'EKGYO', 'ISGYO', 'VKGYO', 'KGYO', 'PSGYO'].includes(r.ticker);
-    const maxDiscountThreshold = isReitOrHolding ? 400.0 : 150.0;
-    if (discount !== null && discount >= maxDiscountThreshold && dec !== 'ALMA') {
+    const maxUpsideThreshold = isReitOrHolding ? 400.0 : 250.0;
+    if (upsidePct !== null && upsidePct >= maxUpsideThreshold && dec !== 'ALMA') {
       flags.push({
         rule: 'INV-3: EXTREME_DISCOUNT_BALLOON',
-        message: `Aşırı İskonto Balonu (%${discount}). Olası sermaye artırımı/lot uyumsuzluğu veya model kalibrasyonu gereksinimi.`
+        message: `Aşırı Potansiyel Balonu (+%${upsidePct} potansiyel / %${discountPct} iskonto). Olası sermaye artırımı/lot uyumsuzluğu veya model kalibrasyonu gereksinimi.`
       });
     }
 
@@ -165,6 +168,21 @@ export async function runForensicAudit() {
       }
     }
 
+    // Invariant 8: Stale "Neden AL Verilmedi?" block when decision is AL
+    const hasNedenAlBlock = Boolean(
+      r.report && (
+        r.report.includes('Neden "AL" Verilmedi?') ||
+        r.report.includes('Neden AL Verilmedi') ||
+        r.report.includes('Neden \\"AL\\" Verilmedi?')
+      )
+    );
+    if (dec === 'AL' && hasNedenAlBlock) {
+      flags.push({
+        rule: 'INV-8: STALE_WHY_NOT_BUY_BLOCK_IN_AL_REPORT',
+        message: 'Karar AL olmasına rağmen rapor metninde eski [NÖTR] "Neden AL Verilmedi?" bloğu bulunmaktadır.'
+      });
+    }
+
     if (flags.length > 0) {
       anomalies.push({
         id: r.id,
@@ -175,6 +193,7 @@ export async function runForensicAudit() {
         currentDecision: dec,
         currentScore: score,
         extractedData: ext,
+        report: r.report,
         flags
       });
     }
@@ -225,7 +244,18 @@ export async function runForensicAudit() {
             }
           };
 
-          const syncedReport = syncReportTextWithValuation(a.report, newValResult.valuation);
+          const syncedReport = syncReportTextWithValuation(
+            a.report,
+            {
+              ...newValResult.valuation,
+              final_decision: newDec,
+              decision: newDec
+            },
+            newScoreResult,
+            newValResult.drivers,
+            Number(a.price || 0),
+            a.extractedData
+          );
 
           const { error: updErr } = await supabase
             .from('valuation_reports')
@@ -280,7 +310,18 @@ export async function runForensicAudit() {
           }
         };
 
-        const syncedReport = syncReportTextWithValuation(r.report, newValResult.valuation);
+        const syncedReport = syncReportTextWithValuation(
+          r.report,
+          {
+            ...newValResult.valuation,
+            final_decision: newDec,
+            decision: newDec
+          },
+          newScoreResult,
+          newValResult.drivers,
+          curPrice,
+          ext
+        );
 
         const { error: updErr } = await supabase
           .from('valuation_reports')

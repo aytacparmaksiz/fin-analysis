@@ -527,9 +527,14 @@ function parseVerdictNarrative(
   return { verdict, verdictTitle, thesis, catalysts, risks, isStructured: Boolean(rawThesis || rawCatalysts) };
 }
 
-function cleanMarkdown(text: string): string {
+function cleanMarkdown(text: string, decision?: string): string {
   if (!text) return '';
   let cleaned = text;
+
+  if (decision === 'AL') {
+    const nedenAlBlockRegex = /(?:^|\n)(?:[ \t]*>)+[ \t]*(?:⚠️\s*)?\*{0,2}(?:2\.\s*Adli\s+Gerçekler\s*:\s*)?Neden\s*"AL"\s*Verilmedi\?[\s\S]*?(?=(?:\n[ \t]*\n[ \t]*(?:[ \t]*>[ \t]*\*{0,2}Yönetici|##|#|\*\*))|(?:\n[ \t]*##)|$)/gi;
+    cleaned = cleaned.replace(nedenAlBlockRegex, '\n\n');
+  }
 
   // Ensure double newlines between run-on decision lines
   cleaned = cleaned.replace(/((?:Analist\s+Karar[ıi]\s*[:=-][^\n]*?))(?=(?:\*{0,2}Yatırım\s+Tezi))/gi, '$1\n\n');
@@ -806,6 +811,15 @@ export default function SimplyView({
   const currentPriceNum = Number(String(report.price || '0').replace(/[^0-9.]/g, '')) || 0;
   const fairValueNum = Number(valuationInfo?.fair_value || report.fairValue || 0);
   const discountPctNum = Number(valuationInfo?.discount_pct || 0);
+  const effectiveDecision = (
+    valuationInfo?.final_decision ||
+    valuationInfo?.decision ||
+    (report as any)?.extractedData?.optimization?.finalDecision ||
+    (report as any)?.extractedData?.valuation?.final_decision ||
+    (report as any)?.extractedData?.valuation?.decision ||
+    report.decision ||
+    'NÖTR'
+  );
 
   // Canlı Piyasa Getiri Performansı (TradingView BIST & Tarihsel Finansal Seriden Dinamik Çözüm)
   const priceReturns = useMemo(() => {
@@ -859,11 +873,11 @@ export default function SimplyView({
 
   // Yönetici Analist Kararı & Yatırım Tezi Çözümü (Tek ve Otoriter Karar Kartı)
   const executiveVerdict = useMemo(() => {
-    return parseVerdictNarrative(report.report || '', report.decision, {
+    return parseVerdictNarrative(report.report || '', effectiveDecision, {
       ticker: report.ticker,
       discountPct: discountPctNum
     });
-  }, [report.report, report.decision, report.ticker, discountPctNum]);
+  }, [report.report, effectiveDecision, report.ticker, discountPctNum]);
 
   // Değer Sürücüleri (12 Ay İleri Hasılat ve Net Kâr Büyümesi vb.)
   const drivers = useMemo(() => {
@@ -1262,7 +1276,7 @@ export default function SimplyView({
     return synthesizeInvestmentThesis({
       ticker: report.ticker,
       companyName: profile.fullName,
-      decision: report.decision,
+      decision: effectiveDecision,
       score: (report as any)?.score,
       currentSector,
       officialSectorName,
@@ -1290,7 +1304,7 @@ export default function SimplyView({
   }, [
     report.ticker,
     profile.fullName,
-    report.decision,
+    effectiveDecision,
     (report as any)?.score,
     currentSector,
     officialSectorName,
@@ -1604,7 +1618,7 @@ export default function SimplyView({
   const handleCopyReportText = async () => {
     if (report.report) {
       try {
-        await navigator.clipboard.writeText(cleanMarkdown(report.report));
+        await navigator.clipboard.writeText(cleanMarkdown(report.report, effectiveDecision));
         setCopiedReport(true);
         setTimeout(() => setCopiedReport(false), 2500);
       } catch {}
@@ -2265,7 +2279,7 @@ export default function SimplyView({
                       const capAllocAudit = valuationInfo?.capital_allocation_risk ?? analyzeRelatedPartyAndCapitalAllocationRisk(latestData, currentSector, officialSectorName);
                       const isCapAllocRisk = Boolean(capAllocAudit?.isRiskDetected);
                       const isInvEntity = Boolean(capAllocAudit?.isInvestmentEntity);
-                      const isAlma = Boolean(report.decision === 'ALMA' || (report as any)?.rawDecision === 'ALMA');
+                      const isAlma = Boolean(effectiveDecision === 'ALMA' || (report as any)?.rawDecision === 'ALMA');
                       const rawScore = report?.score || valuationInfo?.score || (report as any)?.scoreResult?.totalScore;
                       const cleanNum = rawScore ? parseInt(String(rawScore).split('/')[0].replace(/[^0-9]/g, ''), 10) : null;
                       
@@ -5466,20 +5480,20 @@ export default function SimplyView({
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-3.5">
                     <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center font-mono font-black text-xl border shadow-lg shrink-0 ${
-                      report.decision === 'AL'
+                      effectiveDecision === 'AL'
                         ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-400 shadow-emerald-950/50'
-                        : report.decision === 'ALMA'
+                        : effectiveDecision === 'ALMA'
                         ? 'bg-rose-950/80 border-rose-500/50 text-rose-400 shadow-rose-950/50'
                         : 'bg-amber-950/80 border-amber-500/50 text-amber-400 shadow-amber-950/50'
                     }`}>
-                      {report.decision === 'AL' ? 'AL' : report.decision === 'ALMA' ? 'ALMA' : 'NÖTR'}
+                      {effectiveDecision === 'AL' ? 'AL' : effectiveDecision === 'ALMA' ? 'ALMA' : 'NÖTR'}
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`px-3 py-0.5 rounded-full text-xs sm:text-sm font-mono font-bold border ${
-                          report.decision === 'AL'
+                          effectiveDecision === 'AL'
                             ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                            : report.decision === 'ALMA'
+                            : effectiveDecision === 'ALMA'
                             ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
                             : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                         }`}>
@@ -5523,9 +5537,9 @@ export default function SimplyView({
 
                 {/* Tek Cümlelik Kurumsal Kimlik & Yatırım Özeti */}
                 <div className={`p-3.5 sm:p-4 rounded-xl border-l-4 ${
-                  report.decision === 'AL'
+                  effectiveDecision === 'AL'
                     ? 'bg-emerald-950/20 border-l-emerald-400 border border-emerald-500/20'
-                    : report.decision === 'ALMA'
+                    : effectiveDecision === 'ALMA'
                     ? 'bg-rose-950/20 border-l-rose-400 border border-rose-500/20'
                     : 'bg-amber-950/20 border-l-amber-400 border border-amber-500/20'
                 }`}>
@@ -5932,7 +5946,7 @@ export default function SimplyView({
                         td: ({ ...props }) => <td className="p-2.5 border-b border-[#282d37] text-slate-200" {...props} />
                       }}
                     >
-                      {cleanMarkdown(report.report)}
+                      {cleanMarkdown(report.report, effectiveDecision)}
                     </ReactMarkdown>
                   ) : (
                     <div className="text-center py-10 text-slate-400 font-mono text-sm">
