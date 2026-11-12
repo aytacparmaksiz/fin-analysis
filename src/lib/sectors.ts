@@ -450,14 +450,22 @@ export function isConstructionContractingSector(officialSectorName: string, tick
 }
 
 /**
- * Tarım Kimyasalları & Gübre Sanayii:
- * GUBRF, HEKTS, BAGFS.
+ * Tarım Kimyasalları, Gübre & Boya Sanayii:
+ * GUBRF, HEKTS, BAGFS, DYOBY, MRSHL, EGGUB.
  */
 export function isAgroChemicalSector(officialSectorName: string, ticker?: string): boolean {
   const s = resolveOfficialSectorName(officialSectorName, ticker);
-  if (s === 'Tarım Kimyasalları' || s.includes('Gübre') || s.includes('Tarım Kimya')) return true;
+  if (
+    s === 'Tarım Kimyasalları' ||
+    s === 'Boya' ||
+    s.includes('Gübre') ||
+    s.includes('Tarım Kimya') ||
+    s.includes('Boya')
+  ) {
+    return true;
+  }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  return ['GUBRF', 'HEKTS', 'BAGFS'].includes(t);
+  return ['GUBRF', 'HEKTS', 'BAGFS', 'DYOBY', 'MRSHL', 'EGGUB'].includes(t);
 }
 
 /**
@@ -593,9 +601,9 @@ export function isRegulatedDistributionSector(officialSectorName: string, ticker
  */
 export function isTelecomSector(officialSectorName: string, ticker?: string): boolean {
   const s = resolveOfficialSectorName(officialSectorName, ticker);
-  if (s === 'İletişim' || s === 'İletişim Cihazları' || s.includes('Telekom')) return true;
+  if (s === 'İletişim' || (s.includes('Telekom') && !s.includes('Cihaz'))) return true;
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  return ['TCELL', 'TTKOM', 'NETAS', 'KFEIN'].includes(t);
+  return ['TCELL', 'TTKOM'].includes(t);
 }
 
 /**
@@ -687,11 +695,11 @@ export function isAutomotiveOemSector(officialSectorName: string, ticker?: strin
  */
 export function isPetroleumRefinerySector(officialSectorName: string, ticker?: string): boolean {
   const s = resolveOfficialSectorName(officialSectorName, ticker);
-  if (s === 'Petrol' || s === 'Kimyasal Ürün' || s === 'Boya' || s.includes('Petrol') || s.includes('Rafineri')) {
+  if (s === 'Petrol' || s === 'Kimyasal Ürün' || s.includes('Petrol') || s.includes('Rafineri')) {
     return true;
   }
   const t = ticker ? ticker.toUpperCase().replace(/\.IS$/i, '') : '';
-  return ['TUPRS', 'PETKM', 'AYGAZ', 'SASA', 'ALKIM', 'DYOBY', 'POLHO'].includes(t);
+  return ['TUPRS', 'PETKM', 'AYGAZ', 'SASA', 'ALKIM', 'POLHO'].includes(t);
 }
 
 export function isRefinerySector(tickerOrSector?: string, officialSectorName?: string): boolean {
@@ -1784,6 +1792,18 @@ export function detectSector(ticker: string, contextText = ''): SectorType {
     return mapIsYatirimSectorToValuationSector(isy.sectorName);
   }
 
+  // 3. Bağlam metni doğrudan resmi 53 sektör adı içeriyorsa anında eşle
+  if (contextText) {
+    const trimmedContext = contextText.trim();
+    if (OFFICIAL_53_SECTOR_CONFIGS[trimmedContext]) {
+      return OFFICIAL_53_SECTOR_CONFIGS[trimmedContext].valuationSector;
+    }
+    const directMapped = mapIsYatirimSectorToValuationSector(trimmedContext);
+    if (directMapped && directMapped !== 'INDUSTRIAL') {
+      return directMapped;
+    }
+  }
+
   // 2. Ticker bazlı kesin eşleştirme (Yeni halka arzlar ve baseline dışı hisseler için)
   if (BIST_HEALTHCARE_TICKERS.includes(cleanTicker)) {
     return 'HEALTHCARE';
@@ -1825,6 +1845,7 @@ export function detectSector(ticker: string, contextText = ''): SectorType {
   if (
     text.includes('havacılık') ||
     text.includes('havayolu') ||
+    text.includes('havayollar') ||
     text.includes('uçak') ||
     text.includes('yolcu trafiği') ||
     text.includes('hava meydan') ||

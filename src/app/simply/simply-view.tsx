@@ -2783,6 +2783,7 @@ export default function SimplyView({
               </div>
 
               {/* Alt Kısım: Öne Çıkan Güçlü Yönler ve Riskler */}
+              <ComponentErrorBoundary fallbackTitle="Güçlü/Zayıf Yönler Hatası">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                 <div className="bg-[#151821] border border-emerald-900/30 rounded-xl p-4 sm:p-5 space-y-2.5">
                   <div className="text-[15px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
@@ -2812,6 +2813,7 @@ export default function SimplyView({
                   </div>
                 </div>
               </div>
+              </ComponentErrorBoundary>
             </div>
 
             {/* ========================================================================= */}

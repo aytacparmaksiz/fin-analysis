@@ -1,7 +1,7 @@
 /**
  * Kayıtlı Analiz Önbelleği (IndexedDB)
  *
- * 164+ analiz raporu (~15-30 MB) tarayıcının 5 MB'lık localStorage kotasına sığmadığı için
+ * 269+ analiz raporu (~30-70 MB) tarayıcının 5 MB'lık localStorage kotasına sığmadığı için
  * her cihaz farklı sayıda (80 / 111 / 130+) raporu yerelde tutabiliyordu. Bu modül raporları
  * kotası yüzlerce MB olan IndexedDB'de saklar; localStorage yalnızca eski sürümden geçiş için okunur.
  */
