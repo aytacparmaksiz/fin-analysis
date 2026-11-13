@@ -49,6 +49,7 @@ import {
   SECTOR_ARCHETYPE_CONFIGS,
   getCompanySectorDisplayName,
   ISYATIRIM_53_OFFICIAL_SECTOR_NAMES,
+  USER_OFFICIAL_BIST_COMPANY_SECTORS,
   getScoreColorStyle
 } from '@/lib/sectors';
 
@@ -140,7 +141,23 @@ function reconcileSavedReportWithLatestEngine(rep: SavedReport): SavedReport {
   }
 
   // 100% İş Yatırım Resmi Sektör Yetkilendirmesi (Tüm BIST Şirketleri İçin)
-  const canonicalSector: SectorType = detectSector(upperTicker, (rep as any)?.companyName || rep.extractedData?.company_name) || 'INDUSTRIAL';
+  const validSectorsList: SectorType[] = [
+    'INSURANCE', 'BANKING', 'HOLDING', 'REIT', 'TECH', 'INDUSTRIAL',
+    'RETAIL', 'AVIATION', 'UTILITIES_TELCO', 'HEALTHCARE', 'FINANCIAL_SERVICES'
+  ];
+  const existingSavedSector = (
+    rep.extractedData?.sector ||
+    (rep as any)?.extracted_data?.sector ||
+    rep.sector
+  ) as SectorType | undefined;
+  const isOfficialBistTicker = Boolean(
+    upperTicker && (USER_OFFICIAL_BIST_COMPANY_SECTORS[upperTicker] || OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[upperTicker])
+  );
+  const canonicalSector: SectorType = isOfficialBistTicker
+    ? (detectSector(upperTicker, (rep as any)?.companyName || rep.extractedData?.company_name) || 'INDUSTRIAL')
+    : (existingSavedSector && validSectorsList.includes(existingSavedSector))
+      ? existingSavedSector
+      : (detectSector(upperTicker, (rep as any)?.companyName || rep.extractedData?.company_name) || 'INDUSTRIAL');
 
   updatedReport.sector = canonicalSector;
   if (updatedReport.extractedData) {
@@ -180,6 +197,10 @@ function reconcileSavedReportWithLatestEngine(rep: SavedReport): SavedReport {
           ...(updatedReport.extractedData.valuation || {}),
           ...valRes.valuation,
         };
+      }
+      if (valRes?.drivers && updatedReport.extractedData) {
+        updatedReport.extractedData.fair_value_drivers = valRes.drivers;
+        updatedReport.extractedData.drivers = valRes.drivers;
       }
       if (valRes?.scoreResult?.totalScore != null) {
         updatedReport.score = `${valRes.scoreResult.totalScore}/100`;
@@ -1482,6 +1503,9 @@ export default function ValuationTerminal({
   const [savedReports, setSavedReports] = useState<SavedReport[]>(defaultReport ? [defaultReport] : []);
   const [activeReportId, setActiveReportId] = useState<string | null>(defaultReport ? defaultReport.id : null);
   const activeReport = useMemo(() => {
+    if (step !== 'report') {
+      return null;
+    }
     if (activeReportId) {
       const found = savedReports.find(r => r.id === activeReportId);
       if (found) return found;
@@ -1491,12 +1515,12 @@ export default function ValuationTerminal({
       const byTicker = savedReports.find(r => r.ticker?.toUpperCase() === currentTicker);
       if (byTicker) return byTicker;
     }
-    if (defaultReport && (!currentTicker || defaultReport.ticker?.toUpperCase() === currentTicker)) {
+    if (defaultReport && currentTicker && defaultReport.ticker?.toUpperCase() === currentTicker) {
       return defaultReport;
     }
     // ASLA başka bir şirketin raporuna otomatik olarak atlama
     return null;
-  }, [savedReports, activeReportId, ticker, initialTicker, defaultReport]);
+  }, [step, savedReports, activeReportId, ticker, initialTicker, defaultReport]);
 
   // Analiz Edilen Şirketler Sekme & Filtre Durumu
   const [analyzedTab, setAnalyzedTab] = useState<'ALL' | 'PORTFOLIO' | 'FAVORITES' | 'AL' | 'NÖTR' | 'ALMA'>('ALL');
@@ -1705,6 +1729,16 @@ export default function ValuationTerminal({
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, behavior: 'instant' });
     }
+    const targetReport = savedReports.find(r => r.id === reportId);
+    const sym = (tickerName || targetReport?.ticker || '').trim().toUpperCase();
+    // State kirliliği koruması (State Pollution Guard):
+    // Önceki hissenin sektör seçimi, geçici verisi ve dönem kaydırması yeni açılan rapora taşınmamalıdır.
+    setSelectedSector('AUTO');
+    setExtractedData(null);
+    setError(null);
+    if (sym) setTicker(sym);
+    if (targetReport?.price) setPrice(targetReport.price);
+
     setStep((currentStep) => {
       if (currentStep !== 'report') {
         setPreviousNavState({ step: currentStep, analyzedTab });
@@ -1712,10 +1746,9 @@ export default function ValuationTerminal({
       return 'report';
     });
     setActiveReportId(reportId);
-    const sym = tickerName || savedReports.find(r => r.id === reportId)?.ticker || '';
     if (sym && typeof window !== 'undefined') {
       const isSimply = window.location.pathname.startsWith('/simply');
-      const targetPath = isSimply ? `/simply/${sym.toUpperCase()}` : `/analysis/${sym.toUpperCase()}`;
+      const targetPath = isSimply ? `/simply/${sym}` : `/analysis/${sym}`;
       window.history.pushState(null, '', targetPath);
     }
   }, [savedReports, analyzedTab]);
@@ -1813,6 +1846,8 @@ export default function ValuationTerminal({
 
       // 3. Ekran ve URL senkronizasyonu:
       if (activeReport?.id === id || activeReportId === id) {
+        setSelectedSector('AUTO');
+        setExtractedData(null);
         const remainingOfTicker = updated.filter(r => r.ticker?.toUpperCase() === tickerName.toUpperCase());
         if (remainingOfTicker.length > 0) {
           // Aynı hisseye ait başka bir çeyrek varsa onu aç
@@ -1847,6 +1882,11 @@ export default function ValuationTerminal({
   const loadTickerDirect = useCallback(async (targetTicker: string, currentSaved?: SavedReport[]) => {
     const t = (targetTicker || '').trim().toUpperCase();
     if (!t) return;
+
+    // State kirliliği koruması: önceki hissenin sektör seçimi ve geçici verilerini sıfırla
+    setSelectedSector('AUTO');
+    setExtractedData(null);
+    setError(null);
 
     // 1. Mevcut kaydedilmiş yerel depodaki raporlar
     const reportList = currentSaved ?? savedReports;
@@ -2070,6 +2110,8 @@ export default function ValuationTerminal({
       if (urlTicker) {
         const found = savedReports.find(r => r.ticker?.toUpperCase() === urlTicker);
         if (found) {
+          setSelectedSector('AUTO');
+          setExtractedData(null);
           setActiveReportId(found.id);
           setStep('report');
           return;
@@ -2499,7 +2541,9 @@ export default function ValuationTerminal({
 
     setLoading(true);
     setError(null);
+    setActiveReportId(null);
     setTicker(targetTicker);
+    setSelectedSector('AUTO');
     setPipelineStep(1);
     setPipelineProgress(25);
     setStatusMessage(`[1/3] Borsa İstanbul resmi mali tabloları ve canlı piyasa fiyatı çekiliyor: ${targetTicker}...`);
@@ -2517,9 +2561,6 @@ export default function ValuationTerminal({
       const livePriceStr = bistData.current_price ? bistData.current_price.toString() : (price || '');
       if (bistData.current_price) {
         setPrice(livePriceStr);
-      }
-      if (bistData.sector) {
-        setSelectedSector(bistData.sector);
       }
 
       let currentData: any = {
@@ -2766,6 +2807,8 @@ export default function ValuationTerminal({
     }
     setLoading(true);
     setError(null);
+    setActiveReportId(null);
+    setSelectedSector('AUTO');
     setPipelineStep(1);
     setPipelineProgress(15);
     setStatusMessage(`[1. Aşama / 3]: ${financialFiles.length} adet Finansal Tablo taranıyor...`);
@@ -3163,7 +3206,7 @@ export default function ValuationTerminal({
         .replace(/\badli\s+değer\b/gi, 'adil değer')
         .replace(/\badli\s+deger\b/gi, 'adil değer');
       const reportText = cleanReport;
-      const decisionMatch = reportText.match(/Analist\s+Karar[ıi]\s*[:=-]\s*\[?\s*\*?\*?\s*(ALMA|SAT|AL|NÖTR|NOTR|TUT)\s*\*?\*?\s*\]?/i);
+      const decisionMatch = reportText.match(/Analist\s+Karar[ıi]\s*[:=-]\s*(?:\*{0,2}\s*\[?\s*\*{0,2}\s*(ALMA|SAT|AL|NÖTR|NOTR|TUT)\s*\*{0,2}\s*\]?\s*\*{0,2})/i);
       if (decisionMatch) {
         const d = decisionMatch[1].toUpperCase();
         if (d === 'ALMA' || d === 'SAT') rawDecision = 'ALMA';
@@ -3193,11 +3236,19 @@ export default function ValuationTerminal({
       });
 
       const finalDecision = data.optimization?.finalDecision || opt?.finalDecision || rawDecision;
-      const finalReport = syncReportTextWithValuation(cleanReport, {
-        ...(data.valuation || {}),
-        final_decision: finalDecision,
-        decision: finalDecision,
-      });
+      const finalReport = syncReportTextWithValuation(
+        cleanReport,
+        {
+          ...(data.valuation || {}),
+          final_decision: finalDecision,
+          decision: finalDecision,
+          scoreResult: data.scoreResult,
+        },
+        data.scoreResult,
+        data.drivers,
+        Number(effectivePrice) || 0,
+        enrichedExtractedData
+      );
 
       const finalExtracted = {
         ...enrichedExtractedData,
@@ -3205,8 +3256,8 @@ export default function ValuationTerminal({
           ? data.dividend_history
           : (Array.isArray(enrichedExtractedData?.dividend_history) && enrichedExtractedData.dividend_history.length > 0)
             ? enrichedExtractedData.dividend_history
-            : (currentExtractedData?.dividend_history || []),
-        consensus_target: data.consensus_target || enrichedExtractedData?.consensus_target || currentExtractedData?.consensus_target,
+            : (previousReport?.extractedData?.dividend_history || previousReport?.dividendHistory || []),
+        consensus_target: data.consensus_target || enrichedExtractedData?.consensus_target || previousReport?.extractedData?.consensus_target || previousReport?.consensusTarget,
         valuation: data.valuation || enrichedExtractedData?.valuation,
         fair_value_drivers: data.drivers || enrichedExtractedData?.fair_value_drivers,
         score_result: data.scoreResult,
@@ -3239,6 +3290,7 @@ export default function ValuationTerminal({
       };
 
       saveReport(newEntry);
+      setSelectedSector('AUTO');
       setActiveReportId(newEntry.id);
       if (typeof window !== 'undefined') {
         window.scrollTo({ top: 0, behavior: 'instant' });
@@ -3268,8 +3320,30 @@ export default function ValuationTerminal({
   const currentExtractedData = activeReport?.extractedData || extractedData;
 
   const currentSector: SectorType = (() => {
-    if (selectedSector !== 'AUTO') return selectedSector;
     const sym = (activeReport?.ticker || ticker || '').trim().toUpperCase();
+    const validSectors: SectorType[] = [
+      'INSURANCE', 'BANKING', 'HOLDING', 'REIT', 'TECH', 'INDUSTRIAL',
+      'RETAIL', 'AVIATION', 'UTILITIES_TELCO', 'HEALTHCARE', 'FINANCIAL_SERVICES'
+    ];
+    const reportSector = (
+      activeReport?.extractedData?.sector ||
+      (activeReport as any)?.extracted_data?.sector ||
+      activeReport?.sector
+    ) as SectorType | undefined;
+
+    // Kayıtlı rapor görüntülendiğinde sektör DOĞRUDAN o raporun kendi extracted_data.sector veya kanonik sektöründen alınır;
+    // önceki hissenin selectedSector state'i asla yeni açılan rapora bulaşamaz.
+    if (step === 'report' || activeReport) {
+      if (reportSector && validSectors.includes(reportSector)) {
+        return reportSector;
+      }
+      return detectSector(sym, (activeReport as any)?.companyName || currentExtractedData?.company_name) || 'INDUSTRIAL';
+    }
+
+    if (!activeReport && selectedSector !== 'AUTO') return selectedSector;
+    if (currentExtractedData?.sector && validSectors.includes(currentExtractedData.sector as SectorType)) {
+      return currentExtractedData.sector as SectorType;
+    }
     return detectSector(sym, (activeReport as any)?.companyName || currentExtractedData?.company_name) || 'INDUSTRIAL';
   })();
 

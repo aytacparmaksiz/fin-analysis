@@ -15,8 +15,11 @@ import {
   calculateSectorScore,
   optimizeFinalDecision,
   computeSectorValuationAndDrivers,
+  evaluateValueTrap,
+  syncReportTextWithValuation,
   cleanAndParseJson
 } from '../lib/valuation.ts';
+import { synthesizeInvestmentThesis } from '../lib/investment-thesis-synthesizer.ts';
 
 import {
   detectSector,
@@ -870,6 +873,92 @@ describe('Comprehensive Financial Terminal Stress Test Suite', () => {
     it('getIsYatirimMultiplesForTicker strips .IS suffix correctly', async () => {
       const res = await getIsYatirimMultiplesForTicker('NONEXISTENT_XYZ.IS');
       assert.equal(res, null);
+    });
+  });
+
+  describe('8. Institutional Forensic Audit & 6-Pillar Architectural Safeguards', () => {
+    it('Holding valuation does not short-circuit on default 0.70x P/NAV when ROE < 10% (BERA)', () => {
+      const bera = {
+        ticker: 'BERA',
+        sector: 'HOLDING',
+        share_count: 683200000,
+        financial_history: [
+          {
+            period: '2025/12',
+            revenue: 20554364928,
+            gross_profit: 3829463040,
+            operating_profit: 2175922944,
+            ebitda: 2591866112,
+            net_income: 24380829,
+            equity: 37039580224,
+            parent_equity: 37039580224,
+            net_debt: -2374948096,
+            roe: 0.09,
+            roic: 4.28,
+            real_wacc: 15.88,
+            eva_spread: -11.6
+          }
+        ]
+      };
+      const res = computeSectorValuationAndDrivers(bera, 10.27, 'HOLDING');
+      assert.equal(res.drivers.target_multiple.numericValue, 0.45);
+      assert.equal(res.valuation.is_value_trap, true);
+      assert.notEqual(res.valuation.final_decision, 'AL');
+    });
+
+    it('Thesis synthesizer prevents +-EVA sign bugs and negative EVA value-creation claims (RGYAS)', () => {
+      const dossier = synthesizeInvestmentThesis({
+        ticker: 'RGYAS',
+        decision: 'NÖTR',
+        currentSector: 'REIT',
+        officialSectorName: 'Gayrimenkul Yatırım Ortaklığı',
+        currentPrice: 120.0,
+        fairValue: 165.0,
+        discountPct: 37.5,
+        latestData: {
+          revenue: 8500000000,
+          gross_profit: 5800000000,
+          ebitda: 5200000000,
+          net_income: 3100000000,
+          operating_cash_flow: 550000000,
+          equity: 68000000000,
+          net_debt: -2500000000,
+          roic: 7.9,
+          real_wacc: 17.5,
+          eva_spread: -9.6,
+          roe: 4.5
+        },
+        financialHistory: []
+      });
+      const jsonStr = JSON.stringify(dossier);
+      assert.ok(!jsonStr.includes('+-'));
+      assert.ok(!jsonStr.includes('gerçek ekonomik değer yaratmasıdır'));
+    });
+
+    it('evaluateValueTrap covers all sector groups and General Asset Trap Rule without exemptions', () => {
+      const holdingTrap = evaluateValueTrap(
+        [{ period: '2025/12', revenue: 1000, net_income: 5, equity: 10000, roe: 0.05, eva_spread: -11.6, share_count: 100 }],
+        10.0,
+        24.0,
+        'HOLDING'
+      );
+      assert.equal(holdingTrap.isValueTrap, true);
+
+      const bankTrap = evaluateValueTrap(
+        [{ period: '2025/12', revenue: 5000, net_income: 120, equity: 10000, roe: 4.2, npl_ratio: 6.5, share_count: 100 }],
+        10.0,
+        15.0,
+        'BANKING'
+      );
+      assert.equal(bankTrap.isValueTrap, true);
+
+      const insTrap = evaluateValueTrap(
+        [{ period: '2025/12', revenue: 3000, net_income: -50, equity: 2000, combined_ratio: 112.0, technical_balance: -180, share_count: 100 }],
+        10.0,
+        14.0,
+        'INSURANCE'
+      );
+      assert.equal(insTrap.isValueTrap, true);
     });
   });
 

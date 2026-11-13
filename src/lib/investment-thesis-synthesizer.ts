@@ -75,6 +75,8 @@ export interface ThesisSynthesisInput {
   sameSectorPeers?: Array<{ ticker: string; name: string; marketCapMnTl: number | null }>;
   consensusTargetPrice?: number;
   overrideReason?: string;
+  isValueTrap?: boolean;
+  valueTrapReasons?: string[];
   executiveVerdict?: {
     thesis?: string;
     catalysts?: string;
@@ -135,7 +137,10 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
   const roic = Number(input.roic || 0);
   const wacc = Number(input.wacc || 4.7);
   const evaSpread = Number(input.evaSpread ?? (roic - wacc));
-  const isPositiveEva = evaSpread >= 0;
+  const isPositiveEva = evaSpread >= 0 && roic >= wacc;
+  const formattedEvaPts = evaSpread >= 0 ? `+${evaSpread.toFixed(1)}` : `${evaSpread.toFixed(1)}`;
+  const formattedEvaPct = evaSpread >= 0 ? `+%${evaSpread.toFixed(1)}` : `%${evaSpread.toFixed(1)}`;
+  const isStrongCashConv = ocf > 0 && !isSupplierDebtDrivenOcf && (netIncome <= 0 || cashConv >= 0.50);
 
   // Çarpanlar & Sektör Kıyaslaması
   const compPe = Number(input.companyMultiplesData?.multiples?.pe?.companyValue ?? input.marketMultiples?.pe ?? 0);
@@ -192,11 +197,11 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
   let headline = '';
   if (decisionMode === 'AL') {
     if (sec === 'RETAIL' || hasNegativeWorkingCapitalFloat) {
-      headline = `${sectorName} sektöründe negatif işletme sermayesi ve hızlı stok çevrimiyle sıfır faizli büyüme finanse eden, +%${evaSpread.toFixed(1)} reel EVA makası ve güçlü nakit dönüşümüyle yüksek faiz ortamını rekabet kalkanına çeviren lider iş modeli.`;
+      headline = `${sectorName} sektöründe negatif işletme sermayesi ve hızlı stok çevrimiyle sıfır faizli büyüme finanse eden, ${isPositiveEva ? `${formattedEvaPct} reel EVA makası` : `güçlü mağaza/kanal nakit döngüsü`} ve nakit dönüşümüyle yüksek faiz ortamını rekabet kalkanına çeviren lider iş modeli.`;
     } else if (sec === 'INSURANCE') {
       headline = `Disiplinli teknik kârlılık ile büyüyen dev prim/yatırım havuzunu (Float) yüksek TL faiz ortamında bileşik nakit makinesine dönüştüren, %${roe.toFixed(1)} özkaynak kârlılığına rağmen sektör çarpanlarına göre belirgin iskonto sunan sigorta lideri.`;
     } else if (isTechOrDefense) {
-      headline = `Yüksek katma değerli fikri mülkiyet (Ar-Ge), döviz bazlı sözleşme görünürlüğü ve +%${evaSpread.toFixed(1)} reel sermaye getirisiyle (ROIC > WACC) enflasyonist ortamda marjlarını koruyan büyüme ve nakit bileşikçisi.`;
+      headline = `Yüksek katma değerli fikri mülkiyet (Ar-Ge), döviz bazlı sözleşme görünürlüğü ve ${isPositiveEva ? `${formattedEvaPct} reel sermaye getirisiyle (ROIC > WACC)` : `%${ebitdaMargin.toFixed(1)} FAVÖK marjı disipliniyle`} enflasyonist ortamda marjlarını koruyan büyüme ve nakit bileşikçisi.`;
     } else if (sec === 'AVIATION') {
       headline = `Döviz tabanlı küresel gelir mimarisi, güçlü operasyonel nakit akışı (OCF) ve sektör ortalamasının altındaki çarpan fiyatlamasıyla küresel ölçek avantajını bilançosuna yansıtan bayrak taşıyıcı değer tezi.`;
     } else if (sec === 'REIT') {
@@ -204,7 +209,7 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
     } else if (sec === 'HOLDING') {
       headline = `Farklı sektörlerdeki nakit üreten iştirak portföyü, solo bilançodaki döviz/nakit kalkanı ve Net Aktif Değerine (NAD) göre sunduğu çift katmanlı holding iskontosuyla asimetrik getiri fırsatı.`;
     } else {
-      headline = `${sectorName} sektöründe %${ebitdaMargin.toFixed(1)} FAVÖK marjı, sermaye maliyetini aşan %${roic.toFixed(1)} reel ROIC performansı ve ${isNetCash ? 'net nakit bilançosuyla' : 'sağlıklı borç çevrimiyle'} operasyonel kalitesi piyasa tarafından henüz tam fiyatlanmamış değer fırsatı.`;
+      headline = `${sectorName} sektöründe %${ebitdaMargin.toFixed(1)} FAVÖK marjı, ${isPositiveEva ? `sermaye maliyetini aşan %${roic.toFixed(1)} reel ROIC performansı` : `iskontolu varlık tabanı (%${roic.toFixed(1)} ROIC)`} ve ${isNetCash ? 'net nakit bilançosuyla' : 'sağlıklı borç çevrimiyle'} operasyonel kalitesi piyasa tarafından henüz tam fiyatlanmamış değer fırsatı.`;
     }
   } else if (decisionMode === 'ALMA') {
     if (hasShadowHoldingRisk) {
@@ -236,15 +241,17 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
 
   if (decisionMode === 'AL') {
     // 1. Paragraf: Operasyonel Güç + Nakit Dönüşümü + Bilanço Kalkanı Sentezi
-    const cashNarrative = ocf > 0
-      ? `ürettiği operasyonel kârı kağıt üzerinde bırakmayıp ${(cashConv * 100).toFixed(0)}% dönüşüm oranıyla sıcak işletme nakdine (OCF) tahvil etmesi`
-      : `operasyonel marj disipliniyle içsel fon yaratma kapasitesini koruması`;
+    const cashNarrative = isStrongCashConv
+      ? `ürettiği operasyonel kârı kağıt üzerinde bırakmayıp ${(cashConv * 100).toFixed(0)}% dönüşüm oranıyla sıcak işletme nakdine (OCF) tahvil etmesi ile tahakkuk riskinden ayrışmaktadır`
+      : ocf > 0
+      ? `pozitif işletme nakit akışı üretmekle birlikte muhasebe kârının nakde dönüşüm oranının (${(cashConv * 100).toFixed(0)}%) işletme sermayesi ve değerleme kalemleri nedeniyle yakından izlenmesi gerekmektedir`
+      : `operasyonel marj disipliniyle içsel fon yaratma kapasitesini korumaktadır`;
     const balanceSheetNarrative = isNetCash
-      ? `Bilançosundaki Net Nakit pozisyonu sayesinde, yüksek TL faiz ortamında bankalara finansman gideri ödemek yerine nakit varlıklarından faiz geliri yazarak net kâr marjını (%${netMargin.toFixed(1)}) rakiplerine karşı sigortalamaktadır.`
+      ? `Bilançosundaki Net Nakit pozisyonu sayesinde, yüksek TL faiz ortamında bankalara finansman gideri ödemek yerine nakit varlıklarından faiz geliri yazarak ${netMargin >= 0 ? `net kâr marjını (%${netMargin.toFixed(1)})` : 'bilanço likiditesini'} rakiplerine karşı sigortalamaktadır.`
       : `Net Borç / FAVÖK rasyosunu ${netDebtToEbitda.toFixed(2)}x gibi yönetilebilir bir eşikte tutarak yüksek faiz ortamında finansman giderlerinin esas faaliyet kârını eritmesini engellemektedir.`;
 
     whyActionParagraphs.push(
-      `${ticker} için oluşturduğumuz ALIM tezi, tek bir ucuzluk çarpanına değil; kârlılık kalitesi, sermaye verimliliği ve bilanço sağlamlığının aynı anda kesişmesine dayanmaktadır. Şirket, ${sectorName} sektöründe %${ebitdaMargin.toFixed(1)} FAVÖK marjı üretirken, ${cashNarrative} ile tahakkuk riskinden ayrışmaktadır. ${balanceSheetNarrative}`
+      `${ticker} için oluşturduğumuz ALIM tezi, tek bir ucuzluk çarpanına değil; kârlılık kalitesi, sermaye verimliliği ve bilanço sağlamlığının aynı anda kesişmesine dayanmaktadır. Şirket, ${sectorName} sektöründe %${ebitdaMargin.toFixed(1)} FAVÖK marjı üretirken, ${cashNarrative}. ${balanceSheetNarrative}`
     );
 
     // 2. Paragraf: Sermaye Verimliliği (ROIC vs WACC) + Büyüme + Çarpan Asimetrisi Sentezi
@@ -260,8 +267,12 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
       ? `ile birleştiğinde; önümüzdeki 12 ayda yüksek baz etkisi veya sektörel döngü normalleşmesi kaynaklı beklenen net kâr daralmasına (%${netGrowthProj.toFixed(0)}) rağmen, %${revGrowthProj.toFixed(0)} hasılat direnci ve cazip değerleme marjı, kârdaki döngüsel dip seviyesinin hisse fiyatında fazlasıyla iskonto edildiğini ve yeniden değerleme (re-rating) potansiyelini desteklemektedir.`
       : `ve önümüzdeki 12 ayda beklenen %${revGrowthProj.toFixed(0)} hasılat büyümesi ile birleştiğinde, çarpan genişlemesi (re-rating) ve adil değere yakınsama potansiyeli sunmaktadır.`;
 
+    const evaParagraphLead = isPositiveEva
+      ? `İkinci temel dayanak noktası, şirketin yatırdığı her 100 TL'lik sermayeden enflasyondan arındırılmış bazda %${roic.toFixed(1)} Reel ROIC üreterek %${wacc.toFixed(1)}'lik reel sermaye maliyetinin üzerinde (${formattedEvaPts} puan EVA) gerçek ekonomik değer yaratmasıdır.`
+      : `İkinci temel dayanak noktası, şirketin muhasebesel reel sermaye getirisi (%${roic.toFixed(1)} Reel ROIC) mevcut aşamada %${wacc.toFixed(1)}'lik reel sermaye maliyetinin altında (${formattedEvaPts} puan negatif EVA makası) kalsa da, sahip olduğu varlık tabanı ve nakit akışı kapasitesinin piyasa fiyatında derin bir güvenlik marjıyla iskonto edilmiş olmasıdır.`;
+
     whyActionParagraphs.push(
-      `İkinci temel dayanak noktası, şirketin yatırdığı her 100 TL'lik sermayeden enflasyondan arındırılmış bazda %${roic.toFixed(1)} Reel ROIC üreterek %${wacc.toFixed(1)}'lik reel sermaye maliyetinin üzerinde (+${evaSpread.toFixed(1)} puan EVA) gerçek ekonomik değer yaratmasıdır. ${multComparison} ${growthSentence}`
+      `${evaParagraphLead} ${multComparison} ${growthSentence}`
     );
   } else if (decisionMode === 'ALMA') {
     whyActionParagraphs.push(
@@ -326,7 +337,7 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
       opportunitySourceNarrative = `Piyasa şu an ${ticker} hissesini yalnızca gelir tablosunun en alt satırındaki TMS 29 enflasyon muhasebesi (parasallık düzeltmesi ve stok endekslemesi) baskısıyla değerlendirme yanılgısına düşmektedir. Oysa nakit akış tablosu incelendiğinde, şirketin net kârının ${(cashConv * 100).toFixed(0)}% üzerinde gerçek sıcak işletme nakdi (OCF) ürettiği görülmektedir. Muhasebesel ve nakit çıkışı gerektirmeyen düzeltmeler geçici olarak kârı törpülerken, kasaya giren gerçek nakit şirketin içsel değerini ₺${input.fairValue.toFixed(2)} seviyesine taşımaktadır.`;
     } else if (isNetCash && isPositiveEva) {
       opportunityMechanismTag = 'YÜKSEK FAİZ ORTAMINDA NET NAKİT & POZİTİF EVA ASİMETRİSİ';
-      opportunitySourceNarrative = `Borsa İstanbul'da yüksek faiz politikası nedeniyle sanayi ve hizmet şirketlerinin tamamına piyasa tarafından toptancı bir 'finansman gideri iskontosu' uygulanmaktadır. Ancak piyasanın gözden kaçırdığı kritik ayrım şudur: ${ticker} borçlu bir şirket değil, bilançosunda Net Nakit taşıyan ve +%${evaSpread.toFixed(1)} pozitif EVA üreten bir nakit kalesidir. Yüksek faiz ortamı borçlu rakiplerini zayıflatırken ${ticker}'in pazar payını ve finansal gelirlerini beslemekte; bu da mevcut fiyatlamada belirgin bir piyasa verimsizliği (fırsat) yaratmaktadır.`;
+      opportunitySourceNarrative = `Borsa İstanbul'da yüksek faiz politikası nedeniyle sanayi ve hizmet şirketlerinin tamamına piyasa tarafından toptancı bir 'finansman gideri iskontosu' uygulanmaktadır. Ancak piyasanın gözden kaçırdığı kritik ayrım şudur: ${ticker} borçlu bir şirket değil, bilançosunda Net Nakit taşıyan ve ${formattedEvaPct} pozitif EVA üreten bir nakit kalesidir. Yüksek faiz ortamı borçlu rakiplerini zayıflatırken ${ticker}'in pazar payını ve finansal gelirlerini beslemekte; bu da mevcut fiyatlamada belirgin bir piyasa verimsizliği (fırsat) yaratmaktadır.`;
     } else if (capex > 0 && ocf > 0 && (capex / Math.max(ocf, 1)) >= 0.45) {
       opportunityMechanismTag = 'YATIRIM (CAPEX) EVRESİNDEN NAKİT HASADI EVRESİNE GEÇİŞ';
       const capexGrowthNote = (netGrowthProj > 0 && revGrowthProj > 0)
@@ -343,7 +354,10 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
       opportunityMechanismTag = netGrowthProj >= 0
         ? 'İÇSEL SERMAYE BİRİKİMİ & GELECEK KÂR İVMESİ'
         : 'DÖNGÜSEL DİP & SERMAYE VERİMLİLİĞİ ASİMETRİSİ';
-      opportunitySourceNarrative = `Piyasa, şirketin geçmiş çeyreklerdeki baz etkisini ileriye doğrusal olarak taşırken; şirketin maliyet optimizasyonu, %${ebitdaMargin.toFixed(1)} FAVÖK marjı disiplini ve ${growthLabel} iskonto etmektedir. Sermaye maliyetini aşan (+${evaSpread.toFixed(1)} puan) değer üretimi korundukça, içsel özkaynak birikimi hisse fiyatını adil değerine (₺${input.fairValue.toFixed(2)}) yakınsatacaktır.`;
+      const evaClosingSentence = isPositiveEva
+        ? `Sermaye maliyetini aşan (${formattedEvaPts} puan EVA) değer üretimi korundukça, içsel özkaynak birikimi hisse fiyatını adil değerine (₺${input.fairValue.toFixed(2)}) yakınsatacaktır.`
+        : `Operasyonel marj disiplini ve varlık iskontosu (${formattedEvaPts} puan EVA makası) korundukça, kârlılık normalleşmesiyle hisse fiyatı adil değerine (₺${input.fairValue.toFixed(2)}) yakınsayacaktır.`;
+      opportunitySourceNarrative = `Piyasa, şirketin geçmiş çeyreklerdeki baz etkisini ileriye doğrusal olarak taşırken; şirketin maliyet optimizasyonu, %${ebitdaMargin.toFixed(1)} FAVÖK marjı disiplini ve ${growthLabel} iskonto etmektedir. ${evaClosingSentence}`;
     }
   } else if (decisionMode === 'ALMA') {
     opportunityMechanismTag = hasShadowHoldingRisk
@@ -395,7 +409,10 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
   } else if (sec === 'HOLDING' || isTfrs10) {
     sectoralEdgeNarrative = `${isTfrs10 ? 'Girişim sermayesi ve yatırım şirketleri' : 'Holdingler'} arasında fark yaratan temel unsur, solo bilançodaki nakit/borç disiplini ve iştirak portföyünün çeşitliliğidir. ${ticker}, ${isNetCash ? 'solo düzeyde net nakit pozisyonuna sahip olması' : 'dengeli finansal yapısı'} ve ${compPb > 0 ? `${compPb.toFixed(2)}x PD/DD (PD/NAD)` : 'iskontolu'} çarpanıyla yatırımcıya iştirak portföyüne doğrudan iskontolu ortak olma imkanı sunmaktadır.`;
   } else {
-    sectoralEdgeNarrative = `BIST ${sectorName} sektöründe (${peerListStr || 'akran grubu'}) birçok şirket yüksek işletme sermayesi ihtiyacı ve artan kredi faizleri nedeniyle marj daralması yaşarken; ${ticker} %${grossMargin.toFixed(1)} brüt marj, %${ebitdaMargin.toFixed(1)} FAVÖK marjı ve ${isNetCash ? 'Net Nakit bilançosu' : `${netDebtToEbitda.toFixed(2)}x Net Borç/FAVÖK disiplini`} ile öne çıkmaktadır. Şirketin %${roic.toFixed(1)} Reel ROIC performansı, sektördeki ortalama sermaye getirisinin üzerinde kalarak fiyatlama gücünü (pricing power) kanıtlamaktadır.`;
+    const roicEdgeSentence = isPositiveEva
+      ? `Şirketin %${roic.toFixed(1)} Reel ROIC performansı, sermaye maliyetinin (%${wacc.toFixed(1)}) üzerinde kalarak fiyatlama gücünü (pricing power) kanıtlamaktadır.`
+      : `Şirketin %${roic.toFixed(1)} Reel ROIC performansı henüz %${wacc.toFixed(1)}'lik sermaye maliyetinin altında (${formattedEvaPts} puan EVA) seyretmekte olup marj genişlemesi yakından izlenmektedir.`;
+    sectoralEdgeNarrative = `BIST ${sectorName} sektöründe (${peerListStr || 'akran grubu'}) birçok şirket yüksek işletme sermayesi ihtiyacı ve artan kredi faizleri nedeniyle marj daralması yaşarken; ${ticker} %${grossMargin.toFixed(1)} brüt marj, %${ebitdaMargin.toFixed(1)} FAVÖK marjı ve ${isNetCash ? 'Net Nakit bilançosu' : `${netDebtToEbitda.toFixed(2)}x Net Borç/FAVÖK disiplini`} ile faaliyet göstermektedir. ${roicEdgeSentence}`;
   }
 
   // Sektörel Karşılaştırma Rozetleri (3-4 Somut Kıyaslama)
@@ -425,8 +442,8 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
       companyValue: `%${roic.toFixed(1)}`,
       benchmarkValue: `Reel WACC: %${wacc.toFixed(1)}`,
       verdict: isPositiveEva
-        ? `+${evaSpread.toFixed(1)} Puan Reel Değer Üretimi`
-        : `${evaSpread.toFixed(1)} Puan Sermaye Erozyonu`,
+        ? `${formattedEvaPts} Puan Reel Değer Üretimi`
+        : `${formattedEvaPts} Puan Sermaye Erozyonu`,
       isAdvantage: isPositiveEva
     },
     {
@@ -449,22 +466,26 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
     {
       tag: 'SERMAYE VERİMLİLİĞİ',
       title: isPositiveEva
-        ? `Reel Sermaye Maliyetini Aşan Değer Üretimi (+${evaSpread.toFixed(1)} Puan EVA)`
-        : `Sermaye Maliyetinin Altında Getiri (${evaSpread.toFixed(1)} Puan EVA)`,
+        ? `Reel Sermaye Maliyetini Aşan Değer Üretimi (${formattedEvaPts} Puan EVA)`
+        : `Sermaye Maliyetinin Altında Getiri (${formattedEvaPts} Puan EVA)`,
       detail: `Şirket yatırdığı sermayeden reel bazda %${roic.toFixed(1)} getiri (ROIC) elde ederken, %${roe.toFixed(1)} özkaynak kârlılığı (ROE) ile çalışmaktadır.`,
       tone: isPositiveEva ? 'emerald' : 'rose'
     },
     {
       tag: 'NAKİT AKIŞ KALİTESİ',
-      title: ocf > 0 && !isSupplierDebtDrivenOcf
+      title: isStrongCashConv
         ? `Güçlü İşletme Nakit Üretimi (OCF / Net Kâr: ${(cashConv * 100).toFixed(0)}%)`
         : isSupplierDebtDrivenOcf
         ? `Tedarikçi Vadelerine Dayalı Kırılgan Nakit Akışı`
+        : ocf > 0
+        ? `Sınırlı Nakit Dönüşümü (OCF / Net Kâr: ${(cashConv * 100).toFixed(0)}%)`
         : `Zayıf İşletme Nakit Dönüşümü ve Tahakkuk Baskısı`,
-      detail: ocf > 0 && !isSupplierDebtDrivenOcf
+      detail: isStrongCashConv
         ? `Raporlanan muhasebe kârı sıcak nakit akışıyla desteklenmekte olup ${fcf > 0 ? 'Serbest Nakit Akışı (FCF) pozitiftir.' : 'üretilen nakit kapasite yatırımlarını (CapEx) finanse etmektedir.'}`
+        : ocf > 0 && !isSupplierDebtDrivenOcf
+        ? `İşletme nakit akışı pozitif olmakla birlikte muhasebe kârının nakde dönüşüm oranı (%${(cashConv * 100).toFixed(0)}) işletme sermayesi ve değerleme kalemleri nedeniyle sınırlı kalmaktadır.`
         : `Operasyonel kârın serbest nakde dönüşümünde işletme sermayesi (stok ve alacak) baskısı izlenmektedir.`,
-      tone: ocf > 0 && !isSupplierDebtDrivenOcf ? 'cyan' : 'rose'
+      tone: isStrongCashConv ? 'cyan' : (ocf > 0 && !isSupplierDebtDrivenOcf ? 'amber' : 'rose')
     },
     {
       tag: 'BİLANÇO MİMARİSİ',
@@ -499,7 +520,7 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
   // ---------------------------------------------------------------------------
   const moatGood = ebitdaMargin >= 14 || grossMargin >= 25 || (sec === 'RETAIL' && assetTurnover >= 1.4) || (sec === 'INSURANCE' && roe >= 30);
   const capGood = isPositiveEva && roe >= 20;
-  const cashGood = ocf > 0 && !isSupplierDebtDrivenOcf && (isNetCash || netDebtToEbitda <= 2.0) && !hasShadowHoldingRisk;
+  const cashGood = isStrongCashConv && (isNetCash || netDebtToEbitda <= 2.0) && !hasShadowHoldingRisk;
   const valGood = upsidePct >= 18 && (compPe <= secPe * 1.1 || compEvEbitda <= secEvEbitda * 1.1 || compPb <= secPb * 1.1);
 
   const pillars: SynthesizedPillar[] = [
@@ -525,7 +546,7 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
       subtitle: 'Sermaye Maliyetine Göre Reel Getiri',
       status: capGood ? 'GÜÇLÜ' : isPositiveEva ? 'DENGELİ' : 'ZAYIF',
       badgeTone: isPositiveEva ? 'positive' : evaSpread >= -2 ? 'neutral' : 'negative',
-      badgeText: isPositiveEva ? `+${evaSpread.toFixed(1)} Puan EVA` : `${evaSpread.toFixed(1)} Puan Negatif EVA`,
+      badgeText: isPositiveEva ? `${formattedEvaPts} Puan EVA` : `${formattedEvaPts} Puan Negatif EVA`,
       metrics: [
         { label: 'Reel ROIC', value: `%${roic.toFixed(1)}`, isPositive: roic > wacc },
         { label: 'Reel WACC', value: `%${wacc.toFixed(1)}`, isPositive: true },
@@ -539,11 +560,11 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
       id: 'cash_fortress',
       title: '3. Nakit Üretimi & Bilanço Gücü',
       subtitle: 'Operasyonel Nakit & Borçluluk',
-      status: (isNetCash && ocf > 0) || (ocf > 0 && cashGood) ? 'GÜÇLÜ' : (ocf > 0 && !hasShadowHoldingRisk) ? 'DENGELİ' : 'ZAYIF',
-      badgeTone: hasShadowHoldingRisk ? 'negative' : (ocf > 0) ? 'positive' : 'negative',
+      status: (isNetCash && isStrongCashConv) || cashGood ? 'GÜÇLÜ' : (ocf > 0 && !hasShadowHoldingRisk) ? 'DENGELİ' : 'ZAYIF',
+      badgeTone: hasShadowHoldingRisk ? 'negative' : isStrongCashConv ? 'positive' : (ocf > 0 ? 'neutral' : 'negative'),
       badgeText: hasShadowHoldingRisk
         ? 'Sermaye Tahsisi Uyarısı'
-        : isNetCash && ocf > 0
+        : isNetCash && isStrongCashConv
         ? 'Net Nakit & Güçlü OCF'
         : ocf > 0
         ? 'Pozitif İşletme Nakdi'
@@ -584,11 +605,11 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
   // ---------------------------------------------------------------------------
   const catalysts: string[] = [
     netGrowthProj >= 0
-      ? `12 aylık ileri projeksiyonda beklenen %${revGrowthProj.toFixed(1)} hasılat büyümesi ve %${netGrowthProj.toFixed(1)} net kâr artışının çeyreklik bilançolarda teyit edilmesiyle çarpanların ${targetMultLabel} hedefine yakınsaması.`
-      : `12 aylık ileri projeksiyonda %${revGrowthProj.toFixed(1)} hasılat büyümesi ve döngüsel dip sonrası marj toparlanmasının teyit edilmesiyle çarpanların ${targetMultLabel} hedefine yakınsaması.`,
+      ? `12 aylık ileri projeksiyonda beklenen %${revGrowthProj.toFixed(1)} hasılat değişimi ve %${netGrowthProj.toFixed(1)} net kâr artışının çeyreklik bilançolarda teyit edilmesiyle çarpanların ${targetMultLabel} hedefine yakınsaması.`
+      : `12 aylık ileri projeksiyonda %${revGrowthProj.toFixed(1)} hasılat performansı ve döngüsel dip sonrası marj toparlanmasının teyit edilmesiyle çarpanların ${targetMultLabel} hedefine yakınsaması.`,
     isNetCash
       ? `Net Nakit bilançonun yüksek faiz ortamında ürettiği finansal gelir katkısı ve olası temettü / kapasite artırım hamlelerinin özkaynak kârlılığını (%${roe.toFixed(1)}) desteklemesi.`
-      : `Dezenflasyon sürecinde politika faizlerinde başlayacak kademeli indirim döngüsünün şirketin finansman giderlerini düşürerek net kâr marjını (%${netMargin.toFixed(1)}) hızla genişletmesi.`,
+      : `Dezenflasyon sürecinde politika faizlerinde başlayacak kademeli indirim döngüsünün şirketin finansman giderlerini düşürerek ${netMargin >= 0 ? `net kâr marjını (%${netMargin.toFixed(1)}) hızla genişletmesi` : 'net kârlılığa geçişini desteklemesi'}.`,
     sec === 'RETAIL'
       ? `Yeni mağaza/online kanal açılışları ve sepet büyüklüğü artışıyla negatif işletme sermayesi nakit havuzunun (Float) büyümeye devam etmesi.`
       : sec === 'INSURANCE'
@@ -610,6 +631,11 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
       ? `Sermaye Tahsisi Riski: Ana faaliyetten üretilen nakdin çekirdek operasyon yerine ilişkili taraflara / finansal yatırımlara aktarılmasının devam etmesi ve nakit dönüşümünün bozulması.`
       : `Nakit Akışı & İşletme Sermayesi Bozulması: Faaliyet nakit akışının (OCF) ticari alacak tahsilat sürelerinin uzaması veya stok birikimi nedeniyle negatife dönmesi ${!isNetCash ? `veya Net Borç/FAVÖK rasyosunun (${netDebtToEbitda.toFixed(2)}x) 2.50x tehlike sınırını aşması` : 've net nakit tamponunun erimesi'}.`
   ];
+  if (input.isValueTrap && Array.isArray(input.valueTrapReasons)) {
+    for (const r of input.valueTrapReasons) {
+      if (r && !thesisBreakers.includes(r)) thesisBreakers.push(r);
+    }
+  }
 
   return {
     decisionMode,

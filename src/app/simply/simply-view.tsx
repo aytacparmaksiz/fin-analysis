@@ -65,6 +65,8 @@ import {
   BIST_BANKING_TICKERS,
   BIST_HOLDING_TICKERS,
   BIST_REIT_TICKERS,
+  detectSector,
+  getSectorDefinition,
   isMetricDisabled,
   getScoreColorStyle
 } from '@/lib/sectors';
@@ -475,22 +477,21 @@ function parseVerdictNarrative(
   let cleaned = rawText.replace(/\*\*(Yatırım\s+Tezi|Temel\s+Yatırım\s+Tezi|Gerekçe|Kilit\s+Katalizörler|Katalizörler|Riskler\s*(?:&|ve)\s*Emniyet\s*Marjı|Riskler\s*ve\s*Belirsizlikler|Temel\s*Riskler)\s*:\*\*/gi, '$1:');
   cleaned = cleaned.replace(/\[\s*([^\]]+?)\s*\]/g, '$1').trim();
 
-  // Detect verdict: AL, ALMA, NÖTR
+  // Detect verdict: AL, ALMA, NÖTR (Tekil Hakikat Kaynağı / ValuationState öncelikli)
   let verdict: 'AL' | 'ALMA' | 'NÖTR' = 'NÖTR';
+  const normFallback = String(fallbackDecision || '').trim().toUpperCase();
   const verdictMatch = rawText.match(/Analist\s+Karar[ıi]\s*[:=-]?\s*\[?\s*\*?\*?\s*(ALMA|SAT|AL|NÖTR|NOTR|TUT)\s*\*?\*?\s*\]?/i);
-  if (verdictMatch) {
+  if (normFallback === 'AL') {
+    verdict = 'AL';
+  } else if (normFallback === 'ALMA' || normFallback === 'SAT') {
+    verdict = 'ALMA';
+  } else if (normFallback === 'NÖTR' || normFallback === 'NOTR' || normFallback === 'TUT') {
+    verdict = 'NÖTR';
+  } else if (verdictMatch) {
     const val = verdictMatch[1].toUpperCase();
     if (['ALMA', 'SAT'].includes(val)) verdict = 'ALMA';
     else if (val === 'AL') verdict = 'AL';
     else verdict = 'NÖTR';
-  } else if (/\b(ALMA|SAT)\b/i.test(rawText)) {
-    verdict = 'ALMA';
-  } else if (/\bAL\b/i.test(rawText)) {
-    verdict = 'AL';
-  } else if (fallbackDecision === 'ALMA') {
-    verdict = 'ALMA';
-  } else if (fallbackDecision === 'AL') {
-    verdict = 'AL';
   } else {
     verdict = 'NÖTR';
   }
@@ -686,8 +687,8 @@ export default function SimplyView({
   valuationInfo,
   marketMultiples,
   companyMultiplesData,
-  currentSector,
-  sectorMeta,
+  currentSector: rawCurrentSector,
+  sectorMeta: rawSectorMeta,
   latestData,
   chartData,
   quarterlyChartData,
@@ -712,6 +713,42 @@ export default function SimplyView({
   const [showBrokerBreakdown, setShowBrokerBreakdown] = useState(false);
   const [showSnowflakeChecklist, setShowSnowflakeChecklist] = useState(false);
   const [selectedSnowflakeFilter, setSelectedSnowflakeFilter] = useState<'all' | 'value' | 'future' | 'past' | 'health' | 'dividend'>('all');
+  const [selectedSector, setSelectedSector] = useState<SectorType | 'AUTO'>('AUTO');
+
+  const handleSelectReport = useCallback((id: string) => {
+    setSelectedSector('AUTO');
+    setShowAllDividends(false);
+    setShowBrokerBreakdown(false);
+    setShowSnowflakeChecklist(false);
+    setSelectedSnowflakeFilter('all');
+    if (onSelectReport) {
+      onSelectReport(id);
+    }
+  }, [onSelectReport]);
+
+  // Rapor bazlı izole sektör çözümlemesi:
+  // Her rapor yalnızca kendi extracted_data.sector veya kanonik BIST sektörünü kullanır.
+  const currentSector: SectorType = useMemo(() => {
+    const validSectors: SectorType[] = [
+      'INSURANCE', 'BANKING', 'HOLDING', 'REIT', 'TECH', 'INDUSTRIAL',
+      'RETAIL', 'AVIATION', 'UTILITIES_TELCO', 'HEALTHCARE', 'FINANCIAL_SERVICES'
+    ];
+    const reportSec = (
+      report.extractedData?.sector ||
+      (report as any)?.extracted_data?.sector ||
+      report.sector
+    ) as SectorType | undefined;
+    if (reportSec && validSectors.includes(reportSec)) {
+      return reportSec;
+    }
+    const sym = (report.ticker || '').trim().toUpperCase();
+    return detectSector(sym, (report as any)?.companyName || report.extractedData?.company_name) || (selectedSector !== 'AUTO' ? selectedSector : null) || rawCurrentSector || 'INDUSTRIAL';
+  }, [report, rawCurrentSector, selectedSector]);
+
+  const sectorMeta = useMemo(() => {
+    const sym = (report.ticker || '').trim().toUpperCase();
+    return getSectorDefinition(currentSector, sym) || rawSectorMeta;
+  }, [currentSector, report.ticker, rawSectorMeta]);
 
   const isInPortfolio = useMemo(() => {
     return portfolioTickers.includes(report.ticker?.toUpperCase() || '');
@@ -851,17 +888,17 @@ export default function SimplyView({
   // WACC, ROIC ve EVA Çözümü (TMS 29 Reel WACC ve Terminal ile %100 Senkronize)
   const isFxFunctional = ['THYAO', 'PGSUS', 'TAVHL', 'CLEBI', 'DOCO', 'ENKAI'].includes(String(report.ticker || '').toUpperCase());
   const isTms29 = isFxFunctional ? false : Boolean(latestData?.is_tms29 ?? report.extractedData?.is_tms29 ?? true);
-  const realWaccNum = Number(latestData?.real_wacc ?? valuationInfo?.real_wacc ?? (latestData?.wacc ? latestData.wacc - 18 : 4.7));
-  const nominalWaccNum = Number(latestData?.nominal_wacc ?? latestData?.wacc ?? valuationInfo?.wacc ?? 22.8);
+  const realWaccNum = Number(latestData?.real_wacc ?? valuationInfo?.real_wacc ?? (latestData?.wacc ? latestData.wacc - 18 : 11.7));
+  const nominalWaccNum = Number(latestData?.nominal_wacc ?? latestData?.wacc ?? valuationInfo?.wacc ?? 42.5);
   const benchmarkWacc = isTms29 && realWaccNum ? realWaccNum : nominalWaccNum;
   const waccNum = benchmarkWacc;
 
-  const roicNum = Number(latestData?.roic ?? valuationInfo?.roic ?? 15.5);
+  const roicNum = Number(latestData?.roic ?? valuationInfo?.roic ?? latestData?.roe ?? 0);
   const evaSpreadNum = Number(
     latestData?.eva_spread ??
     valuationInfo?.real_eva_spread ??
     valuationInfo?.eva_spread ??
-    (roicNum - benchmarkWacc)
+    Number((roicNum - benchmarkWacc).toFixed(1))
   );
 
   const [showCashQualityExplainer, setShowCashQualityExplainer] = useState(false);
@@ -1273,11 +1310,28 @@ export default function SimplyView({
   // Kurumsal Yatırım Tezi, Sektörel Ayrışma ve Fırsat Sentezi Motoru (8.1 Paneli)
   const synthesizedThesis = useMemo(() => {
     const capAlloc = valuationInfo?.capital_allocation_risk ?? analyzeRelatedPartyAndCapitalAllocationRisk(latestData, currentSector, officialSectorName);
+    const resolvedOverrideReason =
+      valuationInfo?.override_reason ||
+      (report.extractedData as any)?.optimization?.overrideReason ||
+      report.overrideReason;
+    const resolvedIsValueTrap = Boolean(
+      valuationInfo?.is_value_trap ??
+      (report.extractedData as any)?.optimization?.isValueTrap ??
+      (report.extractedData as any)?.valuation?.is_value_trap ??
+      report.isValueTrap
+    );
+    const resolvedValueTrapReasons =
+      valuationInfo?.value_trap_reasons ||
+      (report.extractedData as any)?.optimization?.valueTrapReasons ||
+      (report.extractedData as any)?.valuation?.value_trap_reasons ||
+      report.valueTrapReasons ||
+      [];
+
     return synthesizeInvestmentThesis({
       ticker: report.ticker,
       companyName: profile.fullName,
       decision: effectiveDecision,
-      score: (report as any)?.score,
+      score: valuationInfo?.score ?? (report as any)?.score,
       currentSector,
       officialSectorName,
       currentPrice: currentPriceNum,
@@ -1298,13 +1352,16 @@ export default function SimplyView({
       capAllocAudit: capAlloc,
       sameSectorPeers,
       consensusTargetPrice,
-      overrideReason: report.overrideReason,
+      overrideReason: resolvedOverrideReason,
+      isValueTrap: resolvedIsValueTrap,
+      valueTrapReasons: resolvedValueTrapReasons,
       executiveVerdict
     });
   }, [
     report.ticker,
     profile.fullName,
     effectiveDecision,
+    valuationInfo?.score,
     (report as any)?.score,
     currentSector,
     officialSectorName,
@@ -1324,9 +1381,15 @@ export default function SimplyView({
     marketMultiples,
     drivers,
     valuationInfo?.capital_allocation_risk,
+    valuationInfo?.override_reason,
+    valuationInfo?.is_value_trap,
+    valuationInfo?.value_trap_reasons,
     sameSectorPeers,
     consensusTargetPrice,
     report.overrideReason,
+    report.isValueTrap,
+    report.valueTrapReasons,
+    report.extractedData,
     executiveVerdict
   ]);
 
@@ -1442,7 +1505,7 @@ export default function SimplyView({
     };
   }, []);
 
-  // Rapor açıldığında veya değiştiğinde sayfa daima en baştan (sec-ozet) başlasın
+  // Rapor açıldığında veya değiştiğinde sayfa daima en baştan (sec-ozet) başlasın ve geçici UI durumları sıfırlansın
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
@@ -1452,6 +1515,12 @@ export default function SimplyView({
       }
     }
     setActiveSection('sec-ozet');
+    setSelectedSnowflakeFilter('all');
+    setShowAllDividends(false);
+    setShowBrokerBreakdown(false);
+    setShowSnowflakeChecklist(false);
+    setShowCashQualityExplainer(false);
+    setHoveredRowKey(null);
   }, [report.id, report.ticker]);
 
   const scrollToSection = (id: SimplySectionId) => {
@@ -6016,7 +6085,7 @@ export default function SimplyView({
                     return (
                       <div
                         key={hist.id}
-                        onClick={() => onSelectReport && onSelectReport(hist.id)}
+                        onClick={() => handleSelectReport(hist.id)}
                         onAuxClick={(e) => {
                           if (e.button === 1) {
                             e.preventDefault();

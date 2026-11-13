@@ -1,6 +1,7 @@
 import { test, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeSectorValuationAndDrivers, calculateSectorScore, calculateDuPont5Step, analyzeRelatedPartyAndCapitalAllocationRisk, isTfrs10InvestmentEntity, optimizeFinalDecision } from '../lib/valuation.ts';
+import fs from 'node:fs';
+import { computeSectorValuationAndDrivers, calculateSectorScore, calculateDuPont5Step, analyzeRelatedPartyAndCapitalAllocationRisk, isTfrs10InvestmentEntity, optimizeFinalDecision, detectValueTrap, evaluateValueTrap, syncReportTextWithValuation } from '../lib/valuation.ts';
 import { synthesizeInvestmentThesis } from '../lib/investment-thesis-synthesizer.ts';
 import { computeSnowflakeAnalysis } from '../lib/snowflake.ts';
 import { IsYatirimApiAdapter } from '../lib/isyatirim-adapter.ts';
@@ -989,6 +990,279 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
       const valRes = computeSectorValuationAndDrivers(mockData, 12.50, c.engineSector);
       assert.ok(valRes.valuation.fair_value < 5.0, `${c.ticker} (${c.officialSector}) fair value (${valRes.valuation.fair_value}) must not be inflated by artificial EV floor or sector P/B when net debt > EV and ROE is -32.1%`);
       assert.equal(valRes.valuation.final_decision, 'ALMA', `${c.ticker} final_decision must be ALMA`);
+    }
+  });
+
+  it('26. BERA (Holding Dead-Code Elimination & Unprofitable Asset Trap): ROE 0.09%, EVA -11.6, P/E 215.8x applies 0.45x P/NAV (not 0.70x) and blocks AL decision', () => {
+    const beraData = {
+      ticker: 'BERA',
+      sector: 'HOLDING',
+      official_sector_name: 'Holding ve Yatırım Şirketleri',
+      current_price: 10.27,
+      share_count: 683200000,
+      paid_in_capital: 683200000,
+      financial_history: [
+        {
+          period: '2025/09',
+          revenue: 15810000000,
+          gross_profit: 3950000000,
+          operating_profit: 2900000000,
+          ebitda: 3556000000,
+          net_income: 32300000,
+          equity: 36800000000,
+          parent_equity: 36800000000,
+          net_debt: -2100000000,
+          roe: 0.12
+        },
+        {
+          period: '2026/09',
+          revenue: 17752510464,
+          gross_profit: 3829463040,
+          operating_profit: 2175922944,
+          ebitda: 2591866112,
+          net_income: 24380829,
+          equity: 37039580224,
+          parent_equity: 37039580224,
+          net_debt: -2374948096,
+          operating_cash_flow: 3145000000,
+          roe: 0.09,
+          roic: 4.28,
+          real_wacc: 15.88,
+          eva_spread: -11.6,
+          is_tms29: true,
+          holding_discount: 81.1
+        }
+      ]
+    };
+
+    const res = computeSectorValuationAndDrivers(beraData, 10.27, 'HOLDING');
+    assert.equal(res.drivers.target_multiple.numericValue, 0.45, `BERA target multiple (${res.drivers.target_multiple.numericValue}) must execute roe < 10.0 branch (0.45x), NOT short-circuit to 0.70x`);
+    assert.ok(res.valuation.fair_value <= 25.0, `BERA fair value (${res.valuation.fair_value}) must be ~24.40 TL (0.45x P/NAV), never 38.64 TL (0.70x)`);
+    assert.equal(res.valuation.is_value_trap, true, 'BERA must be flagged as an Unprofitable Asset Trap / Value Trap');
+    assert.ok((res.valuation.value_trap_reasons || []).length >= 3, 'BERA must have >= 3 concrete forensic value trap reasons');
+    assert.notEqual(res.valuation.final_decision, 'AL', 'BERA must NEVER receive AL decision with 0.09% ROE, -11.6 EVA and 215.8x P/E');
+    assert.equal(res.valuation.final_decision, 'NÖTR', 'BERA decision must be capped at NÖTR');
+
+    const rawReport = `### VI. Temel Riskler, Katalizörler ve Nihai Karar\nAnalist Kararı: **[AL]**\nHesaplanan **38.64 TL** adil değer ile cazip görünmektedir.`;
+    const synced = syncReportTextWithValuation(rawReport, res.valuation, res.scoreResult, res.drivers, 10.27, beraData);
+    assert.ok(synced.includes('Analist Kararı: **[NÖTR]**'), 'Synced report header must be updated to [NÖTR]');
+    assert.ok(!synced.includes('Analist Kararı: **[AL]**'), 'Synced report must not retain contradictory [AL] decision');
+    assert.ok(synced.includes('Neden "AL" Verilmedi?') || synced.includes('Neden AL Verilmedi?') || synced.includes('Değer Tuzağı'), 'Synced report must include forensic bear case & value trap reasons');
+  });
+
+  it('27. RGYAS (Thesis Synthesizer Sign & Logic Integrity): Negative EVA (-9.6) and weak cash conversion (18%) never produce +-9.6 or value-creation claims', () => {
+    const rgyasDossier = synthesizeInvestmentThesis({
+      ticker: 'RGYAS',
+      decision: 'AL',
+      currentSector: 'REIT',
+      officialSectorName: 'Gayrimenkul Yatırım Ortaklığı',
+      currentPrice: 120.0,
+      fairValue: 165.0,
+      discountPct: 37.5,
+      latestData: {
+        revenue: 8500000000,
+        gross_profit: 5800000000,
+        ebitda: 5200000000,
+        net_income: 12000000000,
+        operating_cash_flow: 2160000000,
+        free_cash_flow: 1500000000,
+        equity: 95000000000,
+        total_assets: 110000000000,
+        net_debt: -4500000000
+      },
+      roic: 7.9,
+      wacc: 17.5,
+      evaSpread: -9.6,
+      isTms29: true,
+      earningsQuality: {
+        cashConversionRatio: 18.0
+      }
+    });
+
+    const fullText = JSON.stringify(rgyasDossier);
+    assert.ok(!fullText.includes('+-9.6') && !fullText.includes('+-%') && !fullText.includes('+% -'), `Must never contain malformed double sign +-9.6 in dossier: ${fullText}`);
+    assert.ok(!rgyasDossier.whyActionParagraphs.join(' ').includes('reel sermaye maliyetinin üzerinde'), 'Negative EVA must never claim ROIC is above WACC');
+    assert.ok(!rgyasDossier.whyActionParagraphs.join(' ').includes('gerçek ekonomik değer yaratmasıdır'), 'Negative EVA must never claim positive economic value creation');
+    assert.ok(rgyasDossier.whyActionParagraphs.join(' ').includes('-9.6 puan negatif EVA makası'), 'Must explicitly state -9.6 puan negatif EVA makası');
+    assert.ok(!rgyasDossier.whyActionParagraphs.join(' ').includes('tahakkuk riskinden ayrışmaktadır'), '18% cash conversion must not claim separation from accrual risk');
+    const cashHighlight = rgyasDossier.standoutHighlights.find(h => h.tag === 'NAKİT AKIŞ KALİTESİ');
+    assert.ok(cashHighlight && !cashHighlight.title.includes('Güçlü İşletme Nakit Üretimi'), `18% cash conversion must not be labeled Güçlü İşletme Nakit Üretimi: ${cashHighlight?.title}`);
+  });
+
+  it('28. TCKRC (State Pollution Isolation & Sync Idempotency): Frontend sector state is isolated per report and syncReportTextWithValuation is idempotent', () => {
+    const pageSource = fs.readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8');
+    const simplySource = fs.readFileSync(new URL('../app/simply/simply-view.tsx', import.meta.url), 'utf8');
+
+    assert.ok(!pageSource.includes("if (selectedSector !== 'AUTO') return selectedSector;"), 'app/page.tsx must not allow manual upload selectedSector to override activeReport sector');
+    assert.ok(!pageSource.includes('if (bistData.sector) {\n        setSelectedSector(bistData.sector);\n      }'), 'handleBistDirectAnalysis must not pollute selectedSector state');
+    assert.ok(simplySource.includes('const currentSector: SectorType = useMemo('), 'SimplyView must derive currentSector directly from report.extractedData.sector / detectSector(report.ticker)');
+
+    const tckrcVal = {
+      current_price: 92.65,
+      fair_value: 46.84,
+      discount_pct: -49.4,
+      margin_of_safety: 0,
+      margin_of_safety_status: 'UNSAFE',
+      final_decision: 'ALMA',
+      is_value_trap: false,
+      value_trap_reasons: []
+    };
+    const staleReport = `### V. Değerleme\nİndirgenmiş nakit akışı ve çarpan analizimiz sonucunda hesaplanan adil değer **268.48 TL** seviyesindedir ve cari piyasa fiyatına göre **%114.8 getiri potansiyeli** taşımaktadır.\n### VI. Temel Riskler, Katalizörler ve Nihai Karar\nAnalist Kararı: **[AL]**`;
+    const sync1 = syncReportTextWithValuation(staleReport, tckrcVal);
+    const sync2 = syncReportTextWithValuation(sync1, tckrcVal);
+    assert.ok(sync1.includes('**46.84 TL**'), 'Must replace stale 268.48 TL fair value with 46.84 TL');
+    assert.ok(!sync1.includes('268.48 TL'), 'Must not leave stale 268.48 TL in report text');
+    assert.ok(sync1.includes('Analist Kararı: **[ALMA]**'), 'Must update decision to [ALMA]');
+    assert.equal(sync1, sync2, 'syncReportTextWithValuation must be 100% idempotent across repeated invocations');
+  });
+
+  it('29. All 53 Official Sectors Value Trap & General Asset Trap Coverage: Enforces sector-specific traps and sector-independent General Asset Trap Rule', () => {
+    // 1) Banking Negative Real ROE & NPL Trap
+    const bankTrap = evaluateValueTrap(
+      [{ period: '2026/06', net_income: 2000000000, equity: 40000000000, roe: 10.5, npl_ratio: 5.8, car_ratio: 12.5, expected_inflation: 25.0 }],
+      10.0, 15.0, 'BANKING'
+    );
+    assert.equal(bankTrap.isValueTrap, true, 'Bank with ROE 10.5% < Inflation 25% and NPL 5.8% must be flagged as Value Trap');
+    assert.ok(bankTrap.reasons.some(r => r.includes('Negatif Reel Özsermaye Kârlılığı') || r.includes('NPL')));
+
+    // 2) Insurance Combined Ratio > 105% & Negative Technical Balance Trap
+    const insTrap = evaluateValueTrap(
+      [{ period: '2026/06', net_income: 500000000, equity: 5000000000, roe: 18.0, combined_ratio: 108.5, technical_balance: -420000000 }],
+      20.0, 30.0, 'INSURANCE'
+    );
+    assert.equal(insTrap.isValueTrap, true, 'Insurance company with Combined Ratio 108.5% > 105% and Technical Balance < 0 must be flagged as Value Trap');
+    assert.ok(insTrap.reasons.some(r => r.includes('Birleşik Oran Tuzağı')));
+    assert.ok(insTrap.reasons.some(r => r.includes('Negatif Teknik Denge')));
+
+    // 3) Cyclical Commodity Peak Margin Trap
+    const cycTrap = evaluateValueTrap(
+      [{ period: '2026/06', ticker: 'EREGL', official_sector_name: 'Demir-Çelik Temel', revenue: 100000000000, ebitda: 34000000000, ebitda_margin: 34.0, mid_cycle_ebitda_margin: 15.0, pe: 4.2, roic: 8.0, real_wacc: 12.0, eva_spread: -4.0 }],
+      40.0, 60.0, 'INDUSTRIAL'
+    );
+    assert.equal(cycTrap.isValueTrap, true, 'Cyclical commodity company at peak margin (34% vs 15% mid-cycle) with P/E 4.2x must be flagged as Peak Margin Trap');
+    assert.ok(cycTrap.reasons.some(r => r.includes('Döngüsel Tepe Kâr Tuzağı')));
+
+    // 4) Tech / Software Cash Burn & Rule-of-40 Failure
+    const techTrap = evaluateValueTrap(
+      [{ period: '2026/06', official_sector_name: 'Yazılım ve Bilişim', revenue: 500000000, revenue_growth: 8.0, ebitda: 15000000, ebitda_margin: 3.0, net_income: -40000000, operating_cash_flow: -85000000, free_cash_flow: -110000000, roe: -6.0 }],
+      15.0, 25.0, 'TECH'
+    );
+    assert.equal(techTrap.isValueTrap, true, 'Tech company with cash burn and Rule-of-40 = 11% < 40% must be flagged as Value Trap');
+    assert.ok(techTrap.reasons.some(r => r.includes('Nakit Yakma Tuzağı')));
+    assert.ok(techTrap.reasons.some(r => r.includes('Kuralı-40')));
+
+    // 5) Sector-Independent General Asset Trap Rule (P/E > 80x, TTM ROE < Rf/4, EVA < -5 caps decision at NÖTR/ALMA)
+    const generalAssetTrapOpt = optimizeFinalDecision({
+      rawDecision: 'AL',
+      score: 78,
+      valuation: { current_price: 50.0, fair_value: 80.0, discount_pct: 60.0, is_value_trap: true, value_trap_reasons: ['Genel Varlık Tuzağı Kuralı'] },
+      marketPrice: 50.0,
+      fairValue: 80.0,
+      latestData: { equity: 10000000000, net_income: 50000000, operating_profit: 100000000, operating_cash_flow: 120000000, roe: 2.5, roic: 3.0, real_wacc: 12.0, eva_spread: -9.0, pe: 95.0, risk_free_rate: 28.0, is_tms29: true },
+      sector: 'INDUSTRIAL'
+    });
+    assert.notEqual(generalAssetTrapOpt.finalDecision, 'AL', 'General Asset Trap Rule must block AL regardless of sector');
+    assert.equal(generalAssetTrapOpt.finalDecision, 'NÖTR', 'General Asset Trap Rule must cap decision at NÖTR');
+  });
+
+  it('30. Frontend Review & SimplyView Isolation: activeReport is null when step !== "report", handleSelectReport resets state, and Single Source of Truth decision overrides raw text regexes', () => {
+    const pageSource = fs.readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8');
+    const simplySource = fs.readFileSync(new URL('../app/simply/simply-view.tsx', import.meta.url), 'utf8');
+
+    assert.ok(pageSource.includes("if (step !== 'report') {\n      return null;\n    }"), 'activeReport useMemo must return null whenever step !== "report" to prevent stale report data leaking into review/input steps');
+    assert.ok(pageSource.includes("setActiveReportId(null);\n    setTicker(targetTicker);\n    setSelectedSector('AUTO');"), 'handleBistDirectAnalysis must clear activeReportId and reset selectedSector to AUTO');
+    assert.ok(pageSource.includes("setActiveReportId(null);\n    setSelectedSector('AUTO');\n    setPipelineStep(1);"), 'handleExtract must clear activeReportId and reset selectedSector to AUTO');
+    assert.ok(simplySource.includes('const handleSelectReport = useCallback('), 'SimplyView must define handleSelectReport that resets local sector/view state before delegating');
+    assert.ok(simplySource.includes("if (normFallback === 'AL')"), 'parseVerdictNarrative in SimplyView must prioritize ValuationState fallbackDecision over loose rawText regexes');
+    assert.ok(simplySource.includes('isValueTrap: resolvedIsValueTrap'), 'SimplyView must pass resolvedIsValueTrap and resolvedValueTrapReasons into synthesizeInvestmentThesis');
+  });
+
+  it('31. Unconditional General Asset Trap Across Solvent Producers & Unpopulated P/E: F/K > 80x, TTM ROE < Rf/4, EVA < -5 triggers detectValueTrap and blocks AL even when OCF > 0 and latestData.pe is omitted', () => {
+    const allEngineSectors = [
+      'INDUSTRIAL', 'REIT', 'HOLDING', 'TECH', 'AVIATION', 'RETAIL',
+      'BANKING', 'INSURANCE', 'HEALTHCARE', 'UTILITIES_TELCO', 'FINANCIAL_SERVICES'
+    ];
+
+    for (const sec of allEngineSectors) {
+      // Case where operating_cash_flow > 0, net_debt < 0 (solvent cash producer), and pe is NOT pre-populated on latestData
+      // Price = 100 TL, Shares = 100,000,000 -> Market Cap = 10,000,000,000 TL
+      // Net Income = 100,000,000 TL (annual) -> Implied P/E = 100.0x (> 80x)
+      // Equity = 5,000,000,000 TL -> ROE = 2.0% (< Rf/4 = 7.0%), EVA = -8.5 (< -5.0)
+      const hist = [{
+        period: '2026/12',
+        revenue: 4000000000,
+        gross_profit: 900000000,
+        operating_profit: 450000000,
+        ebitda: 600000000,
+        net_income: 100000000,
+        equity: 5000000000,
+        net_debt: -500000000,
+        operating_cash_flow: 480000000,
+        free_cash_flow: 320000000,
+        share_count: 100000000,
+        shares_outstanding: 100000000,
+        roe: 2.0,
+        roic: 3.5,
+        real_wacc: 12.0,
+        eva_spread: -8.5,
+        risk_free_rate: 28.0,
+        current_ratio: 2.4,
+        is_tms29: true
+      }];
+
+      const trapRes = evaluateValueTrap(hist, 100.0, 160.0, sec);
+      assert.equal(trapRes.isValueTrap, true, `Sector ${sec} with derived P/E 100x (>80x), ROE 2.0% (<Rf/4), and EVA -8.5 (<-5) must be flagged as General Asset Trap even with positive OCF`);
+      assert.ok(trapRes.reasons.some(r => r.includes('Genel Varlık Tuzağı Kuralı') || r.includes('Varlık Tuzağı') || r.includes('Reel Özsermaye')), `Sector ${sec} must include General Asset Trap reason, got: ${JSON.stringify(trapRes.reasons)}`);
+
+      const optRes = optimizeFinalDecision({
+        rawDecision: 'AL',
+        score: 82,
+        valuation: { current_price: 100.0, fair_value: 160.0, discount_pct: 60.0 },
+        marketPrice: 100.0,
+        fairValue: 160.0,
+        latestData: hist[0],
+        sector: sec
+      });
+      assert.notEqual(optRes.finalDecision, 'AL', `Sector ${sec} must NEVER receive AL under General Asset Trap even when latestData.pe is omitted and score is 82`);
+    }
+  });
+
+  it('32. Valuation Dead-Code & Formula Weight Sum Integrity: Holding has no duplicate roe < 10.0 branch and Tourism/Media/Paper formula weights sum to 100%', () => {
+    const valSource = fs.readFileSync(new URL('../lib/valuation.ts', import.meta.url), 'utf8');
+    const holdingRoeMatches = valSource.match(/else if \(roe !== null && roe < 10\.0\)/g) || [];
+    assert.equal(holdingRoeMatches.length, 0, 'Unreachable duplicate else if (roe !== null && roe < 10.0) branch in HOLDING must be removed');
+
+    for (const secCase of [
+      { ticker: 'TRZM_TEST', official: 'Turizm', sector: 'INDUSTRIAL' },
+      { ticker: 'MDYA_TEST', official: 'Medya', sector: 'INDUSTRIAL' },
+      { ticker: 'KAGT_TEST', official: 'Kağıt Ürünleri', sector: 'INDUSTRIAL' }
+    ]) {
+      const mock = {
+        ticker: secCase.ticker,
+        official_sector_name: secCase.official,
+        current_price: 20.0,
+        share_count: 100000000,
+        paid_in_capital: 100000000,
+        financial_history: [{
+          period: '2026/12',
+          revenue: 5000000000,
+          gross_profit: 1500000000,
+          operating_profit: 900000000,
+          ebitda: 1100000000,
+          net_income: 650000000,
+          equity: 3200000000,
+          net_debt: 200000000,
+          roe: 20.3,
+          roic: 18.0,
+          real_wacc: 11.0,
+          eva_spread: 7.0,
+          is_tms29: true
+        }]
+      };
+      const res = computeSectorValuationAndDrivers(mock, 20.0, secCase.sector);
+      const formula = res.valuation.formula_display || '';
+      assert.ok(formula.includes('(%45)') && formula.includes('(%35)') && formula.includes('(%20)'), `${secCase.official} formula weights must be %45 + %35 + %20 = %100, got: ${formula}`);
+      assert.ok(!formula.includes('(%15)'), `${secCase.official} formula must not contain mismatched (%15) PD/DD weight`);
     }
   });
 

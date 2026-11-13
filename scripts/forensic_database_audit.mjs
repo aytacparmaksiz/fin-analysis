@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import fs from 'fs';
 import path from 'path';
 import { computeSectorValuationAndDrivers, calculateSectorScore, syncReportTextWithValuation } from '../lib/valuation.ts';
+import { detectSector } from '../lib/sectors.ts';
 
 // Ignore TLS certificate validation in development environment
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -46,31 +47,36 @@ export async function runForensicAudit() {
   console.log(`=`.repeat(85) + `\n`);
 
   let allData = [];
-  let page = 0;
-  const pageSize = 30;
+  let idQuery = supabase
+    .from('valuation_reports')
+    .select('id, ticker')
+    .order('ticker', { ascending: true });
+  if (tickerFilter) {
+    idQuery = idQuery.eq('ticker', tickerFilter);
+  }
+  const { data: idRows, error: idError } = await idQuery;
+  if (idError) {
+    console.error('Supabase ID listesi sorgu hatası:', idError);
+    process.exit(1);
+  }
 
-  while (true) {
-    let query = supabase
+  const allIds = (idRows || []).map(r => r.id);
+  const pageSize = 15;
+  for (let i = 0; i < allIds.length; i += pageSize) {
+    const batchIds = allIds.slice(i, i + pageSize);
+    const { data, error } = await supabase
       .from('valuation_reports')
       .select('id, ticker, period, price, decision, score, extracted_data, report')
-      .order('ticker', { ascending: true })
-      .range(page * pageSize, (page + 1) * pageSize - 1);
-
-    if (tickerFilter) {
-      query = query.eq('ticker', tickerFilter);
-    }
-
-    const { data, error } = await query;
+      .in('id', batchIds);
     if (error) {
-      console.error(`Supabase sorgu hatası (sayfa ${page}):`, error);
+      console.error(`Supabase sorgu hatası (batch ${i / pageSize}):`, error);
       break;
     }
-
-    if (!data || data.length === 0) break;
-    allData = allData.concat(data);
-    if (data.length < pageSize) break;
-    page++;
+    if (data && data.length > 0) {
+      allData = allData.concat(data);
+    }
   }
+  allData.sort((a, b) => String(a.ticker || '').localeCompare(String(b.ticker || '')));
 
   console.log(`Toplam İncelenen Rapor Sayısı: ${allData.length}`);
 
@@ -83,7 +89,7 @@ export async function runForensicAudit() {
     const curP = Number(r.price || val.current_price || ext.current_price || 0);
     const tgtP = Number(val.fair_value || ext.fair_value || ext.target_price || 0);
     const dec = r.decision || val.final_decision;
-    const score = Number(r.score || ext.score || 0);
+    const score = parseInt(String(r.score || ext.score || ext.scoreResult?.totalScore || 0), 10) || 0;
     const hist = ext.financial_history || [];
     const latest = hist.length > 0 ? hist[hist.length - 1] : {};
 
@@ -113,7 +119,14 @@ export async function runForensicAudit() {
 
     // Invariant 2: Loss maker with AL decision
     const netIncomeTTM = latest.net_income_ttm;
-    const isLossMaker = ((netIncome != null && netIncome < 0 && (netIncomeTTM == null || netIncomeTTM < 0)) || (ebit != null && ebit < 0) || (grossProfit != null && grossProfit < 0) || (roe != null && roe < -2.0));
+    const isBankOrFin = ['BANKING', 'INSURANCE', 'FINANCIAL_SERVICES'].includes(ext?.sector);
+    const isHarmlessRetailReeskont = ext?.sector === 'RETAIL' && grossProfit > 0 && (latest.ebitda ?? 0) > 0 && netIncome > 0;
+    const isLossMaker = (
+      (netIncome != null && netIncome < 0 && (netIncomeTTM == null || netIncomeTTM < 0)) ||
+      (!isBankOrFin && !isHarmlessRetailReeskont && ebit != null && ebit < 0) ||
+      (!isBankOrFin && grossProfit != null && grossProfit < 0) ||
+      (netIncome != null && netIncome < 0 && roe != null && roe < -2.0)
+    );
     if (dec === 'AL' && isLossMaker) {
       flags.push({
         rule: 'INV-2: LOSS_MAKER_RECOMMENDED_AS_BUY',
@@ -183,6 +196,23 @@ export async function runForensicAudit() {
       });
     }
 
+    // Invariant 9: Value Trap or General Asset Trap with AL decision
+    const isTrapFlagged = Boolean(val.is_value_trap || ext?.optimization?.isValueTrap);
+    if (dec === 'AL' && isTrapFlagged) {
+      flags.push({
+        rule: 'INV-9: VALUE_TRAP_RECOMMENDED_AS_BUY',
+        message: 'Şirket Değer Tuzağı (is_value_trap=true) olarak işaretlenmiş olmasına rağmen AL kararı üretilmiş!'
+      });
+    }
+
+    // Invariant 10: Sign contradiction (+- or -+) in report text
+    if (r.report && /(\+-|-\+)\d/.test(r.report)) {
+      flags.push({
+        rule: 'INV-10: REPORT_TEXT_SIGN_CONTRADICTION',
+        message: 'Rapor metninde çift işaret (+- / -+) matematiksel/dilbilgisel çelişkisi tespit edildi.'
+      });
+    }
+
     if (flags.length > 0) {
       anomalies.push({
         id: r.id,
@@ -223,8 +253,10 @@ export async function runForensicAudit() {
       if (shouldFix && !shouldUpgradeAll) {
         try {
           console.log(`   🔄 ${a.ticker} için güncel değerleme motoru çalıştırılıyor...`);
-          const newValResult = computeSectorValuationAndDrivers(a.extractedData, a.price);
-          const newScoreResult = calculateSectorScore(a.extractedData, a.extractedData.sector || 'INDUSTRIAL');
+          const trueSector = detectSector(a.ticker, a.extractedData?.company_name) || a.extractedData?.sector || 'INDUSTRIAL';
+          const cleanExt = { ...a.extractedData, ticker: a.ticker, sector: trueSector };
+          const newValResult = computeSectorValuationAndDrivers(cleanExt, a.price, trueSector);
+          const newScoreResult = newValResult.scoreResult || calculateSectorScore(cleanExt, trueSector);
 
           const newDec = newValResult.valuation.final_decision;
           const newFairValue = newValResult.valuation.fair_value;
@@ -234,9 +266,12 @@ export async function runForensicAudit() {
 
           // Update Supabase
           const updatedExtracted = {
-            ...a.extractedData,
+            ...cleanExt,
             fair_value: newFairValue,
             target_price: newFairValue,
+            drivers: newValResult.drivers,
+            scoreResult: newScoreResult,
+            optimization: newValResult.optimization,
             valuation: {
               ...(a.extractedData.valuation || {}),
               ...newValResult.valuation,
@@ -292,17 +327,22 @@ export async function runForensicAudit() {
       try {
         const curPrice = Number(r.price) || 0;
         const ext = r.extracted_data || {};
-        const newValResult = computeSectorValuationAndDrivers(ext, curPrice);
-        const newScoreResult = calculateSectorScore(ext, ext.sector || 'INDUSTRIAL');
+        const trueSector = detectSector(r.ticker, ext.company_name) || ext.sector || 'INDUSTRIAL';
+        const cleanExt = { ...ext, ticker: r.ticker, sector: trueSector };
+        const newValResult = computeSectorValuationAndDrivers(cleanExt, curPrice, trueSector);
+        const newScoreResult = newValResult.scoreResult || calculateSectorScore(cleanExt, trueSector);
 
         const newDec = newValResult.valuation.final_decision;
         const newFairValue = newValResult.valuation.fair_value;
         const newScore = `${newScoreResult.totalScore}/100`;
 
         const updatedExtracted = {
-          ...ext,
+          ...cleanExt,
           fair_value: newFairValue,
           target_price: newFairValue,
+          drivers: newValResult.drivers,
+          scoreResult: newScoreResult,
+          optimization: newValResult.optimization,
           valuation: {
             ...(ext.valuation || {}),
             ...newValResult.valuation,
