@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { X, Lock, Mail, User, ShieldCheck, Sparkles, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Lock, Mail, User, ShieldCheck, Sparkles, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { FairValueLogo } from '../page';
 
 export interface UserSession {
@@ -23,10 +23,20 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -92,9 +102,12 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={onClose}
+    >
       <div 
-        className="relative w-full max-w-md bg-[#161a22] border border-[#2e3440] rounded-2xl shadow-2xl overflow-hidden divide-y divide-[#282d37]"
+        className="relative w-full max-w-md bg-[#161a22] border border-[#2e3440] rounded-2xl shadow-2xl overflow-hidden divide-y divide-[#282d37] animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Başlık Çubuğu */}
@@ -113,6 +126,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
           <button
             type="button"
             onClick={onClose}
+            aria-label="Kapat"
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#21262d] transition cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -165,7 +179,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Aytaç Parmaksız"
-                  className="w-full bg-[#12151b] border border-[#2e3440] rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+                  className="w-full bg-[#12151b] border border-[#2e3440] rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
                 />
               </div>
             </div>
@@ -182,7 +196,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="yatirimci@example.com"
-                className="w-full bg-[#12151b] border border-[#2e3440] rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+                className="w-full bg-[#12151b] border border-[#2e3440] rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
               />
             </div>
           </div>
@@ -199,12 +213,20 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-[#12151b] border border-[#2e3440] rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+                className="w-full bg-[#12151b] border border-[#2e3440] rounded-xl pl-9 pr-9 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(prev => !prev)}
+                aria-label={showPassword ? 'Şifreyi gizle' : 'Şifreyi göster'}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-slate-300 transition cursor-pointer"
+              >
+                {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
             </div>
           </div>
 
@@ -237,7 +259,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
             <button
               type="button"
               onClick={handleDemoLogin}
-              className="w-full py-2 bg-[#21262d] hover:bg-[#2b313d] text-[#f5c242] rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 border border-[#2e3440] cursor-pointer"
+              className="w-full py-2.5 bg-[#21262d] hover:bg-[#2b313d] hover:border-[#f5c242]/40 text-[#f5c242] rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 border border-[#2e3440] cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>Hızlı Demo Girişi (Tek Tıkla Dene)</span>

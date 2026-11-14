@@ -4668,18 +4668,26 @@ export default function ValuationTerminal({
             <button
               type="button"
               onClick={() => setIsSpotlightOpen(true)}
-              className="flex items-center gap-2 bg-[#181b20] hover:bg-[#1f242c] border border-[#2b313d] hover:border-slate-500 py-1.5 px-3 rounded-full text-xs text-slate-400 transition cursor-pointer w-32 sm:w-44"
-              title="Hızlı Şirket Arama"
+              className="flex items-center justify-between gap-2 bg-[#181b20] hover:bg-[#1f242c] border border-[#2b313d] hover:border-slate-500 py-1.5 px-3 rounded-full text-xs text-slate-400 transition cursor-pointer w-32 sm:w-48 group"
+              title="Hızlı Şirket Arama (Ctrl+K)"
             >
-              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <span className="text-slate-400 truncate">Hisse Ara...</span>
+              <span className="flex items-center gap-2 min-w-0">
+                <Search className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-400 transition shrink-0" />
+                <span className="text-slate-400 group-hover:text-slate-200 transition truncate">Hisse Ara...</span>
+              </span>
+              <kbd className="hidden sm:inline-block text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#12151b] border border-[#2e3440] text-slate-400 shrink-0">
+                Ctrl K
+              </kbd>
             </button>
 
             {/* Bildirim Çanı */}
             <div className="relative">
               <button
                 type="button"
-                onClick={() => setIsNotificationOpen(prev => !prev)}
+                onClick={() => {
+                  setIsNotificationOpen(prev => !prev);
+                  setIsUserMenuOpen(false);
+                }}
                 className="p-2 rounded-full hover:bg-[#1c2027] text-slate-400 hover:text-white transition cursor-pointer relative"
                 title="Bildirimler"
               >
@@ -4688,21 +4696,27 @@ export default function ValuationTerminal({
               </button>
 
               {isNotificationOpen && (
-                <div 
-                  className="absolute right-0 mt-2 w-72 bg-[#161a22] border border-[#2e3440] rounded-xl shadow-2xl p-3 z-50 text-xs space-y-2 animate-in fade-in zoom-in-95 duration-150"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="flex items-center justify-between font-bold text-white border-b border-[#282d37] pb-2">
-                    <span>Sistem Bildirimleri</span>
-                    <span className="text-[10px] font-mono text-emerald-400">Aktif</span>
-                  </div>
-                  <div className="space-y-2 text-slate-300">
-                    <div className="p-2 rounded-lg bg-[#12151b] border border-[#282d37] space-y-1">
-                      <div className="font-semibold text-white">BIST Resmi Çarpanları Senkronize</div>
-                      <p className="text-[11px] text-slate-400">İş Yatırım 630 BIST şirketinin günlük çarpanları ve sektör ortalamaları günceldir.</p>
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsNotificationOpen(false)}
+                  />
+                  <div 
+                    className="absolute right-0 mt-2 w-72 bg-[#161a22] border border-[#2e3440] rounded-xl shadow-2xl p-3 z-50 text-xs space-y-2 animate-in fade-in zoom-in-95 duration-150"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between font-bold text-white border-b border-[#282d37] pb-2">
+                      <span>Sistem Bildirimleri</span>
+                      <span className="text-[10px] font-mono text-emerald-400">Aktif</span>
+                    </div>
+                    <div className="space-y-2 text-slate-300">
+                      <div className="p-2 rounded-lg bg-[#12151b] border border-[#282d37] space-y-1">
+                        <div className="font-semibold text-white">BIST Resmi Çarpanları Senkronize</div>
+                        <p className="text-[11px] text-slate-400">İş Yatırım 630 BIST şirketinin günlük çarpanları ve sektör ortalamaları günceldir.</p>
+                      </div>
                     </div>
                   </div>
-                </div>
+                </>
               )}
             </div>
 
@@ -4725,7 +4739,10 @@ export default function ValuationTerminal({
               {userSession ? (
                 <button
                   type="button"
-                  onClick={() => setIsUserMenuOpen(prev => !prev)}
+                  onClick={() => {
+                    setIsUserMenuOpen(prev => !prev);
+                    setIsNotificationOpen(false);
+                  }}
                   className="w-8 h-8 rounded-full bg-[#21262d] border border-[#383e4d] hover:border-emerald-400 text-xs font-bold text-white flex items-center justify-center transition cursor-pointer shadow-sm"
                   title={userSession.name}
                 >
@@ -4744,62 +4761,68 @@ export default function ValuationTerminal({
 
               {/* Kullanıcı Profil Menüsü Dropdown */}
               {isUserMenuOpen && userSession && (
-                <div 
-                  className="absolute right-0 mt-2 w-56 bg-[#161a22] border border-[#2e3440] rounded-xl shadow-2xl p-2 z-50 text-xs divide-y divide-[#282d37] animate-in fade-in zoom-in-95 duration-150"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="p-2.5">
-                    <div className="font-bold text-white truncate">{userSession.name}</div>
-                    <div className="text-[11px] text-slate-400 font-mono truncate">{userSession.email}</div>
-                    <div className="text-[10px] text-emerald-400 font-mono mt-1">{userSession.role}</div>
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsUserMenuOpen(false)}
+                  />
+                  <div 
+                    className="absolute right-0 mt-2 w-56 bg-[#161a22] border border-[#2e3440] rounded-xl shadow-2xl p-2 z-50 text-xs divide-y divide-[#282d37] animate-in fade-in zoom-in-95 duration-150"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="p-2.5">
+                      <div className="font-bold text-white truncate">{userSession.name}</div>
+                      <div className="text-[11px] text-slate-400 font-mono truncate">{userSession.email}</div>
+                      <div className="text-[10px] text-emerald-400 font-mono mt-1">{userSession.role}</div>
+                    </div>
+                    <div className="py-1">
+                      <button
+                        type="button"
+                        onClick={() => { navigateTo('portfolio'); setIsUserMenuOpen(false); }}
+                        className="w-full flex items-center gap-2 p-2 rounded-lg text-slate-300 hover:text-white hover:bg-[#21262d] text-left cursor-pointer"
+                      >
+                        <Briefcase className="w-3.5 h-3.5 text-[#f5c242]" />
+                        <span>Portföyüm ({portfolioTickers.length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { navigateTo('favorites'); setIsUserMenuOpen(false); }}
+                        className="w-full flex items-center gap-2 p-2 rounded-lg text-slate-300 hover:text-white hover:bg-[#21262d] text-left cursor-pointer"
+                      >
+                        <Star className="w-3.5 h-3.5 text-amber-400" />
+                        <span>İzleme Listem ({favoriteTickers.length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { exportBackup(); setIsUserMenuOpen(false); }}
+                        className="w-full flex items-center gap-2 p-2 rounded-lg text-slate-300 hover:text-white hover:bg-[#21262d] text-left cursor-pointer"
+                        title="Analiz edilen şirketleri JSON olarak indir"
+                      >
+                        <Download className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Yedeği Dışa Aktar (JSON)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { backupFileInputRef.current?.click(); setIsUserMenuOpen(false); }}
+                        className="w-full flex items-center gap-2 p-2 rounded-lg text-slate-300 hover:text-white hover:bg-[#21262d] text-left cursor-pointer"
+                        title="Başka bilgisayardan indirilen JSON yedeğini yükle"
+                      >
+                        <Upload className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Yedekten İçe Aktar (JSON)</span>
+                      </button>
+                    </div>
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-2 p-2 rounded-lg text-rose-400 hover:bg-rose-500/10 text-left cursor-pointer"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Çıkış Yap</span>
+                      </button>
+                    </div>
                   </div>
-                  <div className="py-1">
-                    <button
-                      type="button"
-                      onClick={() => { navigateTo('portfolio'); setIsUserMenuOpen(false); }}
-                      className="w-full flex items-center gap-2 p-2 rounded-lg text-slate-300 hover:text-white hover:bg-[#21262d] text-left cursor-pointer"
-                    >
-                      <Briefcase className="w-3.5 h-3.5 text-[#f5c242]" />
-                      <span>Portföyüm ({portfolioTickers.length})</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { navigateTo('favorites'); setIsUserMenuOpen(false); }}
-                      className="w-full flex items-center gap-2 p-2 rounded-lg text-slate-300 hover:text-white hover:bg-[#21262d] text-left cursor-pointer"
-                    >
-                      <Star className="w-3.5 h-3.5 text-amber-400" />
-                      <span>İzleme Listem ({favoriteTickers.length})</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { exportBackup(); setIsUserMenuOpen(false); }}
-                      className="w-full flex items-center gap-2 p-2 rounded-lg text-slate-300 hover:text-white hover:bg-[#21262d] text-left cursor-pointer"
-                      title="Analiz edilen şirketleri JSON olarak indir"
-                    >
-                      <Download className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Yedeği Dışa Aktar (JSON)</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { backupFileInputRef.current?.click(); setIsUserMenuOpen(false); }}
-                      className="w-full flex items-center gap-2 p-2 rounded-lg text-slate-300 hover:text-white hover:bg-[#21262d] text-left cursor-pointer"
-                      title="Başka bilgisayardan indirilen JSON yedeğini yükle"
-                    >
-                      <Upload className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>Yedekten İçe Aktar (JSON)</span>
-                    </button>
-                  </div>
-                  <div className="pt-1">
-                    <button
-                      type="button"
-                      onClick={handleLogout}
-                      className="w-full flex items-center gap-2 p-2 rounded-lg text-rose-400 hover:bg-rose-500/10 text-left cursor-pointer"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span>Çıkış Yap</span>
-                    </button>
-                  </div>
-                </div>
+                </>
               )}
             </div>
 
@@ -7991,8 +8014,21 @@ export default function ValuationTerminal({
       >
         <button
           type="button"
+          onClick={() => navigateTo('input')}
+          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer min-w-[46px] ${
+            step === 'input'
+              ? 'text-emerald-400 font-bold'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <PlusCircle className="w-4 h-4" />
+          <span className="text-[10px]">Analiz</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => navigateTo('saved')}
-          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer min-w-[48px] ${
+          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer min-w-[46px] ${
             step === 'saved' && analyzedTab !== 'PORTFOLIO' && analyzedTab !== 'FAVORITES'
               ? 'text-emerald-400 font-bold'
               : 'text-slate-400 hover:text-white'

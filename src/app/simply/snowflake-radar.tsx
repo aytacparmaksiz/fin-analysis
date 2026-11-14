@@ -182,10 +182,22 @@ export default function SnowflakeRadar({
             return (
               <g
                 key={meta.key}
-                className="cursor-pointer transition-all duration-200"
+                role="button"
+                tabIndex={0}
+                aria-label={`${meta.labelTr} (${axes[meta.key]?.score ?? 0}/6 Puan)`}
+                className="cursor-pointer transition-all duration-200 focus:outline-none"
                 onMouseEnter={() => setHoveredAxis(meta.key)}
                 onMouseLeave={() => setHoveredAxis(null)}
+                onFocus={() => setHoveredAxis(meta.key)}
+                onBlur={() => setHoveredAxis(null)}
+                onTouchStart={() => setHoveredAxis(meta.key)}
                 onClick={() => handleSectorClick(meta.sectionId)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSectorClick(meta.sectionId);
+                  }
+                }}
               >
                 {/* Dış Halka Bandı (rMid -> maxR) */}
                 <path
