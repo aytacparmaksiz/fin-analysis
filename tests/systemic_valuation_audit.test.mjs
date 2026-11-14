@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { computeSectorValuationAndDrivers, calculateSectorScore, calculateDuPont5Step, analyzeRelatedPartyAndCapitalAllocationRisk, isTfrs10InvestmentEntity, optimizeFinalDecision, detectValueTrap, evaluateValueTrap, syncReportTextWithValuation } from '../lib/valuation.ts';
 import { synthesizeInvestmentThesis } from '../lib/investment-thesis-synthesizer.ts';
+import { AGESA_SAMPLE_REPORT_TEXT, VESBE_SAMPLE_REPORT_TEXT } from '../lib/sample-data.ts';
 import { computeSnowflakeAnalysis } from '../lib/snowflake.ts';
 import { IsYatirimApiAdapter } from '../lib/isyatirim-adapter.ts';
 
@@ -1264,6 +1265,167 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
       assert.ok(formula.includes('(%45)') && formula.includes('(%35)') && formula.includes('(%20)'), `${secCase.official} formula weights must be %45 + %35 + %20 = %100, got: ${formula}`);
       assert.ok(!formula.includes('(%15)'), `${secCase.official} formula must not contain mismatched (%15) PD/DD weight`);
     }
+  });
+
+  it('33. Section 7 (Yatırım Tezi) & Section 8 (Analiz Raporu) Split, Chapter Parser, Verdict Narrative & Negative EBITDA Breaker Integrity', () => {
+    // 1. Negative EBITDA Margin in synthesizeInvestmentThesis (e.g., VESBE -1.8%)
+    const vesbeThesis = synthesizeInvestmentThesis({
+      ticker: 'VESBE',
+      sector: 'INDUSTRIAL',
+      officialSectorName: 'Dayanıklı Tüketim',
+      decision: 'ALMA',
+      currentPrice: 3.95,
+      fairValue: 2.46,
+      ebitdaMargin: -1.8,
+      grossMargin: 7.3,
+      netMargin: -6.7,
+      roe: -11.2,
+      roic: -4.5,
+      wacc: 12.2,
+      evaSpread: -16.7,
+      netDebt: 26230000,
+      ebitda: -623450,
+      operatingCashFlow: -2540000,
+      freeCashFlow: -3120000,
+      netIncome: -2280000,
+      currentRatio: 0.78,
+      isValueTrap: true,
+      valueTrapReasons: ['Negatif FAVÖK ve nakit yakımı']
+    });
+
+    assert.equal(vesbeThesis.sectoralComparisonBadges[1].label, 'FD / FAVÖK & PD/DD', 'Badge label must have space after ampersand');
+    assert.ok(
+      vesbeThesis.thesisBreakers[0].includes('Operasyonel Zarar Sarmalı') && !vesbeThesis.thesisBreakers[0].includes('%5 eşiğinin altına sarkması'),
+      `Negative EBITDA margin (-1.8%) must not claim dropping below +5% threshold; got: ${vesbeThesis.thesisBreakers[0]}`
+    );
+
+    // 2. Low positive EBITDA Margin (e.g. 4.0%) scales threshold below 4.0% instead of clamping to 5.0%
+    const lowMarginThesis = synthesizeInvestmentThesis({
+      ticker: 'LOWM',
+      sector: 'INDUSTRIAL',
+      decision: 'NÖTR',
+      currentPrice: 10,
+      fairValue: 11,
+      ebitdaMargin: 4.0,
+      grossMargin: 12.0,
+      netMargin: 1.5,
+      roe: 12.0,
+      roic: 10.0,
+      wacc: 11.0,
+      evaSpread: -1.0
+    });
+    assert.ok(
+      lowMarginThesis.thesisBreakers[0].includes('%2.8 eşiğinin altına sarkması'),
+      `4.0% EBITDA margin must set breaker threshold below 4.0% (2.8%), got: ${lowMarginThesis.thesisBreakers[0]}`
+    );
+
+    // 3. Verify simply-view.tsx mirror parity and Section 7 / 8 / 9 structure
+    const appSimply = fs.readFileSync(new URL('../app/simply/simply-view.tsx', import.meta.url), 'utf8');
+    const srcSimply = fs.readFileSync(new URL('../src/app/simply/simply-view.tsx', import.meta.url), 'utf8');
+    const libSynth = fs.readFileSync(new URL('../lib/investment-thesis-synthesizer.ts', import.meta.url), 'utf8');
+    const srcSynth = fs.readFileSync(new URL('../src/lib/investment-thesis-synthesizer.ts', import.meta.url), 'utf8');
+
+    assert.equal(appSimply, srcSimply, 'app/simply/simply-view.tsx and src/app/simply/simply-view.tsx must be 100% identical');
+    assert.equal(libSynth, srcSynth, 'lib/investment-thesis-synthesizer.ts and src/lib/investment-thesis-synthesizer.ts must be 100% identical');
+
+    assert.ok(appSimply.includes("{ id: 'sec-yatirim-tezi', num: '7', label: 'Yatırım Tezi'"), 'Nav must have 7. Yatırım Tezi');
+    assert.ok(appSimply.includes("{ id: 'sec-analist', num: '8', label: 'Analiz Raporu'"), 'Nav must have 8. Analiz Raporu');
+    assert.ok(appSimply.includes("{ id: 'sec-gecmis', num: '9', label: 'Geçmiş'"), 'Nav must have 9. Geçmiş');
+    assert.ok(appSimply.includes('cleanMarkdown(report.report, effectiveDecision, false)'), 'handleCopyReportText must pass stripTrailingVerdict=false so copied report preserves Analyst Verdict');
+    assert.ok(appSimply.includes('Emniyet\\s*(?:Marjı|Sınırları|Sınırı)'), 'parseVerdictNarrative must match Riskler & Emniyet Sınırları');
+    assert.ok(appSimply.includes('Finansal\\s+Sağlık\\s+Skoru'), 'parseVerdictNarrative thesisMatch must stop before Finansal Sağlık Skoru');
+
+    // 4. Execute cleanMarkdown, parseReportIntoChapters, and parseVerdictNarrative from simply-view.tsx on real report formats
+    const cleanSnippetFn = (str, maxLen = 240) => {
+      let s = str
+        .replace(/^\s*[-*•>]\s*/gm, '')
+        .replace(/#+\s*/g, '')
+        .replace(/\*\*/g, '')
+        .replace(/\n+/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+      if (s.length <= maxLen) return s;
+      const cut = s.slice(0, maxLen);
+      const lastPeriod = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
+      if (lastPeriod > maxLen * 0.55) return cut.slice(0, lastPeriod + 1).trim();
+      const lastSpace = cut.lastIndexOf(' ');
+      return (lastSpace > 0 ? cut.slice(0, lastSpace) : cut).trim() + '…';
+    };
+
+    const parseVerdictMatch = appSimply.match(/function parseVerdictNarrative[\s\S]*?(?=\nfunction cleanMarkdown)/);
+    const cleanMdMatch = appSimply.match(/function cleanMarkdown[\s\S]*?(?=\ninterface ParsedReportChapter)/);
+    const parseChaptersMatch = appSimply.match(/function parseReportIntoChapters[\s\S]*?(?=\n\ninterface ErrorBoundaryProps)/);
+    assert.ok(parseVerdictMatch && cleanMdMatch && parseChaptersMatch, 'Helper functions must be extractable from simply-view.tsx');
+
+    const jsCode = [
+      parseVerdictMatch[0]
+        .replace(/rawText:\s*string,\s*fallbackDecision:\s*string\s*=\s*'AL',\s*context\?:\s*\{\s*ticker\?:\s*string;\s*discountPct\?:\s*number\s*\}\s*\):\s*ParsedVerdictNarrative/, 'rawText, fallbackDecision = "AL", context)')
+        .replace(/let verdict:\s*'AL'\s*\|\s*'ALMA'\s*\|\s*'NÖTR'\s*=/, 'let verdict ='),
+      cleanMdMatch[0]
+        .replace(/text:\s*string,\s*decision\?:\s*string,\s*stripTrailingVerdict\s*=\s*true\):\s*string/, 'text, decision, stripTrailingVerdict = true)')
+        .replace(/\(_match:\s*string,\s*inner:\s*string\)/, '(_match, inner)')
+        .replace(/\(l:\s*string\)/g, '(l)'),
+      parseChaptersMatch[0]
+        .replace(/markdownText:\s*string\):\s*ParsedReportChapter\[\]/, 'markdownText)')
+        .replace(/const CHAPTER_META:\s*Record<string,\s*\{\s*id:\s*string;\s*subtitle:\s*string;\s*tag:\s*string\s*\}>/, 'const CHAPTER_META')
+        .replace(/const chapters:\s*ParsedReportChapter\[\]/, 'const chapters')
+        .replace(/const usedRomans\s*=\s*new Set<string>\(\)/, 'const usedRomans = new Set()')
+        .replace(/let introLines:\s*string\[\]/, 'let introLines')
+        .replace(/let currentHeader:\s*\{\s*roman:\s*string;\s*title:\s*string\s*\}\s*\|\s*null/, 'let currentHeader')
+        .replace(/let currentBodyLines:\s*string\[\]/, 'let currentBodyLines'),
+      'return { parseVerdictNarrative, cleanMarkdown, parseReportIntoChapters };'
+    ].join('\n\n');
+
+    const helpers = new Function('cleanSnippet', jsCode)(cleanSnippetFn);
+
+    // 4a. Deterministic report format from lib/valuation.ts (with Fin. Sağlık Skoru & Riskler & Emniyet Sınırları)
+    const sampleDeterministicReport = `## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ
+**Temel Yatırım Tezi:** Şirket güçlü nakit akışı ve pozitif EVA üretmektedir.
+
+**Finansal Sağlık Skoru:** 84/100 (Güçlü Bilanço).
+
+## VI. SKOR MATRİSİ VE NİHAİ KARAR
+### Analist Kararı: [AL]
+
+Şirket iskontolu işlem görmektedir.
+
+**Kilit Katalizörler:**
+- İhracat artışı ve marj genişlemesi.
+
+**Riskler & Emniyet Sınırları:**
+- Kur oynaklığı ve işletme sermayesi ihtiyacı.
+- Ayı senaryosu taban fiyatı: 42,50 TL.`;
+
+    const verdictParsed = helpers.parseVerdictNarrative(sampleDeterministicReport, 'AL', { ticker: 'TEST', discountPct: 28.5 });
+    assert.equal(verdictParsed.verdict, 'AL');
+    assert.ok(!verdictParsed.thesis.includes('Finansal Sağlık Skoru'), `Thesis must not leak Finansal Sağlık Skoru, got: ${verdictParsed.thesis}`);
+    assert.ok(!verdictParsed.catalysts.includes('Riskler'), `Catalysts must not leak Riskler header, got: ${verdictParsed.catalysts}`);
+    assert.ok(verdictParsed.risks.includes('Kur oynaklığı') && verdictParsed.risks.includes('42,50 TL'), `Risks must extract Riskler & Emniyet Sınırları, got: ${verdictParsed.risks}`);
+
+    // 4b. Copy report (stripTrailingVerdict = false) vs Display chapters (stripTrailingVerdict = true)
+    const copiedMd = helpers.cleanMarkdown(sampleDeterministicReport, 'AL', false);
+    const displayMd = helpers.cleanMarkdown(sampleDeterministicReport, 'AL', true);
+    assert.ok(copiedMd.includes('Analist Kararı:') && copiedMd.includes('Riskler & Emniyet Sınırları:'), 'Copied report must retain trailing Analyst Verdict and Risks');
+    assert.ok(!displayMd.includes('Analist Kararı:'), 'Display markdown for 8.1 chapters must strip trailing Analyst Verdict (rendered in 8.2)');
+
+    // 4c. AGESA_SAMPLE_REPORT_TEXT and VESBE_SAMPLE_REPORT_TEXT chapter parsing
+    const agesaChapters = helpers.parseReportIntoChapters(helpers.cleanMarkdown(AGESA_SAMPLE_REPORT_TEXT, 'AL', true));
+    assert.equal(agesaChapters.length, 6, `AGESA sample report must parse into 6 chapters (I..VI), got ${agesaChapters.length}`);
+    assert.deepEqual(agesaChapters.map(c => c.roman), ['I', 'II', 'III', 'IV', 'V', 'VI']);
+    assert.deepEqual(agesaChapters.map(c => c.id), ['sec-analist-i', 'sec-analist-ii', 'sec-analist-iii', 'sec-analist-iv', 'sec-analist-v', 'sec-analist-vi']);
+
+    const vesbeChapters = helpers.parseReportIntoChapters(helpers.cleanMarkdown(VESBE_SAMPLE_REPORT_TEXT, 'ALMA', true));
+    assert.equal(vesbeChapters.length, 6, `VESBE sample report must parse into 6 chapters (I..VI), got ${vesbeChapters.length}`);
+    assert.deepEqual(vesbeChapters.map(c => c.roman), ['I', 'II', 'III', 'IV', 'V', 'VI']);
+
+    // 4d. Arabic numbered ## 1. / ### 1. headers normalize to Roman numerals without duplicate number prefix
+    const arabicMd = `### 1. YÖNETİCİ ÖZETİ\nDetay 1\n## 2. KÂR KALİTESİ\nDetay 2`;
+    const arabicChapters = helpers.parseReportIntoChapters(helpers.cleanMarkdown(arabicMd, 'AL', true));
+    assert.equal(arabicChapters.length, 2);
+    assert.equal(arabicChapters[0].roman, 'I');
+    assert.equal(arabicChapters[0].title, 'YÖNETİCİ ÖZETİ');
+    assert.equal(arabicChapters[1].roman, 'II');
+    assert.equal(arabicChapters[1].title, 'KÂR KALİTESİ');
   });
 
 });

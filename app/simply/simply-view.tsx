@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -499,7 +499,7 @@ function parseVerdictNarrative(
     };
   }
 
-  let cleaned = rawText.replace(/\*\*(Yatırım\s+Tezi|Temel\s+Yatırım\s+Tezi|Gerekçe|Kilit\s+Katalizörler|Katalizörler|Riskler\s*(?:&|ve)\s*Emniyet\s*Marjı|Riskler\s*ve\s*Belirsizlikler|Temel\s*Riskler)\s*:\*\*/gi, '$1:');
+  let cleaned = rawText.replace(/\*\*(Yatırım\s+Tezi|Temel\s+Yatırım\s+Tezi|Gerekçe|Kilit\s+Katalizörler|Katalizörler|Riskler\s*(?:&|ve)\s*Emniyet\s*(?:Marjı|Sınırları|Sınırı)|Riskler\s*ve\s*Belirsizlikler|Temel\s*Riskler)\s*:\*\*/gi, '$1:');
   cleaned = cleaned.replace(/\[\s*([^\]]+?)\s*\]/g, '$1').trim();
 
   // Detect verdict: AL, ALMA, NÖTR (Tekil Hakikat Kaynağı / ValuationState öncelikli)
@@ -531,11 +531,18 @@ function parseVerdictNarrative(
   const bodyWithoutVerdict = cleaned.replace(/^(?:#{1,4}\s*)?\*{0,2}Analist\s+Karar[ıi]\s*[:=-]?[^\n:]*(?:\(Yatırım Önerisi\))?\*{0,2}\s*/i, '').trim();
 
   // Extract thesis, catalysts, risks with strict boundary that stops at any markdown headers or subsequent sections
-  const thesisMatch = bodyWithoutVerdict.match(/(?:Yatırım\s+Tezi|Temel\s+Yatırım\s+Tezi|Gerekçe)\s*[:=-]?\s*([\s\S]*?)(?=(?:\n\s*#{1,3}\s+|Kilit\s+Katalizörler|Katalizörler|Riskler\s*(?:&|ve)\s*Emniyet\s*Marjı|Riskler\s*ve\s*Belirsizlikler|Temel\s*Riskler|$))/i);
-  const catalystMatch = bodyWithoutVerdict.match(/(?:Kilit\s+Katalizörler|Katalizörler)\s*[:=-]?\s*([\s\S]*?)(?=(?:\n\s*#{1,3}\s+|Riskler\s*(?:&|ve)\s*Emniyet\s*Marjı|Riskler\s*ve\s*Belirsizlikler|Temel\s*Riskler|$))/i);
-  const riskMatch = bodyWithoutVerdict.match(/(?:Riskler\s*(?:&|ve)\s*Emniyet\s*Marjı|Riskler\s*ve\s*Belirsizlikler|Temel\s*Riskler)\s*[:=-]?\s*([\s\S]*?)(?=(?:\n\s*#{1,3}\s+|$))/i);
+  const thesisMatch = bodyWithoutVerdict.match(/(?:Yatırım\s+Tezi|Temel\s+Yatırım\s+Tezi|Gerekçe)\s*[:=-]?\s*([\s\S]*?)(?=(?:\n\s*\n|\n\s*#{1,3}\s+|\*{0,2}Finansal\s+Sağlık\s+Skoru|Kilit\s+Katalizörler|Katalizörler|Riskler\s*(?:&|ve)\s*Emniyet\s*(?:Marjı|Sınırları|Sınırı)|Riskler\s*ve\s*Belirsizlikler|Temel\s*Riskler|$))/i);
+  const unprefixedVerdictMatch = !thesisMatch
+    ? cleaned.match(/Analist\s+Karar[ıi]\s*[:=-]?[^\n]*\n+([\s\S]*?)(?=(?:\n\s*#{1,3}\s+|Kilit\s+Katalizörler|Katalizörler|Riskler\s*(?:&|ve)\s*Emniyet\s*(?:Marjı|Sınırları|Sınırı)|Riskler\s*ve\s*Belirsizlikler|Temel\s*Riskler|$))/i)
+    : null;
+  const catalystMatch = bodyWithoutVerdict.match(/(?:Kilit\s+Katalizörler|Katalizörler)\s*[:=-]?\s*([\s\S]*?)(?=(?:\n\s*#{1,3}\s+|Riskler\s*(?:&|ve)\s*Emniyet\s*(?:Marjı|Sınırları|Sınırı)|Riskler\s*ve\s*Belirsizlikler|Temel\s*Riskler|$))/i);
+  const riskMatch = bodyWithoutVerdict.match(/(?:Riskler\s*(?:&|ve)\s*Emniyet\s*(?:Marjı|Sınırları|Sınırı)|Riskler\s*ve\s*Belirsizlikler|Temel\s*Riskler)\s*[:=-]?\s*([\s\S]*?)(?=(?:\n\s*#{1,3}\s+|$))/i);
 
-  const rawThesis = thesisMatch ? cleanSnippet(thesisMatch[1], 280) : '';
+  const rawThesis = thesisMatch
+    ? cleanSnippet(thesisMatch[1], 280)
+    : unprefixedVerdictMatch
+    ? cleanSnippet(unprefixedVerdictMatch[1], 280)
+    : '';
   const rawCatalysts = catalystMatch ? cleanSnippet(catalystMatch[1], 220) : '';
   const rawRisks = riskMatch ? cleanSnippet(riskMatch[1], 220) : '';
 
@@ -550,10 +557,10 @@ function parseVerdictNarrative(
   const catalysts = rawCatalysts || '12 aylık ileri projeksiyonlarda hasılat artışı, pazar payı genişlemesi ve operasyonel kâr marjı stabilitesi temel değer katalizörleridir.';
   const risks = rawRisks || 'Makro faiz dalgalanmaları, enflasyon muhasebesi marj etkileri ve çalışma sermayesi nakit tahsilat süreleri temel izleme riskleridir.';
 
-  return { verdict, verdictTitle, thesis, catalysts, risks, isStructured: Boolean(rawThesis || rawCatalysts) };
+  return { verdict, verdictTitle, thesis, catalysts, risks, isStructured: Boolean(rawThesis || rawCatalysts || rawRisks) };
 }
 
-function cleanMarkdown(text: string, decision?: string): string {
+function cleanMarkdown(text: string, decision?: string, stripTrailingVerdict = true): string {
   if (!text) return '';
   let cleaned = text;
 
@@ -565,7 +572,7 @@ function cleanMarkdown(text: string, decision?: string): string {
   // Ensure double newlines between run-on decision lines
   cleaned = cleaned.replace(/((?:Analist\s+Karar[ıi]\s*[:=-][^\n]*?))(?=(?:\*{0,2}Yatırım\s+Tezi))/gi, '$1\n\n');
   cleaned = cleaned.replace(/((?:Yatırım\s+Tezi[^\n]*?))(?=(?:\*{0,2}Kilit\s+Katalizörler))/gi, '$1\n\n');
-  cleaned = cleaned.replace(/((?:Kilit\s+Katalizörler[^\n]*?))(?=(?:\*{0,2}Riskler\s*(?:&|ve)\s*Emniyet\s*Marjı))/gi, '$1\n\n');
+  cleaned = cleaned.replace(/((?:Kilit\s+Katalizörler[^\n]*?))(?=(?:\*{0,2}Riskler\s*(?:&|ve)\s*Emniyet\s*(?:Marjı|Sınırları|Sınırı)))/gi, '$1\n\n');
 
   cleaned = cleaned.replace(/\*\*\[AL\]\*\*/gi, '**AL**');
   cleaned = cleaned.replace(/\*\*\[ALMA\]\*\*/gi, '**ALMA**');
@@ -583,7 +590,9 @@ function cleanMarkdown(text: string, decision?: string): string {
   // Bozuk / tek başına kalmış tablo çizgilerini ve "Temel Yatırım Tezi\n|" kalıntılarını temizle
   cleaned = cleaned.replace(/(?:^|\n)\s*(?:Temel\s+Yatırım\s+Tezi|Yatırım\s+Tezi)\s*[:=-]?\s*\n\s*\|[ \t]*(?:\n|$)/gi, '\n');
   cleaned = cleaned.replace(/^\s*\|\s*$/gm, '');
-  cleaned = cleaned.replace(/^(?:###|\#)\s*(I{1,3}|IV|V|VI{1,3}|IX|X)[\.\:\s\-]+(.*)$/gim, '## $1. $2');
+  cleaned = cleaned.replace(/^(?:###|\#)\s*(I{1,3}|IV|V|VI{1,3}|IX|X|[1-9])[\.\:\s\-]+(.*)$/gim, '## $1. $2');
+  // Normalize standalone numbered section headers (e.g., "\n\n1. Sigortacılık Bilanço Gücü...\n") that do not end with a period
+  cleaned = cleaned.replace(/\n\n([1-9])\.\s+([A-ZÇĞİÖŞÜ][^\n.]{8,95})\n(?=\s*(?:[-*|\n]|$$|[A-ZÇĞİÖŞÜ]))/g, '\n\n## $2\n');
   cleaned = cleaned.replace(/\\\\\[([\s\S]*?)\\\\\]/g, (_m, g1) => `\n\n$$\n${g1.trim()}\n$$\n\n`);
   cleaned = cleaned.replace(/\$\$([\s\S]*?)\$\$/g, (_match: string, inner: string) => {
     const cleanedInner = inner.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0).join('\n');
@@ -651,8 +660,10 @@ function cleanMarkdown(text: string, decision?: string): string {
     }
   );
 
-  // Strip trailing unformatted Analist Kararı block from markdown body (it is rendered in the executive card)
-  cleaned = cleaned.replace(/(?:###?\s*)?\*{0,2}Analist\s+Karar[ıi]\s*[:=-][\s\S]*$/i, '');
+  // Strip trailing unformatted Analist Kararı block from markdown body when rendering cards (it is rendered in 8.2 executive card)
+  if (stripTrailingVerdict) {
+    cleaned = cleaned.replace(/(?:###?\s*)?\*{0,2}Analist\s+Karar[ıi]\s*[:=-][\s\S]*$/i, '');
+  }
 
   return cleaned.trim();
 }
@@ -669,6 +680,7 @@ interface ParsedReportChapter {
 function parseReportIntoChapters(markdownText: string): ParsedReportChapter[] {
   if (!markdownText || !markdownText.trim()) return [];
 
+  const ROMAN_NUMERALS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
   const CHAPTER_META: Record<string, { id: string; subtitle: string; tag: string }> = {
     I: {
       id: 'sec-analist-i',
@@ -704,13 +716,18 @@ function parseReportIntoChapters(markdownText: string): ParsedReportChapter[] {
 
   const lines = markdownText.split('\n');
   const chapters: ParsedReportChapter[] = [];
+  const usedRomans = new Set<string>();
   let introLines: string[] = [];
   let currentHeader: { roman: string; title: string } | null = null;
   let currentBodyLines: string[] = [];
 
   const flushChapter = () => {
     if (!currentHeader) return;
-    const romanKey = currentHeader.roman.toUpperCase();
+    let romanKey = currentHeader.roman.toUpperCase();
+    if (usedRomans.has(romanKey)) {
+      romanKey = ROMAN_NUMERALS[chapters.length] || String(chapters.length + 1);
+    }
+    usedRomans.add(romanKey);
     const meta = CHAPTER_META[romanKey] || {
       id: `sec-analist-${romanKey.toLowerCase()}`,
       subtitle: 'Kurumsal Finansal ve Adli Değerlendirme',
@@ -727,12 +744,21 @@ function parseReportIntoChapters(markdownText: string): ParsedReportChapter[] {
   };
 
   for (const line of lines) {
-    const h2Match = line.match(/^##\s+(?:(I{1,3}|IV|V|VI{1,3}|IX|X)[\.\:\-\s]+)?(.+)$/i);
+    const h2Match = line.match(/^##\s+(?:(I{1,3}|IV|V|VI{1,3}|IX|X|[1-9]|10)[\.\:\-\s]+)?(.+)$/i);
     if (h2Match) {
       if (currentHeader) {
         flushChapter();
       }
-      const roman = h2Match[1] ? h2Match[1].toUpperCase() : String(chapters.length + 1);
+      const rawNum = h2Match[1] ? h2Match[1].toUpperCase() : '';
+      let roman = '';
+      if (rawNum && /^\d+$/.test(rawNum)) {
+        const arabicIdx = parseInt(rawNum, 10) - 1;
+        roman = ROMAN_NUMERALS[arabicIdx] || rawNum;
+      } else if (rawNum) {
+        roman = rawNum;
+      } else {
+        roman = ROMAN_NUMERALS[chapters.length] || String(chapters.length + 1);
+      }
       const rawTitle = h2Match[2].trim();
       currentHeader = { roman, title: rawTitle };
       currentBodyLines = [];
@@ -1681,9 +1707,14 @@ export default function SimplyView({
     return parseReportIntoChapters(cleanMarkdown(report.report || '', effectiveDecision));
   }, [report.report, effectiveDecision]);
 
+  const isProgrammaticScrollRef = useRef<boolean>(false);
+  const programmaticScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Scrollspy: window ve main-scroll-container dinlenir
   useEffect(() => {
     const handleScroll = () => {
+      if (isProgrammaticScrollRef.current) return;
+
       const sections: Array<{ id: SimplySectionId; el: HTMLElement | null }> = [
         { id: 'sec-ozet', el: document.getElementById('sec-ozet') },
         { id: 'sec-grafikler', el: document.getElementById('sec-grafikler') },
@@ -1696,6 +1727,18 @@ export default function SimplyView({
         { id: 'sec-analist', el: document.getElementById('sec-analist') },
         { id: 'sec-gecmis', el: document.getElementById('sec-gecmis') },
       ];
+
+      // Sayfanın en altına ulaşıldıysa ve son bölüm (sec-gecmis) görünürdeyse onu aktif yap
+      const docEl = document.documentElement;
+      const isAtPageBottom = window.innerHeight + window.scrollY >= (docEl.scrollHeight || document.body.scrollHeight) - 48;
+      const lastSec = sections[sections.length - 1];
+      if (isAtPageBottom && lastSec?.el) {
+        const lastRect = lastSec.el.getBoundingClientRect();
+        if (lastRect.top < window.innerHeight) {
+          setActiveSection(lastSec.id);
+          return;
+        }
+      }
 
       const targetThreshold = 180;
       for (let i = sections.length - 1; i >= 0; i--) {
@@ -1720,6 +1763,9 @@ export default function SimplyView({
       window.removeEventListener('scroll', handleScroll);
       if (container) {
         container.removeEventListener('scroll', handleScroll);
+      }
+      if (programmaticScrollTimerRef.current) {
+        clearTimeout(programmaticScrollTimerRef.current);
       }
     };
   }, []);
@@ -1746,9 +1792,18 @@ export default function SimplyView({
   const scrollToSection = (id: SimplySectionId) => {
     const el = document.getElementById(id);
     if (el) {
-      const yOffset = -70;
+      isProgrammaticScrollRef.current = true;
+      if (programmaticScrollTimerRef.current) {
+        clearTimeout(programmaticScrollTimerRef.current);
+      }
+      programmaticScrollTimerRef.current = setTimeout(() => {
+        isProgrammaticScrollRef.current = false;
+      }, 650);
+
+      const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
+      const yOffset = isMobile ? -112 : -70;
       const y = el.getBoundingClientRect().top + window.pageYOffset + yOffset;
-      window.scrollTo({ top: y, behavior: 'smooth' });
+      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
       setActiveSection(id);
     }
   };
@@ -1908,7 +1963,7 @@ export default function SimplyView({
   const handleCopyReportText = async () => {
     if (report.report) {
       try {
-        await navigator.clipboard.writeText(cleanMarkdown(report.report, effectiveDecision));
+        await navigator.clipboard.writeText(cleanMarkdown(report.report, effectiveDecision, false));
         setCopiedReport(true);
         setTimeout(() => setCopiedReport(false), 2500);
       } catch {}
@@ -5950,8 +6005,8 @@ export default function SimplyView({
                     <div className="h-8 w-px bg-[#282d37]" />
                     <div className="text-right">
                       <div className="text-[11px] text-slate-400 font-mono uppercase">Potansiyel</div>
-                      <div className={`text-lg sm:text-xl font-black font-mono mt-0.5 ${fairValueNum >= currentPriceNum ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {currentPriceNum > 0
+                      <div className={`text-lg sm:text-xl font-black font-mono mt-0.5 ${fairValueNum > 0 && currentPriceNum > 0 ? (fairValueNum >= currentPriceNum ? 'text-emerald-400' : 'text-rose-400') : 'text-slate-400'}`}>
+                        {fairValueNum > 0 && currentPriceNum > 0
                           ? `${fairValueNum >= currentPriceNum ? '+' : ''}${(((fairValueNum - currentPriceNum) / currentPriceNum) * 100).toFixed(1)}%`
                           : '—'}
                       </div>
@@ -6034,12 +6089,24 @@ export default function SimplyView({
                   <div className="space-y-4">
                     <div className="flex items-center justify-between gap-2 border-b border-[#252b37] pb-3">
                       <div className="flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+                        {effectiveDecision === 'ALMA' ? (
+                          <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+                        ) : effectiveDecision === 'NÖTR' ? (
+                          <Scale className="w-4 h-4 text-amber-400 shrink-0" />
+                        ) : (
+                          <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+                        )}
                         <h4 className="font-sans font-bold text-white text-[15px] sm:text-base">
                           {synthesizedThesis.whyActionTitle}
                         </h4>
                       </div>
-                      <span className="text-[11px] font-mono text-emerald-300 bg-emerald-950/40 px-2.5 py-0.5 rounded border border-emerald-800/40">
+                      <span className={`text-[11px] font-mono px-2.5 py-0.5 rounded border ${
+                        effectiveDecision === 'ALMA'
+                          ? 'text-rose-300 bg-rose-950/40 border-rose-800/40'
+                          : effectiveDecision === 'NÖTR'
+                          ? 'text-amber-300 bg-amber-950/40 border-amber-800/40'
+                          : 'text-emerald-300 bg-emerald-950/40 border-emerald-800/40'
+                      }`}>
                         Çoklu Kriter Sentezi
                       </span>
                     </div>
@@ -6050,7 +6117,13 @@ export default function SimplyView({
                           key={pIdx}
                           className="bg-[#191d26] border border-[#262c38] rounded-xl p-4 space-y-1.5"
                         >
-                          <div className="text-[11px] font-mono font-bold uppercase tracking-wider text-emerald-400">
+                          <div className={`text-[11px] font-mono font-bold uppercase tracking-wider ${
+                            effectiveDecision === 'ALMA'
+                              ? 'text-rose-400'
+                              : effectiveDecision === 'NÖTR'
+                              ? 'text-amber-400'
+                              : 'text-emerald-400'
+                          }`}>
                             {pIdx === 0 ? '01 • Temel Bilanço & Operasyonel Omurga' : `0${pIdx + 1} • Sermaye Tahsisi & Rekabet Dinamiği`}
                           </div>
                           <p className="text-sm sm:text-[14.5px] text-slate-200 leading-[1.8] font-sans">
@@ -6434,32 +6507,34 @@ export default function SimplyView({
               </div>
 
               {/* Hızlı Bölüm Atlama Düğmeleri (Quick Chapter Navigation) */}
-              <div className="flex items-center gap-2 flex-wrap">
-                {[
-                  { id: 'sec-analist-i', num: 'I', label: 'Yönetici Özeti' },
-                  { id: 'sec-analist-ii', num: 'II', label: 'Kâr Kalitesi & Nakit' },
-                  { id: 'sec-analist-iii', num: 'III', label: 'Sektörel Rekabet & DuPont' },
-                  { id: 'sec-analist-iv', num: 'IV', label: 'WACC & Değerleme' },
-                  { id: 'sec-analist-v', num: 'V', label: 'Değer Sürücüleri & Stres' },
-                  { id: 'sec-analist-vi', num: 'VI', label: 'Skor Matrisi & Riskler' }
-                ].map((pill) => (
-                  <button
-                    key={pill.id}
-                    type="button"
-                    onClick={() => {
-                      setCollapsedReportChapters(prev => ({ ...prev, [pill.id]: false }));
-                      setTimeout(() => {
-                        const el = document.getElementById(pill.id);
-                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                      }, 40);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-[13px] font-medium bg-[#14171e] hover:bg-[#21262d] text-slate-200 hover:text-[#f5c242] border border-[#262c38] hover:border-[#f5c242]/40 transition cursor-pointer shadow-sm"
-                  >
-                    <span className="font-mono font-bold text-[#f5c242]">{pill.num}.</span>
-                    <span>{pill.label}</span>
-                  </button>
-                ))}
-              </div>
+              {reportChapters.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  {reportChapters.map((ch) => {
+                    const isCollapsed = Boolean(collapsedReportChapters[ch.id]);
+                    return (
+                      <button
+                        key={ch.id}
+                        type="button"
+                        onClick={() => {
+                          setCollapsedReportChapters(prev => ({ ...prev, [ch.id]: false }));
+                          setTimeout(() => {
+                            const el = document.getElementById(ch.id);
+                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          }, 40);
+                        }}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-[13px] font-medium border transition cursor-pointer shadow-sm ${
+                          isCollapsed
+                            ? 'bg-[#14171e]/60 text-slate-400 border-[#232834] hover:text-slate-200 hover:border-[#2e3440]'
+                            : 'bg-[#14171e] hover:bg-[#21262d] text-slate-200 hover:text-[#f5c242] border-[#262c38] hover:border-[#f5c242]/40'
+                        }`}
+                      >
+                        <span className="font-mono font-bold text-[#f5c242]">{ch.roman}.</span>
+                        <span>{ch.tag}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Bölüm Kartları (Chapter-by-Chapter Editorial Reading Experience) */}
@@ -6565,6 +6640,7 @@ export default function SimplyView({
                                   return <p className="leading-[1.85] mb-4 text-slate-200 font-sans" {...props}>{children}</p>;
                                 },
                                 ul: ({ ...props }) => <ul className="space-y-3 my-4 text-slate-200 pl-0 list-none" {...props} />,
+                                ol: ({ ...props }) => <ol className="space-y-3 my-4 text-slate-200 pl-0 list-none" {...props} />,
                                 li: ({ children, ...props }: any) => (
                                   <li
                                     className="bg-[#191d26] hover:bg-[#1d222c] border border-[#262c38] rounded-xl p-4 flex items-start gap-3 leading-[1.8] transition-colors shadow-sm"
@@ -6831,7 +6907,7 @@ export default function SimplyView({
               className="px-4 py-2 rounded-xl bg-[#181b20] hover:bg-[#21262d] text-slate-300 hover:text-[#f5c242] border border-[#282d37] hover:border-[#f5c242]/40 text-xs font-mono font-semibold transition flex items-center gap-2 cursor-pointer shadow-md"
             >
               <span>↑</span>
-              <span>Rapor Başına Dön (Bölüm 1: Özet)</span>
+              <span>Rapor Başına Dön (Genel Bakış & Özet)</span>
             </button>
           </div>
 

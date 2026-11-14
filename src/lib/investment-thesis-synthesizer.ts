@@ -113,9 +113,15 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
   const wcChange = Number(d.working_capital_change || 0);
 
   // Rasyolar
-  const grossMargin = rev > 0 ? (grossProfit / rev) * 100 : 0;
-  const ebitdaMargin = rev > 0 ? (ebitda / rev) * 100 : (Number(input.drivers?.margin?.value) || 0);
-  const netMargin = rev > 0 ? (netIncome / rev) * 100 : 0;
+  const grossMargin = (rev > 0 && d.gross_profit != null)
+    ? (grossProfit / rev) * 100
+    : Number(d.gross_margin ?? (input as any).grossMargin ?? 0);
+  const ebitdaMargin = (rev > 0 && (d.ebitda != null || d.operating_profit != null))
+    ? (ebitda / rev) * 100
+    : Number(d.ebitda_margin ?? input.drivers?.margin?.value ?? (input as any).ebitdaMargin ?? 0);
+  const netMargin = (rev > 0 && d.net_income != null)
+    ? (netIncome / rev) * 100
+    : Number(d.net_margin ?? (input as any).netMargin ?? 0);
   const roe = input.dupontResult?.calculatedRoe != null && !isNaN(input.dupontResult.calculatedRoe)
     ? Number(input.dupontResult.calculatedRoe)
     : (equity > 0 ? (netIncome / equity) * 100 : 0);
@@ -429,7 +435,7 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
       isAdvantage: compPe > 0 && compPe <= secPe * 1.05
     },
     {
-      label: 'FD / FAVÖK &PD/DD',
+      label: 'FD / FAVÖK & PD/DD',
       companyValue: compEvEbitda > 0 ? `${compEvEbitda.toFixed(1)}x FD/FAVÖK` : `${compPb > 0 ? `${compPb.toFixed(2)}x PD/DD` : '—'}`,
       benchmarkValue: compEvEbitda > 0 ? `Sektör: ${secEvEbitda.toFixed(1)}x` : `Sektör: ${secPb.toFixed(2)}x`,
       verdict: compEvEbitda > 0
@@ -621,9 +627,13 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
       : `${sectorName} sektöründe (${compEvEbitda > 0 ? `${compEvEbitda.toFixed(1)}x FD/FAVÖK vs Sektör ${secEvEbitda.toFixed(1)}x` : `${compPe > 0 ? `${compPe.toFixed(1)}x F/K vs Sektör ${secPe.toFixed(1)}x` : 'mevcut çarpanlar'}`}) tarihsel ortalamalara göre oluşan iskonto makasının kapanması (Re-rating).`
   ];
 
-  const minSafeEbitdaMargin = Math.max(5.0, Number((ebitdaMargin * 0.78).toFixed(1)));
+  const minSafeEbitdaMargin = ebitdaMargin > 6.4
+    ? Math.max(5.0, Number((ebitdaMargin * 0.78).toFixed(1)))
+    : Number((ebitdaMargin * 0.7).toFixed(1));
   const thesisBreakers: string[] = [
-    `Operasyonel Marj Kırılımı: Şirketin çekirdek FAVÖK marjının (%${ebitdaMargin.toFixed(1)}) maliyet baskısı veya fiyat rekabetiyle üst üste 2 çeyrek %${minSafeEbitdaMargin} eşiğinin altına sarkması.`,
+    ebitdaMargin <= 0
+      ? `Operasyonel Zarar Sarmalı: Şirketin mevcut negatif FAVÖK marjının (%${ebitdaMargin.toFixed(1)}) maliyet baskısı ve fiyat rekabetiyle pozitif bölgeye geçememesi, operasyonel nakit yakımının kronikleşmesi.`
+      : `Operasyonel Marj Kırılımı: Şirketin çekirdek FAVÖK marjının (%${ebitdaMargin.toFixed(1)}) maliyet baskısı veya fiyat rekabetiyle üst üste 2 çeyrek %${minSafeEbitdaMargin} eşiğinin altına sarkması.`,
     isPositiveEva
       ? `Sermaye Getirisi Erozyonu: Reel ROIC performansının (%${roic.toFixed(1)}) gerileyerek %${wacc.toFixed(1)} olan Reel WACC eşiğinin altına inmesi ve EVA makasının negatife dönmesi.`
       : `Kronik Negatif EVA Devamı: Reel ROIC'in (%${roic.toFixed(1)}) sermaye maliyetinin (%${wacc.toFixed(1)}) altında kalmaya devam ederek özkaynaklarda reel erimeyi derinleştirmesi.`,
