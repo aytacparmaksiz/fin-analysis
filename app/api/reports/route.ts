@@ -4,8 +4,6 @@ import { isValidTicker, isValidReportId, validateDeleteReportParams } from '@/li
 import { clearBistCache } from '@/lib/bist-service';
 import { clearIsYatirimCache } from '@/lib/isyatirim-service';
 
-export { isValidTicker, isValidReportId, validateDeleteReportParams };
-
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;

@@ -151,6 +151,30 @@ function formatTableNumber(val: number | null | undefined): string {
   return inThousands.toLocaleString('tr-TR');
 }
 
+// Eksi Değerlerde Aşırı Eksen Boşluğunu Önleyen Sıkı Eksen Tabanı Hesaplayıcı (-23 -> -25, -38 -> -40)
+function calculateTightMin(minVal: number): number {
+  if (minVal >= 0 || !isFinite(minVal)) return 0;
+  const abs = Math.abs(minVal);
+  const exp = Math.floor(Math.log10(abs));
+  const base = Math.pow(10, exp);
+  const normalized = abs / base;
+
+  let targetNorm = 10;
+  if (normalized <= 1.2) targetNorm = 1.25;
+  else if (normalized <= 1.5) targetNorm = 1.5;
+  else if (normalized <= 2.0) targetNorm = 2.0;
+  else if (normalized <= 2.5) targetNorm = 2.5;
+  else if (normalized <= 3.0) targetNorm = 3.0;
+  else if (normalized <= 4.0) targetNorm = 4.0;
+  else if (normalized <= 5.0) targetNorm = 5.0;
+  else if (normalized <= 6.0) targetNorm = 6.0;
+  else if (normalized <= 7.5) targetNorm = 7.5;
+  else if (normalized <= 8.5) targetNorm = 8.5;
+  else targetNorm = 10.0;
+
+  return -(targetNorm * base);
+}
+
 // Milyar / Milyon TL Formatlayıcı (Grafik eksen ve tooltip'leri için)
 function formatMrTl(val: number | null | undefined, isAxis = false): string {
   if (val === null || val === undefined || isNaN(val)) return '—';
@@ -921,14 +945,24 @@ export default function SimplyView({
     const raw = valuationInfo?.drivers || report.extractedData?.fair_value_drivers;
 
     let rawRevVal = typeof raw?.revenue_growth?.value === 'number' ? raw.revenue_growth.value : 45.0;
-    let revNote = raw?.revenue_growth?.note || raw?.revenue_growth?.sourceExplanation || 'Enflasyon ve pazar payı projeksiyonu';
+    let revNote = raw?.revenue_growth?.note || raw?.revenue_growth?.sourceExplanation || '';
     if (rawRevVal > 80.0) {
       rawRevVal = 75.0;
       revNote = `Aşırı baz etkisi nedeniyle kurumsal sürdürülebilir ciro büyüme tavanına (%75.0) normalize edilmiştir.`;
+    } else if (!revNote || revNote.includes('Enflasyon ve pazar payı projeksiyonu')) {
+      if (rawRevVal >= 55) {
+        revNote = `Yıllık ciro artışı (%${rawRevVal.toFixed(1)}) yüksek enflasyon ve pazar payı kazanımlarıyla güçlü bir büyüme patikasına işaret ediyor.`;
+      } else if (rawRevVal >= 30) {
+        revNote = `Ciro büyümesi (%${rawRevVal.toFixed(1)}) ılımlı bir reel büyüme temposunu ve dengeli talep koşullarını yansıtıyor.`;
+      } else if (rawRevVal >= 10) {
+        revNote = `Ciro artışı (%${rawRevVal.toFixed(1)}) reel bazda sınırlı kalarak talep daralması veya ciro baskısına işaret ediyor.`;
+      } else {
+        revNote = `Cirodaki dönemsel daralma (%${rawRevVal.toFixed(1)}) sektördeki talep daralması ve hacim kaybını ortaya koyuyor.`;
+      }
     }
 
     let rawNetVal = typeof raw?.net_income_growth?.value === 'number' ? raw.net_income_growth.value : 50.0;
-    let netNote = raw?.net_income_growth?.note || raw?.net_income_growth?.sourceExplanation || 'Operasyonel kârlılık ve içsel sermaye üretimi';
+    let netNote = raw?.net_income_growth?.note || raw?.net_income_growth?.sourceExplanation || '';
     if (rawNetVal > 80.0) {
       const origJump = rawNetVal;
       rawNetVal = 75.0;
@@ -936,6 +970,38 @@ export default function SimplyView({
     } else if (rawNetVal < -60.0) {
       rawNetVal = -50.0;
       netNote = `Dönemsel sert daralma normalize edilerek değerleme tabanı %-50.0 olarak sınırlandırılmıştır.`;
+    } else if (!netNote || netNote.includes('Operasyonel kârlılık ve içsel sermaye üretimi')) {
+      if (rawNetVal >= 50) {
+        netNote = `Net kâr büyümesi (%${rawNetVal.toFixed(1)}) operasyonel kaldıraç ve güçlü marj yönetimi ile kâr üretkenliğinin arttığını teyit ediyor.`;
+      } else if (rawNetVal >= 20) {
+        netNote = `Kâr üretimi (%${rawNetVal.toFixed(1)}) sermaye maliyetiyle uyumlu, istikrarlı bir içsel kârlılık artışını sürdürüyor.`;
+      } else if (rawNetVal >= 0) {
+        netNote = `Net kârlılık (%${rawNetVal.toFixed(1)}) enflasyonun gerisinde kalarak reel kâr marjlarında baskı altında seyrediyor.`;
+      } else {
+        netNote = `Net kârdaki gerileme (%${rawNetVal.toFixed(1)}) artan finansman giderleri ve operasyonel marj baskısını yansıtıyor.`;
+      }
+    }
+
+    const marginVal = typeof raw?.margin?.value === 'number' ? raw.margin.value : 22.0;
+    let marginNote = raw?.margin?.note || raw?.margin?.sourceExplanation || '';
+    if (!marginNote || marginNote.includes('Çekirdek faaliyet marjı hedefi')) {
+      if (currentSector === 'INSURANCE') {
+        marginNote = marginVal <= 95
+          ? `Kombine oran (%${marginVal.toFixed(1)}) teknik kârlılığın ve hasar/prim yönetiminin güçlü olduğunu gösteriyor.`
+          : `Kombine oran (%${marginVal.toFixed(1)}) teknik denge baskısına işaret ederek yatırım gelirlerine bağımlılığı artırıyor.`;
+      } else if (marginVal >= 25) {
+        marginNote = `Operasyonel marj (%${marginVal.toFixed(1)}) şirketin sektör ortalamasının üzerinde güçlü bir fiyatlama gücüne ve kâr koruma yeteneğine sahip olduğunu gösteriyor.`;
+      } else if (marginVal >= 12) {
+        marginNote = `Operasyonel marj (%${marginVal.toFixed(1)}) sürdürülebilir çekirdek faaliyet verimliliği ve dengeli maliyet yapısıyla örtüşüyor.`;
+      } else {
+        marginNote = `Operasyonel marj (%${marginVal.toFixed(1)}) girdi maliyetleri ve rekabet baskısı nedeniyle sınırlı bir kâr tamponuna işaret ediyor.`;
+      }
+    }
+
+    const multVal = raw?.target_multiple?.value || '2.5x PD/DD';
+    let multNote = raw?.target_multiple?.note || raw?.target_multiple?.sourceExplanation || '';
+    if (!multNote || multNote.includes('Sektör ve kârlılık dinamiklerine dayalı hedef çarpan')) {
+      multNote = `Adil değer modelimiz, şirketin sermaye getirisi dinamikleri doğrultusunda ${multVal} çarpanını rasyonel denge seviyesi olarak baz almaktadır.`;
     }
 
     return {
@@ -955,18 +1021,18 @@ export default function SimplyView({
       },
       margin: {
         label: raw?.margin?.label || (currentSector === 'INSURANCE' ? 'Kombine Oran Beklentisi' : 'Operasyonel Marj'),
-        value: typeof raw?.margin?.value === 'number' ? raw.margin.value : 22.0,
+        value: marginVal,
         bearLabel: raw?.margin?.bearLabel || 'Daralan Marj',
         bullLabel: raw?.margin?.bullLabel || 'Fiyatlama Gücü',
-        note: raw?.margin?.note || raw?.margin?.sourceExplanation || 'Çekirdek faaliyet marjı hedefi'
+        note: marginNote
       },
       target_multiple: {
         label: raw?.target_multiple?.label || 'Hedef Çarpan',
-        value: raw?.target_multiple?.value || '2.5x PD/DD',
+        value: multVal,
         numericValue: typeof raw?.target_multiple?.numericValue === 'number' ? raw.target_multiple.numericValue : 2.5,
         bearLabel: raw?.target_multiple?.bearLabel || 'Muhafazakar Çarpan',
         bullLabel: raw?.target_multiple?.bullLabel || 'Piyasa Primi',
-        note: raw?.target_multiple?.note || raw?.target_multiple?.sourceExplanation || 'Sektör ve kârlılık dinamiklerine dayalı hedef çarpan'
+        note: multNote
       }
     };
   }, [valuationInfo?.drivers, report.extractedData?.fair_value_drivers, currentSector]);
@@ -1175,14 +1241,43 @@ export default function SimplyView({
     return allInSector;
   }, [rawOfficialSector, currentSector, report.ticker]);
 
-  // Kullanıcının daha önce analiz ettiği akran şirketler (şirket başına en güncel tek rapor)
+  // Kullanıcının daha önce analiz ettiği akran şirketler (şirket başına en güncel tek rapor, AL -> NÖTR -> ALMA ve puan sırasına göre)
   const analyzedCompetitors = useMemo(() => {
     const peerTickers = new Set(sameSectorPeers.map(p => p.ticker.toUpperCase()));
     const matching = savedReports.filter(
       r => (peerTickers.has(r.ticker?.toUpperCase()) || (r.sector === currentSector && sameSectorPeers.length === 0)) &&
            r.ticker?.toUpperCase() !== report.ticker?.toUpperCase()
     );
-    return getLatestReportsPerTicker(matching);
+    const latestPerTicker = getLatestReportsPerTicker(matching);
+
+    const decisionWeight = (dec?: string): number => {
+      const d = String(dec || '').toUpperCase().trim();
+      if (d === 'AL' || d === 'GÜÇLÜ AL') return 1;
+      if (d === 'NÖTR' || d === 'TUT') return 2;
+      if (d === 'ALMA' || d === 'SAT' || d === 'GÜÇLÜ SAT') return 3;
+      return 2;
+    };
+
+    const extractScore = (sc: any): number => {
+      if (typeof sc === 'number') return sc;
+      if (typeof sc === 'string') {
+        const m = sc.match(/\d+/);
+        return m ? parseInt(m[0], 10) : 0;
+      }
+      return 0;
+    };
+
+    return [...latestPerTicker].sort((a, b) => {
+      const wA = decisionWeight(a.decision);
+      const wB = decisionWeight(b.decision);
+      if (wA !== wB) return wA - wB;
+
+      const scA = extractScore(a.score);
+      const scB = extractScore(b.score);
+      if (scA !== scB) return scB - scA;
+
+      return (Number(b.price) || 0) - (Number(a.price) || 0);
+    });
   }, [savedReports, sameSectorPeers, currentSector, report.ticker]);
 
   // Henüz analiz edilmemiş en büyük 6 akran hisse adayı
@@ -1735,6 +1830,18 @@ export default function SimplyView({
     return reversedPeriods.slice(safePeriodOffset, safePeriodOffset + maxVisiblePeriods);
   }, [reversedPeriods, safePeriodOffset]);
 
+  // Finansal Tablolar Kategori Akordeon Durumları (Bilanço, Gelir Tablosu, Nakit Akışı)
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const toggleSectionCollapse = useCallback((secId: string) => {
+    setCollapsedSections(prev => ({ ...prev, [secId]: !prev[secId] }));
+  }, []);
+
+  // Sektörel Akranlar Paneli Açılır/Kapanır Durumu
+  const [isPeersOpen, setIsPeersOpen] = useState<boolean>(true);
+
+  // 4.7 Sermaye Tahsisi Adli Kriter Sinyalleri Çekmecesi
+  const [isCapAllocExpanded, setIsCapAllocExpanded] = useState<boolean>(false);
+
   // Bilanço Bölümleri (Görseldeki gibi kart içi belirgin kategori blokları)
   const balanceSheetSections = useMemo(() => [
     {
@@ -2124,6 +2231,35 @@ export default function SimplyView({
   const active4ChartsFlowData = chartPeriodMode === 'quarterly' 
     ? quarterlyChartData 
     : (ttmChartData && ttmChartData.length > 0 ? ttmChartData : chartData);
+
+  // Grafik 1.3 ve 1.5 için Eksi Değerlerde Aşırı Eksen Boşluğunu Önleyen Sıkı Eksen Tabanı
+  const chart13YDomain = useMemo<[number | string, number | string]>(() => {
+    if (!active4ChartsFlowData || active4ChartsFlowData.length === 0) return [0, 'auto'];
+    let min = 0;
+    active4ChartsFlowData.forEach(d => {
+      [d.revenue, d.ebitda, d.net_income].forEach(v => {
+        if (typeof v === 'number' && isFinite(v)) {
+          if (v < min) min = v;
+        }
+      });
+    });
+    if (min >= 0) return [0, 'auto'];
+    return [calculateTightMin(min), 'auto'];
+  }, [active4ChartsFlowData]);
+
+  const chart15YDomain = useMemo<[number | string, number | string]>(() => {
+    if (!active4ChartsFlowData || active4ChartsFlowData.length === 0) return [0, 'auto'];
+    let min = 0;
+    active4ChartsFlowData.forEach(d => {
+      [d.operating_cash_flow, d.net_income, d.free_cash_flow].forEach(v => {
+        if (typeof v === 'number' && isFinite(v)) {
+          if (v < min) min = v;
+        }
+      });
+    });
+    if (min >= 0) return [0, 'auto'];
+    return [calculateTightMin(min), 'auto'];
+  }, [active4ChartsFlowData]);
 
   return (
     <div className="space-y-6 font-sans text-slate-100">
@@ -2925,7 +3061,8 @@ export default function SimplyView({
                         { label: 'Esas Faaliyet Kârı', key: 'operating_income', fallback: 'operating_profit' },
                         { label: currentSector === 'INSURANCE' ? 'Teknik Bölüm Dengesi' : 'FAVÖK', key: 'ebitda', fallback: 'technical_balance' },
                         ...(currentSector === 'INSURANCE' ? [{ label: 'Yatırım Gelirleri', key: 'investment_income' }] : []),
-                        { label: 'Net Dönem Kârı', key: 'net_income' }
+                        { label: 'Net Dönem Kârı', key: 'net_income' },
+                        { label: 'Nakit ve Nakit Benzerleri', key: 'cash_and_equivalents', fallback: 'cash' }
                       ].map((row, idx) => {
                         const v1 = latestFlow ? (latestFlow[row.key] ?? latestFlow[row.fallback || '']) : null;
                         const v2 = yoyFlow ? (yoyFlow[row.key] ?? yoyFlow[row.fallback || '']) : null;
@@ -3015,95 +3152,130 @@ export default function SimplyView({
               </div>
             </div>
 
-            {/* Sektörel Akranlar */}
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <h3 className="font-sans text-lg sm:text-xl font-bold text-white">Sektörel Akranlar</h3>
+            {/* Sektörel Akranlar (Açılır/Kapanır Panel & Karar-Puan Sıralı) */}
+            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+              <div 
+                className="flex items-center justify-between cursor-pointer select-none group"
+                onClick={() => setIsPeersOpen(!isPeersOpen)}
+                title={isPeersOpen ? "Paneli Daralt" : "Paneli Genişlet"}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center text-[#f5c242] font-bold text-sm">
+                    {analyzedCompetitors.length}
+                  </div>
+                  <div>
+                    <h3 className="font-sans text-lg sm:text-xl font-bold text-white group-hover:text-[#f5c242] transition-colors flex items-center gap-2">
+                      <span>Sektörel Akranlar</span>
+                      <span className="text-xs font-mono font-medium text-slate-400 bg-[#21262d] px-2.5 py-0.5 rounded-full border border-[#2e3440]">
+                        {officialSectorName}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-400 font-sans mt-0.5">
+                      Kayıtlı akran analizleri karar ve model puanına göre önceliklendirilmiştir
+                    </p>
+                  </div>
                 </div>
-                <span className="text-sm text-[#f5c242] font-mono font-bold">
-                  {officialSectorName} Sektörü
-                </span>
+
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center text-slate-300 group-hover:text-[#f5c242] group-hover:border-[#f5c242]/50 transition shadow-sm">
+                    {isPeersOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </div>
+                </div>
               </div>
 
-              {analyzedCompetitors.length > 0 ? (
-                <div className="space-y-3.5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                    {analyzedCompetitors.map((comp) => (
-                      <div
-                        key={comp.id}
-                        onClick={() => {
-                          if (onSelectReport) {
-                            onSelectReport(comp.id);
-                          } else if (onSelectTicker) {
-                            onSelectTicker(comp.ticker);
-                          }
-                        }}
-                        className="bg-[#21262d] hover:bg-[#2b313d] border border-[#2e3440] hover:border-[#f5c242]/50 rounded-xl p-4 transition cursor-pointer flex items-center justify-between group shadow-sm"
-                        title={`${comp.ticker} analizini aç`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-lg bg-[#181b20] border border-[#2e3440] flex items-center justify-center font-black font-mono text-sm text-[#f5c242]">
-                            {comp.ticker.slice(0, 4)}
-                          </div>
-                          <div>
-                            <div className="font-bold text-sm text-white group-hover:text-[#f5c242] transition">
-                              {comp.ticker}
-                            </div>
-                            <div className="text-sm text-slate-400 font-mono">
-                              Skor: {comp.score != null ? (
-                                <span className={`font-bold ${getScoreColorStyle(comp.score).text}`}>
-                                  {String(comp.score).includes('/100') ? String(comp.score) : `${comp.score}/100`}
-                                </span>
-                              ) : '—'}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-mono text-sm font-bold text-white">{comp.price ? `₺${comp.price}` : '—'}</div>
-                          <div className={`text-sm font-bold font-mono ${comp.decision === 'AL' ? 'text-emerald-400' : comp.decision === 'ALMA' ? 'text-rose-400' : 'text-amber-400'}`}>
-                            {comp.decision || 'NÖTR'}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+              {isPeersOpen && (
+                <>
+                  {analyzedCompetitors.length > 0 ? (
+                    <div className="space-y-4 pt-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                        {analyzedCompetitors.map((comp) => {
+                          const decStr = String(comp.decision || '').toUpperCase();
+                          const isBuy = decStr === 'AL' || decStr === 'GÜÇLÜ AL';
+                          const isSell = decStr === 'ALMA' || decStr === 'SAT' || decStr === 'GÜÇLÜ SAT';
+                          const badgeBg = isBuy 
+                            ? 'bg-emerald-950/70 text-emerald-400 border-emerald-800/60'
+                            : isSell
+                              ? 'bg-rose-950/70 text-rose-400 border-rose-800/60'
+                              : 'bg-amber-950/70 text-amber-400 border-amber-800/60';
 
-                  {sectorCandidateTickers.length > 0 && (
-                    <div className="pt-2.5 border-t border-[#282d37] flex items-center justify-between flex-wrap gap-2 text-sm text-slate-300">
-                      <span className="text-sm font-medium">Sektördeki diğer akranları analiz et:</span>
+                          return (
+                            <div
+                              key={comp.id}
+                              onClick={() => {
+                                if (onSelectReport) {
+                                  onSelectReport(comp.id);
+                                } else if (onSelectTicker) {
+                                  onSelectTicker(comp.ticker);
+                                }
+                              }}
+                              className="bg-[#21262d] hover:bg-[#28303d] border border-[#2e3440] hover:border-[#f5c242]/60 rounded-xl p-4 transition-all duration-200 cursor-pointer flex items-center justify-between group shadow-sm hover:shadow-md hover:-translate-y-0.5"
+                              title={`${comp.ticker} detaylı analizini aç`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-10 h-10 rounded-xl bg-[#181b20] border border-[#2e3440] group-hover:border-[#f5c242]/50 flex items-center justify-center font-black font-mono text-sm text-[#f5c242] shadow-inner transition">
+                                  {comp.ticker.slice(0, 4)}
+                                </div>
+                                <div className="truncate">
+                                  <div className="font-bold text-white group-hover:text-[#f5c242] transition flex items-center gap-2">
+                                    <span>{comp.ticker}</span>
+                                    {comp.score != null && (
+                                      <span className="text-[11px] font-mono px-1.5 py-0.2 bg-[#181b20] text-slate-300 rounded border border-[#2e3440]">
+                                        {comp.score}/100
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-slate-400 font-mono mt-0.5">
+                                    {comp.price ? `₺${comp.price}` : '—'}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0 pl-2">
+                                <div className={`text-xs font-bold font-mono px-2.5 py-1 rounded-md border ${badgeBg} shadow-sm`}>
+                                  {comp.decision || 'NÖTR'}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {sectorCandidateTickers.length > 0 && (
+                        <div className="pt-3 border-t border-[#282d37] flex items-center justify-between flex-wrap gap-2 text-sm text-slate-300">
+                          <span className="text-xs sm:text-sm font-medium text-slate-400">Sektördeki diğer akranları analiz et:</span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {sectorCandidateTickers.slice(0, 6).map((tk) => (
+                              <button
+                                key={tk}
+                                type="button"
+                                onClick={() => onSelectTicker && onSelectTicker(tk)}
+                                className="px-2.5 py-1 bg-[#21262d] hover:bg-[#2e3440] text-[#f5c242] hover:text-white rounded-lg border border-[#2e3440] hover:border-[#f5c242]/40 text-xs font-mono font-bold cursor-pointer transition shadow-sm"
+                                title={`${tk} hissesini doğrudan analiz et`}
+                              >
+                                +{tk}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-[#21262d] rounded-xl p-4 text-sm text-slate-300 flex items-center justify-between flex-wrap gap-3">
+                  <span>Bu sektörde henüz başka bir şirket analiz edilmedi. Sektörel akranları ekleyebilirsiniz:</span>
                       <div className="flex items-center gap-2 flex-wrap">
-                        {sectorCandidateTickers.slice(0, 5).map((tk) => (
+                        {sectorCandidateTickers.map((tk) => (
                           <button
                             key={tk}
                             type="button"
                             onClick={() => onSelectTicker && onSelectTicker(tk)}
-                            className="px-2.5 py-1 bg-[#21262d] hover:bg-[#2e3440] text-[#f5c242] rounded-lg border border-[#2e3440] text-sm font-mono font-bold cursor-pointer transition"
-                            title={`${tk} hissesini doğrudan analiz et`}
+                            className="px-2.5 py-1 bg-[#181b20] hover:bg-[#2e3440] text-[#f5c242] rounded-lg border border-[#2e3440] text-xs font-mono font-bold cursor-pointer transition"
                           >
-                            +{tk}
+                            +{tk} Analiz Et
                           </button>
                         ))}
                       </div>
                     </div>
                   )}
-                </div>
-              ) : (
-                <div className="bg-[#21262d] rounded-xl p-4 text-sm text-slate-300 flex items-center justify-between flex-wrap gap-3">
-                  <span>Bu sektörde henüz başka bir şirket analiz edilmedi. Sektörel akranları ekleyebilirsiniz:</span>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {sectorCandidateTickers.map((tk) => (
-                      <button
-                        key={tk}
-                        type="button"
-                        onClick={() => onSelectTicker && onSelectTicker(tk)}
-                        className="px-2.5 py-1 bg-[#181b20] hover:bg-[#2e3440] text-[#f5c242] rounded-lg border border-[#2e3440] text-xs font-mono font-bold cursor-pointer transition"
-                      >
-                        +{tk} Analiz Et
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                </>
               )}
             </div>
 
@@ -3317,7 +3489,7 @@ export default function SimplyView({
                     <ComposedChart data={active4ChartsFlowData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #2b313d)" vertical={false} />
                       <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
-                      <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => formatMrTl(v, true)} />
+                      <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => formatMrTl(v, true)} domain={chart13YDomain} />
                       <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
                       <Legend align="left" verticalAlign="bottom" wrapperStyle={{ fontSize: '12px', paddingTop: '8px', paddingLeft: '8px' }} />
                       <Bar dataKey="revenue" name={currentSector === 'INSURANCE' ? 'Prim Üretimi' : 'Hasılat'} fill="#3b82f6" radius={[3, 3, 0, 0]} maxBarSize={32} legendType="square">
@@ -3363,22 +3535,23 @@ export default function SimplyView({
               <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 shadow-xl space-y-3">
                 <div className="flex items-center justify-between border-b border-[#282d37] pb-2.5">
                   <span className="text-base font-bold text-white">1.5 Nakit Akışı Kalitesi</span>
+                  <span className="text-xs font-mono text-slate-400 hidden sm:inline">İşletme vs Net Kâr vs Serbest Nakit</span>
                 </div>
                 <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={active4ChartsFlowData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #2b313d)" vertical={false} />
                       <XAxis dataKey="period" stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => v ? v.slice(2) : ''} />
-                      <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => formatMrTl(v, true)} />
+                      <YAxis stroke="#6b7280" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => formatMrTl(v, true)} domain={chart15YDomain} />
                       <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} />
                       <Legend align="left" verticalAlign="bottom" wrapperStyle={{ fontSize: '12px', paddingTop: '8px', paddingLeft: '8px' }} />
-                      <Bar dataKey="operating_cash_flow" name="İşletme Nakit Akışı" fill="#06b6d4" radius={[3, 3, 0, 0]} maxBarSize={32} legendType="square">
+                      <Bar dataKey="operating_cash_flow" name="İşletme Nakit Akışı" fill="#0284c7" fillOpacity={0.9} radius={[3, 3, 0, 0]} maxBarSize={32} legendType="square">
                         {active4ChartsFlowData.map((entry, idx) => (
-                          <Cell key={`canon-ocf-${idx}`} fill={(entry.operating_cash_flow != null && entry.operating_cash_flow < 0) ? '#ef4444' : '#06b6d4'} />
+                          <Cell key={`canon-ocf-${idx}`} fill={(entry.operating_cash_flow != null && entry.operating_cash_flow < 0) ? '#f43f5e' : '#0284c7'} />
                         ))}
                       </Bar>
                       <Line type="monotone" dataKey="net_income" name="Net Kâr" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: '#10b981' }} legendType="line" />
-                      <Line type="monotone" dataKey="free_cash_flow" name="Serbest Nakit (FCF)" stroke="#a855f7" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 2.5, fill: '#a855f7' }} legendType="line" />
+                      <Line type="monotone" dataKey="free_cash_flow" name="Serbest Nakit (FCF)" stroke="#f59e0b" strokeWidth={2.2} strokeDasharray="4 4" dot={{ r: 2.5, fill: '#f59e0b' }} legendType="line" />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -3492,39 +3665,7 @@ export default function SimplyView({
                   <span className="text-sm font-mono text-slate-300">
                     {selectedTableTab === 'ratios' ? 'Birim: Oran / Katsayı' : 'Birim: Bin TRY'}
                   </span>
-                  {reversedPeriods.length > maxVisiblePeriods && (
-                    <div className="flex items-center gap-1.5 bg-[#21262d] px-2.5 py-1 rounded-lg border border-[#2e3440] text-sm font-mono">
-                      <button
-                        type="button"
-                        onClick={() => setPeriodOffset(prev => Math.max(0, prev - 1))}
-                        disabled={safePeriodOffset <= 0}
-                        className={`px-1.5 py-0.5 rounded transition ${
-                          safePeriodOffset > 0
-                            ? 'text-[#f5c242] hover:bg-[#2e3440] cursor-pointer font-bold'
-                            : 'text-slate-600 cursor-not-allowed opacity-30'
-                        }`}
-                        title="Daha Yeni Dönemler"
-                      >
-                        &lt;
-                      </button>
-                      <span className="text-sm text-slate-300 px-1.5">
-                        {safePeriodOffset + 1}-{Math.min(reversedPeriods.length, safePeriodOffset + maxVisiblePeriods)} / {reversedPeriods.length}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setPeriodOffset(prev => Math.min(maxPeriodOffset, prev + 1))}
-                        disabled={safePeriodOffset >= maxPeriodOffset}
-                        className={`px-1.5 py-0.5 rounded transition ${
-                          safePeriodOffset < maxPeriodOffset
-                            ? 'text-[#f5c242] hover:bg-[#2e3440] cursor-pointer font-bold'
-                            : 'text-slate-600 cursor-not-allowed opacity-30'
-                        }`}
-                        title="Daha Eski Dönemler"
-                      >
-                        &gt;
-                      </button>
-                    </div>
-                  )}
+
                 </div>
               </div>
 
@@ -3588,216 +3729,308 @@ export default function SimplyView({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#282d37]/40">
-                    {/* 1. BİLANÇO GÖRÜNÜMÜ */}
-                    {selectedTableTab === 'bs' && balanceSheetSections.map((sec) => (
-                      <React.Fragment key={sec.id}>
-                        {/* Kategori Başlık Çubuğu */}
-                        <tr className="bg-[#1f242c]/90 border-t border-b border-[#2b313d]">
-                          <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3 font-sans font-bold text-slate-100 text-[15px] tracking-wide">
-                            {sec.title}
-                          </td>
-                        </tr>
-
-                        {/* Alt Kalem Satırları */}
-                        {sec.rows.map((row) => (
+                    {/* 1. BİLANÇO GÖRÜNÜMÜ (Açılır/Kapanır Kategoriler) */}
+                    {selectedTableTab === 'bs' && balanceSheetSections.map((sec) => {
+                      const isCollapsed = Boolean(collapsedSections[sec.id]);
+                      return (
+                        <React.Fragment key={sec.id}>
+                          {/* Kategori Başlık Çubuğu (Tıklanabilir Akordeon) */}
                           <tr
-                            key={row.key}
-                            onMouseEnter={() => setHoveredRowKey(row.key)}
-                            onMouseLeave={() => setHoveredRowKey(null)}
-                            className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
+                            onClick={() => toggleSectionCollapse(sec.id)}
+                            className="bg-[#1f242c] hover:bg-[#282f3a] border-t border-b border-[#2b313d] cursor-pointer select-none transition-colors group"
+                            title={isCollapsed ? 'Kategoriyi genişlet' : 'Kategoriyi daralt'}
                           >
-                            <td className="py-2.5 px-3 pl-6 font-sans text-sm text-slate-200 font-normal truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#181b20] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]" title={row.label}>
-                              {row.label}
+                            <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <ChevronDown className={`w-4 h-4 text-[#f5c242] transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />
+                                  <span className="font-sans font-bold text-slate-100 text-[15px] tracking-wide group-hover:text-white">
+                                    {sec.title}
+                                  </span>
+                                  <span className="text-xs font-mono text-slate-400 bg-[#16191f] px-2 py-0.5 rounded-full border border-[#2b313d]">
+                                    {sec.rows.length} kalem
+                                  </span>
+                                </div>
+                                <span className="text-xs text-slate-400 group-hover:text-slate-200 transition font-sans pr-2">
+                                  {isCollapsed ? 'Genişlet ▼' : 'Daralt ▲'}
+                                </span>
+                              </div>
                             </td>
-                            {visiblePeriods.map((c, colIdx) =>
-                              renderDataCell(c, colIdx, row.key, (row as any).fallbackKey, row.key, false, false, (row as any).invert)
-                            )}
                           </tr>
-                        ))}
 
-                        {/* Kategori Toplam Satırı */}
-                        <tr
-                          onMouseEnter={() => setHoveredRowKey(`total-${sec.id}`)}
-                          onMouseLeave={() => setHoveredRowKey(null)}
-                          className="bg-[#1a1e24] border-t border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
-                        >
-                          <td className="py-2.5 px-3 font-sans font-bold text-white text-[15px] truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#1a1e24] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
-                            {sec.totalLabel}
-                          </td>
-                          {visiblePeriods.map((c, colIdx) =>
-                            renderDataCell(c, colIdx, sec.totalKey, undefined, `total-${sec.id}`, true, false)
-                          )}
-                        </tr>
-
-                        {/* Genel Toplam Satırı (Aktifler / Yükümlülükler) */}
-                        {sec.grandTotalLabel && (
-                          <tr
-                            onMouseEnter={() => setHoveredRowKey(`grand-${sec.id}`)}
-                            onMouseLeave={() => setHoveredRowKey(null)}
-                            className="bg-[#242a35] border-t-2 border-b-2 border-[#f5c242]/40 font-bold hover:bg-[#2c3442] transition-colors"
-                          >
-                            <td className="py-3 px-3 font-sans font-extrabold text-[#f5c242] text-base tracking-wide truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#242a35] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
-                              {sec.grandTotalLabel}
-                            </td>
-                            {visiblePeriods.map((c, colIdx) =>
-                              renderDataCell(c, colIdx, sec.grandTotalKey, undefined, `grand-${sec.id}`, true, true)
-                            )}
-                          </tr>
-                        )}
-
-                        {/* Ekstra Satır (Örn: Net Borç) */}
-                        {sec.extraRow && (
-                          <tr
-                            onMouseEnter={() => setHoveredRowKey(`extra-${sec.id}`)}
-                            onMouseLeave={() => setHoveredRowKey(null)}
-                            className="bg-[#1a1e24] border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
-                          >
-                            <td className="py-2.5 px-3 pl-4 font-sans font-semibold text-slate-200 text-sm truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#1a1e24] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
-                              {sec.extraRow.label}
-                            </td>
-                            {visiblePeriods.map((c, colIdx) =>
-                              renderDataCell(c, colIdx, sec.extraRow.key, undefined, `extra-${sec.id}`, true, false, true)
-                            )}
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    ))}
-
-                    {/* 2. GELİR TABLOSU GÖRÜNÜMÜ */}
-                    {selectedTableTab === 'is' && incomeStatementSections.map((sec) => (
-                      <React.Fragment key={sec.id}>
-                        <tr className="bg-[#1f242c]/90 border-t border-b border-[#2b313d]">
-                          <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3 font-sans font-bold text-slate-100 text-[15px] tracking-wide">
-                            {sec.title}
-                          </td>
-                        </tr>
-
-                        {sec.rows.map((row) => (
-                          <tr
-                            key={row.key}
-                            onMouseEnter={() => setHoveredRowKey(row.key)}
-                            onMouseLeave={() => setHoveredRowKey(null)}
-                            className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
-                          >
-                            <td className="py-2.5 px-3 pl-6 font-sans text-sm text-slate-200 font-normal truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#181b20] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]" title={row.label}>
-                              {row.label}
-                            </td>
-                            {visiblePeriods.map((c, colIdx) =>
-                              renderDataCell(c, colIdx, row.key, (row as any).fallbackKey, row.key, false, false, (row as any).invert)
-                            )}
-                          </tr>
-                        ))}
-
-                        <tr
-                          onMouseEnter={() => setHoveredRowKey(`total-${sec.id}`)}
-                          onMouseLeave={() => setHoveredRowKey(null)}
-                          className="bg-[#1a1e24] border-t border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
-                        >
-                          <td className="py-2.5 px-3 font-sans font-bold text-white text-[15px] truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#1a1e24] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
-                            {sec.totalLabel}
-                          </td>
-                          {visiblePeriods.map((c, colIdx) =>
-                            renderDataCell(c, colIdx, sec.totalKey, undefined, `total-${sec.id}`, true, false)
-                          )}
-                        </tr>
-
-                        {sec.grandTotalLabel && (
-                          <tr
-                            onMouseEnter={() => setHoveredRowKey(`grand-${sec.id}`)}
-                            onMouseLeave={() => setHoveredRowKey(null)}
-                            className="bg-[#242a35] border-t-2 border-b-2 border-[#f5c242]/40 font-bold hover:bg-[#2c3442] transition-colors"
-                          >
-                            <td className="py-3 px-3 font-sans font-extrabold text-[#f5c242] text-base tracking-wide truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#242a35] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
-                              {sec.grandTotalLabel}
-                            </td>
-                            {visiblePeriods.map((c, colIdx) =>
-                              renderDataCell(c, colIdx, sec.grandTotalKey, undefined, `grand-${sec.id}`, true, true)
-                            )}
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    ))}
-
-                    {/* 3. NAKİT AKIŞI GÖRÜNÜMÜ */}
-                    {selectedTableTab === 'cf' && cashFlowSections.map((sec) => (
-                      <React.Fragment key={sec.id}>
-                        <tr className="bg-[#1f242c]/90 border-t border-b border-[#2b313d]">
-                          <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3 font-sans font-bold text-slate-100 text-[15px] tracking-wide">
-                            {sec.title}
-                          </td>
-                        </tr>
-
-                        {sec.rows.map((row) => (
-                          <tr
-                            key={row.key}
-                            onMouseEnter={() => setHoveredRowKey(row.key)}
-                            onMouseLeave={() => setHoveredRowKey(null)}
-                            className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
-                          >
-                            <td className="py-2.5 px-3 pl-6 font-sans text-sm text-slate-200 font-normal truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#181b20] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]" title={row.label}>
-                              {row.label}
-                            </td>
-                            {visiblePeriods.map((c, colIdx) =>
-                              renderDataCell(c, colIdx, row.key, (row as any).fallbackKey, row.key, false, false, (row as any).invert)
-                            )}
-                          </tr>
-                        ))}
-
-                        <tr
-                          onMouseEnter={() => setHoveredRowKey(`total-${sec.id}`)}
-                          onMouseLeave={() => setHoveredRowKey(null)}
-                          className="bg-[#1a1e24] border-t border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
-                        >
-                          <td className="py-2.5 px-3 font-sans font-bold text-white text-[15px] truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#1a1e24] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
-                            {sec.totalLabel}
-                          </td>
-                          {visiblePeriods.map((c, colIdx) =>
-                            renderDataCell(c, colIdx, sec.totalKey, undefined, `total-${sec.id}`, true, false)
-                          )}
-                        </tr>
-                      </React.Fragment>
-                    ))}
-
-                    {/* 4. RASYOLAR GÖRÜNÜMÜ */}
-                    {selectedTableTab === 'ratios' && ratiosSections.map((sec) => (
-                      <React.Fragment key={sec.id}>
-                        <tr className="bg-[#1f242c]/90 border-t border-b border-[#2b313d]">
-                          <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3 font-sans font-bold text-slate-100 text-[15px] tracking-wide">
-                            {sec.title}
-                          </td>
-                        </tr>
-
-                        {sec.rows.map((row, idx) => (
-                          <tr
-                            key={idx}
-                            onMouseEnter={() => setHoveredRowKey(`ratio-${sec.id}-${idx}`)}
-                            onMouseLeave={() => setHoveredRowKey(null)}
-                            className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
-                          >
-                            <td className={`py-2.5 px-3 pl-6 font-sans text-sm truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#181b20] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] ${row.isHighlight ? 'font-bold text-white' : 'font-normal text-slate-200'}`} title={row.label}>
-                              {row.label}
-                            </td>
-                            {visiblePeriods.map((c) => {
-                              const rawVal = (row as any).raw ? (row as any).raw(c) : null;
-                              const hmClass = getRatioHeatmapClass((row as any).key, rawVal, currentSector);
-                              return (
-                                <td
-                                  key={c.period}
-                                  className={`py-2.5 px-2 text-right font-mono text-sm font-bold transition-colors whitespace-nowrap ${
-                                    hmClass ? hmClass : (row.isHighlight ? 'text-[#f5c242]' : 'text-slate-200')
-                                  }`}
+                          {!isCollapsed && (
+                            <>
+                              {/* Alt Kalem Satırları */}
+                              {sec.rows.map((row) => (
+                                <tr
+                                  key={row.key}
+                                  onMouseEnter={() => setHoveredRowKey(row.key)}
+                                  onMouseLeave={() => setHoveredRowKey(null)}
+                                  className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
                                 >
-                                  <div className="flex items-center justify-end whitespace-nowrap gap-1">
-                                    <span className="tabular-nums tracking-tight">{row.calc(c)}</span>
-                                    <span className="w-8 flex-shrink-0" />
-                                  </div>
+                                  <td className="py-2.5 px-3 pl-6 font-sans text-sm text-slate-200 font-normal truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#181b20] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]" title={row.label}>
+                                    {row.label}
+                                  </td>
+                                  {visiblePeriods.map((c, colIdx) =>
+                                    renderDataCell(c, colIdx, row.key, (row as any).fallbackKey, row.key, false, false, (row as any).invert)
+                                  )}
+                                </tr>
+                              ))}
+
+                              {/* Kategori Toplam Satırı */}
+                              <tr
+                                onMouseEnter={() => setHoveredRowKey(`total-${sec.id}`)}
+                                onMouseLeave={() => setHoveredRowKey(null)}
+                                className="bg-[#1a1e24] border-t border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
+                              >
+                                <td className="py-2.5 px-3 font-sans font-bold text-white text-[15px] truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#1a1e24] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
+                                  {sec.totalLabel}
                                 </td>
-                              );
-                            })}
+                                {visiblePeriods.map((c, colIdx) =>
+                                  renderDataCell(c, colIdx, sec.totalKey, undefined, `total-${sec.id}`, true, false)
+                                )}
+                              </tr>
+
+                              {/* Genel Toplam Satırı (Aktifler / Yükümlülükler) */}
+                              {sec.grandTotalLabel && (
+                                <tr
+                                  onMouseEnter={() => setHoveredRowKey(`grand-${sec.id}`)}
+                                  onMouseLeave={() => setHoveredRowKey(null)}
+                                  className="bg-[#242a35] border-t-2 border-b-2 border-[#f5c242]/40 font-bold hover:bg-[#2c3442] transition-colors"
+                                >
+                                  <td className="py-3 px-3 font-sans font-extrabold text-[#f5c242] text-base tracking-wide truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#242a35] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
+                                    {sec.grandTotalLabel}
+                                  </td>
+                                  {visiblePeriods.map((c, colIdx) =>
+                                    renderDataCell(c, colIdx, sec.grandTotalKey, undefined, `grand-${sec.id}`, true, true)
+                                  )}
+                                </tr>
+                              )}
+
+                              {/* Ekstra Satır (Örn: Net Borç) */}
+                              {sec.extraRow && (
+                                <tr
+                                  onMouseEnter={() => setHoveredRowKey(`extra-${sec.id}`)}
+                                  onMouseLeave={() => setHoveredRowKey(null)}
+                                  className="bg-[#1a1e24] border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
+                                >
+                                  <td className="py-2.5 px-3 pl-4 font-sans font-semibold text-slate-200 text-sm truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#1a1e24] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
+                                    {sec.extraRow.label}
+                                  </td>
+                                  {visiblePeriods.map((c, colIdx) =>
+                                    renderDataCell(c, colIdx, sec.extraRow.key, undefined, `extra-${sec.id}`, true, false, true)
+                                  )}
+                                </tr>
+                              )}
+                            </>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+
+                    {/* 2. GELİR TABLOSU GÖRÜNÜMÜ (Açılır/Kapanır Kategoriler) */}
+                    {selectedTableTab === 'is' && incomeStatementSections.map((sec) => {
+                      const isCollapsed = Boolean(collapsedSections[sec.id]);
+                      return (
+                        <React.Fragment key={sec.id}>
+                          <tr
+                            onClick={() => toggleSectionCollapse(sec.id)}
+                            className="bg-[#1f242c] hover:bg-[#282f3a] border-t border-b border-[#2b313d] cursor-pointer select-none transition-colors group"
+                            title={isCollapsed ? 'Kategoriyi genişlet' : 'Kategoriyi daralt'}
+                          >
+                            <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <ChevronDown className={`w-4 h-4 text-[#f5c242] transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />
+                                  <span className="font-sans font-bold text-slate-100 text-[15px] tracking-wide group-hover:text-white">
+                                    {sec.title}
+                                  </span>
+                                  <span className="text-xs font-mono text-slate-400 bg-[#16191f] px-2 py-0.5 rounded-full border border-[#2b313d]">
+                                    {sec.rows.length} kalem
+                                  </span>
+                                </div>
+                                <span className="text-xs text-slate-400 group-hover:text-slate-200 transition font-sans pr-2">
+                                  {isCollapsed ? 'Genişlet ▼' : 'Daralt ▲'}
+                                </span>
+                              </div>
+                            </td>
                           </tr>
-                        ))}
-                      </React.Fragment>
-                    ))}
+
+                          {!isCollapsed && (
+                            <>
+                              {sec.rows.map((row) => (
+                                <tr
+                                  key={row.key}
+                                  onMouseEnter={() => setHoveredRowKey(row.key)}
+                                  onMouseLeave={() => setHoveredRowKey(null)}
+                                  className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
+                                >
+                                  <td className="py-2.5 px-3 pl-6 font-sans text-sm text-slate-200 font-normal truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#181b20] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]" title={row.label}>
+                                    {row.label}
+                                  </td>
+                                  {visiblePeriods.map((c, colIdx) =>
+                                    renderDataCell(c, colIdx, row.key, (row as any).fallbackKey, row.key, false, false, (row as any).invert)
+                                  )}
+                                </tr>
+                              ))}
+
+                              <tr
+                                onMouseEnter={() => setHoveredRowKey(`total-${sec.id}`)}
+                                onMouseLeave={() => setHoveredRowKey(null)}
+                                className="bg-[#1a1e24] border-t border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
+                              >
+                                <td className="py-2.5 px-3 font-sans font-bold text-white text-[15px] truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#1a1e24] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
+                                  {sec.totalLabel}
+                                </td>
+                                {visiblePeriods.map((c, colIdx) =>
+                                  renderDataCell(c, colIdx, sec.totalKey, undefined, `total-${sec.id}`, true, false)
+                                )}
+                              </tr>
+
+                              {sec.grandTotalLabel && (
+                                <tr
+                                  onMouseEnter={() => setHoveredRowKey(`grand-${sec.id}`)}
+                                  onMouseLeave={() => setHoveredRowKey(null)}
+                                  className="bg-[#242a35] border-t-2 border-b-2 border-[#f5c242]/40 font-bold hover:bg-[#2c3442] transition-colors"
+                                >
+                                  <td className="py-3 px-3 font-sans font-extrabold text-[#f5c242] text-base tracking-wide truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#242a35] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
+                                    {sec.grandTotalLabel}
+                                  </td>
+                                  {visiblePeriods.map((c, colIdx) =>
+                                    renderDataCell(c, colIdx, sec.grandTotalKey, undefined, `grand-${sec.id}`, true, true)
+                                  )}
+                                </tr>
+                              )}
+                            </>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+
+                    {/* 3. NAKİT AKIŞI GÖRÜNÜMÜ (Açılır/Kapanır Kategoriler) */}
+                    {selectedTableTab === 'cf' && cashFlowSections.map((sec) => {
+                      const isCollapsed = Boolean(collapsedSections[sec.id]);
+                      return (
+                        <React.Fragment key={sec.id}>
+                          <tr
+                            onClick={() => toggleSectionCollapse(sec.id)}
+                            className="bg-[#1f242c] hover:bg-[#282f3a] border-t border-b border-[#2b313d] cursor-pointer select-none transition-colors group"
+                            title={isCollapsed ? 'Kategoriyi genişlet' : 'Kategoriyi daralt'}
+                          >
+                            <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <ChevronDown className={`w-4 h-4 text-[#f5c242] transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />
+                                  <span className="font-sans font-bold text-slate-100 text-[15px] tracking-wide group-hover:text-white">
+                                    {sec.title}
+                                  </span>
+                                  <span className="text-xs font-mono text-slate-400 bg-[#16191f] px-2 py-0.5 rounded-full border border-[#2b313d]">
+                                    {sec.rows.length} kalem
+                                  </span>
+                                </div>
+                                <span className="text-xs text-slate-400 group-hover:text-slate-200 transition font-sans pr-2">
+                                  {isCollapsed ? 'Genişlet ▼' : 'Daralt ▲'}
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {!isCollapsed && (
+                            <>
+                              {sec.rows.map((row) => (
+                                <tr
+                                  key={row.key}
+                                  onMouseEnter={() => setHoveredRowKey(row.key)}
+                                  onMouseLeave={() => setHoveredRowKey(null)}
+                                  className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
+                                >
+                                  <td className="py-2.5 px-3 pl-6 font-sans text-sm text-slate-200 font-normal truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#181b20] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]" title={row.label}>
+                                    {row.label}
+                                  </td>
+                                  {visiblePeriods.map((c, colIdx) =>
+                                    renderDataCell(c, colIdx, row.key, (row as any).fallbackKey, row.key, false, false, (row as any).invert)
+                                  )}
+                                </tr>
+                              ))}
+
+                              <tr
+                                onMouseEnter={() => setHoveredRowKey(`total-${sec.id}`)}
+                                onMouseLeave={() => setHoveredRowKey(null)}
+                                className="bg-[#1a1e24] border-t border-b border-[#2e3542] hover:bg-[#222832] transition-colors"
+                              >
+                                <td className="py-2.5 px-3 font-sans font-bold text-white text-[15px] truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#1a1e24] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
+                                  {sec.totalLabel}
+                                </td>
+                                {visiblePeriods.map((c, colIdx) =>
+                                  renderDataCell(c, colIdx, sec.totalKey, undefined, `total-${sec.id}`, true, false)
+                                )}
+                              </tr>
+                            </>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+
+                    {/* 4. RASYOLAR GÖRÜNÜMÜ (Açılır/Kapanır Kategoriler) */}
+                    {selectedTableTab === 'ratios' && ratiosSections.map((sec) => {
+                      const isCollapsed = Boolean(collapsedSections[sec.id]);
+                      return (
+                        <React.Fragment key={sec.id}>
+                          <tr
+                            onClick={() => toggleSectionCollapse(sec.id)}
+                            className="bg-[#1f242c] hover:bg-[#282f3a] border-t border-b border-[#2b313d] cursor-pointer select-none transition-colors group"
+                            title={isCollapsed ? 'Kategoriyi genişlet' : 'Kategoriyi daralt'}
+                          >
+                            <td colSpan={visiblePeriods.length + 1} className="py-2.5 px-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <ChevronDown className={`w-4 h-4 text-[#f5c242] transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />
+                                  <span className="font-sans font-bold text-slate-100 text-[15px] tracking-wide group-hover:text-white">
+                                    {sec.title}
+                                  </span>
+                                  <span className="text-xs font-mono text-slate-400 bg-[#16191f] px-2 py-0.5 rounded-full border border-[#2b313d]">
+                                    {sec.rows.length} oran
+                                  </span>
+                                </div>
+                                <span className="text-xs text-slate-400 group-hover:text-slate-200 transition font-sans pr-2">
+                                  {isCollapsed ? 'Genişlet ▼' : 'Daralt ▲'}
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {!isCollapsed && sec.rows.map((row, idx) => (
+                            <tr
+                              key={idx}
+                              onMouseEnter={() => setHoveredRowKey(`ratio-${sec.id}-${idx}`)}
+                              onMouseLeave={() => setHoveredRowKey(null)}
+                              className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
+                            >
+                              <td className={`py-2.5 px-3 pl-6 font-sans text-sm truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#181b20] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] ${row.isHighlight ? 'font-bold text-white' : 'font-normal text-slate-200'}`} title={row.label}>
+                                {row.label}
+                              </td>
+                              {visiblePeriods.map((c) => {
+                                const rawVal = (row as any).raw ? (row as any).raw(c) : null;
+                                const hmClass = getRatioHeatmapClass((row as any).key, rawVal, currentSector);
+                                return (
+                                  <td
+                                    key={c.period}
+                                    className={`py-2.5 px-2 text-right font-mono text-sm font-bold transition-colors whitespace-nowrap ${
+                                      hmClass ? hmClass : (row.isHighlight ? 'text-[#f5c242]' : 'text-slate-200')
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-end whitespace-nowrap gap-1">
+                                      <span className="tabular-nums tracking-tight">{row.calc(c)}</span>
+                                      <span className="w-8 flex-shrink-0" />
+                                    </div>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </React.Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -4203,33 +4436,24 @@ export default function SimplyView({
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#282d37] pb-3">
                     <div className="flex items-center gap-2">
                       <span className="font-sans text-base sm:text-lg font-bold text-white">3.4 Halka Açıklık Oranı (Fiili Dolaşım)</span>
-                      <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold border ${statusBg}`}>
-                        {statusLabel}
-                      </span>
                     </div>
-                    <span className="text-xs font-mono text-slate-400">Resmi BIST / MKK Fiili Dolaşım Verisi</span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="bg-[#12151b] border border-[#232834] rounded-xl p-4 space-y-1">
                       <div className="text-xs text-slate-400">Güncel Halka Açıklık</div>
                       <div className={`text-2xl font-bold font-mono ${statusColor}`}>%{floatPct.toFixed(1)}</div>
-                      <div className="text-[11px] text-slate-500">MKK fiili dolaşımdaki pay oranı</div>
                     </div>
 
                     <div className="bg-[#12151b] border border-[#232834] rounded-xl p-4 space-y-1">
                       <div className="text-xs text-slate-400">Piyasa Standardı & Optimal Aralık</div>
                       <div className="text-2xl font-bold font-mono text-cyan-400">%20 – %50</div>
-                      <div className="text-[11px] text-slate-500">Kurumsal fon likidite & kontrol normu</div>
                     </div>
 
                     <div className="bg-[#12151b] border border-[#232834] rounded-xl p-4 space-y-1">
                       <div className="text-xs text-slate-400">Optimal Konum Durumu</div>
-                      <div className={`text-base font-bold font-mono ${statusColor} truncate`}>
+                      <div className={`text-base font-bold font-mono ${statusColor} truncate mt-1`}>
                         {isOptimal ? 'Optimal Aralıkta' : floatPct < 20 ? 'Optimalin Altında (Düşük)' : 'Optimalin Üstünde (Yüksek)'}
-                      </div>
-                      <div className="text-[11px] text-slate-400 leading-snug">
-                        {isOptimal ? 'Mükemmel likidite ve sahiplik dengesi' : floatPct < 20 ? 'Sığ dolaşım / Oynaklık riski' : 'Dağınık mülkiyet yapısı'}
                       </div>
                     </div>
                   </div>
@@ -4237,10 +4461,7 @@ export default function SimplyView({
                   {/* Görsel Aralık Çubuğu (Range Bar Indicator) */}
                   <div className="bg-[#12151b] border border-[#232834] rounded-xl p-4 space-y-2.5">
                     <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-400 font-medium">Fiili Dolaşım Skalası & Karşılaştırma:</span>
-                      <span className="font-mono text-slate-300">
-                        Şirket: <strong className={statusColor}>%{floatPct.toFixed(1)}</strong> | Hedef: <strong className="text-cyan-400">%20–%50</strong>
-                      </span>
+                      <span className="text-slate-400 font-medium">Fiili Dolaşım Skalası</span>
                     </div>
 
                     <div className="relative h-3 w-full bg-[#1b2029] rounded-full overflow-hidden flex">
@@ -4257,10 +4478,6 @@ export default function SimplyView({
                       <span>%70</span>
                       <span>%100 (Tam Dağınık)</span>
                     </div>
-
-                    <p className="text-xs text-slate-400 leading-relaxed pt-1 border-t border-[#232834]/60">
-                      {statusDesc}
-                    </p>
                   </div>
                 </div>
               );
@@ -4354,16 +4571,13 @@ export default function SimplyView({
                       <span className="text-xs font-mono text-slate-400">Aracı Kurum Konsensüsü</span>
                     </div>
 
-                    <div className="bg-[#12151b] border border-[#232834] rounded-xl p-6 text-center space-y-2.5">
-                      <div className="w-10 h-10 rounded-full bg-slate-800/80 border border-slate-700/60 flex items-center justify-center mx-auto text-slate-400">
-                        <Building2 className="w-5 h-5 text-slate-400" />
+                    <div className="bg-[#12151b] border border-[#232834] rounded-xl p-5 text-center space-y-2">
+                      <div className="w-9 h-9 rounded-full bg-slate-800/80 border border-slate-700/60 flex items-center justify-center mx-auto text-slate-400">
+                        <Building2 className="w-4 h-4 text-slate-400" />
                       </div>
                       <h4 className="text-sm font-bold text-slate-200 font-sans">
                         Aktif Aracı Kurum Konsensüs Hedefi Bulunmuyor
                       </h4>
-                      <p className="text-xs text-slate-400 max-w-lg mx-auto font-sans leading-relaxed">
-                        {report.ticker} için Borsa İstanbul aracı kurumları veya Refinitiv/LSEG konsensüs havuzunda henüz aktif bir 12 aylık analist konsensüs hedef fiyatı yayımlanmamıştır. Değerleme için yukarıdaki model içsel değerimiz (₺{fairValueNum.toFixed(2)}) ve senaryo analizleri baz alınmalıdır.
-                      </p>
                     </div>
                   </div>
                 );
@@ -4686,39 +4900,41 @@ export default function SimplyView({
                     note: drivers.target_multiple.note
                   }
                 ].map((d, idx) => (
-                  <div key={idx} className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-4 flex flex-col justify-between space-y-3 shadow-xl">
+                  <div key={idx} className="bg-gradient-to-b from-[#1c212a] to-[#15181f] border border-[#2b313d] hover:border-[#384152] rounded-2xl p-4 sm:p-5 flex flex-col justify-between space-y-3.5 shadow-lg transition-all duration-200 group">
                     <div>
-                      <div className="text-[15px] font-bold text-white font-sans truncate" title={d.title}>
-                        {d.title}
+                      <div className="flex items-center justify-between gap-1.5">
+                        <div className="text-sm font-bold text-white font-sans truncate" title={d.title}>
+                          {d.title}
+                        </div>
+                        <span className="text-[11px] font-mono text-slate-400 bg-[#12151a] px-2 py-0.5 rounded-md border border-[#2b313d]">Model Bazı</span>
                       </div>
-                      <div className="flex items-baseline gap-1.5 mt-1">
-                        <span className="text-xl font-black font-mono text-[#f5c242] tracking-tight">
+                      <div className="flex items-baseline gap-1.5 mt-2">
+                        <span className="text-2xl font-black font-mono text-[#f5c242] tracking-tight">
                           {d.valueText}
                         </span>
-                        <span className="text-sm text-slate-400 font-mono">baz</span>
                       </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                      <div className="relative h-1.5 w-full rounded-full bg-[#101216] border border-[#2b313d] overflow-hidden">
+                    <div className="space-y-2">
+                      <div className="relative h-2 w-full rounded-full bg-[#101216] border border-[#2b313d] overflow-hidden">
                         <div
-                          className="h-full bg-emerald-500/40 rounded-full"
+                          className="h-full bg-gradient-to-r from-emerald-500/30 to-emerald-400/60 rounded-full"
                           style={{ width: `${Math.max(8, Math.min(100, d.pinPercent))}%` }}
                         />
                         <div
-                          className="absolute top-0 bottom-0 w-1.5 bg-[#f5c242] rounded-full"
-                          style={{ left: `calc(${d.pinPercent}% - 3px)` }}
+                          className="absolute top-0 bottom-0 w-2 bg-[#f5c242] rounded-full shadow-sm"
+                          style={{ left: `calc(${d.pinPercent}% - 4px)` }}
                         />
                       </div>
 
-                      <div className="flex items-center justify-between text-sm font-mono text-slate-300 leading-tight">
+                      <div className="flex items-center justify-between text-xs font-mono text-slate-400 leading-tight">
                         <span className="truncate">{d.bearText}</span>
-                        <span className="truncate text-right text-slate-200">{d.bullText}</span>
+                        <span className="truncate text-right text-slate-300">{d.bullText}</span>
                       </div>
                     </div>
 
                     {d.note && (
-                      <p className="text-sm text-slate-200 leading-relaxed pt-2.5 border-t border-[#282d37] font-sans" title={d.note}>
+                      <p className="text-xs text-slate-300 leading-relaxed pt-2.5 border-t border-[#262c37] font-sans" title={d.note}>
                         {d.note}
                       </p>
                     )}
@@ -4980,11 +5196,7 @@ export default function SimplyView({
                 </div>
               </div>
 
-              {dupontResult.driverSummary && (
-                <p className="text-xs text-slate-300 leading-relaxed bg-[#1a1e24] p-3 rounded-xl border border-[#282d37]">
-                  {dupontResult.driverSummary}
-                </p>
-              )}
+
             </div>
 
             {/* 4.7 Sermaye Tahsisi, İştirak Yapısı ve İlişkili Taraf Denetimi */}
@@ -5016,11 +5228,17 @@ export default function SimplyView({
                             : 'Operasyonel Sermaye Tahsisi Dengeli'}
                       </span>
                     </div>
-                    <span className="text-xs font-mono text-slate-400 bg-[#21262d] px-2.5 py-1 rounded-lg border border-[#2e3440]">
-                      {isInvEntity
-                        ? 'TFRS 10 Portföy Değerleme Denetimi'
-                        : `${capAlloc.triggeredCount}/4 Adli Kriter Sinyali`}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsCapAllocExpanded(prev => !prev)}
+                      className="flex items-center gap-1.5 text-xs font-mono font-semibold text-slate-300 hover:text-white bg-[#21262d] hover:bg-[#2c333f] px-3 py-1.5 rounded-lg border border-[#2e3440] hover:border-[#f5c242]/40 transition cursor-pointer shadow-sm select-none"
+                      title={isCapAllocExpanded ? 'Kriter detaylarını gizle' : 'Kriter detaylarını incele'}
+                    >
+                      <span className={capAlloc.triggeredCount > 0 ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold'}>
+                        {isInvEntity ? 'TFRS 10 Portföy Denetimi' : `${capAlloc.triggeredCount}/4 Adli Kriter Sinyali`}
+                      </span>
+                      <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${isCapAllocExpanded ? 'rotate-180 text-[#f5c242]' : ''}`} />
+                    </button>
                   </div>
 
                   {/* 4 Temel Sermaye Tahsisi Metrik Şeridi */}
@@ -5097,9 +5315,10 @@ export default function SimplyView({
                     </div>
                   </div>
 
-                  {/* 4 Boyutlu Sermaye Tahsisi ve İlişkili Taraf Kırılımı */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                    {indicators.map((ind: any) => {
+                  {/* 4 Boyutlu Sermaye Tahsisi ve İlişkili Taraf Kırılımı (Tıklanınca Açılır Çekmece) */}
+                  {isCapAllocExpanded && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-2 border-t border-[#282d37]">
+                      {indicators.map((ind: any) => {
                       const isTriggered = Boolean(ind.triggered);
                       return (
                         <div
@@ -5151,7 +5370,8 @@ export default function SimplyView({
                         </div>
                       );
                     })}
-                  </div>
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -5268,7 +5488,7 @@ export default function SimplyView({
               }
 
               const chartDataChronological = Array.from(yearlyAggMap.values());
-              const displayedDividends = showAllDividends ? uniqueDividends : uniqueDividends.slice(0, 5);
+              const displayedDividends = showAllDividends ? uniqueDividends : uniqueDividends.slice(0, 1);
 
               return (
                 <div className="space-y-6">
@@ -5364,7 +5584,7 @@ export default function SimplyView({
                         <span className="font-sans text-base sm:text-lg font-bold text-white">5.3 Geçmiş Nakit Temettü Ödemeleri</span>
                       </div>
                       <span className="text-xs font-mono text-slate-400">
-                        {showAllDividends ? `Tüm ${dividends.length} Kayıt Gösteriliyor` : `Son ${Math.min(5, dividends.length)} / Toplam ${dividends.length} Kayıt`}
+                        {showAllDividends ? `Tüm ${uniqueDividends.length} Dağıtım Kaydı Gösteriliyor` : 'Son Dağıtılan Temettü (En Güncel)'}
                       </span>
                     </div>
 
@@ -5405,7 +5625,7 @@ export default function SimplyView({
                       </table>
                     </div>
 
-                    {dividends.length > 5 && (
+                    {uniqueDividends.length > 1 && (
                       <div className="pt-3 border-t border-[#282d37] flex justify-center">
                         <button
                           type="button"
@@ -5415,12 +5635,12 @@ export default function SimplyView({
                           {showAllDividends ? (
                             <>
                               <ChevronUp className="w-3.5 h-3.5 text-[#f5c242]" />
-                              <span>Daha Az Göster (Son 5 Kayıt)</span>
+                              <span>Daha Az Göster (Sadece Son Temettü)</span>
                             </>
                           ) : (
                             <>
                               <ChevronDown className="w-3.5 h-3.5 text-[#f5c242]" />
-                              <span>Tümünü Göster ({dividends.length} Kayıt)</span>
+                              <span>Tüm Geçmiş Temettüleri Göster ({uniqueDividends.length} Kayıt)</span>
                             </>
                           )}
                         </button>
@@ -5498,12 +5718,9 @@ export default function SimplyView({
                   </table>
                 </div>
               ) : (
-                <div className="bg-[#21262d]/70 border border-[#2e3440] rounded-xl p-6 text-center space-y-2">
-                  <div className="text-base font-bold text-white">
-                    Geçmiş Yönetim Karnesi Verisi
-                  </div>
-                  <p className="text-sm text-slate-300 max-w-xl mx-auto leading-relaxed">
-                    Şirketin geçmiş faaliyet raporu ve yatırımcı sunumlarında açıklanan hedefler ile gerçekleşmelerin kıyası için yeni analiz ekranındaki <strong className="text-white">Alan 2 (Faaliyet Raporları)</strong> veya <strong className="text-white">Alan 3 (Yatırımcı Sunumu)</strong> bölümlerine PDF belgelerini ekleyebilirsiniz.
+                <div className="bg-[#181b20] border border-[#262c37] rounded-xl p-4 text-center">
+                  <p className="text-xs sm:text-sm text-slate-400 font-sans">
+                    Analiz için faaliyet/sunum raporu eklenmedi.
                   </p>
                 </div>
               )}
