@@ -2020,7 +2020,7 @@ export function syncReportTextWithValuation(
 > Şirketin içsel adil değerini belirleyen operasyonel sürücüler, marj kaldıracı ve senaryo bazlı stres testi duyarlılığı incelenmiştir.
 
 - **1. Hasılat Büyümesi ve Talep Hassasiyeti:** Modelimizde önümüzdeki 12 ay için baz alınan hasılat artış beklentisi **%${revGrowthVal.toFixed(1)}** seviyesindedir. Şirketin güçlü pazar payı ve fiyatlama gücü, maliyet enflasyonunu satışlarına yansıtabilmesini desteklemektedir (**Operasyonel Büyüme Açısından Olumlu**).
-- **2. Operasyonel Marj Kaldıracı (Operating Leverage):** Model operasyonel marjı **%${marginVal.toFixed(1)}** düzeyindedir. Marjlarda yaşanabilecek her 100 baz puanlık (%1,0) genişleme veya daralma, hisse başı kârlılığı ve adil değeri yaklaşık **%${opLeverageSensitivity}** oranında kaldıraçlı etkilemektedir (**Operasyonel Kaldıraç Hassasiyeti**).
+- **2. Operasyonel Marj Kaldıracı:** Model operasyonel marjı **%${marginVal.toFixed(1)}** düzeyindedir. Marjlarda yaşanabilecek her 100 baz puanlık (%1,0) genişleme veya daralma, hisse başı kârlılığı ve adil değeri yaklaşık **%${opLeverageSensitivity}** oranında kaldıraçlı etkilemektedir (**Operasyonel Kaldıraç Hassasiyeti**).
 - **3. Sermaye Maliyeti (WACC) ve Finansman Hassasiyeti:** Faiz oranlarında veya sermaye maliyetinde yaşanabilecek 100 baz puanlık oynaklık adil değer üzerinde %2-3 bandında esneme yaratmaktadır. Şirketin likidite tamponu ve borçluluk yapısı faiz şoklarına karşı savunma gücü sağlamaktadır (**Yönetilebilir Finansman Riski**).
 - **4. Senaryo Bazlı Stres Testi ve Güvenlik Marjı Değerlendirmesi:** Ayı senaryosu taban hedefi (**${bearStr} TL**), sektörde kâr marjlarının sert daraldığı ve talep şokunun yaşandığı en ağır kriz koşullarını simüle etmektedir. Mevcut piyasa fiyatının bu tabanın üzerinde seyretmesi, olumsuz makro şoklara karşı yatırımcıya koruyucu bir güvenlik tamponu sunmaktadır (**Aşağı Yönlü Risk Emniyeti**).`;
 
@@ -10892,7 +10892,7 @@ export function generateAlgorithmicReportFallback(params: {
     if (freeCashFlowVal >= 0) {
       fcfVerdict = `Şirket hem mevcut kapasite ve bakım yatırımlarını finanse edebilmekte hem de geriye ${(freeCashFlowVal / 1e9).toFixed(2)} Milyar TL serbest nakit bırakabilmektedir. Bu durum borçlanma ihtiyacını azaltarak temettü ve özkaynak büyümesini destekleyen **hissedar değeri açısından güçlü ve olumlu** bir yapıya işaret etmektedir.`;
     } else {
-      fcfVerdict = `Devam eden yoğun yatırım döngüsü (CapEx) nedeniyle ${(Math.abs(freeCashFlowVal) / 1e9).toFixed(2)} Milyar TL serbest nakit açığı oluşmuştur. Kısa vadede serbest nakit baskısı yaratsa da, bu yatırımların ciroya ve kâra dönüşme takvimi yakından izlenmelidir (**Kısa vadede temkinli, kapasite artışı açısından orta vadede nötr/fırsat**).`;
+      fcfVerdict = `Devam eden yoğun yatırım döngüsü nedeniyle ${(Math.abs(freeCashFlowVal) / 1e9).toFixed(2)} Milyar TL serbest nakit açığı oluşmuştur. Kısa vadede serbest nakit baskısı yaratsa da, bu yatırımların ciroya ve kâra dönüşme takvimi yakından izlenmelidir (**Kısa vadede temkinli, kapasite artışı açısından orta vadede nötr/fırsat**).`;
     }
   } else {
     fcfVerdict = `Yatırım harcamaları operasyonel nakit üretimiyle dengeli şekilde karşılanmaktadır.`;
@@ -10999,7 +10999,7 @@ ${trapBlock}${redFlagsBlock}
 > Şirketin operasyonel kârının nakde dönüşüm gücü, tahakkuk kalitesi ve serbest nakit akışı finansal tablolar bazında incelenmiştir.
 
 - **Kâr Kalitesi ve Nakit Üretimi:** ${grossOcfVal ? `Çalışma sermayesi öncesi brüt faaliyet nakit üretimi **${(grossOcfVal / 1e9).toFixed(2)} Milyar TL**, vergi ve işletme sermayesi düzeltmeleri sonrası resmi Net İşletme Nakit Akışı ise **${(netOcfVal / 1e9).toFixed(2)} Milyar TL** seviyesindedir. ` : ''}${cashQualityVerdict}
-- **Yatırım Harcamaları ve Serbest Nakit Akışı (FCF):** ${tangibleCapexVal ? `Maddi duran varlık yatırımları (Tangible CapEx) **${(Math.abs(tangibleCapexVal) / 1e9).toFixed(2)} Milyar TL** düzeyindedir. ` : ''}${fcfVerdict}
+- **Yatırım Harcamaları ve Serbest Nakit Akışı:** ${tangibleCapexVal ? `Maddi duran varlık yatırımları **${(Math.abs(tangibleCapexVal) / 1e9).toFixed(2)} Milyar TL** düzeyindedir. ` : ''}${fcfVerdict}
 - **Sermaye Verimliliği (DuPont ROE & Marjlar):** Şirketin özkaynak kârlılığı (ROE) **%${roeVal}** ve operasyonel FAVÖK marjı **%${ebitdaMarginVal.toFixed(1)}** olarak gerçekleşmiştir. ${roeVerdict}
 
 ## III. SEKTÖREL REKABET VE DU PONT ANALİZİ
@@ -11013,13 +11013,13 @@ ${formulaBlock}
 
 - **Sermaye Maliyeti & Ekonomik Katma Değer (EVA):** Nominal Sermaye Maliyeti %${nominalWaccVal}, beklenen enflasyon %${expectedInfVal} ve Fisher denklemiyle hesaplanan Reel WACC **%${realWaccVal}** seviyesindedir. ${evaVerdict}
 - **Uygulanan Değerleme Modeli:** Şirketin sektör dinamikleri ve sermaye yapısına en uygun yöntem olan **${valuation.valuation_model_name}** uygulanmıştır.
-- **Hedef Çarpan ve İskonto Emniyeti:** Modelde hedeflenen sektör çarpanı **${drivers.target_multiple?.value ? (String(drivers.target_multiple.value).endsWith('x') || String(drivers.target_multiple.value).includes('x (') ? drivers.target_multiple.value : `${drivers.target_multiple.value}x`) : 'Sektör Normu'}** olup, piyasa fiyatı model değerine göre **%${valuation.discount_pct} (${valuation.margin_of_safety_status || 'HESAPLANDI'})** seviyesinde güvenlik marjı sunmaktadır.
+- **Hedef Çarpan ve İskonto Emniyeti:** Modelde hedeflenen sektör çarpanı **${drivers.target_multiple?.value ? (String(drivers.target_multiple.value).endsWith('x') || String(drivers.target_multiple.value).includes('x (') ? drivers.target_multiple.value : `${drivers.target_multiple.value}x`) : 'Sektör Normu'}** olup, piyasa fiyatı model değerine göre **%${valuation.discount_pct} (${valuation.margin_of_safety_status === 'SAFE' ? 'Güvenli İskonto Marjı' : valuation.margin_of_safety_status === 'BORDERLINE' ? 'Sınırda Güvenlik Marjı' : valuation.margin_of_safety_status === 'UNSAFE' ? 'Yetersiz Güvenlik Marjı' : (valuation.margin_of_safety_status || 'Hesaplandı')})** seviyesinde güvenlik marjı sunmaktadır.
 
 ## V. DEĞER SÜRÜCÜLERİ VE HASSASİYET ANALİZİ
 > Şirketin içsel adil değerini belirleyen operasyonel sürücüler, marj kaldıracı ve senaryo bazlı stres testi duyarlılığı incelenmiştir.
 
 - **1. Hasılat Büyümesi ve Talep Hassasiyeti:** Modelimizde önümüzdeki 12 ay için baz alınan hasılat artış beklentisi **%${revGrowthVal.toFixed(1)}** seviyesindedir. ${growthVerdict}
-- **2. Operasyonel Marj Kaldıracı (Operating Leverage):** ${marginSensitivityVerdict}
+- **2. Operasyonel Marj Kaldıracı:** ${marginSensitivityVerdict}
 - **3. Sermaye Maliyeti (WACC) ve Finansman Hassasiyeti:** Modelde uygulanan Reel WACC oranı **%${realWaccVal}** düzeyindedir. ${waccSensitivityVerdict}
 - **4. Senaryo Bazlı Stres Testi ve Güvenlik Marjı Değerlendirmesi:** ${stressTestVerdict}
 

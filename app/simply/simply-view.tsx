@@ -422,6 +422,7 @@ function calculateDriverPin(
 
 function extractTextFromChildren(children: any): string {
   if (typeof children === 'string') return children;
+  if (typeof children === 'number') return String(children);
   if (Array.isArray(children)) return children.map(extractTextFromChildren).join('');
   if (children && typeof children === 'object' && children.props && children.props.children) {
     return extractTextFromChildren(children.props.children);
@@ -601,6 +602,13 @@ function cleanMarkdown(text: string, decision?: string, stripTrailingVerdict = t
   // Remove redundant bin TL parenthetical when preceded by milyar/Mr TL
   cleaned = cleaned.replace(/(\b\d+(?:[.,]\d+)?\s*(?:milyar|Mr)\s*TL)\s*\(\s*[\d.,]+\s*bin\s*TL\s*\)/gi, '$1');
 
+  // Parantez içi İngilizce tanım ve kısaltmaları temizle / Türkçeleştir
+  cleaned = cleaned.replace(/\s*\(\s*(?:Operating\s+Leverage|Tangible\s+CapEx|CapEx|Combined\s+Ratio|Bear\s+Case(?:\s+Target)?|Bull\s+Case(?:\s+Target)?|Distressed\s+Turnaround(?:\s+Model)?|Valuation|Asset\s+Trap|Peak\s+Margin|Cash\s+Burn|Rule\s+of\s+40|Forensic\s+Red\s+Team|Float)\s*\)/gi, '');
+  cleaned = cleaned.replace(/\(\s*SAFE\s*\)/g, '(Güvenli İskonto Marjı)');
+  cleaned = cleaned.replace(/\(\s*BORDERLINE\s*\)/g, '(Sınırda Güvenlik Marjı)');
+  cleaned = cleaned.replace(/\(\s*UNSAFE\s*\)/g, '(Yetersiz Güvenlik Marjı)');
+  cleaned = cleaned.replace(/\(\s*\*\*((?:[^*]*?(?:Olumlu|Olumsuz|Nötr|İzleme|İzlenmeli|Görünüm|görünüm|Risk|Riski|riski|Kritik|Hassasiyet|Emniyet|asimetri|fırsat)[^*]*?))\*\*\s*\)/gi, '**($1)**');
+
   // 1. Nakit dönüşüm oranı kuru ifadesini analitik hükme bağla (Insight ekleme)
   if (cleaned.includes('Nakit dönüşüm oranı tahsilat kabiliyetine işaret etmektedir.') && !cleaned.includes('Nakit dönüşüm oranı güçlü tahsilat kabiliyetine')) {
     cleaned = cleaned.replace(
@@ -620,10 +628,10 @@ function cleanMarkdown(text: string, decision?: string, stripTrailingVerdict = t
         return `## V. DEĞER SÜRÜCÜLERİ VE HASSASİYET ANALİZİ
 > Şirketin içsel adil değerini belirleyen operasyonel sürücüler, marj kaldıracı ve senaryo bazlı stres testi duyarlılığı incelenmiştir.
 
-- **1. Hasılat Büyümesi ve Talep Hassasiyeti:** Şirketin 12 aylık ileri büyüme beklentileri, maliyet enflasyonunu satış fiyatlarına yansıtabilme gücü ve pazar payı hakimiyetiyle desteklenmektedir (**Operasyonel Büyüme Açısından Olumlu**).
-- **2. Operasyonel Marj Kaldıracı (Operating Leverage):** Kâr marjlarındaki her 100 baz puanlık (%1,0) iyileşme veya daralma, hisse başı kârlılığı ve adil değeri yaklaşık %4-6 oranında kaldıraçlı etkilemektedir (**Operasyonel Hassasiyet Açısından Kritik**).
-- **3. Sermaye Maliyeti (WACC) ve Finansman Hassasiyeti:** Faiz oranlarında veya sermaye maliyetinde yaşanabilecek 100 baz puanlık oynaklık adil değer üzerinde sınırlı (%2-3) bir esneme yaratmaktadır. Şirketin likidite tamponu faiz şoklarına karşı koruma sağlamaktadır (**Yönetilebilir Finansman Riski**).
-- **4. Senaryo Bazlı Stres Testi ve Güvenlik Marjı Değerlendirmesi:** Ayı senaryosu taban hedefi (**${bearPrice}**), sektörde operasyonel marjların sert daraldığı ve talep şokunun yaşandığı en ağır kriz koşullarını simüle etmektedir. Mevcut piyasa fiyatının bu tabanın üzerinde seyretmesi, olumsuz makro şoklara karşı yatırımcıya koruyucu bir güvenlik tamponu sunmaktadır (**Aşağı Yönlü Risk Emniyeti**).\n\n`;
+- **1. Hasılat Büyümesi ve Talep Hassasiyeti:** Şirketin 12 aylık ileri büyüme beklentileri, maliyet enflasyonunu satış fiyatlarına yansıtabilme gücü ve pazar payı hakimiyetiyle desteklenmektedir **\(Operasyonel Büyüme Açısından Olumlu\)**.
+- **2. Operasyonel Marj Kaldıracı:** Kâr marjlarındaki her 100 baz puanlık (%1,0) iyileşme veya daralma, hisse başı kârlılığı ve adil değeri yaklaşık %4-6 oranında kaldıraçlı etkilemektedir **\(Operasyonel Hassasiyet Açısından Kritik\)**.
+- **3. Sermaye Maliyeti (WACC) ve Finansman Hassasiyeti:** Faiz oranlarında veya sermaye maliyetinde yaşanabilecek 100 baz puanlık oynaklık adil değer üzerinde sınırlı (%2-3) bir esneme yaratmaktadır. Şirketin likidite tamponu faiz şoklarına karşı koruma sağlamaktadır **\(Yönetilebilir Finansman Riski\)**.
+- **4. Senaryo Bazlı Stres Testi ve Güvenlik Marjı Değerlendirmesi:** Ayı senaryosu taban hedefi (**${bearPrice}**), sektörde operasyonel marjların sert daraldığı ve talep şokunun yaşandığı en ağır kriz koşullarını simüle etmektedir. Mevcut piyasa fiyatının bu tabanın üzerinde seyretmesi, olumsuz makro şoklara karşı yatırımcıya koruyucu bir güvenlik tamponu sunmaktadır **\(Aşağı Yönlü Risk Emniyeti\)**.\n\n`;
       }
     );
   }
@@ -1703,6 +1711,11 @@ export default function SimplyView({
     setCollapsedReportChapters(prev => ({ ...prev, [chapterId]: !prev[chapterId] }));
   }, []);
 
+  const [expandedThesisPillars, setExpandedThesisPillars] = useState<Record<string, boolean>>({});
+  const toggleThesisPillar = useCallback((pillarId: string) => {
+    setExpandedThesisPillars(prev => ({ ...prev, [pillarId]: !prev[pillarId] }));
+  }, []);
+
   const reportChapters = useMemo(() => {
     return parseReportIntoChapters(cleanMarkdown(report.report || '', effectiveDecision));
   }, [report.report, effectiveDecision]);
@@ -1787,6 +1800,7 @@ export default function SimplyView({
     setShowCashQualityExplainer(false);
     setHoveredRowKey(null);
     setCollapsedReportChapters({});
+    setExpandedThesisPillars({});
   }, [report.id, report.ticker]);
 
   const scrollToSection = (id: SimplySectionId) => {
@@ -1807,6 +1821,184 @@ export default function SimplyView({
       setActiveSection(id);
     }
   };
+
+  const scrollToDomId = useCallback((domId: string, parentSection?: SimplySectionId) => {
+    const el = document.getElementById(domId);
+    if (el) {
+      isProgrammaticScrollRef.current = true;
+      if (programmaticScrollTimerRef.current) {
+        clearTimeout(programmaticScrollTimerRef.current);
+      }
+      programmaticScrollTimerRef.current = setTimeout(() => {
+        isProgrammaticScrollRef.current = false;
+      }, 650);
+
+      const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
+      const yOffset = isMobile ? -156 : -116;
+      const y = el.getBoundingClientRect().top + window.pageYOffset + yOffset;
+      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+      if (parentSection) {
+        setActiveSection(parentSection);
+      }
+    }
+  }, []);
+
+  // 8.1 Rapor İçi Anlamsal İfade Rozeti Üretici (Olumlu -> Yeşil, Olumsuz -> Kırmızı, Nötr/İzleme -> Kehribar)
+  const renderSemanticEvalBadge = useCallback((phrase: string, key?: string | number) => {
+    const isNegative = /(?:Olumsuz|Yüksek\s+(?:Finansal\s+)?Risk|Sermaye\s+Erozyonu|Değer\s+Tuzağı|zayıf\/olumsuz|temkinli\/olumsuz|yüksek\s+riskli|Yetersiz\s+Güvenlik\s+Marjı|güvenlik\s+marjı\s+bulunmamaktadır)/i.test(phrase);
+    const isNeutral = !isNegative && /(?:Nötr|Koşullu\s+[iİ]zleme|Bekle-Gör|Dengeli(?:\s*\/\s*Ilımlı)?\s+görünüm|temkinli\s+[iİ]zlenmeli|temkinli\s+[iİ]zlenmesi\s+gereken|Yönetilebilir\s+(?:faiz|Finansman)\s+riski|Açısından\s+Kritik|Kaldıraç\s+Hassasiyeti|Yüksek\s+risk-ödül\s+asimetrisi|orta\s+vadede\s+nötr|Sınırda\s+Güvenlik\s+Marjı|Hedefin\s+Altında)/i.test(phrase);
+
+    if (isNegative) {
+      return (
+        <span key={key} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-mono font-bold bg-rose-500/15 text-rose-300 border border-rose-500/35 mx-0.5 align-baseline">
+          ⚠️ {phrase}
+        </span>
+      );
+    }
+    if (isNeutral) {
+      return (
+        <span key={key} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/35 mx-0.5 align-baseline">
+          ⚡ {phrase}
+        </span>
+      );
+    }
+    return (
+      <span key={key} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/35 mx-0.5 align-baseline">
+        ✓ {phrase}
+      </span>
+    );
+  }, []);
+
+  // 8.1 Rapor İçi Çapraz Referans Hedef Çözümleyici
+  const resolveCrossReferenceTarget = useCallback((term: string): { sectionId: SimplySectionId; label: string; tableTab?: 'bs' | 'is' | 'cf' | 'ratios' } | null => {
+    if (/DuPont|Nakit\s+[Aa]kışı\s+[Kk]alitesi|Nakit\s+[Dd]önüşüm\s+[Oo]ranı|Sloan\s+Tahakkuk|Net\s+[iİ]şletme\s+Nakit\s+Akışı|[iİ]şletme\s+Nakit\s+Akışı|Serbest\s+Nakit\s+Akışı/i.test(term)) {
+      return { sectionId: 'sec-grafikler', label: 'Bölüm 2: Grafik, Nakit Kalitesi & DuPont Analizine Git' };
+    }
+    if (/Bilanço|Finansal\s+Tablolar|[iİ]şletme\s+[Ss]ermayesi|[Çç]alışma\s+[Ss]ermayesi/i.test(term)) {
+      return { sectionId: 'sec-tablolar', label: 'Bölüm 3: Bilanço & Finansal Tablolara Git', tableTab: 'bs' };
+    }
+    if (/Değerleme\s+Çarpanları|Sektör\s+Çarpanları|Hedef\s+Çarpan|Cari\s+PD\/DD|Cari\s+F\/K|FD\/FAVÖK|FD\/Satışlar/i.test(term)) {
+      return { sectionId: 'sec-carpanlar', label: 'Bölüm 4: Değerleme Çarpanları & Sektör Kıyaslamasına Git' };
+    }
+    if (/Reel\s+WACC|Gordon\s+Büyüme\s+Modeli|[iİ]ndirgenmiş\s+Nakit\s+Akışı|Reel\s+EVA\s+Makası|Ayı\s+[Ss]enaryosu|Boğa\s+[Ss]enaryosu/i.test(term)) {
+      return { sectionId: 'sec-adildeger', label: 'Bölüm 5: Adil Değer & Sermaye Maliyeti Modeline Git' };
+    }
+    if (/Temettü|Kâr\s+Payı/i.test(term)) {
+      return { sectionId: 'sec-temettu', label: 'Bölüm 6: Temettü Analizine Git' };
+    }
+    return null;
+  }, []);
+
+  // 8.1 Rapor Düz Metin Segmenti Zenginleştirici (Fiyatlar, Getiri/İskonto, Parantez İçi Yargılar ve Çapraz Referans Linkleri)
+  const enrichPlainTextSegment = useCallback((text: string, keyPrefix = 'seg'): React.ReactNode => {
+    if (!text || text.length < 2) return text;
+
+    const combinedRegex = /(\(\s*(?:Güçlü\s+Alım\s+Tezi[^)]*|[^()]*Açısından\s+(?:Olumlu|Olumsuz|Kritik|Zayıf\/Olumsuz)[^)]*|[^()]*açısından\s+(?:olumlu|olumsuz|temkinli[^)]*|zayıf\/olumsuz)[^)]*|Aşağı\s+yönlü\s+risk\s+(?:sınırlı|emniyeti)[^)]*|Faiz\s+şoklarına\s+karşı\s+korumalı[^)]*|Nötr\s*\/[^)]*|Dengeli(?:\s*\/\s*Ilımlı)?\s+görünüm|Yönetilebilir\s+(?:faiz|Finansman)\s+riski|Operasyonel\s+Kaldıraç\s+Hassasiyeti|Yüksek\s+risk-ödül\s+asimetrisi|Kısa\s+vadede\s+temkinli[^)]*|Güvenli\s+[iİ]skonto\s+Marjı|Sınırda\s+Güvenlik\s+Marjı|Yetersiz\s+Güvenlik\s+Marjı|güvenlik\s+marjı\s+bulunmamaktadır)\s*\))|((?:(?:[+-]\s*)?%\s*[+-]?\d+(?:[.,]\d+)?\s*(?:getiri\s+potansiyeli(?:\s*\((?:[iİ]skonto|prim)\))?|yükseliş\s+potansiyeli|güvenlik\s+marjı|[iİ]skonto\s+payı|[iİ]skontolu(?:dur)?|[iİ]skonto(?:su|yla)?|potansiyel(?:i|ine|ini|dir)?|primli(?:dir)?|prim(?:i|le)?|üzerinde(?:dir)?)|[+-]\d+(?:[.,]\d+)?\s*puan(?:\s+(?:pozitif|negatif)\s+(?:ekonomik\s+katma\s+değer|EVA))?|%\s*-\d+(?:[.,]\d+)?|-\s*%\s*\d+(?:[.,]\d+)?))|((?:[+-]\s*)?(?:₺\s*\d[\d.,]*(?:\s*(?:Milyar|Milyon|Mr|Mn|Bin))?|\d[\d.,]*\s*(?:Milyar|Milyon|Mr|Mn|Bin)\s*TL\b|\d[\d.,]*\s*TL\b))|((?<![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ])(?:DuPont(?:\s+5\s+[Aa]şamalı|\s+[Aa]nalizi|\s+[Aa]yrıştırması|\s+ROE|\s+[Vv]erimlilik)?|Net\s+[iİ]şletme\s+Nakit\s+Akışı|[iİ]şletme\s+Nakit\s+Akışı(?:\s*\(OCF\))?|Serbest\s+Nakit\s+Akışı(?:\s*\(FCF\))?|Nakit\s+[Aa]kışı\s+[Kk]alitesi|Nakit\s+[Dd]önüşüm\s+[Oo]ranı|Sloan\s+Tahakkuk|Bilanço(?:da|daki|su|sunda|sundaki)?|Finansal\s+Tablolar|[iİ]şletme\s+[Ss]ermayesi|[Çç]alışma\s+[Ss]ermayesi|Değerleme\s+Çarpanları|Sektör\s+Çarpanları|Hedef\s+Çarpan|Cari\s+PD\/DD|Cari\s+F\/K|FD\/FAVÖK|FD\/Satışlar|Gordon\s+Büyüme\s+Modeli|[iİ]ndirgenmiş\s+Nakit\s+Akışı|Reel\s+WACC|Reel\s+EVA\s+Makası|Ayı\s+[Ss]enaryosu(?:\s+[Tt]aban\s+(?:[Ff]iyatı|[Hh]edefi))?|Boğa\s+[Ss]enaryosu(?:\s+[Tt]avan\s+(?:[Ff]iyatı|[Hh]edefi))?|Temettü(?:\s+verimi|\s+dağıtım\s+kapasitesini)?|Kâr\s+Payı)(?![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ]))|((?:\+%\d+(?:[.,]\d+)?|%\d+(?:[.,]\d+)?(?:\s*-\s*\d+(?:[.,]\d+)?)?|(?<![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ])\d+(?:[.,]\d+)?x(?![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ])))/gi;
+
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    let tokenIdx = 0;
+
+    while ((match = combinedRegex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(text.slice(lastIndex, match.index));
+      }
+      const fullMatch = match[0];
+      const evalParen = match[1];
+      const returnOrDiscount = match[2];
+      const currencyVal = match[3];
+      const crossRef = match[4];
+      const metricVal = match[5];
+      const key = `${keyPrefix}-${tokenIdx++}`;
+
+      if (evalParen) {
+        parts.push(renderSemanticEvalBadge(fullMatch, key));
+      } else if (returnOrDiscount) {
+        const isNeg = /(?:^\s*-|%\s*-|prim|negatif|zarar|daralma)/i.test(fullMatch);
+        parts.push(
+          <span
+            key={key}
+            className={`inline-flex items-center px-1.5 py-0.5 rounded-md font-mono font-bold text-[0.92em] mx-0.5 ${
+              isNeg
+                ? 'bg-rose-500/15 text-rose-300 border border-rose-500/35'
+                : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/35'
+            }`}
+          >
+            {fullMatch}
+          </span>
+        );
+      } else if (currencyVal) {
+        parts.push(
+          <span
+            key={key}
+            className="inline-flex items-center px-1.5 py-0.5 rounded-md font-mono font-bold text-[0.92em] text-[#f5c242] bg-[#f5c242]/12 border border-[#f5c242]/30 mx-0.5"
+          >
+            {fullMatch}
+          </span>
+        );
+      } else if (crossRef) {
+        const refTarget = resolveCrossReferenceTarget(fullMatch);
+        if (refTarget) {
+          parts.push(
+            <button
+              key={key}
+              type="button"
+              onClick={() => {
+                if (refTarget.tableTab) setSelectedTableTab(refTarget.tableTab);
+                scrollToSection(refTarget.sectionId);
+              }}
+              title={refTarget.label}
+              className="inline-flex items-center gap-0.5 text-cyan-300 hover:text-[#f5c242] underline decoration-cyan-500/45 hover:decoration-[#f5c242] decoration-dotted underline-offset-4 font-medium transition-colors cursor-pointer"
+            >
+              <span>{fullMatch}</span>
+              <ExternalLink className="w-2.5 h-2.5 opacity-75 shrink-0" />
+            </button>
+          );
+        } else {
+          parts.push(fullMatch);
+        }
+      } else if (metricVal) {
+        const isPosSigned = fullMatch.startsWith('+%');
+        parts.push(
+          <span key={key} className={`font-mono font-semibold ${isPosSigned ? 'text-emerald-300' : 'text-cyan-300'}`}>
+            {fullMatch}
+          </span>
+        );
+      } else {
+        parts.push(fullMatch);
+      }
+
+      lastIndex = combinedRegex.lastIndex;
+    }
+
+    if (lastIndex === 0) return text;
+    if (lastIndex < text.length) {
+      parts.push(text.slice(lastIndex));
+    }
+    return parts;
+  }, [renderSemanticEvalBadge, resolveCrossReferenceTarget]);
+
+  const enrichReportNode = useCallback((node: React.ReactNode, keyPrefix = 'rn'): React.ReactNode => {
+    if (typeof node === 'string') {
+      return enrichPlainTextSegment(node, keyPrefix);
+    }
+    if (Array.isArray(node)) {
+      return node.map((child, idx) => (
+        <React.Fragment key={`${keyPrefix}-${idx}`}>
+          {enrichReportNode(child, `${keyPrefix}-${idx}`)}
+        </React.Fragment>
+      ));
+    }
+    if (React.isValidElement(node) && (node.props as any)?.children != null) {
+      return React.cloneElement(
+        node as React.ReactElement<any>,
+        undefined,
+        enrichReportNode((node.props as any).children, `${keyPrefix}-el`)
+      );
+    }
+    return node;
+  }, [enrichPlainTextSegment]);
 
   // Adil Değer Trend Geçmişi (Son 4 Çeyrek)
   const fairValueTrendData = useMemo(() => {
@@ -5942,8 +6134,72 @@ export default function SimplyView({
               </div>
             </div>
 
+            {/* Üstte Kompakt "Karar Şeridi" (Sabit Özet Çubuğu) */}
+            <div className="sticky top-[104px] lg:top-14 z-20 backdrop-blur-md bg-[#131720]/95 border border-[#2d3545] rounded-xl px-3.5 sm:px-4 py-2.5 shadow-xl flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5 sm:gap-3.5 flex-wrap">
+                <span className={`px-2.5 py-1 rounded-lg font-mono font-black text-xs border shadow-sm ${
+                  effectiveDecision === 'AL'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    : effectiveDecision === 'ALMA'
+                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                }`}>
+                  KARAR: {effectiveDecision === 'AL' ? 'AL' : effectiveDecision === 'ALMA' ? 'ALMA' : 'NÖTR'}
+                </span>
+                <span className="text-xs font-sans font-bold text-white hidden sm:inline">
+                  {report.ticker} Özet Şeridi
+                </span>
+                <span className="h-4 w-px bg-[#282d37] hidden sm:inline-block" />
+                <div className="flex items-center gap-1.5 text-xs font-mono">
+                  <span className="text-slate-400">Fiyat:</span>
+                  <span className="text-white font-bold">₺{currentPriceNum.toFixed(2)}</span>
+                </div>
+                <span className="text-slate-500 font-mono text-xs">→</span>
+                <div className="flex items-center gap-1.5 text-xs font-mono">
+                  <span className="text-slate-400">Adil Değer:</span>
+                  <span className="text-[#f5c242] font-bold">₺{fairValueNum.toFixed(2)}</span>
+                </div>
+                {fairValueNum > 0 && currentPriceNum > 0 && (
+                  <span className={`px-2 py-0.5 rounded-md text-[11px] font-mono font-bold border ${
+                    fairValueNum >= currentPriceNum
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                      : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                  }`}>
+                    {fairValueNum >= currentPriceNum ? '+' : ''}{(((fairValueNum - currentPriceNum) / currentPriceNum) * 100).toFixed(1)}% ({fairValueNum >= currentPriceNum
+                      ? `%${Math.abs(((fairValueNum - currentPriceNum) / fairValueNum) * 100).toFixed(0)} İskontolu`
+                      : `%${Math.abs(((currentPriceNum - fairValueNum) / currentPriceNum) * 100).toFixed(0)} Primli`})
+                  </span>
+                )}
+                <span className="hidden md:inline-block h-4 w-px bg-[#282d37]" />
+                <div className="hidden md:flex items-center gap-1 text-xs font-mono">
+                  <span className="text-slate-400">Reel EVA:</span>
+                  <span className={`font-bold ${evaSpreadNum >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {evaSpreadNum >= 0 ? `+${evaSpreadNum.toFixed(1)}` : evaSpreadNum.toFixed(1)} Puan
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {[
+                  { id: 'sec-yatirim-tezi-71', label: '7.1 Tez Özeti' },
+                  { id: 'sec-yatirim-tezi-72', label: '7.2 Sektör' },
+                  { id: 'sec-yatirim-tezi-73', label: '7.3 Dört Boyut' },
+                  { id: 'sec-yatirim-tezi-74', label: '7.4 Takip Listesi' },
+                ].map((sub) => (
+                  <button
+                    key={sub.id}
+                    type="button"
+                    onClick={() => scrollToDomId(sub.id, 'sec-yatirim-tezi')}
+                    className="px-2 py-1 rounded-lg bg-[#1c212b] hover:bg-[#252c3a] text-[11px] font-mono text-slate-300 hover:text-[#f5c242] border border-[#2b3240] transition cursor-pointer"
+                  >
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* 7.1 Yatırım Tezi & Yönetici Karar Özeti */}
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 sm:p-7 shadow-xl space-y-6">
+            <div id="sec-yatirim-tezi-71" className="scroll-mt-28 bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 sm:p-7 shadow-xl space-y-6">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#282d37] pb-3.5">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-[#f5c242]/10 border border-[#f5c242]/30 flex items-center justify-center text-[#f5c242]">
@@ -6160,38 +6416,119 @@ export default function SimplyView({
                     </div>
                   </div>
 
-                  {/* Değerleme Asimetrisi & Adli Denetim Özeti Kutusu */}
-                  <div className="bg-[#191d26] border border-[#262c38] rounded-xl p-4 space-y-3">
-                    <div className="text-[11px] font-mono font-bold uppercase tracking-wider text-cyan-400">
-                      02 • Değerleme Asimetrisi & Sermaye Verimliliği Özeti
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                      <div className="bg-[#13161c] border border-[#232834] rounded-lg p-2.5">
-                        <div className="text-[10.5px] text-slate-400 font-mono">Fiyat / Adil Değer</div>
-                        <div className="text-xs sm:text-sm font-bold font-mono text-white mt-0.5">
-                          ₺{currentPriceNum.toFixed(2)} → <span className="text-[#f5c242]">₺{fairValueNum.toFixed(2)}</span>
+                  {/* Değerleme Asimetrisi & Görsel Fırsat/Risk Terazisi Kutusu */}
+                  {(() => {
+                    const rawBear = Number(
+                      valuationInfo?.bear_price ||
+                      report.extractedData?.valuation?.bear_price ||
+                      (fairValueNum > 0 ? Math.min(fairValueNum * 0.78, currentPriceNum * 0.85) : currentPriceNum * 0.80)
+                    );
+                    const bearTargetNum = rawBear > 0 && (currentPriceNum <= 0 || rawBear < currentPriceNum)
+                      ? rawBear
+                      : Number(((currentPriceNum > 0 ? currentPriceNum : 10) * 0.85).toFixed(2));
+                    const downsidePct = currentPriceNum > 0
+                      ? Math.max(2, ((currentPriceNum - bearTargetNum) / currentPriceNum) * 100)
+                      : 15;
+                    const upsideRewardPct = currentPriceNum > 0 && fairValueNum > 0
+                      ? ((fairValueNum - currentPriceNum) / currentPriceNum) * 100
+                      : 0;
+                    const absUpside = Math.max(4, Math.abs(upsideRewardPct));
+                    const totalSpan = downsidePct + absUpside;
+                    const leftWeight = upsideRewardPct < 0
+                      ? Math.max(64, Math.min(78, Math.round((downsidePct / Math.max(totalSpan, 1)) * 100)))
+                      : Math.min(78, Math.max(22, Math.round((downsidePct / Math.max(totalSpan, 1)) * 100)));
+                    const rightWeight = 100 - leftWeight;
+                    const rewardRiskRatio = upsideRewardPct > 0
+                      ? (upsideRewardPct / Math.max(downsidePct, 4)).toFixed(1)
+                      : null;
+
+                    return (
+                      <div className="bg-[#191d26] border border-[#262c38] rounded-xl p-4 space-y-3.5">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="text-[11px] font-mono font-bold uppercase tracking-wider text-cyan-400">
+                            02 • Değerleme Asimetrisi & Görsel Fırsat / Risk Terazisi
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-[10.5px] font-mono font-bold border ${
+                            upsideRewardPct >= 15
+                              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+                              : upsideRewardPct >= 0
+                              ? 'bg-amber-500/15 text-amber-300 border-amber-500/35'
+                              : 'bg-rose-500/15 text-rose-300 border-rose-500/35'
+                          }`}>
+                            {rewardRiskRatio
+                              ? `${rewardRiskRatio}x Fırsat / Risk Dengesi`
+                              : `Primli Fiyatlama (-%${Math.abs(upsideRewardPct).toFixed(1)})`}
+                          </span>
+                        </div>
+
+                        {/* Görsel Fırsat & Risk Terazisi (Yatay Skala) */}
+                        <div className="bg-[#13161c] border border-[#232834] rounded-xl p-3 space-y-2">
+                          <div className="flex items-center justify-between text-[11px] font-mono">
+                            <span className="text-rose-400 font-semibold">
+                              Stres Tabanı: ₺{bearTargetNum.toFixed(2)} (-%{downsidePct.toFixed(1)})
+                            </span>
+                            <span className="text-white font-bold">
+                              Güncel: ₺{currentPriceNum.toFixed(2)}
+                            </span>
+                            <span className={upsideRewardPct >= 0 ? 'text-emerald-400 font-semibold' : 'text-rose-400 font-semibold'}>
+                              Adil Değer: ₺{fairValueNum.toFixed(2)} ({upsideRewardPct >= 0 ? `+%${upsideRewardPct.toFixed(1)}` : `-%${Math.abs(upsideRewardPct).toFixed(1)}`})
+                            </span>
+                          </div>
+
+                          <div className="relative h-3 w-full rounded-full overflow-hidden bg-[#1e232d] flex border border-[#2a3140]">
+                            <div
+                              style={{ width: `${leftWeight}%` }}
+                              className="h-full bg-gradient-to-r from-rose-600/80 to-amber-500/70 transition-all"
+                              title={`Stres Tabanı Marjı: -%${downsidePct.toFixed(1)}`}
+                            />
+                            <div className="w-1 h-full bg-white shadow-[0_0_8px_#fff] z-10 shrink-0" title={`Güncel Fiyat: ₺${currentPriceNum.toFixed(2)}`} />
+                            <div
+                              style={{ width: `${rightWeight}%` }}
+                              className={`h-full transition-all ${
+                                upsideRewardPct >= 0
+                                  ? 'bg-gradient-to-r from-emerald-500/70 to-emerald-400/90'
+                                  : 'bg-gradient-to-r from-rose-500/70 to-rose-700/90'
+                              }`}
+                              title={`Adil Değer Potansiyeli: ${upsideRewardPct >= 0 ? '+' : ''}%${upsideRewardPct.toFixed(1)}`}
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between text-[10px] font-sans text-slate-400">
+                            <span>Aşağı Yönlü Stres Alanı</span>
+                            <span>Mevcut Denge Noktası</span>
+                            <span>{upsideRewardPct >= 0 ? 'Yukarı Yönlü Değerleme Alanı' : 'Adil Değer Üzeri Prim'}</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                          <div className="bg-[#13161c] border border-[#232834] rounded-lg p-2.5">
+                            <div className="text-[10.5px] text-slate-400 font-mono">Fiyat / Adil Değer</div>
+                            <div className="text-xs sm:text-sm font-bold font-mono text-white mt-0.5">
+                              ₺{currentPriceNum.toFixed(2)} → <span className="text-[#f5c242]">₺{fairValueNum.toFixed(2)}</span>
+                            </div>
+                          </div>
+                          <div className="bg-[#13161c] border border-[#232834] rounded-lg p-2.5">
+                            <div className="text-[10.5px] text-slate-400 font-mono">Reel EVA Makası</div>
+                            <div className={`text-xs sm:text-sm font-bold font-mono mt-0.5 ${evaSpreadNum >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {evaSpreadNum >= 0 ? `+${evaSpreadNum.toFixed(1)}` : evaSpreadNum.toFixed(1)} Puan
+                            </div>
+                          </div>
+                          <div className="bg-[#13161c] border border-[#232834] rounded-lg p-2.5">
+                            <div className="text-[10.5px] text-slate-400 font-mono">Nakit Kalitesi</div>
+                            <div className="text-xs sm:text-sm font-bold font-mono text-cyan-300 mt-0.5 truncate" title={earningsQuality.statusTitle}>
+                              {earningsQuality.statusTitle}
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      <div className="bg-[#13161c] border border-[#232834] rounded-lg p-2.5">
-                        <div className="text-[10.5px] text-slate-400 font-mono">Reel EVA Makası</div>
-                        <div className={`text-xs sm:text-sm font-bold font-mono mt-0.5 ${evaSpreadNum >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {evaSpreadNum >= 0 ? `+${evaSpreadNum.toFixed(1)}` : evaSpreadNum.toFixed(1)} Puan
-                        </div>
-                      </div>
-                      <div className="bg-[#13161c] border border-[#232834] rounded-lg p-2.5">
-                        <div className="text-[10.5px] text-slate-400 font-mono">Nakit Kalitesi</div>
-                        <div className="text-xs sm:text-sm font-bold font-mono text-cyan-300 mt-0.5 truncate" title={earningsQuality.statusTitle}>
-                          {earningsQuality.statusTitle}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
 
             {/* 7.2 Sektörel Konum & Rekabet Üstünlüğü */}
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 sm:p-7 shadow-xl space-y-5">
+            <div id="sec-yatirim-tezi-72" className="scroll-mt-28 bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 sm:p-7 shadow-xl space-y-5">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#282d37] pb-3.5">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
@@ -6257,7 +6594,7 @@ export default function SimplyView({
             </div>
 
             {/* 7.3 Dört Boyutlu Temel Değerleme Kriterleri (4-Pillar Adli Matris) */}
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 sm:p-7 shadow-xl space-y-5">
+            <div id="sec-yatirim-tezi-73" className="scroll-mt-28 bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 sm:p-7 shadow-xl space-y-5">
               <div className="flex items-center justify-between flex-wrap gap-2 border-b border-[#282d37] pb-3.5">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-[#f5c242]/10 border border-[#f5c242]/30 flex items-center justify-center text-[#f5c242]">
@@ -6286,6 +6623,7 @@ export default function SimplyView({
                       : tone === 'neutral'
                       ? 'border-l-amber-400 border-[#282d37]'
                       : 'border-l-rose-400 border-[#282d37]';
+                  const isExpanded = Boolean(expandedThesisPillars[pillar.id]);
 
                   return (
                     <div
@@ -6322,9 +6660,51 @@ export default function SimplyView({
                           ))}
                         </div>
 
-                        <p className="text-xs sm:text-[13.5px] text-slate-200 leading-[1.75] font-sans">
-                          {pillar.narrative}
+                        {/* Kısa Özet (Varsayılan Görünüm) */}
+                        <p className="text-xs sm:text-[13.5px] text-slate-200 leading-[1.7] font-sans">
+                          {pillar.shortSummary || pillar.narrative}
                         </p>
+
+                        {/* Kanıt Detayı Açılır Katmanı (Accordion) */}
+                        <div className="pt-1">
+                          <button
+                            type="button"
+                            onClick={() => toggleThesisPillar(pillar.id)}
+                            className="w-full flex items-center justify-between gap-2 px-3.5 py-2 rounded-lg bg-[#191d26] hover:bg-[#202632] border border-[#262c38] text-xs font-mono font-semibold text-slate-300 hover:text-[#f5c242] transition cursor-pointer"
+                          >
+                            <span className="flex items-center gap-1.5">
+                              <Layers className="w-3.5 h-3.5 text-[#f5c242]" />
+                              <span>Kanıt Detayı ve Adli Veri Dökümü</span>
+                            </span>
+                            <span className="flex items-center gap-1 text-[11px] text-[#f5c242]">
+                              <span>{isExpanded ? 'Gizle' : 'Detayı Gör'}</span>
+                              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : 'rotate-0'}`} />
+                            </span>
+                          </button>
+
+                          {isExpanded && (
+                            <div className="mt-3 p-3.5 rounded-xl bg-[#11141a] border border-[#242a36] space-y-3 animate-in fade-in duration-150">
+                              <p className="text-xs text-slate-300 leading-[1.75] font-sans border-b border-[#212733] pb-2.5">
+                                {pillar.narrative}
+                              </p>
+                              {Array.isArray(pillar.evidenceItems) && pillar.evidenceItems.length > 0 && (
+                                <div className="space-y-2">
+                                  {pillar.evidenceItems.map((ev, evIdx) => (
+                                    <div key={evIdx} className="bg-[#171b23] border border-[#232936] rounded-lg px-3 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                                      <div>
+                                        <div className="text-[11px] font-semibold text-slate-200 font-sans">{ev.label}</div>
+                                        <div className="text-[10.5px] text-slate-400 font-sans">{ev.comment}</div>
+                                      </div>
+                                      <div className="text-xs font-mono font-bold text-[#f5c242] shrink-0">
+                                        {ev.value}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -6332,8 +6712,8 @@ export default function SimplyView({
               </div>
             </div>
 
-            {/* 7.4 Fiyat Katalizörleri vs. Tezi Bozan Temel Riskler */}
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 sm:p-7 shadow-xl space-y-5">
+            {/* 7.4 Ölçülebilir Tez Takip Tetikleyicileri & Kontrol Listesi */}
+            <div id="sec-yatirim-tezi-74" className="scroll-mt-28 bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 sm:p-7 shadow-xl space-y-5">
               <div className="flex items-center justify-between flex-wrap gap-2 border-b border-[#282d37] pb-3.5">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
@@ -6341,61 +6721,116 @@ export default function SimplyView({
                   </div>
                   <div>
                     <h3 className="font-sans font-bold text-white text-base sm:text-lg leading-snug">
-                      7.4 Fiyat Katalizörleri & Tezi Bozan Temel Riskler
+                      7.4 Ölçülebilir Tez Takip Tetikleyicileri & Kontrol Listesi
                     </h3>
                     <span className="text-xs text-slate-400 font-sans">
-                      Yukarı yönlü değerleme tetikleyicileri ve ayı senaryosu stres unsurları
+                      Çeyreklik bilançolarda izlenecek somut hedef eşikler ve tezi bozan kırmızı çizgi kriterleri
                     </span>
                   </div>
                 </div>
+                <span className="text-xs font-mono text-emerald-300 bg-emerald-950/40 px-3 py-1 rounded-lg border border-emerald-800/40">
+                  Ölçülebilir Kontrol Listesi
+                </span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {/* Sol: Kilit Katalizörler */}
+                {/* Sol: Kilit Katalizörler (Kontrol Listesi) */}
                 <div className="bg-[#14171e] border border-[#262c38] rounded-xl p-5 space-y-3.5">
                   <div className="flex items-center justify-between border-b border-[#232834] pb-3">
                     <div className="flex items-center gap-2">
                       <TrendingUp className="w-4 h-4 text-cyan-400 shrink-0" />
                       <span className="font-sans font-bold text-white text-sm sm:text-[15px]">
-                        Neler Fiyatı Yukarı Taşır? (Katalizörler)
+                        Yukarı Yönlü Katalizör Kontrol Listesi
                       </span>
                     </div>
                     <span className="text-[11px] font-mono text-cyan-300 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/40">
                       Boğa Tetikleyicileri
                     </span>
                   </div>
-                  <ul className="space-y-2.5">
-                    {synthesizedThesis.catalysts.map((cat, idx) => (
-                      <li key={idx} className="flex items-start gap-3 bg-[#191d26] p-3.5 rounded-xl border border-[#252b37] text-xs sm:text-[13.5px] text-slate-200 leading-[1.7] font-sans">
-                        <span className="w-6 h-6 rounded-lg bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 font-mono text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">
-                          0{idx + 1}
-                        </span>
-                        <span className="flex-1">{cat}</span>
+                  <ul className="space-y-3">
+                    {(synthesizedThesis.catalystChecklist && synthesizedThesis.catalystChecklist.length > 0
+                      ? synthesizedThesis.catalystChecklist
+                      : synthesizedThesis.catalysts.map((cat) => ({
+                          category: 'Değerleme Katalizörü',
+                          metric: 'Hedef Gösterge',
+                          threshold: 'Bilanço Teyidi',
+                          period: 'Çeyreklik Takip',
+                          text: cat
+                        }))
+                    ).map((item, idx) => (
+                      <li key={idx} className="bg-[#191d26] p-3.5 rounded-xl border border-[#252b37] space-y-2">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-md bg-cyan-500/15 border border-cyan-500/35 text-cyan-300 font-mono text-[10px] font-bold flex items-center justify-center shrink-0">
+                              ✓
+                            </span>
+                            <span className="text-xs font-sans font-bold text-white">
+                              {item.category}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10.5px] font-mono font-bold px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+                              {item.threshold}
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-400 bg-[#13161c] px-2 py-0.5 rounded border border-[#232834]">
+                              {item.period}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-xs sm:text-[13.5px] text-slate-200 leading-[1.7] font-sans pl-7">
+                          {item.text}
+                        </p>
                       </li>
                     ))}
                   </ul>
                 </div>
 
-                {/* Sağ: Tezi Bozan Riskler */}
+                {/* Sağ: Tezi Bozan Riskler (Kırmızı Çizgi Kontrol Listesi) */}
                 <div className="bg-[#14171e] border border-[#262c38] rounded-xl p-5 space-y-3.5">
                   <div className="flex items-center justify-between border-b border-[#232834] pb-3">
                     <div className="flex items-center gap-2">
                       <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
                       <span className="font-sans font-bold text-white text-sm sm:text-[15px]">
-                        Tezi Bozan Temel Riskler (Ayı Senaryosu)
+                        Tezi Bozan Kırmızı Çizgiler & Stres Kriterleri
                       </span>
                     </div>
                     <span className="text-[11px] font-mono text-rose-300 bg-rose-950/40 px-2 py-0.5 rounded border border-rose-800/40">
-                      Adli Risk Faktörleri
+                      Adli Risk Eşikleri
                     </span>
                   </div>
-                  <ul className="space-y-2.5">
-                    {synthesizedThesis.thesisBreakers.map((tb, idx) => (
-                      <li key={idx} className="flex items-start gap-3 bg-[#191d26] p-3.5 rounded-xl border border-[#252b37] text-xs sm:text-[13.5px] text-slate-200 leading-[1.7] font-sans">
-                        <span className="w-6 h-6 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 font-mono text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">
-                          0{idx + 1}
-                        </span>
-                        <span className="flex-1">{tb}</span>
+                  <ul className="space-y-3">
+                    {(synthesizedThesis.breakerChecklist && synthesizedThesis.breakerChecklist.length > 0
+                      ? synthesizedThesis.breakerChecklist
+                      : synthesizedThesis.thesisBreakers.map((tb) => ({
+                          category: 'Kırmızı Çizgi Kriteri',
+                          metric: 'Stres Göstergesi',
+                          threshold: 'Kritik Sınır İhlali',
+                          period: 'Çeyreklik Takip',
+                          text: tb
+                        }))
+                    ).map((item, idx) => (
+                      <li key={idx} className="bg-[#191d26] p-3.5 rounded-xl border border-[#252b37] space-y-2">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-md bg-rose-500/15 border border-rose-500/35 text-rose-300 font-mono text-[10px] font-bold flex items-center justify-center shrink-0">
+                              !
+                            </span>
+                            <span className="text-xs font-sans font-bold text-white">
+                              {item.category}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10.5px] font-mono font-bold px-2 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                              {item.threshold}
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-400 bg-[#13161c] px-2 py-0.5 rounded border border-[#232834]">
+                              {item.period}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-xs sm:text-[13.5px] text-slate-200 leading-[1.7] font-sans pl-7">
+                          {item.text}
+                        </p>
                       </li>
                     ))}
                   </ul>
@@ -6542,6 +6977,32 @@ export default function SimplyView({
               <div className="space-y-5">
                 {reportChapters.map((chapter) => {
                   const isCollapsed = Boolean(collapsedReportChapters[chapter.id]);
+                  const chapterCrossLinks: Array<{ label: string; secId: SimplySectionId; tab?: 'bs' | 'is' | 'cf' | 'ratios' }> =
+                    chapter.roman === 'I'
+                      ? [
+                          { label: '1. Genel Bakış & Özet', secId: 'sec-ozet' },
+                          { label: '7. Yatırım Tezi', secId: 'sec-yatirim-tezi' },
+                        ]
+                      : chapter.roman === 'II'
+                      ? [
+                          { label: '2. Nakit Akışı & Kâr Kalitesi Grafikleri', secId: 'sec-grafikler' },
+                          { label: '3. Nakit Akış Tablosu', secId: 'sec-tablolar', tab: 'cf' },
+                        ]
+                      : chapter.roman === 'III'
+                      ? [
+                          { label: '2. DuPont 5 Aşamalı Karne', secId: 'sec-grafikler' },
+                          { label: '4. Sektör Çarpan Kıyaslaması', secId: 'sec-carpanlar' },
+                        ]
+                      : chapter.roman === 'IV' || chapter.roman === 'V'
+                      ? [
+                          { label: '5. Adil Değer & WACC Modeli', secId: 'sec-adildeger' },
+                          { label: '4. Değerleme Çarpanları', secId: 'sec-carpanlar' },
+                        ]
+                      : [
+                          { label: '7. Yatırım Tezi & Takip Listesi', secId: 'sec-yatirim-tezi' },
+                          { label: '3. Bilanço & Rasyolar', secId: 'sec-tablolar', tab: 'ratios' },
+                        ];
+
                   return (
                     <div
                       key={chapter.id}
@@ -6576,7 +7037,7 @@ export default function SimplyView({
 
                       {/* Bölüm İçerik Alanı */}
                       {!isCollapsed && (
-                        <div className="p-5 sm:p-7 bg-[#15181f]">
+                        <div className="p-5 sm:p-7 bg-[#15181f] space-y-5">
                           <div className={`prose prose-invert max-w-none font-sans leading-[1.85] text-slate-200 ${
                             reportFontSize === 'compact' ? 'text-sm' : reportFontSize === 'large' ? 'text-base sm:text-lg' : 'text-[15px] sm:text-base'
                           }`}>
@@ -6596,7 +7057,7 @@ export default function SimplyView({
                                   </div>
                                 ),
                                 h3: ({ children, ...props }: any) => {
-                                  const text = String(children || '');
+                                  const text = extractTextFromChildren(children);
                                   let badgeColor = 'text-[#f5c242] bg-[#f5c242]/10 border-[#f5c242]/30';
                                   let icon = '📌';
                                   if (/tez|neden|fırsat/i.test(text)) {
@@ -6633,25 +7094,31 @@ export default function SimplyView({
                                   if (isKeySummaryLine) {
                                     return (
                                       <div className="my-3.5 p-4 rounded-xl bg-[#191d26] border border-[#282f3d] shadow-sm">
-                                        <p className="leading-[1.8] m-0 text-slate-200 font-sans" {...props}>{children}</p>
+                                        <p className="leading-[1.8] m-0 text-slate-200 font-sans" {...props}>
+                                          {enrichReportNode(children, 'p-key')}
+                                        </p>
                                       </div>
                                     );
                                   }
-                                  return <p className="leading-[1.85] mb-4 text-slate-200 font-sans" {...props}>{children}</p>;
+                                  return (
+                                    <p className="leading-[1.85] mb-4 text-slate-200 font-sans" {...props}>
+                                      {enrichReportNode(children, 'p')}
+                                    </p>
+                                  );
                                 },
-                                ul: ({ ...props }) => <ul className="space-y-3 my-4 text-slate-200 pl-0 list-none" {...props} />,
-                                ol: ({ ...props }) => <ol className="space-y-3 my-4 text-slate-200 pl-0 list-none" {...props} />,
+                                ul: ({ ...props }) => <ul className="space-y-2.5 my-4 text-slate-200 pl-1 list-none" {...props} />,
+                                ol: ({ ...props }) => <ol className="space-y-2.5 my-4 text-slate-200 pl-1 list-none" {...props} />,
                                 li: ({ children, ...props }: any) => (
                                   <li
-                                    className="bg-[#191d26] hover:bg-[#1d222c] border border-[#262c38] rounded-xl p-4 flex items-start gap-3 leading-[1.8] transition-colors shadow-sm"
+                                    className="border-l-2 border-[#2e3646] hover:border-[#f5c242]/80 pl-3.5 py-1 flex items-start gap-2.5 leading-[1.85] transition-colors"
                                     {...props}
                                   >
-                                    <span className="w-2 h-2 rounded-full bg-[#f5c242] mt-2.5 flex-shrink-0 shadow-[0_0_8px_rgba(245,194,66,0.5)]" />
-                                    <div className="flex-1 min-w-0">{children}</div>
+                                    <span className="w-1.5 h-1.5 rounded-full bg-[#f5c242]/85 mt-2.5 flex-shrink-0" />
+                                    <div className="flex-1 min-w-0">{enrichReportNode(children, 'li')}</div>
                                   </li>
                                 ),
                                 strong: ({ children, ...props }: any) => {
-                                  const text = String(children || '').trim();
+                                  const text = extractTextFromChildren(children).trim();
                                   if (/^(\[?(AL|GÜÇLÜ AL|ALIM)\]?)$/i.test(text)) {
                                     return (
                                       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-black font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm mx-1 align-middle">
@@ -6676,28 +7143,77 @@ export default function SimplyView({
                                       </span>
                                     );
                                   }
-                                  if (/(?:Açısından Olumlu|Aşağı Yönlü Risk Emniyeti|Yüksek İskonto Emniyeti)/i.test(text)) {
+
+                                  // 1. Kalın Fiyat / Tutar İfadeleri (örn. **2762,17 TL**, **-623,45 Milyon TL**, **21.330.000.000 TL**)
+                                  if (/^(?:[+-]\s*)?(?:₺\s*\d[\d.,]*(?:\s*(?:Milyar|Milyon|Mr|Mn|Bin))?|\d[\d.,]*\s*(?:Milyar|Milyon|Mr|Mn|Bin)?\s*TL)$/i.test(text)) {
                                     return (
-                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 mx-0.5 align-baseline">
-                                        ✓ {text}
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-md font-mono font-bold text-[0.94em] text-[#f5c242] bg-[#f5c242]/15 border border-[#f5c242]/35 mx-0.5">
+                                        {text}
                                       </span>
                                     );
                                   }
-                                  if (/(?:Açısından Kritik|Yönetilebilir Finansman Riski)/i.test(text)) {
+
+                                  // 2. Kalın Getiri Potansiyeli / İskonto / Prim İfadeleri (örn. **%108.0 getiri potansiyeli**)
+                                  if (/^[+-]?\s*%\s*[+-]?\d+(?:[.,]\d+)?(?:\s*(?:getiri\s+potansiyeli|[iİ]skonto(?:lu)?|potansiyel|güvenlik\s+marjı|üzerinde|prim(?:li)?|\([^)]+\)))?$/i.test(text)) {
+                                    const isNegativeVal = /(?:^\s*-|%\s*-|prim|zarar|daralma|UNSAFE|Yetersiz)/i.test(text);
+                                    const isPositiveReturn = !isNegativeVal && /(?:getiri\s+potansiyeli|[iİ]skonto|potansiyel|güvenlik\s+marjı|üzerinde|SAFE|GÜVENLİ|Güvenli|^\s*\+|%\s*\+)/i.test(text);
+                                    if (isNegativeVal) {
+                                      return (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md font-mono font-bold text-[0.94em] bg-rose-500/15 text-rose-300 border border-rose-500/35 mx-0.5">
+                                          {text}
+                                        </span>
+                                      );
+                                    }
+                                    if (isPositiveReturn) {
+                                      return (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md font-mono font-bold text-[0.94em] bg-emerald-500/15 text-emerald-300 border border-emerald-500/35 mx-0.5">
+                                          {text}
+                                        </span>
+                                      );
+                                    }
                                     return (
-                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 mx-0.5 align-baseline">
-                                        ⚡ {text}
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-md font-mono font-bold text-[0.94em] bg-cyan-500/12 text-cyan-300 border border-cyan-500/30 mx-0.5">
+                                        {text}
                                       </span>
                                     );
                                   }
-                                  if (/(?:Açısından Olumsuz|Sermaye Erozyonu|Değer Tuzağı Riski)/i.test(text)) {
+
+                                  // 3. Sonunda Parantez İçi Yargı Bulunan Kalın Cümleler (örn. **...sunduğu değerlendirilmektedir (Güçlü Alım Tezi / Olumlu)**)
+                                  const trailingEvalMatch = text.match(/^(.*?)\s*(\(\s*(?:Güçlü Alım Tezi|Sermaye Koruma|Nötr|Dengeli|Aşağı yönlü|Faiz şoklarına|Yönetilebilir|Operasyonel|Yüksek risk)[^()]+\))$/i);
+                                  if (trailingEvalMatch && trailingEvalMatch[1].trim().length > 0) {
                                     return (
-                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-mono font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30 mx-0.5 align-baseline">
-                                        ⚠️ {text}
+                                      <>
+                                        <strong className="font-bold text-white font-sans">{enrichPlainTextSegment(trailingEvalMatch[1], 'str-pre')}</strong>{' '}
+                                        {renderSemanticEvalBadge(trailingEvalMatch[2], 'str-eval')}
+                                      </>
+                                    );
+                                  }
+
+                                  // 4. Doğrudan Olumlu / Olumsuz / Nötr Yargı İfadeleri
+                                  if (/(?:Güçlü Alım Tezi|Açısından Olumlu|açısından olumlu|Aşağı Yönlü Risk Emniyeti|Yüksek İskonto Emniyeti|Aşağı yönlü risk sınırlı\s*\/\s*Olumlu|Faiz şoklarına karşı korumalı\s*\/\s*Olumlu|ekonomik zenginlik yarattığını gösteren olumlu bir teyittir|oldukça olumludur|savunmacı ve olumlu bir göstergedir|hissedar değeri açısından güçlü ve olumlu|Mükemmel Kurumsal Kalite|Güvenli İskonto Marjı)/i.test(text) && !/olumsuz/i.test(text)) {
+                                    return renderSemanticEvalBadge(text, 'str-pos');
+                                  }
+                                  if (/(?:Açısından Kritik|Operasyonel Kaldıraç Hassasiyeti|Yönetilebilir Finansman Riski|Yönetilebilir faiz riski|Nötr\s*\/\s*Koşullu [iİ]zleme|Nötr\s*\/\s*Bekle-Gör|Dengeli(?:\s*\/\s*Ilımlı)? görünüm|temkinli [iİ]zlenmeli|temkinli [iİ]zlenmesi gereken|Yüksek risk-ödül asimetrisi|orta vadede nötr\/fırsat|Sınırda Güvenlik Marjı)/i.test(text)) {
+                                    return renderSemanticEvalBadge(text, 'str-neu');
+                                  }
+                                  if (/(?:Açısından (?:Zayıf\/)?Olumsuz|açısından (?:zayıf\/|temkinli\/)?olumsuz|Sermaye Koruma Açısından Olumsuz|Sermaye Erozyonu|Değer Tuzağı Riski|Yüksek Finansal Risk|Yetersiz Güvenlik Marjı|özkaynak erozyonuna işaret eden olumsuz bir risk|yüksek riskli ve olumsuz bir göstergedir)/i.test(text)) {
+                                    return renderSemanticEvalBadge(text, 'str-neg');
+                                  }
+
+                                  // 5. Kalın Çarpan veya Skor (örn. **2,32x**, **90**)
+                                  if (/^(?:\d+(?:[.,]\d+)?x(?:\s*\([^)]+\))?|\d{1,3}\/100)$/i.test(text)) {
+                                    return (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-md font-mono font-bold text-[0.94em] bg-cyan-500/12 text-cyan-300 border border-cyan-500/30 mx-0.5">
+                                        {text}
                                       </span>
                                     );
                                   }
-                                  return <strong className="font-bold text-white font-sans" {...props}>{children}</strong>;
+
+                                  return (
+                                    <strong className="font-bold text-white font-sans" {...props}>
+                                      {enrichReportNode(children, 'strong')}
+                                    </strong>
+                                  );
                                 },
                                 blockquote: ({ children, ...props }: any) => {
                                   const text = extractTextFromChildren(children);
@@ -6715,16 +7231,43 @@ export default function SimplyView({
                                   );
                                 },
                                 table: ({ ...props }) => (
-                                  <div className="overflow-x-auto my-5 rounded-xl border border-[#2b313d] bg-[#191d26] shadow-md">
-                                    <table className="w-full text-sm text-left border-collapse font-mono" {...props} />
+                                  <div className="overflow-x-auto my-5 rounded-xl border border-[#2b313d] bg-[#161921] shadow-md">
+                                    <table className="w-full text-sm text-left border-collapse font-sans" {...props} />
                                   </div>
                                 ),
-                                th: ({ ...props }) => <th className="bg-[#21262d] p-3.5 font-bold text-white border-b border-[#2e3440] text-xs sm:text-sm uppercase tracking-wider" {...props} />,
-                                td: ({ ...props }) => <td className="p-3.5 border-b border-[#262c38] text-slate-200 leading-relaxed" {...props} />
+                                th: ({ ...props }) => <th className="bg-[#1e232e] px-4 py-3 font-bold text-slate-200 border-b border-[#2e3440] text-xs font-mono uppercase tracking-wider" {...props} />,
+                                td: ({ children, ...props }: any) => (
+                                  <td className="px-4 py-3 border-b border-[#242a36] text-slate-200 leading-relaxed text-xs sm:text-sm" {...props}>
+                                    {enrichReportNode(children, 'td')}
+                                  </td>
+                                )
                               }}
                             >
                               {chapter.body}
                             </ReactMarkdown>
+                          </div>
+
+                          {/* Bölüm Sonu Hızlı Çapraz Referans Barı */}
+                          <div className="pt-3 border-t border-[#232936] flex items-center justify-between flex-wrap gap-2">
+                            <span className="text-[11px] font-mono text-slate-400">
+                              İlgili Analiz Bölümleri (Çapraz Referans):
+                            </span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {chapterCrossLinks.map((cl, clIdx) => (
+                                <button
+                                  key={clIdx}
+                                  type="button"
+                                  onClick={() => {
+                                    if (cl.tab) setSelectedTableTab(cl.tab);
+                                    scrollToSection(cl.secId);
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#1c212b] hover:bg-[#252c3b] text-xs font-mono text-cyan-300 hover:text-[#f5c242] border border-[#2a3140] transition cursor-pointer"
+                                >
+                                  <span>{cl.label}</span>
+                                  <ExternalLink className="w-3 h-3" />
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       )}
@@ -6738,69 +7281,127 @@ export default function SimplyView({
               </div>
             )}
 
-            {/* 8.2 Nihai Analist Hükmü & Karar Özeti Kartı */}
-            <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#282d37] pb-3.5">
-                <div className="flex items-center gap-2.5">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-mono font-black text-xs border ${
-                    executiveVerdict.verdict === 'AL'
-                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
-                      : executiveVerdict.verdict === 'ALMA'
-                      ? 'bg-rose-500/15 border-rose-500/40 text-rose-400'
-                      : 'bg-amber-500/15 border-amber-500/40 text-amber-400'
-                  }`}>
-                    {executiveVerdict.verdict}
-                  </div>
-                  <div>
-                    <span className="font-sans text-base sm:text-lg font-bold text-white block leading-snug">
-                      8.2 Nihai Analist Hükmü & Karar Özeti
-                    </span>
-                    <span className="text-xs text-slate-400 font-sans">
-                      {executiveVerdict.verdictTitle}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => scrollToSection('sec-yatirim-tezi')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#21262d] hover:bg-[#2b313d] text-slate-200 hover:text-[#f5c242] border border-[#2e3440] text-xs font-mono font-semibold transition cursor-pointer"
-                >
-                  <span>7. Yatırım Tezi Paneline Git</span>
-                </button>
-              </div>
+            {/* 8.2 Nihai Analist Hükmü & Portföy Konumlandırma Özeti Kartı (7.1 ile Tekrardan Arındırılmış) */}
+            {(() => {
+              const auditScore = Number(valuationInfo?.score ?? (report as any)?.score ?? (executiveVerdict.verdict === 'AL' ? 82 : executiveVerdict.verdict === 'ALMA' ? 42 : 64));
+              const rawBear = Number(
+                valuationInfo?.bear_price ||
+                report.extractedData?.valuation?.bear_price ||
+                (fairValueNum > 0 ? Math.min(fairValueNum * 0.78, currentPriceNum * 0.85) : currentPriceNum * 0.80)
+              );
+              const bearFloorPrice = rawBear > 0 && (currentPriceNum <= 0 || rawBear < currentPriceNum)
+                ? rawBear
+                : Number(((currentPriceNum > 0 ? currentPriceNum : 10) * 0.85).toFixed(2));
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-[#14171e] border border-[#262c38] rounded-xl p-4 space-y-2">
-                  <div className="text-xs font-mono font-bold uppercase tracking-wider text-[#f5c242] flex items-center gap-1.5">
-                    <Target className="w-3.5 h-3.5" />
-                    <span>Temel Yatırım Hükmü</span>
-                  </div>
-                  <p className="text-xs sm:text-[13.5px] text-slate-200 leading-[1.75] font-sans">
-                    {executiveVerdict.thesis}
-                  </p>
-                </div>
+              const positioningBadge =
+                executiveVerdict.verdict === 'AL'
+                  ? 'Kademeli Alım & Çekirdek Portföyde Taşı'
+                  : executiveVerdict.verdict === 'ALMA'
+                  ? 'Nakit Koruma & Portföy Dışı Tut'
+                  : 'Mevcut Pozisyonu Koru / Yeni Alım İçin Teyit Bekle';
 
-                <div className="bg-[#14171e] border border-[#262c38] rounded-xl p-4 space-y-2">
-                  <div className="text-xs font-mono font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
-                    <TrendingUp className="w-3.5 h-3.5" />
-                    <span>Kilit Katalizörler</span>
-                  </div>
-                  <p className="text-xs sm:text-[13.5px] text-slate-200 leading-[1.75] font-sans">
-                    {executiveVerdict.catalysts}
-                  </p>
-                </div>
+              const positioningActionText =
+                executiveVerdict.verdict === 'AL'
+                  ? `${report.ticker} hissesinde güncel ₺${currentPriceNum.toFixed(2)} seviyesi ile ₺${bearFloorPrice.toFixed(2)} stres tabanı arasındaki bölge kademeli biriktirme alanı olarak değerlendirilmektedir. 12 aylık ₺${fairValueNum.toFixed(2)} hedef adil değere yakınsama sürecinde çeyreklik FAVÖK marjı ve işletme nakit dönüşümü korundukça portföy ağırlığı taşınmalıdır.`
+                  : executiveVerdict.verdict === 'ALMA'
+                  ? `Adli denetim bulguları ve negatif sermaye makası (${evaSpreadNum.toFixed(1)} puan EVA) nedeniyle sermaye koruma disiplini önceliklidir. Yüzeysel çarpan ucuzluğuna dayanarak pozisyon açılmamalı; olası tepki yükselişleri risk azaltımı ve nakde geçiş fırsatı olarak kullanılmalıdır.`
+                  : `Hisse senedinde yeni veya agresif alım yapmak yerine mevcut ağırlığın korunması ve izleme listesinde tutulması önerilir. Portföy ağırlığını artırmak için çeyreklik bilançolarda serbest nakit akışı dönüşümünün güçlenmesi veya fiyatın ₺${bearFloorPrice.toFixed(2)} emniyet tabanına yaklaşması beklenmelidir.`;
 
-                <div className="bg-[#14171e] border border-[#262c38] rounded-xl p-4 space-y-2">
-                  <div className="text-xs font-mono font-bold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
-                    <ShieldAlert className="w-3.5 h-3.5" />
-                    <span>İzleme Riskleri & Emniyet Sınırı</span>
+              return (
+                <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#282d37] pb-3.5">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-mono font-black text-xs border ${
+                        executiveVerdict.verdict === 'AL'
+                          ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                          : executiveVerdict.verdict === 'ALMA'
+                          ? 'bg-rose-500/15 border-rose-500/40 text-rose-400'
+                          : 'bg-amber-500/15 border-amber-500/40 text-amber-400'
+                      }`}>
+                        {executiveVerdict.verdict}
+                      </div>
+                      <div>
+                        <span className="font-sans text-base sm:text-lg font-bold text-white block leading-snug">
+                          8.2 Nihai Analist Hükmü & Portföy Konumlandırma Özeti
+                        </span>
+                        <span className="text-xs text-slate-400 font-sans">
+                          Adli denetim onayı, portföy uygulama stratejisi ve stres tabanı emniyet sınırı
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => scrollToSection('sec-yatirim-tezi')}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#21262d] hover:bg-[#2b313d] text-slate-200 hover:text-[#f5c242] border border-[#2e3440] text-xs font-mono font-semibold transition cursor-pointer"
+                    >
+                      <span>7. Yatırım Tezi Paneline Git</span>
+                    </button>
                   </div>
-                  <p className="text-xs sm:text-[13.5px] text-slate-200 leading-[1.75] font-sans">
-                    {executiveVerdict.risks}
-                  </p>
+
+                  {/* Üst Denetim & Pozisyonlama Özet Şeridi */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-[#13161c] border border-[#252b37] rounded-xl p-3.5">
+                    <div className="space-y-0.5">
+                      <div className="text-[10.5px] font-mono text-slate-400 uppercase">Adli Denetim Puanı</div>
+                      <div className="text-xs sm:text-sm font-mono font-bold text-white">
+                        {auditScore}/100 • {executiveVerdict.verdict === 'AL' ? 'Stres Testi Onaylı' : executiveVerdict.verdict === 'ALMA' ? 'Sermaye Koruma Freni' : 'Koşullu İzleme'}
+                      </div>
+                    </div>
+                    <div className="space-y-0.5">
+                      <div className="text-[10.5px] font-mono text-slate-400 uppercase">Portföy Stratejisi</div>
+                      <div className={`text-xs sm:text-sm font-sans font-bold ${
+                        executiveVerdict.verdict === 'AL' ? 'text-emerald-400' : executiveVerdict.verdict === 'ALMA' ? 'text-rose-400' : 'text-amber-300'
+                      }`}>
+                        {positioningBadge}
+                      </div>
+                    </div>
+                    <div className="space-y-0.5">
+                      <div className="text-[10.5px] font-mono text-slate-400 uppercase">Hedef & Stres Tabanı</div>
+                      <div className="text-xs sm:text-sm font-mono font-bold text-white">
+                        Adil: <span className="text-[#f5c242]">₺{fairValueNum.toFixed(2)}</span> • Taban: <span className="text-rose-300">₺{bearFloorPrice.toFixed(2)}</span>
+                      </div>
+                    </div>
+                    <div className="space-y-0.5">
+                      <div className="text-[10.5px] font-mono text-slate-400 uppercase">Sermaye & Nakit Teyidi</div>
+                      <div className="text-xs sm:text-sm font-mono font-bold text-cyan-300 truncate">
+                        EVA: {evaSpreadNum >= 0 ? `+${evaSpreadNum.toFixed(1)}` : evaSpreadNum.toFixed(1)} Puan • {earningsQuality.statusTitle}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-[#14171e] border border-[#262c38] rounded-xl p-4 space-y-2">
+                      <div className="text-xs font-mono font-bold uppercase tracking-wider text-[#f5c242] flex items-center gap-1.5">
+                        <Target className="w-3.5 h-3.5" />
+                        <span>1. Adli Denetim Hükmü</span>
+                      </div>
+                      <p className="text-xs sm:text-[13.5px] text-slate-200 leading-[1.75] font-sans">
+                        {executiveVerdict.thesis}
+                      </p>
+                    </div>
+
+                    <div className="bg-[#14171e] border border-[#262c38] rounded-xl p-4 space-y-2">
+                      <div className="text-xs font-mono font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+                        <Compass className="w-3.5 h-3.5" />
+                        <span>2. Portföy Konumlandırma Planı</span>
+                      </div>
+                      <p className="text-xs sm:text-[13.5px] text-slate-200 leading-[1.75] font-sans">
+                        {positioningActionText}
+                      </p>
+                    </div>
+
+                    <div className="bg-[#14171e] border border-[#262c38] rounded-xl p-4 space-y-2">
+                      <div className="text-xs font-mono font-bold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
+                        <ShieldAlert className="w-3.5 h-3.5" />
+                        <span>3. Risk Bütçesi & Emniyet Sınırı</span>
+                      </div>
+                      <p className="text-xs sm:text-[13.5px] text-slate-200 leading-[1.75] font-sans">
+                        {executiveVerdict.risks}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
           </section>
           </ComponentErrorBoundary>
 

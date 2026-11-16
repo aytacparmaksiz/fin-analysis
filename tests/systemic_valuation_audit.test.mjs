@@ -1428,4 +1428,172 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
     assert.equal(arabicChapters[1].title, 'KÂR KALİTESİ');
   });
 
+  it('34. Section 7 & 8 UX Enhancements: Pure Turkish Checklist Triggers (7.4), Pillar Evidence Accordion (7.3), Asymmetry Bar (7.1), Sticky Decision Bar, 7.1/8.2 De-duplication & Semantic Report Highlighting (8.1)', () => {
+    // 1. Test across multiple sectors (RETAIL, INSURANCE, TECH_SW, AVIATION, INDUSTRIAL, TFRS 10) for pure Turkish checklist triggers and evidence items
+    const sectorsToTest = [
+      { ticker: 'MAVI', currentSector: 'RETAIL', officialSectorName: 'Perakende', decision: 'AL', currentPrice: 82, fairValue: 118.5 },
+      { ticker: 'AGESA', currentSector: 'INSURANCE', officialSectorName: 'Sigorta', decision: 'AL', currentPrice: 118.5, fairValue: 164.2 },
+      { ticker: 'ASELS', currentSector: 'DEFENSE', officialSectorName: 'Savunma & Teknoloji', decision: 'AL', currentPrice: 65, fairValue: 92 },
+      { ticker: 'THYAO', currentSector: 'AVIATION', officialSectorName: 'Havacılık', decision: 'AL', currentPrice: 295, fairValue: 410 },
+      { ticker: 'ESCOM', currentSector: 'TECH_SW', officialSectorName: 'Girişim Sermayesi', decision: 'NÖTR', currentPrice: 3.56, fairValue: 4.42, capAllocAudit: { isInvestmentEntity: true } },
+      { ticker: 'VESBE', currentSector: 'INDUSTRIAL', officialSectorName: 'Dayanıklı Tüketim', decision: 'ALMA', currentPrice: 3.95, fairValue: 2.46, isValueTrap: true, valueTrapReasons: ['Negatif FAVÖK ve nakit yakımı'] }
+    ];
+
+    const bannedEnglishParens = /\(\s*(?:Float|Backlog|IPO|Re-rating|re-rating|exit\/halka arz|CapEx|CASK|pricing power)\s*\)/i;
+
+    for (const cfg of sectorsToTest) {
+      const dossier = synthesizeInvestmentThesis({
+        ticker: cfg.ticker,
+        decision: cfg.decision,
+        currentSector: cfg.currentSector,
+        officialSectorName: cfg.officialSectorName,
+        currentPrice: cfg.currentPrice,
+        fairValue: cfg.fairValue,
+        discountPct: ((cfg.fairValue - cfg.currentPrice) / cfg.fairValue) * 100,
+        latestData: {
+          revenue: 15_000_000_000,
+          gross_profit: 5_200_000_000,
+          ebitda: 3_100_000_000,
+          net_income: 2_000_000_000,
+          operating_cash_flow: 2_500_000_000,
+          free_cash_flow: 1_800_000_000,
+          equity: 9_000_000_000,
+          total_assets: 18_000_000_000,
+          net_debt: -1_200_000_000
+        },
+        roic: 22.0,
+        wacc: 12.0,
+        evaSpread: 10.0,
+        capAllocAudit: cfg.capAllocAudit,
+        isValueTrap: cfg.isValueTrap,
+        valueTrapReasons: cfg.valueTrapReasons
+      });
+
+      assert.equal(dossier.catalystChecklist.length, 3, `${cfg.ticker} must have 3 catalystChecklist items`);
+      assert.ok(dossier.breakerChecklist.length >= 3, `${cfg.ticker} must have at least 3 breakerChecklist items`);
+      if (cfg.isValueTrap) {
+        assert.equal(dossier.breakerChecklist.length, 4, `${cfg.ticker} with valueTrapReasons must append 4th breakerChecklist item`);
+      }
+
+      for (const item of [...dossier.catalystChecklist, ...dossier.breakerChecklist]) {
+        assert.ok(item.category && item.metric && item.threshold && item.period && item.text, `${cfg.ticker} checklist item must have all fields populated`);
+        assert.ok(!bannedEnglishParens.test(item.text), `${cfg.ticker} checklist item text must not contain English parenthetical jargon: ${item.text}`);
+      }
+
+      for (const pillar of dossier.pillars) {
+        assert.ok(pillar.shortSummary && pillar.shortSummary.length > 15, `${cfg.ticker} pillar ${pillar.id} must have a concise shortSummary`);
+        assert.equal(pillar.evidenceItems.length, 3, `${cfg.ticker} pillar ${pillar.id} must have 3 structured evidenceItems`);
+        for (const ev of pillar.evidenceItems) {
+          assert.ok(ev.label && ev.value && ev.comment, `${cfg.ticker} pillar ${pillar.id} evidence item must have label, value, comment`);
+        }
+      }
+
+      const serialized = JSON.stringify(dossier);
+      assert.ok(!bannedEnglishParens.test(serialized), `${cfg.ticker} dossier must be free of English parenthetical terms: ${serialized}`);
+    }
+
+    // 2. Verify top-level property fallback & valueTrapReasons English parenthetical sanitization in synthesizeInvestmentThesis
+    const trapSanitizeDossier = synthesizeInvestmentThesis({
+      ticker: 'TRAP_TEST',
+      sector: 'INDUSTRIAL',
+      decision: 'ALMA',
+      currentPrice: 10,
+      fairValue: 6.5,
+      ebitdaMargin: -2.0,
+      grossMargin: 8.0,
+      netMargin: -7.5,
+      roe: -14.0,
+      roic: -5.0,
+      wacc: 12.0,
+      evaSpread: -17.0,
+      netDebt: 45_000_000,
+      ebitda: -1_200_000,
+      operatingCashFlow: -3_000_000,
+      freeCashFlow: -4_500_000,
+      netIncome: -3_500_000,
+      currentRatio: 0.72,
+      isValueTrap: true,
+      valueTrapReasons: [
+        'Genel Varlık Tuzağı Kuralı (Asset Trap): Defter değeri yüksek görünse de reel değer üretilmemektedir.',
+        '**Döngüsel Tepe Kâr Tuzağı (Peak Margin):** Cari marjlar döngü ortasının üzerindedir.'
+      ]
+    });
+    const cashPillar = trapSanitizeDossier.pillars.find(p => p.id === 'cash_fortress');
+    assert.notEqual(cashPillar.metrics[1].value, 'Net Nakit', 'Top-level positive netDebt must not be misclassified as Net Nakit');
+    assert.equal(cashPillar.metrics[2].value, '0.72x', 'Top-level currentRatio must be preserved');
+    for (const bItem of trapSanitizeDossier.breakerChecklist) {
+      assert.ok(!bItem.text.includes('(Asset Trap)') && !bItem.text.includes('(Peak Margin)') && !bItem.text.includes('**'), `breakerChecklist must strip English parentheticals and markdown asterisks: ${bItem.text}`);
+    }
+    assert.equal(trapSanitizeDossier.breakerChecklist[3].category, 'Genel Varlık Tuzağı Kuralı', 'Extra breakerChecklist item must extract Turkish category prefix before colon');
+
+    // 3. Verify simply-view.tsx & valuation.ts mirror parity and Section 7 & Section 8 UI structures
+    const appSimply = fs.readFileSync(new URL('../app/simply/simply-view.tsx', import.meta.url), 'utf8');
+    const srcSimply = fs.readFileSync(new URL('../src/app/simply/simply-view.tsx', import.meta.url), 'utf8');
+    const libVal = fs.readFileSync(new URL('../lib/valuation.ts', import.meta.url), 'utf8');
+    const srcVal = fs.readFileSync(new URL('../src/lib/valuation.ts', import.meta.url), 'utf8');
+    assert.equal(appSimply, srcSimply, 'app/simply/simply-view.tsx and src/app/simply/simply-view.tsx must remain 100% identical');
+    assert.equal(libVal, srcVal, 'lib/valuation.ts and src/lib/valuation.ts must remain 100% identical');
+
+    // Sticky Decision Bar in Section 7 (positioned below mobile nav top-[104px] lg:top-14)
+    assert.ok(appSimply.includes('sticky top-[104px] lg:top-14 z-20'), 'Section 7 sticky bar must clear mobile sticky nav at top-[104px] lg:top-14');
+    assert.ok(appSimply.includes("{ id: 'sec-yatirim-tezi-71', label: '7.1 Tez Özeti' }"), 'Section 7 must have sticky decision bar with Turkish sub-navigation');
+    // Visual Opportunity & Risk Asymmetry Bar in 7.1
+    assert.ok(appSimply.includes('02 • Değerleme Asimetrisi & Görsel Fırsat / Risk Terazisi'), 'Section 7.1 must include Visual Opportunity & Risk Asymmetry Bar');
+    assert.ok(appSimply.includes('Aşağı Yönlü Stres Alanı'), 'Section 7.1 Asymmetry Bar must include Turkish downside stress label');
+    assert.ok(appSimply.includes('rawBear < currentPriceNum'), 'Section 7.1 & 8.2 must guard against bear_price >= currentPriceNum inversion');
+    // 7.3 Evidence Accordion
+    assert.ok(appSimply.includes('toggleThesisPillar(pillar.id)'), 'Section 7.3 must have interactive Kanıt Detayı accordion toggle');
+    assert.ok(appSimply.includes('Kanıt Detayı ve Adli Veri Dökümü'), 'Section 7.3 accordion must use Turkish label');
+    // 7.4 Measurable Checklist
+    assert.ok(appSimply.includes('7.4 Ölçülebilir Tez Takip Tetikleyicileri & Kontrol Listesi'), 'Section 7.4 must render Measurable Checklist header');
+    assert.ok(appSimply.includes('synthesizedThesis.catalystChecklist'), 'Section 7.4 must render catalystChecklist');
+    assert.ok(appSimply.includes('synthesizedThesis.breakerChecklist'), 'Section 7.4 must render breakerChecklist');
+    // 8.1 Semantic Highlighting, Cross-References & Refined List Typography
+    assert.ok(appSimply.includes('renderSemanticEvalBadge'), 'Section 8.1 must include semantic evaluation badge renderer');
+    assert.ok(appSimply.includes('resolveCrossReferenceTarget'), 'Section 8.1 must include cross-reference link resolver');
+    assert.ok(appSimply.includes('border-l-2 border-[#2e3646] hover:border-[#f5c242]/80 pl-3.5 py-1'), 'Section 8.1 li items must use thin left-bordered typography instead of heavy boxes');
+
+    // Execute combinedRegex from simply-view.tsx against Turkish cross-references, multi-dot currencies, negative currencies, and capital İ discounts
+    const combinedRxMatch = appSimply.match(/const combinedRegex = (\/.*\/gi);/);
+    assert.ok(combinedRxMatch, 'combinedRegex must be extractable from simply-view.tsx');
+    const combinedRx = eval(combinedRxMatch[1]);
+    const tokenize = (s) => [...s.matchAll(combinedRx)].map(x => ({
+      full: x[0],
+      type: x[1] ? 'eval' : x[2] ? 'ret' : x[3] ? 'curr' : x[4] ? 'xref' : 'metric'
+    }));
+
+    assert.deepEqual(tokenize('Piyasa Değeri: 21.330.000.000 TL'), [{ full: '21.330.000.000 TL', type: 'curr' }], 'Multi-dot currency must match in full');
+    assert.deepEqual(tokenize('Sonuç: -623,45 Milyon TL zarar'), [{ full: '-623,45 Milyon TL', type: 'curr' }], 'Negative currency must retain minus sign inside match');
+    assert.deepEqual(tokenize('İskonto Oranı: %38,6 İskontolu'), [{ full: '%38,6 İskontolu', type: 'ret' }], 'Turkish capital İ in İskontolu must match returnOrDiscount');
+    assert.deepEqual(tokenize('Hisse %37,7 primlidir (güvenlik marjı bulunmamaktadır).'), [
+      { full: '%37,7 primlidir', type: 'ret' },
+      { full: '(güvenlik marjı bulunmamaktadır)', type: 'eval' }
+    ], 'Agglutinative suffix -dir in primlidir must not be chopped and negative parenthetical must match');
+    assert.deepEqual(tokenize('100 TL/120 TL bandında %4-6 esneme'), [
+      { full: '100 TL', type: 'curr' },
+      { full: '120 TL', type: 'curr' },
+      { full: '%4-6', type: 'metric' }
+    ], 'Slash-separated currencies and percentage ranges must tokenize cleanly');
+
+    for (const xrefTerm of [
+      'Net İşletme Nakit Akışı',
+      'Serbest Nakit Akışı (FCF)',
+      'Nakit dönüşüm oranı',
+      'Değerleme Çarpanları',
+      'İndirgenmiş Nakit Akışı',
+      'Reel EVA Makası',
+      'Temettü',
+      'Bilanço',
+      'İşletme Sermayesi',
+      'FD/FAVÖK'
+    ]) {
+      const tokens = tokenize(`Analizde ${xrefTerm} incelenmiştir.`);
+      assert.ok(tokens.some(t => t.type === 'xref' && t.full === xrefTerm), `Turkish cross-reference term "${xrefTerm}" must match as xref, got: ${JSON.stringify(tokens)}`);
+    }
+
+    // 8.2 Non-repetitive Audit & Portfolio Positioning
+    assert.ok(appSimply.includes('8.2 Nihai Analist Hükmü & Portföy Konumlandırma Özeti'), 'Section 8.2 must be differentiated as Audit Verdict & Portfolio Positioning');
+    assert.ok(appSimply.includes('2. Portföy Konumlandırma Planı'), 'Section 8.2 must include Portfolio Positioning Plan card');
+  });
+
 });
