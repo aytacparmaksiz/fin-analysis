@@ -1843,28 +1843,28 @@ export default function SimplyView({
     }
   }, []);
 
-  // 8.1 Rapor İçi Anlamsal İfade Rozeti Üretici (Olumlu -> Yeşil, Olumsuz -> Kırmızı, Nötr/İzleme -> Kehribar)
+  // 8.1 Rapor İçi Anlamsal İfade Renklendirici (Tek Yazı Tipi/Boyut, Kutusuz ve Emojisiz)
   const renderSemanticEvalBadge = useCallback((phrase: string, key?: string | number) => {
     const isNegative = /(?:Olumsuz|Yüksek\s+(?:Finansal\s+)?Risk|Sermaye\s+Erozyonu|Değer\s+Tuzağı|zayıf\/olumsuz|temkinli\/olumsuz|yüksek\s+riskli|Yetersiz\s+Güvenlik\s+Marjı|güvenlik\s+marjı\s+bulunmamaktadır)/i.test(phrase);
     const isNeutral = !isNegative && /(?:Nötr|Koşullu\s+[iİ]zleme|Bekle-Gör|Dengeli(?:\s*\/\s*Ilımlı)?\s+görünüm|temkinli\s+[iİ]zlenmeli|temkinli\s+[iİ]zlenmesi\s+gereken|Yönetilebilir\s+(?:faiz|Finansman)\s+riski|Açısından\s+Kritik|Kaldıraç\s+Hassasiyeti|Yüksek\s+risk-ödül\s+asimetrisi|orta\s+vadede\s+nötr|Sınırda\s+Güvenlik\s+Marjı|Hedefin\s+Altında)/i.test(phrase);
 
     if (isNegative) {
       return (
-        <span key={key} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-mono font-bold bg-rose-500/15 text-rose-300 border border-rose-500/35 mx-0.5 align-baseline">
-          ⚠️ {phrase}
+        <span key={key} className="text-rose-400 font-medium">
+          {phrase}
         </span>
       );
     }
     if (isNeutral) {
       return (
-        <span key={key} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/35 mx-0.5 align-baseline">
-          ⚡ {phrase}
+        <span key={key} className="text-amber-300 font-medium">
+          {phrase}
         </span>
       );
     }
     return (
-      <span key={key} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/35 mx-0.5 align-baseline">
-        ✓ {phrase}
+      <span key={key} className="text-emerald-400 font-medium">
+        {phrase}
       </span>
     );
   }, []);
@@ -1919,21 +1919,14 @@ export default function SimplyView({
         parts.push(
           <span
             key={key}
-            className={`inline-flex items-center px-1.5 py-0.5 rounded-md font-mono font-bold text-[0.92em] mx-0.5 ${
-              isNeg
-                ? 'bg-rose-500/15 text-rose-300 border border-rose-500/35'
-                : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/35'
-            }`}
+            className={isNeg ? 'text-rose-400 font-medium' : 'text-emerald-400 font-medium'}
           >
             {fullMatch}
           </span>
         );
       } else if (currencyVal) {
         parts.push(
-          <span
-            key={key}
-            className="inline-flex items-center px-1.5 py-0.5 rounded-md font-mono font-bold text-[0.92em] text-[#f5c242] bg-[#f5c242]/12 border border-[#f5c242]/30 mx-0.5"
-          >
+          <span key={key} className="text-[#f5c242] font-medium">
             {fullMatch}
           </span>
         );
@@ -1949,10 +1942,9 @@ export default function SimplyView({
                 scrollToSection(refTarget.sectionId);
               }}
               title={refTarget.label}
-              className="inline-flex items-center gap-0.5 text-cyan-300 hover:text-[#f5c242] underline decoration-cyan-500/45 hover:decoration-[#f5c242] decoration-dotted underline-offset-4 font-medium transition-colors cursor-pointer"
+              className="inline text-cyan-300 hover:text-[#f5c242] underline decoration-cyan-500/40 hover:decoration-[#f5c242] underline-offset-4 font-medium transition-colors cursor-pointer"
             >
-              <span>{fullMatch}</span>
-              <ExternalLink className="w-2.5 h-2.5 opacity-75 shrink-0" />
+              {fullMatch}
             </button>
           );
         } else {
@@ -1961,7 +1953,7 @@ export default function SimplyView({
       } else if (metricVal) {
         const isPosSigned = fullMatch.startsWith('+%');
         parts.push(
-          <span key={key} className={`font-mono font-semibold ${isPosSigned ? 'text-emerald-300' : 'text-cyan-300'}`}>
+          <span key={key} className={isPosSigned ? 'text-emerald-400 font-medium' : 'text-cyan-300 font-medium'}>
             {fullMatch}
           </span>
         );
@@ -6977,31 +6969,6 @@ export default function SimplyView({
               <div className="space-y-5">
                 {reportChapters.map((chapter) => {
                   const isCollapsed = Boolean(collapsedReportChapters[chapter.id]);
-                  const chapterCrossLinks: Array<{ label: string; secId: SimplySectionId; tab?: 'bs' | 'is' | 'cf' | 'ratios' }> =
-                    chapter.roman === 'I'
-                      ? [
-                          { label: '1. Genel Bakış & Özet', secId: 'sec-ozet' },
-                          { label: '7. Yatırım Tezi', secId: 'sec-yatirim-tezi' },
-                        ]
-                      : chapter.roman === 'II'
-                      ? [
-                          { label: '2. Nakit Akışı & Kâr Kalitesi Grafikleri', secId: 'sec-grafikler' },
-                          { label: '3. Nakit Akış Tablosu', secId: 'sec-tablolar', tab: 'cf' },
-                        ]
-                      : chapter.roman === 'III'
-                      ? [
-                          { label: '2. DuPont 5 Aşamalı Karne', secId: 'sec-grafikler' },
-                          { label: '4. Sektör Çarpan Kıyaslaması', secId: 'sec-carpanlar' },
-                        ]
-                      : chapter.roman === 'IV' || chapter.roman === 'V'
-                      ? [
-                          { label: '5. Adil Değer & WACC Modeli', secId: 'sec-adildeger' },
-                          { label: '4. Değerleme Çarpanları', secId: 'sec-carpanlar' },
-                        ]
-                      : [
-                          { label: '7. Yatırım Tezi & Takip Listesi', secId: 'sec-yatirim-tezi' },
-                          { label: '3. Bilanço & Rasyolar', secId: 'sec-tablolar', tab: 'ratios' },
-                        ];
 
                   return (
                     <div
@@ -7147,7 +7114,7 @@ export default function SimplyView({
                                   // 1. Kalın Fiyat / Tutar İfadeleri (örn. **2762,17 TL**, **-623,45 Milyon TL**, **21.330.000.000 TL**)
                                   if (/^(?:[+-]\s*)?(?:₺\s*\d[\d.,]*(?:\s*(?:Milyar|Milyon|Mr|Mn|Bin))?|\d[\d.,]*\s*(?:Milyar|Milyon|Mr|Mn|Bin)?\s*TL)$/i.test(text)) {
                                     return (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-md font-mono font-bold text-[0.94em] text-[#f5c242] bg-[#f5c242]/15 border border-[#f5c242]/35 mx-0.5">
+                                      <span className="text-[#f5c242] font-semibold">
                                         {text}
                                       </span>
                                     );
@@ -7159,20 +7126,20 @@ export default function SimplyView({
                                     const isPositiveReturn = !isNegativeVal && /(?:getiri\s+potansiyeli|[iİ]skonto|potansiyel|güvenlik\s+marjı|üzerinde|SAFE|GÜVENLİ|Güvenli|^\s*\+|%\s*\+)/i.test(text);
                                     if (isNegativeVal) {
                                       return (
-                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md font-mono font-bold text-[0.94em] bg-rose-500/15 text-rose-300 border border-rose-500/35 mx-0.5">
+                                        <span className="text-rose-400 font-semibold">
                                           {text}
                                         </span>
                                       );
                                     }
                                     if (isPositiveReturn) {
                                       return (
-                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md font-mono font-bold text-[0.94em] bg-emerald-500/15 text-emerald-300 border border-emerald-500/35 mx-0.5">
+                                        <span className="text-emerald-400 font-semibold">
                                           {text}
                                         </span>
                                       );
                                     }
                                     return (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-md font-mono font-bold text-[0.94em] bg-cyan-500/12 text-cyan-300 border border-cyan-500/30 mx-0.5">
+                                      <span className="text-cyan-300 font-semibold">
                                         {text}
                                       </span>
                                     );
@@ -7183,7 +7150,7 @@ export default function SimplyView({
                                   if (trailingEvalMatch && trailingEvalMatch[1].trim().length > 0) {
                                     return (
                                       <>
-                                        <strong className="font-bold text-white font-sans">{enrichPlainTextSegment(trailingEvalMatch[1], 'str-pre')}</strong>{' '}
+                                        <strong className="font-semibold text-white font-sans">{enrichPlainTextSegment(trailingEvalMatch[1], 'str-pre')}</strong>{' '}
                                         {renderSemanticEvalBadge(trailingEvalMatch[2], 'str-eval')}
                                       </>
                                     );
@@ -7203,14 +7170,14 @@ export default function SimplyView({
                                   // 5. Kalın Çarpan veya Skor (örn. **2,32x**, **90**)
                                   if (/^(?:\d+(?:[.,]\d+)?x(?:\s*\([^)]+\))?|\d{1,3}\/100)$/i.test(text)) {
                                     return (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-md font-mono font-bold text-[0.94em] bg-cyan-500/12 text-cyan-300 border border-cyan-500/30 mx-0.5">
+                                      <span className="text-cyan-300 font-semibold">
                                         {text}
                                       </span>
                                     );
                                   }
 
                                   return (
-                                    <strong className="font-bold text-white font-sans" {...props}>
+                                    <strong className="font-semibold text-white font-sans" {...props}>
                                       {enrichReportNode(children, 'strong')}
                                     </strong>
                                   );
@@ -7245,29 +7212,6 @@ export default function SimplyView({
                             >
                               {chapter.body}
                             </ReactMarkdown>
-                          </div>
-
-                          {/* Bölüm Sonu Hızlı Çapraz Referans Barı */}
-                          <div className="pt-3 border-t border-[#232936] flex items-center justify-between flex-wrap gap-2">
-                            <span className="text-[11px] font-mono text-slate-400">
-                              İlgili Analiz Bölümleri (Çapraz Referans):
-                            </span>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {chapterCrossLinks.map((cl, clIdx) => (
-                                <button
-                                  key={clIdx}
-                                  type="button"
-                                  onClick={() => {
-                                    if (cl.tab) setSelectedTableTab(cl.tab);
-                                    scrollToSection(cl.secId);
-                                  }}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#1c212b] hover:bg-[#252c3b] text-xs font-mono text-cyan-300 hover:text-[#f5c242] border border-[#2a3140] transition cursor-pointer"
-                                >
-                                  <span>{cl.label}</span>
-                                  <ExternalLink className="w-3 h-3" />
-                                </button>
-                              ))}
-                            </div>
                           </div>
                         </div>
                       )}
