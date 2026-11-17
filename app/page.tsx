@@ -3270,8 +3270,14 @@ export default function ValuationTerminal({
         enrichedExtractedData
       );
 
+      const latestPeriodFromHistory = Array.isArray(enrichedExtractedData?.financial_history) && enrichedExtractedData.financial_history.length > 0
+        ? enrichedExtractedData.financial_history[enrichedExtractedData.financial_history.length - 1]?.period
+        : undefined;
+      const resolvedPeriod = activeExtractedData?.reporting_period || latestPeriodFromHistory;
+
       const finalExtracted = {
         ...enrichedExtractedData,
+        reporting_period: resolvedPeriod,
         dividend_history: (Array.isArray(data.dividend_history) && data.dividend_history.length > 0)
           ? data.dividend_history
           : (Array.isArray(enrichedExtractedData?.dividend_history) && enrichedExtractedData.dividend_history.length > 0)
@@ -3284,12 +3290,14 @@ export default function ValuationTerminal({
         optimization: opt || data.optimization
       };
 
+      setExtractedData(finalExtracted);
+
       const newEntry: SavedReport = {
         id: Date.now().toString(),
         ticker: normalizedTicker,
         price: effectivePrice,
         fairValue: String(targetVal ?? data.valuation?.fair_value ?? ''),
-        period: extractedData?.reporting_period,
+        period: resolvedPeriod,
         createdAt: new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
         report: finalReport,
         decision: finalDecision,

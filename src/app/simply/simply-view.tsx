@@ -2813,7 +2813,7 @@ export default function SimplyView({
                   <div className="flex items-center gap-2 text-sm font-mono text-slate-300">
                     <span className="text-[#f5c242] font-bold">IBSE:{report.ticker}</span>
                     <span>•</span>
-                    <span>{report.period || '2025/12'} Bilanço Dönemi</span>
+                    <span>{report.period || latestData?.period || '2025/12'} Bilanço Dönemi</span>
                   </div>
                   <h1 className="font-sans text-2xl sm:text-3xl font-black text-white tracking-tight truncate line-clamp-1" title={profile.fullName}>
                     {profile.fullName}
