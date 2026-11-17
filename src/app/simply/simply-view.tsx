@@ -1415,13 +1415,13 @@ export default function SimplyView({
     };
 
     return [...latestPerTicker].sort((a, b) => {
-      const wA = decisionWeight(a.decision);
-      const wB = decisionWeight(b.decision);
-      if (wA !== wB) return wA - wB;
-
       const scA = extractScore(a.score);
       const scB = extractScore(b.score);
       if (scA !== scB) return scB - scA;
+
+      const wA = decisionWeight(a.decision);
+      const wB = decisionWeight(b.decision);
+      if (wA !== wB) return wA - wB;
 
       return (Number(b.price) || 0) - (Number(a.price) || 0);
     });
@@ -2203,6 +2203,7 @@ export default function SimplyView({
 
   // Sektörel Akranlar Paneli Açılır/Kapanır Durumu
   const [isPeersOpen, setIsPeersOpen] = useState<boolean>(true);
+  const [showAllPeers, setShowAllPeers] = useState<boolean>(false);
 
   // 4.7 Sermaye Tahsisi Adli Kriter Sinyalleri Çekmecesi
   const [isCapAllocExpanded, setIsCapAllocExpanded] = useState<boolean>(false);
@@ -2974,7 +2975,6 @@ export default function SimplyView({
                 <div className="md:col-span-2 bg-[#21262d]/60 border border-[#2e3440] rounded-xl p-4 sm:p-5 space-y-3">
                   <div className="flex items-center justify-between text-sm text-slate-300">
                     <span className="font-bold text-white text-[15px]">Son 4 Çeyrek Adil Değer Trendi vs. Piyasa Fiyatı</span>
-                    <span className="font-mono text-sm text-[#f5c242]">Gerçekleşen Veriler</span>
                   </div>
                   <div className="h-36 w-full">
                     <ResponsiveContainer width="100%" height="100%">
@@ -3535,9 +3535,6 @@ export default function SimplyView({
                         {officialSectorName}
                       </span>
                     </h3>
-                    <p className="text-xs text-slate-400 font-sans mt-0.5">
-                      Kayıtlı akran analizleri karar ve model puanına göre önceliklendirilmiştir
-                    </p>
                   </div>
                 </div>
 
@@ -3553,7 +3550,7 @@ export default function SimplyView({
                   {analyzedCompetitors.length > 0 ? (
                     <div className="space-y-4 pt-1">
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                        {analyzedCompetitors.map((comp) => {
+                        {(showAllPeers ? analyzedCompetitors : analyzedCompetitors.slice(0, 3)).map((comp) => {
                           const decStr = String(comp.decision || '').toUpperCase();
                           const isBuy = decStr === 'AL' || decStr === 'GÜÇLÜ AL';
                           const isSell = decStr === 'ALMA' || decStr === 'SAT' || decStr === 'GÜÇLÜ SAT';
@@ -3603,6 +3600,28 @@ export default function SimplyView({
                           );
                         })}
                       </div>
+
+                      {analyzedCompetitors.length > 3 && (
+                        <div className="flex justify-center pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setShowAllPeers(prev => !prev)}
+                            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#21262d] hover:bg-[#2b313d] text-slate-200 hover:text-[#f5c242] border border-[#2e3440] text-xs font-mono font-semibold transition cursor-pointer"
+                          >
+                            {showAllPeers ? (
+                              <>
+                                <ChevronUp className="w-3.5 h-3.5" />
+                                <span>Daha Az Göster (İlk 3)</span>
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="w-3.5 h-3.5" />
+                                <span>Devamını Göster (+{analyzedCompetitors.length - 3} Şirket)</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
 
                       {sectorCandidateTickers.length > 0 && (
                         <div className="pt-3 border-t border-[#282d37] flex items-center justify-between flex-wrap gap-2 text-sm text-slate-300">
@@ -3656,26 +3675,6 @@ export default function SimplyView({
               <div className="flex items-center gap-2.5">
                 <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">1</span>
                 <h2 className="font-sans text-xl sm:text-2xl font-bold text-white">Grafikler</h2>
-              </div>
-              <div className="flex items-center bg-[#21262d] p-0.5 rounded-lg border border-[#2e3440] text-xs font-semibold">
-                <button
-                  type="button"
-                  onClick={() => setChartPeriodMode('quarterly')}
-                  className={`px-3 py-1 rounded-md transition cursor-pointer ${
-                    chartPeriodMode === 'quarterly' ? 'bg-[#f5c242] text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Çeyreklik (3A)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setChartPeriodMode('ttm')}
-                  className={`px-3 py-1 rounded-md transition cursor-pointer ${
-                    chartPeriodMode === 'ttm' ? 'bg-[#f5c242] text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Yıllıklandırılmış (TTM)
-                </button>
               </div>
             </div>
 
@@ -3962,10 +3961,6 @@ export default function SimplyView({
                 <h2 className="font-sans text-xl sm:text-2xl font-bold text-white">Finansal Tablolar</h2>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-mono text-slate-400 bg-[#181b20] px-2.5 py-1 rounded-lg border border-[#282d37] hidden sm:inline-flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#f5c242]" />
-                  Satır üzerine gelin / dokunun: Çeyreklik % Değişim
-                </span>
                 {Object.values(collapsedSections).some(Boolean) && (
                   <button
                     type="button"
@@ -4732,7 +4727,6 @@ export default function SimplyView({
                   <div className="text-base sm:text-lg font-sans font-bold text-white flex items-center gap-2">
                     <span>3.3 Çeyreklik Çarpan Trendi</span>
                   </div>
-                  <span className="text-[10px] text-slate-500 font-mono">Son {Math.min(8, quarterlyMultiplesData.length)} Çeyrek</span>
                 </div>
 
                 <div className="h-44 w-full">
@@ -4939,7 +4933,6 @@ export default function SimplyView({
                       <span className="font-sans text-base sm:text-lg font-bold text-white">
                         4.2 Piyasa ve Analist Hedef Fiyatları
                       </span>
-                      <span className="text-xs font-mono text-slate-400">Aracı Kurum Konsensüsü</span>
                     </div>
 
                     <div className="bg-[#12151b] border border-[#232834] rounded-xl p-5 text-center space-y-2">
@@ -5236,7 +5229,7 @@ export default function SimplyView({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
                   {
                     title: drivers.revenue_growth.label,
@@ -5271,25 +5264,23 @@ export default function SimplyView({
                     note: drivers.target_multiple.note
                   }
                 ].map((d, idx) => (
-                  <div key={idx} className="bg-gradient-to-b from-[#1c212a] to-[#15181f] border border-[#2b313d] hover:border-[#384152] rounded-2xl p-4 sm:p-5 flex flex-col justify-between space-y-3.5 shadow-lg transition-all duration-200 group">
-                    <div>
-                      <div className="flex items-center justify-between gap-1.5">
-                        <div className="text-sm font-bold text-white font-sans truncate" title={d.title}>
-                          {d.title}
-                        </div>
-                        <span className="text-[11px] font-mono text-slate-400 bg-[#12151a] px-2 py-0.5 rounded-md border border-[#2b313d]">Model Bazı</span>
+                  <div
+                    key={idx}
+                    className="bg-[#14171e] border border-[#282e3b] hover:border-[#363e4f] rounded-xl p-4 sm:p-5 flex flex-col justify-between gap-3.5 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm sm:text-[15px] font-bold text-white font-sans">
+                        {d.title}
                       </div>
-                      <div className="flex items-baseline gap-1.5 mt-2">
-                        <span className="text-2xl font-black font-mono text-[#f5c242] tracking-tight">
-                          {d.valueText}
-                        </span>
-                      </div>
+                      <span className="text-xl sm:text-2xl font-black font-mono text-[#f5c242] tracking-tight shrink-0">
+                        {d.valueText}
+                      </span>
                     </div>
 
-                    <div className="space-y-2">
-                      <div className="relative h-2 w-full rounded-full bg-[#101216] border border-[#2b313d] overflow-hidden">
+                    <div className="space-y-1.5">
+                      <div className="relative h-2 w-full rounded-full bg-[#0e1014] border border-[#262c38] overflow-hidden">
                         <div
-                          className="h-full bg-gradient-to-r from-emerald-500/30 to-emerald-400/60 rounded-full"
+                          className="h-full bg-gradient-to-r from-emerald-500/35 to-emerald-400/70 rounded-full"
                           style={{ width: `${Math.max(8, Math.min(100, d.pinPercent))}%` }}
                         />
                         <div
@@ -5298,14 +5289,14 @@ export default function SimplyView({
                         />
                       </div>
 
-                      <div className="flex items-center justify-between text-xs font-mono text-slate-400 leading-tight">
-                        <span className="truncate">{d.bearText}</span>
-                        <span className="truncate text-right text-slate-300">{d.bullText}</span>
+                      <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                        <span>{d.bearText}</span>
+                        <span className="text-slate-300">{d.bullText}</span>
                       </div>
                     </div>
 
                     {d.note && (
-                      <p className="text-xs text-slate-300 leading-relaxed pt-2.5 border-t border-[#262c37] font-sans" title={d.note}>
+                      <p className="text-xs sm:text-[13px] text-slate-300 leading-relaxed pt-2.5 border-t border-[#222733] font-sans">
                         {d.note}
                       </p>
                     )}
