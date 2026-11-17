@@ -938,8 +938,11 @@ export default function SimplyView({
     tvConsensus?: any;
   } | null>(null);
 
+  const [liveMarketPrice, setLiveMarketPrice] = useState<number | null>(null);
+
   useEffect(() => {
     let isMounted = true;
+    setLiveMarketPrice(null);
     const upperTicker = report.ticker ? report.ticker.toUpperCase() : '';
     const baselineDetails = upperTicker ? OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE[upperTicker] : null;
     const rawInitialDivs = (Array.isArray(report.dividendHistory) && report.dividendHistory.length > 0)
@@ -974,6 +977,16 @@ export default function SimplyView({
               foreignShare: data.foreignShare || initialForeign,
               tvConsensus: data.tvConsensus || null
             });
+          }
+        })
+        .catch(() => {});
+
+      fetch(`/api/cockpit/card?ticker=${encodeURIComponent(report.ticker)}&range=1G`, { cache: 'no-store' })
+        .then(res => res.json())
+        .then(data => {
+          const p = Number(data?.card?.price);
+          if (isMounted && data?.success && Number.isFinite(p) && p > 0) {
+            setLiveMarketPrice(p);
           }
         })
         .catch(() => {});
@@ -1015,8 +1028,9 @@ export default function SimplyView({
     return getCompanyProfile(report.ticker, sectorMeta?.title);
   }, [report.ticker, sectorMeta?.title]);
 
-  // Fiyat ve Adil Değer Çözümü
-  const currentPriceNum = Number(String(report.price || '0').replace(/[^0-9.]/g, '')) || 0;
+  // Fiyat ve Adil Değer Çözümü (Üst panel canlı piyasa fiyatını yansıtır; Geçmiş paneli ise analiz anındaki fiyatı korur)
+  const staticReportPrice = Number(String(report.price || '0').replace(/[^0-9.]/g, '')) || 0;
+  const currentPriceNum = (liveMarketPrice != null && liveMarketPrice > 0) ? liveMarketPrice : staticReportPrice;
   const fairValueNum = Number(valuationInfo?.fair_value || report.fairValue || 0);
   const discountPctNum = Number(valuationInfo?.discount_pct || 0);
   const effectiveDecision = (
@@ -7544,6 +7558,12 @@ export default function SimplyView({
                       ? `₺${numFv.toFixed(2)}`
                       : '—';
 
+                    const rawHistPrice = hist.price ?? hist.extractedData?.current_price;
+                    const numHistPrice = parseFinancialNumber(rawHistPrice);
+                    const analysisPriceDisplay = numHistPrice != null && !isNaN(numHistPrice) && numHistPrice > 0
+                      ? `₺${numHistPrice.toFixed(2)}`
+                      : '—';
+
                     return (
                       <div
                         key={hist.id}
@@ -7566,11 +7586,14 @@ export default function SimplyView({
                             {hist.period ? `${hist.period} - ` : ''}Analiz: {formatAnalysisDate(hist.createdAt)}
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right space-y-0.5">
+                          <div className="font-mono text-xs sm:text-[13px] font-semibold text-slate-300">
+                            Analiz Fiyatı: <span className="text-white">{analysisPriceDisplay}</span>
+                          </div>
                           <div className="font-mono text-[15px] font-bold text-[#f5c242]">
                             Adil Değer: {fairValDisplay}
                           </div>
-                          <div className={`text-sm font-bold font-mono mt-0.5 ${hist.decision === 'AL' ? 'text-emerald-400' : hist.decision === 'ALMA' ? 'text-rose-400' : 'text-amber-400'}`}>
+                          <div className={`text-sm font-bold font-mono ${hist.decision === 'AL' ? 'text-emerald-400' : hist.decision === 'ALMA' ? 'text-rose-400' : 'text-amber-400'}`}>
                             Karar: {hist.decision || 'NÖTR'}
                           </div>
                         </div>
