@@ -6079,6 +6079,39 @@ export default function SimplyView({
                     </tbody>
                   </table>
                 </div>
+              ) : (valuationInfo?.qualitative_risk_audit?.managementTargets?.length > 0 || report.extractedData?.qualitative_risk_audit?.managementTargets?.length > 0) ? (
+                (() => {
+                  const qa = valuationInfo?.qualitative_risk_audit || report.extractedData?.qualitative_risk_audit;
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <span className="text-xs font-mono text-emerald-400">
+                          KAP {qa.activityReport?.periodLabel || ''} Faaliyet Raporu Otomatik Tarandı
+                        </span>
+                        {qa.activityReport?.kapUrl && (
+                          <a
+                            href={qa.activityReport.kapUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-mono text-cyan-400 hover:text-[#f5c242] underline underline-offset-2"
+                          >
+                            Resmi KAP Raporunu Aç
+                          </a>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        {qa.managementTargets.map((mt: any, idx: number) => (
+                          <div key={idx} className="bg-[#14171e] border border-[#262c38] rounded-xl px-4 py-3 flex items-start justify-between gap-3">
+                            <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-sans">{mt.target}</p>
+                            <span className="text-[11px] font-mono text-[#f5c242] bg-[#191d26] px-2 py-0.5 rounded border border-[#2a3140] shrink-0">
+                              {mt.pageRef}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()
               ) : (
                 <div className="bg-[#181b20] border border-[#262c37] rounded-xl p-4 text-center">
                   <p className="text-xs sm:text-sm text-slate-400 font-sans">
@@ -6820,6 +6853,125 @@ export default function SimplyView({
                 </div>
               </div>
             </div>
+
+            {/* 7.5 KAP Faaliyet Raporu & Dipnot Kalitatif Risk Taraması */}
+            {(() => {
+              const kapQual = valuationInfo?.qualitative_risk_audit || report.extractedData?.qualitative_risk_audit;
+              if (!kapQual || !Array.isArray(kapQual.findings) || kapQual.findings.length === 0) return null;
+
+              return (
+                <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 sm:p-7 shadow-xl space-y-5">
+                  <div className="flex items-center justify-between flex-wrap gap-3 border-b border-[#282d37] pb-3.5">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                        <FileText className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-sans font-bold text-white text-base sm:text-lg leading-snug">
+                          7.5 KAP Faaliyet Raporu & Dipnot Kalitatif Risk Taraması
+                        </h3>
+                        <span className="text-xs text-slate-400 font-sans">
+                          {kapQual.activityReport?.periodLabel || 'Son Dönem'} resmi KAP belgelerinden otomatik ayıklanan denetim ve dipnot bulguları
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {kapQual.activityReport?.kapUrl && (
+                        <a
+                          href={kapQual.activityReport.kapUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-mono text-cyan-300 hover:text-[#f5c242] bg-[#21262d] px-2.5 py-1 rounded-lg border border-[#2e3440] transition"
+                        >
+                          Faaliyet Raporu ({kapQual.activityReport.pageCount} syf)
+                        </a>
+                      )}
+                      {kapQual.financialReport?.kapUrl && (
+                        <a
+                          href={kapQual.financialReport.kapUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-mono text-slate-300 hover:text-[#f5c242] bg-[#21262d] px-2.5 py-1 rounded-lg border border-[#2e3440] transition"
+                        >
+                          Finansal Dipnotlar ({kapQual.financialReport.pageCount} syf)
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Denetim Durumu & Yönetici Özeti */}
+                  <div className="bg-[#13161c] border border-[#262c38] rounded-xl p-4 space-y-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <span className="text-xs font-mono font-bold text-[#f5c242]">
+                        Denetim Durumu: {kapQual.auditorStatus}
+                      </span>
+                      <span className="text-[11px] font-mono text-emerald-400">
+                        KAP Otomatik Tarandı
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-slate-200 leading-[1.75] font-sans">
+                      {kapQual.executiveSummary}
+                    </p>
+                  </div>
+
+                  {/* Kalitatif Bulgular Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {kapQual.findings.map((f: any) => {
+                      const sevStyle =
+                        f.severity === 'HIGH'
+                          ? 'border-l-rose-500 text-rose-400'
+                          : f.severity === 'MEDIUM'
+                          ? 'border-l-amber-400 text-amber-300'
+                          : f.severity === 'POSITIVE'
+                          ? 'border-l-emerald-400 text-emerald-400'
+                          : 'border-l-cyan-400 text-cyan-300';
+                      const sevLabel =
+                        f.severity === 'HIGH'
+                          ? 'Yüksek Risk'
+                          : f.severity === 'MEDIUM'
+                          ? 'Dikkat / İzleme'
+                          : f.severity === 'POSITIVE'
+                          ? 'Olumlu Sinyal'
+                          : 'Bilgi / Dipnot';
+
+                      return (
+                        <div
+                          key={f.id}
+                          className={`bg-[#14171e] border border-[#262c38] border-l-4 ${sevStyle.split(' ')[0]} rounded-xl p-4 space-y-2.5 flex flex-col justify-between`}
+                        >
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span className="text-[11px] font-mono font-bold text-slate-300">
+                                {f.categoryLabel}
+                              </span>
+                              <div className="flex items-center gap-2 text-[11px] font-mono">
+                                <span className={`font-bold ${sevStyle.split(' ')[1]}`}>
+                                  {sevLabel}
+                                </span>
+                                <span className="text-slate-400 bg-[#191d26] px-2 py-0.5 rounded border border-[#252b37]">
+                                  {f.sourceDoc} • {f.pageRef}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-sm font-bold text-white font-sans">
+                              {f.title}
+                            </div>
+                            <p className="text-xs text-slate-300 leading-relaxed font-sans italic border-l-2 border-[#2a3140] pl-2.5">
+                              &ldquo;{f.excerpt}&rdquo;
+                            </p>
+                          </div>
+                          <div className="text-xs text-slate-200 pt-2 border-t border-[#222733] font-sans">
+                            <span className="text-slate-400 font-semibold">Etki: </span>
+                            {f.impact}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </section>
           </ComponentErrorBoundary>
 

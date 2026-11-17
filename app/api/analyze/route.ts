@@ -15,6 +15,7 @@ import { fetchLiveBistPrice } from '@/lib/bist-service';
 import { fetchIsYatirimCompanyDetails, synthesizeDividendsFromFinancialHistory } from '@/lib/isyatirim-service';
 import { FinancialRatioEngine } from '@/lib/ratio-engine';
 import { InvariantSentinel } from '@/lib/invariant-sentinel';
+import { fetchAndAnalyzeKapQualitativeAudit, KAP_AUTO_QUALITATIVE_TICKERS } from '@/lib/kap-report-service';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -539,6 +540,25 @@ ZORUNLU TALİMAT (Önceki Raporla Karşılaştırma & Çeyreklik Hafıza):
       );
     }
 
+    let qualitativeRiskAudit: any = extractedData?.qualitative_risk_audit || null;
+    if (KAP_AUTO_QUALITATIVE_TICKERS.has(resolvedTicker)) {
+      try {
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 18000));
+        const fetchedAudit = await Promise.race([
+          fetchAndAnalyzeKapQualitativeAudit(resolvedTicker),
+          timeoutPromise
+        ]);
+        if (fetchedAudit) {
+          qualitativeRiskAudit = fetchedAudit;
+          if (valuation && typeof valuation === 'object') {
+            (valuation as any).qualitative_risk_audit = fetchedAudit;
+          }
+        }
+      } catch (e: any) {
+        console.warn(`[KAP Qualitative Audit] ${resolvedTicker} atlandı:`, e?.message);
+      }
+    }
+
     return NextResponse.json({ 
       report: reportText, 
       sector, 
@@ -548,7 +568,8 @@ ZORUNLU TALİMAT (Önceki Raporla Karşılaştırma & Çeyreklik Hafıza):
       optimization,
       unified_metrics: unifiedMetrics,
       dividend_history: dividendHistory,
-      consensus_target: consensusTarget
+      consensus_target: consensusTarget,
+      qualitative_risk_audit: qualitativeRiskAudit
     });
   } catch (error: any) {
     console.error('Analyze Error:', error);

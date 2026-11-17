@@ -3287,7 +3287,8 @@ export default function ValuationTerminal({
         valuation: data.valuation || enrichedExtractedData?.valuation,
         fair_value_drivers: data.drivers || enrichedExtractedData?.fair_value_drivers,
         score_result: data.scoreResult,
-        optimization: opt || data.optimization
+        optimization: opt || data.optimization,
+        qualitative_risk_audit: data.qualitative_risk_audit || data.valuation?.qualitative_risk_audit || enrichedExtractedData?.qualitative_risk_audit || null
       };
 
       setExtractedData(finalExtracted);
