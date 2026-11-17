@@ -176,6 +176,20 @@ function calculateTightMin(minVal: number): number {
   return -(targetNorm * base);
 }
 
+// Çubuk grafiklerde 0 tabanını koruyarak orantısız min-kırpma yanılsamasını önler
+function getZeroAnchoredBarDomain(items: any[], key: string): [number, number] {
+  const vals = items
+    .map((d) => Number(d?.[key]))
+    .filter((v) => Number.isFinite(v));
+  if (vals.length === 0) return [0, 100];
+  const minVal = Math.min(...vals);
+  const maxVal = Math.max(...vals);
+  const yMin = minVal < 0 ? calculateTightMin(minVal) : 0;
+  const yMax = maxVal > 0 ? maxVal * 1.12 : 0;
+  if (yMin === yMax) return [0, 100];
+  return [yMin, yMax];
+}
+
 // Milyar / Milyon TL Formatlayıcı (Grafik eksen ve tooltip'leri için)
 function formatMrTl(val: number | null | undefined, isAxis = false): string {
   if (val === null || val === undefined || isNaN(val)) return '—';
@@ -3693,6 +3707,9 @@ export default function SimplyView({
             </div>
 
             {/* 1.1 Çeyreklik Temel Finansallar */}
+            {(() => {
+              const barSlice = (chartPeriodMode === 'ttm' ? chartData : (quarterlyChartData.length > 0 ? quarterlyChartData : chartData)).slice(-5);
+              return (
             <div className="space-y-3">
               <div className="text-base font-bold text-white flex items-center gap-2">
                 <span>1.1 Çeyreklik Temel Finansallar</span>
@@ -3706,7 +3723,7 @@ export default function SimplyView({
                   <div className="h-48 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
-                        data={(chartPeriodMode === 'ttm' ? chartData : (quarterlyChartData.length > 0 ? quarterlyChartData : chartData)).slice(-5)}
+                        data={barSlice}
                         margin={{ top: 12, right: 8, left: 8, bottom: 4 }}
                       >
                         <ReferenceLine y={0} stroke="#252a36" strokeWidth={1} />
@@ -3718,7 +3735,7 @@ export default function SimplyView({
                           tick={{ fontSize: 11, fill: '#64748b', fontFamily: 'monospace' }}
                           tickFormatter={(v: string) => v ? v.replace(/\/0(\d)/, '/$1') : ''}
                         />
-                        <YAxis stroke="#6b7280" hide domain={['auto', 'auto']} />
+                        <YAxis stroke="#6b7280" hide domain={getZeroAnchoredBarDomain(barSlice, 'revenue')} />
                         <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} cursor={{ fill: 'rgba(255, 255, 255, 0.03)' }} />
                         <Bar
                           dataKey="revenue"
@@ -3739,7 +3756,7 @@ export default function SimplyView({
                   <div className="h-48 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
-                        data={(chartPeriodMode === 'ttm' ? chartData : (quarterlyChartData.length > 0 ? quarterlyChartData : chartData)).slice(-5)}
+                        data={barSlice}
                         margin={{ top: 12, right: 8, left: 8, bottom: 4 }}
                       >
                         <ReferenceLine y={0} stroke="#252a36" strokeWidth={1} />
@@ -3751,7 +3768,7 @@ export default function SimplyView({
                           tick={{ fontSize: 11, fill: '#64748b', fontFamily: 'monospace' }}
                           tickFormatter={(v: string) => v ? v.replace(/\/0(\d)/, '/$1') : ''}
                         />
-                        <YAxis stroke="#6b7280" hide domain={['auto', 'auto']} />
+                        <YAxis stroke="#6b7280" hide domain={getZeroAnchoredBarDomain(barSlice, 'ebitda')} />
                         <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} cursor={{ fill: 'rgba(255, 255, 255, 0.03)' }} />
                         <Bar
                           dataKey="ebitda"
@@ -3772,7 +3789,7 @@ export default function SimplyView({
                   <div className="h-48 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
-                        data={(chartPeriodMode === 'ttm' ? chartData : (quarterlyChartData.length > 0 ? quarterlyChartData : chartData)).slice(-5)}
+                        data={barSlice}
                         margin={{ top: 12, right: 8, left: 8, bottom: 4 }}
                       >
                         <ReferenceLine y={0} stroke="#252a36" strokeWidth={1} />
@@ -3784,7 +3801,7 @@ export default function SimplyView({
                           tick={{ fontSize: 11, fill: '#64748b', fontFamily: 'monospace' }}
                           tickFormatter={(v: string) => v ? v.replace(/\/0(\d)/, '/$1') : ''}
                         />
-                        <YAxis stroke="#6b7280" hide domain={['auto', 'auto']} />
+                        <YAxis stroke="#6b7280" hide domain={getZeroAnchoredBarDomain(barSlice, 'net_income')} />
                         <Tooltip content={<SimplyChartTooltip currentSector={currentSector} />} cursor={{ fill: 'rgba(255, 255, 255, 0.03)' }} />
                         <Bar
                           dataKey="net_income"
@@ -3798,6 +3815,8 @@ export default function SimplyView({
                 </div>
               </div>
             </div>
+              );
+            })()}
 
             {/* 1.2 Kârlılık ve Marj Trendleri (6'lı Marj Sparkline Kartları) */}
             <div className="space-y-3">
