@@ -466,8 +466,10 @@ export function sanitizeDisclosureTitle(rawTitle: string, ticker: string, compan
     title = match2[1].trim();
   }
 
-  // Desen 3: ***TICKER*** kalıntısı
+  // Desen 3: ***TICKER*** veya ***OYA* *OYYAT*** kalıntıları
+  title = title.replace(/^\*+[^*]+\*+(?:\s*\*+[^*]+\*+)*\s*/g, '');
   title = title.replace(/\*\*\*[A-Z0-9]+\*\*\*\s*/gi, '');
+  title = title.replace(/\*+/g, '').trim();
 
   // Başta hisse kodu varsa temizle: "TURSG - " veya "TURSG: "
   title = title.replace(new RegExp(`^${ticker}\\s*[-:–]\\s*`, 'i'), '');

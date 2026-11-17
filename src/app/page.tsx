@@ -2052,11 +2052,17 @@ export default function ValuationTerminal({
     } else if (queryView === 'leaderboard') {
       setStep('leaderboard');
       setLoading(false);
+    } else if (queryView === 'sectors') {
+      setStep('sectors');
+      setLoading(false);
+    } else if (queryView === 'input') {
+      setStep('input');
+      setLoading(false);
     } else {
-      // Hedef bir hisse belirtilmemişse (ana sayfa / veya /simply):
+      // Hedef bir hisse belirtilmemişse (Ana Sayfa):
       setActiveReportId(null);
       setTicker('');
-      setStep('input');
+      setStep('cockpit');
       setLoading(false);
     }
 
@@ -4581,7 +4587,7 @@ export default function ValuationTerminal({
               onClick={() => navigateTo('cockpit')}
               role="button"
               tabIndex={0}
-              title="Piyasa Kokpiti (Ana Ekran)"
+              title="Ana Sayfa"
               className="flex items-center gap-2 cursor-pointer hover:opacity-90 transition select-none shrink-0"
             >
               <FairValueLogo className="w-6 h-6" />
@@ -4590,7 +4596,7 @@ export default function ValuationTerminal({
               </span>
             </div>
 
-            {/* Yatay Navigasyon Linkleri (Kokpit, Akış, Portföy, Favoriler, Yatırım Temaları, Hisse Tarama) */}
+            {/* Yatay Navigasyon Linkleri (Ana Sayfa, Akış, Portföy, Favoriler, Yatırım Temaları, Hisse Tarama) */}
             <nav className="hidden md:flex items-center gap-1 text-sm font-medium">
               <button
                 type="button"
@@ -4601,7 +4607,7 @@ export default function ValuationTerminal({
                     : 'text-slate-400 hover:text-white hover:bg-[#181c24]'
                 }`}
               >
-                <span>Kokpit</span>
+                <span>Ana Sayfa</span>
               </button>
 
               <button
@@ -4864,7 +4870,10 @@ export default function ValuationTerminal({
           </div>
         </header>
 
-        <div className="p-3 sm:p-6 pb-24 md:pb-6 w-full max-w-[1600px] mx-auto space-y-5">
+        <div className={step === 'cockpit'
+          ? 'px-3 sm:px-4 py-3 pb-24 md:pb-4 w-full space-y-3'
+          : 'p-3 sm:p-6 pb-24 md:pb-6 w-full max-w-[1600px] mx-auto space-y-5'
+        }>
 
           {/* KOKPİT / RAPOR GEÇİŞLERİNDE KÜRESEL ANALİZ İLERLEME ÇUBUĞU */}
           {loading && statusMessage && step !== 'input' && (
@@ -4891,7 +4900,6 @@ export default function ValuationTerminal({
               onToggleFavorite={toggleFavorite}
               onOpenTicker={handleOpenOrAnalyzeTicker}
               onOpenReport={openReport}
-              onGoToNewAnalysis={() => navigateTo('input')}
             />
           )}
           
@@ -8077,7 +8085,7 @@ export default function ValuationTerminal({
           }`}
         >
           <Activity className="w-4 h-4" />
-          <span className="text-[10px]">Kokpit</span>
+          <span className="text-[10px]">Ana Sayfa</span>
         </button>
 
         <button
