@@ -1009,7 +1009,7 @@ export default function SimplyView({
         .catch(() => {});
 
       const existingAudit = valuationInfo?.qualitative_risk_audit || report.extractedData?.qualitative_risk_audit;
-      if (!existingAudit && (upperTicker === 'SAYAS' || upperTicker === 'MPARK')) {
+      if (!existingAudit && upperTicker) {
         setLoadingKapQual(true);
         fetch(`/api/kap-audit?ticker=${encodeURIComponent(upperTicker)}`, { cache: 'no-store' })
           .then(res => res.json())

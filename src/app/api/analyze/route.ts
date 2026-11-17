@@ -15,7 +15,7 @@ import { fetchLiveBistPrice } from '@/lib/bist-service';
 import { fetchIsYatirimCompanyDetails, synthesizeDividendsFromFinancialHistory } from '@/lib/isyatirim-service';
 import { FinancialRatioEngine } from '@/lib/ratio-engine';
 import { InvariantSentinel } from '@/lib/invariant-sentinel';
-import { fetchAndAnalyzeKapQualitativeAudit, KAP_AUTO_QUALITATIVE_TICKERS } from '@/lib/kap-report-service';
+import { fetchAndAnalyzeKapQualitativeAudit, isKapQualitativeSupported } from '@/lib/kap-report-service';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,8 +34,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // SAYAS & MPARK için KAP Faaliyet Raporu & Dipnot Kalitatif Risk Taramasını paralel başlat
-    const kapAuditPromise = KAP_AUTO_QUALITATIVE_TICKERS.has(resolvedTicker)
+    // Desteklenen tüm BIST şirketleri için KAP Faaliyet Raporu & Dipnot Kalitatif Risk Taramasını paralel başlat
+    const kapAuditPromise = isKapQualitativeSupported(resolvedTicker)
       ? Promise.race([
           fetchAndAnalyzeKapQualitativeAudit(resolvedTicker),
           new Promise<null>((resolve) => setTimeout(() => resolve(null), 22000))

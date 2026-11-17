@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchAndAnalyzeKapQualitativeAudit, KAP_AUTO_QUALITATIVE_TICKERS } from '@/lib/kap-report-service';
+import { fetchAndAnalyzeKapQualitativeAudit, isKapQualitativeSupported } from '@/lib/kap-report-service';
 import { isValidTicker } from '@/lib/security';
 
 export const runtime = 'nodejs';
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, message: 'Geçersiz hisse kodu.' }, { status: 400 });
     }
 
-    if (!KAP_AUTO_QUALITATIVE_TICKERS.has(ticker)) {
+    if (!isKapQualitativeSupported(ticker)) {
       return NextResponse.json({ success: true, supported: false, audit: null });
     }
 

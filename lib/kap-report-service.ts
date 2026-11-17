@@ -1,7 +1,10 @@
 import https from 'node:https';
 import { BIST_KAP_OID_MAP } from './kap-mapping.ts';
 
-export const KAP_AUTO_QUALITATIVE_TICKERS = new Set(['SAYAS', 'MPARK']);
+export function isKapQualitativeSupported(rawTicker: string): boolean {
+  const ticker = (rawTicker || '').toUpperCase().trim();
+  return Boolean(BIST_KAP_OID_MAP[ticker]);
+}
 
 const isProduction = process.env.NODE_ENV === 'production';
 const kapHttpsAgent = new https.Agent({
@@ -405,7 +408,7 @@ const auditCache = new Map<string, { data: KapQualitativeAuditResult; expiresAt:
 
 export async function fetchAndAnalyzeKapQualitativeAudit(rawTicker: string): Promise<KapQualitativeAuditResult | null> {
   const ticker = (rawTicker || '').toUpperCase().trim();
-  if (!KAP_AUTO_QUALITATIVE_TICKERS.has(ticker)) return null;
+  if (!ticker) return null;
 
   const cached = auditCache.get(ticker);
   if (cached && Date.now() < cached.expiresAt) {
