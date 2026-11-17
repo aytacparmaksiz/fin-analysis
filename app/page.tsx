@@ -19,6 +19,7 @@ import {
 
 import LoginModal, { type UserSession } from './components/login-modal';
 import SpotlightSearch from './components/spotlight-search';
+import MarketCockpit from './components/market-cockpit';
 import { getCompanyNewsFeed, getNewsCategories, type CompanyNewsItem } from '@/lib/news-service';
 import { getKapCompanyDisclosuresUrl } from '@/lib/kap-mapping';
 
@@ -1431,9 +1432,9 @@ export default function ValuationTerminal({
     });
   };
 
-  // Aşama durumu: Yalnızca kayıtlı rapor varsa 'report', aksi halde doğrudan 'input' (Arama ve analiz formu)
-  const [step, setStep] = useState<'input' | 'review' | 'report' | 'leaderboard' | 'themes' | 'saved' | 'sectors'>(
-    defaultReport ? 'report' : 'input'
+  // Aşama durumu: Yalnızca kayıtlı rapor varsa 'report', aksi halde doğrudan 'cockpit' (Piyasa Kokpiti Ana Ekran)
+  const [step, setStep] = useState<'cockpit' | 'input' | 'review' | 'report' | 'leaderboard' | 'themes' | 'saved' | 'sectors'>(
+    defaultReport ? 'report' : 'cockpit'
   );
   const [extractedData, setExtractedData] = useState<any>(defaultReport?.extractedData || null);
 
@@ -1528,7 +1529,7 @@ export default function ValuationTerminal({
 
   // Rapor öncesi gezinti durumu (Geri butonuna basıldığında gelinen ekrana dönebilmek için)
   const [previousNavState, setPreviousNavState] = useState<{
-    step: 'input' | 'review' | 'report' | 'leaderboard' | 'themes' | 'saved' | 'sectors';
+    step: 'cockpit' | 'input' | 'review' | 'report' | 'leaderboard' | 'themes' | 'saved' | 'sectors';
     analyzedTab: 'ALL' | 'PORTFOLIO' | 'FAVORITES' | 'AL' | 'NÖTR' | 'ALMA';
   }>({ step: 'saved', analyzedTab: 'ALL' });
 
@@ -1695,11 +1696,17 @@ export default function ValuationTerminal({
   }, []);
 
   // Tarayıcı Yolu & Sayfa Geçiş Yöneticisi (URL Navigation)
-  const navigateTo = useCallback((targetStep: 'input' | 'saved' | 'themes' | 'leaderboard' | 'portfolio' | 'favorites' | 'sectors') => {
+  const navigateTo = useCallback((targetStep: 'cockpit' | 'input' | 'saved' | 'themes' | 'leaderboard' | 'portfolio' | 'favorites' | 'sectors') => {
     setError(null);
     const basePath = typeof window !== 'undefined' && window.location.pathname.startsWith('/simply') ? '/simply' : '';
 
-    if (targetStep === 'portfolio') {
+    if (targetStep === 'cockpit') {
+      setStep('cockpit');
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        window.history.pushState(null, '', `${basePath || '/'}`);
+      }
+    } else if (targetStep === 'portfolio') {
       setStep('saved');
       setAnalyzedTab('PORTFOLIO');
       if (typeof window !== 'undefined') window.history.pushState(null, '', `${basePath}/?view=portfolio`);
@@ -2176,7 +2183,7 @@ export default function ValuationTerminal({
         if (window.location.search !== '?view=leaderboard') {
           window.history.pushState(null, '', targetFull);
         }
-      } else if (step === 'input') {
+      } else if (step === 'cockpit' || step === 'input') {
         if (
           window.location.pathname.startsWith('/analysis/') ||
           window.location.pathname.startsWith('/report/') ||
@@ -2724,10 +2731,14 @@ export default function ValuationTerminal({
       }
 
       setPipelineProgress(100);
-      setStatusMessage(`${targetTicker} için ${currentData.financial_history.length} çeyreklik resmi veri başarıyla yüklendi!`);
+      setStatusMessage(`${targetTicker} için ${currentData.financial_history.length} çeyreklik resmi veri yüklendi, analiz başlatılıyor...`);
 
       setExtractedData(currentData);
-      setStep('review');
+      await handleEvaluate({
+        ticker: targetTicker,
+        price: livePriceStr,
+        extractedData: currentData
+      });
     } catch (err: any) {
       console.error('[BIST Direct Analysis Error]:', err);
       setError(err.message || 'BIST verileri alınırken bir hata oluştu.');
@@ -3104,10 +3115,11 @@ export default function ValuationTerminal({
   };
 
   // Aşama 2: Çok Yıllı Değerleme ve Çeyreklik Karşılaştırma
-  const handleEvaluate = async () => {
+  const handleEvaluate = async (override?: { ticker?: string; price?: string; extractedData?: any }) => {
     setLoading(true);
     setError(null);
-    const normalizedTicker = (ticker || extractedData?.ticker || '').toUpperCase().trim();
+    const activeExtractedData = override?.extractedData ?? extractedData;
+    const normalizedTicker = (override?.ticker || ticker || activeExtractedData?.ticker || '').toUpperCase().trim();
     if (!normalizedTicker) {
       setError('Hisse kodu bulunamadı. Lütfen analiz edilecek hisse kodunu belirtin.');
       setLoading(false);
@@ -3115,12 +3127,14 @@ export default function ValuationTerminal({
     }
 
     // Fiyat çözümleme: Boşsa veya tanımsızsa otomatik olarak çıkarılan veriden veya canlı BIST servisinden al
-    let effectivePrice = price != null && String(price).trim() !== '' ? String(price).trim() : '';
+    let effectivePrice = override?.price != null && String(override.price).trim() !== ''
+      ? String(override.price).trim()
+      : price != null && String(price).trim() !== '' ? String(price).trim() : '';
     if (!effectivePrice || isNaN(Number(effectivePrice)) || Number(effectivePrice) <= 0) {
-      if (extractedData?.current_price && Number(extractedData.current_price) > 0) {
-        effectivePrice = String(extractedData.current_price);
-      } else if (Array.isArray(extractedData?.financial_history)) {
-        const histWithPrice = [...extractedData.financial_history].reverse().find((p: any) => p.share_price && Number(p.share_price) > 0);
+      if (activeExtractedData?.current_price && Number(activeExtractedData.current_price) > 0) {
+        effectivePrice = String(activeExtractedData.current_price);
+      } else if (Array.isArray(activeExtractedData?.financial_history)) {
+        const histWithPrice = [...activeExtractedData.financial_history].reverse().find((p: any) => p.share_price && Number(p.share_price) > 0);
         if (histWithPrice?.share_price) {
           effectivePrice = String(histWithPrice.share_price);
         }
@@ -3149,19 +3163,19 @@ export default function ValuationTerminal({
     const previousReport = previousReportsForTicker.length > 0 ? previousReportsForTicker[0] : null;
 
     const activeSector: SectorType = selectedSector === 'AUTO' 
-      ? (extractedData?.sector || detectSector(normalizedTicker)) 
+      ? (activeExtractedData?.sector || detectSector(normalizedTicker)) 
       : selectedSector;
 
     const sanitizedHistory = sanitizeHistoryData(
-      extractedData?.financial_history || [], 
-      extractedData?.debt_and_interest,
+      activeExtractedData?.financial_history || [], 
+      activeExtractedData?.debt_and_interest,
       activeSector,
       Number(effectivePrice) || 100,
-      extractedData?.currency || 'TRY'
+      activeExtractedData?.currency || 'TRY'
     );
 
-    const enrichedExtractedData = extractedData ? {
-      ...extractedData,
+    const enrichedExtractedData = activeExtractedData ? {
+      ...activeExtractedData,
       sector: activeSector,
       financial_history: sanitizedHistory
     } : null;
@@ -4564,10 +4578,10 @@ export default function ValuationTerminal({
           {/* Sol: Logo + SimplyWallSt tarzı Navigasyon Menüsü */}
           <div className="flex items-center gap-2 sm:gap-6 min-w-0">
             <div 
-              onClick={() => navigateTo('input')}
+              onClick={() => navigateTo('cockpit')}
               role="button"
               tabIndex={0}
-              title="Yeni Analiz Ekranına Dön"
+              title="Piyasa Kokpiti (Ana Ekran)"
               className="flex items-center gap-2 cursor-pointer hover:opacity-90 transition select-none shrink-0"
             >
               <FairValueLogo className="w-6 h-6" />
@@ -4576,8 +4590,20 @@ export default function ValuationTerminal({
               </span>
             </div>
 
-            {/* Yatay Navigasyon Linkleri (Akış, Portföy, Favoriler, Yatırım Temaları, Hisse Tarama) */}
+            {/* Yatay Navigasyon Linkleri (Kokpit, Akış, Portföy, Favoriler, Yatırım Temaları, Hisse Tarama) */}
             <nav className="hidden md:flex items-center gap-1 text-sm font-medium">
+              <button
+                type="button"
+                onClick={() => navigateTo('cockpit')}
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                  step === 'cockpit'
+                    ? 'text-[#f5c242] font-bold bg-[#1e232d]'
+                    : 'text-slate-400 hover:text-white hover:bg-[#181c24]'
+                }`}
+              >
+                <span>Kokpit</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => navigateTo('saved')}
@@ -4839,6 +4865,35 @@ export default function ValuationTerminal({
         </header>
 
         <div className="p-3 sm:p-6 pb-24 md:pb-6 w-full max-w-[1600px] mx-auto space-y-5">
+
+          {/* KOKPİT / RAPOR GEÇİŞLERİNDE KÜRESEL ANALİZ İLERLEME ÇUBUĞU */}
+          {loading && statusMessage && step !== 'input' && (
+            <div className="bg-[#151922] border border-emerald-500/40 rounded-xl p-4 flex items-center justify-between gap-4 shadow-xl animate-in fade-in duration-150">
+              <div className="flex items-center gap-3 min-w-0">
+                <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-xs font-mono font-bold text-emerald-400">CANLI ANALİZ MOTORU ÇALIŞIYOR</div>
+                  <div className="text-xs sm:text-sm text-slate-200 truncate">{statusMessage}</div>
+                </div>
+              </div>
+              {pipelineProgress > 0 && (
+                <span className="text-xs font-mono font-bold text-[#f5c242] shrink-0">%{pipelineProgress}</span>
+              )}
+            </div>
+          )}
+
+          {/* ADIM 0: PİYASA KOKPİTİ (VARSAYILAN ANA EKRAN) */}
+          {step === 'cockpit' && (
+            <MarketCockpit
+              savedReports={savedReports}
+              favoriteTickers={favoriteTickers}
+              liveNewsFeed={liveNewsFeed}
+              onToggleFavorite={toggleFavorite}
+              onOpenTicker={handleOpenOrAnalyzeTicker}
+              onOpenReport={openReport}
+              onGoToNewAnalysis={() => navigateTo('input')}
+            />
+          )}
           
           {/* ADIM 1: YENİ ANALİZ EKRANI (ŞİRKET DEĞERLEME & BİLANÇO ANALİZİ) */}
           {step === 'input' && (
@@ -5188,7 +5243,7 @@ export default function ValuationTerminal({
                 <button
                   type="button"
                   disabled={loading}
-                  onClick={handleEvaluate}
+                  onClick={() => handleEvaluate()}
                   className="sm:flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white text-xs font-bold rounded-lg transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
                 >
                   {loading ? (
@@ -8012,6 +8067,19 @@ export default function ValuationTerminal({
         aria-label="Mobil Ana Menü"
         className="fixed bottom-0 left-0 right-0 z-50 bg-[#111418]/95 backdrop-blur-md border-t border-[#21262d] flex items-center justify-around py-1.5 px-1 pb-safe md:hidden select-none shadow-2xl"
       >
+        <button
+          type="button"
+          onClick={() => navigateTo('cockpit')}
+          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer min-w-[46px] ${
+            step === 'cockpit'
+              ? 'text-[#f5c242] font-bold'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Activity className="w-4 h-4" />
+          <span className="text-[10px]">Kokpit</span>
+        </button>
+
         <button
           type="button"
           onClick={() => navigateTo('input')}
