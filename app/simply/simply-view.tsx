@@ -3582,7 +3582,7 @@ export default function SimplyView({
                                     <span>{comp.ticker}</span>
                                     {comp.score != null && (
                                       <span className="text-[11px] font-mono px-1.5 py-0.2 bg-[#181b20] text-slate-300 rounded border border-[#2e3440]">
-                                        {comp.score}/100
+                                        {String(comp.score).replace(/\/\s*100\s*$/i, '').trim()}/100
                                       </span>
                                     )}
                                   </div>
