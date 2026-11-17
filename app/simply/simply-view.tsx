@@ -953,10 +953,13 @@ export default function SimplyView({
   } | null>(null);
 
   const [liveMarketPrice, setLiveMarketPrice] = useState<number | null>(null);
+  const [liveKapQualitativeAudit, setLiveKapQualitativeAudit] = useState<any>(null);
+  const [loadingKapQual, setLoadingKapQual] = useState<boolean>(false);
 
   useEffect(() => {
     let isMounted = true;
     setLiveMarketPrice(null);
+    setLiveKapQualitativeAudit(null);
     const upperTicker = report.ticker ? report.ticker.toUpperCase() : '';
     const baselineDetails = upperTicker ? OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE[upperTicker] : null;
     const rawInitialDivs = (Array.isArray(report.dividendHistory) && report.dividendHistory.length > 0)
@@ -1004,6 +1007,22 @@ export default function SimplyView({
           }
         })
         .catch(() => {});
+
+      const existingAudit = valuationInfo?.qualitative_risk_audit || report.extractedData?.qualitative_risk_audit;
+      if (!existingAudit && (upperTicker === 'SAYAS' || upperTicker === 'MPARK')) {
+        setLoadingKapQual(true);
+        fetch(`/api/kap-audit?ticker=${encodeURIComponent(upperTicker)}`, { cache: 'no-store' })
+          .then(res => res.json())
+          .then(data => {
+            if (isMounted && data?.success && data?.audit) {
+              setLiveKapQualitativeAudit(data.audit);
+            }
+          })
+          .catch(() => {})
+          .finally(() => {
+            if (isMounted) setLoadingKapQual(false);
+          });
+      }
     }
 
     return () => { isMounted = false; };
@@ -6112,9 +6131,9 @@ export default function SimplyView({
                     </tbody>
                   </table>
                 </div>
-              ) : (valuationInfo?.qualitative_risk_audit?.managementTargets?.length > 0 || report.extractedData?.qualitative_risk_audit?.managementTargets?.length > 0) ? (
+              ) : (valuationInfo?.qualitative_risk_audit?.managementTargets?.length > 0 || report.extractedData?.qualitative_risk_audit?.managementTargets?.length > 0 || liveKapQualitativeAudit?.managementTargets?.length > 0) ? (
                 (() => {
-                  const qa = valuationInfo?.qualitative_risk_audit || report.extractedData?.qualitative_risk_audit;
+                  const qa = valuationInfo?.qualitative_risk_audit || report.extractedData?.qualitative_risk_audit || liveKapQualitativeAudit;
                   return (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -6889,7 +6908,15 @@ export default function SimplyView({
 
             {/* 7.5 KAP Faaliyet Raporu & Dipnot Kalitatif Risk Taraması */}
             {(() => {
-              const kapQual = valuationInfo?.qualitative_risk_audit || report.extractedData?.qualitative_risk_audit;
+              const kapQual = valuationInfo?.qualitative_risk_audit || report.extractedData?.qualitative_risk_audit || liveKapQualitativeAudit;
+              if (loadingKapQual && !kapQual) {
+                return (
+                  <div className="bg-[#181b20] border border-[#2b313d] rounded-2xl p-5 sm:p-6 shadow-xl flex items-center gap-3 text-xs sm:text-sm font-mono text-slate-300">
+                    <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />
+                    <span>7.5 KAP Faaliyet Raporu & Dipnot Kalitatif Risk Taraması yapılıyor...</span>
+                  </div>
+                );
+              }
               if (!kapQual || !Array.isArray(kapQual.findings) || kapQual.findings.length === 0) return null;
 
               return (

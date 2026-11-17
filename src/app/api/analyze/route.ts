@@ -34,6 +34,14 @@ export async function POST(req: Request) {
       );
     }
 
+    // SAYAS & MPARK için KAP Faaliyet Raporu & Dipnot Kalitatif Risk Taramasını paralel başlat
+    const kapAuditPromise = KAP_AUTO_QUALITATIVE_TICKERS.has(resolvedTicker)
+      ? Promise.race([
+          fetchAndAnalyzeKapQualitativeAudit(resolvedTicker),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 22000))
+        ]).catch(() => null)
+      : Promise.resolve(null);
+
     // Fiyat çözümleme: Boş veya tanımsızsa çıkarılan tablodan veya canlı BIST fiyatından tamamla
     let activePrice = price != null && String(price).trim() !== '' ? String(price).trim() : '';
     if (!activePrice || isNaN(Number(activePrice)) || Number(activePrice) <= 0) {
@@ -541,23 +549,15 @@ ZORUNLU TALİMAT (Önceki Raporla Karşılaştırma & Çeyreklik Hafıza):
     }
 
     let qualitativeRiskAudit: any = extractedData?.qualitative_risk_audit || null;
-    if (KAP_AUTO_QUALITATIVE_TICKERS.has(resolvedTicker)) {
-      try {
-        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 18000));
-        const fetchedAudit = await Promise.race([
-          fetchAndAnalyzeKapQualitativeAudit(resolvedTicker),
-          timeoutPromise
-        ]);
-        if (fetchedAudit) {
-          qualitativeRiskAudit = fetchedAudit;
-          if (valuation && typeof valuation === 'object') {
-            (valuation as any).qualitative_risk_audit = fetchedAudit;
-          }
+    try {
+      const fetchedAudit = await kapAuditPromise;
+      if (fetchedAudit) {
+        qualitativeRiskAudit = fetchedAudit;
+        if (valuation && typeof valuation === 'object') {
+          (valuation as any).qualitative_risk_audit = fetchedAudit;
         }
-      } catch (e: any) {
-        console.warn(`[KAP Qualitative Audit] ${resolvedTicker} atlandı:`, e?.message);
       }
-    }
+    } catch {}
 
     return NextResponse.json({ 
       report: reportText, 

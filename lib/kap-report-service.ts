@@ -364,12 +364,15 @@ ${contextBlock}
   ]
 }`;
 
-    const resp = await ai.models.generateContent({
+    const geminiPromise = ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
       config: { responseMimeType: 'application/json' }
     });
-    const text = resp.text || '';
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 5500));
+    const resp: any = await Promise.race([geminiPromise, timeoutPromise]);
+    const text = resp?.text || '';
+    if (!text) throw new Error('Gemini timeout');
     const parsed = JSON.parse(text);
     const refinedFindings = deterministic.findings.map((orig, idx) => {
       const match = Array.isArray(parsed?.findings)
