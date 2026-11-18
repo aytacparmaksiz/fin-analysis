@@ -4529,51 +4529,51 @@ export default function ValuationTerminal({
         {/* 5 Aşamalı Metrik Şeridi */}
         <div className="grid grid-cols-2 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-slate-800 bg-slate-950 border border-slate-800 rounded-lg overflow-hidden mt-4">
           <div className="p-3 text-center">
-            <div className="text-[10px] text-slate-400 font-medium">Vergi Yükü</div>
+            <div className="text-xs text-slate-400 font-medium">Vergi Yükü</div>
             <div className="text-base font-bold font-mono text-white mt-1" title={dupontResult.taxBurden != null ? `${dupontResult.taxBurden}` : undefined}>
               {dupontResult.taxBurden != null ? Number(dupontResult.taxBurden).toFixed(2) : '—'}
             </div>
-            <div className="text-[10px] text-slate-500 mt-0.5 font-mono">Net/EBT</div>
+            <div className="text-[11px] text-slate-500 mt-0.5 font-mono">Net/EBT</div>
           </div>
 
           <div className="p-3 text-center">
-            <div className="text-[10px] text-slate-400 font-medium">
+            <div className="text-xs text-slate-400 font-medium">
               {currentSector === 'INSURANCE' ? 'Yatırım Katkısı' : 'Faiz Yükü'}
             </div>
             <div className="text-base font-bold font-mono text-white mt-1" title={dupontResult.interestBurden != null ? `${dupontResult.interestBurden}` : undefined}>
               {dupontResult.interestBurden != null ? Number(dupontResult.interestBurden).toFixed(2) : '—'}
             </div>
-            <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
+            <div className="text-[11px] text-slate-500 mt-0.5 font-mono">
               {currentSector === 'INSURANCE' ? 'EBT/Teknik' : 'EBT/EBIT'}
             </div>
           </div>
 
           <div className="p-3 text-center">
-            <div className="text-[10px] text-slate-400 font-medium">
+            <div className="text-xs text-slate-400 font-medium">
               {currentSector === 'INSURANCE' ? 'Teknik Marj' : 'Faaliyet Marjı'}
             </div>
             <div className="text-base font-bold font-mono text-cyan-400 mt-1">
               {dupontResult.ebitMargin != null ? `%${dupontResult.ebitMargin}` : '—'}
             </div>
-            <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
+            <div className="text-[11px] text-slate-500 mt-0.5 font-mono">
               {currentSector === 'INSURANCE' ? 'Teknik/Prim' : 'EBIT/Satış'}
             </div>
           </div>
 
           <div className="p-3 text-center">
-            <div className="text-[10px] text-slate-400 font-medium">Aktif Devri</div>
+            <div className="text-xs text-slate-400 font-medium">Aktif Devri</div>
             <div className="text-base font-bold font-mono text-amber-400 mt-1" title={dupontResult.assetTurnover != null ? `${dupontResult.assetTurnover}` : undefined}>
               {dupontResult.assetTurnover != null ? Number(dupontResult.assetTurnover).toFixed(2) : '—'}
             </div>
-            <div className="text-[10px] text-slate-500 mt-0.5 font-mono">Satış/Aktif</div>
+            <div className="text-[11px] text-slate-500 mt-0.5 font-mono">Satış/Aktif</div>
           </div>
 
           <div className="p-3 text-center col-span-2 sm:col-span-1">
-            <div className="text-[10px] text-slate-400 font-medium">Kaldıraç</div>
+            <div className="text-xs text-slate-400 font-medium">Kaldıraç</div>
             <div className="text-base font-bold font-mono text-slate-200 mt-1" title={dupontResult.financialLeverage != null ? `${dupontResult.financialLeverage}` : undefined}>
               {dupontResult.financialLeverage != null ? Number(dupontResult.financialLeverage).toFixed(2) : '—'}
             </div>
-            <div className="text-[10px] text-slate-500 mt-0.5 font-mono">Aktif/Özkaynak</div>
+            <div className="text-[11px] text-slate-500 mt-0.5 font-mono">Aktif/Özkaynak</div>
           </div>
         </div>
       </div>

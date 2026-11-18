@@ -4669,11 +4669,11 @@ export default function SimplyView({
                 if (c.customType === 'mcap') {
                   return (
                     <div key={i} className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-3.5 text-center space-y-1">
-                      <div className="text-[11px] uppercase font-bold text-slate-400">{c.label}</div>
+                      <div className="text-xs uppercase font-bold text-slate-400">{c.label}</div>
                       <div className="text-lg font-black font-mono text-[#f5c242] mt-1">{c.valStr}</div>
-                      <div className="text-[10px] text-slate-500 font-mono">Ref: {c.benchStr}</div>
+                      <div className="text-[11px] text-slate-500 font-mono">Ref: {c.benchStr}</div>
                       <div className="pt-1">
-                        <span className="inline-block text-[9.5px] font-mono font-medium px-2 py-0.5 rounded-md bg-amber-950/40 text-amber-300 border border-amber-800/40">
+                        <span className="inline-block text-[11px] font-mono font-medium px-2 py-0.5 rounded-md bg-amber-950/40 text-amber-300 border border-amber-800/40">
                           Halka Açık Değer
                         </span>
                       </div>
@@ -4686,11 +4686,11 @@ export default function SimplyView({
                   const isOptimal = val >= 20 && val <= 50;
                   return (
                     <div key={i} className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-3.5 text-center space-y-1">
-                      <div className="text-[11px] uppercase font-bold text-slate-400">{c.label}</div>
+                      <div className="text-xs uppercase font-bold text-slate-400">{c.label}</div>
                       <div className={`text-lg font-black font-mono mt-1 ${isOptimal ? 'text-emerald-400' : 'text-amber-400'}`}>{c.format(val)}</div>
-                      <div className="text-[10px] text-slate-500 font-mono">Ref: %20–%50 Optimal</div>
+                      <div className="text-[11px] text-slate-500 font-mono">Ref: %20–%50 Optimal</div>
                       <div className="pt-1">
-                        <span className={`inline-block text-[9.5px] font-mono font-medium px-2 py-0.5 rounded-md ${
+                        <span className={`inline-block text-[11px] font-mono font-medium px-2 py-0.5 rounded-md ${
                           isOptimal ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-800/40' : 'bg-amber-950/40 text-amber-300 border border-amber-800/40'
                         }`}>
                           {isOptimal ? 'Optimal Aralık' : val < 20 ? 'Sığ Dolaşım' : 'Yüksek Dolaşım'}
@@ -4706,15 +4706,15 @@ export default function SimplyView({
                   const benchText = c.benchNum != null && c.benchNum > 0 ? `Ref: ${c.benchNum.toFixed(c.label === 'PD/DD' ? 2 : 1)}x` : 'Ref: A/D';
                   return (
                     <div key={i} className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-3.5 text-center space-y-1 transition-colors">
-                      <div className="text-[11px] uppercase font-bold text-slate-400">{c.label}</div>
+                      <div className="text-xs uppercase font-bold text-slate-400">{c.label}</div>
                       <div className="text-lg font-black font-mono mt-1 text-slate-400">
                         A/D
                       </div>
-                      <div className="text-[10px] text-slate-500 font-mono">
+                      <div className="text-[11px] text-slate-500 font-mono">
                         {benchText}
                       </div>
                       <div className="pt-1">
-                        <span className="inline-block text-[9.5px] font-mono font-medium px-2 py-0.5 rounded-md bg-[#21262d] text-slate-400 border border-[#2e3440]">
+                        <span className="inline-block text-[11px] font-mono font-medium px-2 py-0.5 rounded-md bg-[#21262d] text-slate-400 border border-[#2e3440]">
                           {isSectorExempt ? 'Sektörel Kapsam Dışı' : 'Anlamsız Değer (A/D)'}
                         </span>
                       </div>
@@ -4734,24 +4734,24 @@ export default function SimplyView({
 
                 return (
                   <div key={i} className={`bg-[#1d222e] border ${cardBorder} rounded-xl p-3.5 text-center space-y-1 transition-colors`}>
-                    <div className="text-[11px] uppercase font-bold text-slate-400">{c.label}</div>
+                    <div className="text-xs uppercase font-bold text-slate-400">{c.label}</div>
                     <div className={`text-lg font-black font-mono mt-1 ${valColor}`}>
                       {formattedVal}
                     </div>
-                    <div className="text-[10px] text-slate-500 font-mono">
+                    <div className="text-[11px] text-slate-500 font-mono">
                       Ref: {bench.toFixed(c.label === 'PD/DD' ? 2 : 1)}x
                     </div>
                     <div className="pt-1">
                       {isCheap ? (
-                        <span className="inline-block text-[9.5px] font-mono font-bold px-2 py-0.5 rounded-md bg-emerald-950/60 text-emerald-400 border border-emerald-800/50">
+                        <span className="inline-block text-[11px] font-mono font-bold px-2 py-0.5 rounded-md bg-emerald-950/60 text-emerald-400 border border-emerald-800/50">
                           -%{Math.abs(diffPct).toFixed(0)} İskontolu
                         </span>
                       ) : isExpensive ? (
-                        <span className="inline-block text-[9.5px] font-mono font-bold px-2 py-0.5 rounded-md bg-rose-950/60 text-rose-400 border border-rose-800/50">
+                        <span className="inline-block text-[11px] font-mono font-bold px-2 py-0.5 rounded-md bg-rose-950/60 text-rose-400 border border-rose-800/50">
                           +%{diffPct.toFixed(0)} Primli
                         </span>
                       ) : (
-                        <span className="inline-block text-[9.5px] font-mono font-medium px-2 py-0.5 rounded-md bg-[#21262d] text-slate-300 border border-[#2e3440]">
+                        <span className="inline-block text-[11px] font-mono font-medium px-2 py-0.5 rounded-md bg-[#21262d] text-slate-300 border border-[#2e3440]">
                           Sektörle Uyumlu
                         </span>
                       )}
@@ -5008,7 +5008,7 @@ export default function SimplyView({
                       <div style={{ width: '30%' }} className="bg-rose-500/40 h-full" title="Aşırı Dağınık Bölge (%70-%100)" />
                     </div>
 
-                    <div className="flex justify-between text-[10px] font-mono text-slate-500 pt-0.5">
+                    <div className="flex justify-between text-[11px] font-mono text-slate-500 pt-0.5">
                       <span>%0 (Aşırı Sığ)</span>
                       <span className="text-emerald-400 font-semibold">%20 (Optimal Tabanı)</span>
                       <span className="text-emerald-400 font-semibold">%50 (Optimal Tavanı)</span>
@@ -5571,7 +5571,7 @@ export default function SimplyView({
               {/* 4 Temel Metrik Şeridi */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-[#1d222e] rounded-xl p-3.5 border border-[#323a4b]">
-                  <span className="text-[10.5px] text-slate-400 block">Nakit Dönüşümü (OCF / Net)</span>
+                  <span className="text-xs text-slate-400 block">Nakit Dönüşümü (OCF / Net)</span>
                   <div className={`text-base font-black font-mono mt-1 ${
                     earningsQuality.status === 'DOUBLE_NEGATIVE' ? 'text-rose-400' : 'text-white'
                   }`}>
@@ -5579,11 +5579,11 @@ export default function SimplyView({
                       ? 'A/D'
                       : (earningsQuality.cashConversionRatio != null ? `%${earningsQuality.cashConversionRatio}` : '—')}
                   </div>
-                  <span className="text-[9.5px] text-slate-500 font-mono">Hedef: &gt; %100</span>
+                  <span className="text-[11px] text-slate-500 font-mono">Hedef: &gt; %100</span>
                 </div>
 
                 <div className="bg-[#1d222e] rounded-xl p-3.5 border border-[#323a4b]">
-                  <span className="text-[10.5px] text-slate-400 block">Sloan Tahakkuk Oranı</span>
+                  <span className="text-xs text-slate-400 block">Sloan Tahakkuk Oranı</span>
                   <div className={`text-base font-black font-mono mt-1 ${
                     earningsQuality.status === 'DOUBLE_NEGATIVE'
                       ? 'text-rose-400'
@@ -5593,27 +5593,27 @@ export default function SimplyView({
                   }`}>
                     {earningsQuality.sloanAccrualRatio != null ? `%${(earningsQuality.sloanAccrualRatio * 100).toFixed(1)}` : '—'}
                   </div>
-                  <span className="text-[9.5px] text-slate-500 font-mono">Hedef: &lt; %5 (Düşük Tahakkuk)</span>
+                  <span className="text-[11px] text-slate-500 font-mono">Hedef: &lt; %5 (Düşük Tahakkuk)</span>
                 </div>
 
                 <div className="bg-[#1d222e] rounded-xl p-3.5 border border-[#323a4b]">
-                  <span className="text-[10.5px] text-slate-400 block">İşletme Nakit Akışı (OCF)</span>
+                  <span className="text-xs text-slate-400 block">İşletme Nakit Akışı (OCF)</span>
                   <div className={`text-base font-black font-mono mt-1 ${
                     (earningsQuality.ocf != null && earningsQuality.ocf < 0) ? 'text-rose-400' : 'text-emerald-400'
                   }`}>
                     {formatMrTl(earningsQuality.ocf)}
                   </div>
-                  <span className="text-[9.5px] text-slate-500 font-mono">Fiili Operasyonel Nakit</span>
+                  <span className="text-[11px] text-slate-500 font-mono">Fiili Operasyonel Nakit</span>
                 </div>
 
                 <div className="bg-[#1d222e] rounded-xl p-3.5 border border-[#323a4b]">
-                  <span className="text-[10.5px] text-slate-400 block">Net Dönem Kârı</span>
+                  <span className="text-xs text-slate-400 block">Net Dönem Kârı</span>
                   <div className={`text-base font-black font-mono mt-1 ${
                     (earningsQuality.netIncome != null && earningsQuality.netIncome < 0) ? 'text-rose-400' : 'text-white'
                   }`}>
                     {formatMrTl(earningsQuality.netIncome)}
                   </div>
-                  <span className="text-xs text-slate-400 font-mono">Muhasebesel Net Kâr</span>
+                  <span className="text-[11px] text-slate-500 font-mono">Muhasebesel Net Kâr</span>
                 </div>
               </div>
 
@@ -5778,7 +5778,7 @@ export default function SimplyView({
                   {/* 4 Temel Sermaye Tahsisi Metrik Şeridi */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div className="bg-[#1d222e] rounded-xl p-3.5 border border-[#323a4b]">
-                      <span className="text-[10.5px] text-slate-400 block">Duran Finansal Yatırım / Aktif</span>
+                      <span className="text-xs text-slate-400 block">Duran Finansal Yatırım / Aktif</span>
                       <div className={`text-base font-black font-mono mt-1 ${
                         isInvEntity
                           ? 'text-amber-300'
@@ -5788,13 +5788,13 @@ export default function SimplyView({
                       }`}>
                         {capAlloc.nonCurrentFinInvRatioAssets != null ? `%${capAlloc.nonCurrentFinInvRatioAssets}` : '%0'}
                       </div>
-                      <span className="text-[9.5px] text-slate-500 font-mono">
+                      <span className="text-[11px] text-slate-500 font-mono">
                         {isInvEntity ? 'TFRS 10 Portföy (>= %85)' : 'Normal Eşik: < %30'}
                       </span>
                     </div>
 
                     <div className="bg-[#1d222e] rounded-xl p-3.5 border border-[#323a4b]">
-                      <span className="text-[10.5px] text-slate-400 block">Yıllık Nakit Yatırım Getirisi</span>
+                      <span className="text-xs text-slate-400 block">Yıllık Nakit Yatırım Getirisi</span>
                       <div className={`text-base font-black font-mono mt-1 ${
                         capAlloc.annualizedInvYieldPct == null
                           ? 'text-slate-400'
@@ -5806,11 +5806,11 @@ export default function SimplyView({
                       }`}>
                         {capAlloc.annualizedInvYieldPct != null ? `%${capAlloc.annualizedInvYieldPct}` : '—'}
                       </div>
-                      <span className="text-[9.5px] text-slate-500 font-mono">Hedef: &gt;= %5,0 Nakit Verim</span>
+                      <span className="text-[11px] text-slate-500 font-mono">Hedef: &gt;= %5,0 Nakit Verim</span>
                     </div>
 
                     <div className="bg-[#1d222e] rounded-xl p-3.5 border border-[#323a4b]">
-                      <span className="text-[10.5px] text-slate-400 block">Azınlık Payı Kâr / Özkaynak</span>
+                      <span className="text-xs text-slate-400 block">Azınlık Payı Kâr / Özkaynak</span>
                       <div className={`text-base font-black font-mono mt-1 ${
                         (capAlloc.minorityProfitLeakagePct != null && capAlloc.minorityProfitLeakagePct >= 25.0) ||
                         (capAlloc.minorityEquitySharePct != null && capAlloc.minorityEquitySharePct >= 30.0)
@@ -5821,11 +5821,11 @@ export default function SimplyView({
                           ? `%${capAlloc.minorityProfitLeakagePct}`
                           : (capAlloc.minorityEquitySharePct != null ? `%${capAlloc.minorityEquitySharePct}` : '%0')}
                       </div>
-                      <span className="text-[9.5px] text-slate-500 font-mono">Hedef: &lt; %25 Azınlık Payı</span>
+                      <span className="text-[11px] text-slate-500 font-mono">Hedef: &lt; %25 Azınlık Payı</span>
                     </div>
 
                     <div className="bg-[#1d222e] rounded-xl p-3.5 border border-[#323a4b]">
-                      <span className="text-[10.5px] text-slate-400 block">Serbest Nakit Dönüşümü (FCF/Kâr)</span>
+                      <span className="text-xs text-slate-400 block">Serbest Nakit Dönüşümü (FCF/Kâr)</span>
                       <div className={`text-base font-black font-mono mt-1 ${
                         capAlloc.fcfConversionPct != null && capAlloc.fcfConversionPct < 15.0
                           ? 'text-amber-400'
@@ -5833,7 +5833,7 @@ export default function SimplyView({
                       }`}>
                         {capAlloc.fcfConversionPct != null ? `%${capAlloc.fcfConversionPct}` : '—'}
                       </div>
-                      <span className="text-[9.5px] text-slate-500 font-mono">Hedef: &gt;= %20 FCF/Kâr</span>
+                      <span className="text-[11px] text-slate-500 font-mono">Hedef: &gt;= %20 FCF/Kâr</span>
                     </div>
                   </div>
 
@@ -6742,19 +6742,19 @@ export default function SimplyView({
 
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                           <div className="bg-[#181d27] border border-[#2d3545] rounded-lg p-2.5">
-                            <div className="text-[10.5px] text-slate-400 font-mono">Fiyat / Adil Değer</div>
+                            <div className="text-xs text-slate-400 font-mono">Fiyat / Adil Değer</div>
                             <div className="text-xs sm:text-sm font-bold font-mono text-white mt-0.5">
                               ₺{currentPriceNum.toFixed(2)} → <span className="text-[#f5c242]">₺{fairValueNum.toFixed(2)}</span>
                             </div>
                           </div>
                           <div className="bg-[#181d27] border border-[#2d3545] rounded-lg p-2.5">
-                            <div className="text-[10.5px] text-slate-400 font-mono">Reel EVA Makası</div>
+                            <div className="text-xs text-slate-400 font-mono">Reel EVA Makası</div>
                             <div className={`text-xs sm:text-sm font-bold font-mono mt-0.5 ${evaSpreadNum >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                               {evaSpreadNum >= 0 ? `+${evaSpreadNum.toFixed(1)}` : evaSpreadNum.toFixed(1)} Puan
                             </div>
                           </div>
                           <div className="bg-[#181d27] border border-[#2d3545] rounded-lg p-2.5">
-                            <div className="text-[10.5px] text-slate-400 font-mono">Nakit Kalitesi</div>
+                            <div className="text-xs text-slate-400 font-mono">Nakit Kalitesi</div>
                             <div className="text-xs sm:text-sm font-bold font-mono text-cyan-300 mt-0.5 truncate" title={earningsQuality.statusTitle}>
                               {earningsQuality.statusTitle}
                             </div>
@@ -7593,13 +7593,13 @@ export default function SimplyView({
                   {/* Üst Denetim & Pozisyonlama Özet Şeridi */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-[#1d222e] border border-[#323a4b] rounded-xl p-3.5">
                     <div className="space-y-0.5">
-                      <div className="text-[10.5px] font-mono text-slate-400 uppercase">Genel Skor</div>
+                      <div className="text-xs font-mono text-slate-400 uppercase">Genel Skor</div>
                       <div className="text-xs sm:text-sm font-mono font-bold text-white">
                         {auditScore}/100 • {executiveVerdict.verdict === 'AL' ? 'Stres Testi Onaylı' : executiveVerdict.verdict === 'ALMA' ? 'Sermaye Koruma Freni' : 'Koşullu İzleme'}
                       </div>
                     </div>
                     <div className="space-y-0.5">
-                      <div className="text-[10.5px] font-mono text-slate-400 uppercase">Portföy Stratejisi</div>
+                      <div className="text-xs font-mono text-slate-400 uppercase">Portföy Stratejisi</div>
                       <div className={`text-xs sm:text-sm font-sans font-bold ${
                         executiveVerdict.verdict === 'AL' ? 'text-emerald-400' : executiveVerdict.verdict === 'ALMA' ? 'text-rose-400' : 'text-amber-300'
                       }`}>
@@ -7607,13 +7607,13 @@ export default function SimplyView({
                       </div>
                     </div>
                     <div className="space-y-0.5">
-                      <div className="text-[10.5px] font-mono text-slate-400 uppercase">Hedef & Stres Tabanı</div>
+                      <div className="text-xs font-mono text-slate-400 uppercase">Hedef & Stres Tabanı</div>
                       <div className="text-xs sm:text-sm font-mono font-bold text-white">
                         Adil: <span className="text-[#f5c242]">₺{fairValueNum.toFixed(2)}</span> • Taban: <span className="text-rose-300">₺{bearFloorPrice.toFixed(2)}</span>
                       </div>
                     </div>
                     <div className="space-y-0.5">
-                      <div className="text-[10.5px] font-mono text-slate-400 uppercase">Sermaye & Nakit</div>
+                      <div className="text-xs font-mono text-slate-400 uppercase">Sermaye & Nakit</div>
                       <div className="text-xs sm:text-sm font-mono font-bold text-cyan-300 truncate">
                         EVA: {evaSpreadNum >= 0 ? `+${evaSpreadNum.toFixed(1)}` : evaSpreadNum.toFixed(1)} Puan • {earningsQuality.statusTitle}
                       </div>
