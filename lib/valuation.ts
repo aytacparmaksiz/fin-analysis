@@ -9657,6 +9657,11 @@ export interface EarningsQualityAudit {
   netIncome: number | null;
   totalAssets: number | null;
   historicalTrend: EarningsQualityHistoricalPoint[];
+  dsri?: number | null; // Days Sales in Receivables Index (Alacak Şişkinliği Endeksi)
+  gmi?: number | null;  // Gross Margin Index (Brüt Marj Bozulma Endeksi)
+  aqi?: number | null;  // Asset Quality Index (Aktif Kalitesi Endeksi)
+  accountingRiskLevel?: 'DÜŞÜK' | 'ORTA' | 'YÜKSEK';
+  accountingRiskLabel?: string;
 }
 
 /**
@@ -9717,8 +9722,57 @@ export function calculateEarningsQuality(
       ocf,
       netIncome,
       totalAssets,
-      historicalTrend
+      historicalTrend,
+      dsri: null,
+      gmi: null,
+      aqi: null,
+      accountingRiskLevel: 'DÜŞÜK',
+      accountingRiskLabel: 'Sektörel Standart (Finans)'
     };
+  }
+
+  // Beneish M-Score Temel Tahakkuk & Bilanço Kalitesi Bileşenleri (DSRI, GMI, AQI)
+  const prev = sorted.length > 1 ? sorted[sorted.length - 2] : null;
+  const recCurr = parseFinancialNumber(latest?.trade_receivables ?? latest?.receivables);
+  const revCurr = parseFinancialNumber(latest?.revenue);
+  const recPrev = parseFinancialNumber(prev?.trade_receivables ?? prev?.receivables);
+  const revPrev = parseFinancialNumber(prev?.revenue);
+
+  const dsri =
+    recCurr !== null && recCurr > 0 &&
+    revCurr !== null && revCurr > 0 &&
+    recPrev !== null && recPrev > 0 &&
+    revPrev !== null && revPrev > 0
+      ? Number(Math.min(3.5, Math.max(0.2, (recCurr / revCurr) / (recPrev / revPrev))).toFixed(2))
+      : null;
+
+  const gmCurr =
+    parseFinancialNumber(latest?.gross_margin) ??
+    (revCurr && revCurr > 0 && latest?.gross_profit != null
+      ? (Number(latest.gross_profit) / revCurr) * 100
+      : null);
+  const gmPrev =
+    parseFinancialNumber(prev?.gross_margin) ??
+    (revPrev && revPrev > 0 && prev?.gross_profit != null
+      ? (Number(prev.gross_profit) / revPrev) * 100
+      : null);
+
+  const gmi =
+    gmCurr !== null && gmCurr > 0 && gmPrev !== null && gmPrev > 0
+      ? Number(Math.min(3.0, Math.max(0.3, gmPrev / gmCurr)).toFixed(2))
+      : null;
+
+  const caCurr = parseFinancialNumber(latest?.current_assets);
+  const ppeCurr = parseFinancialNumber(latest?.property_plant_equipment ?? latest?.tangible_fixed_assets ?? 0) ?? 0;
+  const caPrev = parseFinancialNumber(prev?.current_assets);
+  const ppePrev = parseFinancialNumber(prev?.property_plant_equipment ?? prev?.tangible_fixed_assets ?? 0) ?? 0;
+  const taPrev = parseFinancialNumber(prev?.total_assets);
+
+  let aqi: number | null = null;
+  if (totalAssets && totalAssets > 0 && taPrev && taPrev > 0 && caCurr !== null && caPrev !== null) {
+    const nonHardCurr = Math.max(0.01, 1 - Math.min(0.99, (caCurr + ppeCurr) / totalAssets));
+    const nonHardPrev = Math.max(0.01, 1 - Math.min(0.99, (caPrev + ppePrev) / taPrev));
+    aqi = Number(Math.min(3.0, Math.max(0.3, nonHardCurr / nonHardPrev)).toFixed(2));
   }
 
   if (ocf === null) {
@@ -9735,7 +9789,12 @@ export function calculateEarningsQuality(
       ocf: null,
       netIncome,
       totalAssets,
-      historicalTrend
+      historicalTrend,
+      dsri,
+      gmi,
+      aqi,
+      accountingRiskLevel: dsri !== null && dsri > 1.25 ? 'YÜKSEK' : (dsri !== null && dsri > 1.12) || (gmi !== null && gmi > 1.15) ? 'ORTA' : 'DÜŞÜK',
+      accountingRiskLabel: dsri !== null && dsri > 1.25 ? 'Agresif Tahakkuk / Alacak Şişkinliği' : (dsri !== null && dsri > 1.12) || (gmi !== null && gmi > 1.15) ? 'İzlenmeli (Stok/Alacak Dönüşümü)' : 'Yetersiz Nakit Verisi'
     };
   }
 
@@ -9767,6 +9826,24 @@ export function calculateEarningsQuality(
     }
   }
 
+  let accountingRiskLevel: 'DÜŞÜK' | 'ORTA' | 'YÜKSEK' = 'DÜŞÜK';
+  let accountingRiskLabel = 'Temiz / Nakit Destekli';
+  if ((sloanRatio !== null && sloanRatio > 0.10) || (dsri !== null && dsri > 1.25) || (safeNet > 0 && safeOcf <= 0)) {
+    accountingRiskLevel = 'YÜKSEK';
+    accountingRiskLabel = 'Agresif Tahakkuk / Alacak Şişkinliği';
+  } else if ((sloanRatio !== null && sloanRatio > 0.05) || (dsri !== null && dsri > 1.12) || (gmi !== null && gmi > 1.15)) {
+    accountingRiskLevel = 'ORTA';
+    accountingRiskLabel = 'İzlenmeli (Stok/Alacak Dönüşümü)';
+  }
+
+  const beneishMeta = {
+    dsri,
+    gmi,
+    aqi,
+    accountingRiskLevel,
+    accountingRiskLabel
+  };
+
   // 4 Temel Durum + Çift Negatif & Sıfır Kâr Durumu (Kullanıcı Talebi 1):
   if (safeOcf >= safeNet && safeNet > 0) {
     return {
@@ -9782,7 +9859,8 @@ export function calculateEarningsQuality(
       ocf,
       netIncome,
       totalAssets,
-      historicalTrend
+      historicalTrend,
+      ...beneishMeta
     };
   } else if (safeOcf > 0 && safeNet > 0 && safeOcf < safeNet) {
     const isGood = conversionRatio !== null && conversionRatio >= 70.0;
@@ -9803,7 +9881,8 @@ export function calculateEarningsQuality(
       ocf,
       netIncome,
       totalAssets,
-      historicalTrend
+      historicalTrend,
+      ...beneishMeta
     };
   } else if (safeOcf <= 0 && safeNet > 0) {
     return {
@@ -9819,7 +9898,8 @@ export function calculateEarningsQuality(
       ocf,
       netIncome,
       totalAssets,
-      historicalTrend
+      historicalTrend,
+      ...beneishMeta
     };
   } else if (safeOcf > 0 && safeNet < 0) {
     return {
@@ -9835,7 +9915,8 @@ export function calculateEarningsQuality(
       ocf,
       netIncome,
       totalAssets,
-      historicalTrend
+      historicalTrend,
+      ...beneishMeta
     };
   } else if (safeOcf > 0 && safeNet === 0) {
     return {
@@ -9851,7 +9932,8 @@ export function calculateEarningsQuality(
       ocf,
       netIncome,
       totalAssets,
-      historicalTrend
+      historicalTrend,
+      ...beneishMeta
     };
   } else if (safeOcf <= 0 && safeNet === 0) {
     return {
@@ -9867,7 +9949,8 @@ export function calculateEarningsQuality(
       ocf,
       netIncome,
       totalAssets,
-      historicalTrend
+      historicalTrend,
+      ...beneishMeta
     };
   } else {
     return {
@@ -9883,7 +9966,8 @@ export function calculateEarningsQuality(
       ocf,
       netIncome,
       totalAssets,
-      historicalTrend
+      historicalTrend,
+      ...beneishMeta
     };
   }
 }
@@ -10297,6 +10381,336 @@ export function calculateValuationSensitivityMatrix({
 }
 
 // ============================================================================
+// 8.6. OLASILIK AĞIRLIKLI BEKLENEN DEĞER (E[V]), ASİMETRİ & YARI-KELLY
+// ============================================================================
+
+export interface ProbabilisticEdgeInput {
+  currentPrice: number;
+  fairValue: number;
+  bullPrice?: number | null;
+  bearPrice?: number | null;
+  totalScore?: number;
+  evaSpread?: number;
+  cashConversionRatio?: number | null;
+  isNetCash?: boolean;
+  isValueTrap?: boolean;
+  decision?: 'AL' | 'NÖTR' | 'ALMA' | string;
+}
+
+export interface ProbabilisticEdgeResult {
+  bullPrice: number;
+  basePrice: number;
+  bearPrice: number;
+  pBull: number;
+  pBase: number;
+  pBear: number;
+  expectedValue: number;
+  expectedReturnPct: number;
+  asymmetryRatio: number;
+  halfKellyWeightPct: number;
+  edgeStatus: 'STRONG_POSITIVE_EDGE' | 'MODERATE_EDGE' | 'NEUTRAL_EDGE' | 'NEGATIVE_EXPECTANCY';
+  edgeLabel: string;
+}
+
+export function calculateProbabilisticExpectedValue(
+  input: ProbabilisticEdgeInput
+): ProbabilisticEdgeResult {
+  const safeCurr = input.currentPrice > 0 ? input.currentPrice : 1.0;
+  const safeBase = input.fairValue > 0 ? input.fairValue : safeCurr;
+  const safeBull =
+    input.bullPrice != null && input.bullPrice > safeBase
+      ? Number(input.bullPrice.toFixed(2))
+      : Number((safeBase * 1.25).toFixed(2));
+  const safeBear =
+    input.bearPrice != null && input.bearPrice > 0 && input.bearPrice < safeBase
+      ? Number(input.bearPrice.toFixed(2))
+      : Number(Math.min(safeBase * 0.75, safeCurr * 0.85).toFixed(2));
+
+  let pBull = 0.25;
+  let pBase = 0.50;
+  let pBear = 0.25;
+
+  if (input.isValueTrap || input.decision === 'ALMA') {
+    pBull = 0.15;
+    pBase = 0.35;
+    pBear = 0.50;
+  } else if (
+    (input.evaSpread ?? 0) >= 2.0 &&
+    input.isNetCash &&
+    (input.cashConversionRatio ?? 100) >= 85
+  ) {
+    pBull = 0.35;
+    pBase = 0.50;
+    pBear = 0.15;
+  } else if ((input.evaSpread ?? 0) >= 0 && (input.totalScore ?? 65) >= 70) {
+    pBull = 0.30;
+    pBase = 0.50;
+    pBear = 0.20;
+  } else if ((input.evaSpread ?? 0) < -3.0 || (input.totalScore ?? 65) < 50) {
+    pBull = 0.18;
+    pBase = 0.47;
+    pBear = 0.35;
+  }
+
+  const expectedValue = Number(
+    (pBull * safeBull + pBase * safeBase + pBear * safeBear).toFixed(2)
+  );
+  const expectedReturnPct = Number(
+    (((expectedValue - safeCurr) / safeCurr) * 100).toFixed(1)
+  );
+
+  const upsideTerm =
+    pBull * Math.max(0, (safeBull - safeCurr) / safeCurr) +
+    pBase * Math.max(0, (safeBase - safeCurr) / safeCurr);
+  const downsideTerm =
+    pBear * Math.max(0.03, Math.abs(safeCurr - safeBear) / safeCurr) +
+    pBase * Math.max(0, (safeCurr - safeBase) / safeCurr);
+
+  const asymmetryRatio = Number(
+    Math.min(9.9, upsideTerm / Math.max(0.02, downsideTerm)).toFixed(2)
+  );
+
+  let halfKellyWeightPct = 0;
+  if (
+    !input.isValueTrap &&
+    input.decision !== 'ALMA' &&
+    expectedReturnPct > 0 &&
+    asymmetryRatio >= 1.0
+  ) {
+    const winProb = safeBase > safeCurr ? pBull + pBase : pBull;
+    const lossProb = 1 - winProb;
+    const payoffRatio = Math.max(0.1, asymmetryRatio);
+    const rawKelly = Math.max(0, winProb - lossProb / payoffRatio);
+    const maxCap = input.decision === 'AL' ? 15.0 : 5.0;
+    halfKellyWeightPct = Number(
+      Math.min(maxCap, Math.max(0, rawKelly * 0.25 * 100)).toFixed(1)
+    );
+  }
+
+  let edgeStatus: ProbabilisticEdgeResult['edgeStatus'] = 'NEUTRAL_EDGE';
+  let edgeLabel = 'Dengeli Beklenti';
+
+  if (expectedReturnPct < 0 || input.isValueTrap || input.decision === 'ALMA') {
+    edgeStatus = 'NEGATIVE_EXPECTANCY';
+    edgeLabel = 'Negatif Beklenen Değer / Riskli';
+  } else if (expectedReturnPct >= 20 && asymmetryRatio >= 1.8) {
+    edgeStatus = 'STRONG_POSITIVE_EDGE';
+    edgeLabel = 'Güçlü Pozitif Beklenen Değer';
+  } else if (expectedReturnPct >= 8 && asymmetryRatio >= 1.1) {
+    edgeStatus = 'MODERATE_EDGE';
+    edgeLabel = 'Pozitif Asimetri';
+  }
+
+  return {
+    bullPrice: safeBull,
+    basePrice: Number(safeBase.toFixed(2)),
+    bearPrice: safeBear,
+    pBull,
+    pBase,
+    pBear,
+    expectedValue,
+    expectedReturnPct,
+    asymmetryRatio,
+    halfKellyWeightPct,
+    edgeStatus,
+    edgeLabel
+  };
+}
+
+// ============================================================================
+// 8.7. 4 ÇEYREKLİK TEMEL İVME & 2. TÜREV EĞİM MOTORU (MOMENTUM)
+// ============================================================================
+
+export interface FundamentalMomentumResult {
+  hasEnoughHistory: boolean;
+  quartersAnalyzed: number;
+  marginSlopePtsPerQ: number;
+  roicSlopePtsPerQ: number;
+  ocfMarginSlopePtsPerQ: number;
+  latestMargin: number;
+  earliestMargin: number;
+  latestRoicOrRoe: number;
+  earliestRoicOrRoe: number;
+  regime:
+    | 'TURNAROUND_ALPHA'
+    | 'COMPOUNDING_ACCELERATION'
+    | 'STABLE'
+    | 'EARLY_DECAY_WARNING'
+    | 'CHRONIC_CONTRACTION';
+  regimeLabel: string;
+  regimeSummary: string;
+  badgeTone: 'emerald' | 'cyan' | 'amber' | 'rose';
+}
+
+function computeOlsSlope(values: number[]): number {
+  const n = values.length;
+  if (n < 2) return 0;
+  const meanX = (n - 1) / 2;
+  const meanY = values.reduce((acc, v) => acc + v, 0) / n;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = i - meanX;
+    num += dx * (values[i] - meanY);
+    den += dx * dx;
+  }
+  if (den <= 0) return 0;
+  const rawSlope = num / den;
+  return Number(Math.max(-15.0, Math.min(15.0, rawSlope)).toFixed(2));
+}
+
+export function calculateFundamentalMomentum(
+  financialHistory: any[],
+  sector: SectorType = 'INDUSTRIAL',
+  realWacc = 8.0,
+  currentEvaSpread = 0
+): FundamentalMomentumResult {
+  const rawList = Array.isArray(financialHistory) ? financialHistory.filter(Boolean) : [];
+  const sorted = [...rawList]
+    .sort((a, b) => parsePeriodSortKey(a?.period) - parsePeriodSortKey(b?.period))
+    .slice(-4);
+
+  if (sorted.length < 2) {
+    return {
+      hasEnoughHistory: false,
+      quartersAnalyzed: sorted.length,
+      marginSlopePtsPerQ: 0,
+      roicSlopePtsPerQ: 0,
+      ocfMarginSlopePtsPerQ: 0,
+      latestMargin: 0,
+      earliestMargin: 0,
+      latestRoicOrRoe: 0,
+      earliestRoicOrRoe: 0,
+      regime: 'STABLE',
+      regimeLabel: 'Sınırlı Tarihsel Seri',
+      regimeSummary: 'Çeyreklik trend eğimi için en az 2 dönem finansal veri gereklidir.',
+      badgeTone: 'amber'
+    };
+  }
+
+  const margins: number[] = [];
+  const roics: number[] = [];
+  const ocfMargins: number[] = [];
+
+  for (const item of sorted) {
+    const rev =
+      parseFinancialNumber(
+        sector === 'INSURANCE' ? (item?.gross_written_premiums ?? item?.revenue) : item?.revenue
+      ) ?? 0;
+
+    let m = 0;
+    if (sector === 'INSURANCE') {
+      const techBal = parseFinancialNumber(item?.technical_balance ?? item?.operating_profit) ?? 0;
+      m = rev > 0 ? (techBal / rev) * 100 : Number(item?.ebitda_margin ?? 0);
+    } else if (sector === 'BANKING') {
+      const opInc = parseFinancialNumber(item?.operating_profit ?? item?.net_income) ?? 0;
+      m = rev > 0 ? (opInc / rev) * 100 : Number(item?.net_margin ?? 0);
+    } else {
+      const explicitM = parseFinancialNumber(item?.ebitda_margin);
+      if (explicitM !== null) {
+        m = explicitM;
+      } else {
+        const eb = parseFinancialNumber(item?.ebitda ?? item?.operating_profit ?? item?.ebit) ?? 0;
+        m = rev > 0 ? (eb / rev) * 100 : 0;
+      }
+    }
+    margins.push(Math.max(-60, Math.min(80, m)));
+
+    const explicitRoic = parseFinancialNumber(item?.roic ?? item?.roe);
+    let capRet = 0;
+    if (explicitRoic !== null) {
+      capRet = explicitRoic;
+    } else {
+      const eq = parseFinancialNumber(item?.equity) ?? 0;
+      const net = parseFinancialNumber(item?.net_income) ?? 0;
+      const af = getAnnualizationFactor(item?.period);
+      capRet = eq > 0 ? ((net * af) / eq) * 100 : 0;
+    }
+    roics.push(Math.max(-80, Math.min(120, capRet)));
+
+    const ocf = parseFinancialNumber(item?.operating_cash_flow ?? item?.ocf);
+    const ocfM = rev > 0 && ocf !== null ? (ocf / rev) * 100 : 0;
+    ocfMargins.push(Math.max(-60, Math.min(80, ocfM)));
+  }
+
+  const marginSlopePtsPerQ = computeOlsSlope(margins);
+  const roicSlopePtsPerQ = computeOlsSlope(roics);
+  const ocfMarginSlopePtsPerQ = computeOlsSlope(ocfMargins);
+
+  const latestMargin = Number((margins[margins.length - 1] ?? 0).toFixed(1));
+  const earliestMargin = Number((margins[0] ?? 0).toFixed(1));
+  const latestRoicOrRoe = Number((roics[roics.length - 1] ?? 0).toFixed(1));
+  const earliestRoicOrRoe = Number((roics[0] ?? 0).toFixed(1));
+
+  // Suppress unused variable lint if realWacc isn't explicitly needed beyond caller context
+  void realWacc;
+
+  let regime: FundamentalMomentumResult['regime'] = 'STABLE';
+  let regimeLabel = 'Dengeli Seyir';
+  let regimeSummary =
+    'Çeyreklik operasyonel marj ve sermaye getirisi eğimi yatay/dengeli bantta seyrediyor.';
+  let badgeTone: FundamentalMomentumResult['badgeTone'] =
+    currentEvaSpread >= 0 ? 'emerald' : 'amber';
+
+  if (
+    currentEvaSpread < 2.0 &&
+    marginSlopePtsPerQ >= 0.7 &&
+    roicSlopePtsPerQ >= 1.2 &&
+    latestMargin > 0
+  ) {
+    regime = 'TURNAROUND_ALPHA';
+    regimeLabel = 'Dönüşüm Alfası';
+    regimeSummary =
+      'Son çeyreklerde marj ve sermaye getirisi güçlü pozitif ivme (2. türev) kazanıyor; operasyonel dönüşüm sinyali.';
+    badgeTone = 'cyan';
+  } else if (
+    currentEvaSpread >= 0 &&
+    marginSlopePtsPerQ >= 0.2 &&
+    roicSlopePtsPerQ >= 0.3
+  ) {
+    regime = 'COMPOUNDING_ACCELERATION';
+    regimeLabel = 'İvmelenen Bileşikçi';
+    regimeSummary =
+      'Pozitif reel sermaye getirisi artan marj ivmesiyle birleşiyor; bileşik değer üretimi hızlanıyor.';
+    badgeTone = 'emerald';
+  } else if (
+    currentEvaSpread >= -1.0 &&
+    (marginSlopePtsPerQ <= -1.2 || roicSlopePtsPerQ <= -2.0)
+  ) {
+    regime = 'EARLY_DECAY_WARNING';
+    regimeLabel = 'Erken Bozulma Uyarısı';
+    regimeSummary =
+      'Mevcut kârlılık pozitif görünse de son çeyreklerde marj ve ROIC eğimi aşağı yönlü; erken faz marj erozyonu izlenmeli.';
+    badgeTone = 'amber';
+  } else if (
+    currentEvaSpread < -1.0 &&
+    (marginSlopePtsPerQ < -0.5 || roicSlopePtsPerQ < -1.0 || latestMargin <= 0)
+  ) {
+    regime = 'CHRONIC_CONTRACTION';
+    regimeLabel = 'Kronik Daralma';
+    regimeSummary =
+      'Negatif sermaye makası ve daralan çeyreklik marj eğimi devam ediyor; temel ivme zayıf.';
+    badgeTone = 'rose';
+  }
+
+  return {
+    hasEnoughHistory: true,
+    quartersAnalyzed: sorted.length,
+    marginSlopePtsPerQ,
+    roicSlopePtsPerQ,
+    ocfMarginSlopePtsPerQ,
+    latestMargin,
+    earliestMargin,
+    latestRoicOrRoe,
+    earliestRoicOrRoe,
+    regime,
+    regimeLabel,
+    regimeSummary,
+    badgeTone
+  };
+}
+
+// ============================================================================
 // 9. ARACI KURUM KONSENSÜS HEDEF FİYAT & POTANSİYEL KIYASI
 // ============================================================================
 
@@ -10502,6 +10916,7 @@ export interface MultipleMetricDetail {
   companyValue: number | null;
   sectorMedian: number | null;
   diffPct: number | null; // ((Company - Sector) / Sector) * 100
+  zScore?: number | null;
   status: 'DISCOUNTED' | 'PARITY' | 'PREMIUM' | 'NA';
   statusLabel: string;
   badgeColor: 'emerald' | 'amber' | 'rose' | 'gray';
@@ -10519,6 +10934,9 @@ export interface CompanyMultiplesComparison {
   };
   overallValuationStatus: 'CHEAP' | 'FAIR' | 'EXPENSIVE';
   overallSummary: string;
+  compositeZScore?: number | null;
+  residualAlphaStatus?: 'UNDERVALUED_QUALITY' | 'FAIR_VALUED' | 'JUSTIFIED_DISCOUNT' | 'OVERVALUED';
+  residualAlphaLabel?: string;
 }
 
 export function calculateCompanyMultiples(
@@ -10706,6 +11124,7 @@ export function calculateCompanyMultiples(
         companyValue: compVal,
         sectorMedian: sectorMed,
         diffPct: null,
+        zScore: null,
         status: 'NA',
         statusLabel: 'Veri Yok / Kapsam Dışı',
         badgeColor: 'gray',
@@ -10720,6 +11139,7 @@ export function calculateCompanyMultiples(
         companyValue: compVal,
         sectorMedian: sectorMed,
         diffPct: null,
+        zScore: null,
         status: 'NA',
         statusLabel: 'Negatif Çarpan (Net Zarar / Negatif Özkaynak)',
         badgeColor: 'rose',
@@ -10728,6 +11148,10 @@ export function calculateCompanyMultiples(
     }
 
     const diff = Number((((compVal - sectorMed) / sectorMed) * 100).toFixed(1));
+    const zScore =
+      sectorMed > 0
+        ? Number(Math.max(-3.5, Math.min(3.5, (compVal - sectorMed) / (sectorMed * 0.35))).toFixed(2))
+        : null;
     let status: 'DISCOUNTED' | 'PARITY' | 'PREMIUM' = 'PARITY';
     let statusLabel = 'Sektör Ortalamasında';
     let badgeColor: 'emerald' | 'amber' | 'rose' = 'amber';
@@ -10750,6 +11174,7 @@ export function calculateCompanyMultiples(
       companyValue: compVal,
       sectorMedian: sectorMed,
       diffPct: diff,
+      zScore,
       status,
       statusLabel,
       badgeColor,
@@ -10794,6 +11219,31 @@ export function calculateCompanyMultiples(
     overallSummary = `Şirket sektör medyanına kıyasla primli (${premiumCount}/${activeMetrics.length} çarpan primli) değerlemeye sahiptir; yüksek kârlılıkla desteklenmelidir.`;
   }
 
+  const zValues = activeMetrics
+    .map(m => m.zScore)
+    .filter((z): z is number => z !== null && z !== undefined && Number.isFinite(z));
+  const compositeZScore =
+    zValues.length > 0
+      ? Number((zValues.reduce((sum, z) => sum + z, 0) / zValues.length).toFixed(2))
+      : null;
+
+  const latestRoic = parseFinancialNumber(latest?.roic ?? latest?.roe) ?? 0;
+  const latestEva = parseFinancialNumber(latest?.eva_spread) ?? (latestRoic - 8.0);
+
+  let residualAlphaStatus: CompanyMultiplesComparison['residualAlphaStatus'] = 'FAIR_VALUED';
+  let residualAlphaLabel = 'Sektör Regresyon Doğrusuyla Uyumlu';
+
+  if (compositeZScore !== null && compositeZScore <= -0.35 && latestEva >= 0 && (annualizedNet ?? 0) > 0) {
+    residualAlphaStatus = 'UNDERVALUED_QUALITY';
+    residualAlphaLabel = 'Pozitif Regresyon Alfası (ROIC > WACC & İskontolu Çarpan)';
+  } else if (compositeZScore !== null && compositeZScore <= -0.35 && (latestEva < 0 || (annualizedNet ?? 0) <= 0)) {
+    residualAlphaStatus = 'JUSTIFIED_DISCOUNT';
+    residualAlphaLabel = 'Hak Edilmiş İskonto (Düşük Sermaye Getirisi Karşılığı)';
+  } else if (compositeZScore !== null && compositeZScore >= 0.60 && latestEva < 0) {
+    residualAlphaStatus = 'OVERVALUED';
+    residualAlphaLabel = 'Negatif Regresyon Alfası (Düşük ROIC & Primli Çarpan)';
+  }
+
   return {
     sector,
     benchmark,
@@ -10804,7 +11254,10 @@ export function calculateCompanyMultiples(
       evSales: evSalesMetric
     },
     overallValuationStatus,
-    overallSummary
+    overallSummary,
+    compositeZScore,
+    residualAlphaStatus,
+    residualAlphaLabel
   };
 }
 

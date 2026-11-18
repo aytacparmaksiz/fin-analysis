@@ -443,16 +443,23 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
     sectoralEdgeNarrative = `BIST ${sectorName} sektöründe (${peerListStr || 'akran grubu'}) birçok şirket yüksek işletme sermayesi ihtiyacı ve artan kredi faizleri nedeniyle marj daralması yaşarken; ${ticker} %${grossMargin.toFixed(1)} brüt marj, %${ebitdaMargin.toFixed(1)} FAVÖK marjı ve ${isNetCash ? 'Net Nakit bilançosu' : `${netDebtToEbitda.toFixed(2)}x Net Borç/FAVÖK disiplini`} ile faaliyet göstermektedir. ${roicEdgeSentence}`;
   }
 
-  // Sektörel Karşılaştırma Rozetleri (3-4 Somut Kıyaslama)
+  // Sektörel Karşılaştırma Rozetleri (3-4 Somut Kıyaslama & Kesitsel Z-Skoru)
+  const formatZTag = (compVal: number, secVal: number): string => {
+    if (compVal <= 0 || secVal <= 0) return '';
+    const zVal = Math.max(-3.5, Math.min(3.5, (compVal - secVal) / (secVal * 0.35)));
+    return ` (${zVal > 0 ? '+' : ''}${zVal.toFixed(1)}σ)`;
+  };
+  const discountTypeLabel = isPositiveEva ? 'Pozitif Alfa İskontosu' : 'Düşük ROIC İskontosu';
+
   const sectoralComparisonBadges: SectorComparisonBadge[] = [
     {
       label: 'F/K (Fiyat / Kazanç)',
       companyValue: compPe > 0 ? `${compPe.toFixed(1)}x` : 'Negatif / AD',
       benchmarkValue: `Sektör: ${secPe.toFixed(1)}x`,
       verdict: compPe > 0 && compPe < secPe
-        ? `Sektöre göre %${Math.min(90, Math.abs(peDiscountPct)).toFixed(0)} daha ucuz`
+        ? `${discountTypeLabel}: %${Math.min(90, Math.abs(peDiscountPct)).toFixed(0)} ucuz${formatZTag(compPe, secPe)}`
         : compPe > 0
-        ? `Sektöre göre %${Math.min(99, Math.abs(peDiscountPct)).toFixed(0)} primli`
+        ? `Sektöre göre %${Math.min(99, Math.abs(peDiscountPct)).toFixed(0)} primli${formatZTag(compPe, secPe)}`
         : 'Net kâr bazında çarpan oluşmadı',
       isAdvantage: compPe > 0 && compPe <= secPe * 1.05
     },
@@ -461,8 +468,12 @@ export function synthesizeInvestmentThesis(input: ThesisSynthesisInput): Synthes
       companyValue: compEvEbitda > 0 ? `${compEvEbitda.toFixed(1)}x FD/FAVÖK` : `${compPb > 0 ? `${compPb.toFixed(2)}x PD/DD` : '—'}`,
       benchmarkValue: compEvEbitda > 0 ? `Sektör: ${secEvEbitda.toFixed(1)}x` : `Sektör: ${secPb.toFixed(2)}x`,
       verdict: compEvEbitda > 0
-        ? (compEvEbitda <= secEvEbitda ? `Operasyonel kâra göre %${Math.abs(evEbitdaDiscountPct).toFixed(0)} iskontolu` : 'Operasyonel çarpan sektör üstü')
-        : (compPb > 0 && compPb <= secPb ? `Defter değerine göre %${Math.abs(pbDiscountPct).toFixed(0)} iskontolu` : 'Defter değeri çarpanı dengeli'),
+        ? (compEvEbitda <= secEvEbitda
+            ? `${discountTypeLabel}: %${Math.abs(evEbitdaDiscountPct).toFixed(0)} ucuz${formatZTag(compEvEbitda, secEvEbitda)}`
+            : `Operasyonel çarpan sektör üstü${formatZTag(compEvEbitda, secEvEbitda)}`)
+        : (compPb > 0 && compPb <= secPb
+            ? `${discountTypeLabel}: %${Math.abs(pbDiscountPct).toFixed(0)} ucuz${formatZTag(compPb, secPb)}`
+            : `Defter değeri çarpanı dengeli${formatZTag(compPb, secPb)}`),
       isAdvantage: compEvEbitda > 0 ? compEvEbitda <= secEvEbitda * 1.05 : (compPb > 0 && compPb <= secPb * 1.05)
     },
     {

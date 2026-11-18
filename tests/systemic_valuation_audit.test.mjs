@@ -1,7 +1,7 @@
 import { test, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { computeSectorValuationAndDrivers, calculateSectorScore, calculateDuPont5Step, analyzeRelatedPartyAndCapitalAllocationRisk, isTfrs10InvestmentEntity, optimizeFinalDecision, detectValueTrap, evaluateValueTrap, syncReportTextWithValuation } from '../lib/valuation.ts';
+import { computeSectorValuationAndDrivers, calculateSectorScore, calculateDuPont5Step, analyzeRelatedPartyAndCapitalAllocationRisk, isTfrs10InvestmentEntity, optimizeFinalDecision, detectValueTrap, evaluateValueTrap, syncReportTextWithValuation, calculateProbabilisticExpectedValue, calculateFundamentalMomentum, calculateEarningsQuality, calculateCompanyMultiples } from '../lib/valuation.ts';
 import { synthesizeInvestmentThesis } from '../lib/investment-thesis-synthesizer.ts';
 import { AGESA_SAMPLE_REPORT_TEXT, VESBE_SAMPLE_REPORT_TEXT } from '../lib/sample-data.ts';
 import { computeSnowflakeAnalysis } from '../lib/snowflake.ts';
@@ -1602,6 +1602,137 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
     // 8.2 Non-repetitive Audit & Portfolio Positioning
     assert.ok(appSimply.includes('8.2 Karar ve Portföy Özeti'), 'Section 8.2 must render simplified Karar ve Portföy Özeti title');
     assert.ok(appSimply.includes('2. Portföy Stratejisi'), 'Section 8.2 must include Portföy Stratejisi card');
+  });
+
+  it('35. Quantitative Mathematical Edge Suite (Öneri 1-5): Probabilistic E[V] & Half-Kelly, 4Q Momentum Slope, Beneish Accrual Audit, Cross-Sectional Z-Score Alpha & Historical Signal Tracker', () => {
+    // 1. Öneri 1: Probabilistic E[V], Asymmetry Ratio & Half-Kelly Sizing
+    const strongAlEdge = calculateProbabilisticExpectedValue({
+      currentPrice: 100,
+      fairValue: 145,
+      bullPrice: 180,
+      bearPrice: 88,
+      totalScore: 82,
+      evaSpread: 6.5,
+      cashConversionRatio: 115,
+      isNetCash: true,
+      isValueTrap: false,
+      decision: 'AL'
+    });
+    assert.ok(strongAlEdge.expectedValue > 130, `Strong AL E[V] should exceed 130 TL, got ${strongAlEdge.expectedValue}`);
+    assert.ok(strongAlEdge.asymmetryRatio >= 1.8, `Strong AL asymmetry ratio should be >= 1.8, got ${strongAlEdge.asymmetryRatio}`);
+    assert.ok(strongAlEdge.halfKellyWeightPct > 0 && strongAlEdge.halfKellyWeightPct <= 15.0, `Strong AL Half-Kelly should be in (0, 15.0], got ${strongAlEdge.halfKellyWeightPct}`);
+    assert.equal(strongAlEdge.edgeStatus, 'STRONG_POSITIVE_EDGE', 'Strong AL must classify as STRONG_POSITIVE_EDGE');
+
+    const trapAlmaEdge = calculateProbabilisticExpectedValue({
+      currentPrice: 100,
+      fairValue: 130,
+      isValueTrap: true,
+      decision: 'ALMA'
+    });
+    assert.equal(trapAlmaEdge.halfKellyWeightPct, 0, 'Value trap / ALMA must enforce 0% Half-Kelly position weight');
+    assert.equal(trapAlmaEdge.edgeStatus, 'NEGATIVE_EXPECTANCY', 'Value trap / ALMA must classify as NEGATIVE_EXPECTANCY');
+
+    // 2. Öneri 2: 4Q Fundamental Momentum & 2nd-Derivative Slope
+    const turnaroundMom = calculateFundamentalMomentum(
+      [
+        { period: '2025/09', ebitda_margin: 8.0, roic: -2.0 },
+        { period: '2025/12', ebitda_margin: 10.5, roic: 1.0 },
+        { period: '2026/03', ebitda_margin: 13.0, roic: 4.5 },
+        { period: '2026/06', ebitda_margin: 15.5, roic: 8.5 }
+      ],
+      'INDUSTRIAL',
+      8.0,
+      0.5
+    );
+    assert.ok(turnaroundMom.marginSlopePtsPerQ > 0.7, `Turnaround margin slope must exceed 0.7, got ${turnaroundMom.marginSlopePtsPerQ}`);
+    assert.ok(turnaroundMom.roicSlopePtsPerQ > 1.2, `Turnaround ROIC slope must exceed 1.2, got ${turnaroundMom.roicSlopePtsPerQ}`);
+    assert.equal(turnaroundMom.regime, 'TURNAROUND_ALPHA', 'Rising sub-WACC ROIC/margin slope must detect TURNAROUND_ALPHA');
+
+    const earlyDecayMom = calculateFundamentalMomentum(
+      [
+        { period: '2025/09', ebitda_margin: 24.0, roic: 26.0 },
+        { period: '2025/12', ebitda_margin: 21.0, roic: 22.0 },
+        { period: '2026/03', ebitda_margin: 18.0, roic: 18.0 },
+        { period: '2026/06', ebitda_margin: 15.0, roic: 14.0 }
+      ],
+      'INDUSTRIAL',
+      12.5,
+      1.5
+    );
+    assert.ok(earlyDecayMom.marginSlopePtsPerQ <= -1.2, `Early decay margin slope must be <= -1.2, got ${earlyDecayMom.marginSlopePtsPerQ}`);
+    assert.ok(earlyDecayMom.roicSlopePtsPerQ <= -2.0, `Early decay ROIC slope must be <= -2.0, got ${earlyDecayMom.roicSlopePtsPerQ}`);
+    assert.equal(earlyDecayMom.regime, 'EARLY_DECAY_WARNING', 'Declining positive-EVA slope must trigger EARLY_DECAY_WARNING');
+
+    // 3. Öneri 3: Beneish DSRI/GMI/AQI & Accrual Anomaly Risk
+    const beneishAudit = calculateEarningsQuality(
+      [
+        {
+          period: '2025/06',
+          revenue: 1000,
+          trade_receivables: 150,
+          gross_margin: 30,
+          operating_cash_flow: 120,
+          net_income: 100,
+          total_assets: 2000
+        },
+        {
+          period: '2026/06',
+          revenue: 1100,
+          trade_receivables: 260,
+          gross_margin: 24,
+          operating_cash_flow: 10,
+          net_income: 140,
+          total_assets: 2400
+        }
+      ],
+      'INDUSTRIAL'
+    );
+    assert.ok(beneishAudit.dsri != null && beneishAudit.dsri > 1.25, `DSRI must detect receivable bloat > 1.25, got ${beneishAudit.dsri}`);
+    assert.ok(beneishAudit.gmi != null && beneishAudit.gmi > 1.15, `GMI must detect margin deterioration > 1.15, got ${beneishAudit.gmi}`);
+    assert.equal(beneishAudit.accountingRiskLevel, 'YÜKSEK', 'High DSRI & weak OCF vs profit must trigger YÜKSEK accounting risk');
+
+    // 4. Öneri 4: Cross-Sectional Z-Score & ROIC-Regressed Residual Alpha
+    const alphaMultiples = calculateCompanyMultiples(
+      {
+        period: '2026/06',
+        net_income: 500_000_000,
+        equity: 2_000_000_000,
+        ebitda: 800_000_000,
+        revenue: 4_000_000_000,
+        roic: 18.0,
+        eva_spread: 6.5
+      },
+      10,
+      250_000_000,
+      'INDUSTRIAL',
+      {
+        pe: 5.5,
+        pb: 1.2,
+        ev_ebitda: 4.2,
+        sector_averages: { pe: 10.5, pb: 2.2, ev_ebitda: 7.5 }
+      }
+    );
+    assert.ok(alphaMultiples.compositeZScore != null && alphaMultiples.compositeZScore < -0.35, `Composite Z-Score must be < -0.35, got ${alphaMultiples.compositeZScore}`);
+    assert.equal(alphaMultiples.residualAlphaStatus, 'UNDERVALUED_QUALITY', 'Discounted high-ROIC stock must receive UNDERVALUED_QUALITY');
+
+    // 5. Öneri 5 UI Strings & Dual-Directory Parity Check
+    const appSimply = fs.readFileSync(new URL('../app/simply/simply-view.tsx', import.meta.url), 'utf8');
+    const srcSimply = fs.readFileSync(new URL('../src/app/simply/simply-view.tsx', import.meta.url), 'utf8');
+    const libSynth = fs.readFileSync(new URL('../lib/investment-thesis-synthesizer.ts', import.meta.url), 'utf8');
+    const srcSynth = fs.readFileSync(new URL('../src/lib/investment-thesis-synthesizer.ts', import.meta.url), 'utf8');
+    assert.equal(appSimply, srcSimply, 'app/simply/simply-view.tsx and src/app/simply/simply-view.tsx must be 100% identical');
+    assert.equal(libSynth, srcSynth, 'lib/investment-thesis-synthesizer.ts and src/lib/investment-thesis-synthesizer.ts must be 100% identical');
+
+    for (const uiMarker of [
+      'Olasılık Ağırlıklı E[V]',
+      'Optimal Portföy Ağırlığı (Yarı-Kelly)',
+      'İvme Rejimi (2. Türev)',
+      'Alacak Endeksi (DSRI):',
+      'Model Sinyal Performansı',
+      'Güncel Fark:'
+    ]) {
+      assert.ok(appSimply.includes(uiMarker), `simply-view.tsx must include quantitative edge UI marker: ${uiMarker}`);
+    }
   });
 
 });

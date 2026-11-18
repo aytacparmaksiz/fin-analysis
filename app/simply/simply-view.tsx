@@ -83,7 +83,7 @@ import {
   type SnowflakeAnalysisResult,
   type SnowflakeCheck
 } from '@/lib/snowflake';
-import { analyzeRelatedPartyAndCapitalAllocationRisk, calculateDuPont5Step, calculateEarningsQuality, parseFinancialNumber, parsePeriodSortKey, getLatestReportsPerTicker } from '@/lib/valuation';
+import { analyzeRelatedPartyAndCapitalAllocationRisk, calculateDuPont5Step, calculateEarningsQuality, calculateFundamentalMomentum, calculateProbabilisticExpectedValue, parseFinancialNumber, parsePeriodSortKey, getLatestReportsPerTicker } from '@/lib/valuation';
 import { FinancialRatioEngine } from '@/lib/ratio-engine';
 import { synthesizeInvestmentThesis } from '@/lib/investment-thesis-synthesizer';
 
@@ -1690,6 +1690,45 @@ export default function SimplyView({
     }
     return [];
   }, [liveCompanyDetails, report.dividendHistory, report.extractedData, report.ticker, chartData, latestData, currentPriceNum]);
+
+  // Olasılık Ağırlıklı Beklenen Değer (E[V]), Asimetri Oranı & Yarı-Kelly Pozisyon Boyutlandırması
+  const probabilisticEdge = useMemo(() => {
+    const rawSc = valuationInfo?.score ?? report.score;
+    const parsedSc =
+      rawSc != null
+        ? parseInt(String(rawSc).split('/')[0].replace(/[^0-9]/g, ''), 10)
+        : 65;
+    const safeScore = Number.isFinite(parsedSc) && parsedSc > 0 ? parsedSc : 65;
+    return calculateProbabilisticExpectedValue({
+      currentPrice: currentPriceNum,
+      fairValue: fairValueNum,
+      bullPrice: valuationInfo?.bull_price,
+      bearPrice: valuationInfo?.bear_price,
+      totalScore: safeScore,
+      evaSpread: evaSpreadNum,
+      cashConversionRatio: earningsQuality?.cashConversionRatio,
+      isNetCash: Number(latestData?.net_debt ?? 0) <= 0,
+      isValueTrap: Boolean(valuationInfo?.is_value_trap),
+      decision: effectiveDecision
+    });
+  }, [
+    valuationInfo?.score,
+    valuationInfo?.bull_price,
+    valuationInfo?.bear_price,
+    valuationInfo?.is_value_trap,
+    report.score,
+    currentPriceNum,
+    fairValueNum,
+    evaSpreadNum,
+    earningsQuality?.cashConversionRatio,
+    latestData?.net_debt,
+    effectiveDecision
+  ]);
+
+  // 4 Çeyreklik Temel İvme & 2. Türev Marj/ROIC Eğimi
+  const fundamentalMomentum = useMemo(() => {
+    return calculateFundamentalMomentum(chartData, currentSector, realWaccNum, evaSpreadNum);
+  }, [chartData, currentSector, realWaccNum, evaSpreadNum]);
 
   // Kar Tanesi (Snowflake) Analizi Hesabı (5 Eksen, 30 Deterministik Kriter, 0-6 Puan)
   const snowflake: SnowflakeAnalysisResult = useMemo(() => {
@@ -4611,7 +4650,7 @@ export default function SimplyView({
 
             {/* 3.1 BIST Sektör Medyanları Benchmark Kıyası */}
             <div className="bg-[#161a23] border border-[#2a3140] rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#282d37] pb-3">
                 <span className="font-sans text-base sm:text-lg font-bold text-white flex items-center gap-2">
                   <span>3.1 Sektör Karşılaştırması</span>
                   {marketMultiples?.sector_averages?.sector_name ? (
@@ -4620,6 +4659,23 @@ export default function SimplyView({
                     </span>
                   ) : null}
                 </span>
+                {(companyMultiplesData?.compositeZScore != null || companyMultiplesData?.residualAlphaLabel) && (
+                  <span className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold border ${
+                    companyMultiplesData?.residualAlphaStatus === 'UNDERVALUED_QUALITY'
+                      ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
+                      : companyMultiplesData?.residualAlphaStatus === 'OVERVALUED'
+                      ? 'bg-rose-950/60 text-rose-300 border-rose-500/40'
+                      : companyMultiplesData?.residualAlphaStatus === 'JUSTIFIED_DISCOUNT'
+                      ? 'bg-amber-950/60 text-amber-300 border-amber-500/40'
+                      : 'bg-[#21262d] text-slate-300 border-[#2e3440]'
+                  }`}>
+                    {companyMultiplesData?.compositeZScore != null
+                      ? `Z-Skor: ${companyMultiplesData.compositeZScore > 0 ? '+' : ''}${Number(companyMultiplesData.compositeZScore).toFixed(2)}σ`
+                      : ''}
+                    {companyMultiplesData?.compositeZScore != null && companyMultiplesData?.residualAlphaLabel ? ' • ' : ''}
+                    {companyMultiplesData?.residualAlphaLabel || ''}
+                  </span>
+                )}
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               {[
@@ -5054,8 +5110,11 @@ export default function SimplyView({
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-5 space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-bold text-rose-400">Ayı Senaryosu</span>
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-rose-950/50 text-rose-300 border border-rose-800/40">
+                      Olasılık: %{Math.round(probabilisticEdge.pBear * 100)}
+                    </span>
                   </div>
                   <div className="text-2xl font-black font-mono text-white">
                     ₺{(() => {
@@ -5069,8 +5128,11 @@ export default function SimplyView({
                 </div>
 
                 <div className="bg-[#1d222e] border-2 border-[#f5c242]/70 rounded-xl p-5 shadow-2xl space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-bold text-[#f5c242]">Baz Senaryo</span>
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-amber-950/50 text-[#f5c242] border border-[#f5c242]/35">
+                      Olasılık: %{Math.round(probabilisticEdge.pBase * 100)}
+                    </span>
                   </div>
                   <div className="text-2xl sm:text-3xl font-black font-mono text-[#f5c242]">
                     ₺{fairValueNum.toFixed(2)}
@@ -5081,8 +5143,11 @@ export default function SimplyView({
                 </div>
 
                 <div className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-5 space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-bold text-emerald-400">Boğa Senaryosu</span>
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-950/50 text-emerald-300 border border-emerald-800/40">
+                      Olasılık: %{Math.round(probabilisticEdge.pBull * 100)}
+                    </span>
                   </div>
                   <div className="text-2xl font-black font-mono text-white">
                     ₺{(() => {
@@ -5093,6 +5158,50 @@ export default function SimplyView({
                   <p className="text-xs text-slate-400 leading-relaxed">
                     Pazar payı genişlemesi, marj artışı ve risksiz faiz oranında normalleşme.
                   </p>
+                </div>
+              </div>
+
+              {/* Olasılık Ağırlıklı Beklenen Değer, Asimetri & Yarı-Kelly Özet Barı */}
+              <div className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-3.5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-[#161a23] border border-[#2a3140] rounded-lg p-3 flex flex-col justify-between space-y-1">
+                  <div className="text-xs text-slate-400 font-sans">Olasılık Ağırlıklı E[V]</div>
+                  <div className="text-sm sm:text-base font-black font-mono text-white">
+                    ₺{probabilisticEdge.expectedValue.toFixed(2)}{' '}
+                    <span className={`text-xs font-bold ${probabilisticEdge.expectedReturnPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      ({probabilisticEdge.expectedReturnPct >= 0 ? '+' : ''}%{probabilisticEdge.expectedReturnPct.toFixed(1)})
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-[#161a23] border border-[#2a3140] rounded-lg p-3 flex flex-col justify-between space-y-1">
+                  <div className="text-xs text-slate-400 font-sans">Asimetri Oranı (Ödül/Risk)</div>
+                  <div className="text-sm sm:text-base font-black font-mono">
+                    <span className={
+                      probabilisticEdge.edgeStatus === 'STRONG_POSITIVE_EDGE'
+                        ? 'text-emerald-400'
+                        : probabilisticEdge.edgeStatus === 'MODERATE_EDGE'
+                        ? 'text-cyan-400'
+                        : probabilisticEdge.edgeStatus === 'NEGATIVE_EXPECTANCY'
+                        ? 'text-rose-400'
+                        : 'text-amber-300'
+                    }>
+                      {probabilisticEdge.asymmetryRatio.toFixed(2)}x
+                    </span>{' '}
+                    <span className="text-xs font-sans font-semibold text-slate-300">
+                      • {probabilisticEdge.edgeLabel}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-[#161a23] border border-[#2a3140] rounded-lg p-3 flex flex-col justify-between space-y-1">
+                  <div className="text-xs text-slate-400 font-sans">Optimal Portföy Ağırlığı (Yarı-Kelly)</div>
+                  <div className={`text-sm sm:text-base font-black font-mono ${
+                    probabilisticEdge.halfKellyWeightPct > 0 ? 'text-[#f5c242]' : 'text-rose-400'
+                  }`}>
+                    {probabilisticEdge.halfKellyWeightPct > 0
+                      ? `%${probabilisticEdge.halfKellyWeightPct.toFixed(1)}`
+                      : '%0.0 (Pozisyon Önerilmez)'}
+                  </div>
                 </div>
               </div>
             </div>
@@ -5569,6 +5678,49 @@ export default function SimplyView({
                   </div>
                 </div>
               </div>
+
+              {/* 4 Çeyreklik Temel İvme & 2. Türev Eğim Şeridi */}
+              <div className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-3.5 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                <div className="bg-[#161a23] border border-[#2a3140] rounded-lg p-3 space-y-0.5">
+                  <div className="text-xs text-slate-400 font-sans">4Ç Operasyonel Marj Eğimi</div>
+                  <div className={`text-sm font-bold font-mono ${
+                    fundamentalMomentum.marginSlopePtsPerQ >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                  }`}>
+                    {fundamentalMomentum.marginSlopePtsPerQ >= 0 ? '+' : ''}
+                    {fundamentalMomentum.marginSlopePtsPerQ.toFixed(1)} Puan/Çeyrek
+                  </div>
+                </div>
+
+                <div className="bg-[#161a23] border border-[#2a3140] rounded-lg p-3 space-y-0.5">
+                  <div className="text-xs text-slate-400 font-sans">4Ç ROIC / ROE İvmesi</div>
+                  <div className={`text-sm font-bold font-mono ${
+                    fundamentalMomentum.roicSlopePtsPerQ >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                  }`}>
+                    {fundamentalMomentum.roicSlopePtsPerQ >= 0 ? '+' : ''}
+                    {fundamentalMomentum.roicSlopePtsPerQ.toFixed(1)} Puan/Çeyrek
+                  </div>
+                </div>
+
+                <div className="bg-[#161a23] border border-[#2a3140] rounded-lg p-3 flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-xs text-slate-400 font-sans">İvme Rejimi (2. Türev)</div>
+                    <div className="text-[11px] text-slate-400 font-sans leading-snug mt-0.5 line-clamp-1" title={fundamentalMomentum.regimeSummary}>
+                      {fundamentalMomentum.quartersAnalyzed} çeyreklik eğim analizi
+                    </div>
+                  </div>
+                  <span className={`px-2.5 py-1 rounded text-xs font-mono font-bold border shrink-0 ${
+                    fundamentalMomentum.badgeTone === 'emerald'
+                      ? 'bg-emerald-950/70 text-emerald-300 border-emerald-500/40'
+                      : fundamentalMomentum.badgeTone === 'cyan'
+                      ? 'bg-cyan-950/70 text-cyan-300 border-cyan-500/40'
+                      : fundamentalMomentum.badgeTone === 'rose'
+                      ? 'bg-rose-950/70 text-rose-300 border-rose-500/40'
+                      : 'bg-amber-950/70 text-amber-300 border-amber-500/40'
+                  }`}>
+                    {fundamentalMomentum.regimeLabel}
+                  </span>
+                </div>
+              </div>
             </div>
 
             {/* 4.5 Kâr Kalitesi ve Nakit Dönüşümü (Earnings Quality Audit) */}
@@ -5669,6 +5821,32 @@ export default function SimplyView({
                       <span className="font-semibold text-slate-200 font-sans mr-1.5">Tahakkuk & Nakit Teşhisi:</span>
                       {earningsQuality.sloanAssessment}
                     </p>
+                  </div>
+                )}
+
+                {currentSector !== 'BANKING' && currentSector !== 'INSURANCE' && currentSector !== 'FINANCIAL_SERVICES' && (
+                  <div className="flex flex-wrap items-center gap-2 pt-2.5 border-t border-[#282d37]">
+                    <span className="px-2.5 py-1 rounded-md bg-[#161a23] border border-[#2a3140] text-[11px] font-mono text-slate-300">
+                      Alacak Endeksi (DSRI):{' '}
+                      <strong className={earningsQuality.dsri != null && earningsQuality.dsri > 1.25 ? 'text-rose-400' : 'text-white'}>
+                        {earningsQuality.dsri != null ? earningsQuality.dsri.toFixed(2) : '—'}
+                      </strong>
+                    </span>
+                    <span className="px-2.5 py-1 rounded-md bg-[#161a23] border border-[#2a3140] text-[11px] font-mono text-slate-300">
+                      Brüt Marj Endeksi (GMI):{' '}
+                      <strong className={earningsQuality.gmi != null && earningsQuality.gmi > 1.15 ? 'text-amber-300' : 'text-white'}>
+                        {earningsQuality.gmi != null ? earningsQuality.gmi.toFixed(2) : '—'}
+                      </strong>
+                    </span>
+                    <span className={`px-2.5 py-1 rounded-md border text-[11px] font-mono font-bold ${
+                      earningsQuality.accountingRiskLevel === 'YÜKSEK'
+                        ? 'bg-rose-950/60 border-rose-500/40 text-rose-300'
+                        : earningsQuality.accountingRiskLevel === 'ORTA'
+                        ? 'bg-amber-950/60 border-amber-500/40 text-amber-300'
+                        : 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                    }`}>
+                      Tahakkuk Riski: {earningsQuality.accountingRiskLabel || 'Temiz'}
+                    </span>
                   </div>
                 )}
               </div>
@@ -6784,7 +6962,7 @@ export default function SimplyView({
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
                           <div className="bg-[#181d27] border border-[#2d3545] rounded-lg p-2.5">
                             <div className="text-xs text-slate-400 font-mono">Fiyat / Adil Değer</div>
                             <div className="text-xs sm:text-sm font-bold font-mono text-white mt-0.5">
@@ -6801,6 +6979,16 @@ export default function SimplyView({
                             <div className="text-xs text-slate-400 font-mono">Nakit Kalitesi</div>
                             <div className="text-xs sm:text-sm font-bold font-mono text-cyan-300 mt-0.5 truncate" title={earningsQuality.statusTitle}>
                               {earningsQuality.statusTitle}
+                            </div>
+                          </div>
+                          <div className="bg-[#181d27] border border-[#2d3545] rounded-lg p-2.5">
+                            <div className="text-xs text-slate-400 font-mono">Beklenen Değer E[V] &amp; Kelly</div>
+                            <div className="text-xs sm:text-sm font-bold font-mono text-[#f5c242] mt-0.5">
+                              ₺{probabilisticEdge.expectedValue.toFixed(2)}{' '}
+                              <span className="text-slate-300 font-normal">•</span>{' '}
+                              <span className={probabilisticEdge.halfKellyWeightPct > 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                                %{probabilisticEdge.halfKellyWeightPct.toFixed(1)} Ağırlık
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -7681,6 +7869,79 @@ export default function SimplyView({
               <div className="flex items-center gap-2 border-b border-[#282d37] pb-3">
                 <span className="font-sans text-base sm:text-lg font-bold text-white">9.1 Analiz Geçmişi</span>
               </div>
+
+              {/* Öneri 5: Model Sinyal ve Alfa Takip Özeti */}
+              {(() => {
+                const validPriceItems = (tickerHistory || [])
+                  .map(h => {
+                    const p = parseFinancialNumber(h.price ?? h.extractedData?.current_price);
+                    const rawTs = Date.parse(String(h?.extractedData?.saved_at || h?.updatedAt || h?.createdAt || ''));
+                    return {
+                      hist: h,
+                      price: p,
+                      ts: Number.isFinite(rawTs) ? rawTs : 0
+                    };
+                  })
+                  .filter((x): x is { hist: SavedReport; price: number; ts: number } =>
+                    x.price != null && !isNaN(x.price) && x.price > 0
+                  );
+
+                if (validPriceItems.length === 0 || currentPriceNum <= 0) return null;
+
+                const oldestEntry = [...validPriceItems].sort(
+                  (a, b) => (a.ts || Number.MAX_SAFE_INTEGER) - (b.ts || Number.MAX_SAFE_INTEGER)
+                )[0];
+                const oldestPrice = oldestEntry.price;
+                const totalRealizedPct = ((currentPriceNum - oldestPrice) / oldestPrice) * 100;
+                const oldestDec = String(oldestEntry.hist?.decision || effectiveDecision || 'NÖTR').toUpperCase();
+                const isAlConfirmed = oldestDec === 'AL' && totalRealizedPct > 0;
+                const isAlmaConfirmed = oldestDec === 'ALMA' && totalRealizedPct <= 0;
+                const isConfirmed = isAlConfirmed || isAlmaConfirmed;
+
+                const signalLabel = isAlConfirmed
+                  ? 'Sinyal Teyitli (Pozitif Getiri)'
+                  : isAlmaConfirmed
+                  ? 'Sinyal Teyitli (Kayıp Koruması)'
+                  : oldestDec === 'ALMA' && totalRealizedPct > 0
+                  ? 'Piyasa Ayrışması (İzleniyor)'
+                  : 'Takip Ediliyor';
+
+                return (
+                  <div className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-3.5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="bg-[#161a23] border border-[#2a3140] rounded-lg p-3 space-y-1">
+                      <div className="text-xs text-slate-400 font-sans">İlk Analiz Fiyatı → Güncel</div>
+                      <div className="text-sm font-bold font-mono text-white">
+                        ₺{oldestPrice.toFixed(2)} <span className="text-slate-500">→</span>{' '}
+                        <span className="text-[#f5c242]">₺{currentPriceNum.toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-[#161a23] border border-[#2a3140] rounded-lg p-3 space-y-1">
+                      <div className="text-xs text-slate-400 font-sans">Analizden Bugüne Getiri</div>
+                      <div className={`text-sm font-black font-mono ${
+                        totalRealizedPct >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                      }`}>
+                        {totalRealizedPct >= 0 ? '+' : ''}%{totalRealizedPct.toFixed(1)}
+                      </div>
+                    </div>
+
+                    <div className="bg-[#161a23] border border-[#2a3140] rounded-lg p-3 flex items-center justify-between gap-2">
+                      <div>
+                        <div className="text-xs text-slate-400 font-sans">Model Sinyal Performansı</div>
+                        <div className="text-[11px] font-mono text-slate-400 mt-0.5">İlk Karar: {oldestDec}</div>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded text-xs font-mono font-bold border shrink-0 ${
+                        isConfirmed
+                          ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
+                          : 'bg-amber-950/60 text-amber-300 border-amber-500/40'
+                      }`}>
+                        {signalLabel}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {tickerHistory.length > 0 ? (
                 <div className="divide-y divide-[#282d37]">
                   {tickerHistory.map((hist) => {
@@ -7708,6 +7969,10 @@ export default function SimplyView({
                     const analysisPriceDisplay = numHistPrice != null && !isNaN(numHistPrice) && numHistPrice > 0
                       ? `₺${numHistPrice.toFixed(2)}`
                       : '—';
+                    const realizedReturnPct =
+                      numHistPrice != null && !isNaN(numHistPrice) && numHistPrice > 0 && currentPriceNum > 0
+                        ? ((currentPriceNum - numHistPrice) / numHistPrice) * 100
+                        : null;
 
                     return (
                       <div
@@ -7732,8 +7997,19 @@ export default function SimplyView({
                           </div>
                         </div>
                         <div className="text-right space-y-0.5">
-                          <div className="font-mono text-xs sm:text-[13px] font-semibold text-slate-300">
-                            Analiz Fiyatı: <span className="text-white">{analysisPriceDisplay}</span>
+                          <div className="font-mono text-xs sm:text-[13px] font-semibold text-slate-300 flex items-center justify-end gap-2 flex-wrap">
+                            <span>
+                              Analiz Fiyatı: <span className="text-white">{analysisPriceDisplay}</span>
+                            </span>
+                            {realizedReturnPct !== null && (
+                              <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold border ${
+                                realizedReturnPct >= 0
+                                  ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
+                                  : 'bg-rose-950/60 text-rose-300 border-rose-500/40'
+                              }`}>
+                                Güncel Fark: {realizedReturnPct >= 0 ? '+' : ''}%{realizedReturnPct.toFixed(1)}
+                              </span>
+                            )}
                           </div>
                           <div className="font-mono text-[15px] font-bold text-[#f5c242]">
                             Adil Değer: {fairValDisplay}
