@@ -5679,8 +5679,8 @@ export default function SimplyView({
               <div className="grid grid-cols-2 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-[#323a4b] bg-[#1d222e] border border-[#323a4b] rounded-xl overflow-hidden">
                 <div className="p-3 text-center">
                   <div className="text-xs text-slate-400">Vergi Yükü</div>
-                  <div className="text-base font-bold font-mono text-white mt-1">
-                    {dupontResult.taxBurden != null ? `${dupontResult.taxBurden}x` : '—'}
+                  <div className="text-base font-bold font-mono text-white mt-1" title={dupontResult.taxBurden != null ? `${dupontResult.taxBurden}` : undefined}>
+                    {dupontResult.taxBurden != null ? Number(dupontResult.taxBurden).toFixed(2) : '—'}
                   </div>
                   <div className="text-[11px] text-slate-500 font-mono">Net/EBT</div>
                 </div>
@@ -5689,8 +5689,8 @@ export default function SimplyView({
                   <div className="text-xs text-slate-400">
                     {currentSector === 'BANKING' ? 'Karşılık Yükü' : 'Faiz Yükü'}
                   </div>
-                  <div className="text-base font-bold font-mono text-white mt-1">
-                    {dupontResult.interestBurden != null ? `${dupontResult.interestBurden}x` : '—'}
+                  <div className="text-base font-bold font-mono text-white mt-1" title={dupontResult.interestBurden != null ? `${dupontResult.interestBurden}` : undefined}>
+                    {dupontResult.interestBurden != null ? Number(dupontResult.interestBurden).toFixed(2) : '—'}
                   </div>
                   <div className="text-[11px] text-slate-500 font-mono">
                     {currentSector === 'BANKING' ? 'EBT/Faaliyet Kârı' : 'EBT/EBIT'}
@@ -5713,8 +5713,8 @@ export default function SimplyView({
                   <div className="text-xs text-slate-400">
                     {currentSector === 'BANKING' ? 'Aktif Verimi' : 'Aktif Devri'}
                   </div>
-                  <div className="text-base font-bold font-mono text-cyan-400 mt-1">
-                    {dupontResult.assetTurnover != null ? `${dupontResult.assetTurnover}x` : '—'}
+                  <div className="text-base font-bold font-mono text-cyan-400 mt-1" title={dupontResult.assetTurnover != null ? `${dupontResult.assetTurnover}` : undefined}>
+                    {dupontResult.assetTurnover != null ? Number(dupontResult.assetTurnover).toFixed(2) : '—'}
                   </div>
                   <div className="text-[11px] text-slate-500 font-mono">
                     {currentSector === 'BANKING' ? 'Gelir/Aktif' : 'Satış/Aktif'}
@@ -5723,8 +5723,8 @@ export default function SimplyView({
 
                 <div className="p-3 text-center col-span-2 sm:col-span-1">
                   <div className="text-xs text-slate-400">Kaldıraç</div>
-                  <div className="text-base font-bold font-mono text-white mt-1">
-                    {dupontResult.financialLeverage != null ? `${dupontResult.financialLeverage}x` : '—'}
+                  <div className="text-base font-bold font-mono text-white mt-1" title={dupontResult.financialLeverage != null ? `${dupontResult.financialLeverage}` : undefined}>
+                    {dupontResult.financialLeverage != null ? Number(dupontResult.financialLeverage).toFixed(2) : '—'}
                   </div>
                   <div className="text-[11px] text-slate-500 font-mono">Aktif/Özkaynak</div>
                 </div>
