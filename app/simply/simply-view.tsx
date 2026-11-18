@@ -349,7 +349,7 @@ function PeerTooltip({ active, payload }: any) {
         <div className="text-sm font-bold text-white mb-0.5">{item.payload?.name}</div>
         <div className="text-sm font-mono font-bold text-[#f5c242] flex items-center gap-1.5">
           <span className="text-slate-400 font-normal">F/K Oranı:</span>
-          <span>{item.value != null ? `${Number(item.value).toFixed(1)}x` : '—'}</span>
+          <span>{item.value != null ? Number(item.value).toFixed(2) : '—'}</span>
         </div>
       </div>
     );
@@ -373,7 +373,7 @@ function MultiplesTrendTooltip({ active, payload, label }: any) {
               <span>{entry.name}:</span>
             </span>
             <span className="font-bold text-white">
-              {entry.value != null ? `${Number(entry.value).toFixed(1)}x` : '—'}
+              {entry.value != null ? Number(entry.value).toFixed(2) : '—'}
             </span>
           </div>
         ))}
@@ -3216,7 +3216,7 @@ export default function SimplyView({
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-slate-300">F/K Oranı:</span>
                       <span className="font-mono font-bold text-white">
-                        {(companyMultiplesData?.multiples?.pe?.companyValue ?? marketMultiples?.pe) ? `${(companyMultiplesData?.multiples?.pe?.companyValue ?? marketMultiples.pe).toFixed(1)}x` : '—'}
+                        {(companyMultiplesData?.multiples?.pe?.companyValue ?? marketMultiples?.pe) ? (companyMultiplesData?.multiples?.pe?.companyValue ?? marketMultiples.pe).toFixed(2) : '—'}
                       </span>
                     </div>
                   </div>
@@ -4616,7 +4616,7 @@ export default function SimplyView({
                     ? companyMultiplesData.multiples.pe.companyValue
                     : marketMultiples?.pe,
                   benchNum: marketMultiples?.sector_averages?.pe ?? companyMultiplesData?.benchmark?.peMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pe ?? 8.5,
-                  format: (v: number) => `${v.toFixed(1)}x`,
+                  format: (v: number) => v.toFixed(2),
                   isMultiple: true,
                   customType: 'multiple' as const
                 },
@@ -4626,7 +4626,7 @@ export default function SimplyView({
                     ? companyMultiplesData.multiples.pb.companyValue
                     : marketMultiples?.pb,
                   benchNum: marketMultiples?.sector_averages?.pb ?? companyMultiplesData?.benchmark?.pbMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pb ?? 2.1,
-                  format: (v: number) => `${v.toFixed(2)}x`,
+                  format: (v: number) => v.toFixed(2),
                   isMultiple: true,
                   customType: 'multiple' as const
                 },
@@ -4636,7 +4636,7 @@ export default function SimplyView({
                     ? companyMultiplesData.multiples.evEbitda.companyValue
                     : marketMultiples?.ev_ebitda),
                   benchNum: isMetricDisabled('ev_ebitda', currentSector) ? null : (marketMultiples?.sector_averages?.ev_ebitda ?? companyMultiplesData?.benchmark?.evEbitdaMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.evEbitda ?? 7.2),
-                  format: (v: number) => `${v.toFixed(1)}x`,
+                  format: (v: number) => v.toFixed(2),
                   isMultiple: true,
                   customType: 'multiple' as const
                 },
@@ -4646,7 +4646,7 @@ export default function SimplyView({
                     ? companyMultiplesData.multiples.evSales.companyValue
                     : marketMultiples?.ev_sales),
                   benchNum: isMetricDisabled('ev_sales', currentSector) ? null : (marketMultiples?.sector_averages?.ev_sales ?? companyMultiplesData?.benchmark?.evSalesMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.evSales ?? 1.8),
-                  format: (v: number) => `${v.toFixed(1)}x`,
+                  format: (v: number) => v.toFixed(2),
                   isMultiple: true,
                   customType: 'multiple' as const
                 },
@@ -4703,7 +4703,7 @@ export default function SimplyView({
                 // Eğer metrik A/D (Anlamsız Değer / Sektörel Kapsam Dışı) ise
                 if (c.rawVal == null) {
                   const isSectorExempt = isMetricDisabled(c.label === 'FD/FAVÖK' ? 'ev_ebitda' : (c.label === 'FD/Satışlar' ? 'ev_sales' : ''), currentSector);
-                  const benchText = c.benchNum != null && c.benchNum > 0 ? `Ref: ${c.benchNum.toFixed(c.label === 'PD/DD' ? 2 : 1)}x` : 'Ref: A/D';
+                  const benchText = c.benchNum != null && c.benchNum > 0 ? `Ref: ${c.benchNum.toFixed(2)}` : 'Ref: A/D';
                   return (
                     <div key={i} className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-3.5 text-center space-y-1 transition-colors">
                       <div className="text-xs uppercase font-bold text-slate-400">{c.label}</div>
@@ -4730,7 +4730,7 @@ export default function SimplyView({
 
                 const valColor = isCheap ? 'text-emerald-400' : isExpensive ? 'text-rose-400' : 'text-slate-100';
                 const cardBorder = isCheap ? 'border-emerald-900/40' : isExpensive ? 'border-rose-900/40' : 'border-[#323a4b]';
-                const formattedVal = typeof c.format === 'function' ? c.format(val) : `${val.toFixed(1)}x`;
+                const formattedVal = typeof c.format === 'function' ? c.format(val) : val.toFixed(2);
 
                 return (
                   <div key={i} className={`bg-[#1d222e] border ${cardBorder} rounded-xl p-3.5 text-center space-y-1 transition-colors`}>
@@ -4739,7 +4739,7 @@ export default function SimplyView({
                       {formattedVal}
                     </div>
                     <div className="text-[11px] text-slate-500 font-mono">
-                      Ref: {bench.toFixed(c.label === 'PD/DD' ? 2 : 1)}x
+                      Ref: {bench.toFixed(2)}
                     </div>
                     <div className="pt-1">
                       {isCheap ? (
@@ -6046,7 +6046,7 @@ export default function SimplyView({
                       <div className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-4 space-y-1">
                         <div className="text-xs text-slate-400 font-sans">Hisse Başına Nakit</div>
                         <div className="text-2xl sm:text-3xl font-black font-mono text-white">
-                          ₺{latestPerShare.toFixed(3)}
+                          ₺{latestPerShare.toFixed(2)}
                         </div>
                         <div className="text-[11px] text-slate-500 font-mono">
                           Net Hisse Başı Tutar
@@ -6391,16 +6391,6 @@ export default function SimplyView({
                   <h2 className="font-sans text-xl sm:text-2xl font-bold text-white leading-tight">Yatırım Tezi</h2>
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => scrollToSection('sec-analist')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#21262d] hover:bg-[#2b313d] text-[#f5c242] hover:text-amber-300 border border-[#2e3440] text-xs font-mono font-semibold transition cursor-pointer"
-                >
-                  <span>8. Analiz Raporu</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
             </div>
 
             {/* Üstte Kompakt "Karar Şeridi" (Sabit Özet Çubuğu) */}
@@ -6454,6 +6444,7 @@ export default function SimplyView({
                   { id: 'sec-yatirim-tezi-72', label: '7.2 Sektörel Konum' },
                   { id: 'sec-yatirim-tezi-73', label: '7.3 Temel Kriterler' },
                   { id: 'sec-yatirim-tezi-74', label: '7.4 Takip Kriterleri' },
+                  { id: 'sec-yatirim-tezi-75', label: '7.5 Rapor Bulguları' },
                 ].map((sub) => (
                   <button
                     key={sub.id}
@@ -7073,7 +7064,7 @@ export default function SimplyView({
               const kapQual = liveKapQualitativeAudit || valuationInfo?.qualitative_risk_audit || report.extractedData?.qualitative_risk_audit;
               if (loadingKapQual && !kapQual) {
                 return (
-                  <div className="bg-[#161a23] border border-[#2a3140] rounded-2xl p-5 sm:p-6 shadow-xl flex items-center gap-3 text-xs sm:text-sm font-mono text-slate-300">
+                  <div id="sec-yatirim-tezi-75" className="scroll-mt-28 bg-[#161a23] border border-[#2a3140] rounded-2xl p-5 sm:p-6 shadow-xl flex items-center gap-3 text-xs sm:text-sm font-mono text-slate-300">
                     <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />
                     <span>7.5 Faaliyet Raporu ve Dipnot Bulguları hazırlanıyor...</span>
                   </div>
@@ -7082,7 +7073,7 @@ export default function SimplyView({
               if (!kapQual || !Array.isArray(kapQual.findings) || kapQual.findings.length === 0) return null;
 
               return (
-                <div className="bg-[#161a23] border border-[#2a3140] rounded-2xl p-5 sm:p-7 shadow-xl space-y-5">
+                <div id="sec-yatirim-tezi-75" className="scroll-mt-28 bg-[#161a23] border border-[#2a3140] rounded-2xl p-5 sm:p-7 shadow-xl space-y-5">
                   <div className="flex items-center justify-between flex-wrap gap-3 border-b border-[#282d37] pb-3.5">
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
@@ -7170,52 +7161,6 @@ export default function SimplyView({
                 <div>
                   <h2 className="font-sans text-xl sm:text-2xl font-bold text-white leading-tight">Analiz Raporu</h2>
                 </div>
-              </div>
-
-              <div className="flex items-center gap-2.5 flex-wrap">
-                {/* Okuma Boyutu Seçici */}
-                <div className="flex items-center gap-1.5 bg-[#161a23] px-2.5 py-1 rounded-xl border border-[#2a3140] text-xs font-mono" title="Rapor Okuma Boyutu">
-                  <span className="text-slate-400 hidden sm:inline mr-1">Metin:</span>
-                  {[
-                    { id: 'compact' as const, label: 'A-' },
-                    { id: 'normal' as const, label: 'A' },
-                    { id: 'large' as const, label: 'A+' }
-                  ].map(fs => (
-                    <button
-                      key={fs.id}
-                      type="button"
-                      onClick={() => setReportFontSize(fs.id)}
-                      className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
-                        reportFontSize === fs.id
-                          ? 'bg-[#f5c242] text-slate-950 font-bold shadow-sm'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      {fs.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Raporu Kopyala Butonu */}
-                <button
-                  type="button"
-                  onClick={handleCopyReportText}
-                  className="px-3 py-1.5 bg-[#21262d] hover:bg-[#2b313d] text-slate-200 hover:text-white rounded-xl border border-[#2e3440] transition cursor-pointer flex items-center gap-1.5 text-xs font-mono font-semibold shadow-sm"
-                  title={copiedReport ? 'Kopyalandı' : 'Rapor Metnini Kopyala'}
-                  aria-label="Raporu Kopyala"
-                >
-                  {copiedReport ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      <span className="text-emerald-400">Kopyalandı</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>Raporu Kopyala</span>
-                    </>
-                  )}
-                </button>
               </div>
             </div>
 
@@ -7318,19 +7263,17 @@ export default function SimplyView({
                       {/* Bölüm İçerik Alanı */}
                       {!isCollapsed && (
                         <div className="p-5 sm:p-7 bg-[#131720] space-y-5">
-                          <div className={`prose prose-invert max-w-none font-sans leading-[1.85] text-slate-200 ${
-                            reportFontSize === 'compact' ? 'text-sm' : reportFontSize === 'large' ? 'text-base sm:text-lg' : 'text-[15px] sm:text-base'
-                          }`}>
+                          <div className="prose prose-invert prose-sm max-w-none font-sans text-sm leading-[1.8] text-slate-200">
                             <ReactMarkdown
                               remarkPlugins={[remarkGfm, remarkMath]}
                               rehypePlugins={[rehypeKatex]}
                               components={{
-                                h1: ({ ...props }) => <h1 className="font-sans text-xl sm:text-2xl font-bold text-[#f5c242] border-b border-[#2e3440] pb-2 mt-4 mb-4" {...props} />,
+                                h1: ({ ...props }) => <h1 className="font-sans text-lg sm:text-xl font-bold text-[#f5c242] border-b border-[#2e3440] pb-2 mt-4 mb-3" {...props} />,
                                 h2: ({ children, ...props }: any) => (
-                                  <div className="mt-6 mb-3 pt-4 border-t border-[#262c38] first:mt-0 first:pt-0 first:border-0">
-                                    <div className="flex items-center gap-2.5">
-                                      <span className="w-1.5 h-5 bg-[#f5c242] rounded-full inline-block" />
-                                      <h2 className="font-sans text-base sm:text-lg font-bold text-white tracking-wide m-0" {...props}>
+                                  <div className="mt-5 mb-2.5 pt-3.5 border-t border-[#262c38] first:mt-0 first:pt-0 first:border-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="w-1.5 h-4.5 bg-[#f5c242] rounded-full inline-block" />
+                                      <h2 className="font-sans text-sm sm:text-base font-bold text-white tracking-wide m-0" {...props}>
                                         {children}
                                       </h2>
                                     </div>
@@ -7355,10 +7298,10 @@ export default function SimplyView({
                                   }
 
                                   return (
-                                    <div className="mt-5 mb-3 pt-1">
-                                      <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-sm font-sans font-bold ${badgeColor} shadow-sm`}>
+                                    <div className="mt-4 mb-2.5 pt-1">
+                                      <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-sans font-bold ${badgeColor} shadow-sm`}>
                                         <span>{icon}</span>
-                                        <h3 className="m-0 font-sans text-sm sm:text-base font-bold text-white" {...props}>
+                                        <h3 className="m-0 font-sans text-xs sm:text-sm font-bold text-white" {...props}>
                                           {children}
                                         </h3>
                                       </div>
@@ -7373,27 +7316,27 @@ export default function SimplyView({
                                   const isKeySummaryLine = /^(?:Temel Yatırım Tezi|Finansal Sağlık Skoru)\s*:/i.test(text.trim());
                                   if (isKeySummaryLine) {
                                     return (
-                                      <div className="my-3.5 p-4 rounded-xl bg-[#191d26] border border-[#282f3d] shadow-sm">
-                                        <p className="leading-[1.8] m-0 text-slate-200 font-sans" {...props}>
+                                      <div className="my-3 p-3.5 rounded-xl bg-[#191d26] border border-[#282f3d] shadow-sm">
+                                        <p className="text-sm leading-[1.75] m-0 text-slate-200 font-sans" {...props}>
                                           {enrichReportNode(children, 'p-key')}
                                         </p>
                                       </div>
                                     );
                                   }
                                   return (
-                                    <p className="leading-[1.85] mb-4 text-slate-200 font-sans" {...props}>
+                                    <p className="text-sm leading-[1.8] mb-3 text-slate-200 font-sans" {...props}>
                                       {enrichReportNode(children, 'p')}
                                     </p>
                                   );
                                 },
-                                ul: ({ ...props }) => <ul className="space-y-2.5 my-4 text-slate-200 pl-1 list-none" {...props} />,
-                                ol: ({ ...props }) => <ol className="space-y-2.5 my-4 text-slate-200 pl-1 list-none" {...props} />,
+                                ul: ({ ...props }) => <ul className="space-y-2 my-3 text-slate-200 pl-1 list-none" {...props} />,
+                                ol: ({ ...props }) => <ol className="space-y-2 my-3 text-slate-200 pl-1 list-none" {...props} />,
                                 li: ({ children, ...props }: any) => (
                                   <li
-                                    className="border-l-2 border-[#2e3646] hover:border-[#f5c242]/80 pl-3.5 py-1 flex items-start gap-2.5 leading-[1.85] transition-colors"
+                                    className="border-l-2 border-[#2e3646] hover:border-[#f5c242]/80 pl-3.5 py-1 flex items-start gap-2.5 text-sm leading-[1.8] transition-colors"
                                     {...props}
                                   >
-                                    <span className="w-1.5 h-1.5 rounded-full bg-[#f5c242]/85 mt-2.5 flex-shrink-0" />
+                                    <span className="w-1.5 h-1.5 rounded-full bg-[#f5c242]/85 mt-2 flex-shrink-0" />
                                     <div className="flex-1 min-w-0">{enrichReportNode(children, 'li')}</div>
                                   </li>
                                 ),
