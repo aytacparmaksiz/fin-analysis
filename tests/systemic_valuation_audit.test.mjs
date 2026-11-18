@@ -1538,17 +1538,25 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
     assert.ok(appSimply.includes('sticky top-[104px] lg:top-14 z-20'), 'Section 7 sticky bar must clear mobile sticky nav at top-[104px] lg:top-14');
     assert.ok(appSimply.includes("{ id: 'sec-yatirim-tezi-71', label: '7.1 Tez Özeti' }"), 'Section 7 must have sticky decision bar with Turkish sub-navigation');
     // Visual Opportunity & Risk Asymmetry Bar in 7.1
-    assert.ok(appSimply.includes('02 • Değerleme Asimetrisi & Görsel Fırsat / Risk Terazisi'), 'Section 7.1 must include Visual Opportunity & Risk Asymmetry Bar');
+    assert.ok(appSimply.includes('02 • Fırsat / Risk Dengesi'), 'Section 7.1 must include Visual Opportunity & Risk Asymmetry Bar');
     assert.ok(appSimply.includes('Aşağı Yönlü Stres Alanı'), 'Section 7.1 Asymmetry Bar must include Turkish downside stress label');
     assert.ok(appSimply.includes('rawBear < currentPriceNum'), 'Section 7.1 & 8.2 must guard against bear_price >= currentPriceNum inversion');
     // 7.3 Evidence Accordion
-    assert.ok(appSimply.includes('toggleThesisPillar(pillar.id)'), 'Section 7.3 must have interactive Kanıt Detayı accordion toggle');
-    assert.ok(appSimply.includes('Kanıt Detayı ve Adli Veri Dökümü'), 'Section 7.3 accordion must use Turkish label');
-    // 7.4 Measurable Checklist
-    assert.ok(appSimply.includes('7.4 Ölçülebilir Tez Takip Tetikleyicileri & Kontrol Listesi'), 'Section 7.4 must render Measurable Checklist header');
+    assert.ok(appSimply.includes('toggleThesisPillar(pillar.id)'), 'Section 7.3 must have interactive Veri Detayı accordion toggle');
+    assert.ok(appSimply.includes('Veri Detayı'), 'Section 7.3 accordion must use simplified Turkish label');
+    // 7.4 Measurable Checklist (3-item capped compact + expandable)
+    assert.ok(appSimply.includes('7.4 Takip Kriterleri'), 'Section 7.4 must render simplified Takip Kriterleri header');
     assert.ok(appSimply.includes('synthesizedThesis.catalystChecklist'), 'Section 7.4 must render catalystChecklist');
     assert.ok(appSimply.includes('synthesizedThesis.breakerChecklist'), 'Section 7.4 must render breakerChecklist');
+    assert.ok(appSimply.includes('.slice(0, 3)'), 'Section 7.4 must cap catalyst & risk lists to 3 items');
+    assert.ok(appSimply.includes('toggleChecklistItem(itemKey)'), 'Section 7.4 checklist items must support compact expand/collapse toggle');
+    // 7.5 KAP Findings & Section 6 Management Scorecard
+    assert.ok(appSimply.includes('7.5 Faaliyet Raporu ve Dipnot Bulguları'), 'Section 7.5 must render simplified title');
+    assert.ok(appSimply.includes('formatKapFindingForDisplay'), 'Section 7.5 must apply directional impact & excerpt cleanup formatter');
+    assert.ok(!appSimply.includes('Denetim Durumu:'), 'Section 7.5 must not display AI-sounding Denetim Durumu banner');
+    assert.ok(appSimply.includes('Yönetim Hedef Karnesi'), 'Section 6 must render Yönetim Hedef Karnesi scorecard');
     // 8.1 Semantic Highlighting, Cross-References & Refined List Typography
+    assert.ok(appSimply.includes('8.1 Detaylı Analiz Raporu'), 'Section 8.1 must render simplified Detaylı Analiz Raporu title');
     assert.ok(appSimply.includes('renderSemanticEvalBadge'), 'Section 8.1 must include semantic evaluation badge renderer');
     assert.ok(appSimply.includes('resolveCrossReferenceTarget'), 'Section 8.1 must include cross-reference link resolver');
     assert.ok(appSimply.includes('border-l-2 border-[#2e3646] hover:border-[#f5c242]/80 pl-3.5 py-1'), 'Section 8.1 li items must use thin left-bordered typography instead of heavy boxes');
@@ -1592,8 +1600,8 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
     }
 
     // 8.2 Non-repetitive Audit & Portfolio Positioning
-    assert.ok(appSimply.includes('8.2 Nihai Analist Hükmü & Portföy Konumlandırma Özeti'), 'Section 8.2 must be differentiated as Audit Verdict & Portfolio Positioning');
-    assert.ok(appSimply.includes('2. Portföy Konumlandırma Planı'), 'Section 8.2 must include Portfolio Positioning Plan card');
+    assert.ok(appSimply.includes('8.2 Karar ve Portföy Özeti'), 'Section 8.2 must render simplified Karar ve Portföy Özeti title');
+    assert.ok(appSimply.includes('2. Portföy Stratejisi'), 'Section 8.2 must include Portföy Stratejisi card');
   });
 
 });

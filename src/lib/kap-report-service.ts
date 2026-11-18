@@ -28,11 +28,15 @@ export interface KapQualitativeFinding {
 export interface KapManagementTarget {
   metric: string;
   target: string;
+  realized?: string;
+  status?: 'BAŞARILI' | 'KISMEN' | 'SAPMA';
+  evaluation?: string;
   period: string;
   pageRef: string;
 }
 
 export interface KapQualitativeAuditResult {
+  schemaVersion?: number;
   ticker: string;
   fetchedAt: string;
   isAutoFetched: boolean;
@@ -207,57 +211,196 @@ const MINING_RULES: Array<{
 }> = [
   {
     category: 'AUDITOR_OPINION',
-    categoryLabel: 'Bağımsız Denetçi Görüşü',
-    keywords: /(?:bağımsız\s+denet[çc]i|sınırlı\s+olumlu|şartlı\s+görüş|dikkat\s+çekilen\s+husus|işletmenin\s+sürekliliği|olumsuz\s+görüş|görüş\s+bildirmekten\s+kaçınma)/i,
-    negativeSignals: /(?:şartlı\s+görüş|dikkat\s+çekilen|sürekliliğ(?:i|ine)\s+ilişkin\s+önemli\s+belirsizlik|olumsuz\s+görüş|sınırlı\s+olumlu\s+sonuç\s+dışında\s+dikkat)/i,
-    positiveSignals: /(?:sınırlı\s+denetimden\s+geçmiş|olumlu\s+görüş|aykırı\s+bir\s+husus\s+tespit\s+edilmemiş|dikkatimizi\s+çeken\s+bir\s+husus\s+bulunmamaktadır)/i,
-    defaultTitle: 'Bağımsız Denetim / İnceleme Bulgusu',
-    defaultImpact: 'Finansal tabloların güvenilirliği ve muhasebe standartlarına uyumunu gösterir.'
+    categoryLabel: 'Bağımsız Denetim Görüşü',
+    keywords: /(?:bağımsız\s+denet[çc]i|sınırlı\s+olumlu|şartlı\s+görüş|dikkat\s+çekilen\s+husus|işletmenin\s+sürekliliğine\s+ilişkin\s+önemli\s+belirsizlik|olumsuz\s+görüş|görüş\s+bildirmekten\s+kaçınma)/i,
+    negativeSignals: /(?:şartlı\s+görüş|dikkat\s+çekilen\s+husus|sürekliliğ(?:i|ine)\s+ilişkin\s+önemli\s+belirsizlik|olumsuz\s+görüş|görüş\s+bildirmekten\s+kaçınma)/i,
+    positiveSignals: /(?:sınırlı\s+denetimden\s+geçmiş|olumlu\s+görüş|aykırı\s+bir\s+husus\s+tespit\s+edilmemiş|dikkatimizi\s+çeken\s+bir\s+husus\s+bulunmamaktadır|herhangi\s+bir\s+husus\s+bulunmamaktadır)/i,
+    defaultTitle: 'Bağımsız Denetim Değerlendirmesi',
+    defaultImpact: 'Olumlu — Denetçi tarafından mali tablo güvenilirliğini zedeleyen bir şerh bildirilmemiştir.'
   },
   {
     category: 'LITIGATION_AND_TAX',
-    categoryLabel: 'Dava, İhtilaf & Vergi Riskleri',
+    categoryLabel: 'Dava, İhtilaf ve Vergi Riski',
     keywords: /(?:dava\s+ve\s+ihtilaf|aleyhte\s+açılan\s+dava|vergi\s+inceleme|vergi\s+cezası|idari\s+para\s+cezası|hukuki\s+süreç|karşılık\s+ayrılmış)/i,
     negativeSignals: /(?:aleyh(?:te|ine)|dava\s+karşılığı|ceza|vergi\s+tarhiyat|ihtilaf|tazminat\s+talebi)/i,
-    defaultTitle: 'Hukuki İhtilaf, Dava veya Vergi Karşılığı Kaydı',
-    defaultImpact: 'Bilançoda öngörülmeyen nakit çıkışı veya karşılık gideri yaratma potansiyeli taşır.'
+    positiveSignals: /(?:önemli\s+bir\s+dava\s+bulunmamakta|aleyhte\s+dava\s+yok|lehe\s+sonuçlan)/i,
+    defaultTitle: 'Dava ve Vergi İhtilafı Kaydı',
+    defaultImpact: 'Risk — Olası aleyhte kararlar bilançoda öngörülmeyen nakit çıkışına ve kâr baskısına yol açabilir.'
   },
   {
     category: 'COLLATERAL_AND_OFFBALANCE',
-    categoryLabel: 'TRİ (Teminat, Rehin, İpotek) & Taahhütler',
+    categoryLabel: 'Teminat, Rehin ve İpotekler',
     keywords: /(?:verilen\s+teminat|rehin\s+ve\s+ipotek|teminat\s+mektu|kefalet|bilanço\s+dışı\s+yükümlülük|ipotek\s+tutarı)/i,
     negativeSignals: /(?:rehin|ipotek|kefalet|üçüncü\s+kişiler\s+lehine|teminat\s+olarak\s+veril)/i,
-    defaultTitle: 'Teminat, Rehin, İpotek ve Bilanço Dışı Yükümlülükler',
-    defaultImpact: 'Varlıkların üzerindeki takyidat oranını ve finansal esnekliği etkiler.'
+    positiveSignals: /(?:3\.\s*kişiler\s+lehine\s+verilen\s+teminat\s+bulunmamakta|üçüncü\s+kişiler\s+lehine[^.]{0,40}0\b|yoktur)/i,
+    defaultTitle: 'Teminat, Rehin ve İpotek Yükümlülükleri',
+    defaultImpact: 'İzlenmeli — Varlıklar üzerindeki rehin ve teminatlar şirketin yeni kredi ve teminat kapasitesini sınırlar.'
   },
   {
     category: 'RELATED_PARTY',
     categoryLabel: 'İlişkili Taraf İşlemleri',
     keywords: /(?:ilişkili\s+taraf|ortaklardan\s+alacak|ortaklara\s+borç|grup\s+şirketleri|üst\s+düzey\s+yönetici(?:lere)?\s+sağlanan\s+fayda)/i,
     negativeSignals: /(?:ortaklardan\s+alacak|ilişkili\s+taraflardan\s+ticari\s+olmayan|yüksek\s+tutarlı\s+alacak)/i,
-    defaultTitle: 'İlişkili Taraf Bakiye ve İşlem Detayı',
-    defaultImpact: 'Sermaye tahsisi şeffaflığı ve nakit çıkışının grup içi aktarım riskini izler.'
+    defaultTitle: 'İlişkili Taraf Bakiye ve İşlemleri',
+    defaultImpact: 'İzlenmeli — Grup içi bakiye ve transferlerin ticari emsallere uygun kalması azınlık hakları açısından kritik önemdedir.'
   },
   {
     category: 'GUIDANCE_AND_CAPEX',
-    categoryLabel: 'Yönetim Beklentisi, Yatırım & Sipariş',
-    keywords: /(?:geleceğe\s+yönelik\s+beklenti|yatırım\s+harcama|kapasite\s+artış|yeni\s+hastane|sipariş\s+bakiye|ihracat\s+hedef|büyüme\s+strateji|arz\s+kapasite)/i,
+    categoryLabel: 'Yatırım ve Büyüme Görünümü',
+    keywords: /(?:geleceğe\s+yönelik\s+beklenti|yatırım\s+harcama|kapasite\s+artış|yeni\s+(?:mağaza|hastane|fabrika|tesis)|sipariş\s+bakiye|ihracat\s+hedef|büyüme\s+strateji|arz\s+kapasite)/i,
     negativeSignals: /(?:gecikme|iptal|kapasite\s+düşüş|talep\s+daralma)/i,
-    positiveSignals: /(?:artış|büyüme|yeni\s+yatırım|kapasite\s+artış|devreye\s+alma|ihracat|yeni\s+sözleşme)/i,
-    defaultTitle: 'Yönetim Stratejisi, Kapasite ve Yatırım Görünümü',
-    defaultImpact: 'Gelecek dönem ciro ve FAVÖK büyümesinin kalitatif dayanağını oluşturur.'
+    positiveSignals: /(?:artış|büyüme|yeni\s+yatırım|yatırım\s+harcaması|yeni\s+(?:mağaza|hastane|fabrika|tesis)|kapasite\s+artış|devreye\s+alma|ihracat|yeni\s+sözleşme)/i,
+    defaultTitle: 'Yatırım Harcaması ve Büyüme Adımları',
+    defaultImpact: 'Olumlu — Aktif büyümesi ve yeni yatırımlar önümüzdeki çeyreklerde ciro ve pazar payı artışını destekler.'
   }
 ];
 
-function extractFocusedSnippet(pageText: string, regex: RegExp): string {
+function splitTurkishPdfSentences(rawText: string): string[] {
+  const normalized = String(rawText || '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return [];
+
+  // Kısaltmalardaki ve sayılardaki noktaları geçici koru (A.Ş., Tic., No., vb., 1.250, 01.01.2026)
+  const sentinel = '\u0000';
+  const protectedText = normalized
+    .replace(/\b(A|T|Tic|San|Ltd|Şti|Dr|Prof|No|Not|Mad|vb|vs|yakl|ort|Müh|İnş|Tur|Gıda|Paz|Taah|Yay|Hiz|Yat)\./gi, `$1${sentinel}`)
+    .replace(/(\d)\.(\d)/g, `$1${sentinel}$2`);
+
+  const rawSentences = protectedText.split(/(?<=[.!?])\s+(?=[A-ZÇĞİÖŞÜ0-9])/);
+  return rawSentences
+    .map((s) => s.replace(new RegExp(sentinel, 'g'), '.').trim())
+    .filter((s) => s.length >= 25);
+}
+
+function cleanNoiseFromSentence(sentence: string): string {
+  // Sonradan taşan "5. Dönem Sonrası Önemli Gelişmeler..." veya "Not 31-..." başlık kalıntılarını buda
+  let cleaned = sentence
+    .replace(/\s+\d+\.\s+(?:Dönem\s+Sonrası|Önemli\s+Gelişmeler|Risk\s+Yönetimi|Sonuç|Giriş|Genel\s+Bilgiler)\b.*$/i, '')
+    .replace(/\s+Not\s+\d+\s*[-–:].*$/i, '')
+    .replace(/^[\d.,\s•\-–]+(?=[A-ZÇĞİÖŞÜ])/, '')
+    .trim();
+  if (cleaned.length > 340) {
+    const cut = cleaned.slice(0, 340);
+    const lastSpace = cut.lastIndexOf(' ');
+    cleaned = (lastSpace > 180 ? cut.slice(0, lastSpace) : cut).trim() + '...';
+  }
+  return cleaned;
+}
+
+function isTabularOrBoilerplateNoise(sentence: string): boolean {
+  if (!sentence || sentence.length < 30) return true;
+  if (/000,00|\bPpt\b/i.test(sentence)) return true;
+  if (/^[a-zçğıöşü]/.test(sentence)) return true;
+  if (/^[\d.,\s%\-+]+$/.test(sentence.slice(0, 24))) return true;
+  // Üst üste çok fazla sayı içeren tablo satırlarını ele
+  const numberTokens = sentence.match(/\b\d+(?:[.,]\d+)?%?\b/g) || [];
+  const wordTokens = sentence.match(/[A-Za-zÇĞİÖŞÜçğıöşü]{3,}/g) || [];
+  if (numberTokens.length >= 6 && wordTokens.length < numberTokens.length * 1.4) return true;
+  if (/(?:kontrol\s+gücünün\s+olup\s+olmadığını|işbu\s+finansal\s+tablolar|karşılaştırmalı\s+olarak\s+sunul|muhasebe\s+politikaları\s+tutarlı|bilanço\s+sonrası\s+hususlara\s+ilişkin)/i.test(sentence)) {
+    return true;
+  }
+  return false;
+}
+
+function extractCleanExcerpt(pageText: string, regex: RegExp): string {
+  const sentences = splitTurkishPdfSentences(pageText);
+  const matchIdx = sentences.findIndex((s) => regex.test(s) && !isTabularOrBoilerplateNoise(s));
+  if (matchIdx >= 0) {
+    let combined = cleanNoiseFromSentence(sentences[matchIdx]);
+    if (combined.length < 110 && matchIdx + 1 < sentences.length && !isTabularOrBoilerplateNoise(sentences[matchIdx + 1])) {
+      const nextClean = cleanNoiseFromSentence(sentences[matchIdx + 1]);
+      if (combined.length + nextClean.length + 1 <= 340) {
+        combined = `${combined} ${nextClean}`;
+      }
+    }
+    return combined;
+  }
+
+  // Fallback: kelime ortasından başlamadan tam cümle/kelime sınırına hizala
   const m = regex.exec(pageText);
-  if (!m) return pageText.slice(0, 280);
-  const start = Math.max(0, m.index - 110);
-  const end = Math.min(pageText.length, m.index + 240);
-  let slice = pageText.slice(start, end).trim();
-  if (start > 0) slice = '...' + slice;
-  if (end < pageText.length) slice = slice + '...';
+  if (!m) return cleanNoiseFromSentence(pageText.slice(0, 260));
+  let start = Math.max(0, m.index - 110);
+  if (start > 0) {
+    const nextDot = pageText.indexOf('. ', start);
+    if (nextDot !== -1 && nextDot < m.index) {
+      start = nextDot + 2;
+    } else {
+      const nextSpace = pageText.indexOf(' ', start);
+      if (nextSpace !== -1 && nextSpace < m.index) start = nextSpace + 1;
+    }
+  }
+  let slice = pageText.slice(start, Math.min(pageText.length, start + 300)).trim();
+  slice = cleanNoiseFromSentence(slice);
   return slice;
+}
+
+function buildDynamicFindingMeta(
+  rule: (typeof MINING_RULES)[number],
+  excerpt: string,
+  severity: KapQualitativeFinding['severity']
+): { title: string; impact: string } {
+  const capexMatch = excerpt.match(/(\d+(?:[.,]\d+)?\s*(?:milyar|milyon)\s*(?:TL|USD|EUR))\s*(?:tutarında\s*)?(?:yatırım\s+harcama|yatırım)/i);
+  const storeMatch = excerpt.match(/(?:net\s*)?(\d+)\s*(?:adet\s*)?(?:yeni\s*)?(mağaza|şube|hastane|tesis|fabrika|merkez)/i);
+  const lawsuitMatch = excerpt.match(/(\d+(?:[.,]\d+)?\s*(?:milyar|milyon|bin)\s*(?:TL|USD|EUR))/i);
+
+  if (rule.category === 'GUIDANCE_AND_CAPEX') {
+    const parts: string[] = [];
+    if (storeMatch) parts.push(`${storeMatch[1]} Yeni ${storeMatch[2].charAt(0).toUpperCase() + storeMatch[2].slice(1)}`);
+    if (capexMatch) parts.push(`${capexMatch[1]} Yatırım Harcaması`);
+    if (parts.length > 0) {
+      return {
+        title: `${parts.join(' • ')}`,
+        impact: severity === 'MEDIUM'
+          ? `Olumsuz / Risk — Yatırım takvimindeki gecikme veya talep daralması beklenen ciro katkısını öteleyebilir.`
+          : `Olumlu (Büyüme Fırsatı) — ${parts.join(' ve ')} şirketin satış alanını/kapasitesini genişleterek önümüzdeki çeyreklerde reel ciro büyümesini destekler; ancak yüksek yatırım temposu kısa vadede serbest nakit akışını sınırlayabilir.`
+      };
+    }
+    return {
+      title: rule.defaultTitle,
+      impact: severity === 'MEDIUM'
+        ? `Olumsuz / Risk — Yönetim görünümündeki yavaşlama sinyali önümüzdeki çeyrek ciro ve marj beklentileri üzerinde baskı oluşturabilir.`
+        : `Olumlu (Büyüme Fırsatı) — Operasyonel kapasite ve yatırım adımları ciro potansiyelini artırıyor; serbest nakit dönüşümü ile desteklendiğinde değerlemeyi yukarı taşır.`
+    };
+  }
+
+  if (rule.category === 'AUDITOR_OPINION') {
+    const isNegative = severity === 'HIGH' || severity === 'MEDIUM';
+    return {
+      title: isNegative ? 'Denetimde Dikkat Çekilen Husus' : 'Temiz Bağımsız Denetim / İnceleme Görüşü',
+      impact: isNegative
+        ? `Olumsuz / Tehlike — Bağımsız denetçinin şerh veya önemli belirsizlik vurgusu finansal tablo güvenilirliği ve değerleme iskontosu açısından doğrudan risk oluşturur.`
+        : `Olumlu — Bağımsız denetçi raporunda şerh veya işletmenin sürekliliğine dair bir uyarı yer almaması mali tabloların güvenilirliğini teyit eder.`
+    };
+  }
+
+  if (rule.category === 'LITIGATION_AND_TAX') {
+    const isNegative = severity === 'HIGH' || severity === 'MEDIUM';
+    const amtText = lawsuitMatch ? ` (${lawsuitMatch[1]})` : '';
+    return {
+      title: isNegative ? `Dava / Vergi Riski Kaydı${amtText}` : 'Önemli Dava ve Vergi İhtilafı Bildirimi',
+      impact: isNegative
+        ? `Olumsuz / Risk — Aleyhte sonuçlanabilecek dava veya vergi tarhiyatı${amtText} nakit çıkışı yaratarak net kârı ve özkaynakları aşındırabilir.`
+        : `Nötr / Olumlu — Mevcut hukuki süreçlerin bilançoyu sarsacak kritik bir karşılık yükü oluşturmadığı izlenmektedir.`
+    };
+  }
+
+  if (rule.category === 'COLLATERAL_AND_OFFBALANCE') {
+    const isNegative = severity === 'HIGH' || severity === 'MEDIUM';
+    return {
+      title: isNegative ? 'Aktifler Üzerinde Teminat / İpotek Yükü' : 'Teminat, Rehin ve İpotek (TRİ) Durumu',
+      impact: isNegative
+        ? `Dikkat / Risk — Üçüncü kişiler lehine verilen veya borçlara karşılık tesis edilen rehin/ipotekler şirketin varlık esnekliğini ve yeni kredi kapasitesini sınırlar.`
+        : `Olumlu / Dengeli — Bilanço dışı teminat ve rehin yükünün finansal esnekliği tehdit eden bir boyutta olmadığı görülmektedir.`
+    };
+  }
+
+  // RELATED_PARTY
+  const isNegative = severity === 'HIGH' || severity === 'MEDIUM';
+  return {
+    title: isNegative ? 'İlişkili Taraf Alacak / Fon Aktarımı Riski' : 'İlişkili Taraf İşlemleri ve Bakiye Yapısı',
+    impact: isNegative
+      ? `Olumsuz / Risk — Grup şirketleri veya ortaklardan ticari olmayan alacak artışı, şirket nakdinin ana faaliyet dışına çıktığına işaret ederek değerleme iskontosu gerektirir.`
+      : `İzlenmeli — İlişkili taraflarla ticari işlemler olağan seyrinde görünse de transfer fiyatlaması ve vade dengesi çeyreklik takip edilmelidir.`
+  };
 }
 
 function mineDeterministicFindings(
@@ -268,7 +411,7 @@ function mineDeterministicFindings(
   const targets: KapManagementTarget[] = [];
   const seenCategories = new Map<string, number>();
 
-  let auditorStatus = 'Denetim kaydı taranıyor / Olağan ara dönem bildirimi';
+  let auditorStatus = 'Temiz / Olağan Bildirim';
 
   for (let i = 0; i < pages.length; i++) {
     const pText = pages[i];
@@ -280,7 +423,9 @@ function mineDeterministicFindings(
       const countForCat = seenCategories.get(rule.category) || 0;
       if (countForCat >= 2) continue;
 
-      const excerpt = extractFocusedSnippet(pText, rule.keywords);
+      const excerpt = extractCleanExcerpt(pText, rule.keywords);
+      if (isTabularOrBoilerplateNoise(excerpt)) continue;
+
       const isNeg = rule.negativeSignals.test(excerpt);
       const isPos = rule.positiveSignals ? rule.positiveSignals.test(excerpt) : false;
 
@@ -290,9 +435,11 @@ function mineDeterministicFindings(
       else if (isNeg) severity = 'MEDIUM';
 
       if (rule.category === 'AUDITOR_OPINION') {
-        if (/şartlı|sürekliliğ/i.test(excerpt)) auditorStatus = 'Dikkat Çekilen Husus / Şartlı İnceleme';
+        if (isNeg && !isPos) auditorStatus = 'Dikkat Çekilen Husus / Şartlı İnceleme';
         else if (isPos) auditorStatus = 'Olumlu / Standart Denetim Görüşü';
       }
+
+      const meta = buildDynamicFindingMeta(rule, excerpt, severity);
 
       findings.push({
         id: `${rule.category}-${pageNum}-${countForCat}`,
@@ -301,21 +448,34 @@ function mineDeterministicFindings(
         severity,
         pageRef: `Sayfa ${pageNum}`,
         sourceDoc,
-        title: rule.defaultTitle,
+        title: meta.title,
         excerpt,
-        impact: rule.defaultImpact
+        impact: meta.impact
       });
       seenCategories.set(rule.category, countForCat + 1);
     }
 
-    // Yönetim hedefi / sayısal beklenti yakalama (ör. % büyüme veya TL/USD yatırım)
-    if (targets.length < 4 && /(?:hedef|beklenti|yatırım|büyüme|kapasite)/i.test(pText)) {
-      const targetMatch = pText.match(/([^.]{15,120}(?:%\s*\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?\s*(?:Milyon|Milyar)\s*(?:TL|USD|EUR)|yatırım|kapasite)[^.]{5,90}\.)/i);
-      if (targetMatch && targetMatch[1]) {
+    // Yönetim hedefi / somut operasyonel icraat yakalama (yalnızca temiz tam cümleler, tablo gürültüsü hariç)
+    if (targets.length < 4) {
+      const candidateSentences = splitTurkishPdfSentences(pText);
+      for (const rawSent of candidateSentences) {
+        if (targets.length >= 4) break;
+        const sent = cleanNoiseFromSentence(rawSent);
+        if (isTabularOrBoilerplateNoise(sent)) continue;
+        if (!/(?:mağaza\s+aç|şube\s+aç|yatırım\s+harcama|kapasite\s+artış|sipariş\s+bakiye|ihracat\s+hedef|hedeflenmektedir|beklenmektedir|planlanmaktadır|yeni\s+(?:mağaza|fabrika|hastane|tesis))/i.test(sent)) {
+          continue;
+        }
+        if (sent.length < 45 || sent.length > 260) continue;
+        if (targets.some((t) => t.target === sent)) continue;
+
+        const isCapex = /yatırım\s+harcama|kapasite|mağaza|şube|fabrika|tesis/i.test(sent);
         targets.push({
-          metric: 'Faaliyet Raporu Beyanı',
-          target: targetMatch[1].trim().slice(0, 180),
-          period: '2026 / İleriye Dönük',
+          metric: isCapex ? 'Yatırım & Kapasite İcraatı' : 'Yönetim Beklentisi',
+          target: sent,
+          realized: /açmıştır|yapılmıştır|gerçekleşmiştir|tamamlanmıştır/i.test(sent) ? 'Dönem içi icraat gerçekleşti' : 'Süreç / hedef takipte',
+          status: /açmıştır|yapılmıştır|artış|büyüme/i.test(sent) ? 'BAŞARILI' : 'KISMEN',
+          evaluation: 'Faaliyet raporu resmi dönem içi beyanı',
+          period: 'Cari Dönem',
           pageRef: `Sayfa ${pageNum}`
         });
       }
@@ -333,9 +493,8 @@ async function refineQualitativeAuditWithGemini(
 ): Promise<{ executiveSummary: string; findings: KapQualitativeFinding[]; targets: KapManagementTarget[]; auditorStatus: string }> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || deterministic.findings.length === 0) {
-    const highCount = deterministic.findings.filter((f) => f.severity === 'HIGH' || f.severity === 'MEDIUM').length;
     return {
-      executiveSummary: `${ticker} için resmi KAP ${sourceDoc} metni taranmıştır (${pages.length} sayfa). Toplam ${deterministic.findings.length} adet kalitatif bulgu (${highCount} adet dikkat/risk unsuru) dipnot ve yönetim açıklamalarından çıkarılmıştır.`,
+      executiveSummary: `${ticker} ${sourceDoc} dipnot ve faaliyet raporu bulguları.`,
       ...deterministic
     };
   }
@@ -349,20 +508,25 @@ async function refineQualitativeAuditWithGemini(
       .join('\n\n')
       .slice(0, 9000);
 
-    const prompt = `Sen kurumsal bir BIST adli finansal analistisin. ${ticker} şirketinin resmi KAP "${sourceDoc}" belgesinden (${pages.length} sayfa) çıkarılan aşağıdaki ham alıntıları incele ve yalnızca gerçek veriye dayanarak Türkçe JSON üret. Asla uydurma sayı yazma.
+    const prompt = `Sen kıdemli bir BIST hisse senedi analistisin. ${ticker} şirketinin resmi KAP "${sourceDoc}" belgesinden (${pages.length} sayfa) alınan aşağıdaki alıntıları analiz et ve yalnızca gerçek verilere dayanarak Türkçe JSON üret. Asla sayı uydurma ve asla "otomatik taranmıştır / çıkarılmıştır / yapay zeka" gibi ifadeler kullanma.
 Ham Alıntılar:
 ${contextBlock}
 
+Kurallar:
+- "title": Alıntıdaki somut rakamı veya olguyu içeren kısa ve net başlık (örn. "125 Yeni Mağaza ve 5,3 Milyar TL Yatırım").
+- "severity": Yatırımcı açısından net yön ("POSITIVE" = Olumlu/Fırsat, "HIGH" = Yüksek Risk/Tehlike, "MEDIUM" = Dikkat/Sınırlı Risk, "INFO" = Nötr Bilgi).
+- "impact": Yatırımcı bu bulgudan ne anlamalı? Şirkete olumlu mu olumsuz mu etki edecek, fırsat mı tehlike mi? Bilanço, nakit akışı, marj veya değerleme etkisini doğrudan 1-2 net cümlede açıkla.
+
 İstenen JSON şeması:
 {
-  "auditorStatus": "Kısa denetim durumu özeti (örn. Standart Ara Dönem / Dikkat Çekilen Husus Yok)",
-  "executiveSummary": "Faaliyet raporu ve dipnotlardan çıkan kalitatif risk ve beklenti özeti (2-3 net cümle)",
+  "auditorStatus": "Kısa denetim durumu",
+  "executiveSummary": "Yatırımcı için 1-2 net cümlelik özet",
   "findings": [
     {
       "index": 1,
-      "title": "Kısa ve net bulgu başlığı",
+      "title": "Somut ve net başlık",
       "severity": "HIGH" | "MEDIUM" | "POSITIVE" | "INFO",
-      "impact": "Yatırımcı için bilanço/risk etkisi (1 net cümle)"
+      "impact": "Olumlu/Olumsuz yönüyle birlikte şirkete somut finansal etkisi (1-2 net cümle)"
     }
   ]
 }`;
@@ -392,13 +556,13 @@ ${contextBlock}
 
     return {
       auditorStatus: String(parsed?.auditorStatus || deterministic.auditorStatus),
-      executiveSummary: String(parsed?.executiveSummary || `${ticker} KAP raporu (${pages.length} sayfa) incelenmiştir.`),
+      executiveSummary: String(parsed?.executiveSummary || `${ticker} ${sourceDoc} temel dipnot ve faaliyet bulguları.`),
       findings: refinedFindings,
       targets: deterministic.targets
     };
   } catch {
     return {
-      executiveSummary: `${ticker} için resmi KAP ${sourceDoc} (${pages.length} sayfa) otomatik olarak taranmış ve ${deterministic.findings.length} adet kalitatif bulgu çıkarılmıştır.`,
+      executiveSummary: `${ticker} ${sourceDoc} temel dipnot ve faaliyet bulguları.`,
       ...deterministic
     };
   }
@@ -411,7 +575,7 @@ export async function fetchAndAnalyzeKapQualitativeAudit(rawTicker: string): Pro
   if (!ticker) return null;
 
   const cached = auditCache.get(ticker);
-  if (cached && Date.now() < cached.expiresAt) {
+  if (cached && Date.now() < cached.expiresAt && cached.data?.schemaVersion === 2) {
     return cached.data;
   }
 
@@ -445,12 +609,13 @@ export async function fetchAndAnalyzeKapQualitativeAudit(rawTicker: string): Pro
   const combinedDet = {
     findings: [...detActivity.findings, ...detFinancial.findings].slice(0, 8),
     targets: detActivity.targets.length > 0 ? detActivity.targets : detFinancial.targets,
-    auditorStatus: detFinancial.auditorStatus || detActivity.auditorStatus || 'Standart Denetim'
+    auditorStatus: detFinancial.auditorStatus || detActivity.auditorStatus || 'Temiz / Olağan Bildirim'
   };
 
   const refined = await refineQualitativeAuditWithGemini(ticker, primaryPages, combinedDet, primaryDocName);
 
   const result: KapQualitativeAuditResult = {
+    schemaVersion: 2,
     ticker,
     fetchedAt: new Date().toISOString(),
     isAutoFetched: true,
