@@ -286,19 +286,30 @@ function SimplyChartTooltip({ active, payload, label, currentSector }: any) {
   return null;
 }
 
-// Kurumsal Finansal Çeyreklik Bar Çizici (Mavi/Kırmızı Vurgulu Çizgi Başlıklı)
+// Kurumsal Finansal Çeyreklik Bar Çizici (Mavi/Kırmızı Vurgulu Çizgi Başlıklı & Dengeli Asgari Gösterim)
 function renderFinancialBar(props: any) {
   const { x, y, width, height, value } = props;
   if (width == null || height == null || isNaN(x) || isNaN(y)) return null;
-  const isNegative = typeof value === 'number' && value < 0;
-  const safeHeight = Math.max(Math.abs(height), 2);
+  const numVal = Number(value);
+  const isNegative = typeof value === 'number' && numVal < 0;
+  const isZero = !Number.isFinite(numVal) || numVal === 0;
+
+  // Sıfır olmayan finansal değerler için dengeli görsel taban (900M gibi pozitif çeyreklerin tabana yapışıp kaybolmasını önler)
+  const minBarHeight = isZero ? 2 : 12;
+  const rawAbsHeight = Math.abs(height);
+  const safeHeight = Math.max(rawAbsHeight, minBarHeight);
+
+  // Sıfır taban çizgisine kusursuz sabitleme:
+  // Recharts pozitif değerlerde y'yi barın tepesi (üst), negatiflerde ise sıfır çizgisi olarak belirler.
+  const baselineY = isNegative ? y : y + rawAbsHeight;
+  const renderY = isNegative ? baselineY : baselineY - safeHeight;
 
   if (isNegative) {
     return (
       <g>
         <rect
           x={x}
-          y={y}
+          y={renderY}
           width={width}
           height={safeHeight}
           fill="#3e1d23"
@@ -307,9 +318,9 @@ function renderFinancialBar(props: any) {
         />
         <line
           x1={x}
-          y1={y + safeHeight}
+          y1={renderY + safeHeight}
           x2={x + width}
-          y2={y + safeHeight}
+          y2={renderY + safeHeight}
           stroke="#ef4444"
           strokeWidth={2.5}
         />
@@ -321,7 +332,7 @@ function renderFinancialBar(props: any) {
     <g>
       <rect
         x={x}
-        y={y}
+        y={renderY}
         width={width}
         height={safeHeight}
         fill="#1f3354"
@@ -330,9 +341,9 @@ function renderFinancialBar(props: any) {
       />
       <line
         x1={x}
-        y1={y}
+        y1={renderY}
         x2={x + width}
-        y2={y}
+        y2={renderY}
         stroke="#3b82f6"
         strokeWidth={2.5}
       />
@@ -870,13 +881,15 @@ function isMeaningfulKapTargetText(rawText: string): boolean {
   const s = String(rawText || '').trim();
   if (s.length < 35) return false;
   if (/000,00|\bPpt\b/i.test(s)) return false;
+  if (/^[\d.,\s%\-–/()]{4,}/.test(s)) return false;
+  if (/^\d{1,4}\s+[\d.,]+/.test(s)) return false;
   if (/^[a-zçğıöşü\d.,%\-\s]+/.test(s) && !/^[A-ZÇĞİÖŞÜ]/.test(s)) return false;
-  if (/(?:kontrol\s+gücünün\s+olup\s+olmadığını|işbu\s+finansal\s+tablolar|karşılaştırmalı\s+olarak|bilanço\s+sonrası\s+hususlara\s+ilişkin)/i.test(s)) {
+  if (/(?:kontrol\s+gücünün\s+olup\s+olmadığını|işbu\s+finansal\s+tablolar|karşılaştırmalı\s+olarak|bilanço\s+sonrası\s+hususlara\s+ilişkin|Girişim\s+Sermayesi\s+Yatırım\s+Ortaklığı|konsolidasyon|TMS\s+\d+|TFRS\s+\d+|IFRS)/i.test(s)) {
     return false;
   }
   const numTokens = s.match(/\b\d+(?:[.,]\d+)?%?\b/g) || [];
   const wordTokens = s.match(/[A-Za-zÇĞİÖŞÜçğıöşü]{3,}/g) || [];
-  if (numTokens.length >= 6 && wordTokens.length < numTokens.length * 1.4) return false;
+  if (numTokens.length >= 5 && wordTokens.length < numTokens.length * 1.5) return false;
   return true;
 }
 
@@ -5231,7 +5244,6 @@ export default function SimplyView({
                     <div className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-4 space-y-1">
                       <div className="text-xs text-slate-400">Güncel Piyasa Fiyatı</div>
                       <div className="text-2xl font-black font-mono text-white">₺{currentPriceNum.toFixed(2)}</div>
-                      <div className="text-[11px] text-slate-500 font-mono">BIST Canlı Seans Kapanışı</div>
                     </div>
 
                     <div className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-4 space-y-1">
@@ -5245,9 +5257,6 @@ export default function SimplyView({
                     <div className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-4 space-y-1">
                       <div className="text-xs text-slate-400">Modelimiz İçsel Adil Değeri</div>
                       <div className="text-2xl font-black font-mono text-emerald-400">₺{fairValueNum.toFixed(2)}</div>
-                      <div className="text-[11px] text-slate-400 font-mono">
-                        {fairValueNum >= primaryTarget ? 'Konsensüsün üzerinde içsel iskonto' : 'Konsensüs ile dengeli değerleme'}
-                      </div>
                     </div>
 
                     <div className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-4 space-y-1">
@@ -5259,7 +5268,6 @@ export default function SimplyView({
                       }`}>
                         {rec}
                       </div>
-                      <div className="text-[11px] text-slate-400 truncate" title={agreementText}>{agreementText}</div>
                     </div>
                   </div>
 
@@ -5268,34 +5276,25 @@ export default function SimplyView({
                     <div className="flex items-center justify-between border-b border-[#282d37] pb-2 text-xs font-mono">
                       <span className="text-slate-300 font-bold uppercase tracking-wider">Piyasa Analist Hedef Dağılımı</span>
                       <span className="text-slate-400">
-                        {tvMedian ? `Medyan Hedef: ₺${tvMedian.toFixed(2)}` : `Referans Hedef: ₺${primaryTarget.toFixed(2)}`}
+                        {tvMedian ? `Medyan Hedef: ₺${tvMedian.toFixed(2)}` : `Konsensüs Ortalama: ₺${primaryTarget.toFixed(2)}`}
                       </span>
                     </div>
 
-                    <div className="space-y-2 pt-1">
-                      <div className="flex items-center justify-between text-xs font-mono">
-                        <div>
-                          <span className="text-slate-500 mr-1">En Düşük Hedef:</span>
-                          <span className="text-white font-bold">₺{rangeLow.toFixed(2)}</span>
-                        </div>
-                        <div className="text-center">
-                          <span className="text-slate-500 mr-1">Konsensüs Ortalama:</span>
-                          <span className="text-[#f5c242] font-bold">₺{primaryTarget.toFixed(2)}</span>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-slate-500 mr-1">En Yüksek Hedef:</span>
-                          <span className="text-emerald-400 font-bold">₺{rangeHigh.toFixed(2)}</span>
-                        </div>
-                      </div>
-
+                    <div className="space-y-2.5 pt-1">
                       {/* Görsel Dağılım Çubuğu */}
                       <div className="relative h-2.5 w-full bg-[#242a38] rounded-full overflow-hidden border border-[#384152]">
                         <div className="absolute inset-0 bg-gradient-to-r from-rose-500/50 via-[#f5c242]/70 to-emerald-500/80 rounded-full" />
                       </div>
 
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono pt-1">
-                        <div>Cari Hisse Fiyatı: <strong className="text-white">₺{currentPriceNum.toFixed(2)}</strong></div>
-                        <div>Model Adil Değerimiz: <strong className="text-[#f5c242]">₺{fairValueNum.toFixed(2)}</strong></div>
+                      <div className="flex items-center justify-between text-xs font-mono pt-0.5">
+                        <div>
+                          <span className="text-slate-500 mr-1.5">En Düşük Hedef:</span>
+                          <span className="text-white font-bold">₺{rangeLow.toFixed(2)}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-slate-500 mr-1.5">En Yüksek Hedef:</span>
+                          <span className="text-emerald-400 font-bold">₺{rangeHigh.toFixed(2)}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -5363,32 +5362,69 @@ export default function SimplyView({
                     </div>
                   )}
 
-                  {/* Hedef Revizyon Trendi (İş Yatırım 1M/3M) */}
-                  {(isyConsensus?.targetPrice1M != null || isyConsensus?.targetPrice3M != null) && (
-                    <div className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
-                      <div className="flex items-center gap-2">
-                        <span className="text-slate-300 font-medium">Hedef Fiyat Revizyon Geçmişi:</span>
-                      </div>
-                      <div className="flex items-center gap-5 font-mono text-xs sm:text-sm">
-                        {isyConsensus.targetPrice1M != null && (
-                          <div>
-                            <span className="text-slate-500 mr-1.5">1 Ay Önce:</span>
-                            <span className="font-bold text-white">₺{Number(isyConsensus.targetPrice1M).toFixed(2)}</span>
-                          </div>
-                        )}
-                        {isyConsensus.targetPrice3M != null && (
+                  {/* Hedef Revizyon Trendi */}
+                  {(() => {
+                    const now = Date.now();
+                    const validHistory = (tickerHistory || [])
+                      .filter(h => h.id !== report.id && h.createdAt)
+                      .map(h => {
+                        const ts = new Date(h.createdAt).getTime();
+                        const ageDays = (now - ts) / (1000 * 60 * 60 * 24);
+                        const fv = parseFloat(String(h.fairValue || '0').replace(/[^0-9.-]/g, ''));
+                        return { ...h, ageDays, fv };
+                      })
+                      .filter(h => !isNaN(h.ageDays) && h.fv > 0);
+
+                    const rep1M = validHistory.find(h => h.ageDays >= 14 && h.ageDays < 60);
+                    const rep3M = validHistory.find(h => h.ageDays >= 60 && h.ageDays <= 180);
+
+                    const curTargetNum = Number(isyTarget || primaryTarget || 0);
+
+                    let val1M: string = '—';
+                    if (rep1M && rep1M.fv > 0) {
+                      val1M = `₺${rep1M.fv.toFixed(2)}`;
+                    } else if (
+                      isyConsensus?.targetPrice1M != null &&
+                      curTargetNum > 0 &&
+                      Math.abs(Number(isyConsensus.targetPrice1M) - curTargetNum) > 0.01
+                    ) {
+                      val1M = `₺${Number(isyConsensus.targetPrice1M).toFixed(2)}`;
+                    }
+
+                    let val3M: string = '—';
+                    if (rep3M && rep3M.fv > 0) {
+                      val3M = `₺${rep3M.fv.toFixed(2)}`;
+                    } else if (
+                      isyConsensus?.targetPrice3M != null &&
+                      curTargetNum > 0 &&
+                      Math.abs(Number(isyConsensus.targetPrice3M) - curTargetNum) > 0.01 &&
+                      (val1M === '—' || Math.abs(Number(isyConsensus.targetPrice3M) - Number(isyConsensus.targetPrice1M)) > 0.01)
+                    ) {
+                      val3M = `₺${Number(isyConsensus.targetPrice3M).toFixed(2)}`;
+                    }
+
+                    return (
+                      <div className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-300 font-medium">Hedef Fiyat Revizyon Geçmişi:</span>
+                        </div>
+                        <div className="flex items-center gap-5 font-mono text-xs sm:text-sm">
                           <div>
                             <span className="text-slate-500 mr-1.5">3 Ay Önce:</span>
-                            <span className="font-bold text-white">₺{Number(isyConsensus.targetPrice3M).toFixed(2)}</span>
+                            <span className="font-bold text-white">{val3M}</span>
                           </div>
-                        )}
-                        <div>
-                          <span className="text-slate-500 mr-1.5">Güncel:</span>
-                          <span className="font-bold text-[#f5c242]">₺{Number(isyTarget || primaryTarget).toFixed(2)}</span>
+                          <div>
+                            <span className="text-slate-500 mr-1.5">1 Ay Önce:</span>
+                            <span className="font-bold text-white">{val1M}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 mr-1.5">Güncel:</span>
+                            <span className="font-bold text-[#f5c242]">₺{curTargetNum.toFixed(2)}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               );
             })()}
@@ -6301,10 +6337,23 @@ export default function SimplyView({
                     : (cashConv != null && cashConv >= 40)
                     ? 'KISMEN'
                     : (currNetDebt <= 0 && (earningsQuality?.ocf ?? 0) > 0 ? 'BAŞARILI' : 'SAPMA');
+
+                const cashParts: string[] = [];
+                if (cashConv != null) {
+                  cashParts.push(`%${cashConv} Nakit Dönüşümü`);
+                } else if (earningsQuality?.ocf != null && !isNaN(earningsQuality.ocf)) {
+                  cashParts.push(`${formatMrTl(earningsQuality.ocf)} OCF`);
+                } else if (currentSector === 'INSURANCE') {
+                  cashParts.push('Sigorta Portföyü');
+                } else if (currentSector === 'BANKING') {
+                  cashParts.push('Mevduat / Kredi Dengesi');
+                }
+                cashParts.push(currNetDebt <= 0 ? 'Net Nakit' : 'Net Borçlu');
+
                 rows.push({
                   period: 'Nakit & Borç',
                   guidance: 'Muhasebe kârını nakde çevirmek ve borçluluğu güvenli bantta tutmak',
-                  actual: `${cashConv != null ? `%${cashConv} Nakit Dönüşümü` : formatMrTl(earningsQuality?.ocf)} • ${currNetDebt <= 0 ? 'Net Nakit' : 'Net Borçlu'}`,
+                  actual: cashParts.join(' • '),
                   status: cashStatus,
                   analysis: cashStatus === 'BAŞARILI'
                     ? 'Kârın sıcak nakde dönüşümü yüksek ve bilanço borç baskısından uzak yönetiliyor.'
@@ -6394,43 +6443,46 @@ export default function SimplyView({
             </div>
 
             {/* Üstte Kompakt "Karar Şeridi" (Sabit Özet Çubuğu) */}
-            <div className="sticky top-[104px] lg:top-14 z-20 backdrop-blur-md bg-[#131720]/95 border border-[#2d3545] rounded-xl px-3.5 sm:px-4 py-2.5 shadow-xl flex flex-wrap items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2.5 sm:gap-3.5 flex-wrap">
-                <span className={`px-2.5 py-1 rounded-lg font-mono font-black text-xs border shadow-sm ${
-                  effectiveDecision === 'AL'
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                    : effectiveDecision === 'ALMA'
-                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                    : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                }`}>
-                  KARAR: {effectiveDecision === 'AL' ? 'AL' : effectiveDecision === 'ALMA' ? 'ALMA' : 'NÖTR'}
-                </span>
-                <span className="text-xs font-sans font-bold text-white hidden sm:inline">
-                  {report.ticker} Özet Şeridi
-                </span>
-                <span className="h-4 w-px bg-[#282d37] hidden sm:inline-block" />
-                <div className="flex items-center gap-1.5 text-xs font-mono">
-                  <span className="text-slate-400">Fiyat:</span>
-                  <span className="text-white font-bold">₺{currentPriceNum.toFixed(2)}</span>
-                </div>
-                <span className="text-slate-500 font-mono text-xs">→</span>
-                <div className="flex items-center gap-1.5 text-xs font-mono">
-                  <span className="text-slate-400">Adil Değer:</span>
-                  <span className="text-[#f5c242] font-bold">₺{fairValueNum.toFixed(2)}</span>
-                </div>
-                {fairValueNum > 0 && currentPriceNum > 0 && (
-                  <span className={`px-2 py-0.5 rounded-md text-[11px] font-mono font-bold border ${
-                    fairValueNum >= currentPriceNum
-                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                      : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+            <div className="sticky top-[104px] lg:top-14 z-20 backdrop-blur-md bg-[#131720]/95 border border-[#2d3545] rounded-xl p-3 shadow-xl space-y-2.5">
+              {/* Üst Satır: Finansal Karar, Fiyat & EVA Özeti */}
+              <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+                <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+                  <span className={`px-2.5 py-1 rounded-lg font-mono font-black text-xs border shadow-sm ${
+                    effectiveDecision === 'AL'
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : effectiveDecision === 'ALMA'
+                      ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                      : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                   }`}>
-                    {fairValueNum >= currentPriceNum ? '+' : ''}{(((fairValueNum - currentPriceNum) / currentPriceNum) * 100).toFixed(1)}% ({fairValueNum >= currentPriceNum
-                      ? `%${Math.abs(((fairValueNum - currentPriceNum) / fairValueNum) * 100).toFixed(0)} İskontolu`
-                      : `%${Math.abs(((currentPriceNum - fairValueNum) / currentPriceNum) * 100).toFixed(0)} Primli`})
+                    KARAR: {effectiveDecision === 'AL' ? 'AL' : effectiveDecision === 'ALMA' ? 'ALMA' : 'NÖTR'}
                   </span>
-                )}
-                <span className="hidden md:inline-block h-4 w-px bg-[#282d37]" />
-                <div className="hidden md:flex items-center gap-1 text-xs font-mono">
+                  <span className="font-mono text-xs text-white font-bold">
+                    {report.ticker}
+                  </span>
+                  <span className="h-3.5 w-px bg-[#282d37]" />
+                  <div className="flex items-center gap-1.5 text-xs font-mono">
+                    <span className="text-slate-400">Piyasa:</span>
+                    <span className="text-white font-bold">₺{currentPriceNum.toFixed(2)}</span>
+                  </div>
+                  <span className="text-slate-500 font-mono text-xs">→</span>
+                  <div className="flex items-center gap-1.5 text-xs font-mono">
+                    <span className="text-slate-400">Adil Değer:</span>
+                    <span className="text-[#f5c242] font-bold">₺{fairValueNum.toFixed(2)}</span>
+                  </div>
+                  {fairValueNum > 0 && currentPriceNum > 0 && (
+                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-mono font-bold border ${
+                      fairValueNum >= currentPriceNum
+                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                        : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                    }`}>
+                      {fairValueNum >= currentPriceNum ? '+' : ''}{(((fairValueNum - currentPriceNum) / currentPriceNum) * 100).toFixed(1)}% ({fairValueNum >= currentPriceNum
+                        ? `%${Math.abs(((fairValueNum - currentPriceNum) / fairValueNum) * 100).toFixed(0)} İskontolu`
+                        : `%${Math.abs(((currentPriceNum - fairValueNum) / currentPriceNum) * 100).toFixed(0)} Primli`})
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 bg-[#181d27] border border-[#2a3240] px-3 py-1 rounded-lg text-xs font-mono">
                   <span className="text-slate-400">Reel EVA:</span>
                   <span className={`font-bold ${evaSpreadNum >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                     {evaSpreadNum >= 0 ? `+${evaSpreadNum.toFixed(1)}` : evaSpreadNum.toFixed(1)} Puan
@@ -6438,7 +6490,8 @@ export default function SimplyView({
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 flex-wrap">
+              {/* Alt Satır: Eşit Dağıtılmış Bölüm Sekmeleri (Tam Genişlik Segment Bar) */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 bg-[#161a23] p-1 rounded-xl border border-[#282f3d]">
                 {[
                   { id: 'sec-yatirim-tezi-71', label: '7.1 Tez Özeti' },
                   { id: 'sec-yatirim-tezi-72', label: '7.2 Sektörel Konum' },
@@ -6450,7 +6503,7 @@ export default function SimplyView({
                     key={sub.id}
                     type="button"
                     onClick={() => scrollToDomId(sub.id, 'sec-yatirim-tezi')}
-                    className="px-2 py-1 rounded-lg bg-[#1c212b] hover:bg-[#252c3a] text-[11px] font-mono text-slate-300 hover:text-[#f5c242] border border-[#2b3240] transition cursor-pointer"
+                    className="w-full text-center py-1.5 px-2 rounded-lg bg-[#1c212b] hover:bg-[#252c3a] text-xs font-mono font-medium text-slate-300 hover:text-[#f5c242] hover:border-[#f5c242]/40 border border-[#2b3240] transition cursor-pointer"
                   >
                     {sub.label}
                   </button>
@@ -7483,7 +7536,12 @@ export default function SimplyView({
 
             {/* 8.2 Nihai Analist Hükmü & Portföy Konumlandırma Özeti Kartı (7.1 ile Tekrardan Arındırılmış) */}
             {(() => {
-              const auditScore = Number(valuationInfo?.score ?? (report as any)?.score ?? (executiveVerdict.verdict === 'AL' ? 82 : executiveVerdict.verdict === 'ALMA' ? 42 : 64));
+              const rawScoreVal = valuationInfo?.score ?? (report as any)?.score ?? (report as any)?.scoreResult?.totalScore;
+              let auditScore = rawScoreVal != null ? parseInt(String(rawScoreVal).split('/')[0].replace(/[^0-9]/g, ''), 10) : NaN;
+              if (isNaN(auditScore) || auditScore <= 0) {
+                auditScore = executiveVerdict.verdict === 'AL' ? 82 : executiveVerdict.verdict === 'ALMA' ? 42 : 64;
+              }
+
               const rawBear = Number(
                 valuationInfo?.bear_price ||
                 report.extractedData?.valuation?.bear_price ||
@@ -7524,41 +7582,34 @@ export default function SimplyView({
                         8.2 Karar ve Portföy Özeti
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => scrollToSection('sec-yatirim-tezi')}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#21262d] hover:bg-[#2b313d] text-slate-200 hover:text-[#f5c242] border border-[#2e3440] text-xs font-mono font-semibold transition cursor-pointer"
-                    >
-                      <span>7. Yatırım Tezi</span>
-                    </button>
                   </div>
 
                   {/* Üst Denetim & Pozisyonlama Özet Şeridi */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-[#1d222e] border border-[#323a4b] rounded-xl p-3.5">
-                    <div className="space-y-0.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-[#1d222e] border border-[#323a4b] rounded-xl p-3">
+                    <div className="bg-[#161a23] border border-[#2a3140] rounded-lg p-3 flex flex-col justify-between space-y-1">
                       <div className="text-xs font-mono text-slate-400 uppercase">Genel Skor</div>
                       <div className="text-xs sm:text-sm font-mono font-bold text-white">
-                        {auditScore}/100 • {executiveVerdict.verdict === 'AL' ? 'Stres Testi Onaylı' : executiveVerdict.verdict === 'ALMA' ? 'Sermaye Koruma Freni' : 'Koşullu İzleme'}
+                        {auditScore}/100 <span className="text-slate-500 font-normal">•</span> {executiveVerdict.verdict === 'AL' ? 'Stres Testi Onaylı' : executiveVerdict.verdict === 'ALMA' ? 'Sermaye Koruma Freni' : 'Koşullu İzleme'}
                       </div>
                     </div>
-                    <div className="space-y-0.5">
+                    <div className="bg-[#161a23] border border-[#2a3140] rounded-lg p-3 flex flex-col justify-between space-y-1">
                       <div className="text-xs font-mono text-slate-400 uppercase">Portföy Stratejisi</div>
-                      <div className={`text-xs sm:text-sm font-sans font-bold ${
+                      <div className={`text-xs sm:text-sm font-sans font-bold leading-snug ${
                         executiveVerdict.verdict === 'AL' ? 'text-emerald-400' : executiveVerdict.verdict === 'ALMA' ? 'text-rose-400' : 'text-amber-300'
                       }`}>
                         {positioningBadge}
                       </div>
                     </div>
-                    <div className="space-y-0.5">
+                    <div className="bg-[#161a23] border border-[#2a3140] rounded-lg p-3 flex flex-col justify-between space-y-1">
                       <div className="text-xs font-mono text-slate-400 uppercase">Hedef & Stres Tabanı</div>
                       <div className="text-xs sm:text-sm font-mono font-bold text-white">
-                        Adil: <span className="text-[#f5c242]">₺{fairValueNum.toFixed(2)}</span> • Taban: <span className="text-rose-300">₺{bearFloorPrice.toFixed(2)}</span>
+                        Adil: <span className="text-[#f5c242]">₺{fairValueNum.toFixed(2)}</span> <span className="text-slate-500 font-normal">•</span> Taban: <span className="text-rose-300">₺{bearFloorPrice.toFixed(2)}</span>
                       </div>
                     </div>
-                    <div className="space-y-0.5">
+                    <div className="bg-[#161a23] border border-[#2a3140] rounded-lg p-3 flex flex-col justify-between space-y-1">
                       <div className="text-xs font-mono text-slate-400 uppercase">Sermaye & Nakit</div>
-                      <div className="text-xs sm:text-sm font-mono font-bold text-cyan-300 truncate">
-                        EVA: {evaSpreadNum >= 0 ? `+${evaSpreadNum.toFixed(1)}` : evaSpreadNum.toFixed(1)} Puan • {earningsQuality.statusTitle}
+                      <div className="text-xs sm:text-sm font-mono font-bold text-cyan-300 leading-snug break-words">
+                        EVA: {evaSpreadNum >= 0 ? `+${evaSpreadNum.toFixed(1)}` : evaSpreadNum.toFixed(1)} Puan <span className="text-slate-500 font-normal">•</span> <span className="text-slate-200">{earningsQuality.statusTitle}</span>
                       </div>
                     </div>
                   </div>

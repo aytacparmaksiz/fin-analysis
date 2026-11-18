@@ -290,12 +290,13 @@ function isTabularOrBoilerplateNoise(sentence: string): boolean {
   if (!sentence || sentence.length < 30) return true;
   if (/000,00|\bPpt\b/i.test(sentence)) return true;
   if (/^[a-zçğıöşü]/.test(sentence)) return true;
-  if (/^[\d.,\s%\-+]+$/.test(sentence.slice(0, 24))) return true;
+  if (/^[\d.,\s%\-–/()]{4,}/.test(sentence)) return true;
+  if (/^\d{1,4}\s+[\d.,]+/.test(sentence)) return true;
   // Üst üste çok fazla sayı içeren tablo satırlarını ele
   const numberTokens = sentence.match(/\b\d+(?:[.,]\d+)?%?\b/g) || [];
   const wordTokens = sentence.match(/[A-Za-zÇĞİÖŞÜçğıöşü]{3,}/g) || [];
-  if (numberTokens.length >= 6 && wordTokens.length < numberTokens.length * 1.4) return true;
-  if (/(?:kontrol\s+gücünün\s+olup\s+olmadığını|işbu\s+finansal\s+tablolar|karşılaştırmalı\s+olarak\s+sunul|muhasebe\s+politikaları\s+tutarlı|bilanço\s+sonrası\s+hususlara\s+ilişkin)/i.test(sentence)) {
+  if (numberTokens.length >= 5 && wordTokens.length < numberTokens.length * 1.5) return true;
+  if (/(?:kontrol\s+gücünün\s+olup\s+olmadığını|işbu\s+finansal\s+tablolar|karşılaştırmalı\s+olarak\s+sunul|muhasebe\s+politikaları\s+tutarlı|bilanço\s+sonrası\s+hususlara\s+ilişkin|Girişim\s+Sermayesi\s+Yatırım\s+Ortaklığı|konsolidasyon|TMS\s+\d+|TFRS\s+\d+|IFRS)/i.test(sentence)) {
     return true;
   }
   return false;

@@ -1010,7 +1010,7 @@ function computeIncrementalQuarterlyData(rawData: any[]): any[] {
         const normDiff = quarterSpan > 1 ? Math.round(diff / quarterSpan) : diff;
 
         if ((field === 'revenue' || field === 'gross_written_premiums') && normDiff <= 0) {
-          result[field] = item[field];
+          result[field] = Math.max(0, Math.round(item[field] / Math.max(1, info.q)));
         } else {
           result[field] = normDiff;
         }
