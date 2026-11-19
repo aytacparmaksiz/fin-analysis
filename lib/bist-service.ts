@@ -244,7 +244,7 @@ export const KNOWN_BIST_DIRECTORY: Record<string, BistCompanyMetadata> = {
   VAKBN: { ticker: 'VAKBN', name: 'Türkiye Vakıflar Bankası T.A.O.', sector: 'BANKING', financialGroup: 'UFRS', shareCount: 10000000000 },
   HALKB: { ticker: 'HALKB', name: 'Türkiye Halk Bankası A.Ş.', sector: 'BANKING', financialGroup: 'UFRS', shareCount: 7144927000 },
   ALBRK: { ticker: 'ALBRK', name: 'Albaraka Türk Katılım Bankası A.Ş.', sector: 'BANKING', financialGroup: 'UFRS', shareCount: 2500000000 },
-  SKBNK: { ticker: 'SKBNK', name: 'Şekerbank T.A.Ş.', sector: 'BANKING', financialGroup: 'UFRS', shareCount: 2500000000 },
+  SKBNK: { ticker: 'SKBNK', name: 'Şekerbank T.A.Ş.', sector: 'BANKING', financialGroup: 'UFRS', shareCount: 3500000000 },
   TSKB:  { ticker: 'TSKB',  name: 'Türkiye Sınai Kalkınma Bankası A.Ş.', sector: 'BANKING', financialGroup: 'UFRS', shareCount: 2800000000 },
 
   KCHOL: { ticker: 'KCHOL', name: 'Koç Holding A.Ş.', sector: 'HOLDING', financialGroup: 'XI_29', shareCount: 2535948050 },
@@ -349,6 +349,18 @@ export const OFFICIAL_PENSION_AUM_SERIES: Record<string, Record<string, number>>
  * 2. Öncelik: KNOWN_BIST_DIRECTORY (Statik Ön Tanımlar)
  * 3. Öncelik: Heuristik / Sektör Tahmini
  */
+function resolveDefaultFinancialGroup(
+  cleanTicker: string,
+  valuationSector: SectorType
+): 'XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A' {
+  const explicitGroup = KNOWN_BIST_DIRECTORY[cleanTicker]?.financialGroup;
+  if (explicitGroup) return explicitGroup;
+  if (cleanTicker === 'DOCO') return 'UFRS_A';
+  if (valuationSector === 'INSURANCE') return 'UFRS_K';
+  if (valuationSector === 'BANKING') return 'UFRS';
+  return 'XI_29';
+}
+
 export function resolveBistCompanyMeta(rawTicker: string): BistCompanyMetadata {
   const cleanTicker = (rawTicker || '').toUpperCase().replace(/\.IS$/i, '').trim();
 
@@ -356,14 +368,7 @@ export function resolveBistCompanyMeta(rawTicker: string): BistCompanyMetadata {
   const userSec = USER_OFFICIAL_BIST_COMPANY_SECTORS[cleanTicker];
   if (userSec && userSec.sector) {
     const valuationSector = mapIsYatirimSectorToValuationSector(userSec.sector);
-    let group: 'XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A' = 'XI_29';
-    if (cleanTicker === 'DOCO') {
-      group = 'UFRS_A';
-    } else if (valuationSector === 'INSURANCE') {
-      group = 'UFRS_K';
-    } else if (valuationSector === 'BANKING') {
-      group = 'UFRS';
-    }
+    const group = resolveDefaultFinancialGroup(cleanTicker, valuationSector);
 
     const isy = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[cleanTicker];
     const shareCount = (cleanTicker === 'DOCO' && KNOWN_BIST_DIRECTORY[cleanTicker]?.shareCount)
@@ -388,14 +393,7 @@ export function resolveBistCompanyMeta(rawTicker: string): BistCompanyMetadata {
   const isy = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[cleanTicker];
   if (isy && isy.sectorName) {
     const valuationSector = mapIsYatirimSectorToValuationSector(isy.sectorName);
-    let group: 'XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A' = 'XI_29';
-    if (cleanTicker === 'DOCO') {
-      group = 'UFRS_A';
-    } else if (valuationSector === 'INSURANCE') {
-      group = 'UFRS_K';
-    } else if (valuationSector === 'BANKING') {
-      group = 'UFRS';
-    }
+    const group = resolveDefaultFinancialGroup(cleanTicker, valuationSector);
 
     const shareCount = (cleanTicker === 'DOCO' && KNOWN_BIST_DIRECTORY[cleanTicker]?.shareCount)
       ? KNOWN_BIST_DIRECTORY[cleanTicker].shareCount
@@ -605,7 +603,7 @@ async function saveSupabaseMaliTablo(ticker: string, history: FinancialHistoryIt
 }
 
 /**
- * İş Yatırım tekil parti sorgusu (25s genişletilmiş zaman aşımı, otomatik yeniden deneme)
+ * İş Yatırım tekil parti sorgusu (15s zaman aşımı; boş dizi yanıtında gereksiz retry yapılmaz)
  */
 async function fetchIsYatirimSingleBatch(
   ticker: string,
@@ -618,8 +616,8 @@ async function fetchIsYatirimSingleBatch(
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const resilientData = await fetchResilientJson(url, 25000);
-      if (resilientData && Array.isArray(resilientData.value) && resilientData.value.length > 0) {
+      const resilientData = await fetchResilientJson(url, 15000);
+      if (resilientData && Array.isArray(resilientData.value)) {
         return resilientData.value;
       }
     } catch {}
@@ -665,7 +663,14 @@ export async function fetchIsYatirimMaliTabloBatches(
     }
   }
 
-  // 2. Aşama: Eğer preferredGroup yoksa veya ilk denemede boş geldiyse aday grupları probe et
+  // 2. Aşama: Eğer preferredGroup yoksa veya ilk denemede boş geldiyse kalan aday grupları probe et
+  const remainingCandidates = preferredGroup
+    ? candidateGroups.filter(g => g !== preferredGroup)
+    : candidateGroups;
+  if (remainingCandidates.length === 0) {
+    return { rowsByBatch: [], activeGroup: null };
+  }
+
   const probeGroup = async (group: ('XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A')) => {
     const rows0 = await fetchIsYatirimSingleBatch(ticker, group, BATCH_SPECS[0].params);
     if (rows0 && rows0.length >= 5) {
@@ -680,7 +685,7 @@ export async function fetchIsYatirimMaliTabloBatches(
 
   let chosenGroup: ('XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A') | null = null;
   try {
-    const probeResult = await Promise.any(candidateGroups.map(probeGroup));
+    const probeResult = await Promise.any(remainingCandidates.map(probeGroup));
     chosenGroup = probeResult.group;
   } catch {
     chosenGroup = null;

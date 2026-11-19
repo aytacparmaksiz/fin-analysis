@@ -2286,6 +2286,7 @@ export function calculateSectorScore(
     const isBankConsolidatingHolding = ['KCHOL', 'SAHOL', 'AGHOL', 'DOHOL'].includes(tickerUpper);
     const netDebt = soloNetDebt ?? parseFinancialNumber(latest?.net_debt) ?? 0;
     const equity = parseFinancialNumber(latest?.equity) ?? 1;
+    const holdingCr = parseFinancialNumber(latest?.current_ratio);
     let s2 = 20;
     let r2 = 'Bilanço likiditesi ve kaldıraç yapısı yönetilebilir seviyede';
     let st2: 'good' | 'warning' | 'danger' = 'good';
@@ -2293,6 +2294,10 @@ export function calculateSectorScore(
       s2 = 23;
       r2 = 'Holding solo bilançosu güçlü net nakit pozisyonundadır; konsolide borçlar bankacılık ve sanayi/ticaret iştiraklerinin operasyonel yükümlülükleridir (ana ortaklığa gayrikabili rücu).';
       st2 = 'good';
+    } else if (!isBankConsolidatingHolding && holdingCr !== null && holdingCr < 0.60) {
+      s2 = 14;
+      r2 = `Kısa Vadeli Likidite Baskısı: Holding cari oranı (${holdingCr.toFixed(2)}x) 0,60x emniyet sınırının altındadır.`;
+      st2 = 'warning';
     } else if (netDebt <= 0) {
       if (hasHoldingSevereLoss) {
         s2 = 17; r2 = 'Holding bilançosunda net nakit bulunmakla birlikte konsolide iştirak zararları sermayeyi baskılamaktadır.'; st2 = 'warning';
@@ -2313,6 +2318,17 @@ export function calculateSectorScore(
     // 3. İştirak Temettü Akışı & Nakit Üretimi (Max 25)
     const ocf = parseFinancialNumber(latest?.operating_cash_flow);
     const divPaid = parseFinancialNumber(latest?.dividends_paid);
+    const holdingAssets = parseFinancialNumber(latest?.total_assets);
+    const holdingSloan = (holdingNetIncome !== null && ocf !== null && holdingAssets !== null && holdingAssets > 0)
+      ? ((holdingNetIncome - ocf) / holdingAssets)
+      : null;
+    const isHoldingPaperProfit = Boolean(
+      holdingNetIncome !== null &&
+      holdingNetIncome > 0 &&
+      ocf !== null &&
+      ((ocf < 0 && (holdingSloan === null || holdingSloan > 0.10)) ||
+       ((ocf / holdingNetIncome) < 0.25 && holdingSloan !== null && holdingSloan > 0.15))
+    );
     let s3 = 19;
     let r3 = 'İştiraklerden düzenli nakit ve temettü girişi sağlanıyor.';
     let st3: 'good' | 'warning' | 'danger' = 'good';
@@ -2326,6 +2342,13 @@ export function calculateSectorScore(
       r3 = `Holding Faaliyet Zararı: Şirket esas faaliyet düzeyinde zarar (-${Math.abs(holdingEbit! / 1e6).toFixed(1)}M TL) üretmektedir.`;
       st3 = 'danger';
       anomalies.push('Holding Esas Faaliyet Zararı');
+    } else if (isHoldingPaperProfit) {
+      const convStr = holdingNetIncome! > 0 ? ((ocf! / holdingNetIncome!) * 100).toFixed(1) : '0';
+      const sloanStr = holdingSloan !== null ? (holdingSloan * 100).toFixed(1) : '-';
+      s3 = 7;
+      r3 = `Yüksek Tahakkuk & Zayıf Nakit Dönüşümü: Muhasebesel net kâr yüksek görünse de nakit dönüşümü (%${convStr}) zayıf ve Sloan tahakkuk oranı (%${sloanStr}) kritik eşik üzerindedir.`;
+      st3 = 'danger';
+      anomalies.push('Holding Yüksek Tahakkuk & Zayıf Nakit Dönüşümü');
     } else if ((divPaid !== null && divPaid > 0) || (ocf !== null && ocf > 0)) {
       s3 = 23; r3 = 'İştirak temettü akışı ve holding nakit üretimi güçlü.'; st3 = 'good';
     } else if (ocf !== null && ocf < 0) {
@@ -2430,8 +2453,15 @@ export function calculateSectorScore(
 
     const noiPositive = noiCapRate !== null && noiCapRate >= 6.5;
     const payoutPositive = payoutRatio !== null && payoutRatio >= 50.0;
+    const reitSloanForScore = (ocf !== null && reitNetIncome !== null && assets > 0) ? ((reitNetIncome - ocf) / assets) : 0;
+    const isReitCashBurnPaperProfit = Boolean(ocf !== null && ocf < 0 && reitNetIncome !== null && reitNetIncome > 0 && reitSloanForScore > 0.10);
 
-    if (noiPositive && payoutPositive) {
+    if (isReitCashBurnPaperProfit) {
+      s3 = 8;
+      r3 = `Kağıt Kârı & Negatif İşletme Nakit Akışı Riski: Gayrimenkul değer artışlarıyla muhasebesel kâr görünse de fiili işletme nakit akışı negatiftir; Sloan tahakkuk oranı (%${(reitSloanForScore * 100).toFixed(1)}) kritik eşik (%10) üzerindedir.`;
+      st3 = 'danger';
+      anomalies.push('GYO Negatif İşletme Nakit Akışı & Yüksek Tahakkuk');
+    } else if (noiPositive && payoutPositive) {
       s3 = 25;
       r3 = `Olumlu: Güçlü Portföy Verimliliği (NOI / Cap Rate: %${noiCapRate}) ve 7524 Sayılı Kanun %50 Temettü İstisna Eşiği Tam Uyumlu (%${payoutRatio} Payout). Kurumlar vergisi tam korumalı.`;
       st3 = 'good';
@@ -4845,6 +4875,18 @@ export function optimizeFinalDecision({
       const holdingNet = parseFinancialNumber(effectiveLatestData?.net_income);
       const holdingEbit = parseFinancialNumber(effectiveLatestData?.operating_profit ?? effectiveLatestData?.ebit);
       const holdingRoe = parseFinancialNumber(effectiveLatestData?.roe);
+      const holdingOcf = parseFinancialNumber(effectiveLatestData?.operating_cash_flow ?? effectiveLatestData?.ocf);
+      const holdingAssetsForRule6 = parseFinancialNumber(effectiveLatestData?.total_assets);
+      const holdingSloanForRule6 = (holdingNet !== null && holdingOcf !== null && holdingAssetsForRule6 !== null && holdingAssetsForRule6 > 0)
+        ? ((holdingNet - holdingOcf) / holdingAssetsForRule6)
+        : null;
+      const isHoldingPaperProfitRule6 = Boolean(
+        holdingNet !== null &&
+        holdingNet > 0 &&
+        holdingOcf !== null &&
+        ((holdingOcf < 0 && (holdingSloanForRule6 === null || holdingSloanForRule6 > 0.10)) ||
+         ((holdingOcf / holdingNet) < 0.25 && holdingSloanForRule6 !== null && holdingSloanForRule6 > 0.15))
+      );
 
       if (holdingNet !== null && holdingNet < 0) {
         finalDecision = 'ALMA';
@@ -4856,6 +4898,13 @@ export function optimizeFinalDecision({
         overrideApplied = true;
         overrideReason = `Holding Faaliyet Zararı: Şirket esas faaliyet düzeyinde zarar (-${Math.abs(holdingEbit / 1e6).toFixed(1)}M TL) üretmektedir. Karar temkinli NÖTR olarak dengelendi.`;
         safetyFlags.push('Holding Esas Faaliyet Zararı');
+      } else if (isHoldingPaperProfitRule6) {
+        const convPct = ((holdingOcf! / holdingNet!) * 100).toFixed(1);
+        const sloanPct = holdingSloanForRule6 !== null ? (holdingSloanForRule6 * 100).toFixed(1) : '-';
+        finalDecision = 'NÖTR';
+        overrideApplied = true;
+        overrideReason = `Holding Kağıt Kârı & Tahakkuk Koruması: Net kâr iştirak/yatırım değer artışlarıyla yüksek görünse de işletme nakit dönüşümü (%${convPct}) ve Sloan tahakkuk oranı (%${sloanPct}) kritik kalitesizlik sınırındadır. Karar temkinli NÖTR (Koşullu İzleme) olarak dengelendi.`;
+        safetyFlags.push('Holding Yüksek Tahakkuk / Düşük Nakit Dönüşümü');
       } else if (holdingRoe !== null && holdingRoe <= 0) {
         finalDecision = 'NÖTR';
         overrideApplied = true;
@@ -4904,12 +4953,20 @@ export function optimizeFinalDecision({
         ltv <= 0.40 &&
         ((pOcf !== null && pOcf <= 8.5) || (ocfAssetYield !== null && ocfAssetYield >= 0.055) || (divYield >= 0.045 && pOcf !== null && pOcf <= 12.0))
       );
+      const rawOcfNullable = parseFinancialNumber(effectiveLatestData?.operating_cash_flow ?? effectiveLatestData?.net_operating_cash_flow);
+      const reitSloanForRule7 = (reitNet !== null && rawOcfNullable !== null && totalAssets > 0) ? ((reitNet - rawOcfNullable) / totalAssets) : 0;
+      const isReitCashBurnPaperProfitRule7 = Boolean(reitNet !== null && reitNet > 0 && rawOcfNullable !== null && rawOcfNullable < 0 && reitSloanForRule7 > 0.10);
 
       if (reitNet !== null && reitNet < 0 && !isCashCowReit) {
         finalDecision = 'ALMA';
         overrideApplied = true;
         overrideReason = `GYO Net Zarar: Şirket net dönem zararı açıklamıştır. Portföy sermayesini eriten GYO'lara AL kararı verilemez.`;
         safetyFlags.push('GYO Net Zarar');
+      } else if (isReitCashBurnPaperProfitRule7) {
+        finalDecision = 'NÖTR';
+        overrideApplied = true;
+        overrideReason = `GYO Kağıt Kârı & Nakit Yakımı Koruması: Net kâr gayrimenkul değer artışlarıyla pozitif görünse de fiili işletme nakit akışı (OCF) ağır negatif ve Sloan tahakkuk oranı (%${(reitSloanForRule7 * 100).toFixed(1)}) kritik eşiğin üzerindedir. Nakit üretimi teyit edilene kadar karar temkinli NÖTR olarak dengelendi.`;
+        safetyFlags.push('GYO Negatif OCF / Kağıt Kârı');
       } else if (reitRoe !== null && reitRoe <= 0 && !isCashCowReit) {
         finalDecision = 'NÖTR';
         overrideApplied = true;
@@ -5082,11 +5139,12 @@ export function optimizeFinalDecision({
       safetyFlags.push(`Negatif EVA Spread: ${(roic - benchmarkWacc).toFixed(1)} puan`);
     }
 
-    // 10. Kural: Emniyet Marjı Yetersizse Kesinlikle AL Verilemez (Max NÖTR)
-    if (!overrideApplied && marginOfSafetyStatus === 'UNSAFE') {
+    // 10. Kural: Emniyet Marjı Yetersizse veya Sınırda (<%25) İse Kesinlikle AL Verilemez (Max NÖTR)
+    if (!overrideApplied && (marginOfSafetyStatus === 'UNSAFE' || marginOfSafetyStatus === 'BORDERLINE')) {
       finalDecision = 'NÖTR';
       overrideApplied = true;
-      overrideReason = `Muhafazakar Emniyet Marjı Filtresi: İskonto potansiyeli (%${discount}), asgari %20 güvenlik marjının altında olduğu için 'AL' kararı 'NÖTR' olarak revize edildi.`;
+      overrideReason = `Muhafazakar Emniyet Marjı Filtresi: İskonto potansiyeli (%${discount}), kurumsal %25 'AL' emniyet marjı eşiğinin altında (${marginOfSafetyStatus === 'BORDERLINE' ? 'Sınırda Bölge' : 'Yetersiz Marj'}) kaldığı için 'AL' kararı temkinli 'NÖTR' (Koşullu İzleme) olarak revize edildi.`;
+      safetyFlags.push(`Yetersiz/Sınırda Emniyet Marjı: %${discount} (< %25)`);
     }
 
     // 11. Kural: Skor Tabanı Filtresi (Skor < 65 ise AL verilemez)
@@ -6512,23 +6570,33 @@ export function computeSectorValuationAndDrivers(
   const baselineLivePaidInCap = (cleanCurrentTicker !== 'DOCO' && isyBaselineItem?.paidInCapitalMnTl && isyBaselineItem.paidInCapitalMnTl > 0)
     ? Math.round(isyBaselineItem.paidInCapitalMnTl * 1_000_000)
     : null;
+  const liveMultPaidCapRaw = parseFinancialNumber(extractedData?.marketMultiples?.paidInCapitalMnTl ?? extractedData?.marketMultiples?.paid_in_capital_mn_tl);
+  const liveMultPaidCap = (cleanCurrentTicker !== 'DOCO' && liveMultPaidCapRaw !== null && liveMultPaidCapRaw > 0)
+    ? Math.round(liveMultPaidCapRaw * 1_000_000)
+    : null;
+  const latestPeriodKeyForShare = parsePeriodSortKey(latest?.period || '');
+  const baselinePeriodKeyForShare = parsePeriodSortKey(isyBaselineItem?.lastPeriod || '');
+  const isBalanceSheetNewerThanBaseline = Boolean(
+    paidCapShares &&
+    baselineLivePaidInCap &&
+    paidCapShares > baselineLivePaidInCap * 1.05 &&
+    latestPeriodKeyForShare > 0 &&
+    (baselinePeriodKeyForShare === 0 || latestPeriodKeyForShare >= baselinePeriodKeyForShare)
+  );
+  const effectiveLiveCapRef = liveMultPaidCap ?? (isBalanceSheetNewerThanBaseline ? paidCapShares : baselineLivePaidInCap);
 
   // Canlı piyasa pay adedi ve sermaye artırımı / bölünme sağlama:
-  // Resmi İş Yatırım / BIST baseline sermayesi borsa takasındaki en güncel nominal pay adedidir.
-  // Bilanço çeyreklik dönemlerde (örn. 30 Haziran) kapandığı için, bilanço tarihinden sonra yapılan
-  // bedelsiz veya bedelli sermaye artırımlarında (örn. Ağustos'ta tescil edilen ORGE 80M -> 400M artırımı),
-  // eski rapordaki shareCount veya bilançodaki nominal sermaye bayat (stale) kalır.
-  // Dolayısıyla baselineLivePaidInCap mevcutsa ve caller shareCount'u veya paidCapShares ile arasında bölünme farkı (>%5) varsa,
-  // Borsa İstanbul'da fiilen işlem gören baselineLivePaidInCap esas alınmalıdır!
-  const hasSplitMismatchWithBaseline = baselineLivePaidInCap && (
-    (shareCount && (baselineLivePaidInCap > shareCount * 1.05 || shareCount > baselineLivePaidInCap * 1.05)) ||
-    (paidCapShares && (baselineLivePaidInCap > paidCapShares * 1.05 || paidCapShares > baselineLivePaidInCap * 1.05))
+  // Resmi İş Yatırım / BIST canlı sermayesi mevcutsa ve caller/bilanço bayat kalmışsa (örn. bilanço sonrası bedelsiz bölünme) canlı sermaye esas alınır.
+  // Ancak statik baseline cache eski bir döneme aitse (örn. SKBNK 2.5 Mr -> 2026/09 3.5 Mr), daha güncel bilanço sermayesi geriye doğru ezilmez.
+  const hasSplitMismatchWithBaseline = effectiveLiveCapRef && (
+    (shareCount && (effectiveLiveCapRef > shareCount * 1.05 || shareCount > effectiveLiveCapRef * 1.05)) ||
+    (paidCapShares && (effectiveLiveCapRef > paidCapShares * 1.05 || paidCapShares > effectiveLiveCapRef * 1.05))
   );
 
   const liveMarketShares = hasSplitMismatchWithBaseline
-    ? baselineLivePaidInCap
-    : (baselineLivePaidInCap && baselineLivePaidInCap > 0
-        ? baselineLivePaidInCap
+    ? effectiveLiveCapRef
+    : (effectiveLiveCapRef && effectiveLiveCapRef > 0
+        ? effectiveLiveCapRef
         : (shareCount && shareCount > 0 ? shareCount : null));
 
   // Kurumsal işlem / Sermaye Artırımı / Bedelsiz / Bedelli Çapraz Teyidi:
@@ -6540,7 +6608,7 @@ export function computeSectorValuationAndDrivers(
     ))
   );
   const rawEffectiveShareCount = isCorporateActionOrSplit
-    ? (baselineLivePaidInCap || liveMarketShares)
+    ? (effectiveLiveCapRef || liveMarketShares)
     : ((paidCapShares && paidCapShares >= 1000000) ? paidCapShares : (liveMarketShares && liveMarketShares > 0 ? liveMarketShares : null));
   const effectiveShareCount = (rawEffectiveShareCount && rawEffectiveShareCount > 0) ? rawEffectiveShareCount : null;
   let effectiveEbitdaFull = 0;
@@ -6592,6 +6660,22 @@ export function computeSectorValuationAndDrivers(
     const rawNetDebtValFull = (parseFinancialNumber(latest?.net_debt) ?? 0) * unitScale;
     const netCashVal = rawNetDebtValFull < 0 ? Math.abs(rawNetDebtValFull) : 0;
     const rawMinorityVal = (parseFinancialNumber(latest?.non_controlling_interests ?? latest?.azinlik_paylari) ?? 0) * unitScale;
+    const totalConsEq = (rawMinorityVal > 0 && equityFull > 0) ? (equityFull + rawMinorityVal) : 0;
+    const minorityEqShare = totalConsEq > 0 ? (rawMinorityVal / totalConsEq) : 0;
+    const parentEqShare = totalConsEq > 0 ? (equityFull / totalConsEq) : 1;
+
+    // Bağlı ortaklık azınlık payı konsolide özkaynağın >= %40'ını oluşturuyorsa (örn. TRENJ %71, TRMET %47),
+    // konsolide FAVÖK ve konsolide net nakit üzerindeki ana ortaklık hak sahipliği oransal olarak ayrıştırılır.
+    if (minorityEqShare >= 0.40 && enterpriseVal > 0 && equityFull > 0) {
+      const nonMinorityDebt = Math.max(0, debtBridge - rawMinorityVal);
+      const consEvEq = Math.max(0, enterpriseVal - nonMinorityDebt + netCashVal);
+      const propParentEvEq = consEvEq * parentEqShare;
+      if (!isChronicSectorLossDestroyer(netFullVal)) {
+        return Math.max(propParentEvEq, enterpriseVal * floorRatio * parentEqShare);
+      }
+      return Math.max(0, propParentEvEq);
+    }
+
     const cappedMinority = enterpriseVal > 0 ? Math.min(rawMinorityVal, enterpriseVal * 0.35) : rawMinorityVal;
     
     // debtBridge parametresi (effectiveNetDebt + leaseLiabilities + rawMinority) içerir.
@@ -8315,7 +8399,7 @@ export function computeSectorValuationAndDrivers(
     syncTargetMultipleDriver(targetEvMultiple, 'FD/FAVÖK');
     const enterpriseVal = forwardEbitda * targetEvMultiple;
 
-    let evEquity = Math.max(0, enterpriseVal - debtBridge) + netCash;
+    let evEquity = resolveSafeEvEquity(enterpriseVal, debtBridge, totalEquityFull, 0.30, netFull);
     const evPerShare = evEquity > 0 ? (evEquity / effectiveShareCount) : 0;
 
     const forwardNet = netFull > 0 ? netFull * (1 + clampedNetG) : 0;
@@ -8801,7 +8885,7 @@ export function computeSectorValuationAndDrivers(
     syncTargetMultipleDriver(targetEvMultiple, 'FD/FAVÖK');
     const enterpriseVal = forwardEbitda * targetEvMultiple;
 
-    let evEquity = Math.max(0, enterpriseVal - debtBridge) + netCash;
+    let evEquity = resolveSafeEvEquity(enterpriseVal, debtBridge, totalEquityFull, 0.30, netFull);
     if (!isChronicSectorLossDestroyer(netFull) && enterpriseVal > 0 && totalEquityFull > 0) {
       evEquity = Math.max(evEquity, totalEquityFull * 0.70);
     }
