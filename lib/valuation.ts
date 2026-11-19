@@ -4248,7 +4248,12 @@ export function detectValueTrap(
   const isRetailFloatCheck = resolvedSector === 'RETAIL' || officialSecName.toLowerCase().includes('perakende') || officialSecName.toLowerCase().includes('gıda');
   const isHarmlessRetailReeskont = isRetailFloatCheck && rawGross !== null && rawGross > 0 && ttmEbRaw !== null && ttmEbRaw > 0 && rawNetIncomeVal !== null && rawNetIncomeVal > 0 && (roic === null || roic > 0);
   const isOperatingProfitable = ((rawEbit === null || rawEbit > 0) || isHarmlessRetailReeskont) && (rawGross === null || rawGross > 0);
-  const isSolventCashProducer = !isHoldingOrReitOrInv && isOperatingProfitable && !isChronicLossDestroyer && (ocfVal !== null && ocfVal > 0) && (
+  const rawFinExpCheck = parseFinancialNumber(latest?.financing_expenses ?? latest?.interest_expense);
+  const isLiquidityOrInterestDistressed = !isRetailFloatCheck && !isTelecomOrUtil && (
+    (currentRatio !== null && currentRatio < 0.80 && rawEvaCheck !== null && rawEvaCheck < -8.0) ||
+    (rawFinExpCheck !== null && rawEbit !== null && rawEbit > 0 && rawFinExpCheck > rawEbit * 2.5 && rawEvaCheck !== null && rawEvaCheck < -5.0)
+  );
+  const isSolventCashProducer = !isHoldingOrReitOrInv && isOperatingProfitable && !isChronicLossDestroyer && !isLiquidityOrInterestDistressed && (ocfVal !== null && ocfVal > 0) && (
     ndRaw === null || ndRaw <= 0 || (ttmEbRaw !== null && ttmEbRaw > 0 && (ndRaw / ttmEbRaw) <= safeNdThreshold)
   );
 
@@ -4334,7 +4339,7 @@ export function detectValueTrap(
   }
 
   // E) Teknoloji/Yazılım: Nakit Yakma (Cash Burn) ve Kuralı-40 (Rule of 40) Başarısızlığı
-  const isTechWholesale = officialSecName === 'Bilgisayar Toptancılığı' || ['DGATE', 'INDES', 'ARENA', 'PENTA'].includes(tickerStr);
+  const isTechWholesale = officialSecName === 'Bilgisayar Toptancılığı';
   const isTechSoftware = (resolvedSector === 'TECH' || /yazılım|bilişim|teknoloji/i.test(officialSecName)) && !isTechWholesale && !isVentureHolding;
   const fcf = parseFinancialNumber(latest?.free_cash_flow);
   if (isTechSoftware) {
@@ -5163,12 +5168,22 @@ export function optimizeFinalDecision({
     valuation.margin_of_safety = discount;
     valuation.margin_of_safety_status = discount >= 25.0 ? 'SAFE' : 'BORDERLINE';
     marginOfSafetyStatus = valuation.margin_of_safety_status;
-    const cleanReason = (overrideReason || 'risk faktörleri').trim().replace(/\.+$/, '');
-    const reasonSuffix = cleanReason.includes('çekildi') || cleanReason.includes('revize edildi') || cleanReason.includes('kararı')
-      ? cleanReason
-      : `${cleanReason} nedeniyle nihai karar temkinli 'NÖTR' (Koşullu İzleme) olarak dengelenmiştir`;
-    valuation.boundary_warning = (valuation.boundary_warning ? valuation.boundary_warning + ' | ' : '') +
-      `KOŞULLU EMNİYET MARJI: Hisse %${discount} iskonto potansiyeline sahiptir; ancak ${reasonSuffix}.`;
+    const cleanReason = (overrideReason || 'risk faktörleri')
+      .trim()
+      .replace(/^Karar ve Değerleme Uyumu:\s*/i, '')
+      .replace(/\.+$/, '');
+    const reasonSuffix =
+      cleanReason.includes('çekildi') ||
+      cleanReason.includes('revize edildi') ||
+      cleanReason.includes('kararı') ||
+      cleanReason.includes('dengelenmiştir') ||
+      cleanReason.includes('dengelendi')
+        ? cleanReason
+        : `${cleanReason} nedeniyle nihai karar temkinli 'NÖTR' (Koşullu İzleme) olarak dengelenmiştir`;
+    if (!valuation.boundary_warning?.includes('KOŞULLU EMNİYET MARJI:')) {
+      valuation.boundary_warning = (valuation.boundary_warning ? valuation.boundary_warning + ' | ' : '') +
+        `KOŞULLU EMNİYET MARJI: Hisse %${discount} iskonto potansiyeline sahiptir; ancak ${reasonSuffix}.`;
+    }
   }
 
   // Sınır Koşulları ve Gri Alan Entegrasyonu
@@ -6266,7 +6281,7 @@ export function computeSectorValuationAndDrivers(
         targetMultipleExpl = `Reel büyüme (%${revGrowth.toFixed(1)}) ve serbest nakit marjı (%${(actualFcfMargin ?? 0).toFixed(1)}) bileşimine göre dinamik FD/Satışlar çarpanı`;
       }
     } else if (sector === 'FINANCIAL_SERVICES') {
-      const isBrokerage = detectedOfficialSecName === 'Aracı Kurumlar' || ['ISMEN', 'OYYAT', 'INFO', 'OSMEN', 'GEDIK'].includes(currentTickerUpper);
+      const isBrokerage = detectedOfficialSecName === 'Aracı Kurumlar';
       // Döngüsel Ke Normalizasyonu: Yüksek nominal faiz ortamında (%45-%50 Ke),
       // kârlı aracı kurumlarda sermaye maliyetini tekillik koruması ve sürdürülebilir sermaye maliyetiyle (%18-%25) normalize et
       const effectiveKe = isBrokerage
@@ -6533,16 +6548,35 @@ export function computeSectorValuationAndDrivers(
 
   // EVRENSEL SEKTÖREL DEĞERLEME KORUMA YARDIMCILARI (53 Sektörün Tamamı İçin):
   // 1) Kronik Net Zarar + Özkaynak/EVA Erozyonu Tespiti
+  const latestRoicForProtection = parseFinancialNumber(latest?.roic);
+  const latestWaccForProtection = parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc);
+  const latestEvaForProtection = parseFinancialNumber(latest?.eva_spread) ?? (
+    latestRoicForProtection !== null && latestWaccForProtection !== null
+      ? (latestRoicForProtection - latestWaccForProtection)
+      : 0
+  );
+  const latestFinExpForProtection = parseFinancialNumber(latest?.financing_expenses ?? latest?.interest_expense);
+  const latestCrForProtection = parseFinancialNumber(latest?.current_ratio);
+
+  // 1B) Faaliyet Dışı / TMS 29 Parasal Kâr Yanılsaması & Operasyonel Çöküş Tespiti:
+  // Operasyonel (reel sektör) şirkette Net Kâr > 1.35x FAVÖK olmasına rağmen Esas Faaliyet Kârı (EBIT)
+  // finansman giderinin yarısını bile karşılayamıyor ve ROIC < WACC (negatif EVA) ise,
+  // yüksek görünen net kâr ve ROE tamamen faaliyet dışı / parasal pozisyon / değerleme kaynaklıdır.
+  const isNonOperationalProfitIllusion = Boolean(
+    sector === 'INDUSTRIAL' &&
+    ttmEbVal > 0 &&
+    ttmNetVal > ttmEbVal * 1.35 &&
+    rawLatestEbitVal !== null &&
+    latestFinExpForProtection !== null &&
+    latestFinExpForProtection > Math.max(1, rawLatestEbitVal) * 2.0 &&
+    latestEvaForProtection < -5.0
+  );
+
   const isChronicSectorLossDestroyer = (netFullVal: number): boolean => {
     if (isCapExTransitionPhase) return false;
     const ebitdaCheck = parseFinancialNumber(latest?.ebitda) ?? 0;
     if (ebitdaCheck > 0 || ttmEbVal > 0) return false;
-    const evaCheck = parseFinancialNumber(latest?.eva_spread) ?? (
-      parseFinancialNumber(latest?.roic) !== null && parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc) !== null
-        ? (parseFinancialNumber(latest?.roic)! - parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc)!)
-        : 0
-    );
-    return netFullVal < 0 && ttmEbVal <= 0 && ((roe !== null && roe < -5.0) || evaCheck < -5.0);
+    return netFullVal < 0 && ttmEbVal <= 0 && ((roe !== null && roe < -5.0) || latestEvaForProtection < -5.0);
   };
 
   // 2) Sanal %22-%40 Firma Değeri (EV) Tabanı Koruması & Net Nakit / Azınlık Payı Köprüsü:
@@ -6572,7 +6606,11 @@ export function computeSectorValuationAndDrivers(
 
   // 3) İleri Defter Değeri (Forward BVPS) Negatif ROE Erozyonu Koruması:
   // Pozitif ROE defter değerini büyütürken, negatif ROE (< 0) ileri defter değerini eritir.
+  // Faaliyet dışı / parasal kâr yanılsaması olan negatif EVA'lı şirketlerde fiktif ROE ile defter değeri şişirilmez.
   const resolveSafeForwardBvps = (bvpsVal: number, maxPosGrowth: number, retentionFactor: number): number => {
+    if (isNonOperationalProfitIllusion) {
+      return Math.max(0, bvpsVal);
+    }
     const g = (roe !== null && roe > 0)
       ? Math.min(maxPosGrowth, (roe / 100) * retentionFactor)
       : (roe !== null && roe < 0 ? Math.max(-0.35, (roe / 100) * 1.0) : 0);
@@ -6587,6 +6625,15 @@ export function computeSectorValuationAndDrivers(
     debtBridge: number,
     netFullVal: number
   ): number => {
+    if (isNonOperationalProfitIllusion) {
+      const roicRatio = (latestRoicForProtection !== null && latestRoicForProtection > 0 && latestWaccForProtection !== null && latestWaccForProtection > 0)
+        ? (latestRoicForProtection / latestWaccForProtection)
+        : 0.40;
+      const liqFactor = (latestCrForProtection !== null && latestCrForProtection < 1.0)
+        ? Math.max(0.65, latestCrForProtection)
+        : 1.0;
+      return Number(Math.max(0.28, Math.min(0.55, roicRatio * liqFactor)).toFixed(2));
+    }
     if (roe !== null && roe > 0) return positiveRoePb;
     if (isChronicSectorLossDestroyer(netFullVal)) {
       const debtErosionFactor = (enterpriseVal > 0 && debtBridge >= enterpriseVal)
@@ -8791,7 +8838,7 @@ export function computeSectorValuationAndDrivers(
       ? `F/K (${targetPe.toFixed(1)}x): ${pePerShare.toFixed(2).replace('.', ',')} TL (%45) + FD/FAVÖK (${targetEvMultiple.toFixed(1)}x${debtBridgeLabel}): ${evPerShare.toFixed(2).replace('.', ',')} TL (%35) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%20) = ${fairValue.toFixed(2).replace('.', ',')} TL`
       : `FD/FAVÖK (${targetEvMultiple.toFixed(1)}x${debtBridgeLabel}): ${evPerShare.toFixed(2).replace('.', ',')} TL (%60) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%40) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
   } else if (isAgroChemicalSector(detectedOfficialSecName, currentTickerUpper)) {
-    const isPaint = detectedOfficialSecName === 'Boya' || detectedOfficialSecName?.includes('Boya') || ['DYOBY', 'MRSHL'].includes(currentTickerUpper);
+    const isPaint = detectedOfficialSecName === 'Boya' || detectedOfficialSecName?.includes('Boya');
     const isChemical = detectedOfficialSecName === 'Kimyasal Ürün' || detectedOfficialSecName?.includes('Kimyasal Ürün');
     modelName = isPaint
       ? 'Boya & Kimyasal Kaplama Sanayii Modeli (İhracat, Hammadde Marjı & Katma Değer Modu)'
@@ -8874,8 +8921,8 @@ export function computeSectorValuationAndDrivers(
       ? `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x): ${evPerShare.toFixed(2).replace('.', ',')} TL (%45) + F/K (${targetPe.toFixed(1).replace('.', ',')}x): ${pePerShare.toFixed(2).replace('.', ',')} TL (%35) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%20) = ${fairValue.toFixed(2).replace('.', ',')} TL`
       : `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x): ${evPerShare.toFixed(2).replace('.', ',')} TL (%65) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%35) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
   } else if (isTextileSector(detectedOfficialSecName, currentTickerUpper)) {
-    const isIndustrialTextile = detectedOfficialSecName === 'Endüstriyel Tekstil' || detectedOfficialSecName?.includes('Endüstriyel Tekstil') || currentTickerUpper === 'KORDS';
-    const isLeather = detectedOfficialSecName === 'Deri Giyim' || detectedOfficialSecName?.includes('Deri') || ['DESA', 'DERIM'].includes(currentTickerUpper);
+    const isIndustrialTextile = detectedOfficialSecName === 'Endüstriyel Tekstil' || detectedOfficialSecName?.includes('Endüstriyel Tekstil');
+    const isLeather = detectedOfficialSecName === 'Deri Giyim' || detectedOfficialSecName?.includes('Deri');
 
     modelName = isIndustrialTextile
       ? 'Teknik Tekstil, Kord Bezi & Kompozit Güçlendirme Modeli (Küresel Lastik Tedarik & Katma Değer Modu)'
@@ -8901,17 +8948,19 @@ export function computeSectorValuationAndDrivers(
     const totalDebtBridge = effectiveNetDebt + leaseLiabilities + rawMinority;
 
     const rawRevG = revGrowth / 100;
-    const clampedRevG = Math.min(0.20, Math.max(-0.20, rawRevG));
+    const clampedRevG = isNonOperationalProfitIllusion ? 0 : Math.min(0.20, Math.max(-0.20, rawRevG));
     const rawNetG = netGrowth / 100;
-    const clampedNetG = Math.min(0.25, Math.max(-0.25, rawNetG));
+    const clampedNetG = isNonOperationalProfitIllusion ? 0 : Math.min(0.25, Math.max(-0.25, rawNetG));
 
     let effectiveEbitda = ebitdaFull;
-    if (!isChronicSectorLossDestroyer(netFull) && revFull > 0 && (ebitdaFull / revFull) < 0.10) {
+    if (!isChronicSectorLossDestroyer(netFull) && !isNonOperationalProfitIllusion && revFull > 0 && (ebitdaFull / revFull) < 0.10) {
       effectiveEbitda = Math.max(ebitdaFull, revFull * 0.135);
     }
     const effectiveNet = isChronicSectorLossDestroyer(netFull)
       ? netFull
-      : Math.max(netFull, effectiveEbitda * 0.25);
+      : (isNonOperationalProfitIllusion
+          ? Math.max(0, ebitdaFull * 0.35)
+          : Math.max(netFull, effectiveEbitda * 0.25));
 
     const textSecName = isIndustrialTextile ? 'Endüstriyel Tekstil' : (isLeather ? 'Deri Giyim' : (detectedOfficialSecName || 'Tekstil Entegre'));
     const secMult = resolveOfficialSectorMultiples(
@@ -9092,7 +9141,7 @@ export function computeSectorValuationAndDrivers(
     const rawNetG = netGrowth / 100;
     const clampedNetG = Math.min(0.25, Math.max(-0.25, rawNetG));
 
-    const isSportsClub = detectedOfficialSecName === 'Spor' || ['BJKAS', 'GSRAY', 'TSPOR', 'FENER'].includes(currentTickerUpper);
+    const isSportsClub = detectedOfficialSecName === 'Spor';
     const isMedia = detectedOfficialSecName === 'Medya';
     modelName = isSportsClub
       ? 'Spor Kulüpleri Değerleme Modeli (Yayın Gelirleri, Lisans, Sponsorluk & Finansal Borç Sınırı)'
@@ -9145,7 +9194,7 @@ export function computeSectorValuationAndDrivers(
       ? `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x): ${evPerShare.toFixed(2).replace('.', ',')} TL (%45) + F/K (${targetPe.toFixed(1).replace('.', ',')}x): ${pePerShare.toFixed(2).replace('.', ',')} TL (%35) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%20) = ${fairValue.toFixed(2).replace('.', ',')} TL`
       : `FD/FAVÖK (${targetEvMultiple.toFixed(1).replace('.', ',')}x): ${evPerShare.toFixed(2).replace('.', ',')} TL (%65) + PD/DD (${justifiedPb.toFixed(2).replace('.', ',')}x): ${pbPerShare.toFixed(2).replace('.', ',')} TL (%35) = ${fairValue.toFixed(2).replace('.', ',')} TL`;
   } else if (isPaperStationeryPackagingSector(detectedOfficialSecName, currentTickerUpper)) {
-    const isStationery = detectedOfficialSecName === 'Kırtasiye' || detectedOfficialSecName?.includes('Kırtasiye') || currentTickerUpper === 'ADEL';
+    const isStationery = detectedOfficialSecName === 'Kırtasiye' || detectedOfficialSecName?.includes('Kırtasiye');
     const isHeavyMachinery = detectedOfficialSecName === 'Endüstriyel Makine -Teçhizat Üretim' || detectedOfficialSecName?.includes('Endüstriyel Makine') || detectedOfficialSecName?.includes('Teçhizat') || detectedOfficialSecName?.includes('Makine');
     modelName = isStationery
       ? 'Kırtasiye & Ofis Malzemeleri Tüketim Modeli (Okul Sezonu & Perakende Dağıtım Ağı)'
@@ -9473,7 +9522,7 @@ export function computeSectorValuationAndDrivers(
   const capAllocAudit = analyzeRelatedPartyAndCapitalAllocationRisk(latest, sector, detectedOfficialSecName);
 
   const isDistressedModel = Boolean(
-    (modelName && (modelName.includes('Sıkıntılı') || modelName.includes('Distressed') || modelName.includes('Varlık Tabanı'))) ||
+    (modelName && (modelName.includes('Sıkıntılı') || modelName.includes('Distressed'))) ||
     isFallbackSalesUsed ||
     isAssetFloorUsed
   );

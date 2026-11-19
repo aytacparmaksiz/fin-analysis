@@ -1476,6 +1476,13 @@ export async function fetchAndAnalyzeBistCompany(
     multiplesPeriodKey < reportPeriodKey
   );
 
+  const isPriceMovedFromSnapshot = Boolean(
+    finalMultiples?.lastPrice &&
+    finalMultiples.lastPrice > 0 &&
+    currentPrice > 0 &&
+    Math.abs(currentPrice / finalMultiples.lastPrice - 1) >= 0.05
+  );
+
   const unifiedMetrics = FinancialRatioEngine.computeMetrics({
     ticker,
     history: sanitized.financial_history,
@@ -1487,10 +1494,13 @@ export async function fetchAndAnalyzeBistCompany(
       pb: isMultiplesStale ? null : finalMultiples.pb,
       evEbitda: isMultiplesStale ? null : finalMultiples.evEbitda,
       evSales: isMultiplesStale ? null : finalMultiples.evSales,
+      lastPrice: finalMultiples.lastPrice,
       lastPeriod: finalMultiples.lastPeriod
     } : null,
     currency: 'TRY'
   });
+
+  const shouldUseLiveUnifiedMultiples = isMultiplesStale || isPriceMovedFromSnapshot;
 
   return {
     success: true,
@@ -1510,11 +1520,11 @@ export async function fetchAndAnalyzeBistCompany(
     optimization: valuationEngineResult.optimization,
     unified_metrics: unifiedMetrics,
     market_multiples: finalMultiples ? {
-      pe: (isMultiplesStale && unifiedMetrics.valuation.pe != null) ? unifiedMetrics.valuation.pe : finalMultiples.pe,
-      pb: (isMultiplesStale && unifiedMetrics.valuation.pb != null) ? unifiedMetrics.valuation.pb : finalMultiples.pb,
-      ev_ebitda: (isMultiplesStale && unifiedMetrics.valuation.evEbitda != null) ? unifiedMetrics.valuation.evEbitda : finalMultiples.evEbitda,
-      ev_sales: (isMultiplesStale && unifiedMetrics.valuation.evSales != null) ? unifiedMetrics.valuation.evSales : finalMultiples.evSales,
-      market_cap_mn_tl: (isMultiplesStale && unifiedMetrics.valuation.marketCap != null && unifiedMetrics.valuation.marketCap > 0) ? Number((unifiedMetrics.valuation.marketCap / 1e6).toFixed(1)) : finalMultiples.marketCapMnTl,
+      pe: (shouldUseLiveUnifiedMultiples && unifiedMetrics.valuation.pe != null) ? unifiedMetrics.valuation.pe : finalMultiples.pe,
+      pb: (shouldUseLiveUnifiedMultiples && unifiedMetrics.valuation.pb != null) ? unifiedMetrics.valuation.pb : finalMultiples.pb,
+      ev_ebitda: (shouldUseLiveUnifiedMultiples && unifiedMetrics.valuation.evEbitda != null) ? unifiedMetrics.valuation.evEbitda : finalMultiples.evEbitda,
+      ev_sales: (shouldUseLiveUnifiedMultiples && unifiedMetrics.valuation.evSales != null) ? unifiedMetrics.valuation.evSales : finalMultiples.evSales,
+      market_cap_mn_tl: (shouldUseLiveUnifiedMultiples && unifiedMetrics.valuation.marketCap != null && unifiedMetrics.valuation.marketCap > 0) ? Number((unifiedMetrics.valuation.marketCap / 1e6).toFixed(1)) : finalMultiples.marketCapMnTl,
       market_cap_mn_usd: finalMultiples.marketCapMnUsd,
       free_float_pct: finalMultiples.freeFloatPct,
       paid_in_capital_mn_tl: finalMultiples.paidInCapitalMnTl,
