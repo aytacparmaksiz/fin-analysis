@@ -5808,7 +5808,17 @@ export default function SimplyView({
               {/* Sektörel Rehberlik & Teşhis Açıklama Kartı */}
               <div className="rounded-xl bg-[#1d222e] border border-[#323a4b] p-4 space-y-2 text-sm">
                 <div className="flex items-start gap-2.5">
-                  <div className="mt-1.5 h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
+                  <div className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${
+                    earningsQuality.badgeColor === 'emerald'
+                      ? 'bg-emerald-400'
+                      : earningsQuality.badgeColor === 'amber'
+                      ? 'bg-amber-400'
+                      : earningsQuality.badgeColor === 'indigo'
+                      ? 'bg-indigo-400'
+                      : earningsQuality.badgeColor === 'gray'
+                      ? 'bg-slate-400'
+                      : 'bg-rose-400'
+                  }`} />
                   <p className="text-slate-200 leading-relaxed font-normal flex-1 text-sm">
                     {earningsQuality.guidanceText}
                   </p>

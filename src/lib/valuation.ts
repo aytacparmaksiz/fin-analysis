@@ -9863,19 +9863,51 @@ export function calculateEarningsQuality(
       ...beneishMeta
     };
   } else if (safeOcf > 0 && safeNet > 0 && safeOcf < safeNet) {
-    const isGood = conversionRatio !== null && conversionRatio >= 70.0;
+    const isHighQuality = conversionRatio !== null && conversionRatio >= 70.0;
+    const isModerateQuality = conversionRatio !== null && conversionRatio >= 50.0;
+    const isAccrualDistressed = accountingRiskLevel === 'YÜKSEK' || (sloanRatio !== null && sloanRatio > 0.10);
+
+    let status: 'EXCELLENT' | 'MODERATE' | 'CRITICAL_RISK' = 'MODERATE';
+    let statusTitle = '';
+    let badgeColor: 'emerald' | 'amber' | 'rose' = 'amber';
+    let guidanceText = '';
+
+    if (isHighQuality) {
+      status = 'MODERATE';
+      statusTitle = 'Ilımlı / Makul Nakit Kalitesi (Kârın Büyük Kısmı Nakde Çevriliyor)';
+      badgeColor = 'amber';
+      guidanceText = 'Ilımlı / Makul Nakit Kalitesi: Kârın büyük kısmı nakde dönmektedir; kalan kısım olağan işletme sermayesi döngüsünde (stok/alacak) taşınmaktadır.';
+    } else if (isModerateQuality) {
+      if (isAccrualDistressed) {
+        status = 'CRITICAL_RISK';
+        statusTitle = 'Kısmi Nakit Dönüşümü (Agresif Tahakkuk / Alacak Baskısı)';
+        badgeColor = 'rose';
+        guidanceText = `Kısmi Nakit Dönüşümü ve Tahakkuk Uyarısı: Kârın %${conversionRatio?.toFixed(0) ?? 0}'si nakde dönmekle birlikte, yüksek alacak/stok artışı tahakkuk riski oluşturmaktadır.`;
+      } else {
+        status = 'MODERATE';
+        statusTitle = 'Kısmi Nakit Dönüşümü (İşletme Sermayesi Takip Edilmeli)';
+        badgeColor = 'amber';
+        guidanceText = `Kısmi Nakit Dönüşümü: Şirket kârının %${conversionRatio?.toFixed(0) ?? 0}'ini nakde çevirmiştir; kalan kısım çalışma sermayesi döngüsündedir (tahakkuk yapısı dengelidir).`;
+      }
+    } else {
+      status = 'CRITICAL_RISK';
+      badgeColor = 'rose';
+      if (isAccrualDistressed) {
+        statusTitle = 'Zayıf Nakit Dönüşümü (Kâr Kağıt Üzerinde Kalıyor, Tahakkuk Riski)';
+      } else {
+        statusTitle = 'Zayıf Nakit Dönüşümü (Kâr Kağıt Üzerinde Kalıyor)';
+      }
+      guidanceText = 'Zayıf Nakit Dönüşümü: Kâr kağıt üzerinde kalıyor, tahsilat gecikmeleri veya yüksek stok birikimi çalışma sermayesini eritiyor.';
+    }
+
     return {
       hasData: true,
       cashConversionRatio: conversionRatio,
       sloanAccrualRatio: sloanRatio,
-      status: isGood ? 'MODERATE' : 'CRITICAL_RISK',
-      statusTitle: isGood 
-        ? 'Ilımlı / Makul Nakit Kalitesi (Kârın Büyük Kısmı Nakde Çevriliyor)' 
-        : 'Zayıf Nakit Dönüşümü (Kâr Kağıt Üzerinde Kalıyor, Tahakkuk Riski)',
-      badgeColor: isGood ? 'amber' : 'rose',
-      guidanceText: isGood
-        ? 'Ilımlı / Makul Nakit Kalitesi: Kârın büyük kısmı nakde dönmektedir, kalan kısım işletme sermayesine veya stoklara bağlanmıştır.'
-        : 'Zayıf Nakit Dönüşümü: Kâr kağıt üzerinde kalıyor, tahsilat gecikmeleri veya yüksek stok birikimi çalışma sermayesini eritiyor.',
+      status,
+      statusTitle,
+      badgeColor,
+      guidanceText,
       beginnerExplanation,
       sloanAssessment,
       ocf,
