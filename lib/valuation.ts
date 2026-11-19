@@ -2034,6 +2034,101 @@ export function syncReportTextWithValuation(
 // 3. SEKTÖREL PUANLAMA & SINIR KOŞULLARI (GRİ ALAN UYARILARI)
 // ============================================================================
 
+export interface CoreOperatingAdjustment {
+  isNonCoreInflated: boolean;
+  reportedEbit: number | null;
+  coreEbit: number | null;
+  otherOpIncomeNet: number | null;
+  ooiSharePct: number;
+  normalizedEbit: number | null;
+  normalizedEbitda: number | null;
+  normalizedNetIncome: number | null;
+}
+
+const CORE_OPERATING_SECTORS = new Set<string>([
+  'INDUSTRIAL',
+  'HEALTHCARE',
+  'RETAIL',
+  'TECH',
+  'AVIATION',
+  'UTILITIES_TELCO',
+]);
+
+/**
+ * Esas Faaliyetlerden Diğer Gelirlerin (tek seferlik varlık satışı, değerleme artışı, kur/faiz)
+ * çekirdek faaliyet kârını (Brüt Kâr - Faaliyet Giderleri) >= %50 şişirdiği durumları ayrıştırır.
+ * Bilanço tarihçesi ham verisini bozmadan değerleme ve skorlama katmanına çekirdek bazlı koruma sağlar.
+ */
+export function resolveCoreOperatingAdjustment(item: any, sector: string): CoreOperatingAdjustment {
+  const empty: CoreOperatingAdjustment = {
+    isNonCoreInflated: false,
+    reportedEbit: null,
+    coreEbit: null,
+    otherOpIncomeNet: null,
+    ooiSharePct: 0,
+    normalizedEbit: null,
+    normalizedEbitda: null,
+    normalizedNetIncome: null,
+  };
+  if (!item || !CORE_OPERATING_SECTORS.has(String(sector || '').toUpperCase())) {
+    return empty;
+  }
+
+  const ooi = parseFinancialNumber(item?.other_operating_income_net);
+  const repEbit = parseFinancialNumber(item?.operating_profit ?? item?.ebit);
+  if (ooi === null || ooi <= 0 || repEbit === null || repEbit <= 0) {
+    return empty;
+  }
+
+  const shareRatio = ooi / repEbit;
+  if (shareRatio < 0.50) {
+    return empty;
+  }
+
+  const gp = parseFinancialNumber(item?.gross_profit);
+  const admin = parseFinancialNumber(item?.administrative_expenses);
+  const mkt = parseFinancialNumber(item?.marketing_expenses);
+  const rd = parseFinancialNumber(item?.rd_expenses);
+  const opex = parseFinancialNumber(item?.operating_expenses);
+  const dep = Math.abs(parseFinancialNumber(item?.depreciation) ?? 0);
+  const repEbitda = parseFinancialNumber(item?.ebitda);
+  const repNet = parseFinancialNumber(item?.net_income);
+
+  let coreEbit: number;
+  if (gp !== null && (admin !== null || mkt !== null || rd !== null)) {
+    coreEbit = gp - (Math.abs(admin ?? 0) + Math.abs(mkt ?? 0) + Math.abs(rd ?? 0));
+  } else if (gp !== null && opex !== null) {
+    coreEbit = gp - Math.abs(opex);
+  } else {
+    coreEbit = repEbit - ooi;
+  }
+
+  const normalizedEbit = Math.min(repEbit, coreEbit);
+  const normalizedEbitda = repEbitda !== null
+    ? Math.max(0, repEbitda - (repEbit - normalizedEbit))
+    : Math.max(0, normalizedEbit + dep);
+
+  const ebt = parseFinancialNumber(item?.ebt ?? item?.profit_before_tax);
+  const tax = Math.abs(parseFinancialNumber(item?.tax_expense) ?? 0);
+  const effectiveTaxRate = (ebt !== null && ebt > 0 && tax > 0)
+    ? Math.min(0.25, Math.max(0, tax / ebt))
+    : 0.20;
+  const normalizedNetIncome = repNet !== null
+    ? repNet - (ooi * (1 - effectiveTaxRate))
+    : null;
+
+  return {
+    isNonCoreInflated: true,
+    reportedEbit: repEbit,
+    coreEbit,
+    otherOpIncomeNet: ooi,
+    ooiSharePct: Number((shareRatio * 100).toFixed(1)),
+    normalizedEbit,
+    normalizedEbitda,
+    normalizedNetIncome,
+  };
+}
+
 /**
  * Sektörel dinamikleri (Bankacılık, Sigorta, Holding, Sanayi) göz önüne alan
  * doğrusal olmayan dinamik puanlama motoru.
@@ -3468,6 +3563,31 @@ export function calculateSectorScore(
       }
       if (!anomalies.some(a => a.includes('EVA') || a.includes('Brüt Kâr') || a.includes('Zarar'))) {
         anomalies.push('Ağır Net Zarar ve Sermaye Değer Yıkımı');
+      }
+    }
+  }
+
+  // EVRENSEL ÇEKİRDEK DIŞI FAALİYET KÂRI ŞİŞKİNLİĞİ KORUMASI:
+  // Esas faaliyetlerden diğer gelirler (tek seferlik satış/değerleme/kur) raporlanan EBIT'in >= %50'sini oluşturuyorsa
+  // şirket kârlılık sütunundan tam puan (veya 100/100 kusursuz skor) alamaz.
+  const coreOpScoreAdj = resolveCoreOperatingAdjustment(latest, sector);
+  if (coreOpScoreAdj.isNonCoreInflated) {
+    const coreLossAfterFin = coreOpScoreAdj.normalizedNetIncome !== null && coreOpScoreAdj.normalizedNetIncome <= 0;
+    anomalies.push(
+      `Çekirdek Dışı Faaliyet Kârı Şişkinliği: Raporlanan EBIT'in %${coreOpScoreAdj.ooiSharePct}'i diğer faaliyet gelirlerinden oluşmaktadır.`
+    );
+    if (breakdown.length > 0) {
+      const capFirst = coreLossAfterFin ? 12 : 16;
+      if (breakdown[0].score > capFirst) {
+        breakdown[0].score = capFirst;
+        breakdown[0].status = 'warning';
+      }
+    }
+    if (coreLossAfterFin) {
+      for (let i = 1; i < breakdown.length; i++) {
+        if (breakdown[i].score > 18) {
+          breakdown[i].score = 18;
+        }
       }
     }
   }
@@ -5168,6 +5288,23 @@ export function optimizeFinalDecision({
       }
     }
 
+    // 11.6 Kural: Çekirdek Dışı Faaliyet Kârı Bağımlılığı Koruması (Diğer Faaliyet Geliri >= %50 EBIT & Çekirdek Net Zarar)
+    const coreOpOptAdj = resolveCoreOperatingAdjustment(effectiveLatestData, effectiveSector);
+    if (coreOpOptAdj.isNonCoreInflated) {
+      const coreMsg = `Çekirdek Dışı Faaliyet Kârı Şişkinliği: Raporlanan EBIT'in %${coreOpOptAdj.ooiSharePct}'i diğer faaliyet gelirlerinden kaynaklanmaktadır (Dipnot ve süreklilik teyidi gerekir).`;
+      if (!conditionalWarnings.includes(coreMsg)) {
+        conditionalWarnings.push(coreMsg);
+      }
+      if (coreOpOptAdj.normalizedNetIncome !== null && coreOpOptAdj.normalizedNetIncome <= 0) {
+        safetyFlags.push(`Çekirdek Dışı Gelir Bağımlılığı (%${coreOpOptAdj.ooiSharePct})`);
+        if (!overrideApplied && finalDecision === 'AL') {
+          finalDecision = 'NÖTR';
+          overrideApplied = true;
+          overrideReason = `Çekirdek Operasyonel Kârlılık Koruması: Raporlanan faaliyet kârının %${coreOpOptAdj.ooiSharePct}'i esas faaliyet dışı diğer gelirlerden oluşmaktadır; bu kalem hariç tutulduğunda şirket net finansman giderleri sonrası çekirdek zarar üretmektedir. Kalıcı kârlılık teyit edilene kadar karar NÖTR (Koşullu İzleme) olarak sınırlandırıldı.`;
+        }
+      }
+    }
+
     // 12. Kural: Değer Tuzağı (Value Trap) Filtresi:
     // Kağıt üzerinde cazip iskonto (%20+) görünmesine rağmen marj daralması, negatif ROIC/EVA veya yüksek borç varsa AL kararı ALMA'ya veya NÖTR'e çekilir!
     const isValueTrap = valuation?.is_value_trap ?? false;
@@ -5717,6 +5854,7 @@ export function computeSectorValuationAndDrivers(
   });
 
   const latest = sortedHistory.length > 0 ? sortedHistory[sortedHistory.length - 1] : null;
+  const latestCoreAdj = resolveCoreOperatingAdjustment(latest, sector);
   const shareCount = parseShareCountNumber(extractedData?.share_count ?? extractedData?.shares_outstanding ?? extractedData?.shares_count ?? latest?.shares_count ?? latest?.share_count ?? latest?.shares_outstanding);
   const periodAnnualFactor = getAnnualizationFactor(latest?.period);
 
@@ -5870,8 +6008,15 @@ export function computeSectorValuationAndDrivers(
   }
 
   if (!hasPresentationNet) {
-    const rawLatestNet = parseFinancialNumber(latest?.net_income);
-    const rawPrevNet = parseFinancialNumber(prevYearItem?.net_income);
+    const rawLatestNetRaw = parseFinancialNumber(latest?.net_income);
+    const rawLatestNet = (latestCoreAdj.isNonCoreInflated && latestCoreAdj.normalizedNetIncome !== null)
+      ? latestCoreAdj.normalizedNetIncome
+      : rawLatestNetRaw;
+    const prevYearCoreAdj = resolveCoreOperatingAdjustment(prevYearItem, sector);
+    const rawPrevNetRaw = parseFinancialNumber(prevYearItem?.net_income);
+    const rawPrevNet = (prevYearCoreAdj.isNonCoreInflated && prevYearCoreAdj.normalizedNetIncome !== null)
+      ? prevYearCoreAdj.normalizedNetIncome
+      : rawPrevNetRaw;
     const latestNet = rawLatestNet !== null ? rawLatestNet * latestFlowFactor : null;
     const prevNet = rawPrevNet !== null ? rawPrevNet * prevFlowFactor : null;
 
@@ -5945,22 +6090,32 @@ export function computeSectorValuationAndDrivers(
   }
 
   const historySeries = Array.isArray(extractedData?.financial_history) ? extractedData.financial_history : [];
+  const getNormalizedFieldForItem = (item: any, field: string, fallback: number | null): number | null => {
+    if (!item || (field !== 'ebitda' && field !== 'operating_profit' && field !== 'net_income')) return fallback;
+    const adj = resolveCoreOperatingAdjustment(item, sector);
+    if (!adj.isNonCoreInflated) return fallback;
+    if (field === 'ebitda' && adj.normalizedEbitda !== null) return adj.normalizedEbitda;
+    if (field === 'operating_profit' && adj.normalizedEbit !== null) return adj.normalizedEbit;
+    if (field === 'net_income' && adj.normalizedNetIncome !== null) return adj.normalizedNetIncome;
+    return fallback;
+  };
   const computeTtmField = (field: string, rawVal: number): number => {
+    const effRawVal = getNormalizedFieldForItem(latest, field, rawVal) ?? rawVal;
     const pKey = parsePeriodSortKey(latest?.period);
     const yr = Math.floor(pKey / 100);
     const m = pKey % 100;
-    if (m === 12 || m === 0) return rawVal;
+    if (m === 12 || m === 0) return effRawVal;
     if (yr > 2000 && historySeries.length > 2) {
       const prevYearEnd = historySeries.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + 12);
       const prevYearMatch = historySeries.find((d: any) => parsePeriodSortKey(d?.period) === (yr - 1) * 100 + m);
-      const vEnd = parseFinancialNumber(prevYearEnd?.[field]);
-      const vMatch = parseFinancialNumber(prevYearMatch?.[field]);
+      const vEnd = getNormalizedFieldForItem(prevYearEnd, field, parseFinancialNumber(prevYearEnd?.[field]));
+      const vMatch = getNormalizedFieldForItem(prevYearMatch, field, parseFinancialNumber(prevYearMatch?.[field]));
       if (vEnd !== null && vMatch !== null) {
-        const ttmVal = rawVal + vEnd - vMatch;
+        const ttmVal = effRawVal + vEnd - vMatch;
         if (field !== 'revenue' || ttmVal > 0) return ttmVal;
       }
     }
-    return rawVal * periodAnnualFactor;
+    return effRawVal * periodAnnualFactor;
   };
 
   if (!hasPresentationMargin) {
@@ -6691,8 +6846,14 @@ export function computeSectorValuationAndDrivers(
   // 3) İleri Defter Değeri (Forward BVPS) Negatif ROE Erozyonu Koruması:
   // Pozitif ROE defter değerini büyütürken, negatif ROE (< 0) ileri defter değerini eritir.
   // Faaliyet dışı / parasal kâr yanılsaması olan negatif EVA'lı şirketlerde fiktif ROE ile defter değeri şişirilmez.
+  const isCoreProfitDepleted = Boolean(
+    latestCoreAdj.isNonCoreInflated &&
+    latestCoreAdj.normalizedNetIncome !== null &&
+    latestCoreAdj.normalizedNetIncome <= 0
+  );
+
   const resolveSafeForwardBvps = (bvpsVal: number, maxPosGrowth: number, retentionFactor: number): number => {
-    if (isNonOperationalProfitIllusion) {
+    if (isNonOperationalProfitIllusion || isCoreProfitDepleted) {
       return Math.max(0, bvpsVal);
     }
     const g = (roe !== null && roe > 0)
@@ -6717,6 +6878,9 @@ export function computeSectorValuationAndDrivers(
         ? Math.max(0.65, latestCrForProtection)
         : 1.0;
       return Number(Math.max(0.28, Math.min(0.55, roicRatio * liqFactor)).toFixed(2));
+    }
+    if (isCoreProfitDepleted) {
+      return Number(Math.max(0.75, Math.min(positiveRoePb, Math.max(1.0, secPb * 0.85))).toFixed(2));
     }
     if (roe !== null && roe > 0) return positiveRoePb;
     if (isChronicSectorLossDestroyer(netFullVal)) {

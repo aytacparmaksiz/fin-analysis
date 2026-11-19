@@ -1,7 +1,7 @@
 import { test, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { computeSectorValuationAndDrivers, calculateSectorScore, calculateDuPont5Step, analyzeRelatedPartyAndCapitalAllocationRisk, isTfrs10InvestmentEntity, optimizeFinalDecision, detectValueTrap, evaluateValueTrap, syncReportTextWithValuation, calculateProbabilisticExpectedValue, calculateFundamentalMomentum, calculateEarningsQuality, calculateCompanyMultiples } from '../lib/valuation.ts';
+import { computeSectorValuationAndDrivers, calculateSectorScore, calculateDuPont5Step, analyzeRelatedPartyAndCapitalAllocationRisk, isTfrs10InvestmentEntity, optimizeFinalDecision, detectValueTrap, evaluateValueTrap, syncReportTextWithValuation, calculateProbabilisticExpectedValue, calculateFundamentalMomentum, calculateEarningsQuality, calculateCompanyMultiples, resolveCoreOperatingAdjustment } from '../lib/valuation.ts';
 import { synthesizeInvestmentThesis } from '../lib/investment-thesis-synthesizer.ts';
 import { AGESA_SAMPLE_REPORT_TEXT, VESBE_SAMPLE_REPORT_TEXT } from '../lib/sample-data.ts';
 import { computeSnowflakeAnalysis } from '../lib/snowflake.ts';
@@ -1733,6 +1733,65 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
     ]) {
       assert.ok(appSimply.includes(uiMarker), `simply-view.tsx must include quantitative edge UI marker: ${uiMarker}`);
     }
+  });
+
+  it('36. Non-Core Other Operating Income Inflation Guard (LKMNH 2026/09): strips >=50% other_operating_income_net from EBITDA/NetIncome, caps score and blocks AL when core profit is negative', () => {
+    const lkmnhLikeItem = {
+      period: '2026/09',
+      revenue: 4_192_289_787,
+      gross_profit: 718_808_506,
+      administrative_expenses: -244_295_362,
+      marketing_expenses: -59_207_892,
+      other_operating_income_net: 1_004_181_656,
+      operating_profit: 1_419_486_908,
+      depreciation: 496_400_968,
+      ebitda: 1_915_887_876,
+      ebt: 843_620_000,
+      tax_expense: 8_908_000,
+      net_income: 834_712_259,
+      operating_cash_flow: 480_202_595,
+      net_debt: 1_701_294_775,
+      equity: 3_632_823_197,
+      current_ratio: 1.15,
+      roe: 24.83,
+      roic: 23.19,
+      wacc: 39.7,
+      eva_spread: 10.3,
+      paid_in_capital: 216_000_000,
+      ebitda_margin: 45.7,
+    };
+
+    const adj = resolveCoreOperatingAdjustment(lkmnhLikeItem, 'HEALTHCARE');
+    assert.equal(adj.isNonCoreInflated, true, 'Must detect >=50% non-core other operating income');
+    assert.ok(adj.ooiSharePct >= 70.0, `Expected ~70.7% share, got ${adj.ooiSharePct}`);
+    assert.ok(adj.normalizedEbitda !== null && adj.normalizedEbitda < 950_000_000, `Core EBITDA must strip 1B one-off income, got ${adj.normalizedEbitda}`);
+    assert.ok(adj.normalizedNetIncome !== null && adj.normalizedNetIncome < 0, `Core net income without one-off income must be negative, got ${adj.normalizedNetIncome}`);
+
+    // Exempt sectors & normal operating items must NOT trigger
+    assert.equal(resolveCoreOperatingAdjustment(lkmnhLikeItem, 'HOLDING').isNonCoreInflated, false);
+    assert.equal(resolveCoreOperatingAdjustment({ ...lkmnhLikeItem, other_operating_income_net: 100_000_000 }, 'HEALTHCARE').isNonCoreInflated, false);
+
+    const valRes = computeSectorValuationAndDrivers(
+      {
+        ticker: 'LKMNH',
+        sector: 'HEALTHCARE',
+        current_price: 10.26,
+        share_count: 216_000_000,
+        paid_in_capital: 216_000_000,
+        financial_history: [
+          { period: '2025/09', revenue: 3_834_850_827, gross_profit: 647_970_153, operating_profit: 423_563_051, ebitda: 889_759_360, net_income: 119_659_523, equity: 2_279_316_748, roe: 13.03, roic: 9.77 },
+          { period: '2025/12', revenue: 5_263_619_611, gross_profit: 932_319_253, operating_profit: 653_527_320, ebitda: 1_284_654_670, net_income: 186_903_527, equity: 2_941_328_134, roe: 6.35, roic: 8.51 },
+          lkmnhLikeItem,
+        ],
+      },
+      '10.26',
+      'HEALTHCARE'
+    );
+
+    assert.equal(valRes.valuation.final_decision, 'NÖTR', 'Core-loss non-core-inflated stock must not get AL');
+    assert.ok(valRes.scoreResult.totalScore < 75, `Score must be capped below 75 (not 100/100), got ${valRes.scoreResult.totalScore}`);
+    assert.ok(valRes.valuation.fair_value < 45, `Fair value must be core-normalized (<45 TL, not ~74 TL), got ${valRes.valuation.fair_value}`);
+    assert.ok(valRes.drivers.margin.value < 35, `EBITDA margin driver must reflect core margin (<35%), got ${valRes.drivers.margin.value}`);
   });
 
 });
