@@ -2034,7 +2034,21 @@ export default function SimplyView({
     setCollapsedReportChapters({});
     setExpandedThesisPillars({});
     setExpandedChecklistItems({});
+    setHighlightedTargetId(null);
   }, [report.id, report.ticker]);
+
+  const [highlightedTargetId, setHighlightedTargetId] = useState<string | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const triggerHighlight = useCallback((targetId: string) => {
+    setHighlightedTargetId(targetId);
+    if (highlightTimerRef.current) {
+      clearTimeout(highlightTimerRef.current);
+    }
+    highlightTimerRef.current = setTimeout(() => {
+      setHighlightedTargetId(null);
+    }, 2800);
+  }, []);
 
   const scrollToSection = (id: SimplySectionId) => {
     const el = document.getElementById(id);
@@ -2103,30 +2117,133 @@ export default function SimplyView({
   }, []);
 
   // 8.1 Rapor İçi Çapraz Referans Hedef Çözümleyici
-  const resolveCrossReferenceTarget = useCallback((term: string): { sectionId: SimplySectionId; label: string; tableTab?: 'bs' | 'is' | 'cf' | 'ratios' } | null => {
-    if (/DuPont|Nakit\s+[Aa]kışı\s+[Kk]alitesi|Nakit\s+[Dd]önüşüm\s+[Oo]ranı|Sloan\s+Tahakkuk|Net\s+[iİ]şletme\s+Nakit\s+Akışı|[iİ]şletme\s+Nakit\s+Akışı|Serbest\s+Nakit\s+Akışı/i.test(term)) {
-      return { sectionId: 'sec-grafikler', label: 'Bölüm 2: Grafik, Nakit Kalitesi & DuPont Analizine Git' };
+  const resolveCrossReferenceTarget = useCallback((term: string): {
+    sectionId: SimplySectionId;
+    label: string;
+    tableTab?: 'bs' | 'is' | 'cf' | 'ratios';
+    highlightId?: string;
+    accordionSecId?: string;
+  } | null => {
+    // 1. Nakit Akışı Tablosu Kalemleri (sekme: 'cf')
+    if (/Net\s+[iİ]şletme\s+Nakit\s+Akışı|[iİ]şletme\s+Nakit\s+Akışı(?:\s*\(OCF\))?/i.test(term)) {
+      return {
+        sectionId: 'sec-tablolar',
+        tableTab: 'cf',
+        highlightId: 'fin-row-operating_cash_flow',
+        accordionSecId: 'isletme',
+        label: 'Nakit Akışı Tablosu: Net İşletme Nakit Akışı (OCF)',
+      };
     }
-    if (/Bilanço|Finansal\s+Tablolar|[iİ]şletme\s+[Ss]ermayesi|[Çç]alışma\s+[Ss]ermayesi/i.test(term)) {
-      return { sectionId: 'sec-tablolar', label: 'Bölüm 3: Bilanço & Finansal Tablolara Git', tableTab: 'bs' };
+    if (/Serbest\s+Nakit\s+Akışı(?:\s*\(FCF\))?/i.test(term)) {
+      return {
+        sectionId: 'sec-tablolar',
+        tableTab: 'cf',
+        highlightId: 'fin-row-free_cash_flow',
+        accordionSecId: 'yatirim',
+        label: 'Nakit Akışı Tablosu: Serbest Nakit Akışı (FCF)',
+      };
+    }
+    if (/Maddi\s+Duran\s+Varlık\s+Yatırımları|Yatırım\s+Harcamaları|\bCapEx\b/i.test(term)) {
+      return {
+        sectionId: 'sec-tablolar',
+        tableTab: 'cf',
+        highlightId: 'fin-row-capex',
+        accordionSecId: 'yatirim',
+        label: 'Nakit Akışı Tablosu: Maddi & Maddi Olmayan Duran Varlık Alımları (CapEx)',
+      };
+    }
+    if (/[iİ]şletme\s+[Ss]ermayesi|[Çç]alışma\s+[Ss]ermayesi/i.test(term)) {
+      return {
+        sectionId: 'sec-tablolar',
+        tableTab: 'cf',
+        highlightId: 'fin-row-working_capital_change',
+        accordionSecId: 'isletme',
+        label: 'Nakit Akışı Tablosu: İşletme Sermayesindeki Net Değişimler',
+      };
+    }
+
+    // 2. Bilanço Tablosu Kalemleri (sekme: 'bs')
+    if (/Net\s+Borç/i.test(term)) {
+      return { sectionId: 'sec-tablolar', tableTab: 'bs', highlightId: 'fin-row-net_debt', accordionSecId: 'yukumluluk', label: 'Bilanço: Net Borç' };
+    }
+    if (/Finansal\s+Borç/i.test(term)) {
+      return { sectionId: 'sec-tablolar', tableTab: 'bs', highlightId: 'fin-row-financial_debt', accordionSecId: 'yukumluluk', label: 'Bilanço: Finansal Borçlar' };
+    }
+    if (/Özkaynak|Özsermaye/i.test(term)) {
+      return { sectionId: 'sec-tablolar', tableTab: 'bs', highlightId: 'fin-row-equity', accordionSecId: 'yukumluluk', label: 'Bilanço: Ana Ortaklık Özkaynakları' };
+    }
+    if (/Ticari\s+Alacaklar/i.test(term)) {
+      return { sectionId: 'sec-tablolar', tableTab: 'bs', highlightId: 'fin-row-trade_receivables', accordionSecId: 'donen', label: 'Bilanço: Ticari Alacaklar' };
+    }
+    if (/Stoklar/i.test(term)) {
+      return { sectionId: 'sec-tablolar', tableTab: 'bs', highlightId: 'fin-row-inventories', accordionSecId: 'donen', label: 'Bilanço: Stoklar' };
+    }
+    if (/Bilanço|Finansal\s+Tablolar/i.test(term)) {
+      return { sectionId: 'sec-tablolar', tableTab: 'bs', highlightId: 'sec-tablolar', label: 'Bölüm 3: Bilanço & Finansal Tablolara Git' };
+    }
+
+    // 3. Gelir Tablosu Kalemleri (sekme: 'is')
+    if (/Satış\s+Gelirleri|Hasılat/i.test(term)) {
+      return { sectionId: 'sec-tablolar', tableTab: 'is', highlightId: 'fin-row-revenue', accordionSecId: 'hasilat', label: 'Gelir Tablosu: Satış Gelirleri (Hasılat)' };
+    }
+    if (/Brüt\s+Kâr/i.test(term)) {
+      return { sectionId: 'sec-tablolar', tableTab: 'is', highlightId: 'fin-row-gross_profit', accordionSecId: 'hasilat', label: 'Gelir Tablosu: Brüt Kâr' };
+    }
+    if (/Esas\s+Faaliyet\s+Kârı|\bEBIT\b/i.test(term)) {
+      return { sectionId: 'sec-tablolar', tableTab: 'is', highlightId: 'fin-row-operating_profit', accordionSecId: 'faaliyet', label: 'Gelir Tablosu: Esas Faaliyet Kârı (EBIT)' };
+    }
+    if (/\bFAVÖK\b|\bEBITDA\b/i.test(term)) {
+      return { sectionId: 'sec-tablolar', tableTab: 'is', highlightId: 'fin-row-ebitda', accordionSecId: 'faaliyet', label: 'Gelir Tablosu: FAVÖK (EBITDA)' };
+    }
+    if (/Net\s+Dönem\s+Kârı/i.test(term)) {
+      return { sectionId: 'sec-tablolar', tableTab: 'is', highlightId: 'fin-row-net_income', accordionSecId: 'finansman', label: 'Gelir Tablosu: Net Dönem Kârı' };
+    }
+
+    // 4. Diğer Bölüm Hedefleri
+    if (/DuPont|Nakit\s+[Aa]kışı\s+[Kk]alitesi|Nakit\s+[Dd]önüşüm\s+[Oo]ranı|Sloan\s+Tahakkuk/i.test(term)) {
+      return { sectionId: 'sec-grafikler', highlightId: 'sec-grafikler', label: 'Bölüm 2: Grafik, Nakit Kalitesi & DuPont Analizine Git' };
     }
     if (/Değerleme\s+Çarpanları|Sektör\s+Çarpanları|Hedef\s+Çarpan|Cari\s+PD\/DD|Cari\s+F\/K|FD\/FAVÖK|FD\/Satışlar/i.test(term)) {
-      return { sectionId: 'sec-carpanlar', label: 'Bölüm 4: Değerleme Çarpanları & Sektör Kıyaslamasına Git' };
+      return { sectionId: 'sec-carpanlar', highlightId: 'sec-carpanlar', label: 'Bölüm 4: Değerleme Çarpanları & Sektör Kıyaslamasına Git' };
     }
     if (/Reel\s+WACC|Gordon\s+Büyüme\s+Modeli|[iİ]ndirgenmiş\s+Nakit\s+Akışı|Reel\s+EVA\s+Makası|Ayı\s+[Ss]enaryosu|Boğa\s+[Ss]enaryosu/i.test(term)) {
-      return { sectionId: 'sec-adildeger', label: 'Bölüm 5: Adil Değer & Sermaye Maliyeti Modeline Git' };
+      return { sectionId: 'sec-adildeger', highlightId: 'sec-adildeger', label: 'Bölüm 5: Adil Değer & Sermaye Maliyeti Modeline Git' };
     }
     if (/Temettü|Kâr\s+Payı/i.test(term)) {
-      return { sectionId: 'sec-temettu', label: 'Bölüm 6: Temettü Analizine Git' };
+      return { sectionId: 'sec-temettu', highlightId: 'sec-temettu', label: 'Bölüm 6: Temettü Analizine Git' };
     }
     return null;
   }, []);
+
+  const navigateToCrossRef = useCallback((refTarget: {
+    sectionId: SimplySectionId;
+    tableTab?: 'bs' | 'is' | 'cf' | 'ratios';
+    highlightId?: string;
+    accordionSecId?: string;
+  }) => {
+    if (refTarget.tableTab) {
+      setSelectedTableTab(refTarget.tableTab);
+    }
+    if (refTarget.accordionSecId) {
+      setCollapsedSections(prev => ({ ...prev, [refTarget.accordionSecId!]: false }));
+    }
+    const targetDomId = refTarget.highlightId || refTarget.sectionId;
+    triggerHighlight(targetDomId);
+
+    setTimeout(() => {
+      if (refTarget.highlightId && document.getElementById(refTarget.highlightId)) {
+        scrollToDomId(refTarget.highlightId, refTarget.sectionId);
+      } else {
+        scrollToSection(refTarget.sectionId);
+      }
+    }, 110);
+  }, [scrollToDomId, triggerHighlight]);
 
   // 8.1 Rapor Düz Metin Segmenti Zenginleştirici (Fiyatlar, Getiri/İskonto, Parantez İçi Yargılar ve Çapraz Referans Linkleri)
   const enrichPlainTextSegment = useCallback((text: string, keyPrefix = 'seg'): React.ReactNode => {
     if (!text || text.length < 2) return text;
 
-    const combinedRegex = /(\(\s*(?:Güçlü\s+Alım\s+Tezi[^)]*|[^()]*Açısından\s+(?:Olumlu|Olumsuz|Kritik|Zayıf\/Olumsuz)[^)]*|[^()]*açısından\s+(?:olumlu|olumsuz|temkinli[^)]*|zayıf\/olumsuz)[^)]*|Aşağı\s+yönlü\s+risk\s+(?:sınırlı|emniyeti)[^)]*|Faiz\s+şoklarına\s+karşı\s+korumalı[^)]*|Nötr\s*\/[^)]*|Dengeli(?:\s*\/\s*Ilımlı)?\s+görünüm|Yönetilebilir\s+(?:faiz|Finansman)\s+riski|Operasyonel\s+Kaldıraç\s+Hassasiyeti|Yüksek\s+risk-ödül\s+asimetrisi|Kısa\s+vadede\s+temkinli[^)]*|Güvenli\s+[iİ]skonto\s+Marjı|Sınırda\s+Güvenlik\s+Marjı|Yetersiz\s+Güvenlik\s+Marjı|güvenlik\s+marjı\s+bulunmamaktadır)\s*\))|((?:(?:[+-]\s*)?%\s*[+-]?\d+(?:[.,]\d+)?\s*(?:getiri\s+potansiyeli(?:\s*\((?:[iİ]skonto|prim)\))?|yükseliş\s+potansiyeli|güvenlik\s+marjı|[iİ]skonto\s+payı|[iİ]skontolu(?:dur)?|[iİ]skonto(?:su|yla)?|potansiyel(?:i|ine|ini|dir)?|primli(?:dir)?|prim(?:i|le)?|üzerinde(?:dir)?)|[+-]\d+(?:[.,]\d+)?\s*puan(?:\s+(?:pozitif|negatif)\s+(?:ekonomik\s+katma\s+değer|EVA))?|%\s*-\d+(?:[.,]\d+)?|-\s*%\s*\d+(?:[.,]\d+)?))|((?:[+-]\s*)?(?:₺\s*\d[\d.,]*(?:\s*(?:Milyar|Milyon|Mr|Mn|Bin))?|\d[\d.,]*\s*(?:Milyar|Milyon|Mr|Mn|Bin)\s*TL\b|\d[\d.,]*\s*TL\b))|((?<![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ])(?:DuPont(?:\s+5\s+[Aa]şamalı|\s+[Aa]nalizi|\s+[Aa]yrıştırması|\s+ROE|\s+[Vv]erimlilik)?|Net\s+[iİ]şletme\s+Nakit\s+Akışı|[iİ]şletme\s+Nakit\s+Akışı(?:\s*\(OCF\))?|Serbest\s+Nakit\s+Akışı(?:\s*\(FCF\))?|Nakit\s+[Aa]kışı\s+[Kk]alitesi|Nakit\s+[Dd]önüşüm\s+[Oo]ranı|Sloan\s+Tahakkuk|Bilanço(?:da|daki|su|sunda|sundaki)?|Finansal\s+Tablolar|[iİ]şletme\s+[Ss]ermayesi|[Çç]alışma\s+[Ss]ermayesi|Değerleme\s+Çarpanları|Sektör\s+Çarpanları|Hedef\s+Çarpan|Cari\s+PD\/DD|Cari\s+F\/K|FD\/FAVÖK|FD\/Satışlar|Gordon\s+Büyüme\s+Modeli|[iİ]ndirgenmiş\s+Nakit\s+Akışı|Reel\s+WACC|Reel\s+EVA\s+Makası|Ayı\s+[Ss]enaryosu(?:\s+[Tt]aban\s+(?:[Ff]iyatı|[Hh]edefi))?|Boğa\s+[Ss]enaryosu(?:\s+[Tt]avan\s+(?:[Ff]iyatı|[Hh]edefi))?|Temettü(?:\s+verimi|\s+dağıtım\s+kapasitesini)?|Kâr\s+Payı)(?![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ]))|((?:\+%\d+(?:[.,]\d+)?|%\d+(?:[.,]\d+)?(?:\s*-\s*\d+(?:[.,]\d+)?)?|(?<![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ])\d+(?:[.,]\d+)?x(?![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ])))/gi;
+    const combinedRegex = /(\(\s*(?:Güçlü\s+Alım\s+Tezi[^)]*|[^()]*Açısından\s+(?:Olumlu|Olumsuz|Kritik|Zayıf\/Olumsuz)[^)]*|[^()]*açısından\s+(?:olumlu|olumsuz|temkinli[^)]*|zayıf\/olumsuz)[^)]*|Aşağı\s+yönlü\s+risk\s+(?:sınırlı|emniyeti)[^)]*|Faiz\s+şoklarına\s+karşı\s+korumalı[^)]*|Nötr\s*\/[^)]*|Dengeli(?:\s*\/\s*Ilımlı)?\s+görünüm|Yönetilebilir\s+(?:faiz|Finansman)\s+riski|Operasyonel\s+Kaldıraç\s+Hassasiyeti|Yüksek\s+risk-ödül\s+asimetrisi|Kısa\s+vadede\s+temkinli[^)]*|Güvenli\s+[iİ]skonto\s+Marjı|Sınırda\s+Güvenlik\s+Marjı|Yetersiz\s+Güvenlik\s+Marjı|güvenlik\s+marjı\s+bulunmamaktadır)\s*\))|((?:(?:[+-]\s*)?%\s*[+-]?\d+(?:[.,]\d+)?\s*(?:getiri\s+potansiyeli(?:\s*\((?:[iİ]skonto|prim)\))?|yükseliş\s+potansiyeli|güvenlik\s+marjı|[iİ]skonto\s+payı|[iİ]skontolu(?:dur)?|[iİ]skonto(?:su|yla)?|potansiyel(?:i|ine|ini|dir)?|primli(?:dir)?|prim(?:i|le)?|üzerinde(?:dir)?)|[+-]\d+(?:[.,]\d+)?\s*puan(?:\s+(?:pozitif|negatif)\s+(?:ekonomik\s+katma\s+değer|EVA))?|%\s*-\d+(?:[.,]\d+)?|-\s*%\s*\d+(?:[.,]\d+)?))|((?:[+-]\s*)?(?:₺\s*\d[\d.,]*(?:\s*(?:Milyar|Milyon|Mr|Mn|Bin))?|\d[\d.,]*\s*(?:Milyar|Milyon|Mr|Mn|Bin)\s*TL\b|\d[\d.,]*\s*TL\b))|((?<![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ])(?:DuPont(?:\s+5\s+[Aa]şamalı|\s+[Aa]nalizi|\s+[Aa]yrıştırması|\s+ROE|\s+[Vv]erimlilik)?|Net\s+[iİ]şletme\s+Nakit\s+Akışı|[iİ]şletme\s+Nakit\s+Akışı(?:\s*\(OCF\))?|Serbest\s+Nakit\s+Akışı(?:\s*\(FCF\))?|Maddi\s+Duran\s+Varlık\s+Yatırımları|Yatırım\s+Harcamaları|CapEx|Nakit\s+[Aa]kışı\s+[Kk]alitesi|Nakit\s+[Dd]önüşüm\s+[Oo]ranı|Sloan\s+Tahakkuk|Net\s+Borç|Finansal\s+Borç(?:ları|lar)?|Özkaynak(?:lar|ları|ta|taki)?|Özsermaye(?:sini|si)?|Ticari\s+Alacaklar|Stoklar|Satış\s+Gelirleri|Hasılat(?:ı|ın)?|Brüt\s+Kâr(?:ı|ın)?|Esas\s+Faaliyet\s+Kârı|Net\s+Dönem\s+Kârı|FAVÖK|EBITDA|Bilanço(?:da|daki|su|sunda|sundaki)?|Finansal\s+Tablolar|[iİ]şletme\s+[Ss]ermayesi|[Çç]alışma\s+[Ss]ermayesi|Değerleme\s+Çarpanları|Sektör\s+Çarpanları|Hedef\s+Çarpan|Cari\s+PD\/DD|Cari\s+F\/K|FD\/FAVÖK|FD\/Satışlar|Gordon\s+Büyüme\s+Modeli|[iİ]ndirgenmiş\s+Nakit\s+Akışı|Reel\s+WACC|Reel\s+EVA\s+Makası|Ayı\s+[Ss]enaryosu(?:\s+[Tt]aban\s+(?:[Ff]iyatı|[Hh]edefi))?|Boğa\s+[Ss]enaryosu(?:\s+[Tt]avan\s+(?:[Ff]iyatı|[Hh]edefi))?|Temettü(?:\s+verimi|\s+dağıtım\s+kapasitesini)?|Kâr\s+Payı)(?![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ]))|((?:\+%\d+(?:[.,]\d+)?|%\d+(?:[.,]\d+)?(?:\s*-\s*\d+(?:[.,]\d+)?)?|(?<![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ])\d+(?:[.,]\d+)?x(?![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ])))/gi;
 
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
@@ -2170,10 +2287,7 @@ export default function SimplyView({
             <button
               key={key}
               type="button"
-              onClick={() => {
-                if (refTarget.tableTab) setSelectedTableTab(refTarget.tableTab);
-                scrollToSection(refTarget.sectionId);
-              }}
+              onClick={() => navigateToCrossRef(refTarget)}
               title={refTarget.label}
               className="inline text-cyan-300 hover:text-[#f5c242] underline decoration-cyan-500/40 hover:decoration-[#f5c242] underline-offset-4 font-medium transition-colors cursor-pointer"
             >
@@ -2202,7 +2316,7 @@ export default function SimplyView({
       parts.push(text.slice(lastIndex));
     }
     return parts;
-  }, [renderSemanticEvalBadge, resolveCrossReferenceTarget]);
+  }, [renderSemanticEvalBadge, resolveCrossReferenceTarget, navigateToCrossRef]);
 
   const enrichReportNode = useCallback((node: React.ReactNode, keyPrefix = 'rn'): React.ReactNode => {
     if (typeof node === 'string') {
@@ -3898,7 +4012,7 @@ export default function SimplyView({
           {/* BÖLÜM 1: GRAFİKLER (#sec-grafikler)                                     */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Grafik Terminali Hatası">
-          <section id="sec-grafikler" className="scroll-mt-6 rounded-2xl border border-[#242a35] bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6">
+          <section id="sec-grafikler" className={`scroll-mt-6 rounded-2xl border bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6 transition-all ${highlightedTargetId === 'sec-grafikler' ? 'border-[#f5c242] ring-2 ring-[#f5c242]/60 animate-pulse shadow-[0_0_28px_rgba(245,194,66,0.25)]' : 'border-[#242a35]'}`}>
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3 flex-wrap gap-3">
               <div className="flex items-center gap-2.5">
                 <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">1</span>
@@ -4186,7 +4300,7 @@ export default function SimplyView({
           {/* BÖLÜM 2: FİNANSAL TABLOLAR (#sec-tablolar)                              */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Finansal Tablolar Hatası">
-          <section id="sec-tablolar" className="scroll-mt-6 rounded-2xl border border-[#242a35] bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6">
+          <section id="sec-tablolar" className={`scroll-mt-6 rounded-2xl border bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6 transition-all ${highlightedTargetId === 'sec-tablolar' ? 'border-[#f5c242] ring-2 ring-[#f5c242]/60 animate-pulse shadow-[0_0_28px_rgba(245,194,66,0.25)]' : 'border-[#242a35]'}`}>
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3 flex-wrap gap-3">
               <div className="flex items-center gap-2.5">
                 <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">2</span>
@@ -4353,12 +4467,19 @@ export default function SimplyView({
                               {sec.rows.map((row) => (
                                 <tr
                                   key={row.key}
+                                  id={`fin-row-${row.key}`}
                                   onMouseEnter={() => setHoveredRowKey(row.key)}
                                   onMouseLeave={() => setHoveredRowKey(null)}
                                   onClick={() => setHoveredRowKey(prev => prev === row.key ? null : row.key)}
-                                  className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors cursor-pointer"
+                                  className={`border-b border-[#222730] transition-all cursor-pointer ${
+                                    highlightedTargetId === `fin-row-${row.key}`
+                                      ? 'ring-2 ring-[#f5c242] bg-[#f5c242]/20 animate-pulse shadow-[0_0_20px_rgba(245,194,66,0.35)]'
+                                      : 'hover:bg-[#1f242c]/50'
+                                  }`}
                                 >
-                                  <td className="py-2.5 px-3 pl-6 font-sans text-sm text-slate-200 font-normal truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#181b20] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]" title={row.label}>
+                                  <td className={`py-2.5 px-3 pl-6 font-sans text-sm truncate min-w-[170px] sm:min-w-[200px] sticky left-0 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] ${
+                                    highlightedTargetId === `fin-row-${row.key}` ? 'bg-[#332a12] text-[#f5c242] font-bold' : 'bg-[#181b20] text-slate-200 font-normal'
+                                  }`} title={row.label}>
                                     {row.label}
                                   </td>
                                   {visiblePeriods.map((c, colIdx) =>
@@ -4369,12 +4490,19 @@ export default function SimplyView({
 
                               {/* Kategori Toplam Satırı */}
                               <tr
+                                id={`fin-row-${sec.totalKey}`}
                                 onMouseEnter={() => setHoveredRowKey(`total-${sec.id}`)}
                                 onMouseLeave={() => setHoveredRowKey(null)}
                                 onClick={() => setHoveredRowKey(prev => prev === `total-${sec.id}` ? null : `total-${sec.id}`)}
-                                className="bg-[#1a1e24] border-t border-b border-[#2e3542] hover:bg-[#222832] transition-colors cursor-pointer"
+                                className={`border-t border-b border-[#2e3542] transition-all cursor-pointer ${
+                                  highlightedTargetId === `fin-row-${sec.totalKey}`
+                                    ? 'ring-2 ring-[#f5c242] bg-[#f5c242]/25 animate-pulse shadow-[0_0_24px_rgba(245,194,66,0.4)]'
+                                    : 'bg-[#1a1e24] hover:bg-[#222832]'
+                                }`}
                               >
-                                <td className="py-2.5 px-3 font-sans font-bold text-white text-[15px] truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#1a1e24] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
+                                <td className={`py-2.5 px-3 font-sans font-bold text-[15px] truncate min-w-[170px] sm:min-w-[200px] sticky left-0 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] ${
+                                  highlightedTargetId === `fin-row-${sec.totalKey}` ? 'bg-[#3b3014] text-[#f5c242]' : 'bg-[#1a1e24] text-white'
+                                }`}>
                                   {sec.totalLabel}
                                 </td>
                                 {visiblePeriods.map((c, colIdx) =>
@@ -4385,10 +4513,15 @@ export default function SimplyView({
                               {/* Genel Toplam Satırı (Aktifler / Yükümlülükler) */}
                               {sec.grandTotalLabel && (
                                 <tr
+                                  id={`fin-row-${sec.grandTotalKey}`}
                                   onMouseEnter={() => setHoveredRowKey(`grand-${sec.id}`)}
                                   onMouseLeave={() => setHoveredRowKey(null)}
                                   onClick={() => setHoveredRowKey(prev => prev === `grand-${sec.id}` ? null : `grand-${sec.id}`)}
-                                  className="bg-[#242a35] border-t-2 border-b-2 border-[#f5c242]/40 font-bold hover:bg-[#2c3442] transition-colors cursor-pointer"
+                                  className={`border-t-2 border-b-2 border-[#f5c242]/40 font-bold transition-all cursor-pointer ${
+                                    highlightedTargetId === `fin-row-${sec.grandTotalKey}`
+                                      ? 'ring-2 ring-[#f5c242] bg-[#f5c242]/30 animate-pulse shadow-[0_0_26px_rgba(245,194,66,0.45)]'
+                                      : 'bg-[#242a35] hover:bg-[#2c3442]'
+                                  }`}
                                 >
                                   <td className="py-3 px-3 font-sans font-extrabold text-[#f5c242] text-base tracking-wide truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#242a35] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
                                     {sec.grandTotalLabel}
@@ -4402,12 +4535,19 @@ export default function SimplyView({
                               {/* Ekstra Satır (Örn: Net Borç) */}
                               {sec.extraRow && (
                                 <tr
+                                  id={`fin-row-${sec.extraRow.key}`}
                                   onMouseEnter={() => setHoveredRowKey(`extra-${sec.id}`)}
                                   onMouseLeave={() => setHoveredRowKey(null)}
                                   onClick={() => setHoveredRowKey(prev => prev === `extra-${sec.id}` ? null : `extra-${sec.id}`)}
-                                  className="bg-[#1a1e24] border-b border-[#2e3542] hover:bg-[#222832] transition-colors cursor-pointer"
+                                  className={`border-b border-[#2e3542] transition-all cursor-pointer ${
+                                    highlightedTargetId === `fin-row-${sec.extraRow.key}`
+                                      ? 'ring-2 ring-[#f5c242] bg-[#f5c242]/25 animate-pulse shadow-[0_0_24px_rgba(245,194,66,0.4)]'
+                                      : 'bg-[#1a1e24] hover:bg-[#222832]'
+                                  }`}
                                 >
-                                  <td className="py-2.5 px-3 pl-4 font-sans font-semibold text-slate-200 text-sm truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#1a1e24] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
+                                  <td className={`py-2.5 px-3 pl-4 font-sans font-semibold text-sm truncate min-w-[170px] sm:min-w-[200px] sticky left-0 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] ${
+                                    highlightedTargetId === `fin-row-${sec.extraRow.key}` ? 'bg-[#3b3014] text-[#f5c242]' : 'bg-[#1a1e24] text-slate-200'
+                                  }`}>
                                     {sec.extraRow.label}
                                   </td>
                                   {visiblePeriods.map((c, colIdx) =>
@@ -4454,12 +4594,19 @@ export default function SimplyView({
                               {sec.rows.map((row) => (
                                 <tr
                                   key={row.key}
+                                  id={`fin-row-${row.key}`}
                                   onMouseEnter={() => setHoveredRowKey(row.key)}
                                   onMouseLeave={() => setHoveredRowKey(null)}
                                   onClick={() => setHoveredRowKey(prev => prev === row.key ? null : row.key)}
-                                  className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors cursor-pointer"
+                                  className={`border-b border-[#222730] transition-all cursor-pointer ${
+                                    highlightedTargetId === `fin-row-${row.key}`
+                                      ? 'ring-2 ring-[#f5c242] bg-[#f5c242]/20 animate-pulse shadow-[0_0_20px_rgba(245,194,66,0.35)]'
+                                      : 'hover:bg-[#1f242c]/50'
+                                  }`}
                                 >
-                                  <td className="py-2.5 px-3 pl-6 font-sans text-sm text-slate-200 font-normal truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#181b20] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]" title={row.label}>
+                                  <td className={`py-2.5 px-3 pl-6 font-sans text-sm truncate min-w-[170px] sm:min-w-[200px] sticky left-0 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] ${
+                                    highlightedTargetId === `fin-row-${row.key}` ? 'bg-[#332a12] text-[#f5c242] font-bold' : 'bg-[#181b20] text-slate-200 font-normal'
+                                  }`} title={row.label}>
                                     {row.label}
                                   </td>
                                   {visiblePeriods.map((c, colIdx) =>
@@ -4469,12 +4616,19 @@ export default function SimplyView({
                               ))}
 
                               <tr
+                                id={`fin-row-${sec.totalKey}`}
                                 onMouseEnter={() => setHoveredRowKey(`total-${sec.id}`)}
                                 onMouseLeave={() => setHoveredRowKey(null)}
                                 onClick={() => setHoveredRowKey(prev => prev === `total-${sec.id}` ? null : `total-${sec.id}`)}
-                                className="bg-[#1a1e24] border-t border-b border-[#2e3542] hover:bg-[#222832] transition-colors cursor-pointer"
+                                className={`border-t border-b border-[#2e3542] transition-all cursor-pointer ${
+                                  highlightedTargetId === `fin-row-${sec.totalKey}`
+                                    ? 'ring-2 ring-[#f5c242] bg-[#f5c242]/25 animate-pulse shadow-[0_0_24px_rgba(245,194,66,0.4)]'
+                                    : 'bg-[#1a1e24] hover:bg-[#222832]'
+                                }`}
                               >
-                                <td className="py-2.5 px-3 font-sans font-bold text-white text-[15px] truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#1a1e24] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
+                                <td className={`py-2.5 px-3 font-sans font-bold text-[15px] truncate min-w-[170px] sm:min-w-[200px] sticky left-0 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] ${
+                                  highlightedTargetId === `fin-row-${sec.totalKey}` ? 'bg-[#3b3014] text-[#f5c242]' : 'bg-[#1a1e24] text-white'
+                                }`}>
                                   {sec.totalLabel}
                                 </td>
                                 {visiblePeriods.map((c, colIdx) =>
@@ -4484,10 +4638,15 @@ export default function SimplyView({
 
                               {sec.grandTotalLabel && (
                                 <tr
+                                  id={`fin-row-${sec.grandTotalKey}`}
                                   onMouseEnter={() => setHoveredRowKey(`grand-${sec.id}`)}
                                   onMouseLeave={() => setHoveredRowKey(null)}
                                   onClick={() => setHoveredRowKey(prev => prev === `grand-${sec.id}` ? null : `grand-${sec.id}`)}
-                                  className="bg-[#242a35] border-t-2 border-b-2 border-[#f5c242]/40 font-bold hover:bg-[#2c3442] transition-colors cursor-pointer"
+                                  className={`border-t-2 border-b-2 border-[#f5c242]/40 font-bold transition-all cursor-pointer ${
+                                    highlightedTargetId === `fin-row-${sec.grandTotalKey}`
+                                      ? 'ring-2 ring-[#f5c242] bg-[#f5c242]/30 animate-pulse shadow-[0_0_26px_rgba(245,194,66,0.45)]'
+                                      : 'bg-[#242a35] hover:bg-[#2c3442]'
+                                  }`}
                                 >
                                   <td className="py-3 px-3 font-sans font-extrabold text-[#f5c242] text-base tracking-wide truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#242a35] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
                                     {sec.grandTotalLabel}
@@ -4536,12 +4695,19 @@ export default function SimplyView({
                               {sec.rows.map((row) => (
                                 <tr
                                   key={row.key}
+                                  id={`fin-row-${row.key}`}
                                   onMouseEnter={() => setHoveredRowKey(row.key)}
                                   onMouseLeave={() => setHoveredRowKey(null)}
                                   onClick={() => setHoveredRowKey(prev => prev === row.key ? null : row.key)}
-                                  className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors cursor-pointer"
+                                  className={`border-b border-[#222730] transition-all cursor-pointer ${
+                                    highlightedTargetId === `fin-row-${row.key}`
+                                      ? 'ring-2 ring-[#f5c242] bg-[#f5c242]/20 animate-pulse shadow-[0_0_20px_rgba(245,194,66,0.35)]'
+                                      : 'hover:bg-[#1f242c]/50'
+                                  }`}
                                 >
-                                  <td className="py-2.5 px-3 pl-6 font-sans text-sm text-slate-200 font-normal truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#181b20] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]" title={row.label}>
+                                  <td className={`py-2.5 px-3 pl-6 font-sans text-sm truncate min-w-[170px] sm:min-w-[200px] sticky left-0 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] ${
+                                    highlightedTargetId === `fin-row-${row.key}` ? 'bg-[#332a12] text-[#f5c242] font-bold' : 'bg-[#181b20] text-slate-200 font-normal'
+                                  }`} title={row.label}>
                                     {row.label}
                                   </td>
                                   {visiblePeriods.map((c, colIdx) =>
@@ -4551,12 +4717,19 @@ export default function SimplyView({
                               ))}
 
                               <tr
+                                id={`fin-row-${sec.totalKey}`}
                                 onMouseEnter={() => setHoveredRowKey(`total-${sec.id}`)}
                                 onMouseLeave={() => setHoveredRowKey(null)}
                                 onClick={() => setHoveredRowKey(prev => prev === `total-${sec.id}` ? null : `total-${sec.id}`)}
-                                className="bg-[#1a1e24] border-t border-b border-[#2e3542] hover:bg-[#222832] transition-colors cursor-pointer"
+                                className={`border-t border-b border-[#2e3542] transition-all cursor-pointer ${
+                                  highlightedTargetId === `fin-row-${sec.totalKey}`
+                                    ? 'ring-2 ring-[#f5c242] bg-[#f5c242]/25 animate-pulse shadow-[0_0_24px_rgba(245,194,66,0.4)]'
+                                    : 'bg-[#1a1e24] hover:bg-[#222832]'
+                                }`}
                               >
-                                <td className="py-2.5 px-3 font-sans font-bold text-white text-[15px] truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#1a1e24] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)]">
+                                <td className={`py-2.5 px-3 font-sans font-bold text-[15px] truncate min-w-[170px] sm:min-w-[200px] sticky left-0 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] ${
+                                  highlightedTargetId === `fin-row-${sec.totalKey}` ? 'bg-[#3b3014] text-[#f5c242]' : 'bg-[#1a1e24] text-white'
+                                }`}>
                                   {sec.totalLabel}
                                 </td>
                                 {visiblePeriods.map((c, colIdx) =>
@@ -4640,7 +4813,7 @@ export default function SimplyView({
           {/* BÖLÜM 3: ÇARPANLAR (#sec-carpanlar)                                     */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Çarpan Analizi Hatası">
-          <section id="sec-carpanlar" className="scroll-mt-6 rounded-2xl border border-[#242a35] bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6">
+          <section id="sec-carpanlar" className={`scroll-mt-6 rounded-2xl border bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6 transition-all ${highlightedTargetId === 'sec-carpanlar' ? 'border-[#f5c242] ring-2 ring-[#f5c242]/60 animate-pulse shadow-[0_0_28px_rgba(245,194,66,0.25)]' : 'border-[#242a35]'}`}>
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
               <div className="flex items-center gap-2.5">
                 <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">3</span>
@@ -5095,7 +5268,7 @@ export default function SimplyView({
           {/* BÖLÜM 4: DEĞERLEME (#sec-adildeger)                                     */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Değerleme Panosu Hatası">
-          <section id="sec-adildeger" className="scroll-mt-6 rounded-2xl border border-[#242a35] bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6">
+          <section id="sec-adildeger" className={`scroll-mt-6 rounded-2xl border bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6 transition-all ${highlightedTargetId === 'sec-adildeger' ? 'border-[#f5c242] ring-2 ring-[#f5c242]/60 animate-pulse shadow-[0_0_28px_rgba(245,194,66,0.25)]' : 'border-[#242a35]'}`}>
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
               <div className="flex items-center gap-2.5">
                 <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">4</span>
@@ -6140,7 +6313,7 @@ export default function SimplyView({
           {/* BÖLÜM 5: TEMETTÜ (#sec-temettu)                                         */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Temettü Panosu Hatası">
-          <section id="sec-temettu" className="scroll-mt-6 rounded-2xl border border-[#242a35] bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6">
+          <section id="sec-temettu" className={`scroll-mt-6 rounded-2xl border bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6 transition-all ${highlightedTargetId === 'sec-temettu' ? 'border-[#f5c242] ring-2 ring-[#f5c242]/60 animate-pulse shadow-[0_0_28px_rgba(245,194,66,0.25)]' : 'border-[#242a35]'}`}>
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
               <div className="flex items-center gap-2.5">
                 <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">5</span>
