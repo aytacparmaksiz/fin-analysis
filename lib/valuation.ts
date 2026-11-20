@@ -7210,10 +7210,16 @@ export function computeSectorValuationAndDrivers(
       if (netCashFull > 0 && !isDistressedHolding && !isUnprofitableHoldingTrap) {
         const forwardOperatingNav = operatingEquityFull * (1 + forwardEquityGrowth);
         const discountedOperatingNav = forwardOperatingNav * clampedMultiple;
-        const totalFairEquity = discountedOperatingNav + netCashFull;
+        // Düşük ROE (< %15) veya negatif EVA üreten holdinglerde kasadaki atıl nakde tam 1.0x yerine holding iskontosu (0.60x-0.70x) uygulanır
+        const holdingCashMultiple = (roe !== null && roe < 10.0)
+          ? 0.60
+          : (((roe !== null && roe < 15.0) || latestEvaForProtection < 0) ? 0.70 : 1.0);
+        const effectiveNetCashFull = netCashFull * holdingCashMultiple;
+        const totalFairEquity = discountedOperatingNav + effectiveNetCashFull;
         const rawFair = totalFairEquity / effectiveShareCount;
         fairValue = Number(Math.max(0.5, rawFair).toFixed(2));
-        const netCashNote = ` + Net Nakit (${(netCashFull / effectiveShareCount).toFixed(2).replace('.', ',')} TL)`;
+        const cashDiscTag = holdingCashMultiple < 1.0 ? ` × ${holdingCashMultiple.toFixed(2).replace('.', ',')}` : '';
+        const netCashNote = ` + Net Nakit (${(effectiveNetCashFull / effectiveShareCount).toFixed(2).replace('.', ',')} TL${cashDiscTag})`;
         formulaStr = `12A İleri Portföy NAD: ${(discountedOperatingNav / effectiveShareCount).toFixed(2).replace('.', ',')} TL (${clampedMultiple.toFixed(2).replace('.', ',')}x)${netCashNote} = ${fairValue.toFixed(2).replace('.', ',')} TL`;
       } else {
         const rawFair = forwardNavPerShare * clampedMultiple;

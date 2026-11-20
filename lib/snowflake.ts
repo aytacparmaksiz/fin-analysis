@@ -465,11 +465,14 @@ export function computeSnowflakeAnalysis(params: {
     historicalGrowth.revGrowth
   );
 
-  const effectiveRevGrowth = (unifiedMetrics?.growth?.revenueGrowthYoY != null && !isNaN(unifiedMetrics.growth.revenueGrowthYoY))
-    ? unifiedMetrics.growth.revenueGrowthYoY
-    : ((typeof historicalGrowth.revGrowth === 'number' && !isNaN(historicalGrowth.revGrowth) && historicalGrowth.revGrowth !== 0)
-        ? historicalGrowth.revGrowth
-        : revGrowth);
+  const rawEffectiveRevGrowth = (valuationDrivers?.revenue_growth?.value != null && !isNaN(Number(valuationDrivers.revenue_growth.value)))
+    ? Number(valuationDrivers.revenue_growth.value)
+    : ((unifiedMetrics?.growth?.revenueGrowthYoY != null && !isNaN(unifiedMetrics.growth.revenueGrowthYoY))
+        ? unifiedMetrics.growth.revenueGrowthYoY
+        : ((typeof historicalGrowth.revGrowth === 'number' && !isNaN(historicalGrowth.revGrowth) && historicalGrowth.revGrowth !== 0)
+            ? historicalGrowth.revGrowth
+            : revGrowth));
+  const effectiveRevGrowth = Math.max(-75.0, Math.min(75.0, Number(rawEffectiveRevGrowth.toFixed(1))));
 
   const profitGrowth = Number(
     valuationDrivers?.net_income_growth?.value ??
@@ -477,11 +480,14 @@ export function computeSnowflakeAnalysis(params: {
     historicalGrowth.profitGrowth
   );
 
-  const effectiveProfitGrowth = (unifiedMetrics?.growth?.netIncomeGrowthYoY != null && !isNaN(unifiedMetrics.growth.netIncomeGrowthYoY))
-    ? unifiedMetrics.growth.netIncomeGrowthYoY
-    : ((typeof historicalGrowth.profitGrowth === 'number' && !isNaN(historicalGrowth.profitGrowth) && historicalGrowth.profitGrowth !== 0)
-        ? historicalGrowth.profitGrowth
-        : profitGrowth);
+  const rawEffectiveProfitGrowth = (valuationDrivers?.net_income_growth?.value != null && !isNaN(Number(valuationDrivers.net_income_growth.value)))
+    ? Number(valuationDrivers.net_income_growth.value)
+    : ((unifiedMetrics?.growth?.netIncomeGrowthYoY != null && !isNaN(unifiedMetrics.growth.netIncomeGrowthYoY))
+        ? unifiedMetrics.growth.netIncomeGrowthYoY
+        : ((typeof historicalGrowth.profitGrowth === 'number' && !isNaN(historicalGrowth.profitGrowth) && historicalGrowth.profitGrowth !== 0)
+            ? historicalGrowth.profitGrowth
+            : profitGrowth));
+  const effectiveProfitGrowth = Math.max(-75.0, Math.min(75.0, Number(rawEffectiveProfitGrowth.toFixed(1))));
 
   // Peter Lynch & Gordon Büyüme Hibrit Modeli Adil F/K Çarpanı (Sürdürülebilir Büyüme & İçsel Değerleme)
   // Kurumsal Finans İlkesi:
