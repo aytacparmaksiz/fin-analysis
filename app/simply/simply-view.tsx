@@ -6630,55 +6630,8 @@ export default function SimplyView({
               </div>
             </div>
 
-            {/* Üstte Kompakt "Karar Şeridi" (Sabit Özet Çubuğu) */}
-            <div className="sticky top-[104px] lg:top-14 z-20 backdrop-blur-md bg-[#131720]/95 border border-[#2d3545] rounded-xl p-3 shadow-xl space-y-2.5">
-              {/* Üst Satır: Finansal Karar, Fiyat & EVA Özeti */}
-              <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-                <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
-                  <span className={`px-2.5 py-1 rounded-lg font-mono font-black text-xs border shadow-sm ${
-                    effectiveDecision === 'AL'
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                      : effectiveDecision === 'ALMA'
-                      ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                      : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                  }`}>
-                    KARAR: {effectiveDecision === 'AL' ? 'AL' : effectiveDecision === 'ALMA' ? 'ALMA' : 'NÖTR'}
-                  </span>
-                  <span className="font-mono text-xs text-white font-bold">
-                    {report.ticker}
-                  </span>
-                  <span className="h-3.5 w-px bg-[#282d37]" />
-                  <div className="flex items-center gap-1.5 text-xs font-mono">
-                    <span className="text-slate-400">Piyasa:</span>
-                    <span className="text-white font-bold">₺{currentPriceNum.toFixed(2)}</span>
-                  </div>
-                  <span className="text-slate-500 font-mono text-xs">→</span>
-                  <div className="flex items-center gap-1.5 text-xs font-mono">
-                    <span className="text-slate-400">Adil Değer:</span>
-                    <span className="text-[#f5c242] font-bold">₺{fairValueNum.toFixed(2)}</span>
-                  </div>
-                  {fairValueNum > 0 && currentPriceNum > 0 && (
-                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-mono font-bold border ${
-                      fairValueNum >= currentPriceNum
-                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                        : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
-                    }`}>
-                      {fairValueNum >= currentPriceNum ? '+' : ''}{(((fairValueNum - currentPriceNum) / currentPriceNum) * 100).toFixed(1)}% ({fairValueNum >= currentPriceNum
-                        ? `%${Math.abs(((fairValueNum - currentPriceNum) / fairValueNum) * 100).toFixed(0)} İskontolu`
-                        : `%${Math.abs(((currentPriceNum - fairValueNum) / currentPriceNum) * 100).toFixed(0)} Primli`})
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-1.5 bg-[#181d27] border border-[#2a3240] px-3 py-1 rounded-lg text-xs font-mono">
-                  <span className="text-slate-400">Reel EVA:</span>
-                  <span className={`font-bold ${evaSpreadNum >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {evaSpreadNum >= 0 ? `+${evaSpreadNum.toFixed(1)}` : evaSpreadNum.toFixed(1)} Puan
-                  </span>
-                </div>
-              </div>
-
-              {/* Alt Satır: Eşit Dağıtılmış Bölüm Sekmeleri (Tam Genişlik Segment Bar) */}
+            {/* Sabit Yatırım Tezi Alt-Bölüm Sekmeleri */}
+            <div className="sticky top-[104px] lg:top-14 z-20 backdrop-blur-md bg-[#131720]/95 border border-[#2d3545] rounded-xl p-2 shadow-xl">
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 bg-[#161a23] p-1 rounded-xl border border-[#282f3d]">
                 {[
                   { id: 'sec-yatirim-tezi-71', label: '7.1 Tez Özeti' },
