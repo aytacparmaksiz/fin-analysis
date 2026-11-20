@@ -1752,22 +1752,34 @@ export function buildForensicRedFlagsSection(params: {
 
   const reasons: string[] = [];
 
-  // 0. Adli Değer Tuzağı ve Sermaye Tahsisi Risk Gerekçeleri (Varsa Öncelikli Olarak Dahil Edilir)
+  // 0. Karar Freni (overrideReason) & Adli Değer Tuzağı Gerekçeleri (Öncelikli)
+  const optOverrideReason = String(
+    optimization?.overrideReason ||
+    valuation?.override_reason ||
+    extractedData?.optimization?.overrideReason ||
+    ''
+  ).trim();
+  if (optOverrideReason) {
+    reasons.push(`**Karar Freni (Model Gerekçesi):** ${optOverrideReason}`);
+  }
+
   const existingTrapReasons: string[] = Array.isArray(valuation?.value_trap_reasons) ? valuation.value_trap_reasons : [];
   for (const tr of existingTrapReasons) {
-    if (tr && !reasons.includes(tr)) {
+    if (tr && !reasons.some(r => r.includes(tr))) {
       reasons.push(tr.startsWith('**') ? tr : `**Adli Değer Tuzağı Bulgusu:** ${tr}`);
     }
   }
 
   // 1. Borçluluk ve Kaldıraç Baskısı
-  const netDebt = Number(latestItem?.net_debt ?? extractedData?.net_debt ?? 0);
-  const ebitda = Number(latestItem?.ebitda ?? extractedData?.ebitda ?? 0);
-  const netDebtToEbitda = ebitda > 0 ? Number((netDebt / ebitda).toFixed(2)) : (netDebt > 0 ? 99 : 0);
-  const finDebt = Number(latestItem?.financial_debt ?? 0);
-  const cash = Number(latestItem?.cash ?? 0);
+  const netDebt = parseFinancialNumber(latestItem?.net_debt ?? extractedData?.net_debt);
+  const ebitda = parseFinancialNumber(latestItem?.ebitda ?? extractedData?.ebitda);
+  const netDebtToEbitda = (netDebt !== null && ebitda !== null && ebitda > 0)
+    ? Number((netDebt / ebitda).toFixed(2))
+    : ((netDebt !== null && netDebt > 0) ? 99 : 0);
+  const finDebt = parseFinancialNumber(latestItem?.financial_debt) ?? 0;
+  const cash = parseFinancialNumber(latestItem?.cash ?? latestItem?.cash_and_equivalents) ?? 0;
 
-  if (netDebt > 0 && (netDebtToEbitda >= 1.5 || netDebt >= 500e6)) {
+  if (netDebt !== null && netDebt > 0 && (netDebtToEbitda >= 1.5 || netDebt >= 500e6)) {
     const netDebtStr = netDebt >= 1e9 ? `${(netDebt / 1e9).toFixed(2)} Milyar TL` : `${(netDebt / 1e6).toFixed(0)} Milyon TL`;
     const finDebtStr = finDebt >= 1e9 ? `${(finDebt / 1e9).toFixed(2)} Mr TL` : `${(finDebt / 1e6).toFixed(0)} Mn TL`;
     const cashStr = cash >= 1e9 ? `${(cash / 1e9).toFixed(2)} Mr TL` : `${(cash / 1e6).toFixed(0)} Mn TL`;
@@ -1776,25 +1788,46 @@ export function buildForensicRedFlagsSection(params: {
     );
   }
 
-  // 2. Kâr Var, Sıcak Nakit Yok (İşletme Sermayesi & Serbest Nakit Kıtlığı)
-  const cfo = Number(latestItem?.operating_cash_flow ?? extractedData?.cfo ?? 0);
-  const fcf = Number(latestItem?.free_cash_flow ?? extractedData?.fcf ?? 0);
-  const netInc = Number(latestItem?.net_income ?? extractedData?.net_income ?? 0);
-  const wcChange = Number(latestItem?.working_capital_change ?? 0);
-  const inventories = Number(latestItem?.inventories ?? 0);
-  const receivables = Number(latestItem?.trade_receivables ?? 0);
+  // 2. Nakit Dönüşümü & CapEx / İşletme Sermayesi Ayrımı (Yalnızca Reel/Operasyonel Sektörler ve Mevcut Nakit Akışı Verisi İçin)
+  const secUpper = String(scoreResult?.sector || extractedData?.sector || valuation?.sector || 'INDUSTRIAL').toUpperCase();
+  const isCashFlowOperatingSector = !['BANKING', 'INSURANCE', 'FINANCIAL_SERVICES', 'HOLDING', 'REIT'].includes(secUpper);
+  const cfo = parseFinancialNumber(latestItem?.operating_cash_flow ?? extractedData?.cfo);
+  const fcf = parseFinancialNumber(latestItem?.free_cash_flow ?? extractedData?.fcf);
+  const netInc = parseFinancialNumber(latestItem?.net_income ?? extractedData?.net_income);
+  const wcChange = parseFinancialNumber(latestItem?.working_capital_change);
+  const inventories = parseFinancialNumber(latestItem?.inventories) ?? 0;
+  const receivables = parseFinancialNumber(latestItem?.trade_receivables) ?? 0;
 
-  if (netInc > 0 && (fcf < netInc * 0.3 || cfo < netInc * 0.6 || wcChange < -100e6)) {
-    const fcfStr = Math.abs(fcf) >= 1e9 ? `${(fcf / 1e9).toFixed(2)} Milyar TL` : `${(fcf / 1e6).toFixed(1)} Milyon TL`;
-    const wcDrainStr = wcChange < 0 ? ` (İşletme sermayesi ${(Math.abs(wcChange) / 1e6).toFixed(0)} Milyon TL nakit yutmuştur)` : '';
-    const invStr = inventories > 100e6 ? ` (Stoklar: ${(inventories / 1e9).toFixed(2)} Mr TL, Alacaklar: ${(receivables / 1e9).toFixed(2)} Mr TL)` : '';
-    reasons.push(
-      `**Kâr Var, Sıcak Nakit Yok (İşletme Sermayesi Tuzağı):** Şirket kâğıt üzerinde ${netInc >= 1e9 ? `${(netInc / 1e9).toFixed(2)} Milyar TL` : `${(netInc / 1e6).toFixed(0)} Milyon TL`} net kâr açıklasa da, kasaya kalan Serbest Nakit Akışı (FCF) yalnızca **${fcfStr}** düzeyindedir${wcDrainStr}${invStr}. Üretilen kâr sıcak nakde dönememekte, şirketi dış borçlanmaya muhtaç bırakmaktadır.`
-    );
-  } else if (cfo <= 0) {
-    reasons.push(
-      `**Negatif Faaliyet Nakit Akışı (Nakit Yakımı):** Şirket ana faaliyetlerinden nakit üretememekte; operasyonlarını sürdürebilmek için sıcak nakit yakmaktadır.`
-    );
+  const fmtMnOrMr = (val: number) =>
+    Math.abs(val) >= 1e9 ? `${(val / 1e9).toFixed(2)} Milyar TL` : `${(val / 1e6).toFixed(1)} Milyon TL`;
+
+  if (isCashFlowOperatingSector && cfo !== null) {
+    if (cfo <= 0) {
+      reasons.push(
+        `**Negatif Faaliyet Nakit Akışı (Nakit Yakımı):** Şirket ana faaliyetlerinden nakit üretememekte (${fmtMnOrMr(cfo)}); operasyonlarını sürdürebilmek için sıcak nakit yakmaktadır.`
+      );
+    } else if (netInc !== null && netInc > 0) {
+      const wcDrainStr = (wcChange !== null && wcChange < 0)
+        ? ` (İşletme sermayesi ${(Math.abs(wcChange) / 1e6).toFixed(0)} Milyon TL nakit yutmuştur)`
+        : '';
+      const invStr = inventories > 100e6
+        ? ` (Stoklar: ${(inventories / 1e9).toFixed(2)} Mr TL, Alacaklar: ${(receivables / 1e9).toFixed(2)} Mr TL)`
+        : '';
+
+      if (cfo < netInc * 0.60) {
+        reasons.push(
+          `**Kâr Var, Sıcak Nakit Yok (Tahakkuk Riski):** Şirket ${fmtMnOrMr(netInc)} net kâr açıklasa da ana faaliyetlerinden elde ettiği nakit akışı (CFO) yalnızca **${fmtMnOrMr(cfo)}** düzeyindedir${wcDrainStr}${invStr}. Üretilen kâr sıcak nakde yeterince dönememektedir.`
+        );
+      } else if (fcf !== null && fcf < netInc * 0.30) {
+        reasons.push(
+          `**Yüksek Yatırım Harcaması (CapEx) Kaynaklı Serbest Nakit Kısıtı:** Şirket operasyonel nakit üretse de (CFO: ${fmtMnOrMr(cfo)}), yüksek yatırım harcamaları nedeniyle kasaya kalan Serbest Nakit Akışı (FCF: **${fmtMnOrMr(fcf)}**) sınırlı kalmaktadır${wcDrainStr}.`
+        );
+      } else if (wcChange !== null && wcChange < -100e6 && cfo < netInc * 0.80) {
+        reasons.push(
+          `**İşletme Sermayesi Nakit Çıkışı:** İşletme sermayesindeki artış ${(Math.abs(wcChange) / 1e6).toFixed(0)} Milyon TL nakit çıkışı yaratmıştır${invStr}; nakit dönüşümünün korunması izlenmelidir.`
+        );
+      }
+    }
   }
 
   // 3. Sermaye Verimliliği / Negatif EVA
@@ -1815,9 +1848,23 @@ export function buildForensicRedFlagsSection(params: {
     );
   }
 
-  // 5. Skor ve Sektörel Uyarılar
+  // 5. Skor Anomalileri ve Gerçek Risk Uyarıları (Olumlu tonlu uyarılar hariç tutulur)
+  const scoreAnomalies: string[] = Array.isArray(scoreResult?.anomalies) ? scoreResult.anomalies : [];
+  for (const anom of scoreAnomalies.slice(0, 2)) {
+    if (anom && !reasons.some(r => r.includes(anom))) {
+      reasons.push(`**Adli Skor Anomalisi:** ${anom}`);
+    }
+  }
+
   const warnings = (scoreResult?.breakdown || [])
-    .filter((b: any) => b.status === 'warning' || b.status === 'danger')
+    .filter((b: any) => {
+      if (b.status === 'danger') return true;
+      if (b.status === 'warning') {
+        const rLower = String(b.reason || '').toLowerCase();
+        return !/(sağlıklı|güçlü|olumlu|dengeli|destekliyor)/i.test(rLower);
+      }
+      return false;
+    })
     .slice(0, 2);
   for (const w of warnings) {
     if (!reasons.some(r => r.includes(w.category))) {
@@ -1832,10 +1879,17 @@ export function buildForensicRedFlagsSection(params: {
       `**Düşük Özsermaye Kârlılığı (ROE Baskısı):** Şirketin yıllıklandırılmış özsermaye kârlılığı (**%${roeNum.toFixed(1)}**), alternatif risksiz faiz ve sermaye maliyetinin altında kalarak içsel değer üretimini sınırlandırmaktadır.`
     );
   }
+  const totalScoreNum = Number(scoreResult?.totalScore ?? 72);
   if (reasons.length < 3) {
-    reasons.push(
-      `**Sınır Koşulları ve Katalizör İhtiyacı:** Model skoru (${scoreResult?.totalScore || 72}/100) ve operasyonel nakit dönüşüm rasyoları güçlü alım eşiğinin altında kalmış olup, ciro ve serbest nakit akışında yeni çeyrek teyitleri görülmeden aceleci pozisyon açılmamalıdır.`
-    );
+    if (totalScoreNum < 75) {
+      reasons.push(
+        `**Sınır Koşulları ve Katalizör İhtiyacı:** Model skoru (${totalScoreNum}/100) güçlü alım eşiğinin altında kalmış olup, ciro ve serbest nakit akışında yeni çeyrek teyitleri görülmeden aceleci pozisyon açılmamalıdır.`
+      );
+    } else {
+      reasons.push(
+        `**Güvenlik Marjı & Yeni Çeyrek Teyit İhtiyacı:** Temel analiz skoru (${totalScoreNum}/100) yüksek olsa da kurumsal %25 emniyet marjı veya ek nakit/marj teyitleri tam karşılanmadığından yeni çeyrek verileri izlenmelidir.`
+      );
+    }
   }
   if (reasons.length < 3) {
     const bearP = valuation?.bear_price ?? (valuation?.fair_value ? Number((valuation.fair_value * 0.75).toFixed(2)) : 0);
@@ -1975,7 +2029,10 @@ export function syncReportTextWithValuation(
       ticker: valuation?.ticker,
       valuation,
       scoreResult: scoreResult || valuation?.scoreResult,
-      optimization: { finalDecision: effDecision || 'NÖTR' },
+      optimization: {
+        finalDecision: effDecision || 'NÖTR',
+        overrideReason: valuation?.override_reason || extractedData?.optimization?.overrideReason,
+      },
       extractedData: extractedData || valuation?.extractedData
     });
     if (redFlagsBlock) {

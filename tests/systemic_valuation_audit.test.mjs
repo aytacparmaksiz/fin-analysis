@@ -1,7 +1,7 @@
 import { test, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { computeSectorValuationAndDrivers, calculateSectorScore, calculateDuPont5Step, analyzeRelatedPartyAndCapitalAllocationRisk, isTfrs10InvestmentEntity, optimizeFinalDecision, detectValueTrap, evaluateValueTrap, syncReportTextWithValuation, calculateProbabilisticExpectedValue, calculateFundamentalMomentum, calculateEarningsQuality, calculateCompanyMultiples, resolveCoreOperatingAdjustment } from '../lib/valuation.ts';
+import { computeSectorValuationAndDrivers, calculateSectorScore, calculateDuPont5Step, analyzeRelatedPartyAndCapitalAllocationRisk, isTfrs10InvestmentEntity, optimizeFinalDecision, detectValueTrap, evaluateValueTrap, syncReportTextWithValuation, calculateProbabilisticExpectedValue, calculateFundamentalMomentum, calculateEarningsQuality, calculateCompanyMultiples, resolveCoreOperatingAdjustment, buildForensicRedFlagsSection } from '../lib/valuation.ts';
 import { synthesizeInvestmentThesis } from '../lib/investment-thesis-synthesizer.ts';
 import { AGESA_SAMPLE_REPORT_TEXT, VESBE_SAMPLE_REPORT_TEXT } from '../lib/sample-data.ts';
 import { computeSnowflakeAnalysis } from '../lib/snowflake.ts';
@@ -1792,6 +1792,49 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
     assert.ok(valRes.scoreResult.totalScore < 75, `Score must be capped below 75 (not 100/100), got ${valRes.scoreResult.totalScore}`);
     assert.ok(valRes.valuation.fair_value < 45, `Fair value must be core-normalized (<45 TL, not ~74 TL), got ${valRes.valuation.fair_value}`);
     assert.ok(valRes.drivers.margin.value < 35, `EBITDA margin driver must reflect core margin (<35%), got ${valRes.drivers.margin.value}`);
+  });
+
+  it('37. buildForensicRedFlagsSection: prevents false FCF shortage when CFO/FCF >> NetIncome, prioritizes overrideReason, and avoids score<75 contradiction on 87/100', () => {
+    const block = buildForensicRedFlagsSection({
+      ticker: 'TESTX',
+      valuation: {
+        fair_value: 100,
+        bear_price: 80,
+        discount_pct: 24.8,
+        final_decision: 'NÖTR',
+      },
+      optimization: {
+        finalDecision: 'NÖTR',
+        overrideReason: 'Muhafazakar Emniyet Marjı Filtresi: İskonto potansiyeli (%24.8), kurumsal %25 AL emniyet marjı eşiğinin altında kalmıştır.',
+      },
+      scoreResult: {
+        totalScore: 87,
+        sector: 'INDUSTRIAL',
+        anomalies: [],
+        breakdown: [
+          { category: 'İhracat Gelirleri & Kur Koruması', status: 'warning', reason: 'Sağlıklı operasyonel kârlılık (FAVÖK marjı: %18.6).' },
+        ],
+      },
+      latestItem: {
+        net_income: 980_000_000,
+        operating_cash_flow: 4_500_000_000,
+        free_cash_flow: 4_120_000_000,
+        working_capital_change: -345_000_000,
+        inventories: 8_070_000_000,
+        trade_receivables: 2_780_000_000,
+        net_debt: -500_000_000,
+        ebitda: 2_000_000_000,
+        roe: 25.0,
+        roic: 22.0,
+        real_wacc: 14.0,
+        gross_margin: 32.0,
+      },
+    });
+
+    assert.ok(block.includes('Karar Freni (Model Gerekçesi):'), 'Must include explicit overrideReason');
+    assert.ok(!block.includes('Kâr Var, Sıcak Nakit Yok'), 'Must NOT emit false cash shortage when FCF=4.12B vs Net=980M');
+    assert.ok(!block.includes('güçlü alım eşiğinin altında'), 'Must NOT claim 87/100 score is below threshold');
+    assert.ok(!block.includes('Sağlıklı operasyonel kârlılık'), 'Must NOT leak positive-toned warning as negative reason');
   });
 
 });
