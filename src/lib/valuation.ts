@@ -5401,9 +5401,10 @@ export function optimizeFinalDecision({
       const hasMinimalCapex = capexAbsVal < liquidTotal * 0.05;
       const hasShrinkingCoreAndNegEva = (revGrowthForIdle !== null && revGrowthForIdle < 0) && (evaForIdle !== null && evaForIdle < -3.0);
 
-      if (hasLargeIdleCash && hasMinimalCapex && hasShrinkingCoreAndNegEva) {
+      if (hasLargeIdleCash && hasMinimalCapex && revGrowthForIdle !== null && revGrowthForIdle < 0 && evaForIdle !== null && evaForIdle < -3.0) {
         const capexPctOfCash = Number(((capexAbsVal / liquidTotal) * 100).toFixed(1));
-        const idleMsg = `Atıl Nakit & Yatırım Eksikliği Alarmı: Şirket bilançosunda yüksek likit varlık (${(liquidTotal / 1e9).toFixed(2)} Mr TL) tutmasına rağmen yatırım harcaması (CapEx) nakdin yalnızca %${capexPctOfCash}'i düzeyinde kalmış, hasılat daralırken (%${revGrowthForIdle.toFixed(1)}) sermaye maliyetinin altında getiri (EVA: ${evaForIdle.toFixed(1)} puan) üretilmiştir.`;
+        const revGrowthIdleStr = revGrowthForIdle < 0 ? `-%${Math.abs(revGrowthForIdle).toFixed(1)}` : `%${revGrowthForIdle.toFixed(1)}`;
+        const idleMsg = `Atıl Nakit & Yatırım Eksikliği Alarmı: Şirket bilançosunda yüksek likit varlık (${(liquidTotal / 1e9).toFixed(2)} Mr TL) tutmasına rağmen yatırım harcaması (CapEx) nakdin yalnızca %${capexPctOfCash}'i düzeyinde kalmış, hasılat daralırken (${revGrowthIdleStr}) sermaye maliyetinin altında getiri (EVA: ${evaForIdle.toFixed(1)} puan) üretilmiştir.`;
         if (!conditionalWarnings.includes(idleMsg)) {
           conditionalWarnings.push(idleMsg);
         }
