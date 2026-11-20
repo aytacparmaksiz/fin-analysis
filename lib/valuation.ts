@@ -2087,6 +2087,7 @@ export function syncReportTextWithValuation(
   // 9. I. Bölüm Mükerrer Adil Değer Özet Kutusu Temizliği (Temel Yatırım Tezi ile aynı bilgiyi tekrarlamasını önler)
   text = text
     .replace(/(?:^|\n)>[ \t]*[A-Z0-9]{2,8}\s+hissesi için hesaplanan adil değer[^\n]*(?:\n|$)/gi, '\n')
+    .replace(/%-(\d)/g, '-%$1')
     .replace(/\n{3,}/g, '\n\n');
 
   return text;
@@ -11690,8 +11691,12 @@ export function generateAlgorithmicReportFallback(params: {
   const roeVal = unifiedMetrics?.margins?.roe ?? unifiedMetrics?.dupont?.calculatedRoe ?? latestItem?.roe ?? 25.0;
   const costOfEquityVal = (latestItem?.ke ?? latestItem?.cost_of_equity ?? nominalWaccVal);
 
-  const grossOcfVal = unifiedMetrics?.ttm?.operatingCashFlow ?? latestItem?.gross_operating_cash_flow;
-  const netOcfVal = unifiedMetrics?.ttm?.operatingCashFlow ?? latestItem?.net_operating_cash_flow ?? latestItem?.operating_cash_flow;
+  const periodGrossOcfVal = parseFinancialNumber(latestItem?.gross_operating_cash_flow);
+  const periodNetOcfVal = parseFinancialNumber(latestItem?.net_operating_cash_flow ?? latestItem?.operating_cash_flow);
+  const netOcfVal = unifiedMetrics?.ttm?.operatingCashFlow ?? periodNetOcfVal;
+  const grossOcfVal = (periodGrossOcfVal !== null && periodNetOcfVal !== null && Math.abs(periodGrossOcfVal - periodNetOcfVal) >= 5e6 && netOcfVal === periodNetOcfVal)
+    ? periodGrossOcfVal
+    : null;
   const tangibleCapexVal = unifiedMetrics?.ttm?.capex ?? latestItem?.tangible_capex ?? latestItem?.capex;
   const freeCashFlowVal = unifiedMetrics?.ttm?.freeCashFlow ?? latestItem?.free_cash_flow ?? (netOcfVal ? (netOcfVal - Math.abs(tangibleCapexVal || 0)) : null);
   const netIncomeVal = unifiedMetrics?.ttm?.netIncome ?? latestItem?.net_income ?? 0;
@@ -11755,13 +11760,16 @@ export function generateAlgorithmicReportFallback(params: {
     : `%${roeVal} özkaynak kârlılığı sermaye maliyetinin ve enflasyonun gerisinde kalmakta olup kârlılık ivmesinin hızlandırılması gerektiğini göstermektedir (**Sermaye getirisi açısından zayıf/olumsuz**).`;
 
   // 5. Büyüme Analizi & Yorumu
+  const formatPct = (val: number) => (val < 0 ? `-%${Math.abs(val).toFixed(1)}` : `%${val.toFixed(1)}`);
   const revGrowthVal = Number(drivers.revenue_growth?.value) || 20.0;
   const netGrowthVal = Number(drivers.net_income_growth?.value) || 20.0;
-  const growthVerdict = revGrowthVal >= 30
-    ? `Hasılat büyümesinin %${revGrowthVal.toFixed(1)} seviyesinde hedeflenmesi, şirketin güçlü pazar payı ve fiyatlama gücü sayesinde maliyet enflasyonunu satışlarına başarıyla yansıttığını teyit etmektedir (**Operasyonel büyüme açısından olumlu**).`
-    : revGrowthVal >= 10
-    ? `Hasılat büyümesi (%${revGrowthVal.toFixed(1)}) enflasyon ortamında pazar payının korunduğunu ancak reel hacim büyümesi için yeni kanal ve kapasite artışlarına ihtiyaç duyulduğunu göstermektedir (**Dengeli/Ilımlı görünüm**).`
-    : `Satış büyümesinin sınırlı kalması (%${revGrowthVal.toFixed(1)}), talep daralması veya fiyat baskısının ciro ivmesini frenlediğine işaret etmektedir (**Büyüme açısından temkinli/olumsuz**).`;
+  const growthVerdict = (revGrowthVal >= 20 && netGrowthVal < -5)
+    ? `Hasılat büyümesi (${formatPct(revGrowthVal)}) güçlü kalsa da net kâr beklentisindeki (${formatPct(netGrowthVal)}) daralma marj, finansman gideri veya vergi baskısına işaret etmektedir (**Ciro gücü olumlu, net kâr geçişi temkinli izlenmeli**).`
+    : (revGrowthVal >= 30
+        ? `Hasılat büyümesinin ${formatPct(revGrowthVal)} seviyesinde hedeflenmesi, şirketin güçlü pazar payı ve fiyatlama gücü sayesinde maliyet enflasyonunu satışlarına başarıyla yansıttığını teyit etmektedir (**Operasyonel büyüme açısından olumlu**).`
+        : revGrowthVal >= 10
+        ? `Hasılat büyümesi (${formatPct(revGrowthVal)}) enflasyon ortamında pazar payının korunduğunu ancak reel hacim büyümesi için yeni kanal ve kapasite artışlarına ihtiyaç duyulduğunu göstermektedir (**Dengeli/Ilımlı görünüm**).`
+        : `Satış büyümesinin sınırlı kalması (${formatPct(revGrowthVal)}), talep daralması veya fiyat baskısının ciro ivmesini frenlediğine işaret etmektedir (**Büyüme açısından temkinli/olumsuz**).`);
 
   const trapReasons: string[] = [
     ...(Array.isArray(valuation?.value_trap_reasons) && valuation.value_trap_reasons.length > 0
@@ -11841,14 +11849,14 @@ $$`;
 ## II. KÂR KALİTESİ VE NAKİT AKIŞI TEŞHİSİ
 > Şirketin operasyonel kârının nakde dönüşüm gücü, tahakkuk kalitesi ve serbest nakit akışı finansal tablolar bazında incelenmiştir.
 
-- **Kâr Kalitesi ve Nakit Üretimi:** ${grossOcfVal ? `Çalışma sermayesi öncesi brüt faaliyet nakit üretimi **${(grossOcfVal / 1e9).toFixed(2)} Milyar TL**, vergi ve işletme sermayesi düzeltmeleri sonrası resmi Net İşletme Nakit Akışı ise **${(netOcfVal / 1e9).toFixed(2)} Milyar TL** seviyesindedir. ` : ''}${cashQualityVerdict}
+- **Kâr Kalitesi ve Nakit Üretimi:** ${grossOcfVal ? `Çalışma sermayesi öncesi brüt faaliyet nakit üretimi **${(grossOcfVal / 1e9).toFixed(2)} Milyar TL**, vergi ve işletme sermayesi düzeltmeleri sonrası resmi Net İşletme Nakit Akışı ise **${(netOcfVal / 1e9).toFixed(2)} Milyar TL** seviyesindedir. ` : (netOcfVal != null ? `Son 12 aylık (TTM) Net İşletme Nakit Akışı **${(netOcfVal / 1e9).toFixed(2)} Milyar TL** seviyesindedir. ` : '')}${cashQualityVerdict}
 - **Yatırım Harcamaları ve Serbest Nakit Akışı:** ${tangibleCapexVal ? `Maddi duran varlık yatırımları **${(Math.abs(tangibleCapexVal) / 1e9).toFixed(2)} Milyar TL** düzeyindedir. ` : ''}${fcfVerdict}
 - **Sermaye Verimliliği (DuPont ROE & Marjlar):** Şirketin özkaynak kârlılığı (ROE) **%${roeVal}** ve operasyonel FAVÖK marjı **%${ebitdaMarginVal.toFixed(1)}** olarak gerçekleşmiştir. ${roeVerdict}
 
 ## III. SEKTÖREL REKABET VE DU PONT ANALİZİ
 > ${sectorDef.title} sektörü standartlarına göre büyüme ivmesi, pazar gücü ve DuPont 5 aşamalı kârlılık dinamikleri değerlendirilmiştir.
 
-- **Büyüme Dinamikleri ve Hacim Gücü:** Şirketin 12 aylık ileri hasılat büyüme varsayımı **%${revGrowthVal.toFixed(1)}**, net kâr büyüme beklentisi ise **%${netGrowthVal.toFixed(1)}** seviyesindedir. ${growthVerdict}
+- **Büyüme Dinamikleri ve Hacim Gücü:** Şirketin 12 aylık ileri hasılat büyüme varsayımı **${formatPct(revGrowthVal)}**, net kâr büyüme beklentisi ise **${formatPct(netGrowthVal)}** seviyesindedir. ${growthVerdict}
 - **DuPont Verimlilik ve Pazar Konumu:** Şirketin aktif devir hızı **${assetTurnover.toFixed(2)}x** ve borç/özkaynak kaldıraç çarpanı **${equityMultiplier.toFixed(2)}x** düzeyindedir. Kârlılık, yapay borç kaldıracından ziyade operasyonel verimlilik ve pazar payı gücünden beslenmektedir (**Sektörel Rekabet Gücü Açısından Olumlu**).
 
 ## IV. SERMAYE MALİYETİ (WACC) VE DEĞERLEME MODELİ
