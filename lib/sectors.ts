@@ -44,7 +44,11 @@ export const ISYATIRIM_53_OFFICIAL_SECTOR_NAMES: string[] = [
 ];
 
 
-export const BIST_COMPANY_SPECIFIC_SECTOR: Record<string, string> = {};
+export const BIST_COMPANY_SPECIFIC_SECTOR: Record<string, string> = {
+  // 06.01.2025 KAP açıklamasıyla kimyasal tank çiftliği faaliyetini sonlandırıp ana faaliyetini
+  // Nemrut Körfezi liman/konteyner işletmeciliğine kaydıran EGGUB için kalıcı sektör override'ı.
+  EGGUB: 'Ulaştırma-Lojistik',
+};
 
 /**
  * İş Yatırım 53 Resmi Sektör Adını Sistemimizin 11 Temel Değerleme Sektör Tipine Eşler.
@@ -94,6 +98,9 @@ export function mapIsYatirimSectorToValuationSector(isySectorName?: string | nul
 export function getCompanySectorDisplayName(ticker?: string, rawSector?: string): string {
   if (ticker) {
     const cleanTicker = ticker.trim().toUpperCase().replace(/\.IS$/i, '');
+    if (BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker]) {
+      return BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker];
+    }
     const userSec = USER_OFFICIAL_BIST_COMPANY_SECTORS[cleanTicker];
     if (userSec && userSec.sector) {
       if (userSec.sector === 'Havayolları ve Hizm.') return 'Havacılık';
@@ -190,6 +197,9 @@ export function getFinancialArchetype(sector: SectorType): FinancialArchetype {
 export function resolveOfficialSectorName(officialSectorName?: string, ticker?: string): string {
   if (ticker) {
     const cleanTicker = ticker.toUpperCase().replace(/\.IS$/i, '').trim();
+    if (BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker]) {
+      return BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker];
+    }
     const userSec = USER_OFFICIAL_BIST_COMPANY_SECTORS[cleanTicker];
     if (userSec && userSec.sector) {
       return userSec.sector;
@@ -1377,6 +1387,11 @@ export function detectSector(ticker: string, contextText = ''): SectorType {
   // BDDK Tasarruf Finansman ve Finansal Teknoloji Şirketleri (Resmi sektör 'Diğer' olsa bile Finansal Hizmetler modeline tabi)
   if (cleanTicker === 'KTLEV' || cleanTicker === 'SKYLP') {
     return 'FINANCIAL_SERVICES';
+  }
+
+  // 0. Şirket Bazlı Kalıcı Sektör Override'ı (Faaliyet alanı değişen şirketler)
+  if (BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker]) {
+    return mapIsYatirimSectorToValuationSector(BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker]);
   }
 
   // 1. Kullanıcı 53 Resmi Sektör ve 630 Şirket Master Listesi (Birincil Yetkili Kaynak)

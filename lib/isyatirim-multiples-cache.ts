@@ -4202,7 +4202,7 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
   "EGGUB": {
     "ticker": "EGGUB",
     "name": "Ege Gübre",
-    "sectorName": "Tarım Kimyasalları",
+    "sectorName": "Ulaştırma-Lojistik",
     "lastPrice": 93.65,
     "marketCapMnTl": 9365,
     "marketCapMnUsd": 189.7,
@@ -4218,7 +4218,7 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "foreignSharePct": 1.87,
     "foreignShareChangeBps": -12.69,
     "foreignShareIndexImpactPct": -0.21,
-    "sectorCode": "0042"
+    "sectorCode": "0048"
   },
   "EGPRO": {
     "ticker": "EGPRO",

@@ -836,7 +836,7 @@ export const USER_OFFICIAL_BIST_COMPANY_SECTORS: Record<string, UserBistCompanyS
   },
   "EGGUB": {
     "name": "Ege Gübre",
-    "sector": "Tarım Kimyasalları"
+    "sector": "Ulaştırma-Lojistik"
   },
   "EGPRO": {
     "name": "Ege Profil",
