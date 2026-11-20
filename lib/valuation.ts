@@ -5314,7 +5314,7 @@ export function optimizeFinalDecision({
       overrideApplied = true;
       overrideReason = `Genel Varlık Tuzağı Kuralı (Asset Trap): Şirketin defter değeri/NAD'ı yüksek görünse de reel değer yaratmamaktadır (${checkPeForRule9 !== null && checkPeForRule9 > 80.0 ? `F/K: ${checkPeForRule9.toFixed(1)}x > 80x, ` : ''}TTM ROE: %${checkRoeForRule9 != null ? checkRoeForRule9.toFixed(1) : '-'} < %${rfQuarterForRule9.toFixed(1)} [Rf/4], EVA: ${checkEvaForRule9 != null ? checkEvaForRule9.toFixed(1) : '-'} puan). Karar tavanı NÖTR olarak sınırlandırıldı.`;
       safetyFlags.push('Genel Varlık Tuzağı (Asset Trap)');
-    } else if (!overrideApplied && !isHealthyFinancialOrHoldingRoe && !isReitCashCowExempt && roic !== null && benchmarkWacc !== null && (roic - benchmarkWacc) < -5.0) {
+    } else if (!overrideApplied && !isHealthyFinancialOrHoldingRoe && !isReitCashCowExempt && roic !== null && benchmarkWacc !== null && (roic - benchmarkWacc) < 0) {
       finalDecision = 'NÖTR';
       overrideApplied = true;
       const waccTitle = isTms29 ? 'Reel WACC' : 'WACC';
@@ -5364,6 +5364,54 @@ export function optimizeFinalDecision({
           finalDecision = 'NÖTR';
           overrideApplied = true;
           overrideReason = `Çekirdek Operasyonel Kârlılık Koruması: Raporlanan faaliyet kârının %${coreOpOptAdj.ooiSharePct}'i esas faaliyet dışı diğer gelirlerden oluşmaktadır; bu kalem hariç tutulduğunda şirket net finansman giderleri sonrası çekirdek zarar üretmektedir. Kalıcı kârlılık teyit edilene kadar karar NÖTR (Koşullu İzleme) olarak sınırlandırıldı.`;
+        }
+      }
+    }
+
+    // 11.7 Kural: Atıl Nakit / Faiz Rantı & Yatırım Eksikliği Alarmı (Halka Arz/Sermaye Nakdini İşe Yatırmama Riski)
+    if (!['BANKING', 'INSURANCE', 'FINANCIAL_SERVICES'].includes(effectiveSector)) {
+      const cashVal = Math.max(0, parseFinancialNumber(effectiveLatestData?.cash_and_equivalents ?? effectiveLatestData?.cash) ?? 0);
+      const finInvVal = Math.max(0, parseFinancialNumber(effectiveLatestData?.financial_investments) ?? 0);
+      const liquidTotal = cashVal + finInvVal;
+      const totalAssetsVal = parseFinancialNumber(effectiveLatestData?.total_assets);
+      const sharesForIdle = parseFinancialNumber(effectiveLatestData?.shares_outstanding ?? effectiveLatestData?.share_count ?? effectiveLatestData?.paid_in_capital);
+      const refPriceForIdle = parseFinancialNumber(valuation?.current_price ?? marketPrice ?? effectiveLatestData?.share_price) ?? 0;
+      const mCapForIdle = (sharesForIdle && sharesForIdle > 0 && refPriceForIdle > 0) ? (sharesForIdle * refPriceForIdle) : null;
+      const capexAbsVal = Math.abs(parseFinancialNumber(effectiveLatestData?.tangible_capex ?? effectiveLatestData?.capex) ?? 0);
+      let revGrowthForIdle = parseFinancialNumber((valuation as any)?.drivers?.revenue_growth?.value ?? effectiveLatestData?.revenue_growth);
+      if (revGrowthForIdle === null && Array.isArray(financialHistory) && financialHistory.length >= 2) {
+        const latestKeyIdle = parsePeriodSortKey(effectiveLatestData?.period);
+        const prevYoyIdle = latestKeyIdle > 200000
+          ? financialHistory.find((h: any) => parsePeriodSortKey(h?.period) === latestKeyIdle - 100)
+          : null;
+        const curRevIdle = parseFinancialNumber(effectiveLatestData?.revenue);
+        const prevRevIdle = parseFinancialNumber(prevYoyIdle?.revenue);
+        if (curRevIdle !== null && prevRevIdle !== null && prevRevIdle > 0) {
+          revGrowthForIdle = Number((((curRevIdle - prevRevIdle) / prevRevIdle) * 100).toFixed(1));
+        }
+      }
+      const evaForIdle = (roic !== null && benchmarkWacc !== null)
+        ? Number((roic - benchmarkWacc).toFixed(1))
+        : parseFinancialNumber(effectiveLatestData?.eva_spread);
+
+      const hasLargeIdleCash = liquidTotal > 0 && (
+        (totalAssetsVal !== null && totalAssetsVal > 0 && (liquidTotal / totalAssetsVal) >= 0.14) ||
+        (mCapForIdle !== null && mCapForIdle > 0 && (liquidTotal / mCapForIdle) >= 0.35)
+      );
+      const hasMinimalCapex = capexAbsVal < liquidTotal * 0.05;
+      const hasShrinkingCoreAndNegEva = (revGrowthForIdle !== null && revGrowthForIdle < 0) && (evaForIdle !== null && evaForIdle < -3.0);
+
+      if (hasLargeIdleCash && hasMinimalCapex && hasShrinkingCoreAndNegEva) {
+        const capexPctOfCash = Number(((capexAbsVal / liquidTotal) * 100).toFixed(1));
+        const idleMsg = `Atıl Nakit & Yatırım Eksikliği Alarmı: Şirket bilançosunda yüksek likit varlık (${(liquidTotal / 1e9).toFixed(2)} Mr TL) tutmasına rağmen yatırım harcaması (CapEx) nakdin yalnızca %${capexPctOfCash}'i düzeyinde kalmış, hasılat daralırken (%${revGrowthForIdle.toFixed(1)}) sermaye maliyetinin altında getiri (EVA: ${evaForIdle.toFixed(1)} puan) üretilmiştir.`;
+        if (!conditionalWarnings.includes(idleMsg)) {
+          conditionalWarnings.push(idleMsg);
+        }
+        safetyFlags.push('Atıl Nakit / Faiz Rantı Bağımlılığı');
+        if (!overrideApplied && finalDecision === 'AL') {
+          finalDecision = 'NÖTR';
+          overrideApplied = true;
+          overrideReason = idleMsg + ' Sermayenin ana faaliyete dönüştürülmesi teyit edilene kadar karar NÖTR (Koşullu İzleme) olarak sınırlandırıldı.';
         }
       }
     }

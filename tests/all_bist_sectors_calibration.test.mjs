@@ -116,7 +116,8 @@ test('Borsa Istanbul Comprehensive Multi-Sector Valuation & Calibration Test Sui
 
     assert.ok(res.valuation.valuation_model_name.includes('Sağlık'), `Model should be Sağlık & İlaç, got ${res.valuation.valuation_model_name}`);
     assert.equal(res.valuation.is_value_trap, false, 'MPARK with 79 score and strong cash flow must not be false Value Trap');
-    assert.equal(res.optimization.finalDecision, 'AL', `MPARK should receive AL recommendation (got ${res.optimization.finalDecision})`);
+    assert.equal(res.scoreResult.suggestedDecision, 'AL', 'MPARK raw score decision should be AL');
+    assert.equal(res.optimization.finalDecision, 'NÖTR', `MPARK snapshot with negative EVA (-2.3) must be capped at NÖTR under strict EVA<0 gate (got ${res.optimization.finalDecision})`);
   });
 
   await t.test('5. Holding (SAHOL) and REIT (EKGYO) NAV multiple and growth clamps prevent extreme outlier upside', () => {

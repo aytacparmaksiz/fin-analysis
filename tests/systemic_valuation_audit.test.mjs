@@ -1837,4 +1837,59 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
     assert.ok(!block.includes('Sağlıklı operasyonel kârlılık'), 'Must NOT leak positive-toned warning as negative reason');
   });
 
+  it('38. Strict Negative EVA Gate (<0) & Idle Cash Capital Misallocation Alarm (Rule 11.7)', () => {
+    // 1. Borderline negative EVA (-2.5 pts) in operating sector must NOT get AL (strict EVA < 0 -> NÖTR)
+    const negEvaOpt = optimizeFinalDecision({
+      rawDecision: 'AL',
+      score: 84,
+      sector: 'INDUSTRIAL',
+      ticker: 'TEST_EVA',
+      valuation: { fair_value: 100, current_price: 50, discount_pct: 50 },
+      latestData: {
+        period: '2026/09',
+        equity: 1_000_000_000,
+        ebitda: 300_000_000,
+        net_income: 150_000_000,
+        operating_cash_flow: 200_000_000,
+        roic: 11.5,
+        real_wacc: 14.0,
+        roe: 18.0,
+        net_debt: 100_000_000,
+      },
+    });
+    assert.equal(negEvaOpt.finalDecision, 'NÖTR', 'Any negative EVA (<0) in operating sector must downgrade AL to NÖTR');
+    assert.ok(negEvaOpt.overrideReason?.includes('Negatif Sermaye Makası'), 'Must explain negative EVA spread');
+
+    // 2. Idle Cash + Minimal CapEx + Shrinking Revenue + Negative EVA (AAGYO-style) triggers Rule 11.7 even for REIT
+    const idleCashOpt = optimizeFinalDecision({
+      rawDecision: 'AL',
+      score: 76,
+      sector: 'REIT',
+      ticker: 'AAGYO',
+      valuation: { fair_value: 21.52, current_price: 7.36, discount_pct: 192.4 },
+      latestData: {
+        period: '2026/09',
+        revenue: 891_000_000,
+        cash_and_equivalents: 2_579_000_000,
+        total_assets: 18_000_000_000,
+        tangible_capex: -12_000_000,
+        operating_cash_flow: 535_000_000,
+        net_income: 494_000_000,
+        equity: 17_731_000_000,
+        net_debt: -2_629_000_000,
+        roe: 5.13,
+        roic: 6.06,
+        real_wacc: 14.3,
+        eva_spread: -8.2,
+        share_count: 701_000_000,
+      },
+      financialHistory: [
+        { period: '2025/09', revenue: 1_302_000_000 },
+        { period: '2026/09', revenue: 891_000_000 },
+      ],
+    });
+    assert.equal(idleCashOpt.finalDecision, 'NÖTR', 'Idle cash REIT with shrinking revenue and -8.2 EVA must be capped at NÖTR');
+    assert.ok(idleCashOpt.conditionalWarnings.some(w => w.includes('Atıl Nakit & Yatırım Eksikliği Alarmı')), 'Must emit idle cash alarm');
+  });
+
 });
