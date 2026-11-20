@@ -2084,6 +2084,11 @@ export function syncReportTextWithValuation(
     text = text.replace(/##\s*V\.\s*DEĞER\s+SÜRÜCÜLERİ[\s\S]*?(?=##\s*VI\.|$)/i, enrichedSectionV + '\n\n');
   }
 
+  // 9. I. Bölüm Mükerrer Adil Değer Özet Kutusu Temizliği (Temel Yatırım Tezi ile aynı bilgiyi tekrarlamasını önler)
+  text = text
+    .replace(/(?:^|\n)>[ \t]*[A-Z0-9]{2,8}\s+hissesi için hesaplanan adil değer[^\n]*(?:\n|$)/gi, '\n')
+    .replace(/\n{3,}/g, '\n\n');
+
   return text;
 }
 
@@ -11827,9 +11832,8 @@ $$
 \\text{Reel EVA Makası} = \\text{ROIC} - \\text{Reel WACC} = \\%${roicVal} - \\%${realWaccVal} = ${Number(evaSpreadVal) >= 0 ? '+' : ''}${evaSpreadVal}\\text{ puan}
 $$`;
 
-  return `## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ
-> ${ticker} hissesi için hesaplanan adil değer **${valuation.fair_value} TL** olup, güncel **${price} TL** piyasa fiyatına göre **%${valuation.discount_pct} getiri potansiyeli** (${valuation.discount_pct >= 0 ? 'iskonto' : 'prim'}) taşımaktadır.
-${trapBlock}${redFlagsBlock}
+  return `## I. YÖNETİCİ ÖZETİ VE YATIRIM TEZİ${trapBlock}${redFlagsBlock}
+
 **Temel Yatırım Tezi:** ${thesisVerdict}
 
 **Finansal Sağlık Skoru:** ${scoreSummaryText}
