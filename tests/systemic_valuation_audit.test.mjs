@@ -6,6 +6,9 @@ import { synthesizeInvestmentThesis } from '../lib/investment-thesis-synthesizer
 import { AGESA_SAMPLE_REPORT_TEXT, VESBE_SAMPLE_REPORT_TEXT } from '../lib/sample-data.ts';
 import { computeSnowflakeAnalysis } from '../lib/snowflake.ts';
 import { IsYatirimApiAdapter } from '../lib/isyatirim-adapter.ts';
+import { detectSector } from '../lib/sectors.ts';
+import { FinancialRatioEngine, computeFinancialChange } from '../lib/ratio-engine.ts';
+import { InvariantSentinel } from '../lib/invariant-sentinel.ts';
 
 describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
 
@@ -1890,6 +1893,234 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
     });
     assert.equal(idleCashOpt.finalDecision, 'NÖTR', 'Idle cash REIT with shrinking revenue and -8.2 EVA must be capped at NÖTR');
     assert.ok(idleCashOpt.conditionalWarnings.some(w => w.includes('Atıl Nakit & Yatırım Eksikliği Alarmı')), 'Must emit idle cash alarm');
+  });
+
+  it('39. Package A Forensic Audit Regression Suite: Covers KRİTİK-01..05, YÜKSEK-01/04/05/06, ORTA-04', () => {
+    // 1. KRİTİK-01: ALMA decision does NOT artificially compress fair_value to currentPrice * 1.10
+    const almaHolding = {
+      ticker: 'TESTH',
+      sector: 'HOLDING',
+      current_price: 6.0,
+      share_count: 100_000_000,
+      paid_in_capital: 100_000_000,
+      financial_history: [
+        {
+          period: '2026/06',
+          revenue: 5_000_000_000,
+          ebitda: 1_200_000_000,
+          operating_profit: 1_000_000_000,
+          net_income: -450_000_000,
+          equity: 5_000_000_000,
+          parent_equity: 5_000_000_000,
+          net_debt: -1_000_000_000,
+          roe: -9.0,
+          roic: -4.0,
+          real_wacc: 15.0,
+          eva_spread: -19.0
+        }
+      ]
+    };
+    const resAlma = computeSectorValuationAndDrivers(almaHolding, '6.0', 'HOLDING');
+    assert.equal(resAlma.valuation.final_decision, 'ALMA');
+    assert.equal(
+      resAlma.valuation.fair_value,
+      12,
+      `ALMA fair_value (${resAlma.valuation.fair_value}) must equal intrinsic 12.00 TL without artificial 6.0*1.10 = 6.60 TL compression`
+    );
+
+    // 2. KRİTİK-02: FinancialRatioEngine never produces positive ROIC when EBIT < 0 and equity/IC <= 0
+    const fenerLikeRatio = FinancialRatioEngine.computeMetrics({
+      ticker: 'FENER',
+      currentPrice: 2.13,
+      shareCount: 250_000_000,
+      sector: 'INDUSTRIAL',
+      history: [
+        {
+          period: '2026/06',
+          revenue: 3_200_000_000,
+          operating_profit: -1_950_000_000,
+          ebitda: -1_890_000_000,
+          net_income: -8_080_000_000,
+          equity: -6_500_000_000,
+          net_debt: 4_200_000_000,
+          short_term_debt: 2_500_000_000,
+          long_term_debt: 2_000_000_000,
+          cash_and_equivalents: 300_000_000,
+          roic: 23.0
+        }
+      ]
+    });
+    assert.ok(
+      fenerLikeRatio.margins.roic === null || fenerLikeRatio.margins.roic <= 0,
+      `Negative EBIT + negative equity cannot produce positive ROIC (Got: ${fenerLikeRatio.margins.roic})`
+    );
+
+    // 3. KRİTİK-03 & YÜKSEK-04: Negative-EBITDA MEDIA/SPORTS delegates to Distressed & syncs target_multiple; positive-EBITDA branch eliminates zero-leg dilution
+    const fenerVal = computeSectorValuationAndDrivers({
+      ticker: 'FENER',
+      sector: 'INDUSTRIAL',
+      official_sector_name: 'Spor',
+      current_price: 2.13,
+      share_count: 250_000_000,
+      paid_in_capital: 250_000_000,
+      financial_history: [
+        {
+          period: '2026/06',
+          revenue: 4_500_000_000,
+          operating_profit: -1_600_000_000,
+          ebitda: -1_500_000_000,
+          net_income: -1_200_000_000,
+          equity: 3_500_000_000,
+          net_debt: 1_800_000_000,
+          roe: -34.0,
+          roic: -15.0,
+          real_wacc: 15.0,
+          eva_spread: -30.0
+        }
+      ]
+    }, '2.13');
+    assert.match(fenerVal.valuation.valuation_model_name, /Sıkıntılı Şirket/);
+    assert.match(fenerVal.drivers.target_multiple.value, /Hak Edilen Sıkıntılı PD\/DD/);
+    const formulaPbMatch = fenerVal.valuation.formula_display.match(/\((\d+,\d+)x\)/);
+    assert.ok(formulaPbMatch && fenerVal.drivers.target_multiple.value.includes(formulaPbMatch[1]),
+      `Synced driver (${fenerVal.drivers.target_multiple.value}) must match formula_display (${fenerVal.valuation.formula_display})`
+    );
+
+    const zeroPeSteelVal = computeSectorValuationAndDrivers({
+      ticker: 'KRDMD',
+      sector: 'INDUSTRIAL',
+      official_sector_name: 'Demir-Çelik Temel',
+      current_price: 28.0,
+      share_count: 1_000_000_000,
+      paid_in_capital: 1_000_000_000,
+      financial_history: [
+        {
+          period: '2026/06',
+          revenue: 50_000_000_000,
+          operating_profit: 3_500_000_000,
+          ebitda: 7_500_000_000,
+          net_income: -500_000_000,
+          equity: 40_000_000_000,
+          net_debt: 5_000_000_000,
+          roe: -1.25,
+          roic: 6.0,
+          real_wacc: 14.0
+        }
+      ]
+    }, '28.0');
+    assert.ok(!zeroPeSteelVal.valuation.formula_display.includes('F/K'), 'Zero P/E leg must be dropped instead of diluting with 0.00 TL');
+
+    // 4. KRİTİK-04: Negative-EVA Bank (GARAN) & low-cash-conversion REIT (RGYAS) gated to NÖTR
+    const garanNegEva = optimizeFinalDecision({
+      rawDecision: 'AL',
+      score: 82,
+      sector: 'BANKING',
+      ticker: 'GARAN',
+      valuation: { fair_value: 165.0, current_price: 118.0, discount_pct: 39.8 },
+      marketPrice: 118.0,
+      fairValue: 165.0,
+      latestData: { period: '2026/06', roe: 23.8, roic: 23.8, real_wacc: 41.8, benchmark_wacc: 41.8, wacc: 41.8, equity: 290_000_000_000, net_income: 65_000_000_000 }
+    });
+    assert.equal(garanNegEva.finalDecision, 'NÖTR', 'Bank with ROE (23.8%) < WACC (41.8%) must be gated to NÖTR');
+
+    const rgyasLowConv = optimizeFinalDecision({
+      rawDecision: 'AL',
+      score: 76,
+      sector: 'REIT',
+      ticker: 'RGYAS',
+      valuation: { fair_value: 20.0, current_price: 12.0, discount_pct: 66.7 },
+      marketPrice: 12.0,
+      fairValue: 20.0,
+      latestData: {
+        period: '2026/06',
+        total_assets: 15_000_000_000,
+        equity: 12_000_000_000,
+        net_debt: 1_000_000_000,
+        net_income: 1_000_000_000,
+        operating_cash_flow: 410_000_000,
+        share_count: 1_000_000_000,
+        roe: 8.5,
+        roic: 4.5,
+        real_wacc: 14.1,
+        eva_spread: -9.6
+      }
+    });
+    assert.equal(rgyasLowConv.finalDecision, 'NÖTR', 'REIT with 41% OCF/Net and -9.6 EVA must not bypass Rule 9');
+
+    // 5. KRİTİK-05 & YÜKSEK-01: GOZDE-style Yatırım Ortaklığı micro revenue + negative ROE/EVA
+    const gozdeMetrics = FinancialRatioEngine.computeMetrics({
+      ticker: 'GOZDE',
+      currentPrice: 20.0,
+      shareCount: 385_000_000,
+      sector: 'FINANCIAL_SERVICES',
+      history: [
+        { period: '2026/06', revenue: 1_000_000, gross_profit: -5_305_472_000, ebitda: -8_000_000_000, net_income: -8_410_000_000, equity: 28_000_000_000, roe: -29.1 }
+      ]
+    });
+    assert.equal(gozdeMetrics.margins.grossMargin, null, 'Micro-revenue extreme margin (>200%) must resolve to null');
+    assert.equal(gozdeMetrics.margins.netMargin, null);
+
+    const gozdeVal = computeSectorValuationAndDrivers({
+      ticker: 'GOZDE',
+      sector: 'FINANCIAL_SERVICES',
+      official_sector_name: 'Yatırım Ortaklıkları',
+      current_price: 20.0,
+      share_count: 385_000_000,
+      paid_in_capital: 385_000_000,
+      financial_history: [
+        { period: '2026/06', revenue: 1_000_000, ebitda: -8_000_000_000, net_income: -8_410_000_000, equity: 28_000_000_000, roe: -29.1, eva_spread: -74.8, net_margin: -1657437.5, net_debt: 2_000_000_000 }
+      ]
+    }, '20.0');
+    assert.ok(Math.abs(gozdeVal.drivers.margin.value) <= 100, `GOZDE driver margin (${gozdeVal.drivers.margin.value}) must fall back to clamped ROE`);
+    assert.ok(gozdeVal.scoreResult.totalScore <= 45, `GOZDE chronic loss/negative EVA must be capped <= 45 (Got: ${gozdeVal.scoreResult.totalScore})`);
+
+    // 6. YÜKSEK-05: InvariantSentinel clamps +%1610.8 to +%75.0 & preserves RETAIL 0.55 CR / AVIATION 4.0x ND
+    const retailSf = {
+      axes: {
+        value: { key: 'value', label: 'Değerleme', score: 0, maxScore: 6, checks: [] },
+        future: {
+          key: 'future', label: 'Gelecek Büyüme', score: 0, maxScore: 6, checks: [
+            { id: 'earnings_vs_savings', title: 'Tasarruf', passed: false, metricValue: '+%10.0', threshold: '>= %32.0', detail: '' }
+          ]
+        },
+        past: { key: 'past', label: 'Geçmiş Performans', score: 0, maxScore: 6, checks: [] },
+        health: {
+          key: 'health', label: 'Finansal Sağlık', score: 0, maxScore: 6, checks: [
+            { id: 'short_term_liabilities', title: 'Kısa Vadeli', passed: false, metricValue: 'Cari Oran: 0.40x', threshold: '>= 0.55x', detail: '' },
+            { id: 'debt_level', title: 'Borçluluk', passed: false, metricValue: 'Net Borç / FAVÖK: 1.5x', threshold: '<= 4.0x', detail: '' }
+          ]
+        },
+        dividend: { key: 'dividend', label: 'Temettü', score: 0, maxScore: 6, checks: [] }
+      },
+      totalScore: 0, percentage: 0, rewards: [], risks: []
+    };
+    const healedRetail = InvariantSentinel.validateAndHealSnowflake(JSON.parse(JSON.stringify(retailSf)), {
+      ticker: 'MGROS',
+      sector: 'RETAIL',
+      unifiedMetrics: {
+        growth: { netIncomeGrowthYoY: 1610.8 },
+        liquidity: { currentRatio: 0.65, netDebtToEbitda: 3.5 }
+      }
+    });
+    assert.equal(healedRetail.axes.future.checks[0].metricValue, '+%75.0');
+    assert.equal(healedRetail.axes.health.checks[0].passed, true, 'RETAIL 0.65x >= 0.55x must pass');
+
+    const healedAviation = InvariantSentinel.validateAndHealSnowflake(JSON.parse(JSON.stringify(retailSf)), {
+      ticker: 'THYAO',
+      sector: 'AVIATION',
+      unifiedMetrics: { liquidity: { netDebtToEbitda: 3.5 } }
+    });
+    assert.equal(healedAviation.axes.health.checks[1].passed, true, 'AVIATION 3.5x <= 4.0x must pass');
+
+    // 7. YÜKSEK-06: Sector reclassifications for ARSAN, SONME, PSDTC
+    assert.equal(detectSector('ARSAN'), 'HOLDING');
+    assert.equal(detectSector('SONME'), 'HOLDING');
+    assert.notEqual(detectSector('PSDTC'), 'RETAIL');
+
+    // 8. ORTA-04: Supplier-debt cash illusion & computeFinancialChange 0 -> 0
+    const supplierTrap = FinancialRatioEngine.diagnoseCashQuality(1_000_000_000, -100_000_000, 5_000_000_000, 800_000_000);
+    assert.equal(supplierTrap.status, 'CRITICAL_RISK');
+    assert.equal(computeFinancialChange(0, 0, 'DEBT').percentChange, 0);
   });
 
 });

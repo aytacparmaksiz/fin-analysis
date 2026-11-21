@@ -8,7 +8,7 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const resolved = await params;
-  const cleanTicker = (resolved?.ticker || '').toUpperCase().trim();
+  const cleanTicker = decodeURIComponent(resolved?.ticker || '').toUpperCase().replace(/\.IS$/i, '').trim();
   return {
     title: `${cleanTicker} Radar Analizi | Fair Value Terminal`,
     description: `${cleanTicker} hissesi için 360° radar analizi ve görsel değerleme raporu.`,
@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function SimplyTickerPage({ params }: Props) {
   const resolved = await params;
-  const cleanTicker = (resolved?.ticker || '').toUpperCase().trim();
+  const cleanTicker = decodeURIComponent(resolved?.ticker || '').toUpperCase().replace(/\.IS$/i, '').trim();
   const initialReport = await getReportForTicker(cleanTicker);
   return <ValuationTerminal initialTicker={cleanTicker} initialReport={initialReport} initialLayout="simply" />;
 }

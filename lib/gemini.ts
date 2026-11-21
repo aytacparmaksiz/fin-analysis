@@ -34,7 +34,8 @@ const tokenUsageHistory: TokenUsageEntry[] = [];
 // Global istek kuyruğu durumu
 let lastRequestTimestamp = 0;
 
-// In-memory önbellek
+// In-memory LRU önbellek (maks. 100 girdi)
+const MAX_MEMORY_CACHE_ENTRIES = 100;
 const memoryCache = new Map<string, { timestamp: number; data: any }>();
 
 // Disk tabanlı kalıcı önbellek (Sunucu yeniden başlasa da RPD kotasını korur)
@@ -53,15 +54,22 @@ function loadDiskCache(): Record<string, { timestamp: number; data: any }> {
 }
 
 function saveDiskCache(cacheObj: Record<string, { timestamp: number; data: any }>) {
+  const tmpPath = `${CACHE_FILE_PATH}.${process.pid}.${Date.now()}.tmp`;
   try {
-    fs.writeFileSync(CACHE_FILE_PATH, JSON.stringify(cacheObj, null, 2), 'utf-8');
+    fs.writeFileSync(tmpPath, JSON.stringify(cacheObj, null, 2), 'utf-8');
+    fs.renameSync(tmpPath, CACHE_FILE_PATH);
   } catch (err) {
+    try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch {}
     console.warn('[GeminiCache] Disk önbelleği yazılamadı:', err);
   }
 }
 
+export function getGeminiCacheStats(): { memorySize: number; maxEntries: number } {
+  return { memorySize: memoryCache.size, maxEntries: MAX_MEMORY_CACHE_ENTRIES };
+}
+
 /**
- * Önbellekten veri çek (24 saat geçerli)
+ * Önbellekten veri çek (24 saat geçerli, LRU sıralamalı)
  */
 export function getCachedGeminiResult(cacheKey: string): any | null {
   const now = Date.now();
@@ -70,11 +78,12 @@ export function getCachedGeminiResult(cacheKey: string): any | null {
   // 1. Önce RAM kontrolü
   if (memoryCache.has(cacheKey)) {
     const entry = memoryCache.get(cacheKey)!;
+    memoryCache.delete(cacheKey);
     if (now - entry.timestamp < maxAge) {
+      memoryCache.set(cacheKey, entry);
       console.log(`[GeminiCache] RAM önbellekten yüklendi: ${cacheKey}`);
       return entry.data;
     }
-    memoryCache.delete(cacheKey);
   }
 
   // 2. Disk kontrolü
@@ -83,6 +92,10 @@ export function getCachedGeminiResult(cacheKey: string): any | null {
     const entry = disk[cacheKey];
     if (now - entry.timestamp < maxAge) {
       console.log(`[GeminiCache] Disk önbellekten yüklendi: ${cacheKey}`);
+      if (memoryCache.size >= MAX_MEMORY_CACHE_ENTRIES) {
+        const oldest = memoryCache.keys().next().value;
+        if (oldest) memoryCache.delete(oldest);
+      }
       memoryCache.set(cacheKey, entry);
       return entry.data;
     }
@@ -92,10 +105,15 @@ export function getCachedGeminiResult(cacheKey: string): any | null {
 }
 
 /**
- * Veriyi önbelleğe yaz (RAM + Disk)
+ * Veriyi önbelleğe yaz (RAM LRU + Atomik Disk)
  */
 export function setCachedGeminiResult(cacheKey: string, data: any) {
   const entry = { timestamp: Date.now(), data };
+  memoryCache.delete(cacheKey);
+  if (memoryCache.size >= MAX_MEMORY_CACHE_ENTRIES) {
+    const oldest = memoryCache.keys().next().value;
+    if (oldest) memoryCache.delete(oldest);
+  }
   memoryCache.set(cacheKey, entry);
 
   try {
@@ -103,9 +121,9 @@ export function setCachedGeminiResult(cacheKey: string, data: any) {
     disk[cacheKey] = entry;
     // Maksimum 100 girdi sakla
     const keys = Object.keys(disk);
-    if (keys.length > 100) {
+    if (keys.length > MAX_MEMORY_CACHE_ENTRIES) {
       keys.sort((a, b) => disk[a].timestamp - disk[b].timestamp);
-      for (let i = 0; i < keys.length - 100; i++) {
+      for (let i = 0; i < keys.length - MAX_MEMORY_CACHE_ENTRIES; i++) {
         delete disk[keys[i]];
       }
     }
@@ -187,12 +205,32 @@ function recordTokens(tokens: number) {
 }
 
 /**
- * Token kullanımını kaydeder (Vercel timeout olmaması için sunucuda bekleme yapılmaz)
+ * Dakikalık TPM penceresini denetler ve token kotası doluysa eski pencere düşene kadar bekler (maks. 10s).
  */
-export async function scheduleRequestSlot(estimatedTokens = 2000): Promise<number> {
+export async function scheduleRequestSlot(estimatedTokens = 2000, maxWaitMs = 10000): Promise<number> {
+  const start = Date.now();
+  let totalWaited = 0;
+
+  while (true) {
+    const now = Date.now();
+    const usedTokens = getCurrentMinuteTokens(now);
+    if (usedTokens + estimatedTokens <= MAX_TPM || tokenUsageHistory.length === 0) {
+      break;
+    }
+    const oldest = tokenUsageHistory[0];
+    const remainingWindowMs = Math.max(25, oldest.timestamp + TPM_WINDOW_MS - now + 10);
+    const elapsed = now - start;
+    if (elapsed >= maxWaitMs) {
+      break;
+    }
+    const sleepMs = Math.min(remainingWindowMs, maxWaitMs - elapsed);
+    await new Promise((resolve) => setTimeout(resolve, sleepMs));
+    totalWaited += sleepMs;
+  }
+
   lastRequestTimestamp = Date.now();
   recordTokens(estimatedTokens);
-  return 0;
+  return totalWaited;
 }
 
 export interface GeminiCallParams {
@@ -200,20 +238,18 @@ export interface GeminiCallParams {
   baseParams: any;
   preferredModel?: string;
   cacheKey?: string;
+  maxAttempts?: number;
+  attemptTimeoutMs?: number;
   onWaitProgress?: (seconds: number, message: string) => void;
 }
 
 /**
- * Hız Sınırlayıcı & Hızlı Yeniden Deneme (Free tier koruması)
- * Vercel serverless zaman aşımını (timeout) önlemek için:
- * - Fonksiyon içi 13 saniyelik bekleme tamamen kaldırılmıştır.
- * - Fonksiyon içinde en fazla 1 kez hızlı yeniden deneme (1.5 sn) yapılır.
- * - Rate limit devam ederse hemen 429 status ve retryAfter: 5 döner; bekleme istemciye devredilir.
+ * Hız Sınırlayıcı & Akıllı Fallback Zinciri
  */
 export async function generateWithRateLimitAndBackoff(params: GeminiCallParams): Promise<any> {
   const { ai, baseParams, preferredModel, cacheKey } = params;
 
-  // 1. Önbellek kontrolü (20 RPD kotasını harcamamak için ilk adım)
+  // 1. Önbellek kontrolü (RPD kotasını korumak için ilk adım)
   if (cacheKey) {
     const cached = getCachedGeminiResult(cacheKey);
     if (cached) {
@@ -224,7 +260,7 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
     }
   }
 
-  // 2. Token tahmini ve kaydı (Sunucuda bekletme yapılmaz)
+  // 2. Token tahmini ve kayan pencere TPM denetimi
   const estimatedTokens = estimateTokenCount(baseParams);
   await scheduleRequestSlot(estimatedTokens);
 
@@ -232,10 +268,12 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
     ? [preferredModel, ...CANDIDATE_MODELS.filter(m => m !== preferredModel)]
     : CANDIDATE_MODELS;
 
+  const isJsonMode = baseParams?.config?.responseMimeType === 'application/json';
+  const maxAttempts = Math.max(1, Math.min(params.maxAttempts ?? 4, modelsToTry.length));
+  const attemptTimeoutMs = params.attemptTimeoutMs ?? 12000;
+
   let lastError: any = null;
   let hadRateLimit = false;
-  let rateLimitError: any = null;
-  const maxAttempts = 2;
   let attempts = 0;
 
   for (const model of modelsToTry) {
@@ -247,9 +285,6 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
       lastRequestTimestamp = Date.now();
 
       const reqConfig = { ...(baseParams.config || {}) };
-      // YALNIZCA gemini-3.5-flash-lite thinkingBudget: 0 argümanını 400 hatasıyla reddeder (çünkü thinking modu yoktur).
-      // gemini-3.1-flash-lite, gemini-3.1-flash-lite-preview ve tüm diğer 3.x Flash modellerinde thinking varsayılan olarak aktiftir.
-      // 20+ saniye düşünme gecikmesini önlemek için thinkingBudget: 0 ayarlanarak doğrudan 2-3 saniyede yanıt alınır:
       if (model !== 'gemini-3.5-flash-lite' && (model.includes('3.') || model.includes('3-') || model.includes('flash'))) {
         reqConfig.thinkingConfig = {
           thinkingBudget: 0,
@@ -258,8 +293,7 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
         };
       }
 
-      // Vercel serverless fonksiyon zaman aşımını engellemek için istek başına 9 saniye tavanı:
-      reqConfig.abortSignal = reqConfig.abortSignal || AbortSignal.timeout(9000);
+      reqConfig.abortSignal = reqConfig.abortSignal || AbortSignal.timeout(attemptTimeoutMs);
 
       const response = await ai.models.generateContent({
         ...baseParams,
@@ -267,14 +301,36 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
         model,
       });
 
-      // Başarılı yanıtı önbelleğe kaydet
-      if (cacheKey && response?.text) {
+      const responseText = String(response?.text || '').trim();
+      if (!responseText) {
+        const emptyErr: any = new Error(`Model ${model} boş yanıt döndürdü.`);
+        emptyErr.status = 503;
+        throw emptyErr;
+      }
+
+      if (isJsonMode) {
+        let parsedJson: any;
         try {
-          const parsed = JSON.parse(response.text);
-          setCachedGeminiResult(cacheKey, parsed);
-        } catch {
-          setCachedGeminiResult(cacheKey, response.text);
+          parsedJson = cleanAndParseJson(responseText);
+        } catch (jsonErr: any) {
+          const invalidErr: any = new Error(`Model ${model} geçersiz JSON döndürdü: ${jsonErr?.message || ''}`);
+          invalidErr.status = 502;
+          throw invalidErr;
         }
+        const isValidNonEmptyJson =
+          parsedJson &&
+          typeof parsedJson === 'object' &&
+          (Array.isArray(parsedJson) ? parsedJson.length > 0 : Object.keys(parsedJson).length > 0);
+        if (!isValidNonEmptyJson) {
+          const emptyJsonErr: any = new Error(`Model ${model} boş JSON nesnesi döndürdü.`);
+          emptyJsonErr.status = 502;
+          throw emptyJsonErr;
+        }
+        if (cacheKey) {
+          setCachedGeminiResult(cacheKey, parsedJson);
+        }
+      } else if (cacheKey) {
+        setCachedGeminiResult(cacheKey, responseText);
       }
 
       return response;
@@ -285,7 +341,7 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
       const isRateLimit = status === 429 || 
         err?.isRateLimit || 
         /too many requests|rate[- ]limit|resource_exhausted|quota/i.test(err?.message || '');
-      const isServerBusy = status === 503 || err?.code === 503 || isTimeout || /unavailable|server busy/i.test(err?.message || '');
+      const isServerBusy = status === 503 || status === 502 || err?.code === 503 || isTimeout || /unavailable|server busy/i.test(err?.message || '');
       const isModelNotFound = status === 404 || /not found|no longer available|not supported/i.test(err?.message || '');
 
       console.warn(`[GeminiClient] Model ${model} hata verdi:`, {
@@ -299,7 +355,6 @@ export async function generateWithRateLimitAndBackoff(params: GeminiCallParams):
 
       if (isRateLimit || isServerBusy) {
         hadRateLimit = true;
-        rateLimitError = err;
         console.warn(`[GeminiClient] Model ${model} hız sınırına veya yoğunluğa takıldı. Bir sonraki modele geçiliyor...`);
         continue;
       }

@@ -57,7 +57,7 @@ import {
   Legend,
   ReferenceLine
 } from 'recharts';
-import { formatAnalysisDate, type SavedReport } from '@/lib/report-resolver';
+import { formatAnalysisDate, parseNumericScore, type SavedReport } from '@/lib/report-resolver';
 import type { SectorType } from '@/lib/sectors';
 import {
   SECTOR_DEFINITIONS,
@@ -114,6 +114,7 @@ export interface SimplyViewProps {
   tickerHistory?: SavedReport[];
   portfolioTickers?: string[];
   favoriteTickers?: string[];
+  initialTab?: 'ozet' | 'overview' | 'fairvalue' | 'tables' | 'multiples' | 'proscons' | 'guidance' | 'report' | 'history';
   onTogglePortfolio?: (ticker: string) => void;
   onToggleFavorite?: (ticker: string) => void;
   onSwitchToTerminal: () => void;
@@ -144,12 +145,16 @@ function getCleanCompanyName(fullName: string | undefined, ticker: string): stri
 
 // BIST Finansal Sayı Formatlayıcı (Bin TRY formatı, hücrelerde BİN TL eki olmadan sade sayı)
 function formatTableNumber(val: number | null | undefined): string {
-  if (val === null || val === undefined || isNaN(val)) return '—';
+  if (val === null || val === undefined) return '—';
   const num = Number(val);
+  if (!Number.isFinite(num)) return '—';
   if (num === 0) return '0';
-  // BIST finansal tablolarındaki nominal TL değerleri Bin TRY formatı için 1000'e bölünür
-  const inThousands = Math.abs(num) >= 50_000 ? Math.round(num / 1000) : Math.round(num);
-  return inThousands.toLocaleString('tr-TR');
+  // BIST finansal tablolarındaki tüm değerler Tam TL'den tutarlı biçimde Bin TRY'ye çevrilir
+  const inThousands = num / 1000;
+  if (Math.abs(inThousands) >= 10 || Number.isInteger(inThousands)) {
+    return Math.round(inThousands).toLocaleString('tr-TR');
+  }
+  return inThousands.toLocaleString('tr-TR', { maximumFractionDigits: 1 });
 }
 
 // Eksi Değerlerde Aşırı Eksen Boşluğunu Önleyen Sıkı Eksen Tabanı Hesaplayıcı (-23 -> -25, -38 -> -40)
@@ -192,8 +197,9 @@ function getZeroAnchoredBarDomain(items: any[], key: string): [number, number] {
 
 // Milyar / Milyon TL Formatlayıcı (Grafik eksen ve tooltip'leri için)
 function formatMrTl(val: number | null | undefined, isAxis = false): string {
-  if (val === null || val === undefined || isNaN(val)) return '—';
+  if (val === null || val === undefined) return '—';
   const num = Number(val);
+  if (!Number.isFinite(num)) return '—';
   if (num === 0) return '0 TL';
   const abs = Math.abs(num);
 
@@ -618,7 +624,7 @@ function cleanMarkdown(text: string, decision?: string, stripTrailingVerdict = t
   cleaned = cleaned.replace(/^\s*\|\s*$/gm, '');
   cleaned = cleaned.replace(/^(?:###|\#)\s*(I{1,3}|IV|V|VI{1,3}|IX|X|[1-9])[\.\:\s\-]+(.*)$/gim, '## $1. $2');
   // Normalize standalone numbered section headers (e.g., "\n\n1. Sigortacılık Bilanço Gücü...\n") that do not end with a period
-  cleaned = cleaned.replace(/\n\n([1-9])\.\s+([A-ZÇĞİÖŞÜ][^\n.]{8,95})\n(?=\s*(?:[-*|\n]|$$|[A-ZÇĞİÖŞÜ]))/g, '\n\n## $2\n');
+  cleaned = cleaned.replace(/\n\n([1-9])\.\s+([A-ZÇĞİÖŞÜ][^\n.]{8,95})\n(?=\s*(?:[-*|\n]|\$\$|[A-ZÇĞİÖŞÜ]))/g, '\n\n## $2\n');
   cleaned = cleaned.replace(/\\\\\[([\s\S]*?)\\\\\]/g, (_m, g1) => `\n\n$$\n${g1.trim()}\n$$\n\n`);
   cleaned = cleaned.replace(/\$\$([\s\S]*?)\$\$/g, (_match: string, inner: string) => {
     const cleanedInner = inner.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0).join('\n');
@@ -1022,6 +1028,7 @@ export default function SimplyView({
   tickerHistory = [],
   portfolioTickers = [],
   favoriteTickers = [],
+  initialTab,
   onTogglePortfolio,
   onToggleFavorite,
   onSwitchToTerminal,
@@ -1098,10 +1105,12 @@ export default function SimplyView({
   const [loadingKapQual, setLoadingKapQual] = useState<boolean>(false);
 
   useEffect(() => {
+    const controller = new AbortController();
     let isMounted = true;
     setLiveMarketPrice(null);
     setLiveKapQualitativeAudit(null);
-    const upperTicker = report.ticker ? report.ticker.toUpperCase() : '';
+    setLoadingKapQual(false);
+    const upperTicker = report.ticker ? report.ticker.replace(/\.IS$/i, '').toUpperCase().trim() : '';
     const baselineDetails = upperTicker ? OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE[upperTicker] : null;
     const rawInitialDivs = (Array.isArray(report.dividendHistory) && report.dividendHistory.length > 0)
       ? report.dividendHistory
@@ -1123,11 +1132,14 @@ export default function SimplyView({
       tvConsensus: (report as any).tvConsensus || null
     });
 
-    if (report.ticker) {
-      fetch(`/api/company-details?ticker=${encodeURIComponent(report.ticker)}&refresh=true&t=${Date.now()}`, { cache: 'no-store' })
+    if (upperTicker) {
+      fetch(`/api/company-details?ticker=${encodeURIComponent(upperTicker)}&refresh=true&t=${Date.now()}`, {
+        cache: 'no-store',
+        signal: controller.signal
+      })
         .then(res => res.json())
         .then(data => {
-          if (isMounted && data.success) {
+          if (isMounted && !controller.signal.aborted && data.success) {
             setLiveCompanyDetails({
               ticker: upperTicker,
               dividends: (Array.isArray(data.dividends) && data.dividends.length > 0) ? data.dividends : rawInitialDivs,
@@ -1139,35 +1151,44 @@ export default function SimplyView({
         })
         .catch(() => {});
 
-      fetch(`/api/cockpit/card?ticker=${encodeURIComponent(report.ticker)}&range=1G`, { cache: 'no-store' })
+      fetch(`/api/cockpit/card?ticker=${encodeURIComponent(upperTicker)}&range=1G`, {
+        cache: 'no-store',
+        signal: controller.signal
+      })
         .then(res => res.json())
         .then(data => {
-          const p = Number(data?.card?.price);
-          if (isMounted && data?.success && Number.isFinite(p) && p > 0) {
+          const p = parseFinancialNumber(data?.card?.price);
+          if (isMounted && !controller.signal.aborted && data?.success && p != null && Number.isFinite(p) && p > 0) {
             setLiveMarketPrice(p);
           }
         })
         .catch(() => {});
 
-      const existingAudit = valuationInfo?.qualitative_risk_audit || report.extractedData?.qualitative_risk_audit;
-      if ((!existingAudit || existingAudit?.schemaVersion !== 2) && upperTicker) {
+      const existingAudit = report.extractedData?.valuation?.qualitative_risk_audit || report.extractedData?.qualitative_risk_audit;
+      if (!existingAudit || existingAudit?.schemaVersion !== 2) {
         setLoadingKapQual(true);
-        fetch(`/api/kap-audit?ticker=${encodeURIComponent(upperTicker)}`, { cache: 'no-store' })
+        fetch(`/api/kap-audit?ticker=${encodeURIComponent(upperTicker)}`, {
+          cache: 'no-store',
+          signal: controller.signal
+        })
           .then(res => res.json())
           .then(data => {
-            if (isMounted && data?.success && data?.audit) {
+            if (isMounted && !controller.signal.aborted && data?.success && data?.audit) {
               setLiveKapQualitativeAudit(data.audit);
             }
           })
           .catch(() => {})
           .finally(() => {
-            if (isMounted) setLoadingKapQual(false);
+            if (isMounted && !controller.signal.aborted) setLoadingKapQual(false);
           });
       }
     }
 
-    return () => { isMounted = false; };
-  }, [report.ticker, report.dividendHistory, report.consensusTarget, report.extractedData, marketMultiples]);
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [report.id, report.ticker]);
 
   // Kanonik Yabancı Takas Payı (3.1 Benchmark ve 3.4 Takas Paneli arasında %100 tam mutabakat)
   const canonicalForeignShare = useMemo(() => {
@@ -1203,10 +1224,22 @@ export default function SimplyView({
   }, [report.ticker, sectorMeta?.title]);
 
   // Fiyat ve Adil Değer Çözümü (Üst panel canlı piyasa fiyatını yansıtır; Geçmiş paneli ise analiz anındaki fiyatı korur)
-  const staticReportPrice = Number(String(report.price || '0').replace(/[^0-9.]/g, '')) || 0;
-  const currentPriceNum = (liveMarketPrice != null && liveMarketPrice > 0) ? liveMarketPrice : staticReportPrice;
-  const fairValueNum = Number(valuationInfo?.fair_value || report.fairValue || 0);
-  const discountPctNum = Number(valuationInfo?.discount_pct || 0);
+  const parsedStaticPrice = parseFinancialNumber(report.price);
+  const staticReportPrice = parsedStaticPrice != null && Number.isFinite(parsedStaticPrice) && parsedStaticPrice > 0 ? parsedStaticPrice : 0;
+  const currentPriceNum = (liveMarketPrice != null && Number.isFinite(liveMarketPrice) && liveMarketPrice > 0) ? liveMarketPrice : staticReportPrice;
+  const parsedFairValue = parseFinancialNumber(valuationInfo?.fair_value ?? report.fairValue);
+  const fairValueNum = parsedFairValue != null && Number.isFinite(parsedFairValue) && parsedFairValue > 0 ? parsedFairValue : 0;
+  const parsedDiscountPct = parseFinancialNumber(valuationInfo?.discount_pct);
+  const discountPctNum = parsedDiscountPct != null && Number.isFinite(parsedDiscountPct) ? parsedDiscountPct : 0;
+  const canonicalBearPrice = useMemo(() => {
+    const raw = parseFinancialNumber(valuationInfo?.bear_price ?? report.extractedData?.valuation?.bear_price);
+    if (raw != null && Number.isFinite(raw) && raw > 0) {
+      return Number(raw.toFixed(2));
+    }
+    if (fairValueNum > 0) return Number((fairValueNum * 0.75).toFixed(2));
+    if (currentPriceNum > 0) return Number((currentPriceNum * 0.80).toFixed(2));
+    return 0;
+  }, [valuationInfo?.bear_price, report.extractedData?.valuation?.bear_price, fairValueNum, currentPriceNum]);
   const effectiveDecision = (
     valuationInfo?.final_decision ||
     valuationInfo?.decision ||
@@ -1694,11 +1727,8 @@ export default function SimplyView({
   // Olasılık Ağırlıklı Beklenen Değer (E[V]), Asimetri Oranı & Yarı-Kelly Pozisyon Boyutlandırması
   const probabilisticEdge = useMemo(() => {
     const rawSc = valuationInfo?.score ?? report.score;
-    const parsedSc =
-      rawSc != null
-        ? parseInt(String(rawSc).split('/')[0].replace(/[^0-9]/g, ''), 10)
-        : 65;
-    const safeScore = Number.isFinite(parsedSc) && parsedSc > 0 ? parsedSc : 65;
+    const parsedSc = parseNumericScore(rawSc);
+    const safeScore = parsedSc !== null ? parsedSc : 65;
     return calculateProbabilisticExpectedValue({
       currentPrice: currentPriceNum,
       fairValue: fairValueNum,
@@ -2015,29 +2045,8 @@ export default function SimplyView({
     };
   }, []);
 
-  // Rapor açıldığında veya değiştiğinde sayfa daima en baştan (sec-ozet) başlasın ve geçici UI durumları sıfırlansın
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-      const container = document.getElementById('main-scroll-container');
-      if (container) {
-        container.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-      }
-    }
-    setActiveSection('sec-ozet');
-    setSelectedSnowflakeFilter('all');
-    setShowAllDividends(false);
-    setShowBrokerBreakdown(false);
-    setShowSnowflakeChecklist(false);
-    setShowCashQualityExplainer(false);
-    setHoveredRowKey(null);
-    setCollapsedReportChapters({});
-    setExpandedThesisPillars({});
-    setExpandedChecklistItems({});
-    setHighlightedTargetId(null);
-  }, [report.id, report.ticker]);
-
   const [highlightedTargetId, setHighlightedTargetId] = useState<string | null>(null);
+  const [pendingCrossRef, setPendingCrossRef] = useState<{ sectionId: SimplySectionId; highlightId?: string; seq: number } | null>(null);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const triggerHighlight = useCallback((targetId: string) => {
@@ -2050,7 +2059,7 @@ export default function SimplyView({
     }, 2800);
   }, []);
 
-  const scrollToSection = (id: SimplySectionId) => {
+  const scrollToSection = useCallback((id: SimplySectionId) => {
     const el = document.getElementById(id);
     if (el) {
       isProgrammaticScrollRef.current = true;
@@ -2062,12 +2071,12 @@ export default function SimplyView({
       }, 650);
 
       const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
-      const yOffset = isMobile ? -112 : -70;
+      const yOffset = isMobile ? -112 : -76;
       const y = el.getBoundingClientRect().top + window.pageYOffset + yOffset;
       window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
       setActiveSection(id);
     }
-  };
+  }, []);
 
   const scrollToDomId = useCallback((domId: string, parentSection?: SimplySectionId) => {
     const el = document.getElementById(domId);
@@ -2089,6 +2098,83 @@ export default function SimplyView({
       }
     }
   }, []);
+
+  // Rapor açıldığında veya değiştiğinde sayfa daima en baştan (sec-ozet) başlasın ve geçici UI durumları sıfırlansın
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      const container = document.getElementById('main-scroll-container');
+      if (container) {
+        container.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      }
+    }
+    setActiveSection('sec-ozet');
+    setSelectedSnowflakeFilter('all');
+    setShowAllDividends(false);
+    setShowBrokerBreakdown(false);
+    setShowSnowflakeChecklist(false);
+    setShowCashQualityExplainer(false);
+    setHoveredRowKey(null);
+    setCollapsedReportChapters({});
+    setExpandedThesisPillars({});
+    setExpandedChecklistItems({});
+    setHighlightedTargetId(null);
+    setPendingCrossRef(null);
+    setPeriodOffset(0);
+    setSelectedTableTab('bs');
+    setCollapsedSections({});
+    setSelectedSector('AUTO');
+    setIsCapAllocExpanded(false);
+    setShowAllPeers(false);
+    setChartPeriodMode('quarterly');
+  }, [report.id, report.ticker]);
+
+  // Çapraz referans link tıklandığında tab ve akordeon render edildikten sonra rAF ile hedefe kaydır
+  useEffect(() => {
+    if (!pendingCrossRef) return;
+    let raf1 = 0;
+    let raf2 = 0;
+    raf1 = window.requestAnimationFrame(() => {
+      raf2 = window.requestAnimationFrame(() => {
+        if (pendingCrossRef.highlightId && document.getElementById(pendingCrossRef.highlightId)) {
+          scrollToDomId(pendingCrossRef.highlightId, pendingCrossRef.sectionId);
+        } else {
+          scrollToSection(pendingCrossRef.sectionId);
+        }
+      });
+    });
+    return () => {
+      if (raf1) window.cancelAnimationFrame(raf1);
+      if (raf2) window.cancelAnimationFrame(raf2);
+    };
+  }, [pendingCrossRef, scrollToDomId, scrollToSection]);
+
+  // URL rotasından (initialTab) gelen hedef sekmeye ilk açılışta kaydır
+  useEffect(() => {
+    if (!initialTab || initialTab === 'ozet' || initialTab === 'overview') return;
+    const tabToSection: Partial<Record<NonNullable<SimplyViewProps['initialTab']>, SimplySectionId>> = {
+      fairvalue: 'sec-adildeger',
+      tables: 'sec-tablolar',
+      multiples: 'sec-carpanlar',
+      proscons: 'sec-yatirim-tezi',
+      guidance: 'sec-rehberlik',
+      report: 'sec-analist',
+      history: 'sec-gecmis',
+    };
+    const targetSec = tabToSection[initialTab];
+    if (!targetSec) return;
+    let raf1 = 0;
+    let raf2 = 0;
+    raf1 = window.requestAnimationFrame(() => {
+      raf2 = window.requestAnimationFrame(() => {
+        scrollToSection(targetSec);
+      });
+    });
+    return () => {
+      if (raf1) window.cancelAnimationFrame(raf1);
+      if (raf2) window.cancelAnimationFrame(raf2);
+    };
+  }, [report.id, initialTab, scrollToSection]);
 
   // 8.1 Rapor İçi Anlamsal İfade Renklendirici (Tek Yazı Tipi/Boyut, Kutusuz ve Emojisiz)
   const renderSemanticEvalBadge = useCallback((phrase: string, key?: string | number) => {
@@ -2123,7 +2209,19 @@ export default function SimplyView({
     tableTab?: 'bs' | 'is' | 'cf' | 'ratios';
     highlightId?: string;
     accordionSecId?: string;
+    accordionSecIds?: string[];
   } | null => {
+    // 0. Bileşik Oranlar (bölünmeden önce tam eşleşme)
+    if (/Net\s+Borç\s*\/\s*(?:FAVÖK|EBITDA)/i.test(term)) {
+      return {
+        sectionId: 'sec-tablolar',
+        tableTab: 'ratios',
+        highlightId: 'fin-row-debt_to_ebitda',
+        accordionSecId: 'borcluluk',
+        label: 'Rasyolar Tablosu: Net Borç / FAVÖK',
+      };
+    }
+
     // 1. Nakit Akışı Tablosu Kalemleri (sekme: 'cf')
     if (/Net\s+[iİ]şletme\s+Nakit\s+Akışı|[iİ]şletme\s+Nakit\s+Akışı(?:\s*\(OCF\))?/i.test(term)) {
       return {
@@ -2164,13 +2262,16 @@ export default function SimplyView({
 
     // 2. Bilanço Tablosu Kalemleri (sekme: 'bs')
     if (/Net\s+Borç/i.test(term)) {
-      return { sectionId: 'sec-tablolar', tableTab: 'bs', highlightId: 'fin-row-net_debt', accordionSecId: 'yukumluluk', label: 'Bilanço: Net Borç' };
+      return { sectionId: 'sec-tablolar', tableTab: 'bs', highlightId: 'fin-row-net_debt', accordionSecId: 'uvy', label: 'Bilanço: Net Borç' };
     }
-    if (/Finansal\s+Borç/i.test(term)) {
-      return { sectionId: 'sec-tablolar', tableTab: 'bs', highlightId: 'fin-row-financial_debt', accordionSecId: 'yukumluluk', label: 'Bilanço: Finansal Borçlar' };
+    if (/Uzun\s+Vadeli\s+Finansal\s+Borç/i.test(term)) {
+      return { sectionId: 'sec-tablolar', tableTab: 'bs', highlightId: 'fin-row-long_term_debt', accordionSecId: 'uvy', label: 'Bilanço: Uzun Vadeli Finansal Borçlar' };
+    }
+    if (/Kısa\s+Vadeli\s+Finansal\s+Borç|Finansal\s+Borç/i.test(term)) {
+      return { sectionId: 'sec-tablolar', tableTab: 'bs', highlightId: 'fin-row-short_term_debt', accordionSecIds: ['kvy', 'uvy'], label: 'Bilanço: Finansal Borçlar' };
     }
     if (/Özkaynak|Özsermaye/i.test(term)) {
-      return { sectionId: 'sec-tablolar', tableTab: 'bs', highlightId: 'fin-row-equity', accordionSecId: 'yukumluluk', label: 'Bilanço: Ana Ortaklık Özkaynakları' };
+      return { sectionId: 'sec-tablolar', tableTab: 'bs', highlightId: 'fin-row-equity', accordionSecId: 'ozkaynak', label: 'Bilanço: Ana Ortaklık Özkaynakları' };
     }
     if (/Ticari\s+Alacaklar/i.test(term)) {
       return { sectionId: 'sec-tablolar', tableTab: 'bs', highlightId: 'fin-row-trade_receivables', accordionSecId: 'donen', label: 'Bilanço: Ticari Alacaklar' };
@@ -2190,12 +2291,18 @@ export default function SimplyView({
       return { sectionId: 'sec-tablolar', tableTab: 'is', highlightId: 'fin-row-gross_profit', accordionSecId: 'hasilat', label: 'Gelir Tablosu: Brüt Kâr' };
     }
     if (/Esas\s+Faaliyet\s+Kârı|\bEBIT\b/i.test(term)) {
-      return { sectionId: 'sec-tablolar', tableTab: 'is', highlightId: 'fin-row-operating_profit', accordionSecId: 'faaliyet', label: 'Gelir Tablosu: Esas Faaliyet Kârı (EBIT)' };
+      return {
+        sectionId: 'sec-tablolar',
+        tableTab: 'is',
+        highlightId: currentSector === 'INSURANCE' ? 'fin-row-ebitda' : 'fin-row-operating_profit',
+        accordionSecId: 'faaliyet',
+        label: currentSector === 'INSURANCE' ? 'Gelir Tablosu: Teknik Bölüm Kârı / Dengesi' : 'Gelir Tablosu: Esas Faaliyet Kârı (EBIT)'
+      };
     }
     if (/\bFAVÖK\b|\bEBITDA\b/i.test(term)) {
       return { sectionId: 'sec-tablolar', tableTab: 'is', highlightId: 'fin-row-ebitda', accordionSecId: 'faaliyet', label: 'Gelir Tablosu: FAVÖK (EBITDA)' };
     }
-    if (/Net\s+Dönem\s+Kârı/i.test(term)) {
+    if (/Net\s+Dönem\s+Kârı|Net\s+Kâr/i.test(term)) {
       return { sectionId: 'sec-tablolar', tableTab: 'is', highlightId: 'fin-row-net_income', accordionSecId: 'finansman', label: 'Gelir Tablosu: Net Dönem Kârı' };
     }
 
@@ -2203,7 +2310,7 @@ export default function SimplyView({
     if (/DuPont|Nakit\s+[Aa]kışı\s+[Kk]alitesi|Nakit\s+[Dd]önüşüm\s+[Oo]ranı|Sloan\s+Tahakkuk/i.test(term)) {
       return { sectionId: 'sec-grafikler', highlightId: 'sec-grafikler', label: 'Bölüm 2: Grafik, Nakit Kalitesi & DuPont Analizine Git' };
     }
-    if (/Değerleme\s+Çarpanları|Sektör\s+Çarpanları|Hedef\s+Çarpan|Cari\s+PD\/DD|Cari\s+F\/K|FD\/FAVÖK|FD\/Satışlar/i.test(term)) {
+    if (/Değerleme\s+Çarpanları|Sektör\s+Çarpanları|Hedef\s+Çarpan|(?:Cari\s+)?PD\/DD|(?:Cari\s+)?F\/K|FD\/FAVÖK|FD\/Satışlar/i.test(term)) {
       return { sectionId: 'sec-carpanlar', highlightId: 'sec-carpanlar', label: 'Bölüm 4: Değerleme Çarpanları & Sektör Kıyaslamasına Git' };
     }
     if (/Reel\s+WACC|Gordon\s+Büyüme\s+Modeli|[iİ]ndirgenmiş\s+Nakit\s+Akışı|Reel\s+EVA\s+Makası|Ayı\s+[Ss]enaryosu|Boğa\s+[Ss]enaryosu/i.test(term)) {
@@ -2213,37 +2320,45 @@ export default function SimplyView({
       return { sectionId: 'sec-temettu', highlightId: 'sec-temettu', label: 'Bölüm 6: Temettü Analizine Git' };
     }
     return null;
-  }, []);
+  }, [currentSector]);
 
   const navigateToCrossRef = useCallback((refTarget: {
     sectionId: SimplySectionId;
     tableTab?: 'bs' | 'is' | 'cf' | 'ratios';
     highlightId?: string;
     accordionSecId?: string;
+    accordionSecIds?: string[];
   }) => {
     if (refTarget.tableTab) {
       setSelectedTableTab(refTarget.tableTab);
     }
-    if (refTarget.accordionSecId) {
-      setCollapsedSections(prev => ({ ...prev, [refTarget.accordionSecId!]: false }));
+    const toOpen = [
+      ...(refTarget.accordionSecId ? [refTarget.accordionSecId] : []),
+      ...(refTarget.accordionSecIds || [])
+    ];
+    if (toOpen.length > 0) {
+      setCollapsedSections(prev => {
+        const next = { ...prev };
+        for (const accId of toOpen) {
+          next[accId] = false;
+        }
+        return next;
+      });
     }
     const targetDomId = refTarget.highlightId || refTarget.sectionId;
     triggerHighlight(targetDomId);
-
-    setTimeout(() => {
-      if (refTarget.highlightId && document.getElementById(refTarget.highlightId)) {
-        scrollToDomId(refTarget.highlightId, refTarget.sectionId);
-      } else {
-        scrollToSection(refTarget.sectionId);
-      }
-    }, 110);
-  }, [scrollToDomId, triggerHighlight]);
+    setPendingCrossRef({
+      sectionId: refTarget.sectionId,
+      highlightId: refTarget.highlightId,
+      seq: Date.now(),
+    });
+  }, [triggerHighlight]);
 
   // 8.1 Rapor Düz Metin Segmenti Zenginleştirici (Fiyatlar, Getiri/İskonto, Parantez İçi Yargılar ve Çapraz Referans Linkleri)
   const enrichPlainTextSegment = useCallback((text: string, keyPrefix = 'seg'): React.ReactNode => {
     if (!text || text.length < 2) return text;
 
-    const combinedRegex = /(\(\s*(?:Güçlü\s+Alım\s+Tezi[^)]*|[^()]*Açısından\s+(?:Olumlu|Olumsuz|Kritik|Zayıf\/Olumsuz)[^)]*|[^()]*açısından\s+(?:olumlu|olumsuz|temkinli[^)]*|zayıf\/olumsuz)[^)]*|Aşağı\s+yönlü\s+risk\s+(?:sınırlı|emniyeti)[^)]*|Faiz\s+şoklarına\s+karşı\s+korumalı[^)]*|Nötr\s*\/[^)]*|Dengeli(?:\s*\/\s*Ilımlı)?\s+görünüm|Yönetilebilir\s+(?:faiz|Finansman)\s+riski|Operasyonel\s+Kaldıraç\s+Hassasiyeti|Yüksek\s+risk-ödül\s+asimetrisi|Kısa\s+vadede\s+temkinli[^)]*|Güvenli\s+[iİ]skonto\s+Marjı|Sınırda\s+Güvenlik\s+Marjı|Yetersiz\s+Güvenlik\s+Marjı|güvenlik\s+marjı\s+bulunmamaktadır)\s*\))|((?:(?:[+-]\s*)?%\s*[+-]?\d+(?:[.,]\d+)?\s*(?:getiri\s+potansiyeli(?:\s*\((?:[iİ]skonto|prim)\))?|yükseliş\s+potansiyeli|güvenlik\s+marjı|[iİ]skonto\s+payı|[iİ]skontolu(?:dur)?|[iİ]skonto(?:su|yla)?|potansiyel(?:i|ine|ini|dir)?|primli(?:dir)?|prim(?:i|le)?|üzerinde(?:dir)?)|[+-]\d+(?:[.,]\d+)?\s*puan(?:\s+(?:pozitif|negatif)\s+(?:ekonomik\s+katma\s+değer|EVA))?|%\s*-\d+(?:[.,]\d+)?|-\s*%\s*\d+(?:[.,]\d+)?))|((?:[+-]\s*)?(?:₺\s*\d[\d.,]*(?:\s*(?:Milyar|Milyon|Mr|Mn|Bin))?|\d[\d.,]*\s*(?:Milyar|Milyon|Mr|Mn|Bin)\s*TL\b|\d[\d.,]*\s*TL\b))|((?<![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ])(?:DuPont(?:\s+5\s+[Aa]şamalı|\s+[Aa]nalizi|\s+[Aa]yrıştırması|\s+ROE|\s+[Vv]erimlilik)?|Net\s+[iİ]şletme\s+Nakit\s+Akışı|[iİ]şletme\s+Nakit\s+Akışı(?:\s*\(OCF\))?|Serbest\s+Nakit\s+Akışı(?:\s*\(FCF\))?|Maddi\s+Duran\s+Varlık\s+Yatırımları|Yatırım\s+Harcamaları|CapEx|Nakit\s+[Aa]kışı\s+[Kk]alitesi|Nakit\s+[Dd]önüşüm\s+[Oo]ranı|Sloan\s+Tahakkuk|Net\s+Borç|Finansal\s+Borç(?:ları|lar)?|Özkaynak(?:lar|ları|ta|taki)?|Özsermaye(?:sini|si)?|Ticari\s+Alacaklar|Stoklar|Satış\s+Gelirleri|Hasılat(?:ı|ın)?|Brüt\s+Kâr(?:ı|ın)?|Esas\s+Faaliyet\s+Kârı|Net\s+Dönem\s+Kârı|FAVÖK|EBITDA|Bilanço(?:da|daki|su|sunda|sundaki)?|Finansal\s+Tablolar|[iİ]şletme\s+[Ss]ermayesi|[Çç]alışma\s+[Ss]ermayesi|Değerleme\s+Çarpanları|Sektör\s+Çarpanları|Hedef\s+Çarpan|Cari\s+PD\/DD|Cari\s+F\/K|FD\/FAVÖK|FD\/Satışlar|Gordon\s+Büyüme\s+Modeli|[iİ]ndirgenmiş\s+Nakit\s+Akışı|Reel\s+WACC|Reel\s+EVA\s+Makası|Ayı\s+[Ss]enaryosu(?:\s+[Tt]aban\s+(?:[Ff]iyatı|[Hh]edefi))?|Boğa\s+[Ss]enaryosu(?:\s+[Tt]avan\s+(?:[Ff]iyatı|[Hh]edefi))?|Temettü(?:\s+verimi|\s+dağıtım\s+kapasitesini)?|Kâr\s+Payı)(?![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ]))|((?:\+%\d+(?:[.,]\d+)?|%\d+(?:[.,]\d+)?(?:\s*-\s*\d+(?:[.,]\d+)?)?|(?<![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ])\d+(?:[.,]\d+)?x(?![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ])))/gi;
+    const combinedRegex = /(\(\s*(?:Güçlü\s+Alım\s+Tezi[^)]*|[^()]*Açısından\s+(?:Olumlu|Olumsuz|Kritik|Zayıf\/Olumsuz)[^)]*|[^()]*açısından\s+(?:olumlu|olumsuz|temkinli[^)]*|zayıf\/olumsuz)[^)]*|Aşağı\s+yönlü\s+risk\s+(?:sınırlı|emniyeti)[^)]*|Faiz\s+şoklarına\s+karşı\s+korumalı[^)]*|Nötr\s*\/[^)]*|Dengeli(?:\s*\/\s*Ilımlı)?\s+görünüm|Yönetilebilir\s+(?:faiz|Finansman)\s+riski|Operasyonel\s+Kaldıraç\s+Hassasiyeti|Yüksek\s+risk-ödül\s+asimetrisi|Kısa\s+vadede\s+temkinli[^)]*|Güvenli\s+[iİ]skonto\s+Marjı|Sınırda\s+Güvenlik\s+Marjı|Yetersiz\s+Güvenlik\s+Marjı|güvenlik\s+marjı\s+bulunmamaktadır)\s*\))|((?:(?:[+-]\s*)?%\s*[+-]?\d+(?:[.,]\d+)?\s*(?:getiri\s+potansiyeli(?:\s*\((?:[iİ]skonto|prim)\))?|yükseliş\s+potansiyeli|güvenlik\s+marjı|[iİ]skonto\s+payı|[iİ]skontolu(?:dur)?|[iİ]skonto(?:su|yla)?|potansiyel(?:i|ine|ini|dir)?|primli(?:dir)?|prim(?:i|le)?|üzerinde(?:dir)?)|[+-]\d+(?:[.,]\d+)?\s*puan(?:\s+(?:pozitif|negatif)\s+(?:ekonomik\s+katma\s+değer|EVA))?|%\s*-\d+(?:[.,]\d+)?|-\s*%\s*\d+(?:[.,]\d+)?))|((?:[+-]\s*)?(?:₺\s*\d[\d.,]*(?:\s*(?:Milyar|Milyon|Mr|Mn|Bin))?|\d[\d.,]*\s*(?:Milyar|Milyon|Mr|Mn|Bin)\s*TL\b|\d[\d.,]*\s*TL\b))|((?<![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ])(?:DuPont(?:\s+5\s+[Aa]şamalı|\s+[Aa]nalizi|\s+[Aa]yrıştırması|\s+ROE|\s+[Vv]erimlilik)?|Net\s+Borç\s*\/\s*(?:FAVÖK|EBITDA)|Net\s+[iİ]şletme\s+Nakit\s+Akışı|[iİ]şletme\s+Nakit\s+Akışı(?:\s*\(OCF\))?|Serbest\s+Nakit\s+Akışı(?:\s*\(FCF\))?|Maddi\s+Duran\s+Varlık\s+Yatırımları|Yatırım\s+Harcamaları|CapEx|Nakit\s+[Aa]kışı\s+[Kk]alitesi|Nakit\s+[Dd]önüşüm\s+[Oo]ranı|Sloan\s+Tahakkuk|Net\s+Borç|Uzun\s+Vadeli\s+Finansal\s+Borç(?:ları|lar)?|Kısa\s+Vadeli\s+Finansal\s+Borç(?:ları|lar)?|Finansal\s+Borç(?:ları|lar)?|Özkaynak(?:lar|ları|ta|taki)?|Özsermaye(?:sini|si)?|Ticari\s+Alacaklar|Stoklar|Satış\s+Gelirleri|Hasılat(?:ı|ın)?|Brüt\s+Kâr(?:ı|ın)?|Esas\s+Faaliyet\s+Kârı|Net\s+Dönem\s+Kârı|Net\s+Kâr(?:ı|ın)?|FAVÖK|EBITDA|Bilanço(?:da|daki|su|sunda|sundaki)?|Finansal\s+Tablolar|[iİ]şletme\s+[Ss]ermayesi|[Çç]alışma\s+[Ss]ermayesi|Değerleme\s+Çarpanları|Sektör\s+Çarpanları|Hedef\s+Çarpan|(?:Cari\s+)?PD\/DD|(?:Cari\s+)?F\/K|FD\/FAVÖK|FD\/Satışlar|Gordon\s+Büyüme\s+Modeli|[iİ]ndirgenmiş\s+Nakit\s+Akışı|Reel\s+WACC|Reel\s+EVA\s+Makası|Ayı\s+[Ss]enaryosu(?:\s+[Tt]aban\s+(?:[Ff]iyatı|[Hh]edefi))?|Boğa\s+[Ss]enaryosu(?:\s+[Tt]avan\s+(?:[Ff]iyatı|[Hh]edefi))?|Temettü(?:\s+verimi|\s+dağıtım\s+kapasitesini)?|Kâr\s+Payı)(?![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ]))|((?:\+%\d+(?:[.,]\d+)?|%\d+(?:[.,]\d+)?(?:\s*-\s*\d+(?:[.,]\d+)?)?|(?<![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ])\d+(?:[.,]\d+)?x(?![a-zA-Z0-9_çğıöşüÇĞİÖŞÜ])))/gi;
 
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
@@ -2373,64 +2488,75 @@ export default function SimplyView({
   // 6 Sparkline Kartı Trend Hesaplamaları
   const sparklineMetrics = useMemo(() => {
     const series = (quarterlyChartData.length > 0 ? quarterlyChartData : chartData).slice(-6);
+    const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+    const pctOrNull = (num: unknown, den: unknown, scale = 1): number | null => {
+      if (!fin(num) || !fin(den) || den <= 0) return null;
+      const res = Number(((num / den) * scale).toFixed(1));
+      return Number.isFinite(res) ? res : null;
+    };
     return [
       {
         id: 'gross_margin',
         title: 'Brüt Kâr Marjı',
         data: series.map(d => ({
           period: d.period ? d.period.slice(2) : '',
-          val: d.revenue ? Number(((d.gross_profit || (d.revenue * 0.4)) / d.revenue * 100).toFixed(1)) : 40
+          val: pctOrNull(d.gross_profit, d.revenue, 100)
         })),
-        format: (v: number) => `%${v.toFixed(1)}`
+        format: (v: number) => Number.isFinite(v) ? `%${v.toFixed(1)}` : '—'
       },
       {
         id: 'ebitda_margin',
         title: currentSector === 'INSURANCE' ? 'Teknik Kâr Marjı' : 'FAVÖK Marjı',
         data: series.map(d => ({
           period: d.period ? d.period.slice(2) : '',
-          val: d.revenue ? Number(((d.ebitda || (d.revenue * 0.25)) / d.revenue * 100).toFixed(1)) : 25
+          val: pctOrNull(d.ebitda, d.revenue, 100)
         })),
-        format: (v: number) => `%${v.toFixed(1)}`
+        format: (v: number) => Number.isFinite(v) ? `%${v.toFixed(1)}` : '—'
       },
       {
         id: 'net_margin',
         title: 'Net Kâr Marjı',
         data: series.map(d => ({
           period: d.period ? d.period.slice(2) : '',
-          val: d.revenue ? Number(((d.net_income || (d.revenue * 0.15)) / d.revenue * 100).toFixed(1)) : 15
+          val: pctOrNull(d.net_income, d.revenue, 100)
         })),
-        format: (v: number) => `%${v.toFixed(1)}`
+        format: (v: number) => Number.isFinite(v) ? `%${v.toFixed(1)}` : '—'
       },
       {
         id: 'current_ratio',
         title: 'Cari Oran',
         data: series.map(d => ({
           period: d.period ? d.period.slice(2) : '',
-          val: d.current_liabilities ? Number((d.current_assets / d.current_liabilities).toFixed(2)) : 1.45
+          val: fin(d.current_assets) && fin(d.current_liabilities) && d.current_liabilities > 0
+            ? Number((d.current_assets / d.current_liabilities).toFixed(2))
+            : null
         })),
-        format: (v: number) => `${v.toFixed(2)}x`
+        format: (v: number) => Number.isFinite(v) ? `${v.toFixed(2)}x` : '—'
       },
       {
         id: 'leverage',
         title: 'Borç / Özkaynak',
-        data: series.map(d => ({
-          period: d.period ? d.period.slice(2) : '',
-          val: d.equity ? Number(((d.financial_debt || (d.total_debt || (d.equity * 0.6))) / d.equity * 100).toFixed(1)) : 60
-        })),
-        format: (v: number) => `%${v.toFixed(1)}`
+        data: series.map(d => {
+          const debtVal = fin(d.financial_debt) ? d.financial_debt : (fin(d.total_debt) ? d.total_debt : null);
+          return {
+            period: d.period ? d.period.slice(2) : '',
+            val: pctOrNull(debtVal, d.equity, 100)
+          };
+        }),
+        format: (v: number) => Number.isFinite(v) ? `%${v.toFixed(1)}` : '—'
       },
       {
         id: 'roe',
         title: 'Özkaynak Kârlılığı',
         data: series.map((d, idx) => {
           const isLatest = idx === series.length - 1;
-          if (isLatest && dupontResult?.calculatedRoe != null && !isNaN(dupontResult.calculatedRoe)) {
+          if (isLatest && dupontResult?.calculatedRoe != null && Number.isFinite(dupontResult.calculatedRoe)) {
             return {
               period: d.period ? d.period.slice(2) : '',
               val: dupontResult.calculatedRoe
             };
           }
-          if (d.roe != null && !isNaN(d.roe)) {
+          if (d.roe != null && Number.isFinite(Number(d.roe))) {
             return {
               period: d.period ? d.period.slice(2) : '',
               val: Number(Number(d.roe).toFixed(1))
@@ -2442,13 +2568,13 @@ export default function SimplyView({
           else if (/(?:\/0?6\b|6a\b|q2\b|2\.ç|2ç)/i.test(pStr)) f = 2.0;
           else if (/(?:\/0?9\b|9a\b|q3\b|3\.ç|3ç)/i.test(pStr)) f = 12.0 / 9.0;
           const rawNet = d._rawCumulative?.net_income ?? d.net_income;
-          const annNet = rawNet != null ? rawNet * f : null;
+          const annNet = fin(rawNet) ? rawNet * f : null;
           return {
             period: d.period ? d.period.slice(2) : '',
-            val: (d.equity && annNet != null) ? Number((annNet / d.equity * 100).toFixed(1)) : null
+            val: pctOrNull(annNet, d.equity, 100)
           };
         }),
-        format: (v: number) => `%${v.toFixed(1)}`
+        format: (v: number) => Number.isFinite(v) ? `%${v.toFixed(1)}` : '—'
       }
     ];
   }, [quarterlyChartData, chartData, currentSector, dupontResult]);
@@ -2456,23 +2582,27 @@ export default function SimplyView({
   // Sektör Çarpanları Kıyaslama Çizelgesi
   const peerComparisonData = useMemo(() => {
     const data: Array<{ name: string; pe: number; isMain?: boolean; reportId?: string; ticker?: string }> = [];
-    const mainPE = (companyMultiplesData?.multiples?.pe?.companyValue && companyMultiplesData.multiples.pe.companyValue > 0)
-      ? companyMultiplesData.multiples.pe.companyValue
-      : (marketMultiples?.pe || 8.5);
-    data.push({ name: report.ticker, pe: Number(mainPE.toFixed(1)), isMain: true, reportId: report.id, ticker: report.ticker });
+    const mainCand = parseFinancialNumber(companyMultiplesData?.multiples?.pe?.companyValue ?? marketMultiples?.pe);
+    if (mainCand != null && Number.isFinite(mainCand) && mainCand > 0) {
+      data.push({ name: report.ticker, pe: Number(mainCand.toFixed(1)), isMain: true, reportId: report.id, ticker: report.ticker });
+    }
 
     analyzedCompetitors.slice(0, 4).forEach(comp => {
-      const pe = comp.extractedData?.valuation?.pe_ratio || comp.extractedData?.pe || comp.extractedData?.market_multiples?.pe || 9.2;
-      data.push({ 
-        name: comp.ticker, 
-        pe: Number(Number(pe).toFixed(1)),
-        reportId: comp.id,
-        ticker: comp.ticker
-      });
+      const compPe = parseFinancialNumber(comp.extractedData?.valuation?.pe_ratio ?? comp.extractedData?.pe ?? comp.extractedData?.market_multiples?.pe);
+      if (compPe != null && Number.isFinite(compPe) && compPe > 0) {
+        data.push({
+          name: comp.ticker,
+          pe: Number(compPe.toFixed(1)),
+          reportId: comp.id,
+          ticker: comp.ticker
+        });
+      }
     });
 
-    const bench = marketMultiples?.sector_averages?.pe ?? companyMultiplesData?.benchmark?.peMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pe ?? 9.0;
-    data.push({ name: 'Sektör Ort.', pe: Number(Number(bench).toFixed(1)) });
+    const bench = parseFinancialNumber(marketMultiples?.sector_averages?.pe ?? companyMultiplesData?.benchmark?.peMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pe);
+    if (bench != null && Number.isFinite(bench) && bench > 0) {
+      data.push({ name: 'Sektör Ort.', pe: Number(bench.toFixed(1)) });
+    }
 
     return data;
   }, [report.ticker, report.id, marketMultiples, companyMultiplesData, analyzedCompetitors, currentSector]);
@@ -2655,8 +2785,8 @@ export default function SimplyView({
         { label: 'Araştırma ve Geliştirme Giderleri (-)', key: 'rd_expenses' },
         { label: 'Esas Faaliyetlerden Diğer Gelirler / (Giderler)', key: 'other_operating_income_net', fallbackKey: 'other_operating_income' }
       ],
-      grandTotalLabel: '+ FAVÖK (EBITDA)',
-      grandTotalKey: 'ebitda'
+      grandTotalLabel: currentSector === 'INSURANCE' ? undefined : '+ FAVÖK (EBITDA)',
+      grandTotalKey: currentSector === 'INSURANCE' ? undefined : 'ebitda'
     },
     {
       id: 'finansman',
@@ -2709,6 +2839,21 @@ export default function SimplyView({
 
   // Rasyolar Bölümleri (Isı Haritası için dinamik raw değerler dahil)
   const ratiosSections = useMemo(() => {
+    const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+    const safeRatio = (num: unknown, den: unknown, scale = 1): number | null => {
+      if (!isNum(num) || !isNum(den) || den <= 0) return null;
+      const v = (num / den) * scale;
+      return Number.isFinite(v) ? v : null;
+    };
+    const fmtX = (num: unknown, den: unknown): string => {
+      const v = safeRatio(num, den, 1);
+      return v !== null ? `${v.toFixed(2)}x` : '—';
+    };
+    const fmtPct = (num: unknown, den: unknown): string => {
+      const v = safeRatio(num, den, 100);
+      return v !== null ? `${v.toFixed(1)}%` : '—';
+    };
+
     const sections: Array<{
       id: string;
       title: string;
@@ -2727,21 +2872,21 @@ export default function SimplyView({
         {
           key: 'current_ratio',
           label: 'Cari Oran',
-          calc: (c: any) => c.current_liabilities ? (c.current_assets / c.current_liabilities).toFixed(2) + 'x' : '—',
-          raw: (c: any) => c.current_liabilities ? (c.current_assets / c.current_liabilities) : null,
+          calc: (c: any) => fmtX(c.current_assets, c.current_liabilities),
+          raw: (c: any) => safeRatio(c.current_assets, c.current_liabilities),
           isHighlight: true
         },
         {
           key: 'quick_ratio',
           label: 'Likidite Oranı',
-          calc: (c: any) => c.current_liabilities ? ((c.current_assets - (c.inventories || 0)) / c.current_liabilities).toFixed(2) + 'x' : '—',
-          raw: (c: any) => c.current_liabilities ? ((c.current_assets - (c.inventories || 0)) / c.current_liabilities) : null
+          calc: (c: any) => fmtX(isNum(c.current_assets) ? c.current_assets - (isNum(c.inventories) ? c.inventories : 0) : null, c.current_liabilities),
+          raw: (c: any) => safeRatio(isNum(c.current_assets) ? c.current_assets - (isNum(c.inventories) ? c.inventories : 0) : null, c.current_liabilities)
         },
         {
           key: 'cash_ratio',
           label: 'Nakit Oranı',
-          calc: (c: any) => c.current_liabilities ? ((c.cash_and_equivalents || c.cash || 0) / c.current_liabilities).toFixed(2) + 'x' : '—',
-          raw: (c: any) => c.current_liabilities ? ((c.cash_and_equivalents || c.cash || 0) / c.current_liabilities) : null
+          calc: (c: any) => fmtX(isNum(c.cash_and_equivalents) ? c.cash_and_equivalents : c.cash, c.current_liabilities),
+          raw: (c: any) => safeRatio(isNum(c.cash_and_equivalents) ? c.cash_and_equivalents : c.cash, c.current_liabilities)
         }
       ]
     },
@@ -2752,21 +2897,33 @@ export default function SimplyView({
         {
           key: 'leverage_ratio',
           label: 'Kaldıraç Oranı',
-          calc: (c: any) => c.equity ? ((c.total_assets - c.equity) / c.equity * 100).toFixed(1) + '%' : '—',
-          raw: (c: any) => c.equity ? ((c.total_assets - c.equity) / c.equity * 100) : null
+          calc: (c: any) => fmtPct(isNum(c.total_assets) && isNum(c.equity) ? c.total_assets - c.equity : null, c.equity),
+          raw: (c: any) => safeRatio(isNum(c.total_assets) && isNum(c.equity) ? c.total_assets - c.equity : null, c.equity, 100)
         },
         {
           key: 'debt_to_ebitda',
           label: 'Net Borç / FAVÖK',
-          calc: (c: any) => c.ebitda && c.ebitda > 0 ? (c.net_debt / c.ebitda).toFixed(2) + 'x' : (c.net_debt <= 0 ? 'Net Nakit' : '—'),
-          raw: (c: any) => c.ebitda && c.ebitda > 0 ? (c.net_debt / c.ebitda) : (c.net_debt <= 0 ? 0 : null),
+          calc: (c: any) => {
+            if (isNum(c.ebitda) && c.ebitda > 0 && isNum(c.net_debt)) {
+              const v = c.net_debt / c.ebitda;
+              return Number.isFinite(v) ? `${v.toFixed(2)}x` : '—';
+            }
+            return isNum(c.net_debt) && c.net_debt <= 0 ? 'Net Nakit' : '—';
+          },
+          raw: (c: any) => {
+            if (isNum(c.ebitda) && c.ebitda > 0 && isNum(c.net_debt)) {
+              const v = c.net_debt / c.ebitda;
+              return Number.isFinite(v) ? v : null;
+            }
+            return isNum(c.net_debt) && c.net_debt <= 0 ? 0 : null;
+          },
           isHighlight: true
         },
         {
           key: 'debt_to_assets',
           label: 'Borç / Aktif Oranı',
-          calc: (c: any) => c.total_assets ? (c.total_liabilities / c.total_assets * 100).toFixed(1) + '%' : '—',
-          raw: (c: any) => c.total_assets ? (c.total_liabilities / c.total_assets * 100) : null
+          calc: (c: any) => fmtPct(c.total_liabilities, c.total_assets),
+          raw: (c: any) => safeRatio(c.total_liabilities, c.total_assets, 100)
         }
       ]
     },
@@ -2777,33 +2934,33 @@ export default function SimplyView({
         {
           key: 'gross_margin',
           label: 'Brüt Kâr Marjı',
-          calc: (c: any) => c.revenue && c.gross_profit != null ? ((c.gross_profit / c.revenue) * 100).toFixed(1) + '%' : '—',
-          raw: (c: any) => c.revenue && c.gross_profit != null ? ((c.gross_profit / c.revenue) * 100) : null
+          calc: (c: any) => fmtPct(c.gross_profit, c.revenue),
+          raw: (c: any) => safeRatio(c.gross_profit, c.revenue, 100)
         },
         {
           key: 'ebitda_margin',
           label: 'FAVÖK Marjı',
-          calc: (c: any) => c.revenue && c.ebitda != null ? ((c.ebitda / c.revenue) * 100).toFixed(1) + '%' : '—',
-          raw: (c: any) => c.revenue && c.ebitda != null ? ((c.ebitda / c.revenue) * 100) : null
+          calc: (c: any) => fmtPct(c.ebitda, c.revenue),
+          raw: (c: any) => safeRatio(c.ebitda, c.revenue, 100)
         },
         {
           key: 'net_margin',
           label: 'Net Kâr Marjı',
-          calc: (c: any) => c.revenue && c.net_income != null ? ((c.net_income / c.revenue) * 100).toFixed(1) + '%' : '—',
-          raw: (c: any) => c.revenue && c.net_income != null ? ((c.net_income / c.revenue) * 100) : null
+          calc: (c: any) => fmtPct(c.net_income, c.revenue),
+          raw: (c: any) => safeRatio(c.net_income, c.revenue, 100)
         },
         {
           key: 'roe',
           label: 'Özkaynak Kârlılığı',
-          calc: (c: any) => c.equity && c.net_income != null ? ((c.net_income / c.equity) * 100).toFixed(1) + '%' : '—',
-          raw: (c: any) => c.equity && c.net_income != null ? ((c.net_income / c.equity) * 100) : null,
+          calc: (c: any) => fmtPct(c.net_income, c.equity),
+          raw: (c: any) => safeRatio(c.net_income, c.equity, 100),
           isHighlight: true
         },
         {
           key: 'roa',
           label: 'Aktif Kârlılığı',
-          calc: (c: any) => c.total_assets && c.net_income != null ? ((c.net_income / c.total_assets) * 100).toFixed(1) + '%' : '—',
-          raw: (c: any) => c.total_assets && c.net_income != null ? ((c.net_income / c.total_assets) * 100) : null
+          calc: (c: any) => fmtPct(c.net_income, c.total_assets),
+          raw: (c: any) => safeRatio(c.net_income, c.total_assets, 100)
         }
       ]
     }
@@ -3101,7 +3258,7 @@ export default function SimplyView({
           {/* BÖLÜM 1: GENEL BAKIŞ & SNOWFLAKE (#sec-ozet)                             */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Özet Panosu Hatası">
-          <section id="sec-ozet" className="scroll-mt-6 rounded-2xl border border-[#242a35] bg-[#101319] p-4 sm:p-7 shadow-xl space-y-6">
+          <section id="sec-ozet" className="scroll-mt-28 rounded-2xl border border-[#242a35] bg-[#101319] p-4 sm:p-7 shadow-xl space-y-6">
 
             {/* Mobil Kar Tanesi Radarı & Hızlı Aksiyon Kartı (lg:hidden) */}
             <div className="lg:hidden bg-[#161a23] border border-[#2a3140] rounded-xl p-4 shadow-md flex flex-col items-center text-center space-y-3">
@@ -3176,18 +3333,18 @@ export default function SimplyView({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 sm:gap-5 shrink-0 flex-nowrap">
+                <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 sm:gap-5 w-full sm:w-auto sm:shrink-0">
                   <div>
                     <div className="text-xs sm:text-sm text-slate-400 uppercase font-semibold">Piyasa Fiyatı</div>
                     <div className="text-2xl sm:text-3xl font-black font-mono text-white mt-0.5 whitespace-nowrap">
-                      ₺{currentPriceNum.toFixed(2)}
+                      {currentPriceNum > 0 ? `₺${currentPriceNum.toFixed(2)}` : '—'}
                     </div>
                   </div>
 
                   <div>
                     <div className="text-xs sm:text-sm text-slate-400 uppercase font-semibold">Hesaplanan Adil Değer</div>
                     <div className="text-2xl sm:text-3xl font-black font-mono text-[#f5c242] mt-0.5 whitespace-nowrap">
-                      ₺{fairValueNum.toFixed(2)}
+                      {fairValueNum > 0 ? `₺${fairValueNum.toFixed(2)}` : '—'}
                     </div>
                   </div>
 
@@ -3198,8 +3355,8 @@ export default function SimplyView({
                       const isCapAllocRisk = Boolean(capAllocAudit?.isRiskDetected);
                       const isInvEntity = Boolean(capAllocAudit?.isInvestmentEntity);
                       const isAlma = Boolean(effectiveDecision === 'ALMA' || (report as any)?.rawDecision === 'ALMA');
-                      const rawScore = report?.score || valuationInfo?.score || (report as any)?.scoreResult?.totalScore;
-                      const cleanNum = rawScore ? parseInt(String(rawScore).split('/')[0].replace(/[^0-9]/g, ''), 10) : null;
+                      const rawScore = report?.score ?? valuationInfo?.score ?? (report as any)?.scoreResult?.totalScore;
+                      const cleanNum = parseNumericScore(rawScore);
                       
                       const upsidePct = currentPriceNum > 0 ? ((fairValueNum - currentPriceNum) / currentPriceNum) * 100 : 0;
                       const trueDiscountPct = fairValueNum > 0 ? ((fairValueNum - currentPriceNum) / fairValueNum) * 100 : 0;
@@ -3242,8 +3399,11 @@ export default function SimplyView({
                             <button
                               type="button"
                               onClick={() => {
-                                const el = document.getElementById('sec-sermaye-tahsisi') || document.getElementById('sec-adildeger');
-                                el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                if (document.getElementById('sec-sermaye-tahsisi')) {
+                                  scrollToDomId('sec-sermaye-tahsisi', 'sec-adildeger');
+                                } else {
+                                  scrollToSection('sec-adildeger');
+                                }
                               }}
                               title={riskBadge.tooltip}
                               className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl font-sans text-xs font-bold border whitespace-nowrap shadow-sm cursor-pointer transition ${
@@ -3303,9 +3463,9 @@ export default function SimplyView({
                       );
                     })()}
                     {(() => {
-                      const rawScore = report?.score || valuationInfo?.score || (report as any)?.scoreResult?.totalScore;
-                      const cleanNum = rawScore ? parseInt(String(rawScore).split('/')[0].replace(/[^0-9]/g, ''), 10) : null;
-                      if (cleanNum === null || isNaN(cleanNum)) return null;
+                      const rawScore = report?.score ?? valuationInfo?.score ?? (report as any)?.scoreResult?.totalScore;
+                      const cleanNum = parseNumericScore(rawScore);
+                      if (cleanNum === null) return null;
                       return (
                         <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950/90 border text-xs font-mono font-bold shadow-sm ${getScoreColorStyle(cleanNum).border}`}>
                           <span className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider">Skor:</span>
@@ -3507,7 +3667,7 @@ export default function SimplyView({
                         {report.extractedData.analysis_history.map((h: any) => (
                           <tr key={h.id} className="border-t border-[#232834] text-slate-300">
                             <td className="py-1.5 pr-4">{h.period || '—'}</td>
-                            <td className="py-1.5 pr-4">{h.createdAt ? new Date(h.createdAt).toLocaleDateString('tr-TR') : '—'}</td>
+                            <td className="py-1.5 pr-4">{h.createdAt ? formatAnalysisDate(h.createdAt) : '—'}</td>
                             <td className="py-1.5 pr-4">{h.price || '—'}</td>
                             <td className="py-1.5 pr-4">{h.fairValue || '—'}</td>
                             <td className="py-1.5 pr-4">{h.score || '—'}</td>
@@ -4012,7 +4172,7 @@ export default function SimplyView({
           {/* BÖLÜM 1: GRAFİKLER (#sec-grafikler)                                     */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Grafik Terminali Hatası">
-          <section id="sec-grafikler" className={`scroll-mt-6 rounded-2xl border bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6 transition-all ${highlightedTargetId === 'sec-grafikler' ? 'border-[#f5c242] ring-2 ring-[#f5c242]/60 animate-pulse shadow-[0_0_28px_rgba(245,194,66,0.25)]' : 'border-[#242a35]'}`}>
+          <section id="sec-grafikler" className={`scroll-mt-28 rounded-2xl border bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6 transition-all ${highlightedTargetId === 'sec-grafikler' ? 'border-[#f5c242] ring-2 ring-[#f5c242]/60 animate-pulse shadow-[0_0_28px_rgba(245,194,66,0.25)]' : 'border-[#242a35]'}`}>
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3 flex-wrap gap-3">
               <div className="flex items-center gap-2.5">
                 <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">1</span>
@@ -4139,20 +4299,21 @@ export default function SimplyView({
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {sparklineMetrics.map((mini) => {
-                const values = mini.data.map(d => d.val).filter((v): v is number => v != null && !isNaN(v));
+                const values = mini.data.map(d => d.val).filter((v): v is number => v != null && Number.isFinite(v));
                 const isUptrend = values.length >= 2 && values[values.length - 1]! >= values[0]!;
-                const trendColor = isUptrend ? '#10b981' : '#f87171';
-                const latestVal = values.length > 0 ? (values[values.length - 1] ?? 0) : 0;
+                const trendColor = values.length === 0 ? '#94a3b8' : (isUptrend ? '#10b981' : '#f87171');
+                const latestVal = values.length > 0 ? values[values.length - 1]! : null;
 
                 return (
                   <div key={mini.id} className="bg-[#161a23] border border-[#2a3140] rounded-2xl p-4 shadow-xl space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-[15px] font-bold text-white">{mini.title}</span>
                       <span className="font-mono text-sm font-bold" style={{ color: trendColor }}>
-                        {mini.format(latestVal)}
+                        {latestVal != null ? mini.format(latestVal) : '—'}
                       </span>
                     </div>
                     <div className="h-24 w-full">
+                      {values.length > 0 ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={mini.data}>
                           <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #2b313d)" vertical={false} />
@@ -4163,7 +4324,7 @@ export default function SimplyView({
                               if (active && payload && payload.length) {
                                 const d = payload[0];
                                 const valNum = Number(d.value);
-                                const displayVal = mini.format ? mini.format(valNum) : `%${valNum.toFixed(1)}`;
+                                const displayVal = Number.isFinite(valNum) ? (mini.format ? mini.format(valNum) : `%${valNum.toFixed(1)}`) : '—';
                                 return (
                                   <div className="bg-[#1c2027] border border-[#383e4d] px-2 py-1 rounded-md shadow-lg text-xs font-mono">
                                     <span className="font-bold text-white">{displayVal}</span>
@@ -4173,9 +4334,12 @@ export default function SimplyView({
                               return null;
                             }}
                           />
-                          <Line type="monotone" dataKey="val" stroke={trendColor} strokeWidth={2} dot={{ r: 2.5, fill: trendColor }} />
+                          <Line type="monotone" dataKey="val" stroke={trendColor} strokeWidth={2} dot={{ r: 2.5, fill: trendColor }} connectNulls />
                         </LineChart>
                       </ResponsiveContainer>
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-xs font-mono text-slate-500">Veri Yok</div>
+                      )}
                     </div>
                   </div>
                 );
@@ -4300,7 +4464,7 @@ export default function SimplyView({
           {/* BÖLÜM 2: FİNANSAL TABLOLAR (#sec-tablolar)                              */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Finansal Tablolar Hatası">
-          <section id="sec-tablolar" className={`scroll-mt-6 rounded-2xl border bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6 transition-all ${highlightedTargetId === 'sec-tablolar' ? 'border-[#f5c242] ring-2 ring-[#f5c242]/60 animate-pulse shadow-[0_0_28px_rgba(245,194,66,0.25)]' : 'border-[#242a35]'}`}>
+          <section id="sec-tablolar" className={`scroll-mt-28 rounded-2xl border bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6 transition-all ${highlightedTargetId === 'sec-tablolar' ? 'border-[#f5c242] ring-2 ring-[#f5c242]/60 animate-pulse shadow-[0_0_28px_rgba(245,194,66,0.25)]' : 'border-[#242a35]'}`}>
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3 flex-wrap gap-3">
               <div className="flex items-center gap-2.5">
                 <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">2</span>
@@ -4511,7 +4675,7 @@ export default function SimplyView({
                               </tr>
 
                               {/* Genel Toplam Satırı (Aktifler / Yükümlülükler) */}
-                              {sec.grandTotalLabel && (
+                              {sec.grandTotalLabel && sec.grandTotalKey && (
                                 <tr
                                   id={`fin-row-${sec.grandTotalKey}`}
                                   onMouseEnter={() => setHoveredRowKey(`grand-${sec.id}`)}
@@ -4527,7 +4691,7 @@ export default function SimplyView({
                                     {sec.grandTotalLabel}
                                   </td>
                                   {visiblePeriods.map((c, colIdx) =>
-                                    renderDataCell(c, colIdx, sec.grandTotalKey, undefined, `grand-${sec.id}`, true, true)
+                                    renderDataCell(c, colIdx, sec.grandTotalKey!, undefined, `grand-${sec.id}`, true, true)
                                   )}
                                 </tr>
                               )}
@@ -4636,7 +4800,7 @@ export default function SimplyView({
                                 )}
                               </tr>
 
-                              {sec.grandTotalLabel && (
+                              {sec.grandTotalLabel && sec.grandTotalKey && (
                                 <tr
                                   id={`fin-row-${sec.grandTotalKey}`}
                                   onMouseEnter={() => setHoveredRowKey(`grand-${sec.id}`)}
@@ -4652,7 +4816,7 @@ export default function SimplyView({
                                     {sec.grandTotalLabel}
                                   </td>
                                   {visiblePeriods.map((c, colIdx) =>
-                                    renderDataCell(c, colIdx, sec.grandTotalKey, undefined, `grand-${sec.id}`, true, true)
+                                    renderDataCell(c, colIdx, sec.grandTotalKey!, undefined, `grand-${sec.id}`, true, true)
                                   )}
                                 </tr>
                               )}
@@ -4773,11 +4937,20 @@ export default function SimplyView({
                           {!isCollapsed && sec.rows.map((row, idx) => (
                             <tr
                               key={idx}
+                              id={`fin-row-${row.key}`}
                               onMouseEnter={() => setHoveredRowKey(`ratio-${sec.id}-${idx}`)}
                               onMouseLeave={() => setHoveredRowKey(null)}
-                              className="hover:bg-[#1f242c]/50 border-b border-[#222730] transition-colors"
+                              className={`border-b border-[#222730] transition-colors ${
+                                highlightedTargetId === `fin-row-${row.key}`
+                                  ? 'ring-2 ring-[#f5c242] bg-[#f5c242]/20 animate-pulse shadow-[0_0_20px_rgba(245,194,66,0.35)]'
+                                  : 'hover:bg-[#1f242c]/50'
+                              }`}
                             >
-                              <td className={`py-2.5 px-3 pl-6 font-sans text-sm truncate min-w-[170px] sm:min-w-[200px] sticky left-0 bg-[#181b20] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] ${row.isHighlight ? 'font-bold text-white' : 'font-normal text-slate-200'}`} title={row.label}>
+                              <td className={`py-2.5 px-3 pl-6 font-sans text-sm truncate min-w-[170px] sm:min-w-[200px] sticky left-0 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] ${
+                                highlightedTargetId === `fin-row-${row.key}`
+                                  ? 'bg-[#332a12] text-[#f5c242] font-bold'
+                                  : `bg-[#181b20] ${row.isHighlight ? 'font-bold text-white' : 'font-normal text-slate-200'}`
+                              }`} title={row.label}>
                                 {row.label}
                               </td>
                               {visiblePeriods.map((c) => {
@@ -4813,7 +4986,7 @@ export default function SimplyView({
           {/* BÖLÜM 3: ÇARPANLAR (#sec-carpanlar)                                     */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Çarpan Analizi Hatası">
-          <section id="sec-carpanlar" className={`scroll-mt-6 rounded-2xl border bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6 transition-all ${highlightedTargetId === 'sec-carpanlar' ? 'border-[#f5c242] ring-2 ring-[#f5c242]/60 animate-pulse shadow-[0_0_28px_rgba(245,194,66,0.25)]' : 'border-[#242a35]'}`}>
+          <section id="sec-carpanlar" className={`scroll-mt-28 rounded-2xl border bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6 transition-all ${highlightedTargetId === 'sec-carpanlar' ? 'border-[#f5c242] ring-2 ring-[#f5c242]/60 animate-pulse shadow-[0_0_28px_rgba(245,194,66,0.25)]' : 'border-[#242a35]'}`}>
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
               <div className="flex items-center gap-2.5">
                 <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">3</span>
@@ -4924,7 +5097,21 @@ export default function SimplyView({
                 }
 
                 if (c.customType === 'float') {
-                  const val = c.rawVal != null ? Number(c.rawVal) : 35.0;
+                  if (c.rawVal == null || !Number.isFinite(Number(c.rawVal))) {
+                    return (
+                      <div key={i} className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-3.5 text-center space-y-1">
+                        <div className="text-xs uppercase font-bold text-slate-400">{c.label}</div>
+                        <div className="text-lg font-black font-mono mt-1 text-slate-400">—</div>
+                        <div className="text-[11px] text-slate-500 font-mono">Ref: %20–%50 Optimal</div>
+                        <div className="pt-1">
+                          <span className="inline-block text-[11px] font-mono font-medium px-2 py-0.5 rounded-md bg-[#21262d] text-slate-400 border border-[#2e3440]">
+                            Veri Yok
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  }
+                  const val = Number(c.rawVal);
                   const isOptimal = val >= 20 && val <= 50;
                   return (
                     <div key={i} className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-3.5 text-center space-y-1">
@@ -4943,9 +5130,9 @@ export default function SimplyView({
                 }
 
                 // Eğer metrik A/D (Anlamsız Değer / Sektörel Kapsam Dışı) ise
-                if (c.rawVal == null) {
+                if (c.rawVal == null || !Number.isFinite(Number(c.rawVal))) {
                   const isSectorExempt = isMetricDisabled(c.label === 'FD/FAVÖK' ? 'ev_ebitda' : (c.label === 'FD/Satışlar' ? 'ev_sales' : ''), currentSector);
-                  const benchText = c.benchNum != null && c.benchNum > 0 ? `Ref: ${c.benchNum.toFixed(2)}` : 'Ref: A/D';
+                  const benchText = c.benchNum != null && Number.isFinite(Number(c.benchNum)) && Number(c.benchNum) > 0 ? `Ref: ${Number(c.benchNum).toFixed(2)}` : 'Ref: A/D';
                   return (
                     <div key={i} className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-3.5 text-center space-y-1 transition-colors">
                       <div className="text-xs uppercase font-bold text-slate-400">{c.label}</div>
@@ -4964,11 +5151,12 @@ export default function SimplyView({
                   );
                 }
 
-                const bench = c.benchNum ?? 1.0;
+                const rawBench = Number(c.benchNum);
+                const hasValidBench = Number.isFinite(rawBench) && rawBench > 0;
                 const val = Number(c.rawVal);
-                const diffPct = ((val - bench) / bench) * 100;
-                const isCheap = diffPct <= -8;
-                const isExpensive = diffPct >= 8;
+                const diffPct = hasValidBench ? ((val - rawBench) / rawBench) * 100 : null;
+                const isCheap = diffPct !== null && diffPct <= -8;
+                const isExpensive = diffPct !== null && diffPct >= 8;
 
                 const valColor = isCheap ? 'text-emerald-400' : isExpensive ? 'text-rose-400' : 'text-slate-100';
                 const cardBorder = isCheap ? 'border-emerald-900/40' : isExpensive ? 'border-rose-900/40' : 'border-[#323a4b]';
@@ -4981,10 +5169,14 @@ export default function SimplyView({
                       {formattedVal}
                     </div>
                     <div className="text-[11px] text-slate-500 font-mono">
-                      Ref: {bench.toFixed(2)}
+                      Ref: {hasValidBench ? rawBench.toFixed(2) : '—'}
                     </div>
                     <div className="pt-1">
-                      {isCheap ? (
+                      {!hasValidBench || diffPct === null ? (
+                        <span className="inline-block text-[11px] font-mono font-medium px-2 py-0.5 rounded-md bg-[#21262d] text-slate-400 border border-[#2e3440]">
+                          Referans Yok
+                        </span>
+                      ) : isCheap ? (
                         <span className="inline-block text-[11px] font-mono font-bold px-2 py-0.5 rounded-md bg-emerald-950/60 text-emerald-400 border border-emerald-800/50">
                           -%{Math.abs(diffPct).toFixed(0)} İskontolu
                         </span>
@@ -5108,6 +5300,7 @@ export default function SimplyView({
                 </div>
 
                 <div className="h-44 w-full">
+                  {peerComparisonData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={peerComparisonData} layout="vertical" margin={{ top: 5, right: 30, left: 15, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #2b313d)" horizontal={false} />
@@ -5132,6 +5325,11 @@ export default function SimplyView({
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-xs font-mono text-slate-500">
+                      Sektör F/K kıyaslama verisi bulunamadı.
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -5243,11 +5441,18 @@ export default function SimplyView({
                       <span className="text-slate-400 font-medium">Fiili Dolaşım Skalası</span>
                     </div>
 
-                    <div className="relative h-3 w-full bg-[#1b2029] rounded-full overflow-hidden flex">
-                      <div style={{ width: '20%' }} className="bg-rose-500/40 h-full border-r border-[#12151b]" title="Sığ Bölge (%0-%20)" />
-                      <div style={{ width: '30%' }} className="bg-emerald-500/50 h-full border-r border-[#12151b]" title="Optimal Bölge (%20-%50)" />
-                      <div style={{ width: '20%' }} className="bg-amber-500/40 h-full border-r border-[#12151b]" title="Geniş Bölge (%50-%70)" />
-                      <div style={{ width: '30%' }} className="bg-rose-500/40 h-full" title="Aşırı Dağınık Bölge (%70-%100)" />
+                    <div className="relative py-1">
+                      <div className="relative h-3 w-full bg-[#1b2029] rounded-full overflow-hidden flex">
+                        <div style={{ width: '20%' }} className="bg-rose-500/40 h-full border-r border-[#12151b]" title="Sığ Bölge (%0-%20)" />
+                        <div style={{ width: '30%' }} className="bg-emerald-500/50 h-full border-r border-[#12151b]" title="Optimal Bölge (%20-%50)" />
+                        <div style={{ width: '20%' }} className="bg-amber-500/40 h-full border-r border-[#12151b]" title="Geniş Bölge (%50-%70)" />
+                        <div style={{ width: '30%' }} className="bg-rose-500/40 h-full" title="Aşırı Dağınık Bölge (%70-%100)" />
+                      </div>
+                      <div
+                        style={{ left: `${Math.max(1, Math.min(99, floatPct))}%` }}
+                        className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#f5c242] shadow-md pointer-events-none"
+                        title={`Güncel Halka Açıklık: %${floatPct.toFixed(1)}`}
+                      />
                     </div>
 
                     <div className="flex justify-between text-[11px] font-mono text-slate-500 pt-0.5">
@@ -5268,7 +5473,7 @@ export default function SimplyView({
           {/* BÖLÜM 4: DEĞERLEME (#sec-adildeger)                                     */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Değerleme Panosu Hatası">
-          <section id="sec-adildeger" className={`scroll-mt-6 rounded-2xl border bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6 transition-all ${highlightedTargetId === 'sec-adildeger' ? 'border-[#f5c242] ring-2 ring-[#f5c242]/60 animate-pulse shadow-[0_0_28px_rgba(245,194,66,0.25)]' : 'border-[#242a35]'}`}>
+          <section id="sec-adildeger" className={`scroll-mt-28 rounded-2xl border bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6 transition-all ${highlightedTargetId === 'sec-adildeger' ? 'border-[#f5c242] ring-2 ring-[#f5c242]/60 animate-pulse shadow-[0_0_28px_rgba(245,194,66,0.25)]' : 'border-[#242a35]'}`}>
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
               <div className="flex items-center gap-2.5">
                 <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">4</span>
@@ -5290,10 +5495,7 @@ export default function SimplyView({
                     </span>
                   </div>
                   <div className="text-2xl font-black font-mono text-white">
-                    ₺{(() => {
-                      const bp = valuationInfo?.bear_price ? Number(valuationInfo.bear_price) : 0;
-                      return (bp > 0 && bp < fairValueNum) ? bp.toFixed(2) : (fairValueNum * 0.75).toFixed(2);
-                    })()}
+                    {canonicalBearPrice > 0 ? `₺${canonicalBearPrice.toFixed(2)}` : '—'}
                   </div>
                   <p className="text-xs text-slate-400 leading-relaxed">
                     Yüksek iskonto oranı (+%4 WACC), daralan marjlar ve düşük büyüme varsayımı.
@@ -5308,7 +5510,7 @@ export default function SimplyView({
                     </span>
                   </div>
                   <div className="text-2xl sm:text-3xl font-black font-mono text-[#f5c242]">
-                    ₺{fairValueNum.toFixed(2)}
+                    {fairValueNum > 0 ? `₺${fairValueNum.toFixed(2)}` : '—'}
                   </div>
                   <p className="text-xs text-slate-400 leading-relaxed">
                     Şirketin tarihsel getiri ortalamaları, mevcut sermaye verimliliği ve sektör katsayıları.
@@ -5525,20 +5727,20 @@ export default function SimplyView({
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-4 space-y-1">
                       <div className="text-xs text-slate-400">Güncel Piyasa Fiyatı</div>
-                      <div className="text-2xl font-black font-mono text-white">₺{currentPriceNum.toFixed(2)}</div>
+                      <div className="text-2xl font-black font-mono text-white">{currentPriceNum > 0 ? `₺${currentPriceNum.toFixed(2)}` : '—'}</div>
                     </div>
 
                     <div className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-4 space-y-1">
                       <div className="text-xs text-slate-400">12A Piyasa Konsensüs Hedefi</div>
-                      <div className="text-2xl font-black font-mono text-[#f5c242]">₺{primaryTarget.toFixed(2)}</div>
+                      <div className="text-2xl font-black font-mono text-[#f5c242]">{Number.isFinite(primaryTarget) && primaryTarget > 0 ? `₺${primaryTarget.toFixed(2)}` : '—'}</div>
                       <div className={`text-[11px] font-semibold font-mono ${upsidePct > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {upsidePct > 0 ? '+' : ''}%{upsidePct.toFixed(1)} Potansiyel Getiri
+                        {Number.isFinite(upsidePct) ? `${upsidePct > 0 ? '+' : ''}%${upsidePct.toFixed(1)} Potansiyel Getiri` : '—'}
                       </div>
                     </div>
 
                     <div className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-4 space-y-1">
                       <div className="text-xs text-slate-400">Modelimiz İçsel Adil Değeri</div>
-                      <div className="text-2xl font-black font-mono text-emerald-400">₺{fairValueNum.toFixed(2)}</div>
+                      <div className="text-2xl font-black font-mono text-emerald-400">{fairValueNum > 0 ? `₺${fairValueNum.toFixed(2)}` : '—'}</div>
                     </div>
 
                     <div className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-4 space-y-1">
@@ -5648,14 +5850,16 @@ export default function SimplyView({
                   {(() => {
                     const now = Date.now();
                     const validHistory = (tickerHistory || [])
-                      .filter(h => h.id !== report.id && h.createdAt)
+                      .filter(h => h.id !== report.id && (h.createdAt || h.updatedAt || h.extractedData?.saved_at))
                       .map(h => {
-                        const ts = new Date(h.createdAt).getTime();
-                        const ageDays = (now - ts) / (1000 * 60 * 60 * 24);
-                        const fv = parseFloat(String(h.fairValue || '0').replace(/[^0-9.-]/g, ''));
+                        const isoSrc = h.extractedData?.saved_at || h.updatedAt || h.createdAt || '';
+                        const ts = Date.parse(String(isoSrc));
+                        const ageDays = Number.isFinite(ts) ? (now - ts) / (1000 * 60 * 60 * 24) : NaN;
+                        const parsedFv = parseFinancialNumber(h.fairValue);
+                        const fv = parsedFv != null && Number.isFinite(parsedFv) ? parsedFv : 0;
                         return { ...h, ageDays, fv };
                       })
-                      .filter(h => !isNaN(h.ageDays) && h.fv > 0);
+                      .filter(h => Number.isFinite(h.ageDays) && h.fv > 0);
 
                     const rep1M = validHistory.find(h => h.ageDays >= 14 && h.ageDays < 60);
                     const rep3M = validHistory.find(h => h.ageDays >= 60 && h.ageDays <= 180);
@@ -6063,7 +6267,11 @@ export default function SimplyView({
                 <div className="text-right">
                   <span className="text-sm text-slate-400 font-semibold mr-2">Yıllık ROE:</span>
                   <span className="text-xl font-black font-mono text-emerald-400">
-                    %{((dupontResult.calculatedRoe ?? dupontResult.reportedRoe ?? latestData?.roe) as number)?.toFixed(1) || '—'}
+                    {(() => {
+                      const rawRoe = dupontResult.calculatedRoe ?? dupontResult.reportedRoe ?? latestData?.roe;
+                      const numRoe = rawRoe != null ? Number(rawRoe) : NaN;
+                      return Number.isFinite(numRoe) ? `%${numRoe.toFixed(1)}` : '—';
+                    })()}
                   </span>
                 </div>
               </div>
@@ -6139,7 +6347,7 @@ export default function SimplyView({
               const isInvEntity = Boolean(capAlloc?.isInvestmentEntity);
 
               return (
-                <div id="sec-sermaye-tahsisi" className="scroll-mt-6 bg-[#161a23] border border-[#2a3140] rounded-2xl p-6 shadow-xl space-y-4">
+                <div id="sec-sermaye-tahsisi" className="scroll-mt-28 bg-[#161a23] border border-[#2a3140] rounded-2xl p-6 shadow-xl space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#282d37] pb-3">
                     <div className="flex items-center gap-2.5 flex-wrap">
                       <h3 className="text-base sm:text-lg font-sans font-bold text-white">
@@ -6313,7 +6521,7 @@ export default function SimplyView({
           {/* BÖLÜM 5: TEMETTÜ (#sec-temettu)                                         */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Temettü Panosu Hatası">
-          <section id="sec-temettu" className={`scroll-mt-6 rounded-2xl border bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6 transition-all ${highlightedTargetId === 'sec-temettu' ? 'border-[#f5c242] ring-2 ring-[#f5c242]/60 animate-pulse shadow-[0_0_28px_rgba(245,194,66,0.25)]' : 'border-[#242a35]'}`}>
+          <section id="sec-temettu" className={`scroll-mt-28 rounded-2xl border bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6 transition-all ${highlightedTargetId === 'sec-temettu' ? 'border-[#f5c242] ring-2 ring-[#f5c242]/60 animate-pulse shadow-[0_0_28px_rgba(245,194,66,0.25)]' : 'border-[#242a35]'}`}>
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3">
               <div className="flex items-center gap-2.5">
                 <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">5</span>
@@ -6584,7 +6792,7 @@ export default function SimplyView({
           {/* BÖLÜM 6: YÖNETİM HEDEF KARNESİ (#sec-rehberlik)                          */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Yönetim Hedefleri Hatası">
-          <section id="sec-rehberlik" className="scroll-mt-6 rounded-2xl border border-[#242a35] bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6">
+          <section id="sec-rehberlik" className="scroll-mt-28 rounded-2xl border border-[#242a35] bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6">
             {(() => {
               const qa = liveKapQualitativeAudit || valuationInfo?.qualitative_risk_audit || report.extractedData?.qualitative_risk_audit;
               const cleanKapTargets = Array.isArray(qa?.managementTargets)
@@ -6745,7 +6953,7 @@ export default function SimplyView({
 
                   <div className="bg-[#161a23] border border-[#2a3140] rounded-2xl p-6 shadow-xl">
                     <div className="overflow-x-auto border border-[#323a4b] bg-[#1d222e] rounded-xl">
-                      <table className="w-full table-fixed text-sm sm:text-[15px] text-left border-collapse font-sans">
+                      <table className="w-full min-w-[680px] table-fixed text-sm sm:text-[15px] text-left border-collapse font-sans">
                         <thead className="bg-[#242a38] text-white text-xs sm:text-sm border-b border-[#323a4b]">
                           <tr>
                             <th className="w-[15%] min-w-[110px] p-3.5 font-bold font-mono">Alan / Dönem</th>
@@ -6793,7 +7001,7 @@ export default function SimplyView({
           {/* BÖLÜM 7: YATIRIM TEZİ (#sec-yatirim-tezi)                               */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Yatırım Tezi Panosu Hatası">
-          <section id="sec-yatirim-tezi" className="scroll-mt-20 rounded-2xl border border-[#242a35] bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6">
+          <section id="sec-yatirim-tezi" className="scroll-mt-28 rounded-2xl border border-[#242a35] bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3.5 flex-wrap gap-3">
               <div className="flex items-center gap-2.5">
                 <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">7</span>
@@ -6858,17 +7066,17 @@ export default function SimplyView({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4 sm:gap-6 bg-[#242a38] px-4 sm:px-5 py-3 rounded-xl border border-[#384152]">
+                  <div className="flex flex-wrap items-center gap-3 sm:gap-6 bg-[#242a38] px-4 sm:px-5 py-3 rounded-xl border border-[#384152]">
                     <div className="text-right">
                       <div className="text-[11px] text-slate-400 font-mono uppercase">Güncel Fiyat</div>
-                      <div className="text-lg sm:text-xl font-black font-mono text-white mt-0.5">₺{currentPriceNum.toFixed(2)}</div>
+                      <div className="text-lg sm:text-xl font-black font-mono text-white mt-0.5">{currentPriceNum > 0 ? `₺${currentPriceNum.toFixed(2)}` : '—'}</div>
                     </div>
-                    <div className="h-8 w-px bg-[#384152]" />
+                    <div className="hidden sm:block h-8 w-px bg-[#384152]" />
                     <div className="text-right">
                       <div className="text-[11px] text-slate-400 font-mono uppercase">Adil Değer</div>
-                      <div className="text-lg sm:text-xl font-black font-mono text-[#f5c242] mt-0.5">₺{fairValueNum.toFixed(2)}</div>
+                      <div className="text-lg sm:text-xl font-black font-mono text-[#f5c242] mt-0.5">{fairValueNum > 0 ? `₺${fairValueNum.toFixed(2)}` : '—'}</div>
                     </div>
-                    <div className="h-8 w-px bg-[#384152]" />
+                    <div className="hidden sm:block h-8 w-px bg-[#384152]" />
                     <div className="text-right">
                       <div className="text-[11px] text-slate-400 font-mono uppercase">Potansiyel</div>
                       <div className={`text-lg sm:text-xl font-black font-mono mt-0.5 ${fairValueNum > 0 && currentPriceNum > 0 ? (fairValueNum >= currentPriceNum ? 'text-emerald-400' : 'text-rose-400') : 'text-slate-400'}`}>
@@ -7016,11 +7224,7 @@ export default function SimplyView({
 
                   {/* Fırsat / Risk Terazisi Kutusu */}
                   {(() => {
-                    const rawBear = Number(
-                      valuationInfo?.bear_price ||
-                      report.extractedData?.valuation?.bear_price ||
-                      (fairValueNum > 0 ? Math.min(fairValueNum * 0.78, currentPriceNum * 0.85) : currentPriceNum * 0.80)
-                    );
+                    const rawBear = canonicalBearPrice;
                     const bearTargetNum = rawBear > 0 && (currentPriceNum <= 0 || rawBear < currentPriceNum)
                       ? rawBear
                       : Number(((currentPriceNum > 0 ? currentPriceNum : 10) * 0.85).toFixed(2));
@@ -7531,7 +7735,7 @@ export default function SimplyView({
           {/* BÖLÜM 8: ANALİZ RAPORU (#sec-analist)                                   */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Değerleme Raporu Hatası">
-          <section id="sec-analist" className="scroll-mt-20 rounded-2xl border border-[#242a35] bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6">
+          <section id="sec-analist" className="scroll-mt-28 rounded-2xl border border-[#242a35] bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3.5 flex-wrap gap-3">
               <div className="flex items-center gap-2.5">
                 <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">8</span>
@@ -7585,10 +7789,11 @@ export default function SimplyView({
                         type="button"
                         onClick={() => {
                           setCollapsedReportChapters(prev => ({ ...prev, [ch.id]: false }));
-                          setTimeout(() => {
-                            const el = document.getElementById(ch.id);
-                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                          }, 40);
+                          window.requestAnimationFrame(() => {
+                            window.requestAnimationFrame(() => {
+                              scrollToDomId(ch.id, 'sec-analist');
+                            });
+                          });
                         }}
                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-[13px] font-medium border transition cursor-pointer shadow-sm ${
                           isCollapsed
@@ -7615,7 +7820,7 @@ export default function SimplyView({
                     <div
                       key={chapter.id}
                       id={chapter.id}
-                      className="scroll-mt-24 bg-[#161a23] border border-[#2a3140] rounded-2xl shadow-xl overflow-hidden transition-all"
+                      className="scroll-mt-28 bg-[#161a23] border border-[#2a3140] rounded-2xl shadow-xl overflow-hidden transition-all"
                     >
                       {/* Bölüm Başlık Çubuğu */}
                       <div
@@ -7687,7 +7892,13 @@ export default function SimplyView({
                                 },
                                 p: ({ children, ...props }: any) => {
                                   const text = extractTextFromChildren(children);
-                                  if (/Analist\s+Karar[ıi]\s*[:=-]/i.test(text) || (text.includes('Yatırım Tezi:') && (text.includes('Katalizör') || text.includes('Risk')))) {
+                                  const trimmed = text.trim();
+                                  const isSummaryMetaLine =
+                                    trimmed.length < 220 &&
+                                    /^(?:Özet\s+)?Yatırım\s+Tezi\s*:/i.test(trimmed) &&
+                                    trimmed.includes('Katalizör') &&
+                                    trimmed.includes('Risk');
+                                  if (/^\s*Analist\s+Karar[ıi]\s*[:=-]/i.test(trimmed) || isSummaryMetaLine) {
                                     return null;
                                   }
                                   const isKeySummaryLine = /^(?:Temel Yatırım Tezi|Finansal Sağlık Skoru)\s*:/i.test(text.trim());
@@ -7861,16 +8072,12 @@ export default function SimplyView({
             {/* 8.2 Nihai Analist Hükmü & Portföy Konumlandırma Özeti Kartı (7.1 ile Tekrardan Arındırılmış) */}
             {(() => {
               const rawScoreVal = valuationInfo?.score ?? (report as any)?.score ?? (report as any)?.scoreResult?.totalScore;
-              let auditScore = rawScoreVal != null ? parseInt(String(rawScoreVal).split('/')[0].replace(/[^0-9]/g, ''), 10) : NaN;
-              if (isNaN(auditScore) || auditScore <= 0) {
-                auditScore = executiveVerdict.verdict === 'AL' ? 82 : executiveVerdict.verdict === 'ALMA' ? 42 : 64;
-              }
+              const parsedAudit = parseNumericScore(rawScoreVal);
+              const auditScore = parsedAudit !== null
+                ? parsedAudit
+                : (executiveVerdict.verdict === 'AL' ? 82 : executiveVerdict.verdict === 'ALMA' ? 42 : 64);
 
-              const rawBear = Number(
-                valuationInfo?.bear_price ||
-                report.extractedData?.valuation?.bear_price ||
-                (fairValueNum > 0 ? Math.min(fairValueNum * 0.78, currentPriceNum * 0.85) : currentPriceNum * 0.80)
-              );
+              const rawBear = canonicalBearPrice;
               const bearFloorPrice = rawBear > 0 && (currentPriceNum <= 0 || rawBear < currentPriceNum)
                 ? rawBear
                 : Number(((currentPriceNum > 0 ? currentPriceNum : 10) * 0.85).toFixed(2));
@@ -7927,7 +8134,7 @@ export default function SimplyView({
                     <div className="bg-[#161a23] border border-[#2a3140] rounded-lg p-3 flex flex-col justify-between space-y-1">
                       <div className="text-xs font-mono text-slate-400 uppercase">Hedef & Stres Tabanı</div>
                       <div className="text-xs sm:text-sm font-mono font-bold text-white">
-                        Adil: <span className="text-[#f5c242]">₺{fairValueNum.toFixed(2)}</span> <span className="text-slate-500 font-normal">•</span> Taban: <span className="text-rose-300">₺{bearFloorPrice.toFixed(2)}</span>
+                        Adil: <span className="text-[#f5c242]">{fairValueNum > 0 ? `₺${fairValueNum.toFixed(2)}` : '—'}</span> <span className="text-slate-500 font-normal">•</span> Taban: <span className="text-rose-300">₺{bearFloorPrice.toFixed(2)}</span>
                       </div>
                     </div>
                     <div className="bg-[#161a23] border border-[#2a3140] rounded-lg p-3 flex flex-col justify-between space-y-1">
@@ -7979,7 +8186,7 @@ export default function SimplyView({
           {/* BÖLÜM 9: GEÇMİŞ (#sec-gecmis)                                            */}
           {/* ----------------------------------------------------------------------- */}
           <ComponentErrorBoundary fallbackTitle="Geçmiş Raporlar Hatası">
-          <section id="sec-gecmis" className="scroll-mt-20 rounded-2xl border border-[#242a35] bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6">
+          <section id="sec-gecmis" className="scroll-mt-28 rounded-2xl border border-[#242a35] bg-[#101319] p-6 sm:p-7 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-[#282d37] pb-3 flex-wrap gap-2">
               <div className="flex items-center gap-2.5">
                 <span className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center font-mono text-sm text-[#f5c242] font-bold">9</span>

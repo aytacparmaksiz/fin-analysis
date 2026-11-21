@@ -2,9 +2,8 @@ import https from 'node:https';
 import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from './isyatirim-multiples-cache.ts';
 import { getIsYatirimMultiplesForTicker } from './isyatirim-service.ts';
 
-const isProduction = process.env.NODE_ENV === 'production';
 const cockpitHttpsAgent = new https.Agent({
-  rejectUnauthorized: isProduction,
+  rejectUnauthorized: true,
   keepAlive: true,
   timeout: 12000
 });
@@ -65,6 +64,7 @@ export interface CockpitAgendaEvent {
 export interface CockpitOverviewData {
   updatedAt: string;
   isDelayed: boolean;
+  isDegraded?: boolean;
   indices: CockpitIndexQuote[];
   allTickers: Array<{ ticker: string; name: string; sector: string; price: number; changePct: number }>;
   quotesMap: Record<string, CockpitStockSummary>;
@@ -427,9 +427,19 @@ export async function getMarketCockpitOverview(forceRefresh = false): Promise<Co
     .sort((a, b) => b.avgChangePct - a.avgChangePct)
     .slice(0, 10);
 
+  const isDegraded = indices.length === 0 && scannerList.length === 0;
+
+  if (isDegraded && cachedOverview && (cachedOverview.data.indices.length > 0 || cachedOverview.data.topGainers.length > 0)) {
+    return {
+      ...cachedOverview.data,
+      isDegraded: true,
+    };
+  }
+
   const data: CockpitOverviewData = {
     updatedAt: new Date().toISOString(),
     isDelayed: true,
+    ...(isDegraded ? { isDegraded: true } : {}),
     indices,
     allTickers,
     quotesMap,
@@ -439,15 +449,18 @@ export async function getMarketCockpitOverview(forceRefresh = false): Promise<Co
     agenda
   };
 
-  cachedOverview = {
-    data,
-    expiresAt: Date.now() + 30_000
-  };
+  if (!isDegraded) {
+    cachedOverview = {
+      data,
+      expiresAt: Date.now() + 30_000
+    };
+  }
 
   return data;
 }
 
 const cardCache = new Map<string, { data: CockpitCardData; expiresAt: number }>();
+const MAX_CARD_CACHE = 250;
 
 const RANGE_MAP: Record<CockpitChartRange, { interval: string; range: string }> = {
   '1G': { interval: '5m', range: '1d' },
@@ -556,6 +569,13 @@ export async function getCockpitCardData(rawTicker: string, range: CockpitChartR
     updatedAt: new Date().toISOString()
   };
 
-  cardCache.set(cacheKey, { data: cardData, expiresAt: Date.now() + 30_000 });
+  if (price > 0 || points.length > 0) {
+    if (cardCache.size >= MAX_CARD_CACHE) {
+      const oldestKey = cardCache.keys().next().value;
+      if (oldestKey) cardCache.delete(oldestKey);
+    }
+    cardCache.delete(cacheKey);
+    cardCache.set(cacheKey, { data: cardData, expiresAt: Date.now() + 30_000 });
+  }
   return cardData;
 }

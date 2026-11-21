@@ -54,9 +54,10 @@ import {
   getScoreColorStyle
 } from '@/lib/sectors';
 
-import { SavedReport, formatAnalysisDate } from '@/lib/report-resolver';
+import { SavedReport, formatAnalysisDate, parseNumericScore, formatCanonicalScore } from '@/lib/report-resolver';
 export type { SavedReport };
 import { loadReportsCache, saveReportsCache } from '@/lib/report-cache';
+import { parseApiResponse } from '@/lib/api-response';
 import { generateFullAuditMarkdown } from '@/lib/export-markdown';
 import {
   categorizeCompany,
@@ -90,7 +91,6 @@ import {
   EarningsQualityAudit,
   Dupont5StepResult,
   CompanyMultiplesComparison,
-  cleanAndParseJson,
   syncReportTextWithValuation
 } from '@/lib/valuation';
 import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from '@/lib/isyatirim-multiples-cache';
@@ -129,6 +129,25 @@ function reportTimestamp(r: any): number {
     if (!Number.isNaN(ms)) return ms;
   }
   return 0;
+}
+
+function findLatestReportByTicker(list: SavedReport[], sym: string): SavedReport | undefined {
+  const clean = (sym || '').trim().replace(/\.IS$/i, '').toUpperCase();
+  if (!clean || !Array.isArray(list) || list.length === 0) return undefined;
+  let best: SavedReport | undefined;
+  let bestP = -1;
+  let bestTs = -1;
+  for (const r of list) {
+    if ((r.ticker || '').trim().replace(/\.IS$/i, '').toUpperCase() !== clean) continue;
+    const p = parsePeriodSortKey(r.period || r.extractedData?.reporting_period || '');
+    const ts = reportTimestamp(r);
+    if (!best || p > bestP || (p === bestP && ts > bestTs)) {
+      best = r;
+      bestP = p;
+      bestTs = ts;
+    }
+  }
+  return best;
 }
 
 function reconcileSavedReportWithLatestEngine(rep: SavedReport): SavedReport {
@@ -228,7 +247,7 @@ function reconcileSavedReportWithLatestEngine(rep: SavedReport): SavedReport {
           },
           valRes.scoreResult,
           valRes.drivers,
-          Number(rep.price || 0),
+          parseFinancialNumber(rep.price) ?? 0,
           updatedReport.extractedData
         );
       }
@@ -291,65 +310,6 @@ function renderThemeIcon(iconTag: string, className: string = "w-3.5 h-3.5") {
     case 'DollarSign': return <DollarSign className={className} />;
     default: return <Compass className={className} />;
   }
-}
-
-// Gateway Timeout, kurumsal proxy ve HTML hata sayfalarını yakalayan güvenli API yanıt ayrıştırıcısı
-async function parseApiResponse(res: Response, defaultError: string, context?: 'bist' | 'extract' | 'analyze'): Promise<any> {
-  const status = res.status;
-  const rawText = await res.text();
-
-  // 1. Gateway Timeout (504), Cloudflare (524), Request Timeout (408) veya Kurumsal Proxy HTML yanıtı
-  const isHtml = rawText.trim().startsWith('<!DOCTYPE') || rawText.trim().startsWith('<html') || rawText.includes('<body') || rawText.includes('</html>');
-  const isTimeout = status === 504 || status === 524 || status === 408 || 
-                    (isHtml && (/function_invocation_timeout/i.test(rawText) ||
-                                /gateway\s*time-?out/i.test(rawText) || 
-                                /notification:\s*gateway_timeout/i.test(rawText)));
-  const isPayloadTooLarge = status === 413 || (isHtml && (/function_payload_too_large/i.test(rawText) || /payload\s*too\s*large/i.test(rawText)));
-
-  if (isTimeout) {
-    if (context === 'bist' || /bist/i.test(defaultError)) {
-      throw new Error('BIST veri sunucusu yanıt süresi aşıldı (Zaman Aşımı / HTTP 504). Lütfen birkaç saniye sonra analizi tekrar deneyin.');
-    }
-    if (context === 'analyze' || /değerleme/i.test(defaultError)) {
-      throw new Error('Değerleme raporu hesaplama süresi aşıldı (Zaman Aşımı / HTTP 504). Lütfen analizi tekrar başlatın.');
-    }
-    throw new Error('Sunucu yanıt süresi aşıldı (Gateway Timeout). Lütfen sadece finansal tabloları içeren sayfaları yüklemeyi deneyin.');
-  }
-
-  if (isPayloadTooLarge) {
-    throw new Error('Yüklenen dosya boyutu sunucu sınırını aştı (Payload Too Large). Lütfen daha az sayıda veya daha küçük boyutlu PDF yükleyin.');
-  }
-
-  if (isHtml) {
-    throw new Error(`Sunucu veya ağ geçidi beklenmeyen bir HTML yanıtı döndürdü (HTTP ${status}). Lütfen internet bağlantınızı veya kurumsal proxy ayarlarınızı kontrol edip tekrar deneyin.`);
-  }
-
-  // 2. JSON Yanıtını Güvenli Ayrıştırma
-  let parsed: any = null;
-  try {
-    parsed = cleanAndParseJson(rawText);
-  } catch {
-    if (!res.ok) {
-      throw new Error(`Sunucu hatası (HTTP ${status}): ${rawText.slice(0, 150)}`);
-    }
-    throw new Error('Sunucudan geçersiz veri formatı alındı.');
-  }
-
-  if (!parsed || typeof parsed !== 'object') {
-    if (!res.ok) {
-      throw new Error(`Sunucu hatası (HTTP ${status}): ${rawText.slice(0, 150)}`);
-    }
-    throw new Error('Sunucudan geçersiz veri formatı alındı.');
-  }
-
-  if (!res.ok) {
-    if (status === 429) {
-      throw new Error(parsed?.error || 'Gemini API hız kotası aşıldı (429). Lütfen birkaç saniye sonra tekrar deneyin.');
-    }
-    throw new Error(parsed?.error || defaultError || `İşlem başarısız oldu (HTTP ${status}).`);
-  }
-
-  return parsed;
 }
 
 /**
@@ -625,7 +585,7 @@ function formatFinancialScale(
   isAxis = false,
   isPct = false
 ): string {
-  if (val === null || val === undefined || isNaN(val)) return '—';
+  if (val === null || val === undefined || !Number.isFinite(val)) return '—';
   if (isPct) return `%${val.toLocaleString('tr-TR', { maximumFractionDigits: 1 })}`;
 
   const norm = (currency || '').trim().toLowerCase();
@@ -1352,12 +1312,8 @@ function getSpreadInfo(spread: number | null) {
 }
 
 function formatScore(score: any): string {
-  if (score === null || score === undefined || score === '') return '—';
-  const str = String(score).trim();
-  const match = str.match(/\d+/);
-  if (!match) return '—';
-  const num = parseInt(match[0], 10);
-  if (isNaN(num)) return '—';
+  const num = parseNumericScore(score);
+  if (num === null || !Number.isFinite(num)) return '—';
   return `${num}/100`;
 }
 
@@ -1436,6 +1392,9 @@ export default function ValuationTerminal({
   const [step, setStep] = useState<'cockpit' | 'input' | 'review' | 'report' | 'leaderboard' | 'themes' | 'saved' | 'sectors'>(
     defaultReport ? 'report' : 'cockpit'
   );
+  const stepRef = useRef(step);
+  stepRef.current = step;
+  const isHandlingPopStateRef = useRef(false);
   const [extractedData, setExtractedData] = useState<any>(defaultReport?.extractedData || null);
 
   // Ana Sekmeler
@@ -1511,12 +1470,12 @@ export default function ValuationTerminal({
       const found = savedReports.find(r => r.id === activeReportId);
       if (found) return found;
     }
-    const currentTicker = (ticker || initialTicker || '').trim().toUpperCase();
+    const currentTicker = (ticker || initialTicker || '').trim().replace(/\.IS$/i, '').toUpperCase();
     if (currentTicker) {
-      const byTicker = savedReports.find(r => r.ticker?.toUpperCase() === currentTicker);
+      const byTicker = findLatestReportByTicker(savedReports, currentTicker);
       if (byTicker) return byTicker;
     }
-    if (defaultReport && currentTicker && defaultReport.ticker?.toUpperCase() === currentTicker) {
+    if (defaultReport && currentTicker && defaultReport.ticker?.replace(/\.IS$/i, '').toUpperCase() === currentTicker) {
       return defaultReport;
     }
     // ASLA başka bir şirketin raporuna otomatik olarak atlama
@@ -1595,7 +1554,7 @@ export default function ValuationTerminal({
       email: 'demo@fairvalue.com.tr',
       initials: 'DY',
       isLoggedIn: true,
-      role: 'Misafir Kullanıcı',
+      role: 'Misafir Yatırımcı',
       loginTime: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
     };
     setUserSession(demoSession);
@@ -1607,8 +1566,13 @@ export default function ValuationTerminal({
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
-        const savedUser = localStorage.getItem('fair_value_user');
-        if (savedUser) setUserSession(JSON.parse(savedUser));
+        const savedUser = localStorage.getItem('fair_value_user') || sessionStorage.getItem('fair_value_user');
+        if (savedUser) {
+          const parsed = JSON.parse(savedUser);
+          if (parsed && typeof parsed === 'object' && typeof parsed.email === 'string') {
+            setUserSession(parsed);
+          }
+        }
       } catch (e) {
         console.warn('User session okuma hatası:', e);
       }
@@ -1632,6 +1596,7 @@ export default function ValuationTerminal({
     setIsUserMenuOpen(false);
     try {
       localStorage.removeItem('fair_value_user');
+      sessionStorage.removeItem('fair_value_user');
     } catch {}
   }, []);
 
@@ -1643,9 +1608,19 @@ export default function ValuationTerminal({
     if (typeof window !== 'undefined') {
       try {
         const savedPort = localStorage.getItem('fair_value_portfolio');
-        if (savedPort) setPortfolioTickers(JSON.parse(savedPort));
+        if (savedPort) {
+          const parsedPort = JSON.parse(savedPort);
+          if (Array.isArray(parsedPort)) {
+            setPortfolioTickers(parsedPort.filter((t): t is string => typeof t === 'string' && t.trim().length > 0));
+          }
+        }
         const savedFavs = localStorage.getItem('fair_value_favorites');
-        if (savedFavs) setFavoriteTickers(JSON.parse(savedFavs));
+        if (savedFavs) {
+          const parsedFavs = JSON.parse(savedFavs);
+          if (Array.isArray(parsedFavs)) {
+            setFavoriteTickers(parsedFavs.filter((t): t is string => typeof t === 'string' && t.trim().length > 0));
+          }
+        }
       } catch (e) {
         console.warn('Portföy/Favori okuma hatası:', e);
       }
@@ -1737,21 +1712,19 @@ export default function ValuationTerminal({
       window.scrollTo({ top: 0, behavior: 'instant' });
     }
     const targetReport = savedReports.find(r => r.id === reportId);
-    const sym = (tickerName || targetReport?.ticker || '').trim().toUpperCase();
+    const sym = (tickerName || targetReport?.ticker || '').trim().replace(/\.IS$/i, '').toUpperCase();
     // State kirliliği koruması (State Pollution Guard):
     // Önceki hissenin sektör seçimi, geçici verisi ve dönem kaydırması yeni açılan rapora taşınmamalıdır.
     setSelectedSector('AUTO');
     setExtractedData(null);
     setError(null);
-    if (sym) setTicker(sym);
-    if (targetReport?.price) setPrice(targetReport.price);
+    setTicker(sym);
+    setPrice(targetReport?.price || '');
 
-    setStep((currentStep) => {
-      if (currentStep !== 'report') {
-        setPreviousNavState({ step: currentStep, analyzedTab });
-      }
-      return 'report';
-    });
+    if (stepRef.current !== 'report') {
+      setPreviousNavState({ step: stepRef.current, analyzedTab });
+    }
+    setStep('report');
     setActiveReportId(reportId);
     if (sym && typeof window !== 'undefined') {
       const isSimply = window.location.pathname.startsWith('/simply');
@@ -1797,10 +1770,10 @@ export default function ValuationTerminal({
 
   const sortReportsByScoreDesc = (reports: SavedReport[]) => {
     return [...reports].sort((a, b) => {
-      const scoreA = parseFloat(String(a.score || '0').replace(/[^0-9.]/g, '')) || 0;
-      const scoreB = parseFloat(String(b.score || '0').replace(/[^0-9.]/g, '')) || 0;
+      const scoreA = parseNumericScore(a.score) ?? -1;
+      const scoreB = parseNumericScore(b.score) ?? -1;
       if (scoreB !== scoreA) return scoreB - scoreA;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      return reportTimestamp(b) - reportTimestamp(a);
     });
   };
 
@@ -1816,16 +1789,16 @@ export default function ValuationTerminal({
       const diffDecision = rankDecision(a.decision) - rankDecision(b.decision);
       if (diffDecision !== 0) return diffDecision;
 
-      const scoreA = parseFloat(String(a.score || '0').replace(/[^0-9.]/g, '')) || 0;
-      const scoreB = parseFloat(String(b.score || '0').replace(/[^0-9.]/g, '')) || 0;
+      const scoreA = parseNumericScore(a.score) ?? -1;
+      const scoreB = parseNumericScore(b.score) ?? -1;
       if (scoreB !== scoreA) return scoreB - scoreA;
 
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      return reportTimestamp(b) - reportTimestamp(a);
     });
   };
 
   const sortReportsByDate = (reports: SavedReport[]) => {
-    return [...reports].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return [...reports].sort((a, b) => reportTimestamp(b) - reportTimestamp(a));
   };
 
   const deleteReport = async (id: string, e?: React.MouseEvent) => {
@@ -1846,6 +1819,7 @@ export default function ValuationTerminal({
       try {
         await fetch(`/api/reports?id=${encodeURIComponent(id)}&ticker=${encodeURIComponent(tickerName)}`, {
           method: 'DELETE',
+          headers: { 'X-Requested-With': 'fin-analiz-client' },
         });
       } catch (err) {
         console.warn('Buluttan silme başarısız:', err);
@@ -1885,9 +1859,9 @@ export default function ValuationTerminal({
     }
   };
 
-  // Doğrudan URL veya Harici Çağrı ile Hisse Yükleme (/analysis/[ticker])
+  // Doğrudan URL veya Harici Çağrı ile Hisse Yükleme (/analysis/VESBE)
   const loadTickerDirect = useCallback(async (targetTicker: string, currentSaved?: SavedReport[]) => {
-    const t = (targetTicker || '').trim().toUpperCase();
+    const t = (targetTicker || '').trim().replace(/\.IS$/i, '').toUpperCase();
     if (!t) return;
 
     // State kirliliği koruması: önceki hissenin sektör seçimi ve geçici verilerini sıfırla
@@ -1897,11 +1871,11 @@ export default function ValuationTerminal({
 
     // 1. Mevcut kaydedilmiş yerel depodaki raporlar
     const reportList = currentSaved ?? savedReports;
-    const existing = reportList.find(r => r.ticker?.toUpperCase() === t);
+    const existing = findLatestReportByTicker(reportList, t);
     if (existing) {
       setActiveReportId(existing.id);
       setTicker(existing.ticker);
-      if (existing.price) setPrice(existing.price);
+      setPrice(existing.price || '');
       if (existing.extractedData) setExtractedData(existing.extractedData);
       setStep('report');
       setActiveTab(initialTab || 'ozet');
@@ -1916,18 +1890,18 @@ export default function ValuationTerminal({
       const res = await fetch(`/api/reports?ticker=${encodeURIComponent(t)}`);
       if (res.ok) {
         const json = await res.json();
-        if (json?.report && json.report.ticker?.toUpperCase() === t) {
+        if (json?.report && json.report.ticker?.replace(/\.IS$/i, '').toUpperCase() === t) {
           const apiReport: SavedReport = reconcileSavedReportWithLatestEngine(json.report);
           setSavedReports(prev => {
-            const has = prev.some(r => r.id === apiReport.id || r.ticker?.toUpperCase() === t);
+            const has = prev.some(r => r.id === apiReport.id);
             const next = has ? prev : [apiReport, ...prev];
             saveReportsCache(next);
-            try { localStorage.setItem('fin_valuation_reports', JSON.stringify(next)); } catch {}
+            try { localStorage.setItem('fin_valuation_reports', JSON.stringify(next.slice(0, 30))); } catch {}
             return next;
           });
           setActiveReportId(apiReport.id);
           setTicker(apiReport.ticker);
-          if (apiReport.price) setPrice(apiReport.price);
+          setPrice(apiReport.price || '');
           if (apiReport.extractedData) setExtractedData(apiReport.extractedData);
           setStep('report');
           setActiveTab(initialTab || 'ozet');
@@ -1942,6 +1916,7 @@ export default function ValuationTerminal({
     // 3. Rapor hiçbir yerde yoksa: KULLANICININ İSTEDİĞİ GİBİ DOĞRUDAN ANA SAYFA GELİR
     setActiveReportId(null);
     setTicker(t);
+    setPrice('');
     setStep('input');
     setLoading(false);
   }, [savedReports, initialTab]);
@@ -1975,13 +1950,16 @@ export default function ValuationTerminal({
     try {
       const stored = localStorage.getItem('fin_valuation_reports');
       if (stored) {
-        localData = JSON.parse(stored);
+        const parsedStored = JSON.parse(stored);
+        if (Array.isArray(parsedStored)) {
+          localData = parsedStored.filter((r): r is SavedReport => Boolean(r && typeof r === 'object' && typeof r.ticker === 'string'));
+        }
       }
     } catch (e) {}
 
     // EĞER defaultReport (SSR'den gelen veya statik hazır model) tanımlıysa ve yerel depoda yoksa birleştir
     if (defaultReport) {
-      const idx = localData.findIndex(r => r.id === defaultReport.id || r.ticker?.toUpperCase() === defaultReport.ticker?.toUpperCase());
+      const idx = localData.findIndex(r => r.id === defaultReport.id || (r.ticker?.toUpperCase() === defaultReport.ticker?.toUpperCase() && (!defaultReport.period || r.period === defaultReport.period)));
       if (idx === -1) {
         localData = [defaultReport, ...localData];
       } else {
@@ -2010,22 +1988,22 @@ export default function ValuationTerminal({
     let queryView = '';
     let queryTicker = '';
     if (typeof window !== 'undefined') {
-      const match = window.location.pathname.match(/\/(?:analysis|report|simply)\/([A-Za-z0-9_]+)/i);
+      const match = window.location.pathname.match(/\/(?:analysis|report|simply)\/([A-Za-z0-9_.]+)/i);
       if (match && match[1]) {
-        pathTicker = match[1].toUpperCase();
+        pathTicker = match[1].replace(/\.IS$/i, '').toUpperCase();
       }
       const sParams = new URLSearchParams(window.location.search);
       queryView = sParams.get('view') || '';
-      queryTicker = (sParams.get('ticker') || '').toUpperCase();
+      queryTicker = (sParams.get('ticker') || '').replace(/\.IS$/i, '').toUpperCase();
     }
-    const targetTicker = (initialTicker || pathTicker || queryTicker || '').trim().toUpperCase();
+    const targetTicker = (initialTicker || pathTicker || queryTicker || '').trim().replace(/\.IS$/i, '').toUpperCase();
 
     if (targetTicker) {
-      const matched = localData.find(r => r.ticker?.toUpperCase() === targetTicker) || (defaultReport?.ticker?.toUpperCase() === targetTicker ? defaultReport : null);
+      const matched = findLatestReportByTicker(localData, targetTicker) || (defaultReport?.ticker?.replace(/\.IS$/i, '').toUpperCase() === targetTicker ? defaultReport : null);
       if (matched) {
         setActiveReportId(matched.id);
         setTicker(matched.ticker);
-        if (matched.price) setPrice(matched.price);
+        setPrice(matched.price || '');
         if (matched.extractedData) setExtractedData(matched.extractedData);
         setStep('report');
         if (!initialTab) setActiveTab('ozet');
@@ -2081,21 +2059,40 @@ export default function ValuationTerminal({
           if (json) {
             setIsCloudConfigured(Boolean(json.isCloudConfigured));
             if (json.isCloudConfigured && Array.isArray(json.reports) && json.reports.length > 0) {
-              // Ticker bazında kesin tekilleştirme: Her cihazda birebir aynı ve eksiksiz 164 şirket yer almalıdır.
-              const tickerMap = new Map<string, SavedReport>();
+              // Çoklu çeyrek hafızasını koruyarak (ticker, period) bazında birleştir
+              const cloudMap = new Map<string, SavedReport>();
               for (const rep of json.reports) {
-                const t = (rep.ticker || '').trim().toUpperCase();
+                const t = (rep.ticker || '').trim().replace(/\.IS$/i, '').toUpperCase();
                 if (!t) continue;
-                if (!tickerMap.has(t)) {
-                  tickerMap.set(t, rep);
+                const p = (rep.period || rep.extractedData?.reporting_period || '').trim();
+                const compositeKey = p ? `${t}::${p}` : `${t}::${rep.id}`;
+                const existing = cloudMap.get(compositeKey);
+                if (!existing || reportTimestamp(rep) >= reportTimestamp(existing)) {
+                  cloudMap.set(compositeKey, rep);
                 }
               }
-              const cloudList = Array.from(tickerMap.values()).map(reconcileSavedReportWithLatestEngine);
-              setSavedReports(cloudList);
-              saveReportsCache(cloudList);
-              try {
-                localStorage.setItem('fin_valuation_reports', JSON.stringify(cloudList.slice(0, 30)));
-              } catch {}
+              const cloudReconciled = Array.from(cloudMap.values()).map(reconcileSavedReportWithLatestEngine);
+              setSavedReports(prev => {
+                const mergedMap = new Map<string, SavedReport>();
+                for (const localRep of prev) {
+                  const t = (localRep.ticker || '').trim().replace(/\.IS$/i, '').toUpperCase();
+                  const p = (localRep.period || localRep.extractedData?.reporting_period || '').trim();
+                  if (!t || !p) continue;
+                  mergedMap.set(`${t}::${p}`, localRep);
+                }
+                for (const cloudRep of cloudReconciled) {
+                  const t = (cloudRep.ticker || '').trim().replace(/\.IS$/i, '').toUpperCase();
+                  const p = (cloudRep.period || cloudRep.extractedData?.reporting_period || '').trim();
+                  const key = p ? `${t}::${p}` : `${t}::${cloudRep.id}`;
+                  mergedMap.set(key, cloudRep);
+                }
+                const finalList = Array.from(mergedMap.values());
+                saveReportsCache(finalList);
+                try {
+                  localStorage.setItem('fin_valuation_reports', JSON.stringify(getLatestReportsPerTicker(finalList).slice(0, 30)));
+                } catch {}
+                return finalList;
+              });
             }
           }
         }
@@ -2114,18 +2111,21 @@ export default function ValuationTerminal({
     if (typeof window === 'undefined') return;
 
     const handlePopState = () => {
+      isHandlingPopStateRef.current = true;
       const sParams = new URLSearchParams(window.location.search);
       const view = sParams.get('view');
       const qTicker = sParams.get('ticker');
-      const match = window.location.pathname.match(/\/(?:analysis|report|simply)\/([A-Za-z0-9_]+)/i);
-      const urlTicker = (match ? match[1] : qTicker || '').toUpperCase();
+      const match = window.location.pathname.match(/\/(?:analysis|report|simply)\/([A-Za-z0-9_.]+)/i);
+      const urlTicker = (match ? match[1] : qTicker || '').replace(/\.IS$/i, '').toUpperCase();
 
       if (urlTicker) {
-        const found = savedReports.find(r => r.ticker?.toUpperCase() === urlTicker);
+        const found = findLatestReportByTicker(savedReports, urlTicker);
         if (found) {
           setSelectedSector('AUTO');
           setExtractedData(null);
           setActiveReportId(found.id);
+          setTicker(found.ticker);
+          setPrice(found.price || '');
           setStep('report');
           return;
         }
@@ -2146,8 +2146,11 @@ export default function ValuationTerminal({
         setStep('leaderboard');
       } else if (view === 'sectors') {
         setStep('sectors');
-      } else if (view === 'new' || (!view && !urlTicker)) {
+      } else if (view === 'new' || view === 'input') {
         setStep('input');
+        setActiveReportId(null);
+      } else if (!view && !urlTicker) {
+        setStep('cockpit');
         setActiveReportId(null);
       }
     };
@@ -2159,6 +2162,10 @@ export default function ValuationTerminal({
   // URL Senkronizasyonu (URL'yi sekmeler ve raporlarla senkronize tut)
   useEffect(() => {
     if (typeof window !== 'undefined' && mounted) {
+      if (isHandlingPopStateRef.current) {
+        isHandlingPopStateRef.current = false;
+        return;
+      }
       const isSimply = window.location.pathname.startsWith('/simply');
       const basePath = isSimply ? '/simply' : '';
 
@@ -2187,6 +2194,11 @@ export default function ValuationTerminal({
       } else if (step === 'leaderboard') {
         const targetFull = `${basePath}/?view=leaderboard`;
         if (window.location.search !== '?view=leaderboard') {
+          window.history.pushState(null, '', targetFull);
+        }
+      } else if (step === 'sectors') {
+        const targetFull = `${basePath}/?view=sectors`;
+        if (window.location.search !== '?view=sectors') {
           window.history.pushState(null, '', targetFull);
         }
       } else if (step === 'cockpit' || step === 'input') {
@@ -2227,11 +2239,17 @@ export default function ValuationTerminal({
           if (!res.ok) continue;
           const bist = await res.json();
           if (!bist || !Array.isArray(bist.financial_history) || bist.financial_history.length === 0) continue;
+          const latestHistPeriod = bist.financial_history[bist.financial_history.length - 1]?.period;
+          const nextPeriod = parsePeriodSortKey(latestHistPeriod || '') > parsePeriodSortKey(rep.period || '')
+            ? latestHistPeriod
+            : (rep.period || latestHistPeriod);
           const refreshed = reconcileSavedReportWithLatestEngine({
             ...rep,
+            period: nextPeriod,
             price: bist.current_price ? String(bist.current_price) : rep.price,
             extractedData: {
               ...(rep.extractedData || {}),
+              reporting_period: nextPeriod || rep.extractedData?.reporting_period,
               financial_history: bist.financial_history,
               shares_outstanding: bist.shares_outstanding ?? rep.extractedData?.shares_outstanding,
             },
@@ -2245,7 +2263,7 @@ export default function ValuationTerminal({
           try { localStorage.setItem(`fv_refreshed_${rep.ticker}`, todayKey); } catch {}
           fetch('/api/reports', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fin-analiz-client' },
             body: JSON.stringify({ report: refreshed }),
           }).catch(() => {});
         } catch (err) {
@@ -2305,7 +2323,7 @@ export default function ValuationTerminal({
     try {
       await fetch('/api/reports', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fin-analiz-client' },
         body: JSON.stringify({ report: newReport }),
       });
     } catch (err) {
@@ -2449,7 +2467,7 @@ export default function ValuationTerminal({
           res = await fetchWithClientRetry(
             () => fetch('/api/extract', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fin-analiz-client' },
               body: JSON.stringify({
                 ticker: accumulated.ticker || ticker,
                 price: price || accumulated.valuation?.current_price || '0',
@@ -2509,7 +2527,7 @@ export default function ValuationTerminal({
             fd.append('files_financial', chunkFile);
 
             res = await fetchWithClientRetry(
-              () => fetch('/api/extract', { method: 'POST', body: fd }),
+              () => fetch('/api/extract', { method: 'POST', headers: { 'X-Requested-With': 'fin-analiz-client' }, body: fd }),
               setStatusMessage
             );
 
@@ -2539,24 +2557,32 @@ export default function ValuationTerminal({
 
   // ⚡ Borsa İstanbul Resmi Veri Akışı + Opsiyonel Faaliyet Raporu & Yatırımcı Sunumu Zenginleştirme
   const handleBistDirectAnalysis = async (symbolToAnalyze?: string) => {
-    const targetTicker = (symbolToAnalyze || ticker || '').toUpperCase().trim();
+    const prevFormTicker = (ticker || '').replace(/\.IS$/i, '').toUpperCase().trim();
+    const targetTicker = (symbolToAnalyze || ticker || '').replace(/\.IS$/i, '').toUpperCase().trim();
     if (!targetTicker) {
       setError('Lütfen analiz etmek istediğiniz hisse kodunu yazın (Örn: AGESA, THYAO, EREGL).');
       return;
     }
 
-    setStep((currentStep) => {
-      if (currentStep !== 'report') {
-        setPreviousNavState({ step: currentStep, analyzedTab });
-      }
-      return currentStep;
-    });
+    const isSameFormTicker = !symbolToAnalyze || targetTicker === prevFormTicker;
+    const activeActivityFiles = isSameFormTicker ? activityFiles : [];
+    const activePresentationFiles = isSameFormTicker ? presentationFiles : [];
+
+    if (stepRef.current !== 'report') {
+      setPreviousNavState({ step: stepRef.current, analyzedTab });
+    }
 
     setLoading(true);
     setError(null);
     setActiveReportId(null);
     setTicker(targetTicker);
     setSelectedSector('AUTO');
+    if (!isSameFormTicker) {
+      setPrice('');
+      setFinancialFiles([]);
+      setActivityFiles([]);
+      setPresentationFiles([]);
+    }
     setPipelineStep(1);
     setPipelineProgress(25);
     setStatusMessage(`[1/3] Borsa İstanbul resmi mali tabloları ve canlı piyasa fiyatı çekiliyor: ${targetTicker}...`);
@@ -2571,7 +2597,7 @@ export default function ValuationTerminal({
         throw new Error(`${targetTicker} için BIST mali tablosu bulunamadı.`);
       }
 
-      const livePriceStr = bistData.current_price ? bistData.current_price.toString() : (price || '');
+      const livePriceStr = bistData.current_price ? bistData.current_price.toString() : (isSameFormTicker ? (price || '') : '');
       if (bistData.current_price) {
         setPrice(livePriceStr);
       }
@@ -2581,20 +2607,20 @@ export default function ValuationTerminal({
         fair_value_drivers: bistData.drivers || bistData.fair_value_drivers
       };
 
-      const prevSavedForTicker = savedReports.find(r => r.ticker === targetTicker);
+      const prevSavedForTicker = findLatestReportByTicker(savedReports, targetTicker);
 
       // OPSİYONEL ADIM 2: Faaliyet Raporları (Alan 2) Varsa Zenginleştir
-      if (activityFiles.length > 0) {
+      if (activeActivityFiles.length > 0) {
         setPipelineStep(2);
         setPipelineProgress(55);
-        setStatusMessage(`[2/3] Faaliyet Raporu taranıyor (${activityFiles.length} belge)...`);
+        setStatusMessage(`[2/3] Faaliyet Raporu taranıyor (${activeActivityFiles.length} belge)...`);
 
         try {
-          const perActFileBudget = Math.max(35000, Math.floor(70000 / Math.max(1, activityFiles.length)));
+          const perActFileBudget = Math.max(35000, Math.floor(70000 / Math.max(1, activeActivityFiles.length)));
           const activityDocs: { name: string; text: string; category: string }[] = [];
-          for (let i = 0; i < activityFiles.length; i++) {
-            const file = activityFiles[i];
-            setStatusMessage(`[2/3] Faaliyet Raporu okunuyor (${i + 1}/${activityFiles.length}): ${file.name}...`);
+          for (let i = 0; i < activeActivityFiles.length; i++) {
+            const file = activeActivityFiles[i];
+            setStatusMessage(`[2/3] Faaliyet Raporu okunuyor (${i + 1}/${activeActivityFiles.length}): ${file.name}...`);
             try {
               const arrayBuffer = await file.arrayBuffer();
               const { text } = await extractSmartDocumentText(arrayBuffer.slice(0), 'activity');
@@ -2612,7 +2638,7 @@ export default function ValuationTerminal({
             res2 = await fetchWithClientRetry(
               () => fetch('/api/extract', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fin-analiz-client' },
                 body: JSON.stringify({
                   ticker: targetTicker,
                   price: livePriceStr,
@@ -2626,16 +2652,16 @@ export default function ValuationTerminal({
             );
           } else {
             // İstemci tarafında metin çıkarılamadıysa (taranmış PDF / unpdf hatası), doğrudan sunucuya ilet
-            setStatusMessage(`[2/3] Faaliyet raporu sunucu motoruna aktarılıyor (${activityFiles.length} belge)...`);
+            setStatusMessage(`[2/3] Faaliyet raporu sunucu motoruna aktarılıyor (${activeActivityFiles.length} belge)...`);
             const fd = new FormData();
             fd.append('ticker', targetTicker);
             fd.append('price', livePriceStr);
             fd.append('category', 'activity');
             fd.append('previousData', JSON.stringify(currentData));
             if (prevSavedForTicker) fd.append('previousReport', JSON.stringify(prevSavedForTicker));
-            activityFiles.forEach(f => fd.append('files_activity', f));
+            activeActivityFiles.forEach(f => fd.append('files_activity', f));
             res2 = await fetchWithClientRetry(
-              () => fetch('/api/extract', { method: 'POST', body: fd }),
+              () => fetch('/api/extract', { method: 'POST', headers: { 'X-Requested-With': 'fin-analiz-client' }, body: fd }),
               setStatusMessage
             );
           }
@@ -2659,20 +2685,20 @@ export default function ValuationTerminal({
       }
 
       // OPSİYONEL ADIM 3: Yatırımcı Sunumu (Alan 3) Varsa Zenginleştir
-      if (presentationFiles.length > 0) {
-        if (activityFiles.length > 0) {
+      if (activePresentationFiles.length > 0) {
+        if (activeActivityFiles.length > 0) {
           await new Promise((r) => setTimeout(r, 1500));
         }
         setPipelineStep(3);
         setPipelineProgress(80);
-        setStatusMessage(`[3/3] Yatırımcı Sunumu taranıyor (${presentationFiles.length} belge)...`);
+        setStatusMessage(`[3/3] Yatırımcı Sunumu taranıyor (${activePresentationFiles.length} belge)...`);
 
         try {
-          const perPresFileBudget = Math.max(35000, Math.floor(70000 / Math.max(1, presentationFiles.length)));
+          const perPresFileBudget = Math.max(35000, Math.floor(70000 / Math.max(1, activePresentationFiles.length)));
           const presentationDocs: { name: string; text: string; category: string }[] = [];
-          for (let i = 0; i < presentationFiles.length; i++) {
-            const file = presentationFiles[i];
-            setStatusMessage(`[3/3] Yatırımcı Sunumu okunuyor (${i + 1}/${presentationFiles.length}): ${file.name}...`);
+          for (let i = 0; i < activePresentationFiles.length; i++) {
+            const file = activePresentationFiles[i];
+            setStatusMessage(`[3/3] Yatırımcı Sunumu okunuyor (${i + 1}/${activePresentationFiles.length}): ${file.name}...`);
             try {
               const arrayBuffer = await file.arrayBuffer();
               const { text } = await extractSmartDocumentText(arrayBuffer.slice(0), 'presentation');
@@ -2690,7 +2716,7 @@ export default function ValuationTerminal({
             res3 = await fetchWithClientRetry(
               () => fetch('/api/extract', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fin-analiz-client' },
                 body: JSON.stringify({
                   ticker: targetTicker,
                   price: livePriceStr,
@@ -2704,16 +2730,16 @@ export default function ValuationTerminal({
             );
           } else {
             // İstemci tarafında metin çıkarılamadıysa doğrudan sunucuya ilet
-            setStatusMessage(`[3/3] Yatırımcı sunumu sunucu motoruna aktarılıyor (${presentationFiles.length} belge)...`);
+            setStatusMessage(`[3/3] Yatırımcı sunumu sunucu motoruna aktarılıyor (${activePresentationFiles.length} belge)...`);
             const fd = new FormData();
             fd.append('ticker', targetTicker);
             fd.append('price', livePriceStr);
             fd.append('category', 'presentation');
             fd.append('previousData', JSON.stringify(currentData));
             if (prevSavedForTicker) fd.append('previousReport', JSON.stringify(prevSavedForTicker));
-            presentationFiles.forEach(f => fd.append('files_presentation', f));
+            activePresentationFiles.forEach(f => fd.append('files_presentation', f));
             res3 = await fetchWithClientRetry(
-              () => fetch('/api/extract', { method: 'POST', body: fd }),
+              () => fetch('/api/extract', { method: 'POST', headers: { 'X-Requested-With': 'fin-analiz-client' }, body: fd }),
               setStatusMessage
             );
           }
@@ -2757,13 +2783,14 @@ export default function ValuationTerminal({
   };
 
   const handleOpenOrAnalyzeTicker = useCallback((sym: string) => {
-    const cleanSym = (sym || '').trim().toUpperCase();
+    const cleanSym = (sym || '').trim().replace(/\.IS$/i, '').toUpperCase();
     if (!cleanSym) return;
-    const existing = savedReports.find(r => r.ticker?.toUpperCase() === cleanSym);
+    const existing = findLatestReportByTicker(savedReports, cleanSym);
     if (existing) {
       openReport(existing.id, cleanSym);
     } else {
       setTicker(cleanSym);
+      setPrice('');
       handleBistDirectAnalysis(cleanSym);
     }
   }, [savedReports, openReport]);
@@ -2884,7 +2911,7 @@ export default function ValuationTerminal({
           const res1 = await fetchWithClientRetry(
             () => fetch('/api/extract', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fin-analiz-client' },
               body: JSON.stringify({ 
                 ticker, 
                 price, 
@@ -2954,7 +2981,7 @@ export default function ValuationTerminal({
             fd.append('files_financial', chunkFile);
 
             const res1 = await fetchWithClientRetry(
-              () => fetch('/api/extract', { method: 'POST', body: fd }),
+              () => fetch('/api/extract', { method: 'POST', headers: { 'X-Requested-With': 'fin-analiz-client' }, body: fd }),
               setStatusMessage
             );
 
@@ -2997,15 +3024,15 @@ export default function ValuationTerminal({
           setPipelineProgress(66);
           setStatusMessage(`[2. Aşama / 3]: Faaliyet raporundan yönetim hedefleri ve riskler ayıklanıyor...`);
 
-          const normUploadTicker = (ticker || '').toUpperCase().trim();
-          const prevSavedForUpload = savedReports.find(r => r.ticker === normUploadTicker);
+          const normUploadTicker = (ticker || '').replace(/\.IS$/i, '').toUpperCase().trim();
+          const prevSavedForUpload = findLatestReportByTicker(savedReports, normUploadTicker);
 
           let res2: Response;
           if (activityDocs.length > 0) {
             res2 = await fetchWithClientRetry(
               () => fetch('/api/extract', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fin-analiz-client' },
                 body: JSON.stringify({ ticker, price, category: 'activity', documents: activityDocs, previousData: currentData, previousReport: prevSavedForUpload || null })
               }),
               setStatusMessage
@@ -3019,7 +3046,7 @@ export default function ValuationTerminal({
             if (prevSavedForUpload) fd.append('previousReport', JSON.stringify(prevSavedForUpload));
             activityFiles.forEach(f => fd.append('files_activity', f));
             res2 = await fetchWithClientRetry(
-              () => fetch('/api/extract', { method: 'POST', body: fd }),
+              () => fetch('/api/extract', { method: 'POST', headers: { 'X-Requested-With': 'fin-analiz-client' }, body: fd }),
               setStatusMessage
             );
           }
@@ -3062,15 +3089,15 @@ export default function ValuationTerminal({
           setPipelineProgress(90);
           setStatusMessage(`[3. Aşama / 3]: Yatırımcı sunumundan ileriye dönük hedefler entegre ediliyor...`);
 
-          const normUploadTickerPres = (ticker || '').toUpperCase().trim();
-          const prevSavedForUploadPres = savedReports.find(r => r.ticker === normUploadTickerPres);
+          const normUploadTickerPres = (ticker || '').replace(/\.IS$/i, '').toUpperCase().trim();
+          const prevSavedForUploadPres = findLatestReportByTicker(savedReports, normUploadTickerPres);
 
           let res3: Response;
           if (presentationDocs.length > 0) {
             res3 = await fetchWithClientRetry(
               () => fetch('/api/extract', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fin-analiz-client' },
                 body: JSON.stringify({ ticker, price, category: 'presentation', documents: presentationDocs, previousData: currentData, previousReport: prevSavedForUploadPres || null })
               }),
               setStatusMessage
@@ -3084,7 +3111,7 @@ export default function ValuationTerminal({
             if (prevSavedForUploadPres) fd.append('previousReport', JSON.stringify(prevSavedForUploadPres));
             presentationFiles.forEach(f => fd.append('files_presentation', f));
             res3 = await fetchWithClientRetry(
-              () => fetch('/api/extract', { method: 'POST', body: fd }),
+              () => fetch('/api/extract', { method: 'POST', headers: { 'X-Requested-With': 'fin-analiz-client' }, body: fd }),
               setStatusMessage
             );
           }
@@ -3165,8 +3192,7 @@ export default function ValuationTerminal({
       setPrice(effectivePrice);
     }
 
-    const previousReportsForTicker = savedReports.filter(r => r.ticker === normalizedTicker);
-    const previousReport = previousReportsForTicker.length > 0 ? previousReportsForTicker[0] : null;
+    const previousReport = findLatestReportByTicker(savedReports, normalizedTicker) || null;
 
     const activeSector: SectorType = selectedSector === 'AUTO' 
       ? (activeExtractedData?.sector || detectSector(normalizedTicker)) 
@@ -3191,7 +3217,7 @@ export default function ValuationTerminal({
       const res = await fetchWithClientRetry(
         () => fetch('/api/analyze', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fin-analiz-client' },
           body: JSON.stringify({
             ticker: normalizedTicker,
             price: effectivePrice,
@@ -3238,10 +3264,12 @@ export default function ValuationTerminal({
         reportText.match(/\|\s*\*?\*?Toplam\s+Puan\*?\*?\s*\|\s*\*?\*?(\d{1,3})\*?\*?/i) ||
         reportText.match(/Toplam\s+Puan\s*[:=]\s*\*?\*?(\d{1,3})/i) ||
         reportText.match(/(\d{1,3})\s*\/\s*100/i);
-      const score = scoreMatch ? scoreMatch[1] : (data.scoreResult?.totalScore != null ? String(data.scoreResult.totalScore) : undefined);
       const parsedPrice = parseFinancialNumber(effectivePrice);
       const targetVal = parseFinancialNumber(data.valuation?.composite_fair_value || data.valuation?.fair_value || data.valuation?.dcf_fair_value);
-      const numericScore = score ? parseInt(score, 10) : data.scoreResult?.totalScore;
+      const numericScore = scoreMatch
+        ? parseInt(scoreMatch[1], 10)
+        : (data.scoreResult?.totalScore != null ? Number(data.scoreResult.totalScore) : undefined);
+      const canonicalScore = formatCanonicalScore(numericScore) || (scoreMatch ? `${scoreMatch[1]}/100` : undefined);
 
       const opt = optimizeFinalDecision({
         rawDecision: (data.optimization?.finalDecision || data.optimization?.rawDecision || rawDecision) as any,
@@ -3266,7 +3294,7 @@ export default function ValuationTerminal({
         },
         data.scoreResult,
         data.drivers,
-        Number(effectivePrice) || 0,
+        parsedPrice ?? 0,
         enrichedExtractedData
       );
 
@@ -3299,7 +3327,7 @@ export default function ValuationTerminal({
         price: effectivePrice,
         fairValue: String(targetVal ?? data.valuation?.fair_value ?? ''),
         period: resolvedPeriod,
-        createdAt: new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        createdAt: new Date().toISOString(),
         report: finalReport,
         decision: finalDecision,
         rawDecision: rawDecision !== finalDecision ? rawDecision : undefined,
@@ -3313,7 +3341,7 @@ export default function ValuationTerminal({
         fairValueTrend: data.valuation?.fair_value_trend,
         dividendHistory: finalExtracted.dividend_history,
         consensusTarget: finalExtracted.consensus_target,
-        score,
+        score: canonicalScore,
         sector: activeSector,
         extractedData: finalExtracted
       };
@@ -3382,12 +3410,16 @@ export default function ValuationTerminal({
   const tickerHistory = activeReport 
     ? savedReports
         .filter(r => (r.ticker || '').trim().toUpperCase() === (activeReport.ticker || '').trim().toUpperCase())
-        .sort((a, b) => (b.period || b.createdAt || '').localeCompare(a.period || a.createdAt || ''))
+        .sort((a, b) => {
+          const pDiff = parsePeriodSortKey(b.period || b.extractedData?.reporting_period || '') - parsePeriodSortKey(a.period || a.extractedData?.reporting_period || '');
+          if (pDiff !== 0) return pDiff;
+          return reportTimestamp(b) - reportTimestamp(a);
+        })
     : [];
 
   // Zaman Serisi Grafik Verisi (eskiden yeniye, kronolojik)
   const rawChartData = currentExtractedData?.financial_history || [];
-  const refMarketPrice = parseFloat(activeReport?.price || price || String(currentExtractedData?.current_price || currentExtractedData?.valuation?.current_price || '')) || 0;
+  const refMarketPrice = parseFinancialNumber(activeReport?.price || price || currentExtractedData?.current_price || currentExtractedData?.valuation?.current_price) ?? 0;
   const chartData = sanitizeHistoryData(
     rawChartData, 
     currentExtractedData?.debt_and_interest,
@@ -4199,7 +4231,7 @@ export default function ValuationTerminal({
 
   // Rapor metninde önceden yazılmış adil değer varsa (Item 2: Rapor ile Kart Uyuşmazlığını Sıfırlama)
   const reportValuation = useMemo(() => {
-    const numPrice = parseFloat(activeReport?.price || price || '0');
+    const numPrice = parseFinancialNumber(activeReport?.price || price) ?? 0;
     return extractValuationFromReportText(activeReport?.report || '', numPrice);
   }, [activeReport?.report, activeReport?.price, price]);
 
@@ -4256,7 +4288,7 @@ export default function ValuationTerminal({
   }, [baseDrivers, customDrivers]);
 
   // Güncel ve düzeltilmiş değerleme motoru (dynamicValuationResult.valuation) her zaman birincil kaynaktır
-  const currentMarketPrice = parseFloat(activeReport?.price || price || '') || 0;
+  const currentMarketPrice = parseFinancialNumber(activeReport?.price || price) ?? 0;
   const valuationInfo: ValuationMetrics = {
     ...(currentExtractedData?.valuation || {}),
     ...dynamicValuationResult.valuation,
@@ -4364,10 +4396,16 @@ export default function ValuationTerminal({
 
   const previousQuarterComparison = useMemo(() => {
     if (!currentTicker) return null;
-    const prevList = savedReports.filter(r => r.ticker === currentTicker && r.id !== activeReport?.id);
+    const prevList = savedReports
+      .filter(r => r.ticker === currentTicker && r.id !== activeReport?.id)
+      .sort((a, b) => {
+        const pDiff = parsePeriodSortKey(b.period || b.extractedData?.reporting_period || '') - parsePeriodSortKey(a.period || a.extractedData?.reporting_period || '');
+        if (pDiff !== 0) return pDiff;
+        return reportTimestamp(b) - reportTimestamp(a);
+      });
     if (prevList.length === 0) return null;
     const prev = prevList[0];
-    const prevFv = parseFloat(prev.fairValue || '0') || null;
+    const prevFv = parseFinancialNumber(prev.fairValue);
     const currFv = valuationInfo.fair_value;
     const diffPct = (prevFv && currFv) ? Number((((currFv - prevFv) / prevFv) * 100).toFixed(1)) : null;
     return {
@@ -4900,16 +4938,36 @@ export default function ValuationTerminal({
             </div>
           )}
 
+          {/* KÜRESEL HATA BANNER'I */}
+          {error && (
+            <div className="p-4 bg-rose-950/85 border border-rose-700/70 rounded-xl flex items-center justify-between gap-3 text-rose-200 text-sm shadow-lg">
+              <div className="flex items-center gap-3 min-w-0">
+                <AlertTriangle className="w-5 h-5 flex-shrink-0 text-rose-400" />
+                <span className="break-words">{error}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setError(null)}
+                aria-label="Hata mesajını kapat"
+                className="p-1 rounded-lg text-rose-300 hover:text-white hover:bg-rose-900/60 transition cursor-pointer shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {/* ADIM 0: PİYASA KOKPİTİ (VARSAYILAN ANA EKRAN) */}
           {step === 'cockpit' && (
-            <MarketCockpit
-              savedReports={savedReports}
-              favoriteTickers={favoriteTickers}
-              liveNewsFeed={liveNewsFeed}
-              onToggleFavorite={toggleFavorite}
-              onOpenTicker={handleOpenOrAnalyzeTicker}
-              onOpenReport={openReport}
-            />
+            <ComponentErrorBoundary fallbackTitle="Piyasa Kokpiti Hatası">
+              <MarketCockpit
+                savedReports={savedReports}
+                favoriteTickers={favoriteTickers}
+                liveNewsFeed={liveNewsFeed}
+                onToggleFavorite={toggleFavorite}
+                onOpenTicker={handleOpenOrAnalyzeTicker}
+                onOpenReport={openReport}
+              />
+            </ComponentErrorBoundary>
           )}
           
           {/* ADIM 1: YENİ ANALİZ EKRANI (ŞİRKET DEĞERLEME & BİLANÇO ANALİZİ) */}
@@ -5350,7 +5408,11 @@ export default function ValuationTerminal({
                   const currentTickerUpper = (activeReport?.ticker || '').toUpperCase();
                   const tickerReports = savedReports
                     .filter(r => (r.ticker || '').toUpperCase() === currentTickerUpper)
-                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                    .sort((a, b) => {
+                      const pDiff = parsePeriodSortKey(b.period || b.extractedData?.reporting_period || '') - parsePeriodSortKey(a.period || a.extractedData?.reporting_period || '');
+                      if (pDiff !== 0) return pDiff;
+                      return reportTimestamp(b) - reportTimestamp(a);
+                    });
 
                   if (tickerReports.length <= 1) return null;
 
@@ -5414,7 +5476,9 @@ export default function ValuationTerminal({
               </div>
 
               <SimplyView
+                key={activeReport.id}
                 report={activeReport}
+                initialTab={activeTab}
                 savedReports={savedReports}
                 valuationInfo={valuationInfo}
                 marketMultiples={marketMultiples}
@@ -5490,19 +5554,22 @@ export default function ValuationTerminal({
                 valA = rankDecision(a.decision);
                 valB = rankDecision(b.decision);
               }
-              else if (key === 'period') { valA = a.period || a.createdAt || ''; valB = b.period || b.createdAt || ''; }
-              else if (key === 'price') { valA = parseFloat(a.price || '0') || 0; valB = parseFloat(b.price || '0') || 0; }
-              else if (key === 'fairValue') { valA = parseFloat(a.fairValue || '0') || 0; valB = parseFloat(b.fairValue || '0') || 0; }
+              else if (key === 'period') {
+                valA = parsePeriodSortKey(a.period || a.extractedData?.reporting_period || '');
+                valB = parsePeriodSortKey(b.period || b.extractedData?.reporting_period || '');
+              }
+              else if (key === 'price') { valA = parseFinancialNumber(a.price) ?? 0; valB = parseFinancialNumber(b.price) ?? 0; }
+              else if (key === 'fairValue') { valA = parseFinancialNumber(a.fairValue) ?? 0; valB = parseFinancialNumber(b.fairValue) ?? 0; }
               else if (key === 'score') {
-                valA = parseInt(String(a.score || 0).split('/')[0].replace(/[^0-9]/g, ''), 10) || 0;
-                valB = parseInt(String(b.score || 0).split('/')[0].replace(/[^0-9]/g, ''), 10) || 0;
+                valA = parseNumericScore(a.score) ?? -1;
+                valB = parseNumericScore(b.score) ?? -1;
               }
               else if (key === 'discount') {
-                const fvA = parseFloat(a.fairValue || '0') || 0;
-                const pA = parseFloat(a.price || '0') || 0;
+                const fvA = parseFinancialNumber(a.fairValue) ?? 0;
+                const pA = parseFinancialNumber(a.price) ?? 0;
                 valA = (fvA > 0 && pA > 0) ? ((fvA - pA) / pA) * 100 : -999;
-                const fvB = parseFloat(b.fairValue || '0') || 0;
-                const pB = parseFloat(b.price || '0') || 0;
+                const fvB = parseFinancialNumber(b.fairValue) ?? 0;
+                const pB = parseFinancialNumber(b.price) ?? 0;
                 valB = (fvB > 0 && pB > 0) ? ((fvB - pB) / pB) * 100 : -999;
               }
 
@@ -5510,8 +5577,8 @@ export default function ValuationTerminal({
                 // AL-NÖTR-ALMA (asc) veya ALMA-NÖTR-AL (desc)
                 const diff = direction === 'asc' ? valA - valB : valB - valA;
                 if (diff !== 0) return diff;
-                const scoreA = parseInt(String(a.score || 0).split('/')[0].replace(/[^0-9]/g, ''), 10) || 0;
-                const scoreB = parseInt(String(b.score || 0).split('/')[0].replace(/[^0-9]/g, ''), 10) || 0;
+                const scoreA = parseNumericScore(a.score) ?? -1;
+                const scoreB = parseNumericScore(b.score) ?? -1;
                 return scoreB - scoreA;
               }
 
@@ -5651,8 +5718,8 @@ export default function ValuationTerminal({
                         </div>
                       ) : (
                         sortedLeaderboard.map((item) => {
-                          const fvNum = parseFloat(item.fairValue || '0') || 0;
-                          const prNum = parseFloat(item.price || '0') || 0;
+                          const fvNum = parseFinancialNumber(item.fairValue) ?? 0;
+                          const prNum = parseFinancialNumber(item.price) ?? 0;
                           const discNum = (fvNum > 0 && prNum > 0) ? Number((((fvNum - prNum) / prNum) * 100).toFixed(1)) : null;
                           const isCheap = discNum != null && discNum >= 0;
                           const indexBadge = getBistIndexBadge(item.ticker);
@@ -5853,8 +5920,8 @@ export default function ValuationTerminal({
                           </tr>
                         ) : (
                           sortedLeaderboard.map((item, index) => {
-                            const fvNum = parseFloat(item.fairValue || '0') || 0;
-                            const prNum = parseFloat(item.price || '0') || 0;
+                            const fvNum = parseFinancialNumber(item.fairValue) ?? 0;
+                            const prNum = parseFinancialNumber(item.price) ?? 0;
                             const discNum = (fvNum > 0 && prNum > 0) ? Number((((fvNum - prNum) / prNum) * 100).toFixed(1)) : null;
 
                             return (
@@ -6028,7 +6095,7 @@ export default function ValuationTerminal({
             const toggleSector = (sec: string) => {
               setExpandedSectors(prev => ({
                 ...prev,
-                [sec]: prev[sec] === undefined ? false : !prev[sec]
+                [sec]: prev[sec] === undefined ? true : !prev[sec]
               }));
             };
 
@@ -6170,8 +6237,8 @@ export default function ValuationTerminal({
                                     </thead>
                                     <tbody className="divide-y divide-[#2e3440]/60 text-slate-300">
                                       {reports.map((rep, idx) => {
-                                        const fv = parseFloat(rep.fairValue || '0') || 0;
-                                        const pr = parseFloat(rep.price || '0') || 0;
+                                        const fv = parseFinancialNumber(rep.fairValue) ?? 0;
+                                        const pr = parseFinancialNumber(rep.price) ?? 0;
                                         const disc = (fv > 0 && pr > 0) ? Number((((fv - pr) / pr) * 100).toFixed(1)) : null;
                                         const compName = (rep as any).companyName || rep.extractedData?.company_name || '';
 
@@ -6382,7 +6449,7 @@ export default function ValuationTerminal({
                         ? 'bg-slate-950 text-[#f5c242]'
                         : 'bg-[#21262d] text-white border border-[#2e3440]'
                     }`}>
-                      {savedReports.length}
+                      {deduplicatedForThemes.length}
                     </span>
                   </button>
 
@@ -6588,23 +6655,23 @@ export default function ValuationTerminal({
                                 valA = getCompanySectorDisplayName(a.report.ticker, a.report.sector);
                                 valB = getCompanySectorDisplayName(b.report.ticker, b.report.sector);
                               }
-                              else if (key === 'price') { valA = parseFloat(a.report.price || '0') || 0; valB = parseFloat(b.report.price || '0') || 0; }
+                              else if (key === 'price') { valA = parseFinancialNumber(a.report.price) ?? 0; valB = parseFinancialNumber(b.report.price) ?? 0; }
                               else if (key === 'fairValue') {
-                                const fvA = (a.report as any).valuation?.fair_value || a.report.extractedData?.valuation?.fair_value || parseFloat(a.report.fairValue || '0') || 0;
-                                const fvB = (b.report as any).valuation?.fair_value || b.report.extractedData?.valuation?.fair_value || parseFloat(b.report.fairValue || '0') || 0;
+                                const fvA = (a.report as any).valuation?.fair_value ?? a.report.extractedData?.valuation?.fair_value ?? parseFinancialNumber(a.report.fairValue) ?? 0;
+                                const fvB = (b.report as any).valuation?.fair_value ?? b.report.extractedData?.valuation?.fair_value ?? parseFinancialNumber(b.report.fairValue) ?? 0;
                                 valA = fvA; valB = fvB;
                               }
                               else if (key === 'discount') {
-                                const fvA = (a.report as any).valuation?.fair_value || a.report.extractedData?.valuation?.fair_value || parseFloat(a.report.fairValue || '0') || 0;
-                                const pA = parseFloat(a.report.price || '0') || 0;
+                                const fvA = (a.report as any).valuation?.fair_value ?? a.report.extractedData?.valuation?.fair_value ?? parseFinancialNumber(a.report.fairValue) ?? 0;
+                                const pA = parseFinancialNumber(a.report.price) ?? 0;
                                 valA = (fvA > 0 && pA > 0) ? ((fvA - pA) / pA) * 100 : -999;
-                                const fvB = (b.report as any).valuation?.fair_value || b.report.extractedData?.valuation?.fair_value || parseFloat(b.report.fairValue || '0') || 0;
-                                const pB = parseFloat(b.report.price || '0') || 0;
+                                const fvB = (b.report as any).valuation?.fair_value ?? b.report.extractedData?.valuation?.fair_value ?? parseFinancialNumber(b.report.fairValue) ?? 0;
+                                const pB = parseFinancialNumber(b.report.price) ?? 0;
                                 valB = (fvB > 0 && pB > 0) ? ((fvB - pB) / pB) * 100 : -999;
                               }
                               else if (key === 'score') {
-                                valA = parseInt(String(a.report.score || 0).split('/')[0].replace(/[^0-9]/g, ''), 10) || 0;
-                                valB = parseInt(String(b.report.score || 0).split('/')[0].replace(/[^0-9]/g, ''), 10) || 0;
+                                valA = parseNumericScore(a.report.score) ?? -1;
+                                valB = parseNumericScore(b.report.score) ?? -1;
                               }
                               else if (key === 'decision') { valA = a.report.decision || ''; valB = b.report.decision || ''; }
 
@@ -6618,8 +6685,8 @@ export default function ValuationTerminal({
 
                             return sortedList.map(({ report, matches }, idx) => {
                             const repVal = (report as any).valuation || report.extractedData?.valuation;
-                            const fairVal = repVal?.fair_value || 0;
-                            const priceNum = parseFloat(report.price || '0') || 0;
+                            const fairVal = parseFinancialNumber(repVal?.fair_value ?? report.fairValue) ?? 0;
+                            const priceNum = parseFinancialNumber(report.price) ?? 0;
                             const discount = (fairVal > 0 && priceNum > 0)
                               ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))
                               : null;
@@ -6740,8 +6807,9 @@ export default function ValuationTerminal({
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                     {displayedItems.map(({ report, matches }, idx) => {
                       const repVal = (report as any).valuation || report.extractedData?.valuation;
-                      const fairVal = repVal?.fair_value || 0;
-                      const priceNum = parseFloat(report.price || '0') || 0;
+                      const fairVal = parseFinancialNumber(repVal?.fair_value ?? report.fairValue) ?? 0;
+                      const priceNum = parseFinancialNumber(report.price) ?? 0;
+                      const compactScoreNum = parseNumericScore(report.score);
                       const discount = (fairVal > 0 && priceNum > 0)
                         ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))
                         : null;
@@ -6778,9 +6846,9 @@ export default function ValuationTerminal({
 
                           <div className="pt-2 border-t border-[#2e3440]/60 flex items-center justify-between text-[11px] font-mono">
                             <span className="text-white font-bold">{priceNum > 0 ? `₺${priceNum.toFixed(1)}` : '—'}</span>
-                            {report.score ? (
+                            {compactScoreNum !== null ? (
                               <span className="text-slate-300 font-bold px-1.5 py-0.2 rounded bg-[#12151c] border border-[#2e3440]">
-                                {report.score}p
+                                {compactScoreNum}p
                               </span>
                             ) : null}
                           </div>
@@ -6793,8 +6861,9 @@ export default function ValuationTerminal({
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {displayedItems.map(({ report, matches }, idx) => {
                       const repVal = (report as any).valuation || report.extractedData?.valuation;
-                      const fairVal = repVal?.fair_value || 0;
-                      const priceNum = parseFloat(report.price || '0') || 0;
+                      const fairVal = parseFinancialNumber(repVal?.fair_value ?? report.fairValue) ?? 0;
+                      const priceNum = parseFinancialNumber(report.price) ?? 0;
+                      const compactScoreNum = parseNumericScore(report.score);
                       const discount = (fairVal > 0 && priceNum > 0)
                         ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))
                         : null;
@@ -7351,9 +7420,9 @@ export default function ValuationTerminal({
                         <div className="w-full md:w-80 shrink-0 space-y-4 pt-4 md:pt-0 md:border-l md:border-[#2e3440] md:pl-6">
                           {/* Şirket Mini Değerleme Kartı */}
                           {(() => {
-                            const report = savedReports.find(r => (r.ticker || '').toUpperCase() === selectedDisclosure.ticker.toUpperCase());
-                            const priceNum = report ? parseFloat(report.price || '0') || 0 : 0;
-                            const fairVal = report ? parseFloat(report.fairValue || '0') || 0 : 0;
+                            const report = findLatestReportByTicker(savedReports, selectedDisclosure.ticker);
+                            const priceNum = report ? (parseFinancialNumber(report.price) ?? 0) : 0;
+                            const fairVal = report ? (parseFinancialNumber(report.fairValue) ?? 0) : 0;
                             const discount = (fairVal > 0 && priceNum > 0)
                               ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))
                               : null;
@@ -7732,8 +7801,8 @@ export default function ValuationTerminal({
                             const isAl = (item.decision || '').trim().toUpperCase() === 'AL';
                             const isAlma = (item.decision || '').trim().toUpperCase() === 'ALMA';
                             const repVal = (item as any).valuation || item.extractedData?.valuation;
-                            const fairVal = parseFinancialNumber(item.fairValue ?? repVal?.composite_fair_value ?? repVal?.fair_value ?? repVal?.dcf_fair_value) || 0;
-                            const priceNum = parseFloat(item.price || '0') || 0;
+                            const fairVal = parseFinancialNumber(item.fairValue ?? repVal?.composite_fair_value ?? repVal?.fair_value ?? repVal?.dcf_fair_value) ?? 0;
+                            const priceNum = parseFinancialNumber(item.price) ?? 0;
                             const discount = (fairVal > 0 && priceNum > 0)
                               ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))
                               : null;
@@ -7841,8 +7910,9 @@ export default function ValuationTerminal({
                       const isAl = (item.decision || '').trim().toUpperCase() === 'AL';
                       const isAlma = (item.decision || '').trim().toUpperCase() === 'ALMA';
                       const repVal = (item as any).valuation || item.extractedData?.valuation;
-                      const fairVal = parseFinancialNumber(item.fairValue ?? repVal?.composite_fair_value ?? repVal?.fair_value ?? repVal?.dcf_fair_value) || 0;
-                      const priceNum = parseFloat(item.price || '0') || 0;
+                      const fairVal = parseFinancialNumber(item.fairValue ?? repVal?.composite_fair_value ?? repVal?.fair_value ?? repVal?.dcf_fair_value) ?? 0;
+                      const priceNum = parseFinancialNumber(item.price) ?? 0;
+                      const compactScoreNum = parseNumericScore(item.score);
                       const discount = (fairVal > 0 && priceNum > 0)
                         ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))
                         : null;
@@ -7877,9 +7947,9 @@ export default function ValuationTerminal({
 
                           <div className="pt-2 border-t border-[#2e3440]/60 flex items-center justify-between text-[11px] font-mono">
                             <span className="text-white font-bold">{priceNum > 0 ? `₺${priceNum.toFixed(1)}` : '—'}</span>
-                            {item.score ? (
+                            {compactScoreNum !== null ? (
                               <span className={`font-bold px-1.5 py-0.2 rounded bg-[#12151c] border border-[#2e3440] ${getScoreColorStyle(item.score).text}`}>
-                                {item.score}p
+                                {compactScoreNum}p
                               </span>
                             ) : null}
                           </div>
@@ -7900,8 +7970,8 @@ export default function ValuationTerminal({
                         : 'bg-amber-500/10 border-amber-500/30 text-amber-400';
 
                       const repVal = (item as any).valuation || item.extractedData?.valuation;
-                      const fairVal = parseFinancialNumber(item.fairValue ?? repVal?.composite_fair_value ?? repVal?.fair_value ?? repVal?.dcf_fair_value) || 0;
-                      const priceNum = parseFloat(item.price || '0') || 0;
+                      const fairVal = parseFinancialNumber(item.fairValue ?? repVal?.composite_fair_value ?? repVal?.fair_value ?? repVal?.dcf_fair_value) ?? 0;
+                      const priceNum = parseFinancialNumber(item.price) ?? 0;
                       const discount = (fairVal > 0 && priceNum > 0)
                         ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))
                         : null;
@@ -8042,13 +8112,6 @@ export default function ValuationTerminal({
             );
           })()}
 
-          {error && (
-            <div className="p-4 bg-rose-950/80 border border-rose-800 rounded-lg flex items-center gap-3 text-rose-300 text-sm">
-              <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
         </div>
       </main>
 
@@ -8082,12 +8145,12 @@ export default function ValuationTerminal({
       {/* MOBİL ALT SABİT NAVİGASYON BARI (MD:HIDDEN) */}
       <nav 
         aria-label="Mobil Ana Menü"
-        className="fixed bottom-0 left-0 right-0 z-50 bg-[#111418]/95 backdrop-blur-md border-t border-[#21262d] flex items-center justify-around py-1.5 px-1 pb-safe md:hidden select-none shadow-2xl"
+        className="fixed bottom-0 left-0 right-0 z-50 bg-[#111418]/95 backdrop-blur-md border-t border-[#21262d] flex items-center justify-start sm:justify-around overflow-x-auto no-scrollbar gap-0.5 py-1.5 px-2 pb-safe md:hidden select-none shadow-2xl"
       >
         <button
           type="button"
           onClick={() => navigateTo('cockpit')}
-          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer min-w-[46px] ${
+          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer shrink-0 min-w-[54px] ${
             step === 'cockpit'
               ? 'text-[#f5c242] font-bold'
               : 'text-slate-400 hover:text-white'
@@ -8100,7 +8163,7 @@ export default function ValuationTerminal({
         <button
           type="button"
           onClick={() => navigateTo('input')}
-          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer min-w-[46px] ${
+          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer shrink-0 min-w-[54px] ${
             step === 'input'
               ? 'text-emerald-400 font-bold'
               : 'text-slate-400 hover:text-white'
@@ -8113,7 +8176,7 @@ export default function ValuationTerminal({
         <button
           type="button"
           onClick={() => navigateTo('saved')}
-          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer min-w-[46px] ${
+          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer shrink-0 min-w-[54px] ${
             step === 'saved' && analyzedTab !== 'PORTFOLIO' && analyzedTab !== 'FAVORITES'
               ? 'text-emerald-400 font-bold'
               : 'text-slate-400 hover:text-white'
@@ -8126,7 +8189,7 @@ export default function ValuationTerminal({
         <button
           type="button"
           onClick={() => navigateTo('portfolio')}
-          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer min-w-[48px] relative ${
+          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer shrink-0 min-w-[54px] relative ${
             step === 'saved' && analyzedTab === 'PORTFOLIO'
               ? 'text-[#f5c242] font-bold'
               : 'text-slate-400 hover:text-white'
@@ -8144,7 +8207,7 @@ export default function ValuationTerminal({
         <button
           type="button"
           onClick={() => navigateTo('favorites')}
-          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer min-w-[48px] relative ${
+          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer shrink-0 min-w-[54px] relative ${
             step === 'saved' && analyzedTab === 'FAVORITES'
               ? 'text-amber-400 font-bold'
               : 'text-slate-400 hover:text-white'
@@ -8162,7 +8225,7 @@ export default function ValuationTerminal({
         <button
           type="button"
           onClick={() => navigateTo('themes')}
-          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer min-w-[48px] ${
+          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer shrink-0 min-w-[54px] ${
             step === 'themes'
               ? 'text-cyan-400 font-bold'
               : 'text-slate-400 hover:text-white'
@@ -8175,7 +8238,7 @@ export default function ValuationTerminal({
         <button
           type="button"
           onClick={() => navigateTo('leaderboard')}
-          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer min-w-[48px] ${
+          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer shrink-0 min-w-[54px] ${
             step === 'leaderboard'
               ? 'text-amber-400 font-bold'
               : 'text-slate-400 hover:text-white'
@@ -8188,7 +8251,7 @@ export default function ValuationTerminal({
         <button
           type="button"
           onClick={() => navigateTo('sectors')}
-          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer min-w-[48px] ${
+          className={`flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg transition cursor-pointer shrink-0 min-w-[54px] ${
             step === 'sectors'
               ? 'text-emerald-400 font-bold'
               : 'text-slate-400 hover:text-white'

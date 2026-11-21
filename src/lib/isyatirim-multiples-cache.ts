@@ -1185,7 +1185,7 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
   "ARSAN": {
     "ticker": "ARSAN",
     "name": "Arsan Holding",
-    "sectorName": "Tekstil Entegre",
+    "sectorName": "Holdingler",
     "lastPrice": 3.35,
     "marketCapMnTl": 5902.7,
     "marketCapMnUsd": 119.6,
@@ -1201,7 +1201,7 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "foreignSharePct": 2.68,
     "foreignShareChangeBps": -0.75,
     "foreignShareIndexImpactPct": -0.01,
-    "sectorCode": "0045"
+    "sectorCode": "0019"
   },
   "ARTMS": {
     "ticker": "ARTMS",
@@ -10510,7 +10510,7 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
   "PSDTC": {
     "ticker": "PSDTC",
     "name": "Pergamon Status",
-    "sectorName": "Perakande - Ticaret",
+    "sectorName": "Diğer",
     "lastPrice": 84.8,
     "marketCapMnTl": 629.6,
     "marketCapMnUsd": 12.8,
@@ -10526,7 +10526,7 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "foreignSharePct": 0.8,
     "foreignShareChangeBps": -33.58,
     "foreignShareIndexImpactPct": -0.4,
-    "sectorCode": "0035"
+    "sectorCode": "0049"
   },
   "PSGYO": {
     "ticker": "PSGYO",
@@ -11622,7 +11622,7 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
   "SONME": {
     "ticker": "SONME",
     "name": "Sönmez Filament",
-    "sectorName": "Tekstil Entegre",
+    "sectorName": "Holdingler",
     "lastPrice": 121.7,
     "marketCapMnTl": 9005.8,
     "marketCapMnUsd": 182.4,
@@ -11638,7 +11638,7 @@ export const OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE: Record<string, IsYatirimStoc
     "foreignSharePct": 0.42,
     "foreignShareChangeBps": -11.14,
     "foreignShareIndexImpactPct": -0.12,
-    "sectorCode": "0045"
+    "sectorCode": "0019"
   },
   "SRVGY": {
     "ticker": "SRVGY",

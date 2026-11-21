@@ -3,14 +3,26 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { 
-  generateWithRateLimitAndBackoff, 
-  computeContentHash 
+import crypto from 'crypto';
+import {
+  generateWithRateLimitAndBackoff,
+  computeContentHash,
 } from '@/lib/gemini';
+import {
+  normalizeTicker,
+  isValidTicker,
+  authorizeApiMutation,
+  checkRateLimit,
+  sanitizePromptInput,
+} from '@/lib/security';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
+
+const MAX_PDF_FILES = 5;
+const MAX_SINGLE_PDF_BYTES = 15 * 1024 * 1024;
+const MAX_TOTAL_PDF_BYTES = 30 * 1024 * 1024;
 
 export async function POST(req: Request) {
   const tempFilePaths: string[] = [];
@@ -18,18 +30,49 @@ export async function POST(req: Request) {
   const fileParts: any[] = [];
 
   try {
-    const formData = await req.formData();
-    const ticker = formData.get('ticker') as string;
-    const price = formData.get('price') as string;
-    const consensus = (formData.get('consensus') as string) || 'Belirtilmedi';
-    const peerMultiples = (formData.get('peerMultiples') as string) || 'Belirtilmedi';
+    const rl = checkRateLimit(req, 'analyze_pdf', 15, 60_000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Çok fazla PDF analiz isteği gönderildi. Lütfen bekleyin.', retryAfter: rl.retryAfterSec, isRateLimit: true },
+        { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } }
+      );
+    }
 
-    // Yüklenen tüm PDF dosyalarını al
+    const auth = authorizeApiMutation(req);
+    if (!auth.authorized) {
+      return NextResponse.json(
+        { error: auth.reason || 'Yetkisiz işlem.' },
+        { status: auth.status }
+      );
+    }
+
+    const formData = await req.formData();
+    const rawTicker = (formData.get('ticker') as string) || '';
+    const cleanTicker = normalizeTicker(rawTicker);
+    const price = String(formData.get('price') || '').trim();
+    const consensus = sanitizePromptInput(formData.get('consensus'), 1500) || 'Belirtilmedi';
+    const peerMultiples = sanitizePromptInput(formData.get('peerMultiples'), 1500) || 'Belirtilmedi';
+
     const pdfFiles = formData.getAll('files') as File[];
 
-    if (!ticker || !price || pdfFiles.length === 0) {
+    if (!isValidTicker(cleanTicker) || !price || pdfFiles.length === 0) {
       return NextResponse.json(
-        { error: 'Hisse kodu, güncel fiyat ve en az bir PDF belgesi zorunludur.' },
+        { error: 'Geçerli hisse kodu, güncel fiyat ve en az bir PDF belgesi zorunludur.' },
+        { status: 400 }
+      );
+    }
+
+    const parsedPrice = Number(price.replace(',', '.'));
+    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+      return NextResponse.json(
+        { error: 'Geçerli bir pozitif hisse fiyatı gereklidir.' },
+        { status: 400 }
+      );
+    }
+
+    if (pdfFiles.length > MAX_PDF_FILES) {
+      return NextResponse.json(
+        { error: `Tek seferde en fazla ${MAX_PDF_FILES} adet PDF yüklenebilir.` },
         { status: 400 }
       );
     }
@@ -40,10 +83,31 @@ export async function POST(req: Request) {
     }
 
     const ai = new GoogleGenAI({ apiKey });
+    const contentHasher = crypto.createHash('sha256');
+    let totalBytes = 0;
 
-    // 1. PDF Dosyalarını Diske ve Ardından Gemini File API'ye Yükleme
+    // 1. Dosya boyutlarını doğrula, SHA-256 hash üret ve Gemini File API'ye yükle
+    const bufferedFiles: Array<{ file: File; buffer: Buffer }> = [];
     for (const file of pdfFiles) {
       const buffer = Buffer.from(await file.arrayBuffer());
+      if (buffer.length > MAX_SINGLE_PDF_BYTES) {
+        return NextResponse.json(
+          { error: `Dosya boyutu sınırı aşıldı (${file.name}, maks 15 MB).` },
+          { status: 413 }
+        );
+      }
+      totalBytes += buffer.length;
+      if (totalBytes > MAX_TOTAL_PDF_BYTES) {
+        return NextResponse.json(
+          { error: 'Toplam PDF dosya boyutu 30 MB sınırını aşıyor.' },
+          { status: 413 }
+        );
+      }
+      contentHasher.update(buffer);
+      bufferedFiles.push({ file, buffer });
+    }
+
+    for (const { file, buffer } of bufferedFiles) {
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const tempPath = path.join(os.tmpdir(), `${Date.now()}_${safeName}`);
       fs.writeFileSync(tempPath, buffer);
@@ -66,9 +130,19 @@ export async function POST(req: Request) {
 
       uploadedGoogleFiles.push(fileObj);
 
+      if (fileObj.state !== 'ACTIVE' || !fileObj.uri) {
+        const err: any = new Error(
+          fileObj.state === 'PROCESSING'
+            ? `PDF işleme süresi doldu (${file.name}).`
+            : `PDF dosyası işlenemedi (${file.name}, durum: ${fileObj.state || 'UNKNOWN'}).`
+        );
+        err.status = fileObj.state === 'PROCESSING' ? 504 : 502;
+        throw err;
+      }
+
       fileParts.push({
         fileData: {
-          fileUri: fileObj.uri!,
+          fileUri: fileObj.uri,
           mimeType: fileObj.mimeType || 'application/pdf',
         },
       });
@@ -99,10 +173,10 @@ Piyasa Özeti:
 - Piyasa Değeri:
 - Firma Değeri (EV):
 
-🚨 [KIRMIZI BAYRAK] ve Yatırım Tezi (Storytelling)
+🚨 [KIRMIZI BAYRAK] ve Yatırım Tezi (Temel Tez)
 (Şirketin iş modeli, rekabet avantajı ve tablolarda gizlenen majör riskler/fırsatlar.)
 
-1. Sermaye Tahsisi, Likidite ve Borç Profili (Filme Bakış)
+1. Sermaye Tahsisi, Likidite ve Borç Profili
 (Net nakit döngüsü, borçların vade/faiz profili ve kriz likidite analizi.)
 
 2. Kârlılık Kalitesi ve Değer Yaratımı (ROIC vs. WACC)
@@ -129,20 +203,23 @@ Piyasa Özeti:
 | Finansal Sağlık & Likidite | X | 25 | ... |
 | Sermaye Verimliliği (ROIC > WACC) | X | 25 | ... |
 | Nakit Kalitesi ve Güvenlik Marjı | X | 25 | ... |
-| Hikaye, Katalizör ve Büyüme (Growth CAPEX) | X | 25 | ... |
+| Katalizör ve Büyüme (Growth CAPEX) | X | 25 | ... |
 | **Toplam Puan** | **X** | **100** | ... |
 
 Analist Kararı: [AL / ALMA / NÖTR] (Net ve tavizsiz karar)`;
 
-    const promptText = `Hisse Kodu: ${ticker}
-Güncel Fiyat: ${price} TL
-Konsensüs Beklentileri: ${consensus}
-Sektör/Rakip Çarpanları: ${peerMultiples}
+    const promptText = `Hisse Kodu: ${cleanTicker}
+Güncel Fiyat: ${parsedPrice} TL
+Konsensüs Beklentileri:
+<USER_SUPPLIED_DATA>${consensus}</USER_SUPPLIED_DATA>
+Sektör/Rakip Çarpanları:
+<USER_SUPPLIED_DATA>${peerMultiples}</USER_SUPPLIED_DATA>
 
 Ekteki PDF dokümanlarını (Finansal Tablolar, Dipnotlar, Faaliyet Raporları ve Sunumlar) kullanarak analizi gerçekleştir ve nihai değerleme raporunu oluştur.`;
 
-    const pdfHash = computeContentHash(pdfFiles.map(f => `${f.name}_${f.size}`).join(';'));
-    const cacheKey = `analyze_pdf_${ticker.toUpperCase()}_${price}_${pdfHash}`;
+    const pdfHash = contentHasher.digest('hex').slice(0, 16);
+    const metaHash = computeContentHash(`${consensus}|${peerMultiples}`);
+    const cacheKey = `analyze_pdf_v2_${cleanTicker}_${parsedPrice}_${pdfHash}_${metaHash}`;
 
     const response = await generateWithRateLimitAndBackoff({
       ai,
@@ -157,40 +234,38 @@ Ekteki PDF dokümanlarını (Finansal Tablolar, Dipnotlar, Faaliyet Raporları v
       cacheKey,
     });
 
-
     return NextResponse.json({ report: response.text });
   } catch (error: any) {
     console.error('PDF Analiz Hatası:', error);
-    const status = error?.status === 429 || error?.isRateLimit ? 429 : 500;
+    const status =
+      error?.status === 429 || error?.isRateLimit
+        ? 429
+        : error?.status === 502 || error?.status === 504
+        ? error.status
+        : 500;
     return NextResponse.json(
-      { 
+      {
         error: error.message || 'PDF analiz edilirken hata oluştu.',
         retryAfter: error.retryAfter || 5,
-        isRateLimit: status === 429
+        isRateLimit: status === 429,
       },
       { status }
     );
   } finally {
-    // 4. Sunucudaki geçici disk dosyalarını sil
     for (const p of tempFilePaths) {
       if (fs.existsSync(p)) {
         try {
           fs.unlinkSync(p);
-        } catch (e) {
-          /* ignore */
-        }
+        } catch {}
       }
     }
-    // Google File API'deki dosyaları temizle (kota şişmesini önler)
     for (const gf of uploadedGoogleFiles) {
       try {
-        if (gf?.name) {
-          const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+        if (gf?.name && process.env.GEMINI_API_KEY) {
+          const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
           await ai.files.delete({ name: gf.name });
         }
-      } catch (e) {
-        /* ignore */
-      }
+      } catch {}
     }
   }
 }

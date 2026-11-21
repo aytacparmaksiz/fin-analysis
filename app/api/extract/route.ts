@@ -1,9 +1,9 @@
-import { GoogleGenAI, Type, Schema } from '@google/genai';
+import { GoogleGenAI, Type, type Schema } from '@google/genai';
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { detectSector, SectorType } from '@/lib/sectors';
+import { detectSector, type SectorType } from '@/lib/sectors';
 import { 
   generateWithRateLimitAndBackoff, 
   optimizeTextForGemini, 
@@ -18,11 +18,60 @@ import {
   getAnnualizationFactor,
   normalizePeriodName
 } from '@/lib/valuation';
-import { extractSmartDocumentText, splitScannedPdfIntoChunks, DocumentCategory } from '@/lib/pdf-filter';
+import { extractSmartDocumentText, splitScannedPdfIntoChunks, type DocumentCategory } from '@/lib/pdf-filter';
+import {
+  normalizeTicker,
+  isValidTicker,
+  authorizeApiMutation,
+  checkRateLimit,
+  sanitizePromptInput,
+} from '@/lib/security';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
+
+function parseNonEmptyGeminiJson(rawText: string | undefined): any {
+  const txt = String(rawText || '').trim();
+  if (!txt) {
+    const err: any = new Error('Modelden geçerli finansal veri çıkarılamadı.');
+    err.status = 502;
+    throw err;
+  }
+  const parsed = cleanAndParseJson(txt);
+  const valid =
+    parsed &&
+    typeof parsed === 'object' &&
+    (Array.isArray(parsed) ? parsed.length > 0 : Object.keys(parsed).length > 0);
+  if (!valid) {
+    const err: any = new Error('Modelden geçerli finansal veri çıkarılamadı (boş JSON).');
+    err.status = 502;
+    throw err;
+  }
+  return parsed;
+}
+
+function computeDocsHash(docs: any[], extraCtx: Record<string, any> = {}): string {
+  const parts = docs.map((d) => ({
+    name: String(d?.name || ''),
+    cat: String(d?.category || ''),
+    text: String(d?.text || ''),
+    b64: String(d?.base64Data || ''),
+  }));
+  return computeContentHash(JSON.stringify({ docs: parts, ctx: extraCtx }));
+}
+
+function buildSanitizedPrevReportPrompt(previousReport: any, label: string): string {
+  if (!previousReport) return '';
+  const pPeriod = sanitizePromptInput(previousReport.period || previousReport.createdAt, 64) || 'Belirtilmedi';
+  const pFv = sanitizePromptInput(previousReport.fairValue, 32) || 'Belirtilmedi';
+  const pTargets = sanitizePromptInput(previousReport.extractedData?.future_targets_summary, 1500) || 'Belirtilmedi';
+  return `\n${label}:
+- Önceki Dönem / Tarih: ${pPeriod}
+- Önceki Adil Değer: ${pFv} TL
+- Önceki Yönetim Hedefleri:
+<USER_SUPPLIED_DATA>${pTargets}</USER_SUPPLIED_DATA>\n`;
+}
 
 // ============================================================================
 // ŞEMALAR (SCHEMAS)
@@ -420,6 +469,22 @@ function mergeFinancialHistoryBatches(results: any[]): any {
 
 export async function POST(req: Request) {
   try {
+    const rl = checkRateLimit(req, 'extract', 25, 60_000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Çok fazla belge çıkarım isteği gönderildi. Lütfen bekleyin.', retryAfter: rl.retryAfterSec, isRateLimit: true },
+        { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } }
+      );
+    }
+
+    const auth = authorizeApiMutation(req);
+    if (!auth.authorized) {
+      return NextResponse.json(
+        { error: auth.reason || 'Yetkisiz işlem.' },
+        { status: auth.status }
+      );
+    }
+
     const contentType = req.headers.get('content-type') || '';
     let ticker = '';
     let price = '';
@@ -434,7 +499,7 @@ export async function POST(req: Request) {
 
     if (contentType.includes('application/json')) {
       const json = await req.json();
-      ticker = json.ticker || '';
+      ticker = normalizeTicker(json.ticker);
       price = json.price || '';
       category = (json.category || '').toLowerCase() as DocumentCategory;
       previousData = json.previousData || null;
@@ -459,7 +524,7 @@ export async function POST(req: Request) {
       }
     } else {
       const formData = await req.formData();
-      ticker = (formData.get('ticker') as string) || '';
+      ticker = normalizeTicker(formData.get('ticker') as string);
       price = (formData.get('price') as string) || '';
       category = ((formData.get('category') as string) || '').toLowerCase() as DocumentCategory;
       
@@ -467,14 +532,20 @@ export async function POST(req: Request) {
       if (prevDataStr) {
         try {
           previousData = JSON.parse(prevDataStr);
-        } catch {}
+        } catch (parseErr) {
+          console.warn('[Extract] previousData JSON parse hatası:', parseErr);
+          return NextResponse.json({ error: 'previousData geçersiz JSON formatında.' }, { status: 400 });
+        }
       }
 
       const prevReportStr = formData.get('previousReport') as string;
       if (prevReportStr) {
         try {
           previousReport = JSON.parse(prevReportStr);
-        } catch {}
+        } catch (parseErr) {
+          console.warn('[Extract] previousReport JSON parse hatası:', parseErr);
+          return NextResponse.json({ error: 'previousReport geçersiz JSON formatında.' }, { status: 400 });
+        }
       }
 
       filesFinancial = formData.getAll('files_financial') as File[];
@@ -483,8 +554,8 @@ export async function POST(req: Request) {
       pdfFiles = formData.getAll('files') as File[];
     }
 
-    if (!ticker) {
-      return NextResponse.json({ error: 'Hisse kodu (ticker) gereklidir.' }, { status: 400 });
+    if (!ticker || !isValidTicker(ticker)) {
+      return NextResponse.json({ error: 'Geçerli bir BIST hisse kodu (ticker) gereklidir.' }, { status: 400 });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
@@ -639,10 +710,12 @@ ${!isInsurance && !isBanking ? `   * SANAYİ / HİZMET / DİĞER:
           contents = [prompt];
         }
 
-        const hashSeed = hasScannedDoc 
-          ? (batch[0] as any)?.base64Data?.slice(0, 5000) 
-          : docTexts;
-        const cacheKey = `extract_fin_${ticker.toUpperCase()}_batch_${i}_${computeContentHash(hashSeed || '')}`;
+        const cacheHash = computeDocsHash(batch, {
+          sector: targetSector,
+          prevPeriod: previousData?.reporting_period || null,
+          batchIndex: i,
+        });
+        const cacheKey = `extract_fin_v5_${ticker.toUpperCase()}_batch_${i}_${cacheHash}`;
         const response = await generateWithRateLimitAndBackoff({
           ai,
           preferredModel: 'gemini-3.1-flash-lite-preview',
@@ -658,7 +731,7 @@ ${!isInsurance && !isBanking ? `   * SANAYİ / HİZMET / DİĞER:
           cacheKey,
         });
 
-        const parsed = cleanAndParseJson(response.text || '{}');
+        const parsed = parseNonEmptyGeminiJson(response?.text);
         batchResults.push(parsed);
       }
 
@@ -834,10 +907,7 @@ ${!isInsurance && !isBanking ? `   * SANAYİ / HİZMET / DİĞER:
       const prompt = `Şirket: ${ticker.toUpperCase()} (Sektör: ${targetSector}).
 Toplam ${actDocs.length} adet faaliyet raporu/doküman yüklendi: ${actDocs.map(d => d.name).join(', ')}.
 ${officialActualsText}
-${previousReport ? `\nÖNCEKİ DÖNEM ANALİZ RAPORU VE YÖNETİM HEDEFLERİ (DÖNEMSEL BESLENME):
-- Önceki Dönem / Tarih: ${previousReport.period || previousReport.createdAt}
-- Önceki Adil Değer: ${previousReport.fairValue} TL
-- Önceki Çeyrekte Belirtilen Yönetim Hedefleri: ${previousReport.extractedData?.future_targets_summary || 'Belirtilmedi'}\n` : ''}
+${buildSanitizedPrevReportPrompt(previousReport, 'ÖNCEKİ DÖNEM ANALİZ RAPORU VE YÖNETİM HEDEFLERİ (DÖNEMSEL BESLENME)')}
 Aşağıda şirkete ait çok yıllı faaliyet raporlarının yönetim, hedefler, operasyonel performans ve risk bölümleri yer almaktadır:
 
 ${docTexts || 'Ekli dokümandaki faaliyet raporu ve yönetim hedeflerini analiz et.'}
@@ -865,7 +935,12 @@ GÖREVLER:
         contents = [prompt];
       }
 
-      const cacheKey = `extract_act_v4_${ticker.toUpperCase()}_${actDocs.length}_${computeContentHash(docTexts)}`;
+      const actHash = computeDocsHash(actDocs, {
+        sector: targetSector,
+        prevPeriod: previousReport?.period || null,
+        prevFv: previousReport?.fairValue || null,
+      });
+      const cacheKey = `extract_act_v5_${ticker.toUpperCase()}_${actDocs.length}_${actHash}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
         preferredModel: 'gemini-3.1-flash-lite-preview',
@@ -881,7 +956,7 @@ GÖREVLER:
         cacheKey,
       });
 
-      const actData = cleanAndParseJson(response.text || '{}');
+      const actData = parseNonEmptyGeminiJson(response?.text);
 
       base.guidance_track_record = mergeAndSanitizeGuidance(base.guidance_track_record || [], actData.guidance_track_record || []);
       if (!Array.isArray(base.guidance_track_record) || base.guidance_track_record.length === 0) {
@@ -927,10 +1002,7 @@ GÖREVLER:
       const prompt = `Şirket: ${ticker.toUpperCase()} (Sektör: ${targetSector}).
 Toplam ${presDocs.length} adet yatırımcı sunumu yüklendi: ${presDocs.map(d => d.name).join(', ')}.
 ${officialActualsText}
-${previousReport ? `\nÖNCEKİ DÖNEM ANALİZİ VE YÖNETİM HEDEFLERİ (DÖNEMSEL BESLENME):
-- Önceki Dönem / Tarih: ${previousReport.period || previousReport.createdAt}
-- Önceki Çeyrek Adil Değer: ${previousReport.fairValue} TL
-- Önceki Yönetim Hedefleri: ${previousReport.extractedData?.future_targets_summary || 'Belirtilmedi'}\n` : ''}
+${buildSanitizedPrevReportPrompt(previousReport, 'ÖNCEKİ DÖNEM ANALİZİ VE YÖNETİM HEDEFLERİ (DÖNEMSEL BESLENME)')}
 Aşağıda şirketin Yatırımcı Sunumu ve Gelecek Stratejisi dokümanları yer almaktadır:
 
 ${docTexts || 'Ekli dokümandaki yatırımcı sunumunu analiz et.'}
@@ -957,7 +1029,12 @@ GÖREVLER:
         contents = [prompt];
       }
 
-      const cacheKey = `extract_pres_v4_${ticker.toUpperCase()}_${presDocs.length}_${computeContentHash(docTexts)}`;
+      const presHash = computeDocsHash(presDocs, {
+        sector: targetSector,
+        prevPeriod: previousReport?.period || null,
+        prevFv: previousReport?.fairValue || null,
+      });
+      const cacheKey = `extract_pres_v5_${ticker.toUpperCase()}_${presDocs.length}_${presHash}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
         preferredModel: 'gemini-3.1-flash-lite-preview',
@@ -973,7 +1050,7 @@ GÖREVLER:
         cacheKey,
       });
 
-      const presData = cleanAndParseJson(response.text || '{}');
+      const presData = parseNonEmptyGeminiJson(response?.text);
 
       if (presData.fair_value_drivers) {
         base.fair_value_drivers = presData.fair_value_drivers;
@@ -1019,19 +1096,30 @@ GÖREVLER:
 
     let finalData: any = { ticker, sector: targetSector, financial_history: [] };
 
-    // 1. Finansal Belgeleri Çıkar (Alan 1)
+    // 1. Finansal Belgeleri Çıkar (Alan 1 - Taranmış PDF / Görsel + Metin Destekli)
     if (finDocs.length > 0) {
       const batchResults: any[] = [];
       const DOC_BATCH_SIZE = 5;
       for (let i = 0; i < finDocs.length; i += DOC_BATCH_SIZE) {
         const batch = finDocs.slice(i, i + DOC_BATCH_SIZE);
+        const hasScannedDoc = batch.some(d => (d as any).isScannedImage && (d as any).base64Data);
         const rawTexts = batch.map(d => `### FİNANSAL TABLO: ${d.name}\n${d.text}`).join('\n\n---\n\n');
         const docTexts = optimizeTextForGemini(rawTexts);
-        const cacheKey = `extract_fin_all_${ticker.toUpperCase()}_batch_${i}_${computeContentHash(docTexts)}`;
+        const finPrompt = `Şirket: ${ticker.toUpperCase()} (Tespit Edilen Sektör: ${targetSector}).\n${docTexts || 'Ekli dokümandaki görsel finansal tabloları analiz et.'}`;
+        const contents = hasScannedDoc
+          ? [
+              ...batch
+                .filter(d => (d as any).isScannedImage && (d as any).base64Data)
+                .map(d => ({ inlineData: { mimeType: 'application/pdf', data: (d as any).base64Data } })),
+              finPrompt,
+            ]
+          : [finPrompt];
+        const finAllHash = computeDocsHash(batch, { sector: targetSector, batchIndex: i });
+        const cacheKey = `extract_fin_all_v5_${ticker.toUpperCase()}_batch_${i}_${finAllHash}`;
         const response = await generateWithRateLimitAndBackoff({
           ai,
           baseParams: {
-            contents: [`Şirket: ${ticker.toUpperCase()}.\n${docTexts}`],
+            contents,
             config: {
               systemInstruction: financialSystemInstruction,
               temperature: 0.0,
@@ -1041,7 +1129,7 @@ GÖREVLER:
           },
           cacheKey,
         });
-        batchResults.push(cleanAndParseJson(response.text || '{}'));
+        batchResults.push(parseNonEmptyGeminiJson(response?.text));
       }
       finalData = mergeFinancialHistoryBatches(batchResults);
     }
@@ -1051,7 +1139,7 @@ GÖREVLER:
       const hasScannedDoc = actDocs.some(d => (d as any).isScannedImage);
       const rawTexts = actDocs.map(d => `### FAALİYET RAPORU: ${d.name}\n${d.text}`).join('\n\n---\n\n');
       const docTexts = optimizeTextForGemini(rawTexts);
-      const promptText = `Şirket: ${ticker.toUpperCase()}.${previousReport ? `\nÖnceki Dönem: ${previousReport.period || previousReport.createdAt}, Önceki Çeyrek Adil Değer: ${previousReport.fairValue} TL, Önceki Yönetim Hedefleri: ${previousReport.extractedData?.future_targets_summary || 'Belirtilmedi'}` : ''}\n${docTexts || 'Ekli dokümandaki faaliyet raporunu analiz et.'}`;
+      const promptText = `Şirket: ${ticker.toUpperCase()}.${buildSanitizedPrevReportPrompt(previousReport, 'ÖNCEKİ DÖNEM ANALİZİ VE YÖNETİM HEDEFLERİ')}\n${docTexts || 'Ekli dokümandaki faaliyet raporunu analiz et.'}`;
       let contents: any[];
       if (hasScannedDoc) {
         const scannedParts = actDocs
@@ -1061,7 +1149,12 @@ GÖREVLER:
       } else {
         contents = [promptText];
       }
-      const cacheKey = `extract_act_all_v4_${ticker.toUpperCase()}_${computeContentHash(docTexts)}`;
+      const actAllHash = computeDocsHash(actDocs, {
+        sector: targetSector,
+        prevPeriod: previousReport?.period || null,
+        prevFv: previousReport?.fairValue || null,
+      });
+      const cacheKey = `extract_act_all_v5_${ticker.toUpperCase()}_${actAllHash}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
         baseParams: {
@@ -1075,7 +1168,7 @@ GÖREVLER:
         },
         cacheKey,
       });
-      const actData = cleanAndParseJson(response.text || '{}');
+      const actData = parseNonEmptyGeminiJson(response?.text);
       finalData.guidance_track_record = mergeAndSanitizeGuidance(finalData.guidance_track_record || [], actData.guidance_track_record || []);
       if (!Array.isArray(finalData.guidance_track_record) || finalData.guidance_track_record.length === 0) {
         finalData.guidance_track_record = generateGuidanceScorecardFallback(
@@ -1106,7 +1199,8 @@ GÖREVLER:
       } else {
         contents = [promptText];
       }
-      const cacheKey = `extract_pres_all_v4_${ticker.toUpperCase()}_${computeContentHash(docTexts)}`;
+      const presAllHash = computeDocsHash(presDocs, { sector: targetSector });
+      const cacheKey = `extract_pres_all_v5_${ticker.toUpperCase()}_${presAllHash}`;
       const response = await generateWithRateLimitAndBackoff({
         ai,
         baseParams: {
@@ -1120,7 +1214,7 @@ GÖREVLER:
         },
         cacheKey,
       });
-      const presData = cleanAndParseJson(response.text || '{}');
+      const presData = parseNonEmptyGeminiJson(response?.text);
       if (presData.fair_value_drivers) {
         finalData.fair_value_drivers = presData.fair_value_drivers;
       }
@@ -1154,7 +1248,12 @@ GÖREVLER:
 
   } catch (error: any) {
     console.error('Extraction Error:', error);
-    const status = error?.status === 429 || error?.isRateLimit ? 429 : 500;
+    const status =
+      error?.status === 429 || error?.isRateLimit
+        ? 429
+        : error?.status === 502 || error?.status === 504
+        ? error.status
+        : 500;
     return NextResponse.json(
       { 
         error: error.message || 'Veri çıkarımı başarısız oldu.',

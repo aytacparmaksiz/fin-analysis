@@ -272,7 +272,7 @@ export const USER_OFFICIAL_BIST_COMPANY_SECTORS: Record<string, UserBistCompanyS
   },
   "ARSAN": {
     "name": "Arsan Holding",
-    "sector": "Tekstil Entegre"
+    "sector": "Holdingler"
   },
   "ARTMS": {
     "name": "Artemis Halı",
@@ -2004,7 +2004,7 @@ export const USER_OFFICIAL_BIST_COMPANY_SECTORS: Record<string, UserBistCompanyS
   },
   "PSDTC": {
     "name": "Pergamon Status",
-    "sector": "Perakande - Ticaret"
+    "sector": "Diğer"
   },
   "PSGYO": {
     "name": "Pasifik GYO",
@@ -2212,7 +2212,7 @@ export const USER_OFFICIAL_BIST_COMPANY_SECTORS: Record<string, UserBistCompanyS
   },
   "SONME": {
     "name": "Sönmez Filament",
-    "sector": "Tekstil Entegre"
+    "sector": "Holdingler"
   },
   "SRVGY": {
     "name": "Servet GYO",

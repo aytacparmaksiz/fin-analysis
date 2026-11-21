@@ -48,6 +48,10 @@ export const BIST_COMPANY_SPECIFIC_SECTOR: Record<string, string> = {
   // 06.01.2025 KAP açıklamasıyla kimyasal tank çiftliği faaliyetini sonlandırıp ana faaliyetini
   // Nemrut Körfezi liman/konteyner işletmeciliğine kaydıran EGGUB için kalıcı sektör override'ı.
   EGGUB: 'Ulaştırma-Lojistik',
+  // Paket A (YÜKSEK-06): Fiilen Holding / varlık yönetimi profili taşıyan şirketler ve dış ticaret komisyonculuğu
+  ARSAN: 'Holdingler',
+  SONME: 'Holdingler',
+  PSDTC: 'Diğer',
 };
 
 /**
@@ -98,29 +102,24 @@ export function mapIsYatirimSectorToValuationSector(isySectorName?: string | nul
 export function getCompanySectorDisplayName(ticker?: string, rawSector?: string): string {
   if (ticker) {
     const cleanTicker = ticker.trim().toUpperCase().replace(/\.IS$/i, '');
+    const normalizeDisplayName = (sec: string): string => {
+      if (sec === 'Havayolları ve Hizm.') return 'Havacılık';
+      if (sec === 'Perakande - Ticaret') return 'Gıda & Ticaret Perakende';
+      if (sec === 'Holdingler') return 'Holding';
+      if (sec === 'Sigorta') return 'Sigortacılık';
+      if (sec === 'Cam') return 'Cam Sanayii';
+      return sec;
+    };
     if (BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker]) {
-      return BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker];
+      return normalizeDisplayName(BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker]);
     }
     const userSec = USER_OFFICIAL_BIST_COMPANY_SECTORS[cleanTicker];
     if (userSec && userSec.sector) {
-      if (userSec.sector === 'Havayolları ve Hizm.') return 'Havacılık';
-      if (userSec.sector === 'Perakande - Ticaret') return 'Gıda & Ticaret Perakende';
-      if (userSec.sector === 'Holdingler') return 'Holding';
-      if (userSec.sector === 'Sigorta') return 'Sigortacılık';
-      if (userSec.sector === 'Cam') return 'Cam Sanayii';
-      return userSec.sector;
+      return normalizeDisplayName(userSec.sector);
     }
     const isy = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[cleanTicker];
     if (isy && isy.sectorName) {
-      if (isy.sectorName === 'Havayolları ve Hizm.') return 'Havacılık';
-      if (isy.sectorName === 'Perakande - Ticaret') return 'Gıda & Ticaret Perakende';
-      if (isy.sectorName === 'Holdingler') return 'Holding';
-      if (isy.sectorName === 'Sigorta') return 'Sigortacılık';
-      if (isy.sectorName === 'Cam') return 'Cam Sanayii';
-      return isy.sectorName;
-    }
-    if (BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker]) {
-      return BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker];
+      return normalizeDisplayName(isy.sectorName);
     }
   }
 
@@ -207,9 +206,6 @@ export function resolveOfficialSectorName(officialSectorName?: string, ticker?: 
     const isy = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[cleanTicker];
     if (isy && isy.sectorName) {
       return isy.sectorName;
-    }
-    if (BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker]) {
-      return BIST_COMPANY_SPECIFIC_SECTOR[cleanTicker];
     }
   }
   let s = String(officialSectorName || '').trim();
@@ -1418,36 +1414,9 @@ export function detectSector(ticker: string, contextText = ''): SectorType {
     }
   }
 
-  // 2. Ticker bazlı kesin eşleştirme (Yeni halka arzlar ve baseline dışı hisseler için)
-  if (BIST_HEALTHCARE_TICKERS.includes(cleanTicker)) {
-    return 'HEALTHCARE';
-  }
-  if (BIST_AVIATION_TICKERS.includes(cleanTicker)) {
-    return 'AVIATION';
-  }
-  if (BIST_INSURANCE_TICKERS.includes(cleanTicker)) {
-    return 'INSURANCE';
-  }
-  if (BIST_BANKING_TICKERS.includes(cleanTicker)) {
-    return 'BANKING';
-  }
-  if (BIST_FINANCIAL_SERVICES_TICKERS.includes(cleanTicker)) {
-    return 'FINANCIAL_SERVICES';
-  }
-  if (BIST_RETAIL_TICKERS.includes(cleanTicker)) {
-    return 'RETAIL';
-  }
-  if (BIST_UTILITIES_TELCO_TICKERS.includes(cleanTicker)) {
-    return 'UTILITIES_TELCO';
-  }
-  if (BIST_HOLDING_TICKERS.includes(cleanTicker)) {
-    return 'HOLDING';
-  }
-  if (BIST_REIT_TICKERS.includes(cleanTicker) || cleanTicker.endsWith('GYO')) {
+  // 2. Ticker soneki bazlı GYO yakalama (Baseline dışı yeni halka arzlar için)
+  if (cleanTicker.endsWith('GYO')) {
     return 'REIT';
-  }
-  if (BIST_TECH_TICKERS.includes(cleanTicker)) {
-    return 'TECH';
   }
 
   // 2. Türkçe ve bağlam metni analizi

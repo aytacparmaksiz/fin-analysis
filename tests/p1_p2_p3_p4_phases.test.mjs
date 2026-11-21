@@ -158,14 +158,14 @@ test('Phases P1-P2-P3-P4 Comprehensive Verification Suite', async (t) => {
     assert.strictEqual(optResultAlma.marginOfSafety, 77.0, 'Margin of safety must retain the 77% discount');
     assert.ok(!valuationObj.boundary_warning?.includes('Sermaye Kaybı & Risk Uyarısı: Şirket ALMA'), 'Must NOT slap capital loss UNSAFE warning on 77% discounted solvent stock');
 
-    // Check with rawDecision: 'AL' (Safe holding debt ratio 0.50x <= 0.60x preserves AL with SAFE margin of safety)
+    // Check with rawDecision: 'AL' (Safe holding debt ratio 0.50x <= 0.60x and positive EVA preserves AL with SAFE margin of safety)
     const optResultAl = optimizeFinalDecision({
       rawDecision: 'AL',
       score: 82,
       valuation: { ...valuationObj },
       marketPrice: 100.0,
       fairValue: 177.0,
-      latestData: saholLatestData,
+      latestData: { ...saholLatestData, roic: 18.5, roe: 20.0 },
       sector: 'HOLDING'
     });
     assert.strictEqual(optResultAl.finalDecision, 'AL', 'Safe holding with high score and discount preserves AL rating');

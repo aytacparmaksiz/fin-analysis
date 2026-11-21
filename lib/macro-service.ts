@@ -58,9 +58,9 @@ export interface MacroDataSnapshot {
   fetchedAt: string;
 }
 
-// Güvenli TLS ve TCMB EVDS3 kamu sertifikası toleransı
+// Güvenli TLS doğrulaması (Kurumsal ağlarda sistem CA mağazası ile tam uyumlu)
 const evdsHttpsAgent = new https.Agent({
-  rejectUnauthorized: false,
+  rejectUnauthorized: true,
   keepAlive: true,
   timeout: 15000
 });

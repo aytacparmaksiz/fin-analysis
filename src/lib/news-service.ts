@@ -1,10 +1,10 @@
 import https from 'node:https';
 import { getKapCompanyDisclosuresUrl } from './kap-mapping.ts';
 import { COMPANY_PROFILES, getCompanyProfile } from './company-profiles.ts';
+import { escapeRegExp } from './security.ts';
 
-const isProduction = process.env.NODE_ENV === 'production';
 const newsHttpsAgent = new https.Agent({
-  rejectUnauthorized: isProduction,
+  rejectUnauthorized: true,
   keepAlive: true,
   timeout: 10000
 });
@@ -472,13 +472,13 @@ export function sanitizeDisclosureTitle(rawTitle: string, ticker: string, compan
   title = title.replace(/\*+/g, '').trim();
 
   // Başta hisse kodu varsa temizle: "TURSG - " veya "TURSG: "
-  title = title.replace(new RegExp(`^${ticker}\\s*[-:–]\\s*`, 'i'), '');
+  title = title.replace(new RegExp(`^${escapeRegExp(ticker)}\\s*[-:–]\\s*`, 'i'), '');
 
   // Başta şirket adı varsa temizle
   if (companyName) {
     const cleanComp = companyName.replace(/Anonim Şirketi|A\.Ş\.|Sanayi ve Ticaret/gi, '').trim();
     if (cleanComp.length > 3) {
-      title = title.replace(new RegExp(`^${cleanComp}\\s*[-:–]\\s*`, 'i'), '');
+      title = title.replace(new RegExp(`^${escapeRegExp(cleanComp)}\\s*[-:–]\\s*`, 'i'), '');
     }
   }
 

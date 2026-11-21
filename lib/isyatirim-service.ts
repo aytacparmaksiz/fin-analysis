@@ -36,6 +36,7 @@ export interface IsYatirimStockMultiples {
   foreignShareIndexImpactPct?: number | null; // Etki* (%)
   historicalEstimates?: IsYatirimHistoricalEstimates | null;
   updatedAt: string;
+  isBaselineFallback?: boolean;
 }
 
 import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from './isyatirim-multiples-cache.ts';
@@ -47,10 +48,18 @@ import {
 } from './isyatirim-sector-averages-cache.ts';
 export type { IsYatirimSectorAverage } from './isyatirim-sector-averages-cache.ts';
 
-let cachedMultiples: Record<string, IsYatirimStockMultiples> = { ...OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE };
+function cloneBaselineMultiples(): Record<string, IsYatirimStockMultiples> {
+  const out: Record<string, IsYatirimStockMultiples> = {};
+  for (const [k, v] of Object.entries(OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE)) {
+    out[k] = { ...v, isBaselineFallback: true };
+  }
+  return out;
+}
+
+let cachedMultiples: Record<string, IsYatirimStockMultiples> = cloneBaselineMultiples();
 let cachedSectorAverages: Record<string, IsYatirimSectorAverage> = { ...OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE };
 let lastFetchTimestamp = 0;
-let isFetchingInProgress = false;
+let inFlightMultiplesPromise: Promise<Record<string, IsYatirimStockMultiples>> | null = null;
 const CACHE_TTL_MS = 20 * 60 * 1000; // 20 dakika önbellek
 
 /**
@@ -66,7 +75,7 @@ function parseTrFloat(valStr: string | null | undefined): number | null {
 import https from 'node:https';
 
 const isYatirimHttpsAgent = new https.Agent({
-  rejectUnauthorized: false, // Yerel antivirüs veya kurumsal proxy SSL interception toleransı
+  rejectUnauthorized: true,
   keepAlive: true,
   timeout: 30000
 });
@@ -243,11 +252,12 @@ async function doFetchAllIsYatirimMultiples(): Promise<Record<string, IsYatirimS
     }
 
     if (Object.keys(result).length > 50) {
-      const merged: Record<string, IsYatirimStockMultiples> = { ...OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE };
+      const merged: Record<string, IsYatirimStockMultiples> = cloneBaselineMultiples();
       for (const [k, v] of Object.entries(result)) {
         merged[k] = {
           ...(merged[k] || {}),
           ...v,
+          isBaselineFallback: false,
           foreignSharePct: (v.foreignSharePct !== undefined && v.foreignSharePct !== null) ? v.foreignSharePct : (merged[k]?.foreignSharePct ?? null),
           foreignSharePrevPct: (v.foreignSharePrevPct !== undefined && v.foreignSharePrevPct !== null) ? v.foreignSharePrevPct : (merged[k]?.foreignSharePrevPct ?? null),
           foreignShareChangeBps: (v.foreignShareChangeBps !== undefined && v.foreignShareChangeBps !== null) ? v.foreignShareChangeBps : (merged[k]?.foreignShareChangeBps ?? null),
@@ -267,25 +277,29 @@ async function doFetchAllIsYatirimMultiples(): Promise<Record<string, IsYatirimS
 }
 
 /**
- * İş Yatırım Temel Değerler ve Oranlar tablosunu Stale-While-Revalidate ile anında getirir
+ * İş Yatırım Temel Değerler ve Oranlar tablosunu Stale-While-Revalidate + Singleflight kilidi ile getirir.
  */
 export async function fetchAllIsYatirimMultiples(): Promise<Record<string, IsYatirimStockMultiples>> {
   const now = Date.now();
 
-  // 1. İlk çalıştırmada veya 20 dakikalık TTL dolduğunda canlı çekimi dene
   if (lastFetchTimestamp === 0 || now - lastFetchTimestamp >= CACHE_TTL_MS) {
-    if (!isFetchingInProgress) {
-      isFetchingInProgress = true;
-      try {
-        await Promise.race([
-          doFetchAllIsYatirimMultiples(),
-          new Promise((r) => setTimeout(r, 6000))
-        ]);
-      } catch (err: any) {
-        console.warn('[IsYatirim] Canlı çarpan çekiminde gecikme, önbellek kullanılıyor:', err?.message || err);
-      } finally {
-        isFetchingInProgress = false;
-      }
+    if (!inFlightMultiplesPromise) {
+      inFlightMultiplesPromise = doFetchAllIsYatirimMultiples().finally(() => {
+        inFlightMultiplesPromise = null;
+      });
+    }
+    let raceTimer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      await Promise.race([
+        inFlightMultiplesPromise,
+        new Promise<void>((r) => {
+          raceTimer = setTimeout(r, 6000);
+        })
+      ]);
+    } catch (err: any) {
+      console.warn('[IsYatirim] Canlı çarpan çekiminde gecikme, önbellek kullanılıyor:', err?.message || err);
+    } finally {
+      if (raceTimer) clearTimeout(raceTimer);
     }
   }
 
@@ -457,8 +471,9 @@ export interface IsYatirimCompanyDetails {
   fetchedAt: string;
 }
 
-const companyDetailsCache = new Map<string, { data: IsYatirimCompanyDetails; timestamp: number }>();
+const companyDetailsCache = new Map<string, { data: IsYatirimCompanyDetails; expiresAt: number }>();
 const DETAILS_CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 saat önbellek
+const DETAILS_EMPTY_DIV_TTL_MS = 15 * 60 * 1000; // Temettü boşsa yalnızca 15 dk kilitle
 
 export function clearIsYatirimCache(ticker?: string): void {
   const upper = ticker ? ticker.toUpperCase().replace(/\.IS$/, '').trim() : undefined;
@@ -649,7 +664,7 @@ export async function fetchIsYatirimCompanyDetails(
     companyDetailsCache.delete(ticker);
   }
   const cached = options?.forceRefresh ? null : companyDetailsCache.get(ticker);
-  if (cached && (Date.now() - cached.timestamp < DETAILS_CACHE_TTL_MS)) {
+  if (cached && Date.now() < cached.expiresAt) {
     return cached.data;
   }
 
@@ -835,7 +850,8 @@ export async function fetchIsYatirimCompanyDetails(
     };
 
     if (result.dividends.length > 0 || result.consensus !== null) {
-      companyDetailsCache.set(ticker, { data: result, timestamp: Date.now() });
+      const ttl = result.dividends.length > 0 ? DETAILS_CACHE_TTL_MS : DETAILS_EMPTY_DIV_TTL_MS;
+      companyDetailsCache.set(ticker, { data: result, expiresAt: Date.now() + ttl });
     }
     return result;
   } catch (err: any) {

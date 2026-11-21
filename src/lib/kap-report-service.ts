@@ -6,9 +6,8 @@ export function isKapQualitativeSupported(rawTicker: string): boolean {
   return Boolean(BIST_KAP_OID_MAP[ticker]);
 }
 
-const isProduction = process.env.NODE_ENV === 'production';
 const kapHttpsAgent = new https.Agent({
-  rejectUnauthorized: isProduction,
+  rejectUnauthorized: true,
   keepAlive: true,
   timeout: 15000
 });
@@ -64,15 +63,20 @@ export interface KapQualitativeAuditResult {
   executiveSummary: string;
   findings: KapQualitativeFinding[];
   managementTargets: KapManagementTarget[];
+  isDegraded?: boolean;
 }
+
+const MAX_KAP_PDF_BYTES = 15 * 1024 * 1024;
+const MAX_AUDIT_CACHE = 100;
 
 function kapRequest(
   urlStr: string,
-  opts: { method?: 'GET' | 'POST'; headers?: Record<string, string>; body?: string; timeoutMs?: number } = {}
+  opts: { method?: 'GET' | 'POST'; headers?: Record<string, string>; body?: string; timeoutMs?: number; maxBytes?: number } = {}
 ): Promise<{ status: number; buf: Buffer }> {
   return new Promise((resolve) => {
     let settled = false;
     const timeoutMs = opts.timeoutMs ?? 12000;
+    const maxBytes = opts.maxBytes ?? MAX_KAP_PDF_BYTES;
     const done = (val: { status: number; buf: Buffer }) => {
       if (!settled) {
         settled = true;
@@ -101,8 +105,20 @@ function kapRequest(
         },
         (res) => {
           const chunks: Buffer[] = [];
-          res.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+          let totalBytes = 0;
+          res.on('data', (c) => {
+            const chunk = Buffer.isBuffer(c) ? c : Buffer.from(c);
+            totalBytes += chunk.length;
+            if (totalBytes > maxBytes) {
+              try { res.destroy(); } catch {}
+              try { req.destroy(); } catch {}
+              done({ status: 413, buf: Buffer.alloc(0) });
+              return;
+            }
+            chunks.push(chunk);
+          });
           res.on('end', () => done({ status: res.statusCode || 0, buf: Buffer.concat(chunks) }));
+          res.on('error', () => done({ status: 0, buf: Buffer.alloc(0) }));
         }
       );
       req.on('error', () => done({ status: 0, buf: Buffer.alloc(0) }));
@@ -178,7 +194,7 @@ async function fetchKapPdfPages(disclosureIndex: number): Promise<{
     pdfAtts.find((a) => !/interim|english|eng\b/i.test(String(a.fileName || ''))) || pdfAtts[0];
 
   const pdfUrl = `https://www.kap.org.tr/tr/api/file/download/${preferred.objId}`;
-  const pdfRes = await kapRequest(pdfUrl, { timeoutMs: 14000 });
+  const pdfRes = await kapRequest(pdfUrl, { timeoutMs: 14000, maxBytes: MAX_KAP_PDF_BYTES });
   if (pdfRes.status !== 200 || pdfRes.buf.length < 1000) return null;
 
   try {
@@ -491,15 +507,17 @@ async function refineQualitativeAuditWithGemini(
   pages: string[],
   deterministic: { findings: KapQualitativeFinding[]; targets: KapManagementTarget[]; auditorStatus: string },
   sourceDoc: string
-): Promise<{ executiveSummary: string; findings: KapQualitativeFinding[]; targets: KapManagementTarget[]; auditorStatus: string }> {
+): Promise<{ executiveSummary: string; findings: KapQualitativeFinding[]; targets: KapManagementTarget[]; auditorStatus: string; isDegraded: boolean }> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || deterministic.findings.length === 0) {
     return {
       executiveSummary: `${ticker} ${sourceDoc} dipnot ve faaliyet raporu bulguları.`,
-      ...deterministic
+      ...deterministic,
+      isDegraded: true
     };
   }
 
+  let geminiTimer: ReturnType<typeof setTimeout> | null = null;
   try {
     const { GoogleGenAI } = await import('@google/genai');
     const ai = new GoogleGenAI({ apiKey });
@@ -537,8 +555,14 @@ Kurallar:
       contents: prompt,
       config: { responseMimeType: 'application/json' }
     });
-    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 5500));
+    const timeoutPromise = new Promise<null>((resolve) => {
+      geminiTimer = setTimeout(() => resolve(null), 5500);
+    });
     const resp: any = await Promise.race([geminiPromise, timeoutPromise]);
+    if (geminiTimer) {
+      clearTimeout(geminiTimer);
+      geminiTimer = null;
+    }
     const text = resp?.text || '';
     if (!text) throw new Error('Gemini timeout');
     const parsed = JSON.parse(text);
@@ -559,17 +583,27 @@ Kurallar:
       auditorStatus: String(parsed?.auditorStatus || deterministic.auditorStatus),
       executiveSummary: String(parsed?.executiveSummary || `${ticker} ${sourceDoc} temel dipnot ve faaliyet bulguları.`),
       findings: refinedFindings,
-      targets: deterministic.targets
+      targets: deterministic.targets,
+      isDegraded: false
     };
   } catch {
+    if (geminiTimer) {
+      clearTimeout(geminiTimer);
+      geminiTimer = null;
+    }
     return {
       executiveSummary: `${ticker} ${sourceDoc} temel dipnot ve faaliyet bulguları.`,
-      ...deterministic
+      ...deterministic,
+      isDegraded: true
     };
   }
 }
 
 const auditCache = new Map<string, { data: KapQualitativeAuditResult; expiresAt: number }>();
+
+export function getKapAuditCacheStats(): { size: number } {
+  return { size: auditCache.size };
+}
 
 export async function fetchAndAnalyzeKapQualitativeAudit(rawTicker: string): Promise<KapQualitativeAuditResult | null> {
   const ticker = (rawTicker || '').toUpperCase().trim();
@@ -577,6 +611,8 @@ export async function fetchAndAnalyzeKapQualitativeAudit(rawTicker: string): Pro
 
   const cached = auditCache.get(ticker);
   if (cached && Date.now() < cached.expiresAt && cached.data?.schemaVersion === 2) {
+    auditCache.delete(ticker);
+    auditCache.set(ticker, cached);
     return cached.data;
   }
 
@@ -643,9 +679,16 @@ export async function fetchAndAnalyzeKapQualitativeAudit(rawTicker: string): Pro
     auditorStatus: refined.auditorStatus,
     executiveSummary: refined.executiveSummary,
     findings: refined.findings,
-    managementTargets: refined.targets
+    managementTargets: refined.targets,
+    isDegraded: refined.isDegraded
   };
 
-  auditCache.set(ticker, { data: result, expiresAt: Date.now() + 6 * 3600 * 1000 });
+  const ttlMs = result.isDegraded ? 10 * 60 * 1000 : 6 * 3600 * 1000;
+  if (auditCache.size >= MAX_AUDIT_CACHE) {
+    const oldest = auditCache.keys().next().value;
+    if (oldest) auditCache.delete(oldest);
+  }
+  auditCache.delete(ticker);
+  auditCache.set(ticker, { data: result, expiresAt: Date.now() + ttlMs });
   return result;
 }

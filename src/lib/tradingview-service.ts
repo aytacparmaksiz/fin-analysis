@@ -20,7 +20,7 @@ export interface TradingViewConsensus {
 }
 
 const tvHttpsAgent = new https.Agent({
-  rejectUnauthorized: false,
+  rejectUnauthorized: true,
   keepAlive: true,
   timeout: 10000
 });

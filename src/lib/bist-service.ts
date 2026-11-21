@@ -16,7 +16,7 @@ import {
   type IsYatirimSectorAverage
 } from './isyatirim-service.ts';
 import { OFFICIAL_ISYATIRIM_CACHE } from './isyatirim-official-cache.ts';
-import { getSupabase, isSupabaseConfigured } from './supabase.ts';
+import { getSupabase, getSupabaseForAuthorizedWrite, isSupabaseConfigured } from './supabase.ts';
 import { IsYatirimApiAdapter } from './isyatirim-adapter.ts';
 import { FinancialDataValidator } from './financial-validator.ts';
 import { FinancialRatioEngine } from './ratio-engine.ts';
@@ -24,10 +24,9 @@ import { fetchLiveTcmbMacroData, type MacroDataSnapshot } from './macro-service.
 
 import https from 'node:https';
 
-// Güvenlik & Dayanıklılık: İş Yatırım sunucuları bazı ara sertifikaları (intermediate CA)
-// eksik gönderdiğinden veya kurumsal proxy / antivirüs SSL müdahalesinde kesintiyi önlemek için toleranslıdır.
+// Sıkı TLS sertifika doğrulaması (Kurumsal ortamlarda --use-system-ca ile sistem kök sertifikaları doğrulanır)
 const isYatirimHttpsAgent = new https.Agent({
-  rejectUnauthorized: false,
+  rejectUnauthorized: true,
   keepAlive: true,
   timeout: 30000
 });
@@ -443,7 +442,13 @@ export function resolveBistCompanyMeta(rawTicker: string): BistCompanyMetadata {
 /**
  * Yahoo Finance veya BIST üzerinden canlı hisse fiyatını ve 5 yıllık tarihsel kapanışlarını çeker
  */
-export async function fetchLiveBistPrice(ticker: string): Promise<{ price: number; prevClose?: number; changePct?: number; historicalPrices?: Record<string, number> }> {
+export async function fetchLiveBistPrice(ticker: string): Promise<{
+  price: number;
+  prevClose?: number;
+  changePct?: number;
+  historicalPrices?: Record<string, number>;
+  isFallback?: boolean;
+}> {
   const symbol = ticker.toUpperCase().replace(/\.IS$/, '');
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}.IS?interval=1mo&range=5y`;
   
@@ -478,14 +483,14 @@ export async function fetchLiveBistPrice(ticker: string): Promise<{ price: numbe
         if (prevClose && prevClose > 0) {
           changePct = Number((((price - prevClose) / prevClose) * 100).toFixed(2));
         }
-        return { price, prevClose, changePct, historicalPrices };
+        return { price, prevClose, changePct, historicalPrices, isFallback: false };
       }
     }
   } catch (err) {
     console.warn(`[BistService] Yahoo Finance fiyatı çekilemedi (${ticker}):`, err);
   }
 
-  return { price: 100.0, historicalPrices: {} };
+  return { price: 0, historicalPrices: {}, isFallback: true };
 }
 
 // Sunucu belleği kalıcı finansal tablo önbelleği (6 saat TTL)
@@ -586,8 +591,8 @@ async function getSupabaseMaliTablo(ticker: string): Promise<FinancialHistoryIte
 async function saveSupabaseMaliTablo(ticker: string, history: FinancialHistoryItem[]): Promise<void> {
   try {
     if (!isSupabaseConfigured() || !history || history.length === 0) return;
-    const supabase = getSupabase();
-    if (!supabase) return null as any;
+    const supabase = getSupabaseForAuthorizedWrite();
+    if (!supabase) return;
 
     await supabase
       .from('bist_mali_tablolar')
@@ -637,6 +642,8 @@ export async function fetchIsYatirimMaliTabloBatches(
   sector: SectorType,
   preferredGroup?: 'XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A'
 ): Promise<{ rowsByBatch: { spec: BatchSpec; rows: any[] }[]; activeGroup: string | null }> {
+  // Her çağrıda güncel çeyrek pencerelerini dinamik hesapla (uzun ömürlü sunucularda bayatlamayı önler)
+  const BATCH_SPECS = buildBatchSpecs();
   const cleanTicker = (ticker || '').toUpperCase().replace(/\.IS$/i, '').trim();
   const defaultCandidates: ('XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A')[] = 
     cleanTicker === 'DOCO'
@@ -1035,7 +1042,7 @@ export async function clearBistCache(ticker?: string): Promise<void> {
   // Supabase kalıcı tablosundaki önbellek kaydını da sil
   try {
     if (isSupabaseConfigured()) {
-      const supabase = getSupabase();
+      const supabase = getSupabaseForAuthorizedWrite();
       if (supabase) {
         if (upper) {
           await supabase.from('bist_mali_tablolar').delete().eq('ticker', upper);
@@ -1063,22 +1070,33 @@ export async function fetchAndAnalyzeBistCompany(
     MEMORY_FINANCIAL_CACHE.delete(ticker);
   }
 
-  // 0. Kalıcı ve hızlı önbelleği kontrol et (RAM / Supabase)
+  // 0. Kalıcı ve hızlı önbelleği kontrol et (RAM / Supabase) + yeni tamamlanmış çeyrek tazelik kontrolü
+  const dynamicSpecs = buildBatchSpecs();
+  const expectedLatestPeriodKey = parsePeriodSortKey(dynamicSpecs[0]?.periods?.[0] || '');
   const memCached = options?.forceRefresh ? null : MEMORY_FINANCIAL_CACHE.get(ticker);
   let cachedItems: FinancialHistoryItem[] | null = null;
   let fallbackCachedItems: FinancialHistoryItem[] | null = null;
 
+  const isHistoryBehindNewQuarter = (items: FinancialHistoryItem[], cacheAgeMs: number): boolean => {
+    if (!items || items.length === 0 || !expectedLatestPeriodKey) return false;
+    const maxItemKey = Math.max(...items.map((it) => parsePeriodSortKey(it.period || '')).filter((n) => Number.isFinite(n)), 0);
+    // Tamamlanmış en güncel çeyrek önbellekte yoksa ve önbellek 1 saatten eskiyse canlı tazelemeyi dene
+    return maxItemKey < expectedLatestPeriodKey && cacheAgeMs > 60 * 60 * 1000;
+  };
+
   if (!options?.forceRefresh && memCached && (Date.now() - memCached.timestamp < CACHE_TTL_MS) && memCached.data.length > 0) {
-    cachedItems = memCached.data;
     fallbackCachedItems = memCached.data;
+    if (!isHistoryBehindNewQuarter(memCached.data, Date.now() - memCached.timestamp)) {
+      cachedItems = memCached.data;
+    }
   } else {
     // Supabase kalıcı önbelleğini oku
     const supabaseData = await getSupabaseMaliTablo(ticker);
     if (supabaseData && supabaseData.length > 0) {
       fallbackCachedItems = supabaseData;
       const supabaseAgeMs = Date.now() - (SUPABASE_CACHE_AGE.get(ticker) || 0);
-      // 12 saatten eski Supabase kaydı yalnızca yedek (fallback) olur; canlı İş Yatırım verisi yeniden çekilir.
-      if (!options?.forceRefresh && supabaseAgeMs < SUPABASE_FRESH_MS) {
+      // 12 saatten eski Supabase kaydı veya yeni çeyrek gerisindeyse yalnızca yedek olur
+      if (!options?.forceRefresh && supabaseAgeMs < SUPABASE_FRESH_MS && !isHistoryBehindNewQuarter(supabaseData, supabaseAgeMs)) {
         cachedItems = supabaseData;
         MEMORY_FINANCIAL_CACHE.set(ticker, { data: cachedItems, timestamp: Date.now() });
       }
@@ -1091,12 +1109,14 @@ export async function fetchAndAnalyzeBistCompany(
   }
 
   // 1. Canlı Hisse Fiyatı, Yahoo Fundamentals, İş Yatırım Parti Verileri ve Piyasa Çarpanlarını Eşzamanlı Başlat
-  let priceData: Awaited<ReturnType<typeof fetchLiveBistPrice>> = { price: 100.0, historicalPrices: {} };
+  let priceData: Awaited<ReturnType<typeof fetchLiveBistPrice>> = { price: 0, isFallback: true, historicalPrices: {} };
   let yahooData: Awaited<ReturnType<typeof fetchYahooFundamentalsHistory>> = { items: [] };
   let batchResults: Awaited<ReturnType<typeof fetchIsYatirimMaliTabloBatches>> = { rowsByBatch: [], activeGroup: null };
   let isMultiples: IsYatirimStockMultiples | null = null;
+  let isPartialTimeout = false;
 
   if (cachedItems && cachedItems.length > 0) {
+    let cacheRaceTimer: ReturnType<typeof setTimeout> | null = null;
     try {
       const pPromise = fetchLiveBistPrice(ticker).then(res => { if (res && res.price > 0) priceData = res; }).catch(() => {});
       const mPromise = getIsYatirimMultiplesForTicker(ticker).then(res => { if (res) isMultiples = res; }).catch(() => {});
@@ -1104,10 +1124,12 @@ export async function fetchAndAnalyzeBistCompany(
       // Resmi çarpanlar anında (0ms) gelir; canlı hisse fiyatı için 8s tavan koyularak HTTP 504 engellenir
       await Promise.race([
         Promise.all([pPromise, mPromise]),
-        new Promise(r => setTimeout(r, 8000))
+        new Promise<void>((r) => { cacheRaceTimer = setTimeout(r, 8000); })
       ]);
     } catch {
-      priceData = { price: 100.0, historicalPrices: {} };
+      priceData = { price: 0, isFallback: true, historicalPrices: {} };
+    } finally {
+      if (cacheRaceTimer) clearTimeout(cacheRaceTimer);
     }
   } else {
     // Önbellek yoksa resmi İş Yatırım ve piyasa verilerini tam olarak bekle (45s güvenlik kalkanı)
@@ -1127,10 +1149,20 @@ export async function fetchAndAnalyzeBistCompany(
       .then(res => { if (res) isMultiples = res; })
       .catch(() => {});
 
-    await Promise.race([
-      Promise.all([pricePromise, yahooPromise, isYatirimPromise, multiplesPromise]),
-      new Promise(r => setTimeout(r, 45000))
-    ]);
+    let liveRaceTimer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      await Promise.race([
+        Promise.all([pricePromise, yahooPromise, isYatirimPromise, multiplesPromise]).then(() => false),
+        new Promise<boolean>((r) => {
+          liveRaceTimer = setTimeout(() => {
+            isPartialTimeout = true;
+            r(true);
+          }, 45000);
+        })
+      ]);
+    } finally {
+      if (liveRaceTimer) clearTimeout(liveRaceTimer);
+    }
   }
 
   let currentPrice = priceData.price;
@@ -1194,6 +1226,8 @@ export async function fetchAndAnalyzeBistCompany(
     historyItems.push(valRes.reconciledItem);
   }
 
+  const hadLiveIsYatirimData = !cachedItems && historyItems.length > 0;
+
   // 4.05. Canlı veri kısmi geldiyse (zaman aşımı vb.) eksik dönemleri yedek önbellekten tamamla; yeni dönemler korunur.
   if (historyItems.length > 0 && (!cachedItems || cachedItems.length === 0) && fallbackCachedItems && fallbackCachedItems.length > 0) {
     const have = new Set(historyItems.map(h => h.period));
@@ -1202,16 +1236,10 @@ export async function fetchAndAnalyzeBistCompany(
     }
   }
 
-  // 4.1. Canlı İş Yatırım verisi geldiyse hem bellek önbelleğine hem de Supabase'e kaydet:
-  if (historyItems.length > 0 && (!cachedItems || cachedItems.length === 0)) {
-    MEMORY_FINANCIAL_CACHE.set(ticker, { data: historyItems, timestamp: Date.now() });
-    saveSupabaseMaliTablo(ticker, historyItems);
-  } else if (historyItems.length === 0) {
-    // Canlı veri çekilemediyse veya zaman aşımına uğradıysa:
-    // 1. Önce mevcut Supabase önbelleğini (fallbackCachedItems) kullan:
+  // 4.1. Canlı veri hiç gelmediyse yedekten veya resmi paketten tamamla (önbellek yazımı fiyat/sermaye normalizasyonundan SONRA yapılır):
+  if (historyItems.length === 0) {
     if (fallbackCachedItems && fallbackCachedItems.length > 0) {
       historyItems.push(...fallbackCachedItems.map(it => ({ ...it })));
-      MEMORY_FINANCIAL_CACHE.set(ticker, { data: historyItems, timestamp: Date.now() });
     } else {
       // 2. Paketlenmiş resmi İş Yatırım anlık görüntüsünden (OFFICIAL_ISYATIRIM_CACHE) tamamla:
       const officialCachedItems = OFFICIAL_ISYATIRIM_CACHE[ticker];
@@ -1256,7 +1284,6 @@ export async function fetchAndAnalyzeBistCompany(
           }
           return enhanced;
         }));
-        MEMORY_FINANCIAL_CACHE.set(ticker, { data: historyItems, timestamp: Date.now() });
       }
     }
   }
@@ -1320,19 +1347,19 @@ export async function fetchAndAnalyzeBistCompany(
     const histPrice = priceData.historicalPrices?.[item.period];
     if (typeof histPrice === 'number' && histPrice > 0) {
       item.share_price = histPrice;
-    } else if (isLast) {
+    } else if (isLast && currentPrice > 0 && !priceData.isFallback) {
       item.share_price = Number(currentPrice.toFixed(2));
     } else {
       item.share_price = undefined;
     }
   });
 
-  // 4.5. Güncel piyasa fiyatını İş Yatırım çarpanları veya önbellek ile teyit et
+  // 4.5. Güncel piyasa fiyatını İş Yatırım çarpanları veya önbellek ile teyit et (100.0 sentinel kullanılmaz)
   let finalMultiples = isMultiples as IsYatirimStockMultiples | null;
-  if ((!currentPrice || currentPrice === 100.0) && finalMultiples?.lastPrice && finalMultiples.lastPrice > 0) {
+  if ((!currentPrice || currentPrice <= 0 || priceData.isFallback) && finalMultiples?.lastPrice && finalMultiples.lastPrice > 0) {
     currentPrice = finalMultiples.lastPrice;
   }
-  if ((!currentPrice || currentPrice === 100.0) && fallbackCachedItems && fallbackCachedItems.length > 0) {
+  if ((!currentPrice || currentPrice <= 0 || priceData.isFallback) && fallbackCachedItems && fallbackCachedItems.length > 0) {
     const lastCached = fallbackCachedItems[fallbackCachedItems.length - 1];
     if (lastCached?.share_price && lastCached.share_price > 0) {
       currentPrice = lastCached.share_price;
@@ -1364,6 +1391,12 @@ export async function fetchAndAnalyzeBistCompany(
   // Son bilançodaki nominal sermayeyi kesinleşmiş resmi pay adediyle senkronize et:
   if (latestItem && effectiveShareCount > 0) {
     latestItem.paid_in_capital = effectiveShareCount;
+  }
+
+  // 4.6. Yalnızca kısmi zaman aşımı OLMADAN çekilen ve fiyat/pay adedi tamamlanan canlı seri önbelleğe yazılır
+  if (sortedHistory.length > 0 && hadLiveIsYatirimData && !isPartialTimeout) {
+    MEMORY_FINANCIAL_CACHE.set(ticker, { data: sortedHistory, timestamp: Date.now() });
+    saveSupabaseMaliTablo(ticker, sortedHistory);
   }
 
   // 4.8. İş Yatırım Resmi Temettü Geçmişi ve Konsensüs Hedef Fiyat Verilerini Çözümle

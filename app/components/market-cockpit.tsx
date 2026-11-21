@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Plus,
   X,
@@ -22,7 +22,7 @@ import {
   Tooltip,
   ReferenceLine
 } from 'recharts';
-import type { SavedReport } from '@/lib/report-resolver';
+import { formatCanonicalScore, type SavedReport } from '@/lib/report-resolver';
 import type { CompanyNewsItem } from '@/lib/news-service';
 import type {
   CockpitOverviewData,
@@ -58,6 +58,10 @@ function formatPct(val: number | null | undefined): string {
   return `${sign}%${val.toFixed(1)}`;
 }
 
+const fmtNum = (val: unknown, decimals = 2): string => {
+  return typeof val === 'number' && Number.isFinite(val) ? val.toFixed(decimals) : '—';
+};
+
 function cleanFeedTitle(rawTitle: string): string {
   if (!rawTitle) return '';
   return rawTitle
@@ -82,30 +86,49 @@ function StockComparisonCard({
   const [range, setRange] = useState<CockpitChartRange>('1G');
   const [card, setCard] = useState<CockpitCardData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [cardError, setCardError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const loadCard = useCallback(async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setCardError(null);
     try {
       const res = await fetch(`/api/cockpit/card?ticker=${encodeURIComponent(ticker)}&range=${range}`, {
-        cache: 'no-store'
+        cache: 'no-store',
+        signal: controller.signal
       });
-      if (!res.ok) return;
-      const json = await res.json();
-      if (json?.success && json?.card) {
-        setCard(json.card);
+      if (!res.ok) {
+        if (!controller.signal.aborted) setCardError('Veri alınamadı');
+        return;
       }
-    } catch {
-      // Sessiz hata toleransı
+      const json = await res.json();
+      if (!controller.signal.aborted && json?.success && json?.card) {
+        setCard(json.card);
+      } else if (!controller.signal.aborted) {
+        setCardError('Veri boş döndü');
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || controller.signal.aborted) return;
+      setCardError('Bağlantı hatası');
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   }, [ticker, range]);
 
   useEffect(() => {
     setLoading(true);
     loadCard();
+    return () => {
+      abortRef.current?.abort();
+    };
   }, [loadCard, refreshToken]);
 
-  const isPositive = (card?.changePct ?? 0) >= 0;
+  const hasValidPct = typeof card?.changePct === 'number' && Number.isFinite(card.changePct);
+  const isPositive = (hasValidPct ? (card!.changePct as number) : 0) >= 0;
   const strokeColor = isPositive ? '#22c55e' : '#ef4444';
 
   return (
@@ -126,12 +149,12 @@ function StockComparisonCard({
               {ticker}
             </span>
             <span className="font-mono font-semibold text-sm text-slate-100 shrink-0">
-              {card?.price ? card.price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+              {typeof card?.price === 'number' && Number.isFinite(card.price) ? card.price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
             </span>
             <span className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold shrink-0 ${
-              isPositive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+              !hasValidPct ? 'bg-slate-800/60 text-slate-400' : isPositive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
             }`}>
-              {card ? `${isPositive ? '+' : ''}%${card.changePct.toFixed(2)}` : '—'}
+              {hasValidPct ? `${isPositive ? '+' : ''}%${fmtNum(card?.changePct)}` : '—'}
             </span>
           </button>
 
@@ -150,15 +173,15 @@ function StockComparisonCard({
         <div className="grid grid-cols-3 gap-2 text-[11px] font-mono border-b border-[#20242d] pb-2">
           <div>
             <div className="text-slate-500 text-[10px]">Yüksek</div>
-            <div className="text-slate-200 font-medium">{card?.dayHigh ? card.dayHigh.toFixed(2) : '—'}</div>
+            <div className="text-slate-200 font-medium">{card?.dayHigh ? fmtNum(card.dayHigh) : '—'}</div>
           </div>
           <div className="text-center">
             <div className="text-slate-500 text-[10px]">Düşük</div>
-            <div className="text-slate-200 font-medium">{card?.dayLow ? card.dayLow.toFixed(2) : '—'}</div>
+            <div className="text-slate-200 font-medium">{card?.dayLow ? fmtNum(card.dayLow) : '—'}</div>
           </div>
           <div className="text-right">
             <div className="text-slate-500 text-[10px]">Önc. Kap.</div>
-            <div className="text-slate-200 font-medium">{card?.prevClose ? card.prevClose.toFixed(2) : '—'}</div>
+            <div className="text-slate-200 font-medium">{card?.prevClose ? fmtNum(card.prevClose) : '—'}</div>
           </div>
         </div>
       </div>
@@ -211,9 +234,9 @@ function StockComparisonCard({
                     padding: '4px 8px'
                   }}
                   labelStyle={{ color: '#94a3b8', fontFamily: 'monospace' }}
-                  formatter={(value: any) => [`₺${Number(value).toFixed(2)}`, ticker]}
+                  formatter={(value: any) => [Number.isFinite(Number(value)) ? `₺${Number(value).toFixed(2)}` : '—', ticker]}
                 />
-                {range === '1G' && card.prevClose > 0 && (
+                {range === '1G' && typeof card.prevClose === 'number' && Number.isFinite(card.prevClose) && card.prevClose > 0 && (
                   <ReferenceLine y={card.prevClose} stroke="#3f4654" strokeDasharray="3 3" />
                 )}
                 <Line
@@ -226,6 +249,16 @@ function StockComparisonCard({
                 />
               </LineChart>
             </ResponsiveContainer>
+          ) : cardError ? (
+            <div className="h-full flex items-center justify-center">
+              <button
+                type="button"
+                onClick={() => { setLoading(true); loadCard(); }}
+                className="text-[11px] font-mono text-rose-400 hover:text-rose-300 underline cursor-pointer"
+              >
+                {cardError} • Tekrar Dene
+              </button>
+            </div>
           ) : (
             <div className="h-full flex items-center justify-center text-[11px] font-mono text-slate-500">
               Grafik verisi bekleniyor
@@ -238,15 +271,15 @@ function StockComparisonCard({
       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px] font-mono border-t border-[#20242d] pt-2.5">
         <div className="flex items-center justify-between gap-2">
           <span className="text-slate-400">F/K</span>
-          <span className="text-slate-100 font-semibold">{card?.multiples.pe ? card.multiples.pe.toFixed(2) : '—'}</span>
+          <span className="text-slate-100 font-semibold">{card?.multiples?.pe ? fmtNum(card.multiples.pe) : '—'}</span>
         </div>
         <div className="flex items-center justify-between gap-2">
           <span className="text-slate-400">FD/FAVÖK</span>
-          <span className="text-slate-100 font-semibold">{card?.multiples.evEbitda ? card.multiples.evEbitda.toFixed(2) : '—'}</span>
+          <span className="text-slate-100 font-semibold">{card?.multiples?.evEbitda ? fmtNum(card.multiples.evEbitda) : '—'}</span>
         </div>
         <div className="flex items-center justify-between gap-2">
           <span className="text-slate-400">PD/DD</span>
-          <span className="text-slate-100 font-semibold">{card?.multiples.pb ? card.multiples.pb.toFixed(2) : '—'}</span>
+          <span className="text-slate-100 font-semibold">{card?.multiples?.pb ? fmtNum(card.multiples.pb) : '—'}</span>
         </div>
         <div className="flex items-center justify-between gap-2">
           <span className="text-slate-400 whitespace-nowrap">Piy. Değ.</span>
@@ -289,6 +322,8 @@ export default function MarketCockpit({
 }: MarketCockpitProps) {
   const [overview, setOverview] = useState<CockpitOverviewData | null>(null);
   const [loadingOverview, setLoadingOverview] = useState<boolean>(true);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
+  const overviewAbortRef = useRef<AbortController | null>(null);
   const [refreshToken, setRefreshToken] = useState<number>(0);
 
   // Kullanıcının eklediği karşılaştırma kartları (Varsayılan boş)
@@ -344,17 +379,32 @@ export default function MarketCockpit({
   }, [cardTickers, persistCardTickers]);
 
   const fetchOverview = useCallback(async (force = false) => {
+    overviewAbortRef.current?.abort();
+    const controller = new AbortController();
+    overviewAbortRef.current = controller;
+    setOverviewError(null);
     try {
-      const res = await fetch(`/api/cockpit${force ? '?refresh=true' : ''}`, { cache: 'no-store' });
-      if (!res.ok) return;
-      const json = await res.json();
-      if (json?.success) {
-        setOverview(json);
+      const res = await fetch(`/api/cockpit${force ? '?refresh=true' : ''}`, {
+        cache: 'no-store',
+        signal: controller.signal
+      });
+      if (!res.ok) {
+        if (!controller.signal.aborted) setOverviewError('Piyasa verileri alınamadı.');
+        return;
       }
-    } catch {
-      // Sessiz hata toleransı
+      const json = await res.json();
+      if (!controller.signal.aborted && json?.success) {
+        setOverview(json);
+      } else if (!controller.signal.aborted) {
+        setOverviewError('Piyasa verisi boş döndü.');
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || controller.signal.aborted) return;
+      setOverviewError('Piyasa verilerine ulaşılamadı.');
     } finally {
-      setLoadingOverview(false);
+      if (!controller.signal.aborted) {
+        setLoadingOverview(false);
+      }
     }
   }, []);
 
@@ -364,7 +414,10 @@ export default function MarketCockpit({
       fetchOverview(true);
       setRefreshToken((t) => t + 1);
     }, 45_000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      overviewAbortRef.current?.abort();
+    };
   }, [fetchOverview]);
 
   const filteredAddCandidates = useMemo(() => {
@@ -411,23 +464,25 @@ export default function MarketCockpit({
                 { symbol: 'EURTRY', label: 'EURTRY', price: 0, changePct: 0, decimals: 4 }
               ]
           ).map((idx) => {
-            const isUp = idx.changePct >= 0;
+            const hasChg = typeof idx.changePct === 'number' && Number.isFinite(idx.changePct);
+            const hasPrice = typeof idx.price === 'number' && Number.isFinite(idx.price) && idx.price > 0;
+            const isUp = (hasChg ? idx.changePct : 0) >= 0;
             return (
               <div key={idx.symbol} className="flex items-baseline gap-2">
                 <div>
                   <div className="text-[10.5px] font-mono text-slate-400">{idx.label}</div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-mono font-semibold text-white">
-                      {idx.price > 0
+                      {hasPrice
                         ? idx.price.toLocaleString('tr-TR', {
                             minimumFractionDigits: idx.decimals,
                             maximumFractionDigits: idx.decimals
                           })
                         : '—'}
                     </span>
-                    {idx.price > 0 && (
+                    {hasPrice && hasChg && (
                       <span className={`text-[11px] font-mono font-semibold ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {isUp ? '+' : ''}%{idx.changePct.toFixed(2)}
+                        {isUp ? '+' : ''}%{fmtNum(idx.changePct)}
                       </span>
                     )}
                   </div>
@@ -535,9 +590,9 @@ export default function MarketCockpit({
                         }`}
                       >
                         <span className="font-bold">{item.ticker}</span>
-                        {item.price > 0 && (
+                        {typeof item.price === 'number' && Number.isFinite(item.price) && item.price > 0 && (
                           <span className="text-[10px] text-slate-400">
-                            ₺{item.price.toFixed(2)}
+                            ₺{fmtNum(item.price)}
                           </span>
                         )}
                       </button>
@@ -650,8 +705,8 @@ export default function MarketCockpit({
                               </span>
                               <span className="text-[10.5px] font-mono text-slate-400">{ev.timeTr}</span>
                             </div>
-                            <div className="text-slate-200 font-medium truncate mt-0.5" title={ev.title}>
-                              {ev.title.replace(/\*+$/, '').trim()}
+                            <div className="text-slate-200 font-medium truncate mt-0.5" title={ev.title || ''}>
+                              {(ev.title || '').replace(/\*+$/, '').trim()}
                             </div>
                           </div>
                         </div>
@@ -689,7 +744,7 @@ export default function MarketCockpit({
                           <span className="text-slate-400 font-mono text-[11px]">{rep.period || '2025/12'}</span>
                         </div>
                         <div className="flex items-center gap-2 shrink-0 font-mono">
-                          <span className="text-slate-300">{rep.score || '—'}</span>
+                          <span className="text-slate-300">{formatCanonicalScore(rep.score) ?? '—'}</span>
                           <span className={`px-1.5 py-0.5 rounded text-[10.5px] font-bold ${
                             rep.decision === 'AL'
                               ? 'bg-emerald-500/10 text-emerald-400'
@@ -756,7 +811,8 @@ export default function MarketCockpit({
                 <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
                   {overview?.topSectors && overview.topSectors.length > 0 ? (
                     overview.topSectors.map((sec) => {
-                      const isUp = sec.avgChangePct >= 0;
+                      const hasAvg = typeof sec.avgChangePct === 'number' && Number.isFinite(sec.avgChangePct);
+                      const isUp = (hasAvg ? sec.avgChangePct : 0) >= 0;
                       return (
                         <div
                           key={sec.sector}
@@ -776,52 +832,70 @@ export default function MarketCockpit({
                             </div>
                           </div>
                           <span className={`font-mono font-semibold px-2 py-0.5 rounded text-xs shrink-0 ${
-                            isUp ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+                            !hasAvg ? 'bg-slate-800/60 text-slate-400' : isUp ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
                           }`}>
-                            {isUp ? '+' : ''}%{sec.avgChangePct.toFixed(2)}
+                            {hasAvg ? `${isUp ? '+' : ''}%${fmtNum(sec.avgChangePct)}` : '—'}
                           </span>
                         </div>
                       );
                     })
                   ) : (
-                    <div className="py-8 text-center text-xs font-mono text-slate-400">
-                      {loadingOverview ? 'Sektör performansları yükleniyor...' : 'Sektör verisi şu an alınamadı.'}
+                    <div className="py-8 text-center text-xs font-mono text-slate-400 space-y-2">
+                      <div>{loadingOverview ? 'Sektör performansları yükleniyor...' : (overviewError || 'Sektör verisi şu an alınamadı.')}</div>
+                      {!loadingOverview && (
+                        <button type="button" onClick={() => fetchOverview(true)} className="text-emerald-400 hover:underline cursor-pointer">
+                          Tekrar Dene
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
               ) : (
                 <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
-                  {(marketTab === 'gainers' ? overview?.topGainers : overview?.topLosers)?.map((st) => {
-                    const isUp = st.changePct >= 0;
+                  {(() => {
+                    const list = marketTab === 'gainers' ? overview?.topGainers : overview?.topLosers;
+                    if (list && list.length > 0) {
+                      return list.map((st) => {
+                        const hasChg = typeof st.changePct === 'number' && Number.isFinite(st.changePct);
+                        const hasPrice = typeof st.price === 'number' && Number.isFinite(st.price) && st.price > 0;
+                        const isUp = (hasChg ? st.changePct : 0) >= 0;
+                        return (
+                          <button
+                            key={st.ticker}
+                            type="button"
+                            onClick={() => onOpenTicker(st.ticker)}
+                            className="w-full flex items-center justify-between gap-3 bg-[#15181e] hover:bg-[#1b1f27] border border-[#20242d] rounded px-3 py-2 text-xs transition cursor-pointer text-left"
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-white">{st.ticker}</span>
+                                <span className="text-slate-300 truncate">{st.name}</span>
+                              </div>
+                              <div className="text-[10.5px] text-slate-400 font-mono">{st.sector}</div>
+                            </div>
+                            <div className="flex items-center gap-2.5 shrink-0 font-mono">
+                              <span className="text-slate-100 font-semibold">{hasPrice ? `₺${fmtNum(st.price)}` : '—'}</span>
+                              <span className={`px-1.5 py-0.5 rounded font-semibold text-[11px] ${
+                                !hasChg ? 'bg-slate-800/60 text-slate-400' : isUp ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+                              }`}>
+                                {hasChg ? `${isUp ? '+' : ''}%${fmtNum(st.changePct)}` : '—'}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      });
+                    }
                     return (
-                      <button
-                        key={st.ticker}
-                        type="button"
-                        onClick={() => onOpenTicker(st.ticker)}
-                        className="w-full flex items-center justify-between gap-3 bg-[#15181e] hover:bg-[#1b1f27] border border-[#20242d] rounded px-3 py-2 text-xs transition cursor-pointer text-left"
-                      >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-white">{st.ticker}</span>
-                            <span className="text-slate-300 truncate">{st.name}</span>
-                          </div>
-                          <div className="text-[10.5px] text-slate-400 font-mono">{st.sector}</div>
-                        </div>
-                        <div className="flex items-center gap-2.5 shrink-0 font-mono">
-                          <span className="text-slate-100 font-semibold">₺{st.price.toFixed(2)}</span>
-                          <span className={`px-1.5 py-0.5 rounded font-semibold text-[11px] ${
-                            isUp ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
-                          }`}>
-                            {isUp ? '+' : ''}%{st.changePct.toFixed(2)}
-                          </span>
-                        </div>
-                      </button>
+                      <div className="py-8 text-center text-xs font-mono text-slate-400 space-y-2">
+                        <div>{loadingOverview ? 'Hisse verisi yükleniyor...' : (overviewError || 'Gösterilecek hisse verisi bulunamadı.')}</div>
+                        {!loadingOverview && (
+                          <button type="button" onClick={() => fetchOverview(true)} className="text-emerald-400 hover:underline cursor-pointer">
+                            Tekrar Dene
+                          </button>
+                        )}
+                      </div>
                     );
-                  }) || (
-                    <div className="py-8 text-center text-xs font-mono text-slate-400">
-                      Hisse verisi yükleniyor...
-                    </div>
-                  )}
+                  })()}
                 </div>
               )}
             </div>
@@ -855,7 +929,10 @@ export default function MarketCockpit({
                   onChange={(e) => setWatchlistQuery(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && watchlistQuery.trim()) {
-                      onToggleFavorite(watchlistQuery.toUpperCase().trim());
+                      const clean = watchlistQuery.replace(/\.IS$/i, '').toUpperCase().trim();
+                      if (clean && !favoriteTickers.some(t => t.toUpperCase() === clean)) {
+                        onToggleFavorite(clean);
+                      }
                       setWatchlistQuery('');
                       setShowWatchlistAdd(false);
                     }
@@ -867,7 +944,10 @@ export default function MarketCockpit({
                   type="button"
                   onClick={() => {
                     if (watchlistQuery.trim()) {
-                      onToggleFavorite(watchlistQuery.toUpperCase().trim());
+                      const clean = watchlistQuery.replace(/\.IS$/i, '').toUpperCase().trim();
+                      if (clean && !favoriteTickers.some(t => t.toUpperCase() === clean)) {
+                        onToggleFavorite(clean);
+                      }
                       setWatchlistQuery('');
                       setShowWatchlistAdd(false);
                     }
@@ -902,17 +982,17 @@ export default function MarketCockpit({
                         <span className="font-bold text-white truncate">{item.ticker}</span>
                       </div>
                       <div className="text-right text-slate-200 font-medium">
-                        {item.price ? item.price.toFixed(2) : '—'}
+                        {typeof item.price === 'number' && Number.isFinite(item.price) && item.price > 0 ? item.price.toFixed(2) : '—'}
                       </div>
                       <div className="text-right flex items-center justify-end gap-1">
                         <span className={`px-1.5 py-0.5 rounded text-[11px] font-semibold ${
-                          item.changePct == null
+                          typeof item.changePct !== 'number' || !Number.isFinite(item.changePct)
                             ? 'text-slate-500'
                             : isUp
                             ? 'bg-emerald-500/10 text-emerald-400'
                             : 'bg-rose-500/10 text-rose-400'
                         }`}>
-                          {item.changePct == null ? '—' : `${isUp ? '+' : ''}%${item.changePct.toFixed(2)}`}
+                          {typeof item.changePct !== 'number' || !Number.isFinite(item.changePct) ? '—' : `${isUp ? '+' : ''}%${item.changePct.toFixed(2)}`}
                         </span>
                         <button
                           type="button"
@@ -921,7 +1001,8 @@ export default function MarketCockpit({
                             onToggleFavorite(item.ticker);
                           }}
                           title="Favorilerden Çıkar"
-                          className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 transition cursor-pointer"
+                          aria-label={`${item.ticker} favorilerden çıkar`}
+                          className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 text-slate-500 hover:text-rose-400 transition cursor-pointer"
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -991,14 +1072,24 @@ export default function MarketCockpit({
                       </div>
                       <span className="text-slate-500">{news.timeAgo || news.publishDate}</span>
                     </div>
-                    <a
-                      href={news.kapUrl || news.url || '#'}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block text-xs text-slate-200 hover:text-white leading-snug line-clamp-2 font-sans"
-                    >
-                      {cleanFeedTitle(news.title)}
-                    </a>
+                    {(() => {
+                      const validUrl = news.kapUrl || news.url;
+                      const hasExternalUrl = typeof validUrl === 'string' && /^https?:\/\//i.test(validUrl);
+                      return hasExternalUrl ? (
+                        <a
+                          href={validUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block text-xs text-slate-200 hover:text-white leading-snug line-clamp-2 font-sans"
+                        >
+                          {cleanFeedTitle(news.title)}
+                        </a>
+                      ) : (
+                        <span className="block text-xs text-slate-200 leading-snug line-clamp-2 font-sans">
+                          {cleanFeedTitle(news.title)}
+                        </span>
+                      );
+                    })()}
                   </div>
                 ))
               ) : (

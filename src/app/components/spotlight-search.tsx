@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, X, TrendingUp, Building2, ArrowRight, Sparkles } from 'lucide-react';
 import type { SavedReport } from '../page';
+import { formatCanonicalScore } from '@/lib/report-resolver';
+import { parsePeriodSortKey } from '@/lib/valuation';
 
 interface SpotlightSearchProps {
   isOpen: boolean;
@@ -35,6 +37,7 @@ export default function SpotlightSearch({
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   useEffect(() => {
     if (isOpen) {
@@ -50,37 +53,36 @@ export default function SpotlightSearch({
     setActiveIndex(0);
   }, [query]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    itemRefs.current[activeIndex]?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex, isOpen]);
+
   // Her hisse (ticker) için YALNIZCA en son (en güncel) raporu filtreleyen tekilleştirme haritası
   const latestSavedMap = useMemo(() => {
     const map = new Map<string, SavedReport>();
-    const parsePeriod = (p?: string) => {
-      if (!p) return 0;
-      const parts = p.split('/');
-      if (parts.length === 2) {
-        const yr = parseInt(parts[0], 10) || 0;
-        const m = parseInt(parts[1], 10) || 0;
-        return yr * 100 + m;
+    const getReportTs = (r: SavedReport) => {
+      const cands = [r.extractedData?.saved_at, r.updatedAt, r.createdAt];
+      for (const c of cands) {
+        const ms = typeof c === 'string' ? Date.parse(c) : NaN;
+        if (!Number.isNaN(ms)) return ms;
       }
-      return 0;
+      return Number(r.id) || 0;
     };
 
     for (const r of savedReports) {
-      const sym = (r.ticker || '').trim().toUpperCase();
+      const sym = (r.ticker || '').trim().replace(/\.IS$/i, '').toUpperCase();
       if (!sym) continue;
       const existing = map.get(sym);
       if (!existing) {
         map.set(sym, r);
       } else {
-        const pExisting = parsePeriod(existing.period);
-        const pCurrent = parsePeriod(r.period);
+        const pExisting = parsePeriodSortKey(existing.period || existing.extractedData?.reporting_period || '');
+        const pCurrent = parsePeriodSortKey(r.period || r.extractedData?.reporting_period || '');
         if (pCurrent > pExisting) {
           map.set(sym, r);
-        } else if (pCurrent === pExisting) {
-          const idExisting = Number(existing.id) || 0;
-          const idCurrent = Number(r.id) || 0;
-          if (idCurrent > idExisting) {
-            map.set(sym, r);
-          }
+        } else if (pCurrent === pExisting && getReportTs(r) > getReportTs(existing)) {
+          map.set(sym, r);
         }
       }
     }
@@ -100,13 +102,17 @@ export default function SpotlightSearch({
     (r.ticker || '').toUpperCase().includes(normalizedQuery) ||
     ((r as any).companyName || r.extractedData?.company_name || '').toUpperCase().includes(normalizedQuery)
   );
+  const savedTickerSet = new Set(matchedSaved.map(r => (r.ticker || '').trim().replace(/\.IS$/i, '').toUpperCase()));
 
   const matchedPopular = POPULAR_TICKERS.filter(p =>
-    p.ticker.includes(normalizedQuery) ||
-    p.name.toUpperCase().includes(normalizedQuery)
+    !savedTickerSet.has(p.ticker.toUpperCase()) &&
+    (p.ticker.includes(normalizedQuery) ||
+      p.name.toUpperCase().includes(normalizedQuery))
   );
 
-  const displayedPopular = query ? matchedPopular : POPULAR_TICKERS.slice(0, 6);
+  const displayedPopular = query
+    ? matchedPopular
+    : POPULAR_TICKERS.filter(p => !savedTickerSet.has(p.ticker.toUpperCase())).slice(0, 6);
 
   const hasExactMatch =
     matchedSaved.some(r => (r.ticker || '').toUpperCase() === normalizedQuery) ||
@@ -232,15 +238,12 @@ export default function SpotlightSearch({
                     : 'text-amber-400 bg-amber-500/10 border-amber-500/20';
 
                   // Skorun 83/100/100 gibi çift yazılmasını kesin olarak önler
-                  const cleanScore = (() => {
-                    if (!item.score) return '—';
-                    const numMatch = String(item.score).match(/\d+/);
-                    return numMatch ? `${numMatch[0]}/100` : '—';
-                  })();
+                  const cleanScore = formatCanonicalScore(item.score) ?? '—';
 
                   return (
                     <button
                       key={item.id}
+                      ref={(el) => { itemRefs.current[idx] = el; }}
                       type="button"
                       onMouseEnter={() => setActiveIndex(idx)}
                       onClick={() => {
@@ -297,6 +300,7 @@ export default function SpotlightSearch({
                   return (
                     <button
                       key={comp.ticker}
+                      ref={(el) => { itemRefs.current[globalIdx] = el; }}
                       type="button"
                       onMouseEnter={() => setActiveIndex(globalIdx)}
                       onClick={() => handleSelect(comp.ticker)}
@@ -339,6 +343,7 @@ export default function SpotlightSearch({
                 const isSelected = activeIndex === directIdx;
                 return (
                   <button
+                    ref={(el) => { itemRefs.current[directIdx] = el; }}
                     type="button"
                     onMouseEnter={() => setActiveIndex(directIdx)}
                     onClick={() => handleSelect(normalizedQuery)}

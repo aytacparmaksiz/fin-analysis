@@ -1,22 +1,36 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getReportForTicker } from '@/lib/report-resolver';
 import { generateFullAuditMarkdown } from '@/lib/export-markdown';
+import { normalizeTicker, isValidTicker, checkRateLimit } from '@/lib/security';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
-const TICKER_REGEX = /^[A-Z0-9]{2,10}$/;
-
-export async function GET(req: NextRequest) {
+export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const ticker = searchParams.get('ticker') || searchParams.get('symbol') || '';
-    const cleanTicker = ticker.toUpperCase().trim();
+    const rl = checkRateLimit(req, 'export', 60, 60_000);
+    if (!rl.allowed) {
+      return new NextResponse('Çok fazla dışa aktarma isteği gönderildi.', {
+        status: 429,
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Retry-After': String(rl.retryAfterSec),
+          'Cache-Control': 'private, no-store',
+        },
+      });
+    }
 
-    if (!cleanTicker || !TICKER_REGEX.test(cleanTicker)) {
+    const { searchParams } = new URL(req.url);
+    const rawTicker = searchParams.get('ticker') || searchParams.get('symbol') || '';
+    const cleanTicker = normalizeTicker(rawTicker);
+
+    if (!isValidTicker(cleanTicker)) {
       return new NextResponse('Lütfen geçerli bir hisse kodu belirtin. Örn: /api/export?ticker=VESBE', {
         status: 400,
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'private, no-store',
+        },
       });
     }
 
@@ -25,7 +39,11 @@ export async function GET(req: NextRequest) {
     if (!report) {
       return new NextResponse(`# ${cleanTicker} — Kayıtlı Rapor Bulunamadı\n\nBu hisse kodu için henüz bir değerleme raporu oluşturulmamış.`, {
         status: 404,
-        headers: { 'Content-Type': 'text/markdown; charset=utf-8' }
+        headers: {
+          'Content-Type': 'text/markdown; charset=utf-8',
+          'Cache-Control': 'private, no-store',
+          'X-Content-Type-Options': 'nosniff',
+        },
       });
     }
 
@@ -35,14 +53,19 @@ export async function GET(req: NextRequest) {
       status: 200,
       headers: {
         'Content-Type': 'text/markdown; charset=utf-8',
-        'Cache-Control': 'public, max-age=60, s-maxage=300',
-      }
+        'Cache-Control': 'private, no-store',
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Disposition': `inline; filename="${cleanTicker}_audit_report.md"`,
+      },
     });
   } catch (error: any) {
     console.error('[API /api/export] Hata:', error);
     return new NextResponse('Hata oluştu: Rapor dışa aktarılırken bir sorun oluştu.', {
       status: 500,
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'private, no-store',
+      },
     });
   }
 }

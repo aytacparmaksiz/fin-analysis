@@ -16,6 +16,7 @@ import {
   computeSectorValuationAndDrivers,
   parsePeriodSortKey
 } from '../lib/valuation.ts';
+import { parseApiResponse } from '../lib/api-response.ts';
 
 describe('PDF Filter & Timeout Resilience', () => {
   describe('Turkish Diacritic & Text Normalization', () => {
@@ -127,56 +128,6 @@ describe('PDF Filter & Timeout Resilience', () => {
   });
 
   describe('API Response Parsing & HTML / Gateway Timeout Interception', () => {
-    // Replicate parseApiResponse logic for direct testing
-    async function parseApiResponse(res, defaultError) {
-      const status = res.status;
-      const rawText = await res.text();
-
-      const isHtml = rawText.trim().startsWith('<!DOCTYPE') || rawText.trim().startsWith('<html') || rawText.includes('<body') || rawText.includes('</html>');
-      const isTimeout = status === 504 || status === 524 || status === 408 || 
-                        /function_invocation_timeout/i.test(rawText) ||
-                        /gateway\s*time-?out/i.test(rawText) || 
-                        /notification:\s*gateway_timeout/i.test(rawText) ||
-                        /timed?\s*out/i.test(rawText) ||
-                        /time-?out\s+occurred/i.test(rawText);
-      const isPayloadTooLarge = status === 413 || /function_payload_too_large/i.test(rawText) || /payload\s*too\s*large/i.test(rawText);
-
-      if (isTimeout) {
-        throw new Error('Sunucu yanıt süresi aşıldı (Gateway Timeout). Lütfen sadece finansal tabloları içeren sayfaları yüklemeyi deneyin.');
-      }
-
-      if (isPayloadTooLarge) {
-        throw new Error('Yüklenen dosya boyutu sunucu sınırını aştı (Payload Too Large). Lütfen daha az sayıda veya daha küçük boyutlu PDF yükleyin.');
-      }
-
-      if (isHtml) {
-        throw new Error(`Sunucu veya ağ geçidi beklenmeyen bir HTML yanıtı döndürdü (HTTP ${status}). Lütfen internet bağlantınızı veya kurumsal proxy ayarlarınızı kontrol edip tekrar deneyin.`);
-      }
-
-      let parsed = null;
-      try {
-        parsed = cleanAndParseJson(rawText);
-      } catch {
-        if (!res.ok) {
-          throw new Error(`Sunucu hatası (HTTP ${status}): ${rawText.slice(0, 150)}`);
-        }
-        throw new Error('Sunucudan geçersiz veri formatı alındı.');
-      }
-
-      if (!parsed || typeof parsed !== 'object') {
-        if (!res.ok) {
-          throw new Error(`Sunucu hatası (HTTP ${status}): ${rawText.slice(0, 150)}`);
-        }
-        throw new Error('Sunucudan geçersiz veri formatı alındı.');
-      }
-
-      if (!res.ok) {
-        throw new Error(parsed?.error || defaultError || `İşlem başarısız oldu (HTTP ${status}).`);
-      }
-
-      return parsed;
-    }
-
     it('gracefully intercepts the exact ZHCORP 504 Gateway Timeout HTML page', async () => {
       const zhcorp504Html = `<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd"> <html> <head> <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"> <title>Notification: Gateway Timeout</title> <style type="text/css"> body { font-family: Arial, Helvetica, sans-serif; font-size: 14px; color:#333333; background-color: #ffffff; } </style> </head> <body> <div class="shadow"> <h1>This Page Cannot Be Displayed</h1> <p> The system cannot communicate with the external server (&nbsp;fin-analysis-drab.vercel.app&nbsp;). </p> </div> <div class="details"><p> Date: Wed, 30 Sep 2026 08:29:22 +03<br /> Username: ZHCORP\\aytacpa@zh.corp<br /> Source IP: 10.146.0.78<br /> URL: POST https://fin-analysis-drab.vercel.app/api/extract<br /> Notification: GATEWAY_TIMEOUT </p></div> </body> </html>`;
       const mockResponse = new Response(zhcorp504Html, { status: 504 });

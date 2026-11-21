@@ -37,6 +37,7 @@ export interface TtmFinancials {
   operatingCashFlow: number | null;
   freeCashFlow: number | null;
   capex: number | null;
+  workingCapitalChange?: number | null;
   periodCount: number;
   isAnnualizedFallback: boolean;
 }
@@ -146,23 +147,29 @@ export class FinancialRatioEngine {
     const latest = sorted.length > 0 ? sorted[sorted.length - 1] : ({} as FinancialHistoryItem);
     const prevYearItem = sorted.length > 4 ? sorted[sorted.length - 5] : (sorted.length > 1 ? sorted[0] : null);
 
-    const safeShares = (shareCount && shareCount > 0) ? shareCount : 100000000;
-    const safePrice = (currentPrice && currentPrice > 0) ? currentPrice : 1.0;
+    const explicitShareInput = parseFinancialNumber(
+      (shareCount && shareCount > 0) ? shareCount : ((latest as any)?.shares_count ?? (latest as any)?.share_count ?? (latest as any)?.shares_outstanding)
+    );
+    const safeShares = (explicitShareInput !== null && explicitShareInput > 0) ? explicitShareInput : null;
+    const safePrice = (currentPrice && currentPrice > 0) ? currentPrice : null;
 
     // Ölçek normalizasyonu (Bin TRY vs Tam TL)
+    const isAlreadyScaledFlag = (latest as any)?._scaleNormalized === true;
     const normCurr = String(currency || latest?.currency || '').trim().toLowerCase();
     const eqSample = Math.abs(latest?.equity ?? 0);
     const revSample = Math.abs(latest?.revenue ?? latest?.gross_written_premiums ?? 0);
     const paidCapSample = Math.abs(latest?.paid_in_capital ?? 0);
 
-    const isExplicitBin = normCurr.includes('bin') || normCurr.includes('thousand') || (latest as any)?.is_thousands === true;
-    const isExplicitTam = normCurr.includes('tam') || normCurr.includes('birim') || (latest as any)?.is_thousands === false;
-    const isLotRatioTam = paidCapSample > 0 && safeShares > 0 && Math.abs((paidCapSample / safeShares) - 1.0) < 0.25;
-    const isLotRatioBin = paidCapSample > 0 && safeShares > 0 && Math.abs((paidCapSample * 1000) / safeShares - 1.0) < 0.25;
+    const isExplicitBin = !isAlreadyScaledFlag && (normCurr.includes('bin') || normCurr.includes('thousand') || (latest as any)?.is_thousands === true);
+    const isExplicitTam = isAlreadyScaledFlag || normCurr.includes('tam') || normCurr.includes('birim') || (latest as any)?.is_thousands === false;
+    const isLotRatioTam = safeShares !== null && paidCapSample > 0 && Math.abs((paidCapSample / safeShares) - 1.0) < 0.25;
+    const isLotRatioBin = safeShares !== null && paidCapSample > 0 && Math.abs((paidCapSample * 1000) / safeShares - 1.0) < 0.25;
 
     const isClearlyThousands =
-      isLotRatioBin ||
-      (!isLotRatioTam && paidCapSample === 0 && eqSample > 0 && eqSample < 50_000_000 && (eqSample / safeShares) < 0.25 && (revSample === 0 || (revSample / safeShares) < 0.50) && safeShares >= 10_000_000);
+      !isAlreadyScaledFlag && (
+        isLotRatioBin ||
+        (!isLotRatioTam && safeShares !== null && paidCapSample === 0 && eqSample > 0 && eqSample < 50_000_000 && (eqSample / safeShares) < 0.25 && (revSample === 0 || (revSample / safeShares) < 0.50) && safeShares >= 10_000_000)
+      );
 
     const isAlreadyTamTl =
       isExplicitTam ||
@@ -234,26 +241,31 @@ export class FinancialRatioEngine {
       investedCapital
     };
 
-    // 3. Değerleme Çarpanları
-    const marketCap = safePrice * safeShares;
-    const enterpriseValue = netDebtTl !== null ? marketCap + netDebtTl : marketCap;
+    // 3. Değerleme Çarpanları (Eksik pay adedi / fiyat durumunda asla 100M lot uydurulmaz)
+    const resolvedShares = safeShares ?? (paidCapTl && paidCapTl > 0 ? paidCapTl : null);
+    const marketCap = (safePrice !== null && resolvedShares !== null && resolvedShares > 0)
+      ? safePrice * resolvedShares
+      : null;
+    const enterpriseValue = marketCap !== null
+      ? (netDebtTl !== null ? marketCap + netDebtTl : marketCap)
+      : null;
 
     const multPeriodKey = parsePeriodSortKey((marketMultiples as any)?.lastPeriod || (marketMultiples as any)?.last_period || '');
     const latestPeriodKey = parsePeriodSortKey(latest?.period || '');
     const isMultiplesStale = Boolean(multPeriodKey > 0 && latestPeriodKey > 0 && multPeriodKey < latestPeriodKey);
     const snapshotPrice = Number((marketMultiples as any)?.lastPrice ?? (marketMultiples as any)?.last_price ?? 0);
-    const priceRatio = (snapshotPrice > 0 && safePrice > 0) ? (safePrice / snapshotPrice) : 1;
+    const priceRatio = (snapshotPrice > 0 && safePrice !== null && safePrice > 0) ? (safePrice / snapshotPrice) : 1;
     const isSignificantPriceMove = snapshotPrice > 0 && Math.abs(priceRatio - 1) >= 0.15;
 
-    let pe = (!isMultiplesStale ? marketMultiples?.pe : null) ?? (ttm.netIncome && ttm.netIncome > 0 ? Number((marketCap / ttm.netIncome).toFixed(2)) : null);
-    if (pe !== null && pe > 0 && !isMultiplesStale && snapshotPrice > 0 && safePrice > 0) {
+    let pe = (!isMultiplesStale ? marketMultiples?.pe : null) ?? ((marketCap !== null && ttm.netIncome && ttm.netIncome > 0) ? Number((marketCap / ttm.netIncome).toFixed(2)) : null);
+    if (pe !== null && pe > 0 && !isMultiplesStale && snapshotPrice > 0 && safePrice !== null && safePrice > 0) {
       if (Math.abs(priceRatio - 1) >= 0.02) {
         pe = Number((pe * priceRatio).toFixed(1));
       }
     }
 
-    let pb = (!isMultiplesStale ? marketMultiples?.pb : null) ?? (equityTl && equityTl > 0 ? Number((marketCap / equityTl).toFixed(2)) : null);
-    if (pb !== null && pb > 0 && !isMultiplesStale && snapshotPrice > 0 && safePrice > 0) {
+    let pb = (!isMultiplesStale ? marketMultiples?.pb : null) ?? ((marketCap !== null && equityTl && equityTl > 0) ? Number((marketCap / equityTl).toFixed(2)) : null);
+    if (pb !== null && pb > 0 && !isMultiplesStale && snapshotPrice > 0 && safePrice !== null && safePrice > 0) {
       if (Math.abs(priceRatio - 1) >= 0.02) {
         pb = Number((pb * priceRatio).toFixed(2));
       }
@@ -261,11 +273,11 @@ export class FinancialRatioEngine {
 
     const evEbitda = (isMetricDisabled('ev_ebitda', sector) || isMetricDisabled('ebitda', sector))
       ? null
-      : ((!isMultiplesStale && !isSignificantPriceMove ? (marketMultiples?.evEbitda ?? marketMultiples?.ev_ebitda) : null) ?? (ttm.ebitda && ttm.ebitda > 0 ? Number((enterpriseValue / ttm.ebitda).toFixed(2)) : null));
+      : ((!isMultiplesStale && !isSignificantPriceMove ? (marketMultiples?.evEbitda ?? marketMultiples?.ev_ebitda) : null) ?? ((enterpriseValue !== null && ttm.ebitda && ttm.ebitda > 0) ? Number((enterpriseValue / ttm.ebitda).toFixed(2)) : null));
     const evSales = isMetricDisabled('ev_sales', sector)
       ? null
-      : ((!isMultiplesStale && !isSignificantPriceMove ? (marketMultiples?.evSales ?? marketMultiples?.ev_sales) : null) ?? (ttm.revenue && ttm.revenue > 0 ? Number((enterpriseValue / ttm.revenue).toFixed(2)) : null));
-    const fcfYield = (ttm.freeCashFlow && marketCap > 0) ? Number(((ttm.freeCashFlow / marketCap) * 100).toFixed(1)) : null;
+      : ((!isMultiplesStale && !isSignificantPriceMove ? (marketMultiples?.evSales ?? marketMultiples?.ev_sales) : null) ?? ((enterpriseValue !== null && ttm.revenue && ttm.revenue > 0) ? Number((enterpriseValue / ttm.revenue).toFixed(2)) : null));
+    const fcfYield = (ttm.freeCashFlow && marketCap !== null && marketCap > 0) ? Number(((ttm.freeCashFlow / marketCap) * 100).toFixed(1)) : null;
 
     const valuation: ValuationMultiples = {
       marketCap,
@@ -291,26 +303,29 @@ export class FinancialRatioEngine {
       totalAssets: totAssets
     });
 
-    // 5. Kârlılık & Marjlar
+    // 5. Kârlılık & Marjlar (Mikro hasılat anomalilerine karşı ±%200 önemlilik koruması)
+    const safeRatioMargin = (num: number | null, rev: number | null): number | null => {
+      if (num === null || rev === null || rev <= 0) return null;
+      const pct = (num / rev) * 100;
+      if (!Number.isFinite(pct) || Math.abs(pct) > 200) return null;
+      return Number(pct.toFixed(1));
+    };
+    const safeLatestMargin = (rawVal: any): number | null => {
+      const p = parseFinancialNumber(rawVal);
+      return (p !== null && Number.isFinite(p) && Math.abs(p) <= 200) ? Number(p.toFixed(1)) : null;
+    };
+
     const grossMargin = (isMetricDisabled('gross_profit', sector) || isMetricDisabled('gross_margin', sector))
       ? null
-      : ((ttm.grossProfit !== null && ttm.revenue !== null && ttm.revenue > 0)
-        ? Number(((ttm.grossProfit / ttm.revenue) * 100).toFixed(1))
-        : parseFinancialNumber(latest?.gross_margin));
+      : (safeRatioMargin(ttm.grossProfit, ttm.revenue) ?? safeLatestMargin(latest?.gross_margin));
 
-    const operatingMargin = (ttm.operatingProfit !== null && ttm.revenue !== null && ttm.revenue > 0)
-      ? Number(((ttm.operatingProfit / ttm.revenue) * 100).toFixed(1))
-      : parseFinancialNumber(latest?.operating_margin);
+    const operatingMargin = safeRatioMargin(ttm.operatingProfit, ttm.revenue) ?? safeLatestMargin(latest?.operating_margin);
 
     const ebitdaMargin = (isMetricDisabled('ebitda', sector) || isMetricDisabled('ebitda_margin', sector))
       ? null
-      : ((ttm.ebitda !== null && ttm.revenue !== null && ttm.revenue > 0)
-        ? Number(((ttm.ebitda / ttm.revenue) * 100).toFixed(1))
-        : parseFinancialNumber(latest?.ebitda_margin));
+      : (safeRatioMargin(ttm.ebitda, ttm.revenue) ?? safeLatestMargin(latest?.ebitda_margin));
 
-    const netMargin = (ttm.netIncome !== null && ttm.revenue !== null && ttm.revenue > 0)
-      ? Number(((ttm.netIncome / ttm.revenue) * 100).toFixed(1))
-      : parseFinancialNumber(latest?.net_margin);
+    const netMargin = safeRatioMargin(ttm.netIncome, ttm.revenue) ?? safeLatestMargin(latest?.net_margin);
 
     const roe = (dupont.calculatedRoe !== null && !isNaN(dupont.calculatedRoe))
       ? dupont.calculatedRoe
@@ -327,14 +342,22 @@ export class FinancialRatioEngine {
     const taxRate = sector === 'REIT' ? 0 : (sector === 'INSURANCE' || sector === 'BANKING' || sector === 'FINANCIAL_SERVICES' ? 0.30 : 0.25);
     const sanitizedRoic = parseFinancialNumber(latest?.roic);
     let roic: number | null = null;
-    if (ttm.operatingProfit !== null && ttm.operatingProfit > 0 && investedCapital !== null && investedCapital > 0 && !isMetricDisabled('ebitda', sector)) {
-      const nopat = ttm.operatingProfit * (1 - taxRate);
-      roic = Number(((nopat / investedCapital) * 100).toFixed(1));
+    if (!isMetricDisabled('ebitda', sector) && ttm.operatingProfit !== null && investedCapital !== null) {
+      if (investedCapital > 0) {
+        const nopat = ttm.operatingProfit * (1 - taxRate);
+        const rawRoic = (nopat / investedCapital) * 100;
+        roic = Number.isFinite(rawRoic) ? Number(Math.max(-100, Math.min(150, rawRoic)).toFixed(1)) : null;
+      } else if (ttm.operatingProfit < 0) {
+        // Negatif veya sıfır Invested Capital ile negatif faaliyet zararında asla pozitif ROIC türetilemez
+        roic = null;
+      } else if (sanitizedRoic !== null) {
+        roic = Number(sanitizedRoic.toFixed(1));
+      }
     } else if (sanitizedRoic !== null) {
-      roic = Number(sanitizedRoic.toFixed(1));
-    } else if (ttm.operatingProfit !== null && investedCapital !== null && investedCapital > 0 && !isMetricDisabled('ebitda', sector)) {
-      const nopat = ttm.operatingProfit * (1 - taxRate);
-      roic = Number(((nopat / investedCapital) * 100).toFixed(1));
+      // Faaliyet zararı varken bayat/negatif-bölü-negatif kaynaklı pozitif ROIC fallback'ini reddet
+      roic = (ttm.operatingProfit !== null && ttm.operatingProfit < 0 && sanitizedRoic > 0)
+        ? null
+        : Number(sanitizedRoic.toFixed(1));
     }
 
     const wacc = parseFinancialNumber(
@@ -398,7 +421,8 @@ export class FinancialRatioEngine {
     };
 
     // 7. Kâr Kalitesi & Nakit Akışı Teşhisi
-    const cashQuality = this.diagnoseCashQuality(ttm.operatingCashFlow, ttm.netIncome, totAssets);
+    const wcChangeTl = ttm.workingCapitalChange ?? (latest?.working_capital_change != null ? Number(latest.working_capital_change) * unitScale : null);
+    const cashQuality = this.diagnoseCashQuality(ttm.operatingCashFlow, ttm.netIncome, totAssets, wcChangeTl);
 
     // 8. Karşılaştırmalı Büyüme (YoY)
     const priorComparison = IsYatirimApiAdapter.computePriorPeriodComparison(sorted, latest.period);
@@ -506,6 +530,7 @@ export class FinancialRatioEngine {
       operatingCashFlow: computeTtmMetric(i => i.operating_cash_flow, true),
       freeCashFlow: computeTtmMetric(i => i.free_cash_flow, true),
       capex: computeTtmMetric(i => i.capex, true),
+      workingCapitalChange: computeTtmMetric(i => i.working_capital_change, true),
       periodCount: sortedSeries.length,
       isAnnualizedFallback: isFallback
     };
@@ -517,7 +542,8 @@ export class FinancialRatioEngine {
   public static diagnoseCashQuality(
     ocfTl: number | null,
     netIncomeTl: number | null,
-    totalAssetsTl: number | null
+    totalAssetsTl: number | null,
+    workingCapitalChangeTl: number | null = null
   ): CashQualityDiagnosis {
     if (ocfTl === null || netIncomeTl === null) {
       return {
@@ -565,6 +591,16 @@ export class FinancialRatioEngine {
     }
 
     if (ocfTl > 0 && netIncomeTl <= 0) {
+      if (workingCapitalChangeTl !== null && workingCapitalChangeTl >= ocfTl * 0.70) {
+        const wcPct = Math.round((workingCapitalChangeTl / ocfTl) * 100);
+        return {
+          cashConversionRatio: null,
+          sloanAccrualRatio: sloanAccrual,
+          status: 'CRITICAL_RISK',
+          badgeTitle: '🚨 Tedarikçi Borcu Kaynaklı Nakit Yanılsaması',
+          evaluationText: `Net zarar açıklamasına rağmen görünen pozitif faaliyet nakit akışının %${wcPct}'i operasyonel kârdan değil işletme sermayesi/tedarikçi vadesi artışından kaynaklanmaktadır.`
+        };
+      }
       return {
         cashConversionRatio: null,
         sloanAccrualRatio: sloanAccrual,
@@ -708,15 +744,35 @@ export function computeFinancialChange(
       }
     }
 
-    // İkisi de pozitif Net Borç (veya borç > 0)
+    // İkisi de pozitif veya sıfırdan hareketli Net Borç
     if (previous === 0) {
+      if (current === 0) {
+        return {
+          percentChange: 0,
+          formattedLabel: '%0',
+          badgeColor: 'neutral',
+          badgeClass: 'text-slate-400 bg-slate-800/40 border-slate-700/50',
+          isTextStatus: false,
+          arrow: '—'
+        };
+      }
+      if (current < 0) {
+        return {
+          percentChange: -100,
+          formattedLabel: '-%100',
+          badgeColor: 'green',
+          badgeClass: 'text-emerald-400 bg-emerald-950/40 border-emerald-800/50',
+          isTextStatus: false,
+          arrow: '↓'
+        };
+      }
       return {
         percentChange: 100,
         formattedLabel: '+%100',
-        badgeColor: current > 0 ? 'red' : 'neutral',
-        badgeClass: current > 0 ? 'text-rose-400 bg-rose-950/40 border-rose-800/50' : 'text-slate-400 bg-slate-800/40 border-slate-700/50',
+        badgeColor: 'red',
+        badgeClass: 'text-rose-400 bg-rose-950/40 border-rose-800/50',
         isTextStatus: false,
-        arrow: current > 0 ? '↑' : '—'
+        arrow: '↑'
       };
     }
 

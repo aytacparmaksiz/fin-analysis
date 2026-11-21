@@ -72,10 +72,22 @@ export class InvariantSentinel {
     if (!sf || !sf.axes) return sf;
 
     const ticker = ctx.ticker || 'BIST';
+    const effSector = String(ctx.sector || ctx.latestData?.sector || ctx.unifiedMetrics?.sector || 'INDUSTRIAL').toUpperCase();
+    const isFinancialSec = effSector === 'BANKING' || effSector === 'INSURANCE' || effSector === 'FINANCIAL_SERVICES';
+    const isForeignCurrency = effSector === 'AVIATION' ||
+      Boolean(ctx.latestData?.is_foreign_currency) ||
+      ['USD', 'EUR'].includes(String(ctx.latestData?.currency || '').toUpperCase());
+
+    const periodSortNum = (p: any): number => {
+      const m = String(p || '').match(/(20\d{2})\D*(\d{1,2})?/);
+      return m ? parseInt(m[1], 10) * 100 + (m[2] ? parseInt(m[2], 10) : 12) : 0;
+    };
     const sorted = Array.isArray(ctx.financialHistory)
-      ? [...ctx.financialHistory].sort((a, b) => String(a.period || '').localeCompare(String(b.period || '')))
+      ? [...ctx.financialHistory].sort((a, b) => periodSortNum(a?.period) - periodSortNum(b?.period))
       : [];
     const latest = sorted.length > 0 ? sorted[sorted.length - 1] : ctx.latestData;
+    const eqForHealth = ctx.unifiedMetrics?.balanceSheet?.equity ?? latest?.equity;
+    const isInsolventEquity = eqForHealth != null && Number(eqForHealth) <= 0;
 
     // 1. GERÇEKLEŞEN NET KÂR BÜYÜMESİ MUTABAKATI
     let trueProfitGrowth: number | null = null;
@@ -97,64 +109,66 @@ export class InvariantSentinel {
       }
     }
 
-    if (trueProfitGrowth !== null && !isNaN(trueProfitGrowth)) {
+    if (trueProfitGrowth !== null && !isNaN(trueProfitGrowth) && Number.isFinite(trueProfitGrowth)) {
+      const boundedProfitGrowth = Math.max(-75.0, Math.min(75.0, Number(trueProfitGrowth.toFixed(1))));
       const fmtGrowth = (val: number) => (val >= 0 ? `+%${val.toFixed(1)}` : `-%${Math.abs(val).toFixed(1)}`);
+      const savingsThreshold = isForeignCurrency ? 10.0 : 32.0;
 
       // 2. Eksen (Gelecek Büyüme) kontrolleri: 2.1, 2.2, 2.3
       const savingsCheck = sf.axes.future.checks.find(c => c.id === 'earnings_vs_savings');
       if (savingsCheck && savingsCheck.metricValue) {
         const currentDisplayed = parseFloat(savingsCheck.metricValue.replace(/[^0-9.-]/g, ''));
-        if (Math.abs(currentDisplayed - trueProfitGrowth) >= 0.5) {
+        if (Math.abs(currentDisplayed - boundedProfitGrowth) >= 0.5) {
           this.logViolation(
             ticker,
             savingsCheck.title,
             savingsCheck.metricValue,
-            fmtGrowth(trueProfitGrowth),
+            fmtGrowth(boundedProfitGrowth),
             'Değerleme sürücüsü veya yapay varsayım, gerçekleşen mali tablo net kâr büyümesini ezmiş.'
           );
-          savingsCheck.metricValue = fmtGrowth(trueProfitGrowth);
-          savingsCheck.passed = trueProfitGrowth >= 32.0;
+          savingsCheck.metricValue = fmtGrowth(boundedProfitGrowth);
+          savingsCheck.passed = boundedProfitGrowth >= savingsThreshold;
           savingsCheck.detail = savingsCheck.passed
-            ? `Öngörülen net kâr artış ivmesi (%${trueProfitGrowth.toFixed(1)}), risksiz faiz ve sermaye koruma eşiğinin (%32.0) üzerindedir.`
-            : `Beklenen kâr büyümesi (%${trueProfitGrowth.toFixed(1)}), risksiz getiri eşiğinin (%32.0) gerisindedir.`;
+            ? `Öngörülen net kâr artış ivmesi (%${boundedProfitGrowth.toFixed(1)}), risksiz faiz ve sermaye koruma eşiğinin (%${savingsThreshold.toFixed(1)}) üzerindedir.`
+            : `Beklenen kâr büyümesi (%${boundedProfitGrowth.toFixed(1)}), risksiz getiri eşiğinin (%${savingsThreshold.toFixed(1)}) gerisindedir.`;
         }
       }
 
       const marketGrowthCheck = sf.axes.future.checks.find(c => c.id === 'earnings_vs_market');
       if (marketGrowthCheck && marketGrowthCheck.metricValue) {
         const curVal = parseFloat(marketGrowthCheck.metricValue.replace(/[^0-9.-]/g, ''));
-        if (Math.abs(curVal - trueProfitGrowth) >= 0.5) {
+        if (Math.abs(curVal - boundedProfitGrowth) >= 0.5) {
           this.logViolation(
             ticker,
             marketGrowthCheck.title,
             marketGrowthCheck.metricValue,
-            fmtGrowth(trueProfitGrowth),
+            fmtGrowth(boundedProfitGrowth),
             'Piyasaya göre kâr büyümesi kartında mali tablo verisi dışındaki varsayım ezildi.'
           );
-          marketGrowthCheck.metricValue = fmtGrowth(trueProfitGrowth);
-          marketGrowthCheck.passed = trueProfitGrowth >= 25.0;
+          marketGrowthCheck.metricValue = fmtGrowth(boundedProfitGrowth);
+          marketGrowthCheck.passed = boundedProfitGrowth >= 25.0;
           marketGrowthCheck.detail = marketGrowthCheck.passed
-            ? `Şirketin kâr büyümesi (%${trueProfitGrowth.toFixed(1)}), BIST genel piyasa büyüme medyanının (%25.0) üzerindedir.`
-            : `Kâr büyümesi (%${trueProfitGrowth.toFixed(1)}), genel piyasa kâr büyüme medyanının (%25.0) altındadır.`;
+            ? `Şirketin kâr büyümesi (%${boundedProfitGrowth.toFixed(1)}), BIST genel piyasa büyüme medyanının (%25.0) üzerindedir.`
+            : `Kâr büyümesi (%${boundedProfitGrowth.toFixed(1)}), genel piyasa kâr büyüme medyanının (%25.0) altındadır.`;
         }
       }
 
       const highGrowthCheck = sf.axes.future.checks.find(c => c.id === 'high_growth_earnings');
       if (highGrowthCheck && highGrowthCheck.metricValue) {
         const curVal = parseFloat(highGrowthCheck.metricValue.replace(/[^0-9.-]/g, ''));
-        if (Math.abs(curVal - trueProfitGrowth) >= 0.5) {
+        if (Math.abs(curVal - boundedProfitGrowth) >= 0.5) {
           this.logViolation(
             ticker,
             highGrowthCheck.title,
             highGrowthCheck.metricValue,
-            fmtGrowth(trueProfitGrowth),
+            fmtGrowth(boundedProfitGrowth),
             'Yüksek hızlı kâr büyümesi kartı gerçek mali tabloya eşitlendi.'
           );
-          highGrowthCheck.metricValue = fmtGrowth(trueProfitGrowth);
-          highGrowthCheck.passed = trueProfitGrowth >= 35.0;
+          highGrowthCheck.metricValue = fmtGrowth(boundedProfitGrowth);
+          highGrowthCheck.passed = boundedProfitGrowth >= 35.0;
           highGrowthCheck.detail = highGrowthCheck.passed
-            ? `Yıllık kâr artış projeksiyonu (%${trueProfitGrowth.toFixed(1)}) yüksek büyüme bandında (%35+) güçlü seyretmektedir.`
-            : `Kâr artış projeksiyonu (%${trueProfitGrowth.toFixed(1)}), yüksek büyüme eşiğinin (%35) altındadır.`;
+            ? `Yıllık kâr artış projeksiyonu (%${boundedProfitGrowth.toFixed(1)}) yüksek büyüme bandında (%35+) güçlü seyretmektedir.`
+            : `Kâr artış projeksiyonu (%${boundedProfitGrowth.toFixed(1)}), yüksek büyüme eşiğinin (%35) altındadır.`;
         }
       }
 
@@ -162,17 +176,17 @@ export class InvariantSentinel {
       const accelCheck = sf.axes.past.checks.find(c => c.id === 'accelerating_growth');
       if (accelCheck && accelCheck.metricValue) {
         const curVal = parseFloat(accelCheck.metricValue.replace(/[^0-9.-]/g, ''));
-        if (Math.abs(curVal - trueProfitGrowth) >= 0.5) {
-          accelCheck.metricValue = `${fmtGrowth(trueProfitGrowth)} Son Dönem`;
+        if (Math.abs(curVal - boundedProfitGrowth) >= 0.5) {
+          accelCheck.metricValue = `${fmtGrowth(boundedProfitGrowth)} Son Dönem`;
         }
       }
 
       const pastIndCheck = sf.axes.past.checks.find(c => c.id === 'earnings_vs_industry');
       if (pastIndCheck && pastIndCheck.metricValue) {
         const curVal = parseFloat(pastIndCheck.metricValue.replace(/[^0-9.-]/g, ''));
-        if (Math.abs(curVal - trueProfitGrowth) >= 0.5) {
-          pastIndCheck.metricValue = fmtGrowth(trueProfitGrowth);
-          pastIndCheck.passed = trueProfitGrowth >= 20.0;
+        if (Math.abs(curVal - boundedProfitGrowth) >= 0.5) {
+          pastIndCheck.metricValue = fmtGrowth(boundedProfitGrowth);
+          pastIndCheck.passed = boundedProfitGrowth >= 20.0;
         }
       }
     }
@@ -244,7 +258,10 @@ export class InvariantSentinel {
             'Snowflake gerçekleşen ROE, DuPont 5 aşamalı kârlılık ayrıştırmasıyla uyuşmuyordu.'
           );
           roeCheck.metricValue = `%${trueRoe.toFixed(1)} Gerçekleşen ROE`;
-          roeCheck.passed = trueRoe >= 20.0;
+          const roeThreshold = isFinancialSec ? 25.0 : 20.0;
+          roeCheck.passed = !isInsolventEquity && trueRoe >= roeThreshold;
+        } else if (roeCheck && isInsolventEquity) {
+          roeCheck.passed = false;
         }
       }
 
@@ -252,14 +269,18 @@ export class InvariantSentinel {
       const futureRoeCheck = sf.axes.future.checks.find(c => c.id === 'future_roe');
       if (futureRoeCheck && futureRoeCheck.metricValue) {
         const curFutVal = parseFloat(futureRoeCheck.metricValue.replace(/[^0-9.-]/g, ''));
-        if (!isNaN(curFutVal) && curFutVal < trueRoe) {
+        const futureRoeThreshold = isFinancialSec ? 25.0 : 20.0;
+        if (isInsolventEquity) {
+          futureRoeCheck.passed = false;
+        } else if (!isNaN(curFutVal) && curFutVal < trueRoe) {
           futureRoeCheck.metricValue = `%${trueRoe.toFixed(1)} İleri ROE`;
-          futureRoeCheck.passed = trueRoe >= 20.0;
+          futureRoeCheck.passed = trueRoe >= futureRoeThreshold;
         }
       }
     }
 
     // 4. CARİ ORAN (LİKİDİTE) MUTABAKATI
+    const minCurrentRatio = effSector === 'RETAIL' ? 0.55 : 1.0;
     const trueCurrentRatio = ctx.unifiedMetrics?.liquidity?.currentRatio ?? (
       latest?.current_assets && latest?.current_liabilities && latest.current_liabilities > 0
         ? Number((latest.current_assets / latest.current_liabilities).toFixed(2))
@@ -278,18 +299,23 @@ export class InvariantSentinel {
             'Cari oran bilançodaki dönen varlık / kısa vadeli borç ile çelişiyordu.'
           );
           crCheck.metricValue = `Cari Oran: ${trueCurrentRatio.toFixed(2)}x`;
-          crCheck.passed = trueCurrentRatio >= 1.0;
+          crCheck.passed = !isInsolventEquity && trueCurrentRatio >= minCurrentRatio;
+        } else {
+          crCheck.passed = !isInsolventEquity && trueCurrentRatio >= minCurrentRatio;
         }
       }
     }
 
     // 5. NET BORÇ / FAVÖK (NET DEBT / EBITDA) TTM MUTABAKATI
+    const maxSafeNd = (effSector === 'AVIATION' || effSector === 'UTILITIES_TELCO') ? 4.0 : 2.5;
+    const maxControlledNd = (effSector === 'AVIATION' || effSector === 'UTILITIES_TELCO') ? 4.8 : 3.0;
     const trueNdEbitda = ctx.unifiedMetrics?.liquidity?.netDebtToEbitda ?? null;
     if (trueNdEbitda !== null && !isNaN(trueNdEbitda)) {
       for (const checkId of ['debt_level', 'reducing_debt']) {
         const chk = sf.axes.health.checks.find(c => c.id === checkId);
         if (chk && chk.metricValue && (chk.metricValue.includes('Net Borç / FAVÖK') || chk.metricValue.includes('Kontrollü Borç'))) {
           const curVal = parseFloat(chk.metricValue.replace(/[^0-9.-]/g, ''));
+          const ndLimit = checkId === 'debt_level' ? maxSafeNd : maxControlledNd;
           if (!isNaN(curVal) && Math.abs(curVal - trueNdEbitda) >= 0.2) {
             this.logViolation(
               ticker,
@@ -301,7 +327,9 @@ export class InvariantSentinel {
             chk.metricValue = checkId === 'debt_level'
               ? `Net Borç / FAVÖK: ${trueNdEbitda.toFixed(1)}x`
               : `Kontrollü Borç: ${trueNdEbitda.toFixed(1)}x`;
-            chk.passed = trueNdEbitda <= 2.5;
+            chk.passed = !isInsolventEquity && trueNdEbitda <= ndLimit;
+          } else {
+            chk.passed = !isInsolventEquity && trueNdEbitda <= ndLimit;
           }
         }
       }
@@ -314,7 +342,10 @@ export class InvariantSentinel {
       if (chk && chk.metricValue && chk.metricValue.includes('Nakit Dönüşümü')) {
         const curVal = parseFloat(chk.metricValue.replace(/[^0-9.-]/g, ''));
         const trueCashConvPct = Math.round(trueCashConvRatio * 100);
-        if (!isNaN(curVal) && Math.abs(curVal - trueCashConvPct) >= 5) {
+        const ttmNetVal = ctx.unifiedMetrics?.ttm?.netIncome ?? latest?.net_income ?? null;
+        const ttmOcfVal = ctx.unifiedMetrics?.ttm?.operatingCashFlow ?? latest?.operating_cash_flow ?? null;
+        const hasPositiveCashProfit = (ttmNetVal === null || Number(ttmNetVal) > 0) && (ttmOcfVal === null || Number(ttmOcfVal) > 0);
+        if ((!isNaN(curVal) && Math.abs(curVal - trueCashConvPct) >= 5) || (!hasPositiveCashProfit && chk.passed)) {
           this.logViolation(
             ticker,
             chk.title,
@@ -323,7 +354,7 @@ export class InvariantSentinel {
             'Nakit dönüşüm oranı TTM kümülatif nakit akışları yerine tek çeyreklik veriden sapıyordu.'
           );
           chk.metricValue = `Nakit Dönüşümü: %${trueCashConvPct}`;
-          chk.passed = trueCashConvPct >= 70;
+          chk.passed = hasPositiveCashProfit && trueCashConvPct >= 70;
         }
       }
     }
@@ -351,7 +382,7 @@ export class InvariantSentinel {
     // 8. NET NAKİT VE FAİZ KARŞILAMA MUTABAKATI
     const isNetCashOrSurplus = (ctx.unifiedMetrics?.balanceSheet?.netDebt != null && ctx.unifiedMetrics.balanceSheet.netDebt <= 0) ||
       (ctx.unifiedMetrics?.dupont?.interestBurden != null && ctx.unifiedMetrics.dupont.interestBurden >= 1.0);
-    if (isNetCashOrSurplus) {
+    if (!isInsolventEquity && isNetCashOrSurplus) {
       const icrCheck = sf.axes.health.checks.find(c => c.id === 'interest_coverage');
       if (icrCheck && !icrCheck.passed) {
         this.logViolation(

@@ -29,6 +29,34 @@ test('Security Remediation & Fail-Safe Defense Test Suite', async (t) => {
       assert.ok(!srcBist.includes("process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'"));
       assert.ok(!srcIs.includes("process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'"));
     });
+
+    await st.test('ALL lib/*.ts and src/lib/*.ts files prohibit NODE_TLS_REJECT_UNAUTHORIZED=0', () => {
+      for (const dir of ['lib', 'src/lib']) {
+        const files = fs.readdirSync(path.join(process.cwd(), dir)).filter((f) => f.endsWith('.ts'));
+        for (const f of files) {
+          const content = fs.readFileSync(path.join(process.cwd(), dir, f), 'utf8');
+          assert.equal(
+            /NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*['"]0['"]/.test(content),
+            false,
+            `${dir}/${f} must never set NODE_TLS_REJECT_UNAUTHORIZED = '0'`
+          );
+        }
+      }
+    });
+
+    await st.test('ALL lib/*.ts and src/lib/*.ts files prohibit rejectUnauthorized: false or isProduction toggle', () => {
+      for (const dir of ['lib', 'src/lib']) {
+        const files = fs.readdirSync(path.join(process.cwd(), dir)).filter((f) => f.endsWith('.ts'));
+        for (const f of files) {
+          const content = fs.readFileSync(path.join(process.cwd(), dir, f), 'utf8');
+          assert.equal(
+            /rejectUnauthorized\s*:\s*(?:false|isProduction)\b/.test(content),
+            false,
+            `${dir}/${f} must enforce rejectUnauthorized: true`
+          );
+        }
+      }
+    });
   });
 
   await t.test('2. Ticker Validation & Wildcard Injection Prevention', async (st) => {

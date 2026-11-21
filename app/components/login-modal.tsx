@@ -27,6 +27,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
   const [name, setName] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -75,7 +76,13 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
       };
 
       try {
-        localStorage.setItem('fair_value_user', JSON.stringify(session));
+        if (rememberMe) {
+          localStorage.setItem('fair_value_user', JSON.stringify(session));
+          sessionStorage.removeItem('fair_value_user');
+        } else {
+          sessionStorage.setItem('fair_value_user', JSON.stringify(session));
+          localStorage.removeItem('fair_value_user');
+        }
       } catch {}
 
       onLoginSuccess(session);
@@ -85,16 +92,22 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
 
   const handleDemoLogin = () => {
     const demoSession: UserSession = {
-      name: 'Aytaç Parmaksız',
-      email: 'aytac@fairvalue.ai',
-      initials: 'AP',
+      name: 'Demo Yatırımcı',
+      email: 'demo@fairvalue.com.tr',
+      initials: 'DY',
       isLoggedIn: true,
-      role: 'Kıdemli Fon Yöneticisi',
+      role: 'Misafir Yatırımcı',
       loginTime: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
     };
 
     try {
-      localStorage.setItem('fair_value_user', JSON.stringify(demoSession));
+      if (rememberMe) {
+        localStorage.setItem('fair_value_user', JSON.stringify(demoSession));
+        sessionStorage.removeItem('fair_value_user');
+      } else {
+        sessionStorage.setItem('fair_value_user', JSON.stringify(demoSession));
+        localStorage.removeItem('fair_value_user');
+      }
     } catch {}
 
     onLoginSuccess(demoSession);
@@ -137,7 +150,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
         <div className="grid grid-cols-2 p-1.5 bg-[#12151b] border-b border-[#282d37] text-xs font-semibold">
           <button
             type="button"
-            onClick={() => { setMode('login'); setError(null); }}
+            onClick={() => { setMode('login'); setError(null); setInfoMessage(null); }}
             className={`py-2 rounded-lg transition cursor-pointer ${
               mode === 'login'
                 ? 'bg-[#21262d] text-white shadow-sm font-bold border border-[#2e3440]'
@@ -148,7 +161,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
           </button>
           <button
             type="button"
-            onClick={() => { setMode('register'); setError(null); }}
+            onClick={() => { setMode('register'); setError(null); setInfoMessage(null); }}
             className={`py-2 rounded-lg transition cursor-pointer ${
               mode === 'register'
                 ? 'bg-[#21262d] text-white shadow-sm font-bold border border-[#2e3440]'
@@ -164,6 +177,11 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
           {error && (
             <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
               {error}
+            </div>
+          )}
+          {infoMessage && (
+            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
+              {infoMessage}
             </div>
           )}
 
@@ -206,9 +224,16 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
               <label className="block text-xs font-medium text-slate-300">
                 Şifre
               </label>
-              <span className="text-[11px] text-slate-500 hover:text-emerald-400 cursor-pointer transition">
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setInfoMessage('Yerel oturum modunda şifre sıfırlama gerekmez; yeni şifreyle giriş yapabilir veya Hızlı Demo Girişi kullanabilirsiniz.');
+                }}
+                className="text-[11px] text-slate-500 hover:text-emerald-400 cursor-pointer transition"
+              >
                 Şifremi Unuttum?
-              </span>
+              </button>
             </div>
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />

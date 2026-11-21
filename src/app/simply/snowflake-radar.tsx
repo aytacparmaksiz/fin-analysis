@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useId } from 'react';
 import {
   getSnowflakeCoordinates,
   generateSmoothSnowflakePath,
@@ -42,7 +42,7 @@ const SECTOR_METAS: SectorMeta[] = [
     key: 'future',
     labelEn: 'FUTURE',
     labelTr: 'GELECEK',
-    sectionId: 'sec-rehberlik',
+    sectionId: 'sec-adildeger',
     centerDeg: -18,
     labelX: 250,
     labelY: 104,
@@ -52,7 +52,7 @@ const SECTOR_METAS: SectorMeta[] = [
     key: 'past',
     labelEn: 'PAST',
     labelTr: 'GEÇMİŞ',
-    sectionId: 'sec-gecmis',
+    sectionId: 'sec-grafikler',
     centerDeg: 54,
     labelX: 212,
     labelY: 236,
@@ -114,6 +114,11 @@ export default function SnowflakeRadar({
   showLabels = true
 }: SnowflakeRadarProps) {
   const [hoveredAxis, setHoveredAxis] = useState<string | null>(null);
+  const rawUid = useId();
+  const uid = rawUid.replace(/[^a-zA-Z0-9_-]/g, '');
+  const glowFilterId = `sfGlow-${uid}`;
+  const goldGradId = `sfGoldGradient-${uid}`;
+  const hoverSectorGradId = `sfHoverSectorGrad-${uid}`;
 
   const cx = 140;
   const cy = 140;
@@ -136,7 +141,9 @@ export default function SnowflakeRadar({
     } else {
       const el = document.getElementById(sectionId);
       if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const yOffset = typeof window !== 'undefined' && window.innerWidth < 1024 ? -112 : -76;
+        const y = el.getBoundingClientRect().top + window.pageYOffset + yOffset;
+        window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
       }
     }
   };
@@ -151,20 +158,20 @@ export default function SnowflakeRadar({
       >
         <defs>
           {/* Organik Snowflake Glow Filtresi */}
-          <filter id="sfGlow" x="-20%" y="-20%" width="140%" height="140%">
+          <filter id={glowFilterId} x="-20%" y="-20%" width="140%" height="140%">
             <feGaussianBlur stdDeviation="3.5" result="blur" />
             <feComposite in="SourceGraphic" in2="blur" operator="over" />
           </filter>
 
           {/* Altın / Sarı Gradyan */}
-          <radialGradient id="sfGoldGradient" cx="50%" cy="50%" r="50%">
+          <radialGradient id={goldGradId} cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="#fde047" stopOpacity="0.85" />
             <stop offset="60%" stopColor="#f5c242" stopOpacity="0.75" />
             <stop offset="100%" stopColor="#d97706" stopOpacity="0.65" />
           </radialGradient>
 
           {/* Vurgu (Hover) Gradyanı */}
-          <radialGradient id="sfHoverSectorGrad" cx="50%" cy="50%" r="50%">
+          <radialGradient id={hoverSectorGradId} cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="#ffffff" stopOpacity="0.18" />
             <stop offset="100%" stopColor="#f5c242" stopOpacity="0.12" />
           </radialGradient>
@@ -230,7 +237,7 @@ export default function SnowflakeRadar({
                 {isHovered && (
                   <path
                     d={makeWedgePath(cx, cy, 0, maxR, startDeg, endDeg)}
-                    fill="url(#sfHoverSectorGrad)"
+                    fill={`url(#${hoverSectorGradId})`}
                     stroke="#f5c242"
                     strokeWidth="1.5"
                     className="animate-in fade-in duration-200"
@@ -270,11 +277,11 @@ export default function SnowflakeRadar({
         {smoothRadarPath && (
           <path
             d={smoothRadarPath}
-            fill="url(#sfGoldGradient)"
+            fill={`url(#${goldGradId})`}
             stroke="#f5c242"
             strokeWidth="2.5"
             strokeLinejoin="round"
-            filter="url(#sfGlow)"
+            filter={`url(#${glowFilterId})`}
             className="transition-all duration-500 pointer-events-none drop-shadow-[0_0_8px_rgba(245,194,66,0.35)]"
           />
         )}
@@ -317,14 +324,14 @@ export default function SnowflakeRadar({
         <circle cx={cx} cy={cy} r={14} fill="#181c24" stroke="#323846" strokeWidth="1.4" />
         <text
           x={cx}
-          y={cy + 4}
+          y={cy + 3.5}
           textAnchor="middle"
           fill="#f5c242"
-          fontSize="9"
+          fontSize={ticker && ticker.trim().length >= 5 ? '7.8' : '9'}
           fontWeight="bold"
           fontFamily="monospace"
         >
-          {ticker ? ticker.slice(0, 4) : 'BIST'}
+          {ticker ? ticker.trim().toUpperCase().slice(0, 5) : 'BIST'}
         </text>
 
         {/* ========================================================================= */}
