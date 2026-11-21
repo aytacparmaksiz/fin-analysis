@@ -120,7 +120,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
       onClick={onClose}
     >
       <div 
-        className="relative w-full max-w-md bg-[#161a22] border border-[#2e3440] rounded-2xl shadow-2xl overflow-hidden divide-y divide-[#282d37] animate-in zoom-in-95 duration-150"
+        className="fv-modal-panel relative w-full max-w-md bg-[#161a22] border border-[#2e3440] rounded-2xl shadow-2xl overflow-hidden divide-y divide-[#282d37]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Başlık Çubuğu */}

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchLiveBistNewsFeed } from '@/lib/news-service';
+import { fetchLiveBistNewsFeed, fetchSingleKapDisclosureDetail } from '@/lib/news-service';
 import { normalizeTicker, isValidTicker, checkRateLimit } from '@/lib/security';
 
 export const dynamic = 'force-dynamic';
@@ -18,9 +18,42 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
+
+    // Tekil KAP bildirimi talep anında (on-demand) tam metin & özet zenginleştirme
+    const kapIdParam = searchParams.get('kapId');
+    if (kapIdParam) {
+      const cleanKapId = kapIdParam.trim();
+      if (!/^\d{5,9}$/.test(cleanKapId)) {
+        return NextResponse.json(
+          { success: false, error: 'Geçersiz KAP bildirim numarası.' },
+          { status: 400 }
+        );
+      }
+      const rawTicker = searchParams.get('ticker') || '';
+      const cleanTicker = normalizeTicker(rawTicker);
+      if (!isValidTicker(cleanTicker)) {
+        return NextResponse.json(
+          { success: false, error: 'Geçersiz hisse kodu parametresi.' },
+          { status: 400 }
+        );
+      }
+      const detail = await fetchSingleKapDisclosureDetail({
+        kapId: cleanKapId,
+        ticker: cleanTicker,
+        rawTitle: (searchParams.get('subject') || '').slice(0, 240),
+        kapSummary: (searchParams.get('summary') || '').slice(0, 320),
+      });
+      return NextResponse.json({
+        success: Boolean(detail),
+        detail,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const category = searchParams.get('category') || undefined;
     const tickersParam = searchParams.get('tickers');
     const singleTicker = searchParams.get('ticker');
+    const forceRefresh = searchParams.get('force') === '1';
     const limitParam = searchParams.get('limit');
     const parsedLimit = limitParam ? parseInt(limitParam, 10) : NaN;
     const limit = Number.isFinite(parsedLimit)
@@ -67,6 +100,7 @@ export async function GET(request: Request) {
       tickers,
       category,
       limit,
+      forceRefresh,
     });
 
     return NextResponse.json({
@@ -75,14 +109,15 @@ export async function GET(request: Request) {
       feed,
       timestamp: new Date().toISOString(),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[API /api/feed] Hata:', error);
+    const errMsg = error instanceof Error ? error.message : 'Haber akışı alınamadı.';
     return NextResponse.json(
       {
         success: false,
         count: 0,
         feed: [],
-        error: error?.message || 'Haber akışı alınamadı.',
+        error: errMsg,
         timestamp: new Date().toISOString(),
       },
       { status: 500 }

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Serif, IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 import "katex/dist/katex.min.css";
+import TactileFeedback from "./components/tactile-feedback";
 
 const ibmPlexSerif = IBM_Plex_Serif({
   subsets: ["latin", "latin-ext"],
@@ -38,7 +39,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="tr" className={`h-full antialiased ${ibmPlexSerif.variable} ${ibmPlexSans.variable}`}>
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+      <body className="min-h-full flex flex-col font-sans">
+        <TactileFeedback />
+        {children}
+      </body>
     </html>
   );
 }

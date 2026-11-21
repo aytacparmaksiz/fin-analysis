@@ -308,8 +308,164 @@ function renderThemeIcon(iconTag: string, className: string = "w-3.5 h-3.5") {
     case 'RefreshCw': return <RefreshCw className={className} />;
     case 'Zap': return <Activity className={className} />;
     case 'DollarSign': return <DollarSign className={className} />;
+    case 'AlertTriangle': return <AlertTriangle className={className} />;
     default: return <Compass className={className} />;
   }
+}
+
+// 53 Resmi Sektör İçin İş Yatırım Çarpan Ortalaması Eşleştirici
+const SECTOR_AVG_LIST = Object.values(OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE);
+function findOfficialSectorAverage(sectorDisplayName: string) {
+  const norm = (s: string) => s.toLocaleLowerCase('tr-TR').replace(/[^a-zçğıöşü0-9]+/g, ' ').trim();
+  const target = norm(sectorDisplayName);
+  if (!target) return null;
+  const exact = SECTOR_AVG_LIST.find(item => norm(item.sectorName) === target);
+  if (exact) return exact;
+  return SECTOR_AVG_LIST.find(item => {
+    const cand = norm(item.sectorName);
+    return cand.length >= 3 && (target.includes(cand) || cand.includes(target));
+  }) || null;
+}
+
+// Fiyat-duyarlı **kalın** metrik vurgularını React öğelerine dönüştürür
+function renderHighlightedFinancialText(text: string) {
+  if (!text) return null;
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, idx) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <strong
+          key={idx}
+          className="font-mono font-bold text-white bg-slate-800/90 px-1.5 py-0.5 rounded border border-slate-700/70 inline-block mx-0.5"
+        >
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return part;
+  });
+}
+
+// KAP bildirim kartları ve kök detay modalı için ortak semantik görsel kimlik çözümleyici
+function getDisclosureVisualStyle(item: CompanyNewsItem) {
+  const ev = item.eventType;
+  if (item.impact === 'NEGATIVE' || ev === 'PENALTY') {
+    return {
+      icon: <ShieldAlert className="w-4 h-4 text-rose-400" />,
+      iconBg: 'bg-rose-500/12 border-rose-500/35',
+      accentBar: 'bg-gradient-to-b from-rose-500 to-red-600',
+      topBar: 'bg-gradient-to-r from-rose-500 to-red-600',
+      hoverCls: 'fv-card-rose',
+      dotCls: 'bg-rose-400',
+      headerTint: 'from-rose-500/12 via-rose-500/5 to-transparent border-rose-500/25',
+      badgeCls: 'bg-rose-500/15 text-rose-300 border-rose-500/35',
+      badgeText: item.impactLabel || 'Olumsuz / Risk'
+    };
+  }
+  if (ev === 'CONTRACT' || item.category === 'CONTRACT') {
+    return {
+      icon: <Briefcase className="w-4 h-4 text-emerald-400" />,
+      iconBg: 'bg-emerald-500/12 border-emerald-500/35',
+      accentBar: 'bg-gradient-to-b from-emerald-400 to-teal-500',
+      topBar: 'bg-gradient-to-r from-emerald-400 to-teal-500',
+      hoverCls: 'fv-card-emerald',
+      dotCls: 'bg-emerald-400',
+      headerTint: 'from-emerald-500/12 via-emerald-500/5 to-transparent border-emerald-500/25',
+      badgeCls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35',
+      badgeText: item.impactLabel || 'Yüksek Etki / Sözleşme'
+    };
+  }
+  if (ev === 'DIVIDEND' || item.category === 'DIVIDEND') {
+    return {
+      icon: <Coins className="w-4 h-4 text-[#f5c242]" />,
+      iconBg: 'bg-[#f5c242]/12 border-[#f5c242]/35',
+      accentBar: 'bg-gradient-to-b from-[#f5c242] to-amber-500',
+      topBar: 'bg-gradient-to-r from-[#f5c242] to-amber-500',
+      hoverCls: 'fv-card-amber',
+      dotCls: 'bg-[#f5c242]',
+      headerTint: 'from-amber-500/12 via-amber-500/5 to-transparent border-amber-500/25',
+      badgeCls: 'bg-[#f5c242]/15 text-[#f5c242] border-[#f5c242]/35',
+      badgeText: item.impactLabel || 'Temettü & Sermaye'
+    };
+  }
+  if (ev === 'BUYBACK' || item.category === 'BUYBACK') {
+    return {
+      icon: <RefreshCw className="w-4 h-4 text-teal-400" />,
+      iconBg: 'bg-teal-500/12 border-teal-500/35',
+      accentBar: 'bg-gradient-to-b from-teal-400 to-emerald-500',
+      topBar: 'bg-gradient-to-r from-teal-400 to-emerald-500',
+      hoverCls: 'fv-card-emerald',
+      dotCls: 'bg-teal-400',
+      headerTint: 'from-teal-500/12 via-teal-500/5 to-transparent border-teal-500/25',
+      badgeCls: 'bg-teal-500/15 text-teal-300 border-teal-500/35',
+      badgeText: item.impactLabel || 'Olumlu / Geri Alım'
+    };
+  }
+  if (ev === 'FINANCIALS' || ev === 'OPERATIONAL' || item.category === 'FINANCIALS') {
+    return {
+      icon: ev === 'OPERATIONAL' ? <BarChart3 className="w-4 h-4 text-sky-400" /> : <FileText className="w-4 h-4 text-sky-400" />,
+      iconBg: 'bg-sky-500/12 border-sky-500/35',
+      accentBar: 'bg-gradient-to-b from-sky-400 to-blue-500',
+      topBar: 'bg-gradient-to-r from-sky-400 to-blue-500',
+      hoverCls: 'fv-card-sky',
+      dotCls: 'bg-sky-400',
+      headerTint: 'from-sky-500/12 via-sky-500/5 to-transparent border-sky-500/25',
+      badgeCls: item.impact === 'HIGH_IMPACT'
+        ? 'bg-sky-500/15 text-sky-300 border-sky-500/35'
+        : 'bg-emerald-500/12 text-emerald-300 border-emerald-500/30',
+      badgeText: item.impactLabel || 'Finansal Sonuç'
+    };
+  }
+  if (ev === 'INVESTMENT' || item.category === 'INVESTMENT') {
+    return {
+      icon: <Building2 className="w-4 h-4 text-cyan-400" />,
+      iconBg: 'bg-cyan-500/12 border-cyan-500/35',
+      accentBar: 'bg-gradient-to-b from-cyan-400 to-sky-500',
+      topBar: 'bg-gradient-to-r from-cyan-400 to-sky-500',
+      hoverCls: 'fv-card-sky',
+      dotCls: 'bg-cyan-400',
+      headerTint: 'from-cyan-500/12 via-cyan-500/5 to-transparent border-cyan-500/25',
+      badgeCls: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/35',
+      badgeText: item.impactLabel || 'Olumlu / Yatırım'
+    };
+  }
+  if (ev === 'RATING') {
+    return {
+      icon: <Award className="w-4 h-4 text-purple-400" />,
+      iconBg: 'bg-purple-500/12 border-purple-500/35',
+      accentBar: 'bg-gradient-to-b from-purple-400 to-indigo-500',
+      topBar: 'bg-gradient-to-r from-purple-400 to-indigo-500',
+      hoverCls: 'fv-card-purple',
+      dotCls: 'bg-purple-400',
+      headerTint: 'from-purple-500/12 via-purple-500/5 to-transparent border-purple-500/25',
+      badgeCls: 'bg-purple-500/15 text-purple-300 border-purple-500/35',
+      badgeText: item.impactLabel || 'Derecelendirme'
+    };
+  }
+  if (ev === 'DEBT') {
+    return {
+      icon: <Scale className="w-4 h-4 text-indigo-400" />,
+      iconBg: 'bg-indigo-500/12 border-indigo-500/35',
+      accentBar: 'bg-gradient-to-b from-indigo-400 to-slate-500',
+      topBar: 'bg-gradient-to-r from-indigo-400 to-slate-500',
+      hoverCls: 'fv-card-purple',
+      dotCls: 'bg-indigo-400',
+      headerTint: 'from-indigo-500/10 via-indigo-500/4 to-transparent border-indigo-500/25',
+      badgeCls: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
+      badgeText: item.impactLabel || 'Finansman / Kupon'
+    };
+  }
+  return {
+    icon: ev === 'GOVERNANCE' ? <Shield className="w-4 h-4 text-slate-300" /> : <Megaphone className="w-4 h-4 text-slate-300" />,
+    iconBg: 'bg-slate-800/80 border-slate-700/70',
+    accentBar: 'bg-slate-600',
+    topBar: 'bg-slate-600',
+    hoverCls: 'fv-card-sky',
+    dotCls: 'bg-slate-400',
+    headerTint: 'from-slate-700/15 via-slate-800/5 to-transparent border-[#2e3440]',
+    badgeCls: 'bg-slate-800/90 text-slate-300 border-slate-700/70',
+    badgeText: item.impactLabel || 'Bilgilendirme'
+  };
 }
 
 /**
@@ -1452,6 +1608,7 @@ export default function ValuationTerminal({
   const [expandedSectors, setExpandedSectors] = useState<Record<string, boolean>>({});
   const [sectorSearchTerm, setSectorSearchTerm] = useState<string>('');
   const [sectorFilterTab, setSectorFilterTab] = useState<'ACTIVE' | 'ALL'>('ACTIVE');
+  const [sectorSortMode, setSectorSortMode] = useState<'count' | 'score' | 'upside' | 'alpha'>('count');
 
   const [loading, setLoading] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
@@ -1504,21 +1661,104 @@ export default function ValuationTerminal({
   const [watchlistViewMode, setWatchlistViewMode] = useState<'cards' | 'list' | 'compact'>('list');
   const [portfolioViewMode, setPortfolioViewMode] = useState<'cards' | 'list' | 'compact'>('list');
   const [portfolioDecisionFilter, setPortfolioDecisionFilter] = useState<'ALL' | 'AL' | 'NÖTR' | 'ALMA'>('ALL');
+  const [favoritesDecisionFilter, setFavoritesDecisionFilter] = useState<'ALL' | 'AL' | 'NÖTR' | 'ALMA'>('ALL');
+  const [savedTableSort, setSavedTableSort] = useState<{ key: 'score' | 'ticker' | 'price' | 'fairValue' | 'discount' | 'decision' | 'date'; direction: 'asc' | 'desc' }>({ key: 'score', direction: 'desc' });
+  const [quickAddOpen, setQuickAddOpen] = useState<boolean>(false);
+  const [quickAddQuery, setQuickAddQuery] = useState<string>('');
   const [newsCategoryFilter, setNewsCategoryFilter] = useState<string>('ALL');
+  const [newsImpactFilter, setNewsImpactFilter] = useState<'ALL' | 'HIGH_IMPACT' | 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL'>('ALL');
   const [newsSearchTerm, setNewsSearchTerm] = useState<string>('');
   const [liveNewsFeed, setLiveNewsFeed] = useState<CompanyNewsItem[]>([]);
   const [selectedDisclosure, setSelectedDisclosure] = useState<CompanyNewsItem | null>(null);
+  const [isHydratingDisclosure, setIsHydratingDisclosure] = useState<boolean>(false);
+  const [copiedDisclosureText, setCopiedDisclosureText] = useState<boolean>(false);
   const [isFeedLoading, setIsFeedLoading] = useState<boolean>(false);
   const [lastFeedSync, setLastFeedSync] = useState<Date | null>(null);
 
-  const refreshLiveFeed = useCallback(async () => {
+  // Portföy ve Favoriler Listeleri (localStorage'a kalıcı kaydedilir)
+  const [portfolioTickers, setPortfolioTickers] = useState<string[]>([]);
+  const [favoriteTickers, setFavoriteTickers] = useState<string[]>([]);
+
+  // KAP Detay Modalı ESC ile kapatma
+  useEffect(() => {
+    if (!selectedDisclosure) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSelectedDisclosure(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedDisclosure]);
+
+  // Bildirime tıklandığında modalı aç; eğer resmi tam metin henüz çekilmediyse (on-demand) KAP'tan anında zenginleştir
+  const openDisclosureModal = useCallback(async (item: CompanyNewsItem) => {
+    setCopiedDisclosureText(false);
+    setSelectedDisclosure(item);
+    if (item.fullText || !item.kapId || !/^\d{5,9}$/.test(item.kapId)) {
+      setIsHydratingDisclosure(false);
+      return;
+    }
+    setIsHydratingDisclosure(true);
+    try {
+      const params = new URLSearchParams({
+        kapId: item.kapId,
+        ticker: item.ticker,
+      });
+      if (item.originalSubject) params.set('subject', item.originalSubject);
+      if (item.kapSummary) params.set('summary', item.kapSummary);
+      const res = await fetch(`/api/feed?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        const d = data?.detail;
+        if (d && d.fullText) {
+          const merged: CompanyNewsItem = {
+            ...item,
+            title: d.title || item.title,
+            summary: d.summary || item.summary,
+            keyTakeaways: Array.isArray(d.keyTakeaways) && d.keyTakeaways.length > 0 ? d.keyTakeaways : item.keyTakeaways,
+            keyMetrics: Array.isArray(d.keyMetrics) && d.keyMetrics.length > 0 ? d.keyMetrics : item.keyMetrics,
+            fullText: d.fullText,
+            category: d.category || item.category,
+            categoryLabel: d.categoryLabel || item.categoryLabel,
+            impact: d.impact || item.impact,
+            impactLabel: d.impactLabel || item.impactLabel,
+            eventType: d.eventType || item.eventType,
+          };
+          setSelectedDisclosure(prev => (prev && prev.id === item.id ? merged : prev));
+          setLiveNewsFeed(prev => prev.map(x => (x.id === item.id ? merged : x)));
+        }
+      }
+    } catch {
+      // On-demand zenginleştirme başarısız olursa mevcut özet korunur
+    } finally {
+      setIsHydratingDisclosure(false);
+    }
+  }, []);
+
+  const prioritizedFeedTickersKey = useMemo(() => {
+    const analyzed = savedReports
+      .map(r => (r.ticker || '').toUpperCase().trim())
+      .filter(Boolean);
+    if (analyzed.length === 0) return '';
+    const analyzedSet = new Set(analyzed);
+    const ordered: string[] = [];
+    const seen = new Set<string>();
+    const addIfAnalyzed = (t: string) => {
+      const sym = (t || '').toUpperCase().trim();
+      if (sym && analyzedSet.has(sym) && !seen.has(sym)) {
+        seen.add(sym);
+        ordered.push(sym);
+      }
+    };
+    portfolioTickers.forEach(addIfAnalyzed);
+    favoriteTickers.forEach(addIfAnalyzed);
+    analyzed.forEach(addIfAnalyzed);
+    return ordered.join(',');
+  }, [savedReports, portfolioTickers, favoriteTickers]);
+
+  const refreshLiveFeed = useCallback(async (forceRefresh = false) => {
     setIsFeedLoading(true);
     try {
-      const analyzedTickers = savedReports
-        .map(r => r.ticker)
-        .filter((t): t is string => Boolean(t && t.trim()));
-
-      if (analyzedTickers.length === 0) {
+      if (!prioritizedFeedTickersKey) {
         setLiveNewsFeed([]);
         setLastFeedSync(new Date());
         setIsFeedLoading(false);
@@ -1526,8 +1766,11 @@ export default function ValuationTerminal({
       }
 
       const params = new URLSearchParams({
-        tickers: [...new Set(analyzedTickers)].join(','),
+        tickers: prioritizedFeedTickersKey,
       });
+      if (forceRefresh) {
+        params.set('force', '1');
+      }
 
       const res = await fetch(`/api/feed?${params.toString()}`);
       if (res.ok) {
@@ -1542,10 +1785,10 @@ export default function ValuationTerminal({
     } finally {
       setIsFeedLoading(false);
     }
-  }, [savedReports]);
+  }, [prioritizedFeedTickersKey]);
 
   useEffect(() => {
-    refreshLiveFeed();
+    refreshLiveFeed(false);
   }, [refreshLiveFeed]);
 
   const handleDemoLogin = useCallback(() => {
@@ -1599,10 +1842,6 @@ export default function ValuationTerminal({
       sessionStorage.removeItem('fair_value_user');
     } catch {}
   }, []);
-
-  // Portföy ve Favoriler Listeleri (localStorage'a kalıcı kaydedilir)
-  const [portfolioTickers, setPortfolioTickers] = useState<string[]>([]);
-  const [favoriteTickers, setFavoriteTickers] = useState<string[]>([]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -1673,6 +1912,8 @@ export default function ValuationTerminal({
   // Tarayıcı Yolu & Sayfa Geçiş Yöneticisi (URL Navigation)
   const navigateTo = useCallback((targetStep: 'cockpit' | 'input' | 'saved' | 'themes' | 'leaderboard' | 'portfolio' | 'favorites' | 'sectors') => {
     setError(null);
+    setQuickAddOpen(false);
+    setQuickAddQuery('');
     const basePath = typeof window !== 'undefined' && window.location.pathname.startsWith('/simply') ? '/simply' : '';
 
     if (targetStep === 'cockpit') {
@@ -4648,10 +4889,10 @@ export default function ValuationTerminal({
               <button
                 type="button"
                 onClick={() => navigateTo('cockpit')}
-                className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                className={`fv-pill px-3 py-1.5 rounded-lg cursor-pointer flex items-center gap-1.5 border ${
                   step === 'cockpit'
-                    ? 'text-[#f5c242] font-bold bg-[#1e232d]'
-                    : 'text-slate-400 hover:text-white hover:bg-[#181c24]'
+                    ? 'text-[#f5c242] font-bold bg-[#1e232d] border-[#f5c242]/30 shadow-sm'
+                    : 'text-slate-400 hover:text-white hover:bg-[#181c24] border-transparent'
                 }`}
               >
                 <span>Ana Sayfa</span>
@@ -4660,27 +4901,30 @@ export default function ValuationTerminal({
               <button
                 type="button"
                 onClick={() => navigateTo('saved')}
-                className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                className={`fv-pill px-3 py-1.5 rounded-lg cursor-pointer flex items-center gap-1.5 border ${
                   step === 'saved' && analyzedTab !== 'PORTFOLIO' && analyzedTab !== 'FAVORITES'
-                    ? 'text-white font-bold bg-[#1e232d]'
-                    : 'text-slate-400 hover:text-white hover:bg-[#181c24]'
+                    ? 'text-sky-300 font-bold bg-[#1e232d] border-sky-400/30 shadow-sm'
+                    : 'text-slate-400 hover:text-white hover:bg-[#181c24] border-transparent'
                 }`}
               >
                 <span>Akış</span>
+                {liveNewsFeed.some(n => n.impact === 'NEGATIVE') && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400" title="Olumsuz / Riskli KAP Bildirimi Mevcut" />
+                )}
               </button>
 
               <button
                 type="button"
                 onClick={() => navigateTo('portfolio')}
-                className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                className={`fv-pill px-3 py-1.5 rounded-lg cursor-pointer flex items-center gap-1.5 border ${
                   step === 'saved' && analyzedTab === 'PORTFOLIO'
-                    ? 'text-[#f5c242] font-bold bg-[#1e232d]'
-                    : 'text-slate-400 hover:text-white hover:bg-[#181c24]'
+                    ? 'text-[#f5c242] font-bold bg-[#1e232d] border-[#f5c242]/30 shadow-sm'
+                    : 'text-slate-400 hover:text-white hover:bg-[#181c24] border-transparent'
                 }`}
               >
                 <span>Portföy</span>
                 {portfolioTickers.length > 0 && (
-                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-[#21262d] text-[#f5c242] font-bold">
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-[#21262d] text-[#f5c242] font-bold">
                     {portfolioTickers.length}
                   </span>
                 )}
@@ -4689,15 +4933,15 @@ export default function ValuationTerminal({
               <button
                 type="button"
                 onClick={() => navigateTo('favorites')}
-                className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                className={`fv-pill px-3 py-1.5 rounded-lg cursor-pointer flex items-center gap-1.5 border ${
                   step === 'saved' && analyzedTab === 'FAVORITES'
-                    ? 'text-amber-400 font-bold bg-[#1e232d]'
-                    : 'text-slate-400 hover:text-white hover:bg-[#181c24]'
+                    ? 'text-amber-400 font-bold bg-[#1e232d] border-amber-400/30 shadow-sm'
+                    : 'text-slate-400 hover:text-white hover:bg-[#181c24] border-transparent'
                 }`}
               >
                 <span>Favoriler</span>
                 {favoriteTickers.length > 0 && (
-                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-[#21262d] text-amber-400 font-bold">
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-[#21262d] text-amber-400 font-bold">
                     {favoriteTickers.length}
                   </span>
                 )}
@@ -4706,10 +4950,10 @@ export default function ValuationTerminal({
               <button
                 type="button"
                 onClick={() => navigateTo('themes')}
-                className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                className={`fv-pill px-3 py-1.5 rounded-lg cursor-pointer border ${
                   step === 'themes'
-                    ? 'text-cyan-400 font-bold bg-[#1e232d]'
-                    : 'text-slate-400 hover:text-white hover:bg-[#181c24]'
+                    ? 'text-cyan-400 font-bold bg-[#1e232d] border-cyan-400/30 shadow-sm'
+                    : 'text-slate-400 hover:text-white hover:bg-[#181c24] border-transparent'
                 }`}
               >
                 <span>Yatırım Temaları</span>
@@ -4718,10 +4962,10 @@ export default function ValuationTerminal({
               <button
                 type="button"
                 onClick={() => navigateTo('leaderboard')}
-                className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                className={`fv-pill px-3 py-1.5 rounded-lg cursor-pointer border ${
                   step === 'leaderboard'
-                    ? 'text-amber-400 font-bold bg-[#1e232d]'
-                    : 'text-slate-400 hover:text-white hover:bg-[#181c24]'
+                    ? 'text-amber-400 font-bold bg-[#1e232d] border-amber-400/30 shadow-sm'
+                    : 'text-slate-400 hover:text-white hover:bg-[#181c24] border-transparent'
                 }`}
               >
                 <span>Hisse Tarama</span>
@@ -4730,10 +4974,10 @@ export default function ValuationTerminal({
               <button
                 type="button"
                 onClick={() => navigateTo('sectors')}
-                className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                className={`fv-pill px-3 py-1.5 rounded-lg cursor-pointer border ${
                   step === 'sectors'
-                    ? 'text-emerald-400 font-bold bg-[#1e232d]'
-                    : 'text-slate-400 hover:text-white hover:bg-[#181c24]'
+                    ? 'text-emerald-400 font-bold bg-[#1e232d] border-emerald-400/30 shadow-sm'
+                    : 'text-slate-400 hover:text-white hover:bg-[#181c24] border-transparent'
                 }`}
               >
                 <span>Sektörler</span>
@@ -4966,6 +5210,7 @@ export default function ValuationTerminal({
                 onToggleFavorite={toggleFavorite}
                 onOpenTicker={handleOpenOrAnalyzeTicker}
                 onOpenReport={openReport}
+                onSelectDisclosure={openDisclosureModal}
               />
             </ComponentErrorBoundary>
           )}
@@ -5257,7 +5502,7 @@ export default function ValuationTerminal({
                           <td className="p-3 font-bold text-white flex items-center gap-1.5 sticky left-0 bg-slate-900 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] min-w-[130px]">
                             <span>{row.period}</span>
                             {row.is_tms29 && (
-                              <span className="text-[9px] font-sans font-bold px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                              <span className="text-[9px] font-sans font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">
                                 TMS 29
                               </span>
                             )}
@@ -5396,7 +5641,7 @@ export default function ValuationTerminal({
                 <button
                   type="button"
                   onClick={handleGoBack}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-[#181b20] hover:bg-[#222731] border border-[#2b313d] rounded-lg transition cursor-pointer shadow-sm flex-shrink-0"
+                  className="fv-pill inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-[#181b20] hover:bg-[#222731] border border-[#2b313d] rounded-lg cursor-pointer shadow-sm flex-shrink-0"
                   title="Geri Dön"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
@@ -5435,7 +5680,7 @@ export default function ValuationTerminal({
                                 window.open(`/analysis/${r.ticker.toUpperCase()}`, '_blank');
                               }
                             }}
-                            className={`px-2.5 py-1 text-xs font-mono rounded-lg transition whitespace-nowrap border cursor-pointer ${
+                            className={`fv-pill px-2.5 py-1 text-xs font-mono rounded-lg whitespace-nowrap border cursor-pointer ${
                               isCurrent
                                 ? 'bg-[#f5c242]/15 text-[#f5c242] border-[#f5c242]/50 font-bold shadow-sm'
                                 : 'bg-[#181b20] text-slate-400 hover:text-white hover:bg-[#222731] border-[#2b313d]'
@@ -5677,7 +5922,7 @@ export default function ValuationTerminal({
                             title={`${f.label} (${f.count} hisse)`}
                           >
                             <span>{f.label}</span>
-                            <span className={`text-[9px] px-1 py-0.2 rounded font-mono ${
+                            <span className={`text-[9px] px-1 py-0.5 rounded font-mono ${
                               leaderboardIndexFilter === f.key ? 'bg-black/30 text-white' : 'text-slate-500'
                             }`}>
                               {f.count}
@@ -6048,7 +6293,7 @@ export default function ValuationTerminal({
           
           {/* BIST 53 RESMİ İŞ YATIRIM SEKTÖR VE ŞİRKET LİSTESİ PANELİ */}
           {step === 'sectors' && (() => {
-            // Analiz edilmiş şirketleri 53 İş Yatırım resmi sektörüne göre eşleştir
+            const deduplicatedSectorReports = getLatestReportsPerTicker(savedReports);
             const sectorReportsMap: Record<string, SavedReport[]> = {};
 
             // 53 sektörün tamamını ilklendir
@@ -6056,8 +6301,8 @@ export default function ValuationTerminal({
               sectorReportsMap[sec] = [];
             });
 
-            // Analiz edilmiş raporları sektörlere ata
-            savedReports.forEach(rep => {
+            // Her hissenin en güncel raporunu resmi sektörüne ata
+            deduplicatedSectorReports.forEach(rep => {
               const secName = getCompanySectorDisplayName(rep.ticker, rep.sector);
               if (!sectorReportsMap[secName]) {
                 sectorReportsMap[secName] = [];
@@ -6065,182 +6310,489 @@ export default function ValuationTerminal({
               sectorReportsMap[secName].push(rep);
             });
 
-            const allSectorEntries = Object.entries(sectorReportsMap);
-            const activeSectorCount = allSectorEntries.filter(([_, reps]) => reps.length > 0).length;
+            const sectorRichList = Object.entries(sectorReportsMap).map(([secName, reps]) => {
+              const sortedReps = sortReportsByScoreDesc(reps);
+              const alCount = sortedReps.filter(r => (r.decision || '').trim().toUpperCase() === 'AL').length;
+              const almaCount = sortedReps.filter(r => (r.decision || '').trim().toUpperCase() === 'ALMA').length;
+              const notrCount = sortedReps.length - alCount - almaCount;
 
-            // Filtreleme (Arama ve Aktif/Tümü sekmesi)
-            const filteredSectorEntries = allSectorEntries.filter(([secName, reps]) => {
-              // Sekme filtresi
-              if (sectorFilterTab === 'ACTIVE' && reps.length === 0) return false;
+              const validScores = sortedReps
+                .map(r => parseNumericScore(r.score))
+                .filter((s): s is number => s !== null && Number.isFinite(s));
+              const avgScore = validScores.length > 0
+                ? Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length)
+                : null;
 
-              // Arama filtresi
+              const validUpsides = sortedReps
+                .map(r => {
+                  const fv = parseFinancialNumber(r.fairValue) ?? 0;
+                  const pr = parseFinancialNumber(r.price) ?? 0;
+                  return fv > 0 && pr > 0 ? ((fv - pr) / pr) * 100 : null;
+                })
+                .filter((u): u is number => u !== null && Number.isFinite(u));
+              const avgUpside = validUpsides.length > 0
+                ? Number((validUpsides.reduce((a, b) => a + b, 0) / validUpsides.length).toFixed(1))
+                : null;
+
+              const officialAvg = findOfficialSectorAverage(secName);
+              return { secName, reports: sortedReps, alCount, notrCount, almaCount, avgScore, avgUpside, officialAvg };
+            });
+
+            const activeSectors = sectorRichList.filter(s => s.reports.length > 0);
+            const activeSectorCount = activeSectors.length;
+            const coveragePct = Math.round((activeSectorCount / Math.max(1, ISYATIRIM_53_OFFICIAL_SECTOR_NAMES.length)) * 100);
+
+            const topScoreSector = [...activeSectors]
+              .filter(s => s.avgScore !== null)
+              .sort((a, b) => (b.avgScore ?? -1) - (a.avgScore ?? -1))[0] || null;
+            const topUpsideSector = [...activeSectors]
+              .filter(s => s.avgUpside !== null)
+              .sort((a, b) => (b.avgUpside ?? -999) - (a.avgUpside ?? -999))[0] || null;
+
+            const filteredSectors = sectorRichList.filter(({ secName, reports }) => {
+              if (sectorFilterTab === 'ACTIVE' && reports.length === 0) return false;
               if (sectorSearchTerm.trim()) {
-                const q = sectorSearchTerm.toLowerCase().trim();
-                const matchesSector = secName.toLowerCase().includes(q);
-                const matchesCompany = reps.some(r => 
-                  r.ticker.toLowerCase().includes(q) ||
-                  ((r as any).companyName || r.extractedData?.company_name || '').toLowerCase().includes(q)
+                const q = sectorSearchTerm.toLocaleLowerCase('tr-TR').trim();
+                const matchesSector = secName.toLocaleLowerCase('tr-TR').includes(q);
+                const matchesCompany = reports.some(r =>
+                  r.ticker.toLocaleLowerCase('tr-TR').includes(q) ||
+                  ((r as any).companyName || r.extractedData?.company_name || '').toLocaleLowerCase('tr-TR').includes(q)
                 );
                 return matchesSector || matchesCompany;
               }
               return true;
             });
 
-            // Sıralama: Şirketi olanlar önce (çoktan aza), sonra alfabetik
-            const sortedSectorEntries = filteredSectorEntries.sort((a, b) => {
-              if (b[1].length !== a[1].length) return b[1].length - a[1].length;
-              return a[0].localeCompare(b[0], 'tr');
+            const sortedSectorEntries = [...filteredSectors].sort((a, b) => {
+              if (sectorSortMode === 'alpha') {
+                return a.secName.localeCompare(b.secName, 'tr');
+              }
+              if (sectorSortMode === 'score') {
+                const diff = (b.avgScore ?? -1) - (a.avgScore ?? -1);
+                if (diff !== 0) return diff;
+              } else if (sectorSortMode === 'upside') {
+                const diff = (b.avgUpside ?? -999) - (a.avgUpside ?? -999);
+                if (diff !== 0) return diff;
+              }
+              if (b.reports.length !== a.reports.length) return b.reports.length - a.reports.length;
+              return a.secName.localeCompare(b.secName, 'tr');
             });
 
+            const isSearchAutoExpanded = sectorSearchTerm.trim().length > 0 && sortedSectorEntries.length <= 5;
+            const isSectorExpanded = (sec: string) =>
+              isSearchAutoExpanded ? (expandedSectors[sec] !== false) : !!expandedSectors[sec];
+
             const toggleSector = (sec: string) => {
+              if (isSearchAutoExpanded) {
+                setExpandedSectors(prev => ({ ...prev, [sec]: prev[sec] === false ? true : false }));
+                return;
+              }
               setExpandedSectors(prev => ({
                 ...prev,
                 [sec]: prev[sec] === undefined ? true : !prev[sec]
               }));
             };
 
-            const toggleAll = (expand: boolean) => {
+            const focusSector = (sec: string) => {
+              setSectorSearchTerm('');
+              setSectorFilterTab('ACTIVE');
+              setExpandedSectors(prev => ({ ...prev, [sec]: true }));
+            };
+
+            const allVisibleExpanded = sortedSectorEntries.length > 0 && sortedSectorEntries.every(s => isSectorExpanded(s.secName));
+            const toggleAllSectors = (expand: boolean) => {
               const next: Record<string, boolean> = {};
-              sortedSectorEntries.forEach(([sec]) => {
-                next[sec] = expand;
+              sortedSectorEntries.forEach(s => {
+                next[s.secName] = expand;
               });
               setExpandedSectors(next);
             };
 
             return (
-              <div className="space-y-6">
-                {/* ÜST BAŞLIK VE KONTROL KARTI */}
-                <div className="bg-[#181b20] border border-[#2b313d] rounded-xl p-4 sm:p-5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight font-sans">
-                      Sektörler
-                    </h2>
-                    <div className="flex items-center gap-1.5 bg-[#12151c] p-1 rounded-lg border border-[#2b313d]">
-                      <button
-                        type="button"
-                        onClick={() => setSectorFilterTab('ACTIVE')}
-                        className={`px-2.5 py-1 rounded-md text-xs font-semibold transition ${
-                          sectorFilterTab === 'ACTIVE'
-                            ? 'bg-[#21262d] text-white shadow-sm'
-                            : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        Analiz Edilmiş ({activeSectorCount})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSectorFilterTab('ALL')}
-                        className={`px-2.5 py-1 rounded-md text-xs font-semibold transition ${
-                          sectorFilterTab === 'ALL'
-                            ? 'bg-[#21262d] text-white shadow-sm'
-                            : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        Tümü (53)
-                      </button>
+              <div className="space-y-5 fv-panel-enter">
+                {/* ÜST BAŞLIK & SEKTÖR RADAR KONTROL PANELİ */}
+                <div className="bg-[#151821] border border-[#262c38] rounded-2xl p-5 sm:p-6 space-y-5">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3.5">
+                      <div className="w-11 h-11 rounded-xl bg-emerald-500/12 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                        <Layers className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <h2 className="text-xl font-bold text-white tracking-tight font-sans">
+                            BIST Sektörler
+                          </h2>
+                          <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
+                            53 Resmi Alt Sektör
+                          </span>
+                        </div>
+                        <p className="text-xs sm:text-sm text-slate-400 mt-0.5 font-sans">
+                          İş Yatırım resmi sektör sınıflandırması, güncel çarpan ortalamaları ve analiz kapsamınızın sektörel dağılımı.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* Analiz Edilmiş / Tümü */}
+                      <div className="flex items-center gap-1 bg-[#101319] p-1 rounded-xl border border-[#262c38]">
+                        <button
+                          type="button"
+                          onClick={() => setSectorFilterTab('ACTIVE')}
+                          className={`fv-pill px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                            sectorFilterTab === 'ACTIVE'
+                              ? 'bg-emerald-600 text-white font-bold shadow-sm'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          Analiz Edilmiş ({activeSectorCount})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSectorFilterTab('ALL')}
+                          className={`fv-pill px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                            sectorFilterTab === 'ALL'
+                              ? 'bg-emerald-600 text-white font-bold shadow-sm'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          Tümü (53)
+                        </button>
+                      </div>
+
+                      {/* Tümünü Aç / Kapat */}
+                      {sortedSectorEntries.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => toggleAllSectors(!allVisibleExpanded)}
+                          className="fv-pill px-3 py-1.5 rounded-xl bg-[#101319] hover:bg-[#1e232e] border border-[#262c38] text-xs font-medium text-slate-300 hover:text-white cursor-pointer flex items-center gap-1.5"
+                        >
+                          {allVisibleExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          <span>{allVisibleExpanded ? 'Daralt' : 'Tümünü Aç'}</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 
-                  <div className="relative w-full sm:w-64">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={sectorSearchTerm}
-                      onChange={(e) => setSectorSearchTerm(e.target.value)}
-                      placeholder="Sektör veya hisse ara..."
-                      className="w-full bg-[#12151c] border border-[#2b313d] rounded-lg pl-8 pr-7 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
-                    />
-                    {sectorSearchTerm && (
-                      <button
-                        type="button"
-                        onClick={() => setSectorSearchTerm('')}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                  {/* 4-KART SEKTÖR İSTİHBARAT ŞERİDİ */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="fv-kpi-card bg-[#101319] border border-[#232834] rounded-xl p-3.5 space-y-2">
+                      <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                        <span>SEKTÖR KAPSAMA</span>
+                        <span className="text-emerald-400 font-bold">%{coveragePct}</span>
+                      </div>
+                      <div className="text-lg font-mono font-bold text-white">
+                        {activeSectorCount} <span className="text-xs text-slate-400 font-normal">/ 53 sektör</span>
+                      </div>
+                      <div className="h-1.5 w-full rounded-full bg-[#1c212b] overflow-hidden">
+                        <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500" style={{ width: `${Math.max(3, coveragePct)}%` }} />
+                      </div>
+                    </div>
+
+                    <div className="fv-kpi-card bg-[#101319] border border-[#232834] rounded-xl p-3.5 space-y-1.5">
+                      <div className="text-[11px] font-mono text-slate-400">ANALİZ EDİLEN ŞİRKET</div>
+                      <div className="text-lg font-mono font-bold text-white">
+                        {deduplicatedSectorReports.length} <span className="text-xs text-slate-400 font-normal">tekil hisse</span>
+                      </div>
+                      <div className="text-[11px] font-mono text-slate-400">
+                        <span className="text-emerald-400 font-semibold">{deduplicatedSectorReports.filter(r => r.decision === 'AL').length} AL</span>
+                        {' · '}
+                        <span className="text-amber-400 font-semibold">{deduplicatedSectorReports.filter(r => r.decision !== 'AL' && r.decision !== 'ALMA').length} NÖTR</span>
+                        {' · '}
+                        <span className="text-rose-400 font-semibold">{deduplicatedSectorReports.filter(r => r.decision === 'ALMA').length} ALMA</span>
+                      </div>
+                    </div>
+
+                    <div
+                      role={topScoreSector ? 'button' : undefined}
+                      tabIndex={topScoreSector ? 0 : undefined}
+                      onClick={() => topScoreSector && focusSector(topScoreSector.secName)}
+                      onKeyDown={(e) => {
+                        if (topScoreSector && (e.key === 'Enter' || e.key === ' ')) {
+                          e.preventDefault();
+                          focusSector(topScoreSector.secName);
+                        }
+                      }}
+                      className={`fv-kpi-card bg-[#101319] border border-[#232834] rounded-xl p-3.5 space-y-1.5 ${topScoreSector ? 'cursor-pointer hover:border-emerald-500/40' : ''}`}
+                    >
+                      <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                        <span>EN YÜKSEK ORT. SKOR</span>
+                        {topScoreSector && <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />}
+                      </div>
+                      {topScoreSector ? (
+                        <>
+                          <div className="text-sm font-sans font-bold text-white truncate" title={topScoreSector.secName}>
+                            {topScoreSector.secName}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs font-mono">
+                            <span className={`font-bold ${getScoreColorStyle(topScoreSector.avgScore).text}`}>
+                              {topScoreSector.avgScore}/100
+                            </span>
+                            <span className="text-slate-500">({topScoreSector.reports.length} hisse)</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-xs text-slate-500 font-mono pt-1">Henüz analiz yok</div>
+                      )}
+                    </div>
+
+                    <div
+                      role={topUpsideSector && topUpsideSector.avgUpside !== null ? 'button' : undefined}
+                      tabIndex={topUpsideSector && topUpsideSector.avgUpside !== null ? 0 : undefined}
+                      onClick={() => topUpsideSector && focusSector(topUpsideSector.secName)}
+                      onKeyDown={(e) => {
+                        if (topUpsideSector && (e.key === 'Enter' || e.key === ' ')) {
+                          e.preventDefault();
+                          focusSector(topUpsideSector.secName);
+                        }
+                      }}
+                      className={`fv-kpi-card bg-[#101319] border border-[#232834] rounded-xl p-3.5 space-y-1.5 ${topUpsideSector && topUpsideSector.avgUpside !== null ? 'cursor-pointer hover:border-emerald-500/40' : ''}`}
+                    >
+                      <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                        <span>EN YÜKSEK POTANSİYEL</span>
+                        {topUpsideSector && topUpsideSector.avgUpside !== null && <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />}
+                      </div>
+                      {topUpsideSector && topUpsideSector.avgUpside !== null ? (
+                        <>
+                          <div className="text-sm font-sans font-bold text-white truncate" title={topUpsideSector.secName}>
+                            {topUpsideSector.secName}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs font-mono">
+                            <span className={`font-bold ${topUpsideSector.avgUpside >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {topUpsideSector.avgUpside >= 0 ? `+%${topUpsideSector.avgUpside}` : `-%${Math.abs(topUpsideSector.avgUpside)}`}
+                            </span>
+                            <span className="text-slate-500">ort. marj</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-xs text-slate-500 font-mono pt-1">Henüz analiz yok</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ARAMA & SIRALAMA BAR */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-t border-[#232834]">
+                    <div className="relative flex-1 max-w-md">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={sectorSearchTerm}
+                        onChange={(e) => setSectorSearchTerm(e.target.value)}
+                        placeholder="Sektör adı, hisse kodu veya şirket ara (Örn: Bankacılık, THYAO)..."
+                        className="w-full bg-[#101319] border border-[#262c38] rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+                      />
+                      {sectorSearchTerm && (
+                        <button
+                          type="button"
+                          onClick={() => setSectorSearchTerm('')}
+                          aria-label="Aramayı temizle"
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-slate-500 hover:text-white cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                      <span className="text-[11px] font-mono text-slate-500 mr-1">Sırala:</span>
+                      {[
+                        { id: 'count', label: 'Şirket Sayısı' },
+                        { id: 'score', label: 'Ort. Skor' },
+                        { id: 'upside', label: 'Potansiyel' },
+                        { id: 'alpha', label: 'A-Z' }
+                      ].map(opt => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setSectorSortMode(opt.id as any)}
+                          className={`fv-pill px-2.5 py-1 rounded-lg font-medium border cursor-pointer ${
+                            sectorSortMode === opt.id
+                              ? 'bg-[#21262d] text-emerald-400 border-emerald-500/40 font-semibold'
+                              : 'bg-[#101319] text-slate-400 border-[#232834] hover:text-white'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                {/* SEKTÖR LİSTESİ (ACCORDION TABLER) */}
+                {/* SEKTÖR AKORDİYON KARTLARI */}
                 {sortedSectorEntries.length === 0 ? (
-                  <div className="p-12 text-center rounded-2xl border border-[#2e3440] bg-[#1a1e26] space-y-3">
+                  <div className="p-12 text-center rounded-2xl border border-[#262c38] bg-[#151821] space-y-3">
                     <Building2 className="w-12 h-12 mx-auto text-slate-600 opacity-60" />
                     <h4 className="text-base font-bold text-slate-200">Kriterlere Uygun Sektör Bulunamadı</h4>
                     <p className="text-xs text-slate-400 max-w-md mx-auto">
-                      Arama kriterinizi temizleyebilir veya "Tüm Resmi Sektörler" sekmesine geçerek 53 sektörü görüntüleyebilirsiniz.
+                      Arama kriterinizi temizleyebilir veya &ldquo;Tümü (53)&rdquo; sekmesine geçerek tüm resmi BIST alt sektörlerini görüntüleyebilirsiniz.
                     </p>
+                    <button
+                      type="button"
+                      onClick={() => { setSectorSearchTerm(''); setSectorFilterTab('ALL'); }}
+                      className="fv-pill inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer"
+                    >
+                      <span>Tüm 53 Sektörü Göster</span>
+                    </button>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {sortedSectorEntries.map(([secName, reports]) => {
-                      // Eğer şirket varsa varsayılan açık gelsin, yoksa kullanıcı tıklarsa açılsın
-                      const isExpanded = !!expandedSectors[secName];
+                  <div className="space-y-3">
+                    {sortedSectorEntries.map(({ secName, reports, alCount, notrCount, almaCount, avgScore, avgUpside, officialAvg }) => {
+                      const isExpanded = isSectorExpanded(secName);
+                      const hasReports = reports.length > 0;
+                      const alPct = hasReports ? (alCount / reports.length) * 100 : 0;
+                      const notrPct = hasReports ? (notrCount / reports.length) * 100 : 0;
+                      const almaPct = hasReports ? (almaCount / reports.length) * 100 : 0;
 
                       return (
-                        <div key={secName} className="bg-[#181b20] border border-[#262c37] rounded-xl overflow-hidden shadow-sm transition hover:border-[#384252]">
-                          {/* Sektör Satırı */}
+                        <div
+                          key={secName}
+                          className={`bg-[#151821] border rounded-2xl overflow-hidden transition ${
+                            isExpanded
+                              ? 'border-emerald-500/40'
+                              : 'border-[#262c38] hover:border-[#384252]'
+                          }`}
+                        >
+                          {/* Zengin Sektör Özet Başlığı */}
                           <div
+                            role="button"
+                            tabIndex={0}
                             onClick={() => toggleSector(secName)}
-                            className="py-3 px-4 sm:px-5 flex items-center justify-between gap-4 cursor-pointer select-none transition group hover:bg-[#1f2530]"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                toggleSector(secName);
+                              }
+                            }}
+                            className="py-3.5 px-4 sm:px-5 flex flex-col lg:flex-row lg:items-center justify-between gap-3 cursor-pointer select-none transition group hover:bg-[#1b202b]"
                           >
-                            <div className="flex items-center gap-3">
-                              <span className="text-sm font-semibold text-slate-200 group-hover:text-emerald-400 transition font-sans">
-                                {secName}
-                              </span>
+                            {/* Sol: İkon + Sektör Adı + İş Yatırım Resmi Çarpan Benchmarkları */}
+                            <div className="flex items-start sm:items-center gap-3 min-w-0">
+                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border transition ${
+                                hasReports
+                                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 group-hover:bg-emerald-500/20'
+                                  : 'bg-[#101319] border-[#262c38] text-slate-500'
+                              }`}>
+                                <Building2 className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0 space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-sm sm:text-[15px] font-bold text-white group-hover:text-emerald-400 transition font-sans">
+                                    {secName}
+                                  </span>
+                                  <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+                                    hasReports
+                                      ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/50'
+                                      : 'bg-[#101319] text-slate-500 border-[#262c38]'
+                                  }`}>
+                                    {reports.length} şirket
+                                  </span>
+                                </div>
+                                {officialAvg && (officialAvg.pe || officialAvg.pb || officialAvg.evEbitda) && (
+                                  <div className="flex items-center gap-2 flex-wrap text-[11px] font-mono text-slate-400">
+                                    <span className="text-slate-500">Sektör Ort:</span>
+                                    {officialAvg.pe != null && (
+                                      <span className="px-1.5 py-0.5 rounded bg-[#101319] border border-[#232834] text-slate-300">
+                                        F/K <strong className="text-white">{officialAvg.pe.toFixed(1)}x</strong>
+                                      </span>
+                                    )}
+                                    {officialAvg.pb != null && (
+                                      <span className="px-1.5 py-0.5 rounded bg-[#101319] border border-[#232834] text-slate-300">
+                                        PD/DD <strong className="text-white">{officialAvg.pb.toFixed(2)}x</strong>
+                                      </span>
+                                    )}
+                                    {officialAvg.evEbitda != null && (
+                                      <span className="px-1.5 py-0.5 rounded bg-[#101319] border border-[#232834] text-slate-300">
+                                        FD/FAVÖK <strong className="text-white">{officialAvg.evEbitda.toFixed(1)}x</strong>
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
 
-                            <div className="flex items-center gap-3">
-                              <span className={`text-xs font-mono font-medium px-2.5 py-0.5 rounded-full border transition ${
-                                reports.length > 0
-                                  ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/50'
-                                  : 'bg-[#21262d] text-slate-400 border-[#2e3440]'
-                              }`}>
-                                {reports.length} şirket
-                              </span>
-                              <div className="text-slate-400 group-hover:text-white transition">
-                                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                            {/* Sağ: Karar Dağılım Çubuğu + Ort. Skor + Ort. Potansiyel + Chevron */}
+                            <div className="flex items-center justify-between lg:justify-end gap-4 shrink-0 pl-12 lg:pl-0">
+                              {hasReports && (
+                                <>
+                                  {/* Karar Dağılım Çubuğu */}
+                                  <div className="hidden sm:flex flex-col items-end gap-1 min-w-[115px]">
+                                    <div className="flex items-center gap-1.5 text-[10px] font-mono">
+                                      {alCount > 0 && <span className="text-emerald-400 font-bold">{alCount} AL</span>}
+                                      {notrCount > 0 && <span className="text-amber-400 font-bold">{notrCount} NÖTR</span>}
+                                      {almaCount > 0 && <span className="text-rose-400 font-bold">{almaCount} ALMA</span>}
+                                    </div>
+                                    <div className="h-1.5 w-28 rounded-full bg-[#101319] overflow-hidden flex">
+                                      {alPct > 0 && <div className="h-full bg-emerald-400" style={{ width: `${alPct}%` }} />}
+                                      {notrPct > 0 && <div className="h-full bg-amber-400" style={{ width: `${notrPct}%` }} />}
+                                      {almaPct > 0 && <div className="h-full bg-rose-400" style={{ width: `${almaPct}%` }} />}
+                                    </div>
+                                  </div>
+
+                                  {avgScore !== null && (
+                                    <div className="text-right font-mono">
+                                      <div className="text-[10px] text-slate-500">ORT. SKOR</div>
+                                      <div className={`text-xs font-bold ${getScoreColorStyle(avgScore).text}`}>
+                                        {avgScore}/100
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {avgUpside !== null && (
+                                    <div className="text-right font-mono min-w-[66px]">
+                                      <div className="text-[10px] text-slate-500">POTANSİYEL</div>
+                                      <div className={`text-xs font-bold ${avgUpside >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                        {avgUpside >= 0 ? `+%${avgUpside}` : `-%${Math.abs(avgUpside)}`}
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+
+                              <div className={`w-7 h-7 rounded-lg bg-[#101319] border border-[#262c38] flex items-center justify-center text-slate-400 group-hover:text-white group-hover:border-slate-500 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-emerald-400 border-emerald-500/40' : ''}`}>
+                                <ChevronDown className="w-4 h-4" />
                               </div>
                             </div>
                           </div>
 
                           {/* Sektöre Ait Şirket Tablosu veya Boş Durum */}
                           {isExpanded && (
-                            <div>
+                            <div className="border-t border-[#232834]">
                               {reports.length === 0 ? (
-                                <div className="p-6 text-center bg-[#13161c]/50 space-y-2">
+                                <div className="p-6 text-center bg-[#101319]/60 space-y-2.5">
                                   <p className="text-xs text-slate-400">
                                     Bu sektörde henüz analiz edilmiş hisse bulunmuyor.
                                   </p>
                                   <button
                                     type="button"
                                     onClick={resetToNewAnalysis}
-                                    className="px-3 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-xs font-semibold border border-emerald-500/30 transition cursor-pointer"
+                                    className="fv-pill px-3.5 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-xs font-semibold border border-emerald-500/35 cursor-pointer"
                                   >
                                     + {secName} Sektöründe Şirket Analiz Et
                                   </button>
                                 </div>
                               ) : (
-                                <div className="overflow-x-auto touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                                <div className="overflow-x-auto touch-pan-x no-scrollbar">
                                   <table className="w-full text-left text-sm border-collapse font-sans">
                                     <thead>
-                                      <tr className="border-b border-[#2e3440] bg-[#12151c]/80 text-[11px] font-mono text-slate-400 uppercase tracking-wider">
-                                        <th className="py-3 px-4 sticky left-0 bg-[#12151c] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] min-w-[110px]">Hisse</th>
+                                      <tr className="border-b border-[#262c38] bg-[#101319] text-[11px] font-mono text-slate-400 uppercase tracking-wider">
+                                        <th className="py-3 px-4 sticky left-0 bg-[#101319] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] min-w-[125px]">Hisse</th>
                                         <th className="py-3 px-4">Şirket Ünvanı</th>
-                                        <th className="py-3 px-4 text-right">Piyasa Fiyatı</th>
-                                        <th className="py-3 px-4 text-right">Adil Değer</th>
+                                        <th className="py-3 px-3 text-right">Fiyat</th>
+                                        <th className="py-3 px-3 text-right">Adil Değer</th>
                                         <th className="py-3 px-4 text-center">İskonto / Prim</th>
-                                        <th className="py-3 px-4 text-center">Skor</th>
-                                        <th className="py-3 px-4 text-center">Karar</th>
-                                        <th className="py-3 px-5 text-right">İşlem</th>
+                                        <th className="py-3 px-3 text-center">Skor</th>
+                                        <th className="py-3 px-3 text-center">Karar</th>
+                                        <th className="py-3 px-4 text-right">İşlem</th>
                                       </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-[#2e3440]/60 text-slate-300">
+                                    <tbody className="divide-y divide-[#232834] text-slate-300">
                                       {reports.map((rep, idx) => {
                                         const fv = parseFinancialNumber(rep.fairValue) ?? 0;
                                         const pr = parseFinancialNumber(rep.price) ?? 0;
                                         const disc = (fv > 0 && pr > 0) ? Number((((fv - pr) / pr) * 100).toFixed(1)) : null;
                                         const compName = (rep as any).companyName || rep.extractedData?.company_name || '';
+                                        const symUpper = (rep.ticker || '').toUpperCase();
+                                        const inPort = portfolioTickers.includes(symUpper);
+                                        const inFav = favoriteTickers.includes(symUpper);
 
                                         return (
                                           <tr
@@ -6253,11 +6805,11 @@ export default function ValuationTerminal({
                                                 window.open(`/analysis/${rep.ticker.toUpperCase()}`, '_blank');
                                               }
                                             }}
-                                            className="hover:bg-[#21262d] transition cursor-pointer group"
+                                            className="fv-row cursor-pointer group"
                                           >
-                                            <td className="py-3 px-4 sticky left-0 bg-[#12151c] group-hover:bg-[#21262d] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] min-w-[110px]">
-                                              <div className="flex items-center gap-1.5">
-                                                <span className="font-mono text-xs text-slate-500">#{idx + 1}</span>
+                                            <td className="py-3 px-4 sticky left-0 bg-[#151821] group-hover:bg-[#1c222d] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] min-w-[125px]">
+                                              <div className="flex items-center gap-2">
+                                                <span className="font-mono text-[11px] text-slate-500 w-5">#{idx + 1}</span>
                                                 <a
                                                   href={`/analysis/${rep.ticker.toUpperCase()}`}
                                                   onClick={(e) => {
@@ -6273,53 +6825,85 @@ export default function ValuationTerminal({
                                                       window.open(`/analysis/${rep.ticker.toUpperCase()}`, '_blank');
                                                     }
                                                   }}
-                                                  className="font-mono font-bold text-white text-base group-hover:text-[#f5c242] transition"
+                                                  className="font-mono font-bold text-white text-sm sm:text-base group-hover:text-[#f5c242] transition"
                                                 >
                                                   {rep.ticker}
                                                 </a>
+                                                {rep.period && (
+                                                  <span className="text-[10px] font-mono text-slate-500 hidden xl:inline">{rep.period}</span>
+                                                )}
                                               </div>
                                             </td>
-                                            <td className="py-3 px-4 text-xs text-slate-300 font-sans truncate max-w-[200px]">
+                                            <td className="py-3 px-4 text-xs text-slate-300 font-sans truncate max-w-[220px]">
                                               {compName || '—'}
                                             </td>
-                                            <td className="py-3 px-4 text-right font-mono font-bold text-white">
+                                            <td className="py-3 px-3 text-right font-mono font-bold text-white">
                                               {pr > 0 ? `₺${pr.toFixed(2)}` : '—'}
                                             </td>
-                                            <td className="py-3 px-4 text-right font-mono font-bold text-[#f5c242]">
+                                            <td className="py-3 px-3 text-right font-mono font-bold text-[#f5c242]">
                                               {fv > 0 ? `₺${fv.toFixed(2)}` : '—'}
                                             </td>
                                             <td className="py-3 px-4 text-center font-mono">
                                               {disc !== null ? (
-                                                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                                                  disc >= 0 ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                                                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                                                  disc >= 0
+                                                    ? 'bg-emerald-500/12 text-emerald-400 border-emerald-500/30'
+                                                    : 'bg-rose-500/12 text-rose-400 border-rose-500/30'
                                                 }`}>
                                                   {disc >= 0 ? `+${disc}%` : `${disc}%`}
                                                 </span>
                                               ) : <span className="text-slate-500">—</span>}
                                             </td>
-                                            <td className={`py-3 px-4 text-center font-mono font-bold text-xs ${getScoreColorStyle(rep.score).text}`}>
+                                            <td className={`py-3 px-3 text-center font-mono font-bold text-xs ${getScoreColorStyle(rep.score).text}`}>
                                               {formatScore(rep.score)}
                                             </td>
-                                            <td className="py-3 px-4 text-center font-mono">
-                                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                                                rep.decision === 'AL' ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/80' :
-                                                rep.decision === 'ALMA' ? 'bg-rose-950/80 text-rose-400 border border-rose-800/80' :
-                                                'bg-amber-950/80 text-amber-400 border border-amber-800/80'
+                                            <td className="py-3 px-3 text-center font-mono">
+                                              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-md border ${
+                                                rep.decision === 'AL' ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800/80' :
+                                                rep.decision === 'ALMA' ? 'bg-rose-950/80 text-rose-400 border-rose-800/80' :
+                                                'bg-amber-950/80 text-amber-400 border-amber-800/80'
                                               }`}>
                                                 {rep.decision || 'N/A'}
                                               </span>
                                             </td>
-                                            <td className="py-3 px-5 text-right font-sans">
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  openReport(rep.id, rep.ticker);
-                                                }}
-                                                className="px-3 py-1 rounded-lg bg-[#21262d] hover:bg-[#2b313d] text-slate-200 text-xs font-semibold transition cursor-pointer"
-                                              >
-                                                Raporu İncele
-                                              </button>
+                                            <td className="py-3 px-4 text-right font-sans">
+                                              <div className="inline-flex items-center gap-1.5">
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => { e.stopPropagation(); toggleFavorite(rep.ticker); }}
+                                                  title={inFav ? 'Favorilerden Çıkar' : 'Favorilere Ekle'}
+                                                  className={`p-1.5 rounded-lg border cursor-pointer ${
+                                                    inFav
+                                                      ? 'bg-amber-400/15 text-amber-300 border-amber-400/40'
+                                                      : 'bg-[#101319] text-slate-500 hover:text-amber-300 border-[#262c38]'
+                                                  }`}
+                                                >
+                                                  <Star className={`w-3.5 h-3.5 ${inFav ? 'fill-amber-400 text-amber-400' : ''}`} />
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => { e.stopPropagation(); togglePortfolio(rep.ticker); }}
+                                                  title={inPort ? 'Portföyden Çıkar' : 'Portföye Ekle'}
+                                                  className={`p-1.5 rounded-lg border cursor-pointer ${
+                                                    inPort
+                                                      ? 'bg-[#f5c242]/15 text-[#f5c242] border-[#f5c242]/40'
+                                                      : 'bg-[#101319] text-slate-500 hover:text-[#f5c242] border-[#262c38]'
+                                                  }`}
+                                                >
+                                                  <Briefcase className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    openReport(rep.id, rep.ticker);
+                                                  }}
+                                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#21262d] hover:bg-emerald-600 text-slate-200 hover:text-white text-xs font-semibold cursor-pointer border border-[#2e3440] hover:border-emerald-500"
+                                                >
+                                                  <span>İncele</span>
+                                                  <ArrowUpRight className="w-3.5 h-3.5" />
+                                                </button>
+                                              </div>
                                             </td>
                                           </tr>
                                         );
@@ -6349,6 +6933,65 @@ export default function ValuationTerminal({
             const deduplicatedForThemes = getLatestReportsPerTicker(savedReports);
             const themeSummary = getThemeSummary(deduplicatedForThemes);
 
+            // Semantik tema görsel kimlik haritası
+            const themeVisualMeta: Record<InvestmentThemeId, {
+              iconBox: string;
+              activeCard: string;
+              barColor: string;
+              tagline: string;
+              hoverCard: string;
+            }> = {
+              GROWTH: {
+                iconBox: 'bg-emerald-500/12 text-emerald-400 border-emerald-500/30',
+                activeCard: 'border-emerald-400/70 bg-emerald-500/10 ring-1 ring-emerald-400/30',
+                barColor: 'bg-emerald-400',
+                tagline: '≥%30 büyüme & güçlü FAVÖK',
+                hoverCard: 'fv-card-emerald'
+              },
+              DEEP_VALUE: {
+                iconBox: 'bg-cyan-500/12 text-cyan-400 border-cyan-500/30',
+                activeCard: 'border-cyan-400/70 bg-cyan-500/10 ring-1 ring-cyan-400/30',
+                barColor: 'bg-cyan-400',
+                tagline: 'PD/DD ≤ 1,6x · Güçlü özkaynak',
+                hoverCard: 'fv-card-sky'
+              },
+              DEFENSIVE: {
+                iconBox: 'bg-blue-500/12 text-blue-400 border-blue-500/30',
+                activeCard: 'border-blue-400/70 bg-blue-500/10 ring-1 ring-blue-400/30',
+                barColor: 'bg-blue-400',
+                tagline: 'Net nakit / düşük borç kalkanı',
+                hoverCard: 'fv-card-sky'
+              },
+              TURNAROUND: {
+                iconBox: 'bg-amber-500/12 text-amber-400 border-amber-500/30',
+                activeCard: 'border-amber-400/70 bg-amber-500/10 ring-1 ring-amber-400/30',
+                barColor: 'bg-amber-400',
+                tagline: 'Zarardan kâra operasyonel dönüş',
+                hoverCard: 'fv-card-amber'
+              },
+              HIGH_ROIC: {
+                iconBox: 'bg-purple-500/12 text-purple-400 border-purple-500/30',
+                activeCard: 'border-purple-400/70 bg-purple-500/10 ring-1 ring-purple-400/30',
+                barColor: 'bg-purple-400',
+                tagline: 'ROIC > WACC · Pozitif EVA',
+                hoverCard: 'fv-card-purple'
+              },
+              CASH_COW: {
+                iconBox: 'bg-teal-500/12 text-teal-400 border-teal-500/30',
+                activeCard: 'border-teal-400/70 bg-teal-500/10 ring-1 ring-teal-400/30',
+                barColor: 'bg-teal-400',
+                tagline: 'Yüksek serbest nakit dönüşümü',
+                hoverCard: 'fv-card-emerald'
+              },
+              AVOID: {
+                iconBox: 'bg-rose-500/12 text-rose-400 border-rose-500/30',
+                activeCard: 'border-rose-400/70 bg-rose-500/10 ring-1 ring-rose-400/30',
+                barColor: 'bg-rose-400',
+                tagline: 'Değer tuzağı / sermaye erozyonu',
+                hoverCard: 'fv-card-rose'
+              }
+            };
+
             // Kesişim (Intersection / AND) Filtrelemesi
             let displayedItems: Array<{ report: SavedReport; matches: CompanyThemeMatch[] }> = [];
 
@@ -6370,44 +7013,124 @@ export default function ValuationTerminal({
             }
 
             if (themeSearchTerm.trim()) {
-              const q = themeSearchTerm.trim().toUpperCase();
-              displayedItems = displayedItems.filter(({ report, matches }) => 
-                report.ticker.toUpperCase().includes(q) ||
-                getCompanySectorDisplayName(report.ticker, report.sector).toUpperCase().includes(q) ||
-                ((report as any).companyName || report.extractedData?.company_name || '').toUpperCase().includes(q) ||
-                matches.some(m => m.reason.toUpperCase().includes(q) || m.themeName.toUpperCase().includes(q))
+              const q = themeSearchTerm.trim().toLocaleLowerCase('tr-TR');
+              displayedItems = displayedItems.filter(({ report, matches }) =>
+                report.ticker.toLocaleLowerCase('tr-TR').includes(q) ||
+                getCompanySectorDisplayName(report.ticker, report.sector).toLocaleLowerCase('tr-TR').includes(q) ||
+                ((report as any).companyName || report.extractedData?.company_name || '').toLocaleLowerCase('tr-TR').includes(q) ||
+                matches.some(m => m.reason.toLocaleLowerCase('tr-TR').includes(q) || m.themeName.toLocaleLowerCase('tr-TR').includes(q))
               );
             }
 
+            // Tüm görünüm modlarında (Liste, Kart, Kompakt) tutarlı sıralama
+            const sortedThemeItems = [...displayedItems].sort((a, b) => {
+              const { key, direction } = themesSort;
+              let valA: any = null;
+              let valB: any = null;
+              if (key === 'ticker') { valA = a.report.ticker || ''; valB = b.report.ticker || ''; }
+              else if (key === 'sector') {
+                valA = getCompanySectorDisplayName(a.report.ticker, a.report.sector);
+                valB = getCompanySectorDisplayName(b.report.ticker, b.report.sector);
+              }
+              else if (key === 'price') { valA = parseFinancialNumber(a.report.price) ?? 0; valB = parseFinancialNumber(b.report.price) ?? 0; }
+              else if (key === 'fairValue') {
+                const fvA = parseFinancialNumber((a.report as any).valuation?.fair_value ?? a.report.extractedData?.valuation?.fair_value ?? a.report.fairValue) ?? 0;
+                const fvB = parseFinancialNumber((b.report as any).valuation?.fair_value ?? b.report.extractedData?.valuation?.fair_value ?? b.report.fairValue) ?? 0;
+                valA = fvA; valB = fvB;
+              }
+              else if (key === 'discount') {
+                const fvA = parseFinancialNumber((a.report as any).valuation?.fair_value ?? a.report.extractedData?.valuation?.fair_value ?? a.report.fairValue) ?? 0;
+                const pA = parseFinancialNumber(a.report.price) ?? 0;
+                valA = (fvA > 0 && pA > 0) ? ((fvA - pA) / pA) * 100 : -999;
+                const fvB = parseFinancialNumber((b.report as any).valuation?.fair_value ?? b.report.extractedData?.valuation?.fair_value ?? b.report.fairValue) ?? 0;
+                const pB = parseFinancialNumber(b.report.price) ?? 0;
+                valB = (fvB > 0 && pB > 0) ? ((fvB - pB) / pB) * 100 : -999;
+              }
+              else if (key === 'score') {
+                valA = parseNumericScore(a.report.score) ?? -1;
+                valB = parseNumericScore(b.report.score) ?? -1;
+              }
+              else if (key === 'decision') { valA = a.report.decision || ''; valB = b.report.decision || ''; }
+
+              if (typeof valA === 'string') {
+                const cmp = valA.localeCompare(valB, 'tr');
+                return direction === 'asc' ? cmp : -cmp;
+              }
+              return direction === 'asc' ? (valA ?? 0) - (valB ?? 0) : (valB ?? 0) - (valA ?? 0);
+            });
+
+            // Seçili küme özet istatistikleri
+            const matchedAlCount = displayedItems.filter(({ report }) => (report.decision || '').trim().toUpperCase() === 'AL').length;
+            const matchedScores = displayedItems
+              .map(({ report }) => parseNumericScore(report.score))
+              .filter((s): s is number => s !== null && Number.isFinite(s));
+            const matchedAvgScore = matchedScores.length > 0
+              ? Math.round(matchedScores.reduce((a, b) => a + b, 0) / matchedScores.length)
+              : null;
+            const matchedUpsides = displayedItems
+              .map(({ report }) => {
+                const repVal = (report as any).valuation || report.extractedData?.valuation;
+                const fv = parseFinancialNumber(repVal?.fair_value ?? report.fairValue) ?? 0;
+                const pr = parseFinancialNumber(report.price) ?? 0;
+                return fv > 0 && pr > 0 ? ((fv - pr) / pr) * 100 : null;
+              })
+              .filter((u): u is number => u !== null && Number.isFinite(u));
+            const matchedAvgUpside = matchedUpsides.length > 0
+              ? Number((matchedUpsides.reduce((a, b) => a + b, 0) / matchedUpsides.length).toFixed(1))
+              : null;
+
             return (
-              <div className="space-y-6">
-                {/* Üst Başlık Banner */}
-                <div className="bg-[#1a1e26] border border-[#2e3440] p-6 rounded-2xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div>
-                    <h2 className="text-xl font-bold font-sans text-white tracking-tight">
-                      Yatırım Temaları
-                    </h2>
+              <div className="space-y-5 fv-panel-enter">
+                {/* Üst Başlık & Kontroller */}
+                <div className="bg-[#151821] border border-[#262c38] p-5 sm:p-6 rounded-2xl flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-11 h-11 rounded-xl bg-cyan-500/12 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
+                      <Compass className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <h2 className="text-xl font-bold font-sans text-white tracking-tight">
+                          Yatırım Temaları
+                        </h2>
+                        <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/25">
+                          7 Temel Strateji
+                        </span>
+                      </div>
+                      <p className="text-xs sm:text-sm text-slate-400 mt-0.5 font-sans">
+                        Bilanço dayanıklılığı, sermaye verimliliği (ROIC &gt; WACC), nakit dönüşümü ve iskonto disiplinlerine göre tematik radar.
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <div className="relative min-w-[220px]">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <div className="relative flex-1 sm:flex-initial min-w-[235px]">
                       <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
                         type="text"
                         value={themeSearchTerm}
                         onChange={(e) => setThemeSearchTerm(e.target.value)}
-                        placeholder="Şirket veya kod ara..."
-                        className="w-full bg-[#12151c] border border-[#2e3440] rounded-xl pl-9 pr-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#f5c242] transition font-sans"
+                        placeholder="Hisse, sektör veya tema ara..."
+                        className="w-full bg-[#101319] border border-[#262c38] rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition font-sans"
                       />
+                      {themeSearchTerm && (
+                        <button
+                          type="button"
+                          onClick={() => setThemeSearchTerm('')}
+                          aria-label="Aramayı temizle"
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
 
-                    {/* Görünüm Değiştirici (Liste / Kartlar / Küçük Simgeler) */}
-                    <div className="flex items-center bg-[#12151c] p-1 rounded-xl border border-[#2e3440] shrink-0">
+                    {/* Görünüm Değiştirici */}
+                    <div className="flex items-center bg-[#101319] p-1 rounded-xl border border-[#262c38] shrink-0">
                       <button
                         type="button"
                         title="Liste / Tablo Görünümü"
                         onClick={() => setDiscoverViewMode('list')}
-                        className={`p-1.5 rounded-lg transition cursor-pointer ${discoverViewMode === 'list' ? 'bg-[#f5c242] text-slate-950 font-bold shadow-sm' : 'text-slate-400 hover:text-white'}`}
+                        className={`fv-pill p-1.5 rounded-lg cursor-pointer ${discoverViewMode === 'list' ? 'bg-[#f5c242] text-slate-950 font-bold shadow-sm' : 'text-slate-400 hover:text-white'}`}
                       >
                         <List className="w-4 h-4" />
                       </button>
@@ -6415,15 +7138,15 @@ export default function ValuationTerminal({
                         type="button"
                         title="Kart Görünümü"
                         onClick={() => setDiscoverViewMode('cards')}
-                        className={`p-1.5 rounded-lg transition cursor-pointer ${discoverViewMode === 'cards' ? 'bg-[#f5c242] text-slate-950 font-bold shadow-sm' : 'text-slate-400 hover:text-white'}`}
+                        className={`fv-pill p-1.5 rounded-lg cursor-pointer ${discoverViewMode === 'cards' ? 'bg-[#f5c242] text-slate-950 font-bold shadow-sm' : 'text-slate-400 hover:text-white'}`}
                       >
                         <LayoutGrid className="w-4 h-4" />
                       </button>
                       <button
                         type="button"
-                        title="Küçük Simgeler (Kompakt Rozetler)"
+                        title="Kompakt Rozet Görünümü"
                         onClick={() => setDiscoverViewMode('compact')}
-                        className={`p-1.5 rounded-lg transition cursor-pointer ${discoverViewMode === 'compact' ? 'bg-[#f5c242] text-slate-950 font-bold shadow-sm' : 'text-slate-400 hover:text-white'}`}
+                        className={`fv-pill p-1.5 rounded-lg cursor-pointer ${discoverViewMode === 'compact' ? 'bg-[#f5c242] text-slate-950 font-bold shadow-sm' : 'text-slate-400 hover:text-white'}`}
                       >
                         <Grid className="w-4 h-4" />
                       </button>
@@ -6431,134 +7154,255 @@ export default function ValuationTerminal({
                   </div>
                 </div>
 
-                {/* Tema Filtreleme Çipleri (TÜMÜ + Çoklu Seçim Temaları) */}
-                <div className="flex items-center gap-2 overflow-x-auto pb-2 [scrollbar-width:none]">
-                  {/* TÜMÜ Butonu */}
+                {/* GÖRSEL STRATEJİ TEMA KARTLARI IZGARASI (Simetrik 4x2 Kurumsal Düzen) */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {/* TÜMÜ Strateji Kartı */}
                   <button
                     type="button"
                     onClick={() => setSelectedThemeFilters([])}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer border ${
+                    className={`fv-card text-left p-4 rounded-xl border cursor-pointer flex flex-col justify-between gap-2.5 ${
                       selectedThemeFilters.length === 0
-                        ? 'bg-[#f5c242] text-slate-950 border-[#f5c242] shadow-md font-bold'
-                        : 'bg-[#1a1e26] text-slate-300 border-[#2e3440] hover:text-white hover:bg-[#21262d]'
+                        ? 'bg-[#f5c242]/12 border-[#f5c242]/70 ring-1 ring-[#f5c242]/30'
+                        : 'bg-[#151821] border-[#262c38] hover:bg-[#1a1f2b]'
                     }`}
                   >
-                    <span>TÜMÜ</span>
-                    <span className={`text-xs font-mono px-2 py-0.5 rounded-full font-bold ${
-                      selectedThemeFilters.length === 0
-                        ? 'bg-slate-950 text-[#f5c242]'
-                        : 'bg-[#21262d] text-white border border-[#2e3440]'
-                    }`}>
-                      {deduplicatedForThemes.length}
-                    </span>
+                    <div className="flex items-center justify-between gap-1.5">
+                      <span className={`w-8 h-8 rounded-lg border flex items-center justify-center ${
+                        selectedThemeFilters.length === 0
+                          ? 'bg-[#f5c242] text-slate-950 border-[#f5c242]'
+                          : 'bg-[#101319] text-[#f5c242] border-[#262c38]'
+                      }`}>
+                        <Sparkles className="w-4 h-4" />
+                      </span>
+                      <span className={`text-xs font-mono font-bold px-2.5 py-0.5 rounded-full ${
+                        selectedThemeFilters.length === 0
+                          ? 'bg-[#f5c242] text-slate-950'
+                          : 'bg-[#101319] text-white border border-[#262c38]'
+                      }`}>
+                        {deduplicatedForThemes.length}
+                      </span>
+                    </div>
+                    <div>
+                      <div className={`text-[13px] font-bold font-sans ${selectedThemeFilters.length === 0 ? 'text-[#f5c242]' : 'text-white'}`}>
+                        TÜMÜ
+                      </div>
+                      <div className="text-[11px] text-slate-400 leading-snug mt-0.5">
+                        Tüm analiz kapsamı
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 flex-1 rounded-full bg-[#101319] overflow-hidden">
+                        <div className="h-full bg-[#f5c242] rounded-full" style={{ width: '100%' }} />
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-400">%100</span>
+                    </div>
                   </button>
 
-                  {/* Çoklu Seçilebilir Tema Butonları */}
+                  {/* 7 Semantik Yatırım Teması Kartı */}
                   {allThemesList.map(theme => {
-                    const count = themeSummary[theme.id as InvestmentThemeId]?.length || 0;
-                    const isSelected = selectedThemeFilters.includes(theme.id as InvestmentThemeId);
+                    const tid = theme.id as InvestmentThemeId;
+                    const count = themeSummary[tid]?.length || 0;
+                    const sharePct = deduplicatedForThemes.length > 0
+                      ? Math.round((count / deduplicatedForThemes.length) * 100)
+                      : 0;
+                    const isSelected = selectedThemeFilters.includes(tid);
+                    const vis = themeVisualMeta[tid];
+
                     return (
                       <button
                         key={theme.id}
                         type="button"
                         onClick={() => {
-                          setSelectedThemeFilters(prev => 
-                            prev.includes(theme.id as InvestmentThemeId)
-                              ? prev.filter(t => t !== theme.id)
-                              : [...prev, theme.id as InvestmentThemeId]
+                          setSelectedThemeFilters(prev =>
+                            prev.includes(tid)
+                              ? prev.filter(t => t !== tid)
+                              : [...prev, tid]
                           );
                         }}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer border ${
+                        title={`${theme.name} — ${theme.criteriaSummary}`}
+                        className={`fv-card ${vis.hoverCard} text-left p-4 rounded-xl border cursor-pointer flex flex-col justify-between gap-2.5 ${
                           isSelected
-                            ? 'bg-[#f5c242] text-slate-950 border-[#f5c242] shadow-md font-bold'
-                            : 'bg-[#1a1e26] text-slate-300 border-[#2e3440] hover:text-white hover:bg-[#21262d]'
+                            ? vis.activeCard
+                            : 'bg-[#151821] border-[#262c38] hover:bg-[#1a1f2b]'
                         }`}
                       >
-                        {renderThemeIcon(theme.iconTag, "w-4 h-4")}
-                        <span>{theme.shortLabel}</span>
-                        <span className={`text-xs font-mono px-2 py-0.5 rounded-full font-bold ${
-                          isSelected
-                            ? 'bg-slate-950 text-[#f5c242]'
-                            : count > 0 ? 'bg-[#21262d] text-white border border-[#2e3440]' : 'bg-[#12151c] text-slate-500'
-                        }`}>
-                          {count}
-                        </span>
+                        <div className="flex items-center justify-between gap-1.5">
+                          <span className={`w-8 h-8 rounded-lg border flex items-center justify-center ${vis.iconBox}`}>
+                            {renderThemeIcon(theme.iconTag, 'w-4 h-4')}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {isSelected && (
+                              <span className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-sm">
+                                <Check className="w-2.5 h-2.5 stroke-[3]" />
+                              </span>
+                            )}
+                            <span className={`text-xs font-mono font-bold px-2.5 py-0.5 rounded-full ${
+                              count > 0
+                                ? 'bg-[#101319] text-white border border-[#2e3440]'
+                                : 'bg-[#101319] text-slate-500 border border-[#232834]'
+                            }`}>
+                              {count}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="text-[13px] font-bold text-white font-sans truncate">
+                            {theme.shortLabel}
+                          </div>
+                          <div className="text-[11px] text-slate-400 leading-snug mt-0.5 line-clamp-1">
+                            {vis.tagline}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 flex-1 rounded-full bg-[#101319] overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${vis.barColor}`}
+                              style={{ width: `${count > 0 ? Math.max(8, sharePct) : 0}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] font-mono text-slate-500">%{sharePct}</span>
+                        </div>
                       </button>
                     );
                   })}
                 </div>
 
-                {/* Filtreleme Kriteri Bilgi Barı */}
-                {selectedThemeFilters.length === 0 ? (
-                  <div className="p-4 rounded-2xl bg-[#1a1e26] border border-[#2e3440] flex items-center justify-between gap-4 text-xs font-sans text-slate-300 shadow-md">
-                    <div className="flex items-center gap-2">
-                      <span className="text-slate-400 font-medium">Seçili Kapsam:</span>
-                      <span className="text-white font-bold">Tüm Analiz Edilmiş Şirketler ({savedReports.length})</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-4 rounded-2xl bg-[#1a1e26] border border-[#2e3440] flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shadow-md">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-slate-400 font-medium">Seçili Kesişim ({selectedThemeFilters.length} Tema):</span>
-                      {selectedThemeFilters.map(tid => {
-                        const t = INVESTMENT_THEMES[tid];
-                        return (
-                          <span
-                            key={tid}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#21262d] text-[#f5c242] border border-[#2e3440] font-mono font-bold"
+                {/* SEÇİLİ STRATEJİ ÖZET & METRİK ŞERİDİ */}
+                <div className="p-4 rounded-2xl bg-[#151821] border border-[#262c38] flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs">
+                  <div className="space-y-1.5 min-w-0">
+                    {selectedThemeFilters.length === 0 ? (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-slate-400 font-medium">Aktif Kapsam:</span>
+                        <span className="text-white font-bold">Tüm Analiz Edilmiş Şirketler ({deduplicatedForThemes.length})</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-slate-400 font-medium">Aktif Strateji ({selectedThemeFilters.length}):</span>
+                          {selectedThemeFilters.map(tid => {
+                            const t = INVESTMENT_THEMES[tid];
+                            return (
+                              <span
+                                key={tid}
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono font-bold text-[11px] ${t?.badgeClass || 'bg-[#21262d] text-[#f5c242] border-[#2e3440]'}`}
+                              >
+                                {renderThemeIcon(t?.iconTag || 'Zap', 'w-3 h-3')}
+                                <span>{t?.shortLabel || tid}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedThemeFilters(prev => prev.filter(x => x !== tid))}
+                                  className="hover:text-white ml-0.5 cursor-pointer"
+                                  title="Kaldır"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            );
+                          })}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedThemeFilters([])}
+                            className="text-[11px] text-rose-400 hover:text-rose-300 font-bold cursor-pointer ml-1"
                           >
-                            {renderThemeIcon(t?.iconTag || 'zap', "w-3.5 h-3.5")}
-                            <span>{t?.shortLabel || tid}</span>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedThemeFilters(prev => prev.filter(x => x !== tid))}
-                              className="hover:text-white transition ml-1 cursor-pointer text-sm"
-                              title="Kaldır"
-                            >
-                              ×
-                            </button>
-                          </span>
-                        );
-                      })}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedThemeFilters([])}
-                      className="text-xs text-rose-400 hover:text-rose-300 font-bold transition cursor-pointer self-start md:self-auto font-sans"
-                    >
-                      Filtreleri Temizle (Tüm Şirketler)
-                    </button>
+                            Temizle
+                          </button>
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-sans">
+                          {selectedThemeFilters.map(tid => INVESTMENT_THEMES[tid]?.criteriaSummary).filter(Boolean).join(' • ')}
+                        </div>
+                      </>
+                    )}
                   </div>
-                )}
+
+                  {/* Eşleşen Küme KPI Özetleri & Hızlı Sıralama */}
+                  <div className="flex items-center gap-3 sm:gap-4 font-mono text-[11px] shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-[#232834] flex-wrap">
+                    <div>
+                      <span className="text-slate-500 block text-[10px]">EŞLEŞEN</span>
+                      <span className="text-white font-bold">{sortedThemeItems.length} şirket</span>
+                    </div>
+                    <div className="w-px h-6 bg-[#262c38]" />
+                    <div>
+                      <span className="text-slate-500 block text-[10px]">AL KARARI</span>
+                      <span className="text-emerald-400 font-bold">{matchedAlCount} hisse</span>
+                    </div>
+                    {matchedAvgScore !== null && (
+                      <>
+                        <div className="w-px h-6 bg-[#262c38]" />
+                        <div>
+                          <span className="text-slate-500 block text-[10px]">ORT. SKOR</span>
+                          <span className={`font-bold ${getScoreColorStyle(matchedAvgScore).text}`}>{matchedAvgScore}/100</span>
+                        </div>
+                      </>
+                    )}
+                    {matchedAvgUpside !== null && (
+                      <>
+                        <div className="w-px h-6 bg-[#262c38]" />
+                        <div>
+                          <span className="text-slate-500 block text-[10px]">ORT. POTANSİYEL</span>
+                          <span className={`font-bold ${matchedAvgUpside >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {matchedAvgUpside >= 0 ? `+%${matchedAvgUpside}` : `-%${Math.abs(matchedAvgUpside)}`}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                    {discoverViewMode !== 'list' && (
+                      <>
+                        <div className="w-px h-6 bg-[#262c38] hidden sm:block" />
+                        <div className="flex items-center gap-1 bg-[#101319] p-1 rounded-lg border border-[#262c38]">
+                          {[
+                            { key: 'score', label: 'Skor', dir: 'desc' as const },
+                            { key: 'discount', label: 'Potansiyel', dir: 'desc' as const },
+                            { key: 'ticker', label: 'A-Z', dir: 'asc' as const }
+                          ].map(opt => (
+                            <button
+                              key={opt.key}
+                              type="button"
+                              onClick={() => setThemesSort({ key: opt.key, direction: opt.dir })}
+                              className={`fv-pill px-2 py-0.5 rounded text-[10.5px] font-semibold cursor-pointer ${
+                                themesSort.key === opt.key
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'text-slate-400 hover:text-white'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
 
                 {/* Şirketler Görünümü: Boş Durum VEYA Seçili Görünüm Modu */}
                 {displayedItems.length === 0 ? (
-                  <div className="bg-[#1a1e26] border border-[#2e3440] rounded-2xl p-12 text-center text-slate-400 space-y-3">
+                  <div className="bg-[#151821] border border-[#262c38] rounded-2xl p-12 text-center text-slate-400 space-y-3">
                     <Compass className="w-12 h-12 mx-auto text-slate-600 opacity-60" />
                     <h4 className="text-base font-bold text-slate-200 font-sans">
-                      Seçilen Filtre Kesişimine Uyan Şirket Bulunamadı
+                      Seçilen Tema Kriterlerine Uyan Şirket Bulunamadı
                     </h4>
                     <p className="text-sm text-slate-400 max-w-md mx-auto font-sans">
                       Seçtiğiniz temaların tümünü aynı anda sağlayan analiz edilmiş şirket bulunmuyor. Temaları tekil olarak deneyebilir veya filtreleri temizleyebilirsiniz.
                     </p>
                     <button
                       type="button"
-                      onClick={() => setSelectedThemeFilters([])}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-[#f5c242] text-slate-950 font-bold rounded-xl text-sm transition cursor-pointer"
+                      onClick={() => { setSelectedThemeFilters([]); setThemeSearchTerm(''); }}
+                      className="fv-pill inline-flex items-center gap-2 px-4 py-2 bg-[#f5c242] text-slate-950 font-bold rounded-xl text-sm cursor-pointer"
                     >
                       <span>Tüm Şirketleri Göster</span>
                     </button>
                   </div>
                 ) : discoverViewMode === 'list' ? (
                   /* Liste / Tablo Görünümü */
-                  <div className="bg-[#1a1e26] border border-[#2e3440] rounded-2xl overflow-hidden shadow-xl">
-                    <div className="overflow-x-auto touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                  <div className="bg-[#151821] border border-[#262c38] rounded-2xl overflow-hidden">
+                    <div className="overflow-x-auto touch-pan-x no-scrollbar">
                       <table className="w-full text-left text-sm border-collapse font-sans">
                         <thead>
-                          <tr className="border-b border-[#2e3440] bg-[#12151c]/80 text-[11px] font-mono text-slate-400 uppercase tracking-wider">
-                            <th 
+                          <tr className="border-b border-[#262c38] bg-[#101319] text-[11px] font-mono text-slate-400 uppercase tracking-wider">
+                            <th
                               onClick={() => setThemesSort(p => ({ key: 'ticker', direction: p.key === 'ticker' && p.direction === 'asc' ? 'desc' : 'asc' }))}
-                              className="py-3.5 px-4 cursor-pointer select-none hover:text-white transition group sticky left-0 bg-[#12151c] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] min-w-[120px]"
+                              className="py-3.5 px-4 cursor-pointer select-none hover:text-white transition sticky left-0 bg-[#101319] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] min-w-[130px]"
                               title="Şirkete Göre Sırala"
                             >
                               <span className="inline-flex items-center gap-1.5">
@@ -6568,9 +7412,9 @@ export default function ValuationTerminal({
                                 )}
                               </span>
                             </th>
-                            <th 
+                            <th
                               onClick={() => setThemesSort(p => ({ key: 'sector', direction: p.key === 'sector' && p.direction === 'asc' ? 'desc' : 'asc' }))}
-                              className="py-3.5 px-3 cursor-pointer select-none hover:text-white transition group"
+                              className="py-3.5 px-3 cursor-pointer select-none hover:text-white transition"
                               title="Sektöre Göre Sırala"
                             >
                               <span className="inline-flex items-center gap-1.5">
@@ -6580,9 +7424,9 @@ export default function ValuationTerminal({
                                 )}
                               </span>
                             </th>
-                            <th 
+                            <th
                               onClick={() => setThemesSort(p => ({ key: 'price', direction: p.key === 'price' && p.direction === 'desc' ? 'asc' : 'desc' }))}
-                              className="py-3.5 px-3 text-right cursor-pointer select-none hover:text-white transition group"
+                              className="py-3.5 px-3 text-right cursor-pointer select-none hover:text-white transition"
                               title="Fiyata Göre Sırala"
                             >
                               <span className="inline-flex items-center justify-end gap-1.5 w-full">
@@ -6592,9 +7436,9 @@ export default function ValuationTerminal({
                                 )}
                               </span>
                             </th>
-                            <th 
+                            <th
                               onClick={() => setThemesSort(p => ({ key: 'fairValue', direction: p.key === 'fairValue' && p.direction === 'desc' ? 'asc' : 'desc' }))}
-                              className="py-3.5 px-3 text-right cursor-pointer select-none hover:text-white transition group"
+                              className="py-3.5 px-3 text-right cursor-pointer select-none hover:text-white transition"
                               title="Adil Değere Göre Sırala"
                             >
                               <span className="inline-flex items-center justify-end gap-1.5 w-full">
@@ -6604,9 +7448,9 @@ export default function ValuationTerminal({
                                 )}
                               </span>
                             </th>
-                            <th 
+                            <th
                               onClick={() => setThemesSort(p => ({ key: 'discount', direction: p.key === 'discount' && p.direction === 'desc' ? 'asc' : 'desc' }))}
-                              className="py-3.5 px-3 text-center cursor-pointer select-none hover:text-white transition group"
+                              className="py-3.5 px-3 text-center cursor-pointer select-none hover:text-white transition"
                               title="Potansiyele Göre Sırala"
                             >
                               <span className="inline-flex items-center justify-center gap-1.5 w-full">
@@ -6616,9 +7460,9 @@ export default function ValuationTerminal({
                                 )}
                               </span>
                             </th>
-                            <th 
+                            <th
                               onClick={() => setThemesSort(p => ({ key: 'score', direction: p.key === 'score' && p.direction === 'desc' ? 'asc' : 'desc' }))}
-                              className="py-3.5 px-3 text-center cursor-pointer select-none hover:text-white transition group"
+                              className="py-3.5 px-3 text-center cursor-pointer select-none hover:text-white transition"
                               title="Skora Göre Sırala"
                             >
                               <span className="inline-flex items-center justify-center gap-1.5 w-full">
@@ -6628,9 +7472,9 @@ export default function ValuationTerminal({
                                 )}
                               </span>
                             </th>
-                            <th 
+                            <th
                               onClick={() => setThemesSort(p => ({ key: 'decision', direction: p.key === 'decision' && p.direction === 'asc' ? 'desc' : 'asc' }))}
-                              className="py-3.5 px-3 text-center cursor-pointer select-none hover:text-white transition group"
+                              className="py-3.5 px-3 text-center cursor-pointer select-none hover:text-white transition"
                               title="Karara Göre Sırala"
                             >
                               <span className="inline-flex items-center justify-center gap-1.5 w-full">
@@ -6641,171 +7485,164 @@ export default function ValuationTerminal({
                               </span>
                             </th>
                             <th className="py-3.5 px-4">Eşleşen Temalar</th>
-                            <th className="py-3.5 px-4 text-center">İşlem</th>
+                            <th className="py-3.5 px-4 text-right">İşlem</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-[#2e3440]/60 text-slate-300">
-                          {(() => {
-                            const sortedList = [...displayedItems].sort((a, b) => {
-                              const { key, direction } = themesSort;
-                              let valA: any = null;
-                              let valB: any = null;
-                              if (key === 'ticker') { valA = a.report.ticker || ''; valB = b.report.ticker || ''; }
-                              else if (key === 'sector') {
-                                valA = getCompanySectorDisplayName(a.report.ticker, a.report.sector);
-                                valB = getCompanySectorDisplayName(b.report.ticker, b.report.sector);
-                              }
-                              else if (key === 'price') { valA = parseFinancialNumber(a.report.price) ?? 0; valB = parseFinancialNumber(b.report.price) ?? 0; }
-                              else if (key === 'fairValue') {
-                                const fvA = (a.report as any).valuation?.fair_value ?? a.report.extractedData?.valuation?.fair_value ?? parseFinancialNumber(a.report.fairValue) ?? 0;
-                                const fvB = (b.report as any).valuation?.fair_value ?? b.report.extractedData?.valuation?.fair_value ?? parseFinancialNumber(b.report.fairValue) ?? 0;
-                                valA = fvA; valB = fvB;
-                              }
-                              else if (key === 'discount') {
-                                const fvA = (a.report as any).valuation?.fair_value ?? a.report.extractedData?.valuation?.fair_value ?? parseFinancialNumber(a.report.fairValue) ?? 0;
-                                const pA = parseFinancialNumber(a.report.price) ?? 0;
-                                valA = (fvA > 0 && pA > 0) ? ((fvA - pA) / pA) * 100 : -999;
-                                const fvB = (b.report as any).valuation?.fair_value ?? b.report.extractedData?.valuation?.fair_value ?? parseFinancialNumber(b.report.fairValue) ?? 0;
-                                const pB = parseFinancialNumber(b.report.price) ?? 0;
-                                valB = (fvB > 0 && pB > 0) ? ((fvB - pB) / pB) * 100 : -999;
-                              }
-                              else if (key === 'score') {
-                                valA = parseNumericScore(a.report.score) ?? -1;
-                                valB = parseNumericScore(b.report.score) ?? -1;
-                              }
-                              else if (key === 'decision') { valA = a.report.decision || ''; valB = b.report.decision || ''; }
+                        <tbody className="divide-y divide-[#232834] text-slate-300">
+                          {sortedThemeItems.map(({ report, matches }, idx) => {
+                              const repVal = (report as any).valuation || report.extractedData?.valuation;
+                              const fairVal = parseFinancialNumber(repVal?.fair_value ?? report.fairValue) ?? 0;
+                              const priceNum = parseFinancialNumber(report.price) ?? 0;
+                              const discount = (fairVal > 0 && priceNum > 0)
+                                ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))
+                                : null;
+                              const isAl = report.decision === 'AL';
+                              const isAlma = report.decision === 'ALMA';
+                              const companyName = (report as any).companyName || report.extractedData?.company_name || '';
+                              const symUpper = (report.ticker || '').toUpperCase();
+                              const inPort = portfolioTickers.includes(symUpper);
+                              const inFav = favoriteTickers.includes(symUpper);
 
-                              if (typeof valA === 'string') {
-                                const cmp = valA.localeCompare(valB, 'tr');
-                                return direction === 'asc' ? cmp : -cmp;
-                              } else {
-                                return direction === 'asc' ? (valA ?? 0) - (valB ?? 0) : (valB ?? 0) - (valA ?? 0);
-                              }
-                            });
-
-                            return sortedList.map(({ report, matches }, idx) => {
-                            const repVal = (report as any).valuation || report.extractedData?.valuation;
-                            const fairVal = parseFinancialNumber(repVal?.fair_value ?? report.fairValue) ?? 0;
-                            const priceNum = parseFinancialNumber(report.price) ?? 0;
-                            const discount = (fairVal > 0 && priceNum > 0)
-                              ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))
-                              : null;
-                            const isAl = report.decision === 'AL';
-                            const isAlma = report.decision === 'ALMA';
-                            const companyName = (report as any).companyName || report.extractedData?.company_name || '';
-
-                            return (
-                              <tr
-                                key={`${report.id}-table-${idx}`}
-                                onClick={() => openReport(report.id, report.ticker)}
-                                onAuxClick={(e) => {
-                                  if (e.button === 1) {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    window.open(`/analysis/${report.ticker.toUpperCase()}`, '_blank');
-                                  }
-                                }}
-                                className="hover:bg-[#21262d] transition cursor-pointer group"
-                              >
-                                <td className="py-3 px-4 sticky left-0 bg-[#1a1e26] group-hover:bg-[#21262d] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] min-w-[120px]">
-                                  <div className="flex items-center gap-2">
-                                    <a
-                                      href={`/analysis/${report.ticker.toUpperCase()}`}
-                                      onClick={(e) => {
-                                        if (e.button === 0 && !e.ctrlKey && !e.metaKey) {
-                                          e.preventDefault();
-                                          openReport(report.id, report.ticker);
-                                        }
-                                      }}
-                                      onAuxClick={(e) => {
-                                        if (e.button === 1) {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          window.open(`/analysis/${report.ticker.toUpperCase()}`, '_blank');
-                                        }
-                                      }}
-                                      className="font-mono font-bold text-white group-hover:text-[#f5c242] transition"
-                                    >
-                                      {report.ticker}
-                                    </a>
-                                    {companyName && (
-                                      <span className="text-xs text-slate-400 truncate max-w-[160px] hidden sm:inline">
-                                        {companyName}
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="py-3 px-3 font-mono text-xs text-slate-300">
-                                  {getCompanySectorDisplayName(report.ticker, report.sector)}
-                                </td>
-                                <td className="py-3 px-3 text-right font-mono font-bold text-white">
-                                  {priceNum > 0 ? `₺${priceNum.toFixed(2)}` : '—'}
-                                </td>
-                                <td className="py-3 px-3 text-right font-mono font-bold text-emerald-400">
-                                  {fairVal > 0 ? `₺${fairVal.toFixed(2)}` : '—'}
-                                </td>
-                                <td className="py-3 px-3 text-center">
-                                  {discount !== null ? (
-                                    <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-bold ${
-                                      discount >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
-                                    }`}>
-                                      {discount >= 0 ? `+${discount}%` : `${discount}%`}
-                                    </span>
-                                  ) : <span className="text-slate-500">—</span>}
-                                </td>
-                                <td className={`py-3 px-3 text-center font-mono font-bold text-xs ${getScoreColorStyle(report.score).text}`}>
-                                  {formatScore(report.score)}
-                                </td>
-                                <td className="py-3 px-3 text-center">
-                                  <span className={`px-2 py-0.5 rounded-md text-xs font-mono font-bold border ${
-                                    isAl ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
-                                    isAlma ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' :
-                                    'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                                  }`}>
-                                    {report.decision}
-                                  </span>
-                                </td>
-                                <td className="py-3 px-4 text-xs text-slate-300 max-w-[280px]">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    {matches.map(m => (
-                                      <span
-                                        key={m.themeId}
-                                        className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${m.badgeClass}`}
-                                        title={m.reason}
-                                      >
-                                        {m.shortLabel}
-                                      </span>
-                                    ))}
-                                    {matches.length === 0 && (
-                                      <span className="text-slate-500 font-mono text-[11px]">Temel Analiz</span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="py-3 px-4 text-center">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
+                              return (
+                                <tr
+                                  key={`${report.id}-table-${idx}`}
+                                  onClick={() => openReport(report.id, report.ticker)}
+                                  onAuxClick={(e) => {
+                                    if (e.button === 1) {
+                                      e.preventDefault();
                                       e.stopPropagation();
-                                      openReport(report.id, report.ticker);
-                                    }}
-                                    className="p-1.5 rounded-lg bg-[#21262d] hover:bg-[#f5c242] hover:text-slate-950 text-slate-300 transition cursor-pointer"
-                                    title="Şirket Analizini Aç"
-                                  >
-                                    <ArrowUpRight className="w-4 h-4" />
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          });
-                          })()}
+                                      window.open(`/analysis/${report.ticker.toUpperCase()}`, '_blank');
+                                    }
+                                  }}
+                                  className="fv-row cursor-pointer group"
+                                >
+                                  <td className="py-3 px-4 sticky left-0 bg-[#151821] group-hover:bg-[#1c222d] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.3)] min-w-[130px]">
+                                    <div className="flex items-center gap-2">
+                                      <a
+                                        href={`/analysis/${report.ticker.toUpperCase()}`}
+                                        onClick={(e) => {
+                                          if (e.button === 0 && !e.ctrlKey && !e.metaKey) {
+                                            e.preventDefault();
+                                            openReport(report.id, report.ticker);
+                                          }
+                                        }}
+                                        onAuxClick={(e) => {
+                                          if (e.button === 1) {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            window.open(`/analysis/${report.ticker.toUpperCase()}`, '_blank');
+                                          }
+                                        }}
+                                        className="font-mono font-bold text-white group-hover:text-[#f5c242] transition"
+                                      >
+                                        {report.ticker}
+                                      </a>
+                                      {companyName && (
+                                        <span className="text-xs text-slate-400 truncate max-w-[150px] hidden sm:inline">
+                                          {companyName}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-3 font-mono text-xs text-slate-300">
+                                    {getCompanySectorDisplayName(report.ticker, report.sector)}
+                                  </td>
+                                  <td className="py-3 px-3 text-right font-mono font-bold text-white">
+                                    {priceNum > 0 ? `₺${priceNum.toFixed(2)}` : '—'}
+                                  </td>
+                                  <td className="py-3 px-3 text-right font-mono font-bold text-emerald-400">
+                                    {fairVal > 0 ? `₺${fairVal.toFixed(2)}` : '—'}
+                                  </td>
+                                  <td className="py-3 px-3 text-center">
+                                    {discount !== null ? (
+                                      <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-mono font-bold border ${
+                                        discount >= 0
+                                          ? 'bg-emerald-500/12 text-emerald-400 border-emerald-500/30'
+                                          : 'bg-rose-500/12 text-rose-400 border-rose-500/30'
+                                      }`}>
+                                        {discount >= 0 ? `+${discount}%` : `${discount}%`}
+                                      </span>
+                                    ) : <span className="text-slate-500">—</span>}
+                                  </td>
+                                  <td className={`py-3 px-3 text-center font-mono font-bold text-xs ${getScoreColorStyle(report.score).text}`}>
+                                    {formatScore(report.score)}
+                                  </td>
+                                  <td className="py-3 px-3 text-center">
+                                    <span className={`px-2 py-0.5 rounded-md text-xs font-mono font-bold border ${
+                                      isAl ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
+                                      isAlma ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' :
+                                      'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                                    }`}>
+                                      {report.decision}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-4 text-xs text-slate-300 max-w-[300px]">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      {matches.map(m => (
+                                        <span
+                                          key={m.themeId}
+                                          className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md border ${m.badgeClass}`}
+                                          title={`${m.reason} (${m.metricValue})`}
+                                        >
+                                          {renderThemeIcon(m.iconTag, 'w-3 h-3')}
+                                          <span>{m.shortLabel}</span>
+                                        </span>
+                                      ))}
+                                      {matches.length === 0 && (
+                                        <span className="text-slate-500 font-mono text-[11px]">Temel Analiz</span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-4 text-right">
+                                    <div className="inline-flex items-center gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); toggleFavorite(report.ticker); }}
+                                        title={inFav ? 'Favorilerden Çıkar' : 'Favorilere Ekle'}
+                                        className={`p-1.5 rounded-lg border cursor-pointer ${
+                                          inFav
+                                            ? 'bg-amber-400/15 text-amber-300 border-amber-400/40'
+                                            : 'bg-[#101319] text-slate-500 hover:text-amber-300 border-[#262c38]'
+                                        }`}
+                                      >
+                                        <Star className={`w-3.5 h-3.5 ${inFav ? 'fill-amber-400 text-amber-400' : ''}`} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); togglePortfolio(report.ticker); }}
+                                        title={inPort ? 'Portföyden Çıkar' : 'Portföye Ekle'}
+                                        className={`p-1.5 rounded-lg border cursor-pointer ${
+                                          inPort
+                                            ? 'bg-[#f5c242]/15 text-[#f5c242] border-[#f5c242]/40'
+                                            : 'bg-[#101319] text-slate-500 hover:text-[#f5c242] border-[#262c38]'
+                                        }`}
+                                      >
+                                        <Briefcase className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          openReport(report.id, report.ticker);
+                                        }}
+                                        className="p-1.5 rounded-lg bg-[#21262d] hover:bg-[#f5c242] hover:text-slate-950 text-slate-300 cursor-pointer border border-[#2e3440]"
+                                        title="Şirket Analizini Aç"
+                                      >
+                                        <ArrowUpRight className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
                         </tbody>
                       </table>
                     </div>
                   </div>
                 ) : discoverViewMode === 'compact' ? (
-                  /* Küçük Simgeler (Small Icons / Kompakt Rozetler) Görünümü */
+                  /* Küçük Simgeler (Kompakt Rozetler) Görünümü */
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                    {displayedItems.map(({ report, matches }, idx) => {
+                    {sortedThemeItems.map(({ report, matches }, idx) => {
                       const repVal = (report as any).valuation || report.extractedData?.valuation;
                       const fairVal = parseFinancialNumber(repVal?.fair_value ?? report.fairValue) ?? 0;
                       const priceNum = parseFinancialNumber(report.price) ?? 0;
@@ -6820,19 +7657,24 @@ export default function ValuationTerminal({
                         <div
                           key={`${report.id}-compact-${idx}`}
                           onClick={() => openReport(report.id, report.ticker)}
-                          className="bg-[#1a1e26] hover:bg-[#21262d] border border-[#2e3440] hover:border-[#f5c242]/50 p-3.5 rounded-2xl transition cursor-pointer group flex flex-col justify-between space-y-2.5 shadow-md"
+                          className={`fv-card bg-[#151821] hover:bg-[#1c212c] border border-[#262c38] p-3.5 rounded-xl cursor-pointer group flex flex-col justify-between space-y-2.5 overflow-hidden ${
+                            isAl ? 'fv-card-emerald' : isAlma ? 'fv-card-rose' : 'fv-card-amber'
+                          }`}
                         >
+                          <div className={`h-0.5 -mx-3.5 -mt-3.5 mb-0.5 ${isAl ? 'bg-emerald-400/80' : isAlma ? 'bg-rose-400/80' : 'bg-amber-400/70'}`} />
                           <div className="flex items-center justify-between gap-1">
                             <span className="font-mono font-black text-base text-white group-hover:text-[#f5c242] transition">
                               {report.ticker}
                             </span>
-                            <span className={`w-2.5 h-2.5 rounded-full ${
-                              isAl ? 'bg-emerald-400' : isAlma ? 'bg-rose-400' : 'bg-amber-400'
-                            }`} />
+                            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                              isAl ? 'bg-emerald-500/15 text-emerald-400' : isAlma ? 'bg-rose-500/15 text-rose-400' : 'bg-amber-500/15 text-amber-400'
+                            }`}>
+                              {report.decision}
+                            </span>
                           </div>
 
                           <div className="flex items-center justify-between text-xs font-mono">
-                            <span className="text-slate-400 text-[11px] truncate max-w-[120px]">
+                            <span className="text-slate-400 text-[11px] truncate max-w-[110px]">
                               {getCompanySectorDisplayName(report.ticker, report.sector)}
                             </span>
                             {discount !== null ? (
@@ -6844,13 +7686,18 @@ export default function ValuationTerminal({
                             )}
                           </div>
 
-                          <div className="pt-2 border-t border-[#2e3440]/60 flex items-center justify-between text-[11px] font-mono">
+                          <div className="pt-2 border-t border-[#232834] flex items-center justify-between text-[11px] font-mono">
                             <span className="text-white font-bold">{priceNum > 0 ? `₺${priceNum.toFixed(1)}` : '—'}</span>
-                            {compactScoreNum !== null ? (
-                              <span className="text-slate-300 font-bold px-1.5 py-0.2 rounded bg-[#12151c] border border-[#2e3440]">
-                                {compactScoreNum}p
-                              </span>
-                            ) : null}
+                            <div className="flex items-center gap-1">
+                              {matches.length > 0 && (
+                                <span className="text-[10px] text-cyan-400">{matches.length}t</span>
+                              )}
+                              {compactScoreNum !== null ? (
+                                <span className={`font-bold px-1.5 py-0.5 rounded bg-[#101319] border border-[#262c38] ${getScoreColorStyle(report.score).text}`}>
+                                  {compactScoreNum}p
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
                         </div>
                       );
@@ -6859,111 +7706,157 @@ export default function ValuationTerminal({
                 ) : (
                   /* Kartlar Grid Görünümü */
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {displayedItems.map(({ report, matches }, idx) => {
+                    {sortedThemeItems.map(({ report, matches }, idx) => {
                       const repVal = (report as any).valuation || report.extractedData?.valuation;
                       const fairVal = parseFinancialNumber(repVal?.fair_value ?? report.fairValue) ?? 0;
                       const priceNum = parseFinancialNumber(report.price) ?? 0;
-                      const compactScoreNum = parseNumericScore(report.score);
                       const discount = (fairVal > 0 && priceNum > 0)
                         ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))
                         : null;
                       const isAl = report.decision === 'AL';
                       const isAlma = report.decision === 'ALMA';
                       const companyName = (report as any).companyName || report.extractedData?.company_name || '';
+                      const symUpper = (report.ticker || '').toUpperCase();
+                      const inPort = portfolioTickers.includes(symUpper);
+                      const inFav = favoriteTickers.includes(symUpper);
+                      const marginBarPct = discount !== null
+                        ? Math.max(10, Math.min(100, Math.round(Math.abs(discount))))
+                        : 0;
+                      const orderedMatches = [...matches].sort(
+                        (a, b) => (selectedThemeFilters.includes(b.themeId) ? 1 : 0) - (selectedThemeFilters.includes(a.themeId) ? 1 : 0)
+                      );
+                      const leadMatch = orderedMatches[0];
 
                       return (
                         <div
                           key={`${report.id}-theme-card-${idx}`}
-                          className="p-5 rounded-2xl bg-[#1a1e26] border border-[#2e3440] hover:border-[#f5c242]/50 transition group flex flex-col justify-between space-y-4 shadow-lg"
+                          onClick={() => openReport(report.id, report.ticker)}
+                          className={`fv-card ${isAl ? 'fv-card-emerald' : isAlma ? 'fv-card-rose' : 'fv-card-amber'} rounded-2xl bg-[#151821] border border-[#262c38] overflow-hidden cursor-pointer group flex flex-col justify-between`}
                         >
-                          <div className="space-y-3">
-                            {/* Başlık Satırı */}
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-lg font-black text-white font-mono tracking-tight group-hover:text-[#f5c242] transition">
-                                    {report.ticker}
-                                  </span>
-                                  <span className="text-xs text-slate-300 font-mono px-2 py-0.5 rounded bg-[#12151c] border border-[#2e3440]">
-                                    {getCompanySectorDisplayName(report.ticker, report.sector)}
-                                  </span>
-                                </div>
-                                {companyName && (
-                                  <div className="text-xs text-slate-400 truncate max-w-[200px] mt-0.5 font-sans">
-                                    {companyName}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className={`text-xs font-bold px-2.5 py-1 rounded-lg font-mono border ${
-                                  isAl ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
-                                  isAlma ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' :
-                                  'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                                }`}>
-                                  {report.decision}
-                                </span>
-                                {report.score && (
-                                  <span className="text-xs font-mono font-bold text-white bg-[#12151c] px-2.5 py-1 rounded-lg border border-[#2e3440]">
-                                    {formatScore(report.score)}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Fiyat & Adil Değer & Potansiyel Kutusu */}
-                            <div className="grid grid-cols-3 divide-x divide-[#2e3440] py-2 px-3 bg-[#12151c] rounded-xl border border-[#2e3440] text-sm font-mono text-center">
-                              <div>
-                                <span className="text-slate-400 text-xs block font-sans">Fiyat</span>
-                                <span className="text-white font-bold">{priceNum > 0 ? `₺${priceNum.toFixed(2)}` : '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-slate-400 text-xs block font-sans">Adil Değer</span>
-                                <span className="text-emerald-400 font-bold">{fairVal > 0 ? `₺${fairVal.toFixed(2)}` : '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-slate-400 text-xs block font-sans">Potansiyel</span>
-                                {discount !== null ? (
-                                  <span className={`font-bold ${discount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                    {discount >= 0 ? `+${discount}%` : `${discount}%`}
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-500">—</span>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Eşleşen Temalar */}
-                            {matches.length > 0 && (
-                              <div className="p-3 rounded-xl bg-[#21262d] border border-[#2e3440] space-y-2">
-                                <div className="text-[11px] font-mono text-slate-400 uppercase tracking-wider">
-                                  Eşleşen Temalar ({matches.length})
-                                </div>
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  {matches.map(m => (
-                                    <span
-                                      key={m.themeId}
-                                      className={`text-xs px-2 py-0.5 rounded-md border font-semibold ${m.badgeClass}`}
-                                    >
-                                      {m.shortLabel}
+                          <div className={`h-1 w-full ${isAl ? 'bg-gradient-to-r from-emerald-500 to-teal-400' : isAlma ? 'bg-gradient-to-r from-rose-500 to-red-400' : 'bg-gradient-to-r from-amber-500 to-yellow-400'}`} />
+                          <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                            <div className="space-y-3.5">
+                              {/* Başlık Satırı */}
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-lg font-black text-white font-mono tracking-tight group-hover:text-[#f5c242] transition">
+                                      {report.ticker}
                                     </span>
-                                  ))}
+                                    <span className="text-[11px] text-slate-300 font-mono px-2 py-0.5 rounded bg-[#101319] border border-[#262c38]">
+                                      {getCompanySectorDisplayName(report.ticker, report.sector)}
+                                    </span>
+                                  </div>
+                                  {companyName && (
+                                    <div className="text-xs text-slate-400 truncate max-w-[210px] mt-0.5 font-sans">
+                                      {companyName}
+                                    </div>
+                                  )}
                                 </div>
-                                <p className="text-xs text-slate-300 font-sans leading-relaxed pt-1 border-t border-[#2e3440]/60">
-                                  {matches[0].reason}
-                                </p>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); toggleFavorite(report.ticker); }}
+                                    title={inFav ? 'Favorilerden Çıkar' : 'Favorilere Ekle'}
+                                    className={`p-1.5 rounded-lg border cursor-pointer ${
+                                      inFav
+                                        ? 'bg-amber-400/15 text-amber-300 border-amber-400/40'
+                                        : 'bg-[#101319] text-slate-500 hover:text-amber-300 border-[#262c38]'
+                                    }`}
+                                  >
+                                    <Star className={`w-3.5 h-3.5 ${inFav ? 'fill-amber-400 text-amber-400' : ''}`} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); togglePortfolio(report.ticker); }}
+                                    title={inPort ? 'Portföyden Çıkar' : 'Portföye Ekle'}
+                                    className={`p-1.5 rounded-lg border cursor-pointer ${
+                                      inPort
+                                        ? 'bg-[#f5c242]/15 text-[#f5c242] border-[#f5c242]/40'
+                                        : 'bg-[#101319] text-slate-500 hover:text-[#f5c242] border-[#262c38]'
+                                    }`}
+                                  >
+                                    <Briefcase className="w-3.5 h-3.5" />
+                                  </button>
+                                  <span className={`text-xs font-bold px-2.5 py-1 rounded-lg font-mono border ${
+                                    isAl ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
+                                    isAlma ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' :
+                                    'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                                  }`}>
+                                    {report.decision}
+                                  </span>
+                                </div>
                               </div>
-                            )}
-                          </div>
 
-                          {/* İncele Butonu */}
-                          <button
-                            type="button"
-                            onClick={() => openReport(report.id, report.ticker)}
-                            className="w-full py-2.5 bg-[#21262d] hover:bg-[#f5c242] hover:text-slate-950 text-slate-200 rounded-xl text-sm font-bold transition flex items-center justify-center gap-2 border border-[#2e3440] hover:border-[#f5c242] cursor-pointer"
-                          >
-                            <span>Şirket Analizini İncele</span>
-                            <ArrowUpRight className="w-4 h-4" />
-                          </button>
+                              {/* Fiyat & Adil Değer & Görsel Hedef Çubuğu */}
+                              <div className="p-3 bg-[#101319] rounded-xl border border-[#232834] space-y-2.5">
+                                <div className="grid grid-cols-3 divide-x divide-[#232834] text-sm font-mono text-center">
+                                  <div>
+                                    <span className="text-slate-400 text-[10.5px] block font-sans">Fiyat</span>
+                                    <span className="text-white font-bold">{priceNum > 0 ? `₺${priceNum.toFixed(2)}` : '—'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400 text-[10.5px] block font-sans">Adil Değer</span>
+                                    <span className="text-emerald-400 font-bold">{fairVal > 0 ? `₺${fairVal.toFixed(2)}` : '—'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400 text-[10.5px] block font-sans">Potansiyel</span>
+                                    {discount !== null ? (
+                                      <span className={`font-bold ${discount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                        {discount >= 0 ? `+${discount}%` : `${discount}%`}
+                                      </span>
+                                    ) : <span className="text-slate-500">—</span>}
+                                  </div>
+                                </div>
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
+                                    <span>Skor: <strong className={getScoreColorStyle(report.score).text}>{formatScore(report.score)}</strong></span>
+                                    <span>{discount !== null ? (discount >= 0 ? `%${discount} İskonto Marjı` : `%${Math.abs(discount)} Primli`) : ''}</span>
+                                  </div>
+                                  <div className="h-1.5 w-full rounded-full bg-[#1a1f2b] overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full ${discount !== null && discount >= 0 ? 'bg-emerald-400' : 'bg-rose-400'}`}
+                                      style={{ width: `${marginBarPct}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Eşleşen Temalar & Metrik Kanıtları */}
+                              {orderedMatches.length > 0 && leadMatch && (
+                                <div className="p-3 rounded-xl bg-[#101319]/80 border border-[#232834] space-y-2">
+                                  <div className="flex items-center justify-between text-[10.5px] font-mono text-slate-400 uppercase tracking-wider">
+                                    <span>Eşleşen Temalar ({orderedMatches.length})</span>
+                                    <span className="text-cyan-400 font-bold">{leadMatch.metricValue}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    {orderedMatches.map(m => (
+                                      <span
+                                        key={m.themeId}
+                                        className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md border font-semibold ${m.badgeClass}`}
+                                      >
+                                        {renderThemeIcon(m.iconTag, 'w-3 h-3')}
+                                        <span>{m.shortLabel}</span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                  <p className="text-xs text-slate-300 font-sans leading-relaxed pt-1.5 border-t border-[#232834] line-clamp-2">
+                                    {leadMatch.reason}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* İncele Butonu */}
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); openReport(report.id, report.ticker); }}
+                              className="w-full py-2.5 bg-[#1e232e] group-hover:bg-[#f5c242] group-hover:text-slate-950 text-slate-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border border-[#2e3440] group-hover:border-[#f5c242] cursor-pointer"
+                            >
+                              <span>Şirket Analizini İncele</span>
+                              <ArrowUpRight className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -6986,98 +7879,191 @@ export default function ValuationTerminal({
             }
 
             // ==========================================
-            // 1. AKIŞ PANELİ (KAP & BİST HABER AKIŞI)
+            // 1. AKIŞ PANELİ (CANLI KAP İSTİHBARAT AKIŞI)
             // ==========================================
             if (isDashboard) {
-              const baseFeed = liveNewsFeed.length > 0 ? liveNewsFeed : getCompanyNewsFeed();
+              const analyzedTickersUnique = [...new Set(
+                savedReports.map(r => (r.ticker || '').toUpperCase().trim()).filter(Boolean)
+              )];
+              const fallbackFeed = analyzedTickersUnique.length > 0
+                ? getCompanyNewsFeed({ tickers: analyzedTickersUnique })
+                : [];
+              const baseFeed = liveNewsFeed.length > 0 ? liveNewsFeed : fallbackFeed;
               const newsCategories = getNewsCategories(baseFeed);
+
+              const impactCounts = {
+                ALL: baseFeed.length,
+                HIGH_IMPACT: baseFeed.filter(i => i.impact === 'HIGH_IMPACT').length,
+                POSITIVE: baseFeed.filter(i => i.impact === 'POSITIVE').length,
+                NEGATIVE: baseFeed.filter(i => i.impact === 'NEGATIVE').length,
+                NEUTRAL: baseFeed.filter(i => i.impact === 'NEUTRAL').length,
+              };
+
               let newsFeed = baseFeed.filter(item => {
                 if (newsCategoryFilter !== 'ALL' && item.category !== newsCategoryFilter) return false;
+                if (newsImpactFilter !== 'ALL' && item.impact !== newsImpactFilter) return false;
                 return true;
               });
 
               if (newsSearchTerm.trim()) {
-                const nq = newsSearchTerm.trim().toLowerCase();
-                newsFeed = newsFeed.filter(item => 
-                  item.ticker.toLowerCase().includes(nq) ||
-                  item.companyName.toLowerCase().includes(nq) ||
-                  item.title.toLowerCase().includes(nq) ||
-                  item.summary.toLowerCase().includes(nq) ||
-                  item.categoryLabel.toLowerCase().includes(nq)
+                const nq = newsSearchTerm.trim().toLocaleLowerCase('tr-TR');
+                newsFeed = newsFeed.filter(item =>
+                  item.ticker.toLocaleLowerCase('tr-TR').includes(nq) ||
+                  item.companyName.toLocaleLowerCase('tr-TR').includes(nq) ||
+                  item.title.toLocaleLowerCase('tr-TR').includes(nq) ||
+                  item.summary.toLocaleLowerCase('tr-TR').includes(nq) ||
+                  (item.fullText || '').toLocaleLowerCase('tr-TR').includes(nq) ||
+                  item.categoryLabel.toLocaleLowerCase('tr-TR').includes(nq)
                 );
               }
 
               return (
-                <div className="space-y-6">
-                  {/* Akış Başlık Barı */}
-                  <div className="bg-[#1a1e26] border border-[#2e3440] p-6 rounded-2xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <h2 className="text-xl font-bold font-sans text-white tracking-tight">
-                          Akış
-                        </h2>
-                        {lastFeedSync && (
-                          <span className="text-[11px] text-slate-500 font-mono hidden sm:inline">
-                            Son Güncelleme: {lastFeedSync.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        )}
+                <div className="space-y-5 fv-panel-enter">
+                  {/* Akış İstihbarat Başlık & Kontrol Paneli */}
+                  <div className="bg-[#151821] border border-[#262c38] p-5 sm:p-6 rounded-2xl space-y-4">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      <div className="flex items-start gap-3.5">
+                        <div className="w-11 h-11 rounded-xl bg-sky-500/12 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0 relative">
+                          <Radio className="w-5 h-5" />
+                          <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-[#151821] animate-pulse" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            <h2 className="text-xl font-bold font-sans text-white tracking-tight">
+                              KAP Bildirim Akışı
+                            </h2>
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                              CANLI KAP
+                            </span>
+                            {analyzedTickersUnique.length > 0 && (
+                              <span className="text-[11px] font-mono text-slate-400 px-2 py-0.5 rounded-full bg-[#101319] border border-[#262c38]">
+                                {analyzedTickersUnique.length} şirket izleniyor
+                              </span>
+                            )}
+                            {lastFeedSync && (
+                              <span className="text-[11px] text-slate-500 font-mono hidden sm:inline">
+                                • {lastFeedSync.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs sm:text-sm text-slate-400 mt-0.5 font-sans">
+                            Analiz ettiğiniz şirketlerin resmi KAP açıklamalarından otomatik ayıklanan başlık, tutar ve finansal etki özeti.
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-sm text-slate-300 mt-1 font-sans">
-                        Analiz ettiğiniz şirketlerin resmi KAP bildirimleri ve fiyat-duyarlı finansal haber akışı.
-                      </p>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => refreshLiveFeed(true)}
+                          disabled={isFeedLoading}
+                          className="fv-pill px-3.5 py-2 rounded-xl bg-[#101319] hover:bg-[#1e232e] border border-[#262c38] text-xs font-semibold text-slate-200 hover:text-white flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                          title="KAP Bildirimlerini Yenile"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${isFeedLoading ? 'animate-spin text-sky-400' : 'text-emerald-400'}`} />
+                          <span>{isFeedLoading ? 'Taranıyor...' : 'Yenile'}</span>
+                        </button>
+
+                        <div className="relative flex-1 sm:flex-initial min-w-[245px]">
+                          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={newsSearchTerm}
+                            onChange={(e) => setNewsSearchTerm(e.target.value)}
+                            placeholder="Hisse, ceza veya sözleşme ara..."
+                            className="w-full bg-[#101319] border border-[#262c38] rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-400 transition font-sans"
+                          />
+                          {newsSearchTerm && (
+                            <button
+                              type="button"
+                              onClick={() => setNewsSearchTerm('')}
+                              aria-label="Aramayı temizle"
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={refreshLiveFeed}
-                        disabled={isFeedLoading}
-                        className="px-3 py-2 rounded-xl bg-[#12151c] hover:bg-[#21262d] border border-[#2e3440] text-xs font-sans text-slate-300 hover:text-white flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
-                        title="KAP Bildirimlerini Yenile"
-                      >
-                        <RefreshCw className={`w-3.5 h-3.5 ${isFeedLoading ? 'animate-spin text-sky-400' : ''}`} />
-                        <span>{isFeedLoading ? 'Yenileniyor...' : 'Yenile'}</span>
-                      </button>
+                    {/* Etki / Sinyal Filtre Çubuğu (Risk vs Katalizör Hızlı Tarama) */}
+                    {baseFeed.length > 0 && (
+                      <div className="flex items-center justify-between gap-3 flex-wrap pt-3 border-t border-[#232834]">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[11px] font-mono text-slate-500 mr-1">Etki:</span>
+                          {[
+                            { id: 'ALL', label: 'Tümü', count: impactCounts.ALL, active: 'bg-slate-200 text-slate-950 border-slate-200' },
+                            { id: 'NEGATIVE', label: '▼ Olumsuz / Ceza', count: impactCounts.NEGATIVE, active: 'bg-rose-500/20 text-rose-300 border-rose-500/50' },
+                            { id: 'HIGH_IMPACT', label: '⚡ Yüksek Etki', count: impactCounts.HIGH_IMPACT, active: 'bg-purple-500/20 text-purple-300 border-purple-500/50' },
+                            { id: 'POSITIVE', label: '▲ Olumlu', count: impactCounts.POSITIVE, active: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50' },
+                            { id: 'NEUTRAL', label: '● Bilgilendirme', count: impactCounts.NEUTRAL, active: 'bg-[#252b36] text-slate-200 border-slate-500/50' },
+                          ].map(imp => {
+                            const active = newsImpactFilter === imp.id;
+                            return (
+                              <button
+                                key={imp.id}
+                                type="button"
+                                onClick={() => setNewsImpactFilter(imp.id as any)}
+                                className={`fv-pill inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
+                                  active
+                                    ? imp.active
+                                    : 'bg-[#101319] text-slate-400 border-[#232834] hover:text-white'
+                                }`}
+                              >
+                                <span>{imp.label}</span>
+                                <span className="font-mono text-[10px] opacity-80">{imp.count}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
 
-                      {/* Arama */}
-                      <div className="relative min-w-[220px]">
-                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          value={newsSearchTerm}
-                          onChange={(e) => setNewsSearchTerm(e.target.value)}
-                          placeholder="Haber veya hisse ara (Örn: THYAO)..."
-                          className="w-full bg-[#12151c] border border-[#2e3440] rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 transition font-sans"
-                        />
+                        <span className="text-[11px] font-mono text-slate-500">
+                          {newsFeed.length} bildirim listeleniyor
+                        </span>
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   {/* Kategori Filtre Hapları */}
-                  <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
-                    {newsCategories.map(cat => (
-                      <button
-                        key={cat.id}
-                        type="button"
-                        onClick={() => setNewsCategoryFilter(cat.id)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer border ${
-                          newsCategoryFilter === cat.id
-                            ? 'bg-sky-600 text-white border-sky-500 shadow-sm'
-                            : 'bg-[#12151c] text-slate-400 border-[#2e3440] hover:text-white'
-                        }`}
-                      >
-                        <span>{cat.label}</span>
-                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-900 border border-[#2e3440]">
-                          {cat.count}
-                        </span>
-                      </button>
-                    ))}
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar touch-pan-x">
+                    {newsCategories.map(cat => {
+                      const active = newsCategoryFilter === cat.id;
+                      const catIcon = cat.id === 'FINANCIALS' ? <FileText className="w-3.5 h-3.5" />
+                        : cat.id === 'DIVIDEND' ? <Coins className="w-3.5 h-3.5" />
+                        : cat.id === 'CONTRACT' ? <Briefcase className="w-3.5 h-3.5" />
+                        : cat.id === 'BUYBACK' ? <RefreshCw className="w-3.5 h-3.5" />
+                        : cat.id === 'INVESTMENT' ? <Building2 className="w-3.5 h-3.5" />
+                        : cat.id === 'GENERAL' ? <ShieldAlert className="w-3.5 h-3.5" />
+                        : <Newspaper className="w-3.5 h-3.5" />;
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setNewsCategoryFilter(cat.id)}
+                          className={`fv-pill flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap cursor-pointer border ${
+                            active
+                              ? 'bg-sky-600 text-white border-sky-500 shadow-sm'
+                              : 'bg-[#151821] text-slate-300 border-[#262c38] hover:text-white hover:bg-[#1c212c]'
+                          }`}
+                        >
+                          {catIcon}
+                          <span>{cat.label}</span>
+                          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${
+                            active ? 'bg-black/25 text-white' : 'bg-[#101319] text-slate-400 border border-[#262c38]'
+                          }`}>
+                            {cat.count}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {/* Haber Kartları Akışı */}
                   {savedReports.length === 0 ? (
-                    <div className="bg-[#1a1e26] border border-[#2e3440] rounded-2xl p-12 text-center text-slate-400 space-y-4">
-                      <div className="w-14 h-14 mx-auto rounded-2xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                    <div className="bg-[#151821] border border-[#262c38] rounded-2xl p-12 text-center text-slate-400 space-y-4">
+                      <div className="w-14 h-14 mx-auto rounded-2xl bg-sky-500/10 border border-sky-500/25 flex items-center justify-center text-sky-400">
                         <Newspaper className="w-7 h-7" />
                       </div>
                       <div className="space-y-1">
@@ -7085,14 +8071,14 @@ export default function ValuationTerminal({
                           Henüz Analiz Edilmiş Şirket Bulunmuyor
                         </h4>
                         <p className="text-xs text-slate-400 max-w-md mx-auto font-sans leading-relaxed">
-                          Akış panelinde yalnızca analiz ettiğiniz şirketlerin resmi KAP bildirimleri ve fiyat-duyarlı finansal gelişmeleri listelenir.
+                          Akış panelinde yalnızca analiz ettiğiniz şirketlerin resmi KAP bildirimleri, sözleşme, ceza ve finansal gelişmeleri listelenir.
                         </p>
                       </div>
                       <div className="flex items-center justify-center gap-3 flex-wrap">
                         <button
                           type="button"
                           onClick={resetToNewAnalysis}
-                          className="inline-flex items-center gap-2 px-4 py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition cursor-pointer font-sans shadow-lg shadow-sky-600/20"
+                          className="fv-pill inline-flex items-center gap-2 px-4 py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold cursor-pointer font-sans"
                         >
                           <Plus className="w-4 h-4" />
                           <span>Yeni Şirket Analiz Et</span>
@@ -7100,150 +8086,150 @@ export default function ValuationTerminal({
                         <button
                           type="button"
                           onClick={() => backupFileInputRef.current?.click()}
-                          className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#21262d] hover:bg-[#2b313d] text-cyan-400 border border-[#3b4252] rounded-xl text-xs font-bold transition cursor-pointer font-sans"
+                          className="fv-pill inline-flex items-center gap-2 px-4 py-2.5 bg-[#21262d] hover:bg-[#2b313d] text-cyan-400 border border-[#3b4252] rounded-xl text-xs font-bold cursor-pointer font-sans"
                         >
                           <Upload className="w-4 h-4" />
                           <span>Başka Cihazdan Yedek Yükle (JSON)</span>
                         </button>
                       </div>
                     </div>
+                  ) : isFeedLoading && liveNewsFeed.length === 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {[0, 1, 2, 3].map(sk => (
+                        <div key={sk} className="bg-[#151821] border border-[#262c38] rounded-2xl p-5 space-y-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl fv-shimmer shrink-0" />
+                            <div className="flex-1 space-y-2">
+                              <div className="h-3.5 w-44 rounded fv-shimmer" />
+                              <div className="h-4 w-4/5 rounded fv-shimmer" />
+                            </div>
+                          </div>
+                          <div className="h-3 w-full rounded fv-shimmer" />
+                          <div className="h-3 w-2/3 rounded fv-shimmer" />
+                        </div>
+                      ))}
+                    </div>
                   ) : newsFeed.length === 0 ? (
-                    <div className="bg-[#1a1e26] border border-[#2e3440] rounded-2xl p-12 text-center text-slate-400 space-y-3">
+                    <div className="bg-[#151821] border border-[#262c38] rounded-2xl p-12 text-center text-slate-400 space-y-3">
                       <Newspaper className="w-12 h-12 mx-auto text-slate-600 opacity-60" />
                       <h4 className="text-base font-bold text-slate-200 font-sans">
-                        Yeni Bildirim Bulunmuyor
+                        Seçili Filtrede Bildirim Bulunamadı
                       </h4>
                       <p className="text-sm text-slate-400 max-w-md mx-auto font-sans">
-                        Analiz ettiğiniz şirketlere ait seçilen filtrede yeni bir KAP bildirimi bulunamadı.
+                        Analiz ettiğiniz şirketler için seçili kategori veya etki filtresine uyan KAP bildirimi bulunmuyor.
                       </p>
                       <button
                         type="button"
-                        onClick={() => { setNewsCategoryFilter('ALL'); setNewsSearchTerm(''); }}
-                        className="px-4 py-2 bg-[#21262d] hover:bg-[#2e3440] text-slate-200 rounded-xl text-xs font-bold transition cursor-pointer font-sans border border-[#2e3440]"
+                        onClick={() => { setNewsCategoryFilter('ALL'); setNewsImpactFilter('ALL'); setNewsSearchTerm(''); }}
+                        className="fv-pill px-4 py-2 bg-[#21262d] hover:bg-[#2e3440] text-slate-200 rounded-xl text-xs font-bold cursor-pointer font-sans border border-[#2e3440]"
                       >
-                        Filtreleri Sıfırla
+                        Tüm Filtreleri Sıfırla
                       </button>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                       {newsFeed.map((item) => {
-                        const iconEl = item.category === 'FINANCIALS' ? (
-                          <FileText className="w-4 h-4 text-emerald-400" />
-                        ) : item.category === 'DIVIDEND' ? (
-                          <Coins className="w-4 h-4 text-emerald-400" />
-                        ) : item.category === 'CONTRACT' ? (
-                          <Briefcase className="w-4 h-4 text-emerald-400" />
-                        ) : item.category === 'BUYBACK' ? (
-                          <RefreshCw className="w-4 h-4 text-emerald-400" />
-                        ) : item.category === 'INVESTMENT' ? (
-                          <Building2 className="w-4 h-4 text-emerald-400" />
-                        ) : (
-                          <Megaphone className="w-4 h-4 text-slate-400" />
-                        );
-
-                        const iconBg = item.category === 'GENERAL'
-                          ? 'bg-slate-800/60 border-slate-700/60'
-                          : 'bg-emerald-500/10 border-emerald-500/30';
-
+                        const vis = getDisclosureVisualStyle(item);
                         return (
                           <div
                             key={item.id}
-                            onClick={() => setSelectedDisclosure(item)}
-                            className="bg-[#181c24] hover:bg-[#1f242e] border border-[#2e3440] hover:border-emerald-500/40 rounded-2xl p-4 transition cursor-pointer flex items-start gap-3.5 group shadow-md"
+                            onClick={() => openDisclosureModal(item)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                openDisclosureModal(item);
+                              }
+                            }}
+                            className={`fv-card ${vis.hoverCls} bg-[#151821] hover:bg-[#1a1f2b] border border-[#262c38] rounded-2xl overflow-hidden cursor-pointer flex group text-left`}
                           >
-                            {/* Sol Dairesel İkon (Image 2) */}
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 border ${iconBg}`}>
-                              {iconEl}
-                            </div>
+                            {/* Sol Semantik Etki Şeridi */}
+                            <div className={`w-1.5 shrink-0 ${vis.accentBar}`} />
 
-                            {/* Sağ İçerik Alanı */}
-                            <div className="flex-1 min-w-0 space-y-1.5">
-                              {/* Üst Satır: Ticker • Kategori • Zaman • Etki Rozeti (Image 2) */}
-                              <div className="flex items-center gap-2 flex-wrap text-xs">
-                                <span className="font-mono font-black text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                                  {item.ticker}
-                                </span>
-                                <span className="text-slate-500 text-xs">•</span>
-                                <span className="font-sans font-medium text-slate-300 text-xs">
-                                  {item.categoryLabel}
-                                </span>
-                                <span className="text-slate-500 text-xs">•</span>
-                                <span className="font-sans text-slate-400 text-xs">
-                                  {item.timeAgo}
-                                </span>
-                                {item.impact === 'HIGH_IMPACT' && (
-                                  <span className="px-2 py-0.5 rounded text-[11px] font-sans font-bold bg-purple-500/10 text-purple-400 border border-purple-500/30">
-                                    ⚡ Yüksek Etki
+                            <div className="flex-1 min-w-0 p-4 sm:p-5 flex flex-col justify-between gap-3">
+                              <div className="space-y-2.5">
+                                {/* Üst Satır: İkon + Ticker + Kategori + Zaman + Etki Rozeti */}
+                                <div className="flex items-start justify-between gap-2.5">
+                                  <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
+                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${vis.iconBg}`}>
+                                      {vis.icon}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-mono font-black text-xs text-white bg-[#101319] px-2 py-0.5 rounded-md border border-[#2e3440] group-hover:border-emerald-500/40 group-hover:text-emerald-400 transition">
+                                          {item.ticker}
+                                        </span>
+                                        <span className="text-[11px] font-sans font-semibold text-slate-300">
+                                          {item.categoryLabel}
+                                        </span>
+                                        <span className="text-slate-600">•</span>
+                                        <span className="text-[11px] font-mono text-slate-400">
+                                          {item.timeAgo}
+                                        </span>
+                                      </div>
+                                      <div className="text-[11px] text-slate-500 truncate max-w-[260px] mt-0.5 font-sans">
+                                        {item.companyName}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <span className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-sans font-bold border shrink-0 ${vis.badgeCls}`}>
+                                    {vis.badgeText}
                                   </span>
+                                </div>
+
+                                {/* Anlamlı, Net Başlık (Jenerik "Özel Durum Açıklaması" Yerine Gerçek Olay) */}
+                                <h3 className="text-[15px] font-bold text-white font-sans group-hover:text-emerald-300 transition leading-snug">
+                                  {item.title}
+                                </h3>
+
+                                {/* Çıkarılan Kilit Finansal Metrik Hapları (Tutar, İndirim, Süre, Karşı Taraf) */}
+                                {item.keyMetrics && item.keyMetrics.length > 0 && (
+                                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                    {item.keyMetrics.map((m, mIdx) => (
+                                      <span
+                                        key={mIdx}
+                                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono border ${
+                                          m.tone === 'negative'
+                                            ? 'bg-rose-500/12 text-rose-300 border-rose-500/30'
+                                            : m.tone === 'positive'
+                                            ? 'bg-emerald-500/12 text-emerald-300 border-emerald-500/30'
+                                            : 'bg-[#101319] text-slate-300 border-[#262c38]'
+                                        }`}
+                                      >
+                                        <span className="text-[10px] opacity-75">{m.label}:</span>
+                                        <strong className="font-bold">{m.value}</strong>
+                                      </span>
+                                    ))}
+                                  </div>
                                 )}
-                                {item.impact === 'POSITIVE' && (
-                                  <span className="px-2 py-0.5 rounded text-[11px] font-sans font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                                    ▲ Olumlu
-                                  </span>
-                                )}
-                                {item.impact === 'NEGATIVE' && (
-                                  <span className="px-2 py-0.5 rounded text-[11px] font-sans font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30">
-                                    ▼ Olumsuz
-                                  </span>
-                                )}
-                                {item.impact === 'NEUTRAL' && (
-                                  <span className="px-2 py-0.5 rounded text-[11px] font-sans font-medium bg-slate-800 text-slate-400 border border-slate-700/60">
-                                    ● Nötr
-                                  </span>
-                                )}
+
+                                {/* Gerçek KAP İçeriğinden Özet */}
+                                <p className="text-xs text-slate-300/90 font-sans leading-relaxed line-clamp-3">
+                                  {renderHighlightedFinancialText(item.summary)}
+                                </p>
                               </div>
 
-                              {/* Başlık (Temiz, net, kurumsal başlık) */}
-                              <h3 className="text-sm font-bold text-white font-sans group-hover:text-emerald-300 transition leading-snug">
-                                {item.title}
-                              </h3>
-
-                              {/* Kilit Özet (Fiyat-Duyarlı Metrik Vurgulu, Başlığın Tekrarı ASLA Değil) */}
-                              <p className="text-xs text-slate-400 font-sans leading-relaxed line-clamp-3">
-                                {(() => {
-                                  if (!item.summary) return null;
-                                  const parts = item.summary.split(/(\*\*[^*]+\*\*)/g);
-                                  return parts.map((part, idx) => {
-                                    if (part.startsWith('**') && part.endsWith('**')) {
-                                      return (
-                                        <strong key={idx} className="font-bold text-white bg-slate-800/90 px-1 py-0.5 rounded border border-slate-700/60 inline-block my-0.5">
-                                          {part.slice(2, -2)}
-                                        </strong>
-                                      );
-                                    }
-                                    return part;
-                                  });
-                                })()}
-                              </p>
-
-                              {/* Alt Bar: Doğrudan KAP & Bigpara Bildirimi Yönlendirmesi */}
-                              <div className="flex items-center justify-between pt-2 border-t border-[#2e3440]/50 mt-1 flex-wrap gap-2">
-                                <span className="text-[11px] font-mono text-slate-500 flex items-center gap-1">
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                                  <span>Resmi Bildirim</span>
+                              {/* Alt Aksiyon Şeridi */}
+                              <div className="flex items-center justify-between pt-2.5 border-t border-[#232834] flex-wrap gap-2">
+                                <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5 group-hover:text-white transition">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                  <span>{item.fullText ? 'Tam Metni & Özeti İncele' : 'Bildirim Detayı'}</span>
+                                  <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:translate-x-0.5 group-hover:text-emerald-400 transition" />
                                 </span>
-                                <div className="flex items-center gap-3">
-                                  {item.bigparaUrl && (
-                                    <a
-                                      href={item.bigparaUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300 font-sans hover:underline"
-                                      title="Bigpara üzerinde KAP tam metnini görüntüle"
-                                    >
-                                      <span>Bigpara Metni -&gt;</span>
-                                    </a>
-                                  )}
+
+                                <div className="flex items-center gap-2.5">
                                   <a
                                     href={item.kapUrl || item.url || getKapCompanyDisclosuresUrl(item.ticker)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     onClick={(e) => e.stopPropagation()}
-                                    className="inline-flex items-center gap-1 text-xs font-bold text-sky-400 hover:text-sky-300 font-sans hover:underline"
-                                    title="Doğrudan KAP resmi bildirim sayfası"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#101319] hover:bg-sky-600/20 text-sky-400 hover:text-sky-300 border border-[#262c38] hover:border-sky-500/40 text-[11px] font-mono font-bold transition"
+                                    title="Doğrudan KAP resmi bildirim sayfasını aç"
                                   >
-                                    <span>{item.kapId ? `KAP Bildirim #${item.kapId} ->` : 'KAP Bildirim ->'}</span>
+                                    <span>{item.kapId ? `KAP #${item.kapId}` : 'KAP'}</span>
+                                    <ExternalLink className="w-3 h-3" />
                                   </a>
                                 </div>
                               </div>
@@ -7251,297 +8237,6 @@ export default function ValuationTerminal({
                           </div>
                         );
                       })}
-                    </div>
-                  )}
-
-                  {/* Detay Pop-Up Modal (Image 3) */}
-                  {selectedDisclosure && (
-                    <div
-                      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
-                      onClick={() => setSelectedDisclosure(null)}
-                    >
-                      <div
-                        className="bg-[#12151c] border border-[#2e3440] rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl relative flex flex-col md:flex-row gap-6 p-6 sm:p-8"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {/* Kapat Butonu */}
-                        <button
-                          type="button"
-                          onClick={() => setSelectedDisclosure(null)}
-                          className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-white bg-[#1a1e26] border border-[#2e3440] hover:bg-[#252b36] transition cursor-pointer z-10"
-                          title="Kapat"
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
-
-                        {/* Sol / Ana Kolon (%65) */}
-                        <div className="flex-1 space-y-5">
-                          {/* Şirket Başlığı ve Üst Bilgi */}
-                          <div className="flex items-center gap-3">
-                            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500 to-sky-600 flex items-center justify-center font-black font-mono text-white text-sm shadow-md">
-                              {selectedDisclosure.ticker.slice(0, 2)}
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <h4 className="text-base font-bold text-white font-sans">
-                                  {selectedDisclosure.companyName}
-                                </h4>
-                                <span className="font-mono text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                                  BIST:{selectedDisclosure.ticker}
-                                </span>
-                                {selectedDisclosure.impact === 'HIGH_IMPACT' && (
-                                  <span className="px-2 py-0.5 rounded text-[11px] font-sans font-bold bg-purple-500/10 text-purple-400 border border-purple-500/30">
-                                    ⚡ Yüksek Etki
-                                  </span>
-                                )}
-                                {selectedDisclosure.impact === 'POSITIVE' && (
-                                  <span className="px-2 py-0.5 rounded text-[11px] font-sans font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                                    ▲ Olumlu
-                                  </span>
-                                )}
-                                {selectedDisclosure.impact === 'NEGATIVE' && (
-                                  <span className="px-2 py-0.5 rounded text-[11px] font-sans font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30">
-                                    ▼ Olumsuz
-                                  </span>
-                                )}
-                                {selectedDisclosure.impact === 'NEUTRAL' && (
-                                  <span className="px-2 py-0.5 rounded text-[11px] font-sans font-medium bg-slate-800 text-slate-400 border border-slate-700/60">
-                                    ● Nötr
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-xs text-slate-400 font-sans mt-0.5">
-                                {selectedDisclosure.categoryLabel} • {selectedDisclosure.timeAgo}
-                              </p>
-                            </div>
-                          </div>
-
-                          {/* Büyük Başlık */}
-                          <h2 className="text-xl sm:text-2xl font-bold font-sans text-white tracking-tight leading-tight">
-                            {selectedDisclosure.title}
-                          </h2>
-
-                          {/* Kilit Çıkarımlar & Yapılandırılmış Maddeler (Image 3 tarzı) */}
-                          <div className="space-y-3 pt-2">
-                            <h5 className="text-xs font-bold font-mono uppercase tracking-wider text-slate-400">
-                              Kilit Noktalar & Finansal Etki
-                            </h5>
-                            <div className="space-y-2.5">
-                              {selectedDisclosure.keyTakeaways && selectedDisclosure.keyTakeaways.length > 0 ? (
-                                selectedDisclosure.keyTakeaways.map((bullet, idx) => (
-                                  <div key={idx} className="flex items-start gap-2.5 text-sm text-slate-300 leading-relaxed font-sans bg-[#181c24] p-3 rounded-xl border border-[#2e3440]/80">
-                                    <span className="w-2 h-2 rounded-full bg-emerald-400 mt-2 shrink-0" />
-                                    <span>
-                                      {(() => {
-                                        const parts = bullet.split(/(\*\*[^*]+\*\*)/g);
-                                        return parts.map((part, pIdx) => {
-                                          if (part.startsWith('**') && part.endsWith('**')) {
-                                            return (
-                                              <strong key={pIdx} className="font-bold text-white bg-slate-800/90 px-1 py-0.5 rounded border border-slate-700/60 inline-block my-0.5">
-                                                {part.slice(2, -2)}
-                                              </strong>
-                                            );
-                                          }
-                                          return part;
-                                        });
-                                      })()}
-                                    </span>
-                                  </div>
-                                ))
-                              ) : (
-                                <div className="flex items-start gap-2.5 text-sm text-slate-300 leading-relaxed font-sans bg-[#181c24] p-3 rounded-xl border border-[#2e3440]/80">
-                                  <span className="w-2 h-2 rounded-full bg-emerald-400 mt-2 shrink-0" />
-                                  <span>{selectedDisclosure.summary}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Açıklama / Özet Kartı */}
-                          <div className="p-4 rounded-xl bg-[#181c24] border border-[#2e3440] text-xs text-slate-300 font-sans leading-relaxed">
-                            <p className="text-slate-400 text-[11px] font-mono mb-1.5 uppercase font-bold">KAP Açıklama Özeti:</p>
-                            {(() => {
-                              const parts = selectedDisclosure.summary.split(/(\*\*[^*]+\*\*)/g);
-                              return parts.map((part, pIdx) => {
-                                if (part.startsWith('**') && part.endsWith('**')) {
-                                  return (
-                                    <strong key={pIdx} className="font-bold text-white bg-slate-800/90 px-1 py-0.5 rounded border border-slate-700/60 inline-block my-0.5">
-                                      {part.slice(2, -2)}
-                                    </strong>
-                                  );
-                                }
-                                return part;
-                              });
-                            })()}
-                          </div>
-
-                          {/* Alt Butonlar: Doğrudan KAP & Bigpara Bağlantıları */}
-                          <div className="pt-3 border-t border-[#2e3440] flex items-center gap-3 flex-wrap">
-                            <a
-                              href={selectedDisclosure.kapUrl || selectedDisclosure.url || getKapCompanyDisclosuresUrl(selectedDisclosure.ticker)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-sans font-bold text-xs transition cursor-pointer shadow-lg shadow-sky-600/20"
-                            >
-                              <span>
-                                {selectedDisclosure.kapId ? `KAP Resmi Bildirimi Aç (#${selectedDisclosure.kapId})` : 'KAP Resmi Bildirimi Aç'}
-                              </span>
-                              <ExternalLink className="w-3.5 h-3.5" />
-                            </a>
-
-                            {selectedDisclosure.bigparaUrl && (
-                              <a
-                                href={selectedDisclosure.bigparaUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-sans font-bold text-xs transition cursor-pointer shadow-lg shadow-emerald-600/20"
-                              >
-                                <span>Bigpara KAP Tam Metnini Oku</span>
-                                <ExternalLink className="w-3.5 h-3.5" />
-                              </a>
-                            )}
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const t = selectedDisclosure.ticker;
-                                setSelectedDisclosure(null);
-                                handleOpenOrAnalyzeTicker(t);
-                              }}
-                              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#1a1e26] hover:bg-[#252b36] border border-[#2e3440] text-slate-200 hover:text-white font-sans font-bold text-xs transition cursor-pointer"
-                            >
-                              <span>{selectedDisclosure.ticker} Şirket Raporuna Git</span>
-                              <ChevronRight className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Sağ Yan Kolon (%35) - Şirket Kartı & İlgili Gelişmeler (Image 3) */}
-                        <div className="w-full md:w-80 shrink-0 space-y-4 pt-4 md:pt-0 md:border-l md:border-[#2e3440] md:pl-6">
-                          {/* Şirket Mini Değerleme Kartı */}
-                          {(() => {
-                            const report = findLatestReportByTicker(savedReports, selectedDisclosure.ticker);
-                            const priceNum = report ? (parseFinancialNumber(report.price) ?? 0) : 0;
-                            const fairVal = report ? (parseFinancialNumber(report.fairValue) ?? 0) : 0;
-                            const discount = (fairVal > 0 && priceNum > 0)
-                              ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))
-                              : null;
-                            return (
-                              <div className="p-4 rounded-xl bg-[#181c24] border border-[#2e3440] space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <div>
-                                    <span className="font-mono font-black text-sm text-white">
-                                      {selectedDisclosure.ticker}
-                                    </span>
-                                    <p className="text-[11px] text-slate-400 font-sans truncate max-w-[160px]">
-                                      {selectedDisclosure.companyName}
-                                    </p>
-                                  </div>
-                                  {report?.decision && (
-                                    <span className={`px-2.5 py-1 rounded-md text-xs font-mono font-bold border ${
-                                      report.decision === 'AL'
-                                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                                        : report.decision === 'ALMA'
-                                        ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                                        : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                                    }`}>
-                                      {report.decision}
-                                    </span>
-                                  )}
-                                </div>
-
-                                {report ? (
-                                  <div className="space-y-2 pt-2 border-t border-[#2e3440]/60 text-xs">
-                                    <div className="flex items-center justify-between text-slate-400">
-                                      <span>Güncel Fiyat:</span>
-                                      <span className="font-mono font-bold text-white">₺{report.price ?? '—'}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between text-slate-400">
-                                      <span>Adil Değer:</span>
-                                      <span className="font-mono font-bold text-emerald-400">₺{report.fairValue ?? '—'}</span>
-                                    </div>
-                                    {discount != null && (
-                                      <div className="flex items-center justify-between text-slate-400">
-                                        <span>Potansiyel:</span>
-                                        <span className={`font-mono font-bold ${discount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                          {discount >= 0 ? `+%${discount}` : `-%${Math.abs(discount)}`}
-                                        </span>
-                                      </div>
-                                    )}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const t = selectedDisclosure.ticker;
-                                        setSelectedDisclosure(null);
-                                        handleOpenOrAnalyzeTicker(t);
-                                      }}
-                                      className="w-full mt-2 py-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold font-sans transition cursor-pointer flex items-center justify-center gap-1.5"
-                                    >
-                                      <span>Şirket Analizine Git</span>
-                                      <ChevronRight className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div className="pt-2 border-t border-[#2e3440]/60 space-y-2">
-                                    <p className="text-xs text-slate-400 font-sans">
-                                      Bu hisse henüz detaylı finansal analize alınmadı.
-                                    </p>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const t = selectedDisclosure.ticker;
-                                        setSelectedDisclosure(null);
-                                        handleOpenOrAnalyzeTicker(t);
-                                      }}
-                                      className="w-full py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold font-sans transition cursor-pointer"
-                                    >
-                                      Analiz Başlat
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
-
-                          {/* Son Bildirimler / İlgili Gelişmeler Listesi */}
-                          <div className="space-y-2.5">
-                            <h5 className="text-xs font-bold font-mono uppercase tracking-wider text-slate-400">
-                              Diğer Şirket Bildirimleri
-                            </h5>
-                            {(() => {
-                              const otherUpdates = newsFeed.filter(n => n.id !== selectedDisclosure.id);
-                              if (otherUpdates.length === 0) {
-                                return (
-                                  <p className="text-xs text-slate-500 font-sans">Başka bildirim bulunmuyor.</p>
-                                );
-                              }
-                              return (
-                                <div className="space-y-2">
-                                  {otherUpdates.slice(0, 4).map(other => (
-                                    <div
-                                      key={other.id}
-                                      onClick={() => setSelectedDisclosure(other)}
-                                      className="p-3 rounded-xl bg-[#181c24] hover:bg-[#1f242e] border border-[#2e3440] hover:border-slate-500/50 transition cursor-pointer space-y-1 group"
-                                    >
-                                      <div className="flex items-center justify-between text-[11px]">
-                                        <span className="font-mono font-bold text-emerald-400">
-                                          {other.ticker}
-                                        </span>
-                                        <span className="text-slate-500 font-sans">
-                                          {other.timeAgo}
-                                        </span>
-                                      </div>
-                                      <p className="text-xs font-bold text-slate-200 group-hover:text-white font-sans line-clamp-2 leading-snug">
-                                        {other.title}
-                                      </p>
-                                    </div>
-                                  ))}
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        </div>
-                      </div>
                     </div>
                   )}
                 </div>
@@ -7552,275 +8247,648 @@ export default function ValuationTerminal({
             // 2. PORTFÖY & FAVORİLER LİSTESİ (Şirket Başına En Güncel Tek Rapor)
             // ==========================================
             const deduplicatedSaved = getLatestReportsPerTicker(savedReports);
-            const portAll = deduplicatedSaved.filter(r => portfolioTickers.includes((r.ticker || '').toUpperCase()));
-            const portAl = portAll.filter(r => (r.decision || '').trim().toUpperCase() === 'AL');
-            const portNotr = portAll.filter(r => {
-              const d = (r.decision || '').trim().toUpperCase();
-              return d === 'NÖTR' || d === 'NOTR';
-            });
-            const portAlma = portAll.filter(r => (r.decision || '').trim().toUpperCase() === 'ALMA');
-            const favReports = deduplicatedSaved.filter(r => favoriteTickers.includes((r.ticker || '').toUpperCase()));
+            const activeTickersUpper = [...new Set(
+              (isPortfolio ? portfolioTickers : favoriteTickers).map(t => t.toUpperCase().trim()).filter(Boolean)
+            )];
 
-            let baseList = isPortfolio
-              ? (portfolioDecisionFilter === 'AL' 
-                  ? portAl 
-                  : portfolioDecisionFilter === 'NÖTR' 
-                  ? portNotr 
-                  : portfolioDecisionFilter === 'ALMA' 
-                  ? portAlma 
-                  : portAll)
-              : favReports;
+            const collectionAll = deduplicatedSaved.filter(r =>
+              activeTickersUpper.includes((r.ticker || '').toUpperCase())
+            );
+            const analyzedInCollectionSet = new Set(collectionAll.map(r => (r.ticker || '').toUpperCase()));
+            const unanalyzedWatchTickers = activeTickersUpper.filter(sym => !analyzedInCollectionSet.has(sym));
+            const colAl = collectionAll.filter(r => (r.decision || '').trim().toUpperCase() === 'AL');
+            const colAlma = collectionAll.filter(r => (r.decision || '').trim().toUpperCase() === 'ALMA');
+            const colNotr = collectionAll.filter(r => {
+              const d = (r.decision || '').trim().toUpperCase();
+              return d !== 'AL' && d !== 'ALMA';
+            });
+
+            const activeDecisionFilter = isPortfolio ? portfolioDecisionFilter : favoritesDecisionFilter;
+            const setActiveDecisionFilter = isPortfolio ? setPortfolioDecisionFilter : setFavoritesDecisionFilter;
+
+            let baseList = activeDecisionFilter === 'AL'
+              ? colAl
+              : activeDecisionFilter === 'NÖTR'
+              ? colNotr
+              : activeDecisionFilter === 'ALMA'
+              ? colAlma
+              : collectionAll;
 
             if (analyzedSearch.trim()) {
-              const q = analyzedSearch.trim().toUpperCase();
-              baseList = baseList.filter(r => 
-                (r.ticker || '').toUpperCase().includes(q) || 
-                ((r as any).companyName || r.extractedData?.company_name || '').toUpperCase().includes(q)
+              const q = analyzedSearch.trim().toLocaleLowerCase('tr-TR');
+              baseList = baseList.filter(r =>
+                (r.ticker || '').toLocaleLowerCase('tr-TR').includes(q) ||
+                ((r as any).companyName || r.extractedData?.company_name || '').toLocaleLowerCase('tr-TR').includes(q) ||
+                getCompanySectorDisplayName(r.ticker, r.sector).toLocaleLowerCase('tr-TR').includes(q)
               );
             }
 
-            const sortedList = sidebarSort === 'rank' 
-              ? sortReportsByScoreDesc(baseList) 
-              : sortReportsByDate(baseList);
+            const getItemValuationMetrics = (item: SavedReport) => {
+              const repVal = (item as any).valuation || item.extractedData?.valuation;
+              const fairVal = parseFinancialNumber(item.fairValue ?? repVal?.composite_fair_value ?? repVal?.fair_value ?? repVal?.dcf_fair_value) ?? 0;
+              const priceNum = parseFinancialNumber(item.price) ?? 0;
+              const discount = (fairVal > 0 && priceNum > 0)
+                ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))
+                : null;
+              return { fairVal, priceNum, discount };
+            };
+
+            const sortedList = [...baseList].sort((a, b) => {
+              const { key, direction } = savedTableSort;
+              const dir = direction === 'asc' ? 1 : -1;
+              if (key === 'ticker') {
+                return (a.ticker || '').localeCompare(b.ticker || '', 'tr') * dir;
+              }
+              if (key === 'date') {
+                return (reportTimestamp(a) - reportTimestamp(b)) * dir;
+              }
+              if (key === 'price') {
+                return ((parseFinancialNumber(a.price) ?? 0) - (parseFinancialNumber(b.price) ?? 0)) * dir;
+              }
+              if (key === 'fairValue') {
+                return (getItemValuationMetrics(a).fairVal - getItemValuationMetrics(b).fairVal) * dir;
+              }
+              if (key === 'discount') {
+                const dA = getItemValuationMetrics(a).discount ?? -999;
+                const dB = getItemValuationMetrics(b).discount ?? -999;
+                return (dA - dB) * dir;
+              }
+              if (key === 'decision') {
+                return (a.decision || '').localeCompare(b.decision || '', 'tr') * dir;
+              }
+              const sA = parseNumericScore(a.score) ?? -1;
+              const sB = parseNumericScore(b.score) ?? -1;
+              if (sA !== sB) return (sA - sB) * dir;
+              return (reportTimestamp(b) - reportTimestamp(a));
+            });
+
+            // Koleksiyon KPI İstatistikleri (Yalnızca Gerçek Kayıtlı Raporlardan)
+            const totalCount = collectionAll.length;
+            const validScores = collectionAll
+              .map(r => parseNumericScore(r.score))
+              .filter((s): s is number => s !== null && Number.isFinite(s));
+            const avgScore = validScores.length > 0
+              ? Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length)
+              : null;
+
+            const withUpside = collectionAll
+              .map(r => ({ report: r, ...getItemValuationMetrics(r) }))
+              .filter(x => x.discount !== null);
+            const avgUpside = withUpside.length > 0
+              ? Number((withUpside.reduce((acc, x) => acc + (x.discount || 0), 0) / withUpside.length).toFixed(1))
+              : null;
+            const discountedCount = withUpside.filter(x => (x.discount || 0) > 0).length;
+            const topOpportunity = [...withUpside].sort((a, b) => (b.discount ?? -999) - (a.discount ?? -999))[0] || null;
+
+            const sectorFreq = new Map<string, number>();
+            collectionAll.forEach(r => {
+              const sName = getCompanySectorDisplayName(r.ticker, r.sector);
+              sectorFreq.set(sName, (sectorFreq.get(sName) || 0) + 1);
+            });
+            const topSectorEntry = Array.from(sectorFreq.entries()).sort((a, b) => b[1] - a[1])[0] || null;
+
+            const alPct = totalCount > 0 ? (colAl.length / totalCount) * 100 : 0;
+            const notrPct = totalCount > 0 ? (colNotr.length / totalCount) * 100 : 0;
+            const almaPct = totalCount > 0 ? (colAlma.length / totalCount) * 100 : 0;
+
+            // Hızlı Ekleme Adayları (Analiz edilmiş ancak henüz bu listede olmayan şirketler)
+            const addCandidates = deduplicatedSaved.filter(r => {
+              const sym = (r.ticker || '').toUpperCase();
+              if (activeTickersUpper.includes(sym)) return false;
+              if (!quickAddQuery.trim()) return true;
+              const q = quickAddQuery.trim().toLocaleLowerCase('tr-TR');
+              return sym.toLocaleLowerCase('tr-TR').includes(q) ||
+                ((r as any).companyName || r.extractedData?.company_name || '').toLocaleLowerCase('tr-TR').includes(q);
+            });
 
             const pageTitle = isPortfolio ? 'Portföy' : 'Favoriler';
             const pageDesc = isPortfolio
-              ? 'Portföyünüze eklediğiniz hisselerin güncel değerleme modelleri, adil değer ve getiri takibi.'
-              : 'Takip listenize aldığınız şirketler, potansiyel fırsatlar ve güncel rasyolar.';
+              ? 'Portföyünüzdeki şirketlerin karar dağılımı, adil değer potansiyeli, kalite skoru ve sektörel yoğunlaşma kokpiti.'
+              : 'İzleme listenizdeki şirketler, alım bölgesindeki fırsatlar ve tek tıkla portföye aktarım radarı.';
             const currentViewMode = isPortfolio ? portfolioViewMode : watchlistViewMode;
             const setViewMode = isPortfolio ? setPortfolioViewMode : setWatchlistViewMode;
 
+            const toggleSavedSort = (key: 'score' | 'ticker' | 'price' | 'fairValue' | 'discount' | 'decision' | 'date') => {
+              setSavedTableSort(prev => ({
+                key,
+                direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
+              }));
+            };
+
             return (
-              <div className="space-y-6">
-                {/* Üst Banner (Yedekle / Yükle / Yeni Analiz butonları tamamen kaldırıldı) */}
-                <div className="bg-[#1a1e26] border border-[#2e3440] p-6 rounded-2xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3.5 rounded-2xl bg-[#21262d] border border-[#2e3440]">
-                      {isPortfolio ? (
-                        <Briefcase className="w-7 h-7 text-[#f5c242]" />
-                      ) : (
-                        <Star className="w-7 h-7 text-amber-400 fill-amber-400/20" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        <h2 className="text-xl font-bold font-sans text-white tracking-tight">
-                          {pageTitle}
-                        </h2>
-                        <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-[#21262d] text-emerald-400 border border-[#2e3440]">
-                          {isPortfolio ? `${portAll.length} Şirket Portföyde` : `${favReports.length} Şirket Favorilerde`}
-                        </span>
+              <div className="space-y-5 fv-panel-enter">
+                {/* ÜST BAŞLIK & KPI KOMUTA ŞERİDİ */}
+                <div className="bg-[#151821] border border-[#262c38] p-5 sm:p-6 rounded-2xl space-y-5">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3.5">
+                      <div className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 ${
+                        isPortfolio
+                          ? 'bg-[#f5c242]/12 border-[#f5c242]/35 text-[#f5c242]'
+                          : 'bg-amber-400/12 border-amber-400/35 text-amber-400'
+                      }`}>
+                        {isPortfolio ? (
+                          <Briefcase className="w-5 h-5" />
+                        ) : (
+                          <Star className="w-5 h-5 fill-amber-400/25" />
+                        )}
                       </div>
-                      <p className="text-sm text-slate-300 mt-1 font-sans">
-                        {pageDesc}
-                      </p>
+                      <div>
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <h2 className="text-xl font-bold font-sans text-white tracking-tight">
+                            {pageTitle}
+                          </h2>
+                          <span className={`text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full border ${
+                            isPortfolio
+                              ? 'bg-[#f5c242]/10 text-[#f5c242] border-[#f5c242]/30'
+                              : 'bg-amber-400/10 text-amber-400 border-amber-400/30'
+                          }`}>
+                            {isPortfolio ? `${activeTickersUpper.length} Şirket Portföyde` : `${activeTickersUpper.length} Şirket İzlemede`}
+                          </span>
+                        </div>
+                        <p className="text-xs sm:text-sm text-slate-400 mt-0.5 font-sans">
+                          {pageDesc}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Sağ Aksiyonlar: Hızlı Ekle + Yedekleme + Görünüm Seçici */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {deduplicatedSaved.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setQuickAddOpen(p => !p)}
+                          className={`fv-pill inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border cursor-pointer ${
+                            isPortfolio
+                              ? 'bg-[#f5c242] text-slate-950 border-[#f5c242]'
+                              : 'bg-amber-400 text-slate-950 border-amber-400'
+                          }`}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>{isPortfolio ? 'Portföye Ekle' : 'Favoriye Ekle'}</span>
+                        </button>
+                      )}
+
+                      <div className="flex items-center bg-[#101319] p-1 rounded-xl border border-[#262c38]">
+                        <button
+                          type="button"
+                          onClick={exportBackup}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-[#1e232e] cursor-pointer"
+                          title="Verileri Dışa Aktar (JSON İndir)"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => backupFileInputRef.current?.click()}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-[#1e232e] cursor-pointer"
+                          title="Başka Cihazdan Yedek Yükle (JSON İçe Aktar)"
+                        >
+                          <Upload className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center bg-[#101319] p-1 rounded-xl border border-[#262c38]">
+                        <button
+                          type="button"
+                          title="Liste / Tablo Görünümü"
+                          onClick={() => setViewMode('list')}
+                          className={`fv-pill p-1.5 rounded-lg cursor-pointer ${currentViewMode === 'list' ? (isPortfolio ? 'bg-[#f5c242] text-slate-950 font-bold shadow-sm' : 'bg-amber-400 text-slate-950 font-bold shadow-sm') : 'text-slate-400 hover:text-white'}`}
+                        >
+                          <List className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Kart Görünümü"
+                          onClick={() => setViewMode('cards')}
+                          className={`fv-pill p-1.5 rounded-lg cursor-pointer ${currentViewMode === 'cards' ? (isPortfolio ? 'bg-[#f5c242] text-slate-950 font-bold shadow-sm' : 'bg-amber-400 text-slate-950 font-bold shadow-sm') : 'text-slate-400 hover:text-white'}`}
+                        >
+                          <LayoutGrid className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Kompakt Rozetler"
+                          onClick={() => setViewMode('compact')}
+                          className={`fv-pill p-1.5 rounded-lg cursor-pointer ${currentViewMode === 'compact' ? (isPortfolio ? 'bg-[#f5c242] text-slate-950 font-bold shadow-sm' : 'bg-amber-400 text-slate-950 font-bold shadow-sm') : 'text-slate-400 hover:text-white'}`}
+                        >
+                          <Grid className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Görünüm Seçici ve Cihazlar Arası Yedekleme Butonları */}
-                  <div className="flex items-center gap-2 flex-wrap self-start md:self-auto">
-                    <div className="flex items-center bg-[#12151c] p-1 rounded-xl border border-[#2e3440]">
-                      <button
-                        type="button"
-                        onClick={exportBackup}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-[#21262d] transition cursor-pointer"
-                        title="Verileri Dışa Aktar (JSON İndir)"
-                      >
-                        <Download className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => backupFileInputRef.current?.click()}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-[#21262d] transition cursor-pointer"
-                        title="Başka Cihazdan Yedek Yükle (JSON İçe Aktar)"
-                      >
-                        <Upload className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="flex items-center bg-[#12151c] p-1 rounded-xl border border-[#2e3440]">
-                    <button
-                      type="button"
-                      title="Liste / Tablo Görünümü (Varsayılan)"
-                      onClick={() => setViewMode('list')}
-                      className={`p-2 rounded-lg transition cursor-pointer ${currentViewMode === 'list' ? (isPortfolio ? 'bg-[#f5c242] text-slate-950 font-bold shadow-sm' : 'bg-amber-400 text-slate-950 font-bold shadow-sm') : 'text-slate-400 hover:text-white'}`}
-                    >
-                      <List className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      title="Kart Görünümü"
-                      onClick={() => setViewMode('cards')}
-                      className={`p-2 rounded-lg transition cursor-pointer ${currentViewMode === 'cards' ? (isPortfolio ? 'bg-[#f5c242] text-slate-950 font-bold shadow-sm' : 'bg-amber-400 text-slate-950 font-bold shadow-sm') : 'text-slate-400 hover:text-white'}`}
-                    >
-                      <LayoutGrid className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      title="Küçük Simgeler (Kompakt Rozetler)"
-                      onClick={() => setViewMode('compact')}
-                      className={`p-2 rounded-lg transition cursor-pointer ${currentViewMode === 'compact' ? (isPortfolio ? 'bg-[#f5c242] text-slate-950 font-bold shadow-sm' : 'bg-amber-400 text-slate-950 font-bold shadow-sm') : 'text-slate-400 hover:text-white'}`}
-                    >
-                      <Grid className="w-4 h-4" />
-                    </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Filtre ve Arama Barı */}
-                <div className="bg-[#1a1e26] border border-[#2e3440] p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  {/* Portföyde Karar Filtreleri (TÜMÜ, AL, NÖTR, ALMA) - Sadece portföye ekli olan şirketler */}
-                  {isPortfolio ? (
-                    <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
-                      {[
-                        { key: 'ALL', label: 'TÜMÜ', count: portAll.length, dot: 'bg-slate-400' },
-                        { key: 'AL', label: 'AL', count: portAl.length, dot: 'bg-emerald-400', activeCls: 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300' },
-                        { key: 'NÖTR', label: 'NÖTR', count: portNotr.length, dot: 'bg-amber-400', activeCls: 'border-amber-500/50 bg-amber-500/10 text-amber-300' },
-                        { key: 'ALMA', label: 'ALMA', count: portAlma.length, dot: 'bg-rose-400', activeCls: 'border-rose-500/50 bg-rose-500/10 text-rose-300' },
-                      ].map(tab => {
-                        const isSelected = portfolioDecisionFilter === tab.key;
-                        return (
-                          <button
-                            key={tab.key}
-                            type="button"
-                            onClick={() => setPortfolioDecisionFilter(tab.key as any)}
-                            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-bold transition cursor-pointer border ${
-                              isSelected
-                                ? tab.activeCls || 'border-[#f5c242]/50 bg-[#f5c242]/10 text-[#f5c242]'
-                                : 'border-transparent text-slate-400 hover:text-white hover:bg-[#21262d]'
-                            }`}
-                          >
-                            <span className={`w-2.5 h-2.5 rounded-full ${tab.dot}`} />
-                            <span>{tab.label}</span>
-                            <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-[#12151c] border border-[#2e3440] text-slate-300">
-                              {tab.count}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 text-sm text-slate-300 font-sans font-semibold">
-                      <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                      <span>Favori Şirketleriniz</span>
+                  {/* Hızlı Hisse Ekleme Çekmecesi (Analiz Edilmiş Raporlardan Tek Tıkla Ekle) */}
+                  {quickAddOpen && (
+                    <div className="p-3.5 rounded-xl bg-[#101319] border border-[#2e3440] space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="relative flex-1 max-w-sm">
+                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={quickAddQuery}
+                            onChange={(e) => setQuickAddQuery(e.target.value)}
+                            placeholder="Analiz edilmiş şirketlerden ara..."
+                            autoFocus
+                            className="w-full bg-[#151821] border border-[#262c38] rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setQuickAddOpen(false); setQuickAddQuery(''); }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#1e232e] cursor-pointer"
+                          title="Kapat"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {addCandidates.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
+                          {addCandidates.slice(0, 24).map(cand => (
+                            <button
+                              key={cand.id}
+                              type="button"
+                              onClick={() => isPortfolio ? togglePortfolio(cand.ticker) : toggleFavorite(cand.ticker)}
+                              className="fv-pill inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#151821] hover:bg-emerald-600/20 border border-[#262c38] hover:border-emerald-500/40 text-xs font-mono text-slate-200 hover:text-white cursor-pointer"
+                            >
+                              <Plus className="w-3 h-3 text-emerald-400" />
+                              <span className="font-bold">{cand.ticker}</span>
+                              <span className={`text-[10px] font-bold ${
+                                cand.decision === 'AL' ? 'text-emerald-400' : cand.decision === 'ALMA' ? 'text-rose-400' : 'text-amber-400'
+                              }`}>
+                                {cand.decision}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-500 font-sans">
+                          Eklenebilecek başka analiz edilmiş şirket bulunmuyor.
+                        </div>
+                      )}
                     </div>
                   )}
 
+                  {/* 4-KART KPI KOMUTA ŞERİDİ */}
+                  {totalCount > 0 && (
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      {/* KPI 1: Karar Dağılımı */}
+                      <div className="fv-kpi-card bg-[#101319] border border-[#232834] rounded-xl p-3.5 space-y-2">
+                        <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                          <span>KARAR DAĞILIMI</span>
+                          <span className="text-white font-bold">{totalCount} hisse</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs font-mono">
+                          <span className="text-emerald-400 font-bold">{colAl.length} AL</span>
+                          <span className="text-slate-600">·</span>
+                          <span className="text-amber-400 font-bold">{colNotr.length} NÖTR</span>
+                          <span className="text-slate-600">·</span>
+                          <span className="text-rose-400 font-bold">{colAlma.length} ALMA</span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-[#1b202b] overflow-hidden flex">
+                          {alPct > 0 && <div className="h-full bg-emerald-400" style={{ width: `${alPct}%` }} />}
+                          {notrPct > 0 && <div className="h-full bg-amber-400" style={{ width: `${notrPct}%` }} />}
+                          {almaPct > 0 && <div className="h-full bg-rose-400" style={{ width: `${almaPct}%` }} />}
+                        </div>
+                      </div>
+
+                      {/* KPI 2: Ortalama Kalite Skoru */}
+                      <div className="fv-kpi-card bg-[#101319] border border-[#232834] rounded-xl p-3.5 space-y-2">
+                        <div className="text-[11px] font-mono text-slate-400">ORTALAMA KALİTE SKORU</div>
+                        <div className="flex items-baseline gap-2 font-mono">
+                          <span className={`text-lg font-bold ${avgScore !== null ? getScoreColorStyle(avgScore).text : 'text-slate-400'}`}>
+                            {avgScore !== null ? `${avgScore}/100` : '—'}
+                          </span>
+                          <span className="text-[11px] text-slate-500">model puanı</span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-[#1b202b] overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${avgScore !== null && avgScore >= 70 ? 'bg-emerald-400' : avgScore !== null && avgScore >= 50 ? 'bg-amber-400' : 'bg-rose-400'}`}
+                            style={{ width: `${avgScore !== null ? Math.max(6, Math.min(100, avgScore)) : 0}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* KPI 3: Ortalama Adil Değer Potansiyeli */}
+                      <div className="fv-kpi-card bg-[#101319] border border-[#232834] rounded-xl p-3.5 space-y-1.5">
+                        <div className="text-[11px] font-mono text-slate-400">ORT. ADİL DEĞER MARJI</div>
+                        <div className={`text-lg font-mono font-bold ${
+                          avgUpside === null ? 'text-slate-400' : avgUpside >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}>
+                          {avgUpside !== null ? (avgUpside >= 0 ? `+%${avgUpside}` : `-%${Math.abs(avgUpside)}`) : '—'}
+                        </div>
+                        <div className="text-[11px] font-mono text-slate-400">
+                          <span className="text-emerald-400 font-semibold">{discountedCount}</span> / {withUpside.length} iskontolu
+                        </div>
+                      </div>
+
+                      {/* KPI 4: Portföy için Sektör Yoğunlaşması / Favoriler için En Cazip Fırsat */}
+                      {isPortfolio ? (
+                        <div className="fv-kpi-card bg-[#101319] border border-[#232834] rounded-xl p-3.5 space-y-1.5">
+                          <div className="text-[11px] font-mono text-slate-400">SEKTÖR ÇEŞİTLİLİĞİ</div>
+                          <div className="text-lg font-mono font-bold text-white">
+                            {sectorFreq.size} <span className="text-xs font-normal text-slate-400">farklı sektör</span>
+                          </div>
+                          {topSectorEntry && (
+                            <div className="text-[11px] font-sans text-slate-400 truncate" title={topSectorEntry[0]}>
+                              Ağırlık: <strong className="text-[#f5c242]">{topSectorEntry[0]}</strong> (%{Math.round((topSectorEntry[1] / totalCount) * 100)})
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div
+                          role={topOpportunity ? 'button' : undefined}
+                          tabIndex={topOpportunity ? 0 : undefined}
+                          onClick={() => topOpportunity && openReport(topOpportunity.report.id, topOpportunity.report.ticker)}
+                          onKeyDown={(e) => {
+                            if (topOpportunity && (e.key === 'Enter' || e.key === ' ')) {
+                              e.preventDefault();
+                              openReport(topOpportunity.report.id, topOpportunity.report.ticker);
+                            }
+                          }}
+                          className={`fv-kpi-card bg-[#101319] border border-[#232834] rounded-xl p-3.5 space-y-1.5 ${topOpportunity ? 'cursor-pointer hover:border-emerald-500/40' : ''}`}
+                        >
+                          <div className="text-[11px] font-mono text-slate-400">EN YÜKSEK POTANSİYEL</div>
+                          {topOpportunity ? (
+                            <>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-lg font-mono font-black text-white">{topOpportunity.report.ticker}</span>
+                                <span className={`text-sm font-mono font-bold ${(topOpportunity.discount || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                  {(topOpportunity.discount || 0) >= 0 ? `+%${topOpportunity.discount}` : `-%${Math.abs(topOpportunity.discount || 0)}`}
+                                </span>
+                              </div>
+                              <div className="text-[11px] font-mono text-slate-400 flex items-center justify-between">
+                                <span>{topOpportunity.report.decision} · {formatScore(topOpportunity.report.score)}</span>
+                                <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-xs text-slate-500 font-mono pt-1">—</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* Henüz Analiz Edilmemiş İzleme / Portföy Hisseleri Şeridi */}
+                  {unanalyzedWatchTickers.length > 0 && (
+                    <div className="p-3.5 rounded-xl bg-[#101319] border border-[#262c38] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2 text-xs text-slate-300 font-sans">
+                        <Sparkles className="w-3.5 h-3.5 text-[#f5c242] shrink-0" />
+                        <span>
+                          <strong className="text-white">{unanalyzedWatchTickers.length}</strong> hisse listede ancak henüz değerleme raporu oluşturulmadı:
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {unanalyzedWatchTickers.map(sym => (
+                          <div
+                            key={sym}
+                            className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-lg bg-[#151821] border border-[#2e3440] text-xs font-mono"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => handleOpenOrAnalyzeTicker(sym)}
+                              className="inline-flex items-center gap-1 text-white hover:text-[#f5c242] font-bold cursor-pointer"
+                              title={`${sym} analizini başlat`}
+                            >
+                              <span>{sym}</span>
+                              <span className="text-[10px] font-sans font-semibold text-emerald-400">Analiz Et</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => isPortfolio ? togglePortfolio(sym) : toggleFavorite(sym)}
+                              className="p-0.5 rounded text-slate-500 hover:text-rose-400 cursor-pointer"
+                              title={`${sym} listeden çıkar`}
+                              aria-label={`${sym} çıkar`}
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Filtre, Arama & Sıralama Kontrol Barı */}
+                <div className="bg-[#151821] border border-[#262c38] p-4 rounded-2xl flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                  {/* Karar Filtreleri (Portföy & Favoriler Her İkisinde Aktif) */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                    {[
+                      { key: 'ALL', label: 'TÜMÜ', count: collectionAll.length, dot: 'bg-slate-400', activeCls: isPortfolio ? 'border-[#f5c242]/50 bg-[#f5c242]/12 text-[#f5c242]' : 'border-amber-400/50 bg-amber-400/12 text-amber-300' },
+                      { key: 'AL', label: 'AL', count: colAl.length, dot: 'bg-emerald-400', activeCls: 'border-emerald-500/50 bg-emerald-500/12 text-emerald-300' },
+                      { key: 'NÖTR', label: 'NÖTR', count: colNotr.length, dot: 'bg-amber-400', activeCls: 'border-amber-500/50 bg-amber-500/12 text-amber-300' },
+                      { key: 'ALMA', label: 'ALMA', count: colAlma.length, dot: 'bg-rose-400', activeCls: 'border-rose-500/50 bg-rose-500/12 text-rose-300' },
+                    ].map(tab => {
+                      const isSelected = activeDecisionFilter === tab.key;
+                      return (
+                        <button
+                          key={tab.key}
+                          type="button"
+                          onClick={() => setActiveDecisionFilter(tab.key as any)}
+                          className={`fv-pill flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer border whitespace-nowrap ${
+                            isSelected
+                              ? tab.activeCls
+                              : 'border-transparent bg-[#101319] text-slate-400 hover:text-white hover:border-[#2e3440]'
+                          }`}
+                        >
+                          <span className={`w-2 h-2 rounded-full ${tab.dot}`} />
+                          <span>{tab.label}</span>
+                          <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-black/25 text-slate-200">
+                            {tab.count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
                   {/* Arama ve Sıralama */}
-                  <div className="flex items-center gap-3">
-                    <div className="relative min-w-[220px]">
-                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <div className="relative flex-1 sm:flex-initial min-w-[235px]">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
                         type="text"
                         value={analyzedSearch}
                         onChange={(e) => setAnalyzedSearch(e.target.value)}
-                        placeholder="Şirket veya kod ara..."
-                        className="w-full bg-[#12151c] border border-[#2e3440] rounded-xl pl-9 pr-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition font-sans"
+                        placeholder="Hisse veya sektör ara..."
+                        className="w-full bg-[#101319] border border-[#262c38] rounded-xl pl-8 pr-8 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition font-sans"
                       />
+                      {analyzedSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setAnalyzedSearch('')}
+                          aria-label="Aramayı temizle"
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
 
-                    <div className="flex items-center bg-[#12151c] p-1 rounded-xl border border-[#2e3440] text-sm">
-                      <button
-                        type="button"
-                        onClick={() => setSidebarSort('rank')}
-                        className={`px-3 py-1.5 rounded-lg transition cursor-pointer font-semibold ${
-                          sidebarSort === 'rank'
-                            ? 'bg-emerald-600 text-white shadow-sm'
-                            : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        Puana Göre
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSidebarSort('date')}
-                        className={`px-3 py-1.5 rounded-lg transition cursor-pointer font-semibold ${
-                          sidebarSort === 'date'
-                            ? 'bg-[#2e3440] text-white shadow-sm'
-                            : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        Tarihe Göre
-                      </button>
+                    <div className="flex items-center bg-[#101319] p-1 rounded-xl border border-[#262c38] text-xs">
+                      {[
+                        { key: 'score', label: 'Skor' },
+                        { key: 'discount', label: 'Potansiyel' },
+                        { key: 'date', label: 'Tarih' }
+                      ].map(opt => (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          onClick={() => {
+                            if (opt.key === 'score') setSidebarSort('rank');
+                            if (opt.key === 'date') setSidebarSort('date');
+                            setSavedTableSort({ key: opt.key as any, direction: 'desc' });
+                          }}
+                          className={`fv-pill px-2.5 py-1 rounded-lg cursor-pointer font-semibold ${
+                            savedTableSort.key === opt.key
+                              ? 'bg-emerald-600 text-white shadow-sm'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
 
-                {/* Şirketler Gösterimi (Boş Durum VEYA Seçili Görünüm Modu) */}
+                {/* Şirketler Gösterimi */}
                 {sortedList.length === 0 ? (
-                  <div className="bg-[#1a1e26] border border-[#2e3440] rounded-2xl p-12 text-center text-slate-400 space-y-3">
-                    <Building2 className="w-12 h-12 mx-auto text-slate-600 opacity-60" />
-                    <h4 className="text-base font-bold text-slate-200 font-sans">
-                      {isPortfolio 
+                  <div className="bg-[#151821] border border-[#262c38] rounded-2xl p-12 text-center text-slate-400 space-y-3.5">
+                    <div className={`w-14 h-14 mx-auto rounded-2xl border flex items-center justify-center ${
+                      isPortfolio ? 'bg-[#f5c242]/10 border-[#f5c242]/25 text-[#f5c242]' : 'bg-amber-400/10 border-amber-400/25 text-amber-400'
+                    }`}>
+                      {isPortfolio ? <Briefcase className="w-7 h-7" /> : <Star className="w-7 h-7" />}
+                    </div>
+                    <h4 className="text-base font-bold text-slate-100 font-sans">
+                      {collectionAll.length > 0
+                        ? 'Seçili Filtreye Uyan Şirket Bulunamadı'
+                        : isPortfolio
                         ? 'Portföyünüzde Henüz Şirket Yok'
                         : 'Favori Listenizde Henüz Şirket Yok'}
                     </h4>
-                    <p className="text-sm text-slate-400 max-w-md mx-auto font-sans">
-                      {isPortfolio
-                        ? 'Şirket analiz ekranında sol menüdeki "+ Portföy" butonuna tıklayarak hisseleri portföyünüze ekleyebilirsiniz.'
-                        : 'Şirket analiz ekranında hisse kodunun yanındaki "★" butonuna tıklayarak hisseleri favori listenize alabilirsiniz.'}
+                    <p className="text-xs sm:text-sm text-slate-400 max-w-md mx-auto font-sans">
+                      {collectionAll.length > 0
+                        ? 'Farklı bir karar filtresi seçebilir veya arama metnini temizleyebilirsiniz.'
+                        : isPortfolio
+                        ? 'Üstteki "+ Portföye Ekle" butonundan mevcut analizlerinizi ekleyebilir veya şirket raporundaki "+ Portföy" butonunu kullanabilirsiniz.'
+                        : 'Üstteki "+ Favoriye Ekle" butonundan izlemek istediğiniz şirketleri ekleyebilir veya rapor ekranındaki "★ İzle" butonuna tıklayabilirsiniz.'}
                     </p>
-                    <div className="flex items-center justify-center gap-3 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={() => navigateTo('input')}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-bold transition cursor-pointer font-sans"
-                      >
-                        <PlusCircle className="w-4 h-4" />
-                        <span>Yeni Şirket Analiz Et</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => backupFileInputRef.current?.click()}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#21262d] hover:bg-[#2b313d] text-cyan-400 border border-[#3b4252] rounded-xl text-sm font-bold transition cursor-pointer font-sans"
-                      >
-                        <Upload className="w-4 h-4" />
-                        <span>Başka Cihazdan Yedek Yükle (JSON)</span>
-                      </button>
+                    <div className="flex items-center justify-center gap-2.5 flex-wrap pt-1">
+                      {collectionAll.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => { setActiveDecisionFilter('ALL'); setAnalyzedSearch(''); }}
+                          className="fv-pill px-4 py-2 bg-[#21262d] hover:bg-[#2b313d] text-white rounded-xl text-xs font-bold border border-[#2e3440] cursor-pointer"
+                        >
+                          Filtreleri Temizle
+                        </button>
+                      ) : (
+                        <>
+                          {deduplicatedSaved.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setQuickAddOpen(true)}
+                              className={`fv-pill inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer ${
+                                isPortfolio ? 'bg-[#f5c242] text-slate-950' : 'bg-amber-400 text-slate-950'
+                              }`}
+                            >
+                              <Plus className="w-4 h-4" />
+                              <span>Analizlerden Hızlı Ekle</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => navigateTo('input')}
+                            className="fv-pill inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold cursor-pointer font-sans"
+                          >
+                            <PlusCircle className="w-4 h-4" />
+                            <span>Yeni Şirket Analiz Et</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => backupFileInputRef.current?.click()}
+                            className="fv-pill inline-flex items-center gap-2 px-4 py-2 bg-[#21262d] hover:bg-[#2b313d] text-cyan-400 border border-[#3b4252] rounded-xl text-xs font-bold cursor-pointer font-sans"
+                          >
+                            <Upload className="w-4 h-4" />
+                            <span>Yedek Yükle (JSON)</span>
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ) : currentViewMode === 'list' ? (
-                  /* Liste / Tablo Görünümü (Varsayılan) */
-                  <div className="bg-[#1a1e26] border border-[#2e3440] rounded-2xl overflow-hidden shadow-xl">
-                    <div className="overflow-x-auto">
+                  /* Liste / Tablo Görünümü */
+                  <div className="bg-[#151821] border border-[#262c38] rounded-2xl overflow-hidden">
+                    <div className="overflow-x-auto touch-pan-x no-scrollbar">
                       <table className="w-full text-left text-sm border-collapse font-sans">
                         <thead>
-                          <tr className="border-b border-[#2e3440] bg-[#12151c]/80 text-[11px] font-mono text-slate-400 uppercase tracking-wider">
-                            <th className="py-3.5 px-4">Şirket</th>
+                          <tr className="border-b border-[#262c38] bg-[#101319] text-[11px] font-mono text-slate-400 uppercase tracking-wider">
+                            <th onClick={() => toggleSavedSort('ticker')} className="py-3.5 px-4 cursor-pointer select-none hover:text-white sticky left-0 bg-[#101319] z-10 min-w-[130px]">
+                              <span className="inline-flex items-center gap-1">
+                                <span>Şirket</span>
+                                {savedTableSort.key === 'ticker' && <span className="text-[#f5c242]">{savedTableSort.direction === 'asc' ? '↑' : '↓'}</span>}
+                              </span>
+                            </th>
                             <th className="py-3.5 px-3">Sektör</th>
-                            <th className="py-3.5 px-3 text-right">Fiyat</th>
-                            <th className="py-3.5 px-3 text-right">Adil Değer</th>
-                            <th className="py-3.5 px-3 text-center">Potansiyel</th>
-                            <th className="py-3.5 px-3 text-center">Skor</th>
-                            <th className="py-3.5 px-3 text-center">Karar</th>
-                            <th className="py-3.5 px-4 text-center">{isPortfolio ? 'Portföy' : 'Favori'}</th>
-                            <th className="py-3.5 px-4 text-center">Aksiyon</th>
+                            <th onClick={() => toggleSavedSort('price')} className="py-3.5 px-3 text-right cursor-pointer select-none hover:text-white">
+                              <span className="inline-flex items-center justify-end gap-1 w-full">
+                                <span>Fiyat</span>
+                                {savedTableSort.key === 'price' && <span className="text-[#f5c242]">{savedTableSort.direction === 'asc' ? '↑' : '↓'}</span>}
+                              </span>
+                            </th>
+                            <th onClick={() => toggleSavedSort('fairValue')} className="py-3.5 px-3 text-right cursor-pointer select-none hover:text-white">
+                              <span className="inline-flex items-center justify-end gap-1 w-full">
+                                <span>Adil Değer</span>
+                                {savedTableSort.key === 'fairValue' && <span className="text-[#f5c242]">{savedTableSort.direction === 'asc' ? '↑' : '↓'}</span>}
+                              </span>
+                            </th>
+                            <th onClick={() => toggleSavedSort('discount')} className="py-3.5 px-3 text-center cursor-pointer select-none hover:text-white">
+                              <span className="inline-flex items-center justify-center gap-1 w-full">
+                                <span>Potansiyel</span>
+                                {savedTableSort.key === 'discount' && <span className="text-[#f5c242]">{savedTableSort.direction === 'asc' ? '↑' : '↓'}</span>}
+                              </span>
+                            </th>
+                            <th onClick={() => toggleSavedSort('score')} className="py-3.5 px-3 text-center cursor-pointer select-none hover:text-white">
+                              <span className="inline-flex items-center justify-center gap-1 w-full">
+                                <span>Skor</span>
+                                {savedTableSort.key === 'score' && <span className="text-[#f5c242]">{savedTableSort.direction === 'asc' ? '↑' : '↓'}</span>}
+                              </span>
+                            </th>
+                            <th onClick={() => toggleSavedSort('decision')} className="py-3.5 px-3 text-center cursor-pointer select-none hover:text-white">
+                              <span className="inline-flex items-center justify-center gap-1 w-full">
+                                <span>Karar</span>
+                                {savedTableSort.key === 'decision' && <span className="text-[#f5c242]">{savedTableSort.direction === 'asc' ? '↑' : '↓'}</span>}
+                              </span>
+                            </th>
+                            <th className="py-3.5 px-4 text-right">Aksiyon</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-[#2e3440]/60 text-slate-300">
+                        <tbody className="divide-y divide-[#232834] text-slate-300">
                           {sortedList.map((item) => {
                             const isAl = (item.decision || '').trim().toUpperCase() === 'AL';
                             const isAlma = (item.decision || '').trim().toUpperCase() === 'ALMA';
-                            const repVal = (item as any).valuation || item.extractedData?.valuation;
-                            const fairVal = parseFinancialNumber(item.fairValue ?? repVal?.composite_fair_value ?? repVal?.fair_value ?? repVal?.dcf_fair_value) ?? 0;
-                            const priceNum = parseFinancialNumber(item.price) ?? 0;
-                            const discount = (fairVal > 0 && priceNum > 0)
-                              ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))
-                              : null;
+                            const { fairVal, priceNum, discount } = getItemValuationMetrics(item);
                             const companyName = (item as any).companyName || item.extractedData?.company_name || '';
+                            const symUpper = (item.ticker || '').toUpperCase();
+                            const inPort = portfolioTickers.includes(symUpper);
+                            const inFav = favoriteTickers.includes(symUpper);
 
                             return (
                               <tr
                                 key={item.id}
                                 onClick={() => openReport(item.id, item.ticker)}
-                                className="hover:bg-[#21262d] transition cursor-pointer group"
+                                className="fv-row cursor-pointer group"
                               >
-                                <td className="py-3 px-4">
+                                <td className="py-3 px-4 sticky left-0 bg-[#151821] group-hover:bg-[#1c222d] z-10 min-w-[130px]">
                                   <div className="flex items-center gap-2">
                                     <span className="font-mono font-bold text-white group-hover:text-emerald-400 transition">
                                       {item.ticker}
                                     </span>
+                                    {item.isValueTrap && (
+                                      <span title="Değer Tuzağı Uyarısı" className="text-rose-400">
+                                        <AlertTriangle className="w-3.5 h-3.5" />
+                                      </span>
+                                    )}
                                     {companyName && (
-                                      <span className="text-xs text-slate-400 truncate max-w-[160px] hidden sm:inline">
+                                      <span className="text-xs text-slate-400 truncate max-w-[165px] hidden sm:inline">
                                         {companyName}
                                       </span>
                                     )}
@@ -7837,8 +8905,10 @@ export default function ValuationTerminal({
                                 </td>
                                 <td className="py-3 px-3 text-center">
                                   {discount !== null ? (
-                                    <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-bold ${
-                                      discount >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+                                    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-mono font-bold border ${
+                                      discount >= 0
+                                        ? 'bg-emerald-500/12 text-emerald-400 border-emerald-500/30'
+                                        : 'bg-rose-500/12 text-rose-400 border-rose-500/30'
                                     }`}>
                                       {discount >= 0 ? `+${discount}%` : `${discount}%`}
                                     </span>
@@ -7856,45 +8926,61 @@ export default function ValuationTerminal({
                                     {item.decision || 'NÖTR'}
                                   </span>
                                 </td>
-                                <td className="py-3 px-4 text-center">
-                                  {isPortfolio ? (
+                                <td className="py-3 px-4 text-right">
+                                  <div className="inline-flex items-center gap-1.5">
+                                    {!isPortfolio && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); togglePortfolio(item.ticker); }}
+                                        title={inPort ? 'Portföyden Çıkar' : 'Portföye Ekle'}
+                                        className={`fv-pill inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
+                                          inPort
+                                            ? 'bg-[#f5c242]/15 text-[#f5c242] border-[#f5c242]/40'
+                                            : 'bg-[#101319] text-slate-300 hover:text-[#f5c242] border-[#262c38] hover:border-[#f5c242]/40'
+                                        }`}
+                                      >
+                                        <Briefcase className="w-3 h-3" />
+                                        <span className="hidden xl:inline">{inPort ? 'Portföyde' : '+ Portföy'}</span>
+                                      </button>
+                                    )}
+                                    {isPortfolio && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); toggleFavorite(item.ticker); }}
+                                        title={inFav ? 'Favorilerden Çıkar' : 'Favorilere Ekle'}
+                                        className={`p-1.5 rounded-lg border cursor-pointer ${
+                                          inFav
+                                            ? 'bg-amber-400/15 text-amber-300 border-amber-400/40'
+                                            : 'bg-[#101319] text-slate-500 hover:text-amber-300 border-[#262c38]'
+                                        }`}
+                                      >
+                                        <Star className={`w-3.5 h-3.5 ${inFav ? 'fill-amber-400 text-amber-400' : ''}`} />
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        togglePortfolio(item.ticker);
+                                        if (isPortfolio) togglePortfolio(item.ticker);
+                                        else toggleFavorite(item.ticker);
                                       }}
-                                      className="p-1 rounded-lg text-[#f5c242] hover:text-rose-400 transition cursor-pointer"
-                                      title="Portföyden Çıkar"
+                                      className="p-1.5 rounded-lg bg-[#101319] hover:bg-rose-500/15 text-slate-400 hover:text-rose-400 border border-[#262c38] hover:border-rose-500/40 cursor-pointer"
+                                      title={isPortfolio ? 'Portföyden Çıkar' : 'Favorilerden Çıkar'}
                                     >
-                                      <Briefcase className="w-4 h-4" />
+                                      <X className="w-3.5 h-3.5" />
                                     </button>
-                                  ) : (
                                     <button
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        toggleFavorite(item.ticker);
+                                        openReport(item.id, item.ticker);
                                       }}
-                                      className="p-1 rounded-lg text-amber-400 hover:text-rose-400 transition cursor-pointer"
-                                      title="Favorilerden Çıkar"
+                                      className="p-1.5 rounded-lg bg-[#21262d] hover:bg-emerald-500 hover:text-slate-950 text-slate-200 cursor-pointer border border-[#2e3440]"
+                                      title="Şirket Analizini Aç"
                                     >
-                                      <Star className="w-4 h-4 fill-amber-400" />
+                                      <ArrowUpRight className="w-4 h-4" />
                                     </button>
-                                  )}
-                                </td>
-                                <td className="py-3 px-4 text-center">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openReport(item.id, item.ticker);
-                                    }}
-                                    className="p-1.5 rounded-lg bg-[#21262d] hover:bg-emerald-500 hover:text-slate-950 text-slate-300 transition cursor-pointer"
-                                    title="Şirket Analizini Aç"
-                                  >
-                                    <ArrowUpRight className="w-4 h-4" />
-                                  </button>
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -7904,36 +8990,34 @@ export default function ValuationTerminal({
                     </div>
                   </div>
                 ) : currentViewMode === 'compact' ? (
-                  /* Küçük Simgeler (Small Icons / Kompakt Rozetler) Görünümü */
+                  /* Kompakt Rozetler Görünümü */
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                     {sortedList.map((item) => {
                       const isAl = (item.decision || '').trim().toUpperCase() === 'AL';
                       const isAlma = (item.decision || '').trim().toUpperCase() === 'ALMA';
-                      const repVal = (item as any).valuation || item.extractedData?.valuation;
-                      const fairVal = parseFinancialNumber(item.fairValue ?? repVal?.composite_fair_value ?? repVal?.fair_value ?? repVal?.dcf_fair_value) ?? 0;
-                      const priceNum = parseFinancialNumber(item.price) ?? 0;
+                      const { priceNum, discount } = getItemValuationMetrics(item);
                       const compactScoreNum = parseNumericScore(item.score);
-                      const discount = (fairVal > 0 && priceNum > 0)
-                        ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))
-                        : null;
 
                       return (
                         <div
                           key={item.id}
                           onClick={() => openReport(item.id, item.ticker)}
-                          className="bg-[#1a1e26] hover:bg-[#21262d] border border-[#2e3440] hover:border-emerald-500/50 p-3.5 rounded-2xl transition cursor-pointer group flex flex-col justify-between space-y-2.5 shadow-md"
+                          className={`fv-card ${isAl ? 'fv-card-emerald' : isAlma ? 'fv-card-rose' : 'fv-card-amber'} bg-[#151821] hover:bg-[#1c212c] border border-[#262c38] p-3.5 rounded-xl cursor-pointer group flex flex-col justify-between space-y-2.5 overflow-hidden`}
                         >
+                          <div className={`h-0.5 -mx-3.5 -mt-3.5 mb-0.5 ${isAl ? 'bg-emerald-400/80' : isAlma ? 'bg-rose-400/80' : 'bg-amber-400/75'}`} />
                           <div className="flex items-center justify-between gap-1">
                             <span className="font-mono font-black text-base text-white group-hover:text-emerald-400 transition">
                               {item.ticker}
                             </span>
-                            <span className={`w-2.5 h-2.5 rounded-full ${
-                              isAl ? 'bg-emerald-400' : isAlma ? 'bg-rose-400' : 'bg-amber-400'
-                            }`} />
+                            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                              isAl ? 'bg-emerald-500/15 text-emerald-400' : isAlma ? 'bg-rose-500/15 text-rose-400' : 'bg-amber-500/15 text-amber-400'
+                            }`}>
+                              {item.decision || 'NÖTR'}
+                            </span>
                           </div>
 
                           <div className="flex items-center justify-between text-xs font-mono">
-                            <span className="text-slate-400 text-[11px] truncate max-w-[120px]">
+                            <span className="text-slate-400 text-[11px] truncate max-w-[115px]">
                               {getCompanySectorDisplayName(item.ticker, item.sector)}
                             </span>
                             {discount !== null ? (
@@ -7945,10 +9029,10 @@ export default function ValuationTerminal({
                             )}
                           </div>
 
-                          <div className="pt-2 border-t border-[#2e3440]/60 flex items-center justify-between text-[11px] font-mono">
+                          <div className="pt-2 border-t border-[#232834] flex items-center justify-between text-[11px] font-mono">
                             <span className="text-white font-bold">{priceNum > 0 ? `₺${priceNum.toFixed(1)}` : '—'}</span>
                             {compactScoreNum !== null ? (
-                              <span className={`font-bold px-1.5 py-0.2 rounded bg-[#12151c] border border-[#2e3440] ${getScoreColorStyle(item.score).text}`}>
+                              <span className={`font-bold px-1.5 py-0.5 rounded bg-[#101319] border border-[#262c38] ${getScoreColorStyle(item.score).text}`}>
                                 {compactScoreNum}p
                               </span>
                             ) : null}
@@ -7969,139 +9053,161 @@ export default function ValuationTerminal({
                         ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
                         : 'bg-amber-500/10 border-amber-500/30 text-amber-400';
 
-                      const repVal = (item as any).valuation || item.extractedData?.valuation;
-                      const fairVal = parseFinancialNumber(item.fairValue ?? repVal?.composite_fair_value ?? repVal?.fair_value ?? repVal?.dcf_fair_value) ?? 0;
-                      const priceNum = parseFinancialNumber(item.price) ?? 0;
-                      const discount = (fairVal > 0 && priceNum > 0)
-                        ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))
-                        : null;
+                      const { fairVal, priceNum, discount } = getItemValuationMetrics(item);
                       const companyName = (item as any).companyName || item.extractedData?.company_name || '';
                       const inPort = portfolioTickers.includes((item.ticker || '').toUpperCase());
                       const inFav = favoriteTickers.includes((item.ticker || '').toUpperCase());
+                      const marginBarPct = discount !== null
+                        ? Math.max(10, Math.min(100, Math.round(Math.abs(discount))))
+                        : 0;
 
                       return (
                         <div
                           key={item.id}
                           onClick={() => openReport(item.id, item.ticker)}
-                          className="bg-[#1a1e26] hover:bg-[#21262d] border border-[#2e3440] hover:border-emerald-500/50 rounded-2xl p-5 transition cursor-pointer flex flex-col justify-between space-y-4 group shadow-lg"
+                          className={`fv-card ${isAl ? 'fv-card-emerald' : isAlma ? 'fv-card-rose' : 'fv-card-amber'} bg-[#151821] border border-[#262c38] rounded-2xl overflow-hidden cursor-pointer flex flex-col justify-between group`}
                         >
-                          <div className="space-y-3">
-                            {/* Başlık: Ticker, Şirket Adı, Karar Rozeti ve Hızlı Butonlar */}
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-mono font-black text-lg text-white group-hover:text-emerald-400 transition">
-                                    {item.ticker}
-                                  </span>
-                                  {item.period && (
-                                    <span className="text-xs font-mono text-slate-300 bg-[#12151c] px-2 py-0.5 rounded-md border border-[#2e3440]">
-                                      {item.period}
+                          <div className={`h-1 w-full ${isAl ? 'bg-gradient-to-r from-emerald-500 to-teal-400' : isAlma ? 'bg-gradient-to-r from-rose-500 to-red-400' : 'bg-gradient-to-r from-amber-500 to-yellow-400'}`} />
+                          <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                            <div className="space-y-3.5">
+                              {/* Başlık */}
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-mono font-black text-lg text-white group-hover:text-emerald-400 transition">
+                                      {item.ticker}
                                     </span>
-                                  )}
-                                  <span className="text-xs font-mono text-slate-400 bg-[#12151c] px-2 py-0.5 rounded-md border border-[#2e3440]">
-                                    {getCompanySectorDisplayName(item.ticker, item.sector)}
-                                  </span>
-                                </div>
-                                {companyName && (
-                                  <div className="text-xs text-slate-400 truncate max-w-[200px] mt-0.5 font-sans">
-                                    {companyName}
+                                    {item.period && (
+                                      <span className="text-[11px] font-mono text-slate-300 bg-[#101319] px-2 py-0.5 rounded-md border border-[#262c38]">
+                                        {item.period}
+                                      </span>
+                                    )}
+                                    <span className="text-[11px] font-mono text-slate-400 bg-[#101319] px-2 py-0.5 rounded-md border border-[#262c38]">
+                                      {getCompanySectorDisplayName(item.ticker, item.sector)}
+                                    </span>
                                   </div>
-                                )}
+                                  {companyName && (
+                                    <div className="text-xs text-slate-400 truncate max-w-[215px] mt-0.5 font-sans">
+                                      {companyName}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-1.5 flex-shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleFavorite(item.ticker);
+                                    }}
+                                    title={inFav ? 'Favorilerden Çıkar' : 'Favorilere Ekle'}
+                                    className={`p-1.5 rounded-lg border cursor-pointer ${
+                                      inFav
+                                        ? 'bg-amber-400/20 text-amber-300 border-amber-400/50 hover:bg-amber-400/30'
+                                        : 'bg-[#101319] text-slate-400 hover:text-white border-[#262c38]'
+                                    }`}
+                                  >
+                                    <Star className={`w-3.5 h-3.5 ${inFav ? 'fill-amber-400 text-amber-400' : ''}`} />
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      togglePortfolio(item.ticker);
+                                    }}
+                                    title={inPort ? 'Portföyden Çıkar' : 'Portföye Ekle'}
+                                    className={`p-1.5 rounded-lg border cursor-pointer ${
+                                      inPort
+                                        ? 'bg-[#f5c242]/20 text-[#f5c242] border-[#f5c242]/50 hover:bg-[#f5c242]/30 font-bold'
+                                        : 'bg-[#101319] text-slate-400 hover:text-white border-[#262c38]'
+                                    }`}
+                                  >
+                                    <Briefcase className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               </div>
 
-                              <div className="flex items-center gap-1.5 flex-shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleFavorite(item.ticker);
-                                  }}
-                                  title={inFav ? 'Favorilerden Çıkar' : 'Favorilere Ekle'}
-                                  className={`p-1.5 rounded-lg border transition cursor-pointer ${
-                                    inFav
-                                      ? 'bg-amber-400/20 text-amber-300 border-amber-400/50 hover:bg-amber-400/30'
-                                      : 'bg-[#12151c] text-slate-400 hover:text-white border-[#2e3440] hover:bg-[#21262d]'
-                                  }`}
-                                >
-                                  <Star className={`w-3.5 h-3.5 ${inFav ? 'fill-amber-400 text-amber-400' : ''}`} />
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    togglePortfolio(item.ticker);
-                                  }}
-                                  title={inPort ? 'Portföyden Çıkar' : 'Portföye Ekle'}
-                                  className={`p-1.5 rounded-lg border transition cursor-pointer ${
-                                    inPort
-                                      ? 'bg-[#f5c242]/20 text-[#f5c242] border-[#f5c242]/50 hover:bg-[#f5c242]/30 font-bold'
-                                      : 'bg-[#12151c] text-slate-400 hover:text-white border-[#2e3440] hover:bg-[#21262d]'
-                                  }`}
-                                >
-                                  <Briefcase className="w-3.5 h-3.5" />
-                                </button>
-
-                                <div className={`px-2.5 py-1 rounded-xl border text-xs font-mono font-bold flex items-center gap-2 ${badgeCls}`}>
+                              {/* Karar + Skor + Değer Tuzağı Uyarı Şeridi */}
+                              <div className="flex items-center justify-between gap-2">
+                                <div className={`px-2.5 py-1 rounded-lg border text-xs font-mono font-bold inline-flex items-center gap-2 ${badgeCls}`}>
                                   <span>{item.decision || 'NÖTR'}</span>
-                                  <span className="w-1 h-3 bg-current opacity-30" />
+                                  <span className="w-px h-3 bg-current opacity-30" />
                                   <span className={getScoreColorStyle(item.score).text}>{formatScore(item.score)}</span>
                                 </div>
-                              </div>
-                            </div>
-
-                            {/* Fiyat & Adil Değer & Potansiyel Kutusu */}
-                            <div className="grid grid-cols-3 divide-x divide-[#2e3440] py-2 px-3 bg-[#12151c] rounded-xl border border-[#2e3440] text-sm font-mono text-center">
-                              <div>
-                                <span className="text-slate-400 text-xs block font-sans">Fiyat</span>
-                                <span className="text-white font-bold">{priceNum > 0 ? `₺${priceNum.toFixed(2)}` : '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-slate-400 text-xs block font-sans">Adil Değer</span>
-                                <span className="text-emerald-400 font-bold">{fairVal > 0 ? `₺${fairVal.toFixed(2)}` : '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-slate-400 text-xs block font-sans">Potansiyel</span>
-                                {discount !== null ? (
-                                  <span className={`font-bold ${discount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                    {discount >= 0 ? `+${discount}%` : `${discount}%`}
+                                {item.isValueTrap && (
+                                  <span className="inline-flex items-center gap-1 text-[10.5px] font-mono font-bold px-2 py-0.5 rounded bg-rose-500/12 text-rose-300 border border-rose-500/30">
+                                    <AlertTriangle className="w-3 h-3" />
+                                    <span>Değer Tuzağı</span>
                                   </span>
-                                ) : (
-                                  <span className="text-slate-500">—</span>
                                 )}
                               </div>
+
+                              {/* Fiyat & Adil Değer & Hedef Çubuğu */}
+                              <div className="p-3 bg-[#101319] rounded-xl border border-[#232834] space-y-2.5">
+                                <div className="grid grid-cols-3 divide-x divide-[#232834] text-sm font-mono text-center">
+                                  <div>
+                                    <span className="text-slate-400 text-[10.5px] block font-sans">Fiyat</span>
+                                    <span className="text-white font-bold">{priceNum > 0 ? `₺${priceNum.toFixed(2)}` : '—'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400 text-[10.5px] block font-sans">Adil Değer</span>
+                                    <span className="text-emerald-400 font-bold">{fairVal > 0 ? `₺${fairVal.toFixed(2)}` : '—'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400 text-[10.5px] block font-sans">Potansiyel</span>
+                                    {discount !== null ? (
+                                      <span className={`font-bold ${discount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                        {discount >= 0 ? `+${discount}%` : `${discount}%`}
+                                      </span>
+                                    ) : <span className="text-slate-500">—</span>}
+                                  </div>
+                                </div>
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
+                                    <span>Değerleme Marjı</span>
+                                    <span>{discount !== null ? (discount >= 0 ? `%${discount} İskonto` : `%${Math.abs(discount)} Primli`) : '—'}</span>
+                                  </div>
+                                  <div className="h-1.5 w-full rounded-full bg-[#1b202b] overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full ${discount !== null && discount >= 0 ? 'bg-emerald-400' : 'bg-rose-400'}`}
+                                      style={{ width: `${marginBarPct}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="text-[11px] text-slate-500 flex items-center justify-between font-mono">
+                                <span>Güncelleme: {formatAnalysisDate(item.createdAt) || '—'}</span>
+                              </div>
                             </div>
 
-                            <div className="text-xs text-slate-500 flex items-center justify-between font-mono pt-1">
-                              <span>Kayıt: {item.createdAt || '—'}</span>
+                            {/* Alt Aksiyon Butonları */}
+                            <div className="flex items-center gap-2 pt-2.5 border-t border-[#232834]">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openReport(item.id, item.ticker);
+                                }}
+                                className="flex-1 py-2 bg-[#1e232e] group-hover:bg-emerald-600 group-hover:text-white text-slate-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border border-[#2e3440] group-hover:border-emerald-500 cursor-pointer"
+                              >
+                                <span>Analizi Aç</span>
+                                <ArrowUpRight className="w-4 h-4" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteReport(item.id, e);
+                                }}
+                                title="Analizi Sil"
+                                className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/12 rounded-xl border border-transparent hover:border-rose-500/35 cursor-pointer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
-                          </div>
-
-                          {/* Alt Aksiyon Butonları */}
-                          <div className="flex items-center gap-2 pt-2 border-t border-[#2e3440]">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openReport(item.id, item.ticker);
-                              }}
-                              className="flex-1 py-2 bg-[#21262d] group-hover:bg-emerald-600 group-hover:text-white text-slate-200 rounded-xl text-sm font-bold transition flex items-center justify-center gap-2 border border-[#2e3440] group-hover:border-emerald-500 cursor-pointer"
-                            >
-                              <span>Analizi Aç</span>
-                              <ArrowUpRight className="w-4 h-4" />
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                deleteReport(item.id, e);
-                              }}
-                              title="Analizi Sil"
-                              className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl border border-transparent hover:border-rose-500/30 transition cursor-pointer"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
                           </div>
                         </div>
                       );
@@ -8141,6 +9247,392 @@ export default function ValuationTerminal({
         onSelectReport={(reportId, tickerSym) => openReport(reportId, tickerSym)}
         onAnalyzeTicker={(tickerSym) => handleBistDirectAnalysis(tickerSym)}
       />
+
+      {/* Kök Düzey KAP Bildirim Detay Modalı (fixed viewport, header üstünde, Akış & Kokpit ortak) */}
+      {selectedDisclosure && (() => {
+        const vis = getDisclosureVisualStyle(selectedDisclosure);
+        const fullTextParagraphs = (selectedDisclosure.fullText || '')
+          .split(/\n+/)
+          .map(p => p.trim())
+          .filter(Boolean);
+        const takeawaysList = (selectedDisclosure.keyTakeaways && selectedDisclosure.keyTakeaways.length > 0
+          ? selectedDisclosure.keyTakeaways
+          : [selectedDisclosure.summary]);
+        // Tek cümlelik kısa bir KAP bildirimi zaten birebir Kilit Noktalar'da yer alıyorsa alt kutuyu tekrarlama
+        const normClean = (s: string) => s.replace(/\*\*/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+        const isSingleRedundantBody =
+          fullTextParagraphs.length === 1 &&
+          takeawaysList.length === 1 &&
+          normClean(fullTextParagraphs[0]) === normClean(takeawaysList[0]);
+
+        const handleCopyDisclosure = async () => {
+          const body = selectedDisclosure.fullText || selectedDisclosure.summary.replace(/\*\*/g, '');
+          const payload = `[${selectedDisclosure.ticker}] ${selectedDisclosure.title}\n${body}\nKaynak: ${selectedDisclosure.kapUrl || selectedDisclosure.url}`;
+          try {
+            await navigator.clipboard.writeText(payload);
+            setCopiedDisclosureText(true);
+            setTimeout(() => setCopiedDisclosureText(false), 2000);
+          } catch {}
+        };
+
+        const modalBaseFeed = liveNewsFeed.length > 0
+          ? liveNewsFeed
+          : getCompanyNewsFeed({
+              tickers: [...new Set(savedReports.map(r => (r.ticker || '').toUpperCase().trim()).filter(Boolean))]
+            });
+        const sameTickerOthers = modalBaseFeed.filter(n => n.id !== selectedDisclosure.id && n.ticker === selectedDisclosure.ticker);
+        const otherTickerOthers = modalBaseFeed.filter(n => n.id !== selectedDisclosure.id && n.ticker !== selectedDisclosure.ticker);
+        const relatedDisclosures = [...sameTickerOthers, ...otherTickerOthers];
+
+        return (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-md"
+            onClick={() => setSelectedDisclosure(null)}
+          >
+            <div
+              className="fv-modal-panel bg-[#12151c] border border-[#2e3440] rounded-2xl w-full max-w-4xl max-h-[88vh] flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Üst Semantik Vurgu Şeridi */}
+              <div className={`h-1.5 w-full shrink-0 ${vis.topBar}`} />
+
+              {/* Sabit Üst Başlık & Kapatma Çubuğu (Sağ kolonla asla çakışmaz) */}
+              <div className="flex items-center justify-between gap-3 px-5 sm:px-7 py-3 bg-[#101319] border-b border-[#232834] shrink-0">
+                <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                  <span className="font-mono text-xs font-black text-white bg-[#151821] px-2 py-0.5 rounded border border-[#2e3440]">
+                    BIST:{selectedDisclosure.ticker}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-sans font-bold border ${vis.badgeCls}`}>
+                    {vis.badgeText}
+                  </span>
+                  <span className="text-[11px] font-mono text-slate-400">
+                    {selectedDisclosure.timeAgo}
+                  </span>
+                  {selectedDisclosure.kapId && (
+                    <span className="text-[11px] font-mono text-slate-500 hidden sm:inline">
+                      • KAP #{selectedDisclosure.kapId}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDisclosure(null)}
+                  aria-label="Bildirimi kapat"
+                  className="fv-pill inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-slate-300 hover:text-white bg-[#1a1e26] border border-[#2e3440] hover:bg-[#252b36] cursor-pointer shrink-0 text-xs font-mono"
+                  title="Kapat (ESC)"
+                >
+                  <span className="hidden sm:inline text-[10px] text-slate-400">ESC</span>
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Kaydırılabilir Modal İçeriği */}
+              <div className="overflow-y-auto flex-1">
+                <div className="flex flex-col md:flex-row gap-6 p-5 sm:p-7">
+                  {/* Sol / Ana Kolon */}
+                  <div className="flex-1 min-w-0 space-y-5">
+                    {/* Şirket Başlığı ve Anlamlı Başlık */}
+                    <div className={`p-4 rounded-xl bg-gradient-to-r border ${vis.headerTint} space-y-3`}>
+                      <div className="flex items-start gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${vis.iconBg}`}>
+                          {vis.icon}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-semibold text-slate-200 font-sans truncate">
+                            {selectedDisclosure.companyName}
+                          </h4>
+                          <div className="flex items-center gap-2 flex-wrap mt-0.5 text-[11px] text-slate-400 font-sans">
+                            <span>{selectedDisclosure.categoryLabel}</span>
+                            {selectedDisclosure.originalSubject && selectedDisclosure.originalSubject !== selectedDisclosure.title && (
+                              <>
+                                <span className="text-slate-600">•</span>
+                                <span className="text-slate-500">KAP Sınıfı: {selectedDisclosure.originalSubject}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <h2 className="text-lg sm:text-xl font-bold font-sans text-white tracking-tight leading-snug">
+                        {selectedDisclosure.title}
+                      </h2>
+                    </div>
+
+                    {/* On-demand KAP tam metin yükleme göstergesi */}
+                    {isHydratingDisclosure && (
+                      <div className="p-3.5 rounded-xl bg-[#161a23] border border-[#262c38] space-y-2">
+                        <div className="flex items-center gap-2 text-[11px] font-mono text-sky-400">
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Resmi KAP bildirim metni çekiliyor...</span>
+                        </div>
+                        <div className="h-3 w-full rounded fv-shimmer" />
+                        <div className="h-3 w-4/5 rounded fv-shimmer" />
+                      </div>
+                    )}
+
+                    {/* Çıkarılan Finansal Metrik Kartları */}
+                    {selectedDisclosure.keyMetrics && selectedDisclosure.keyMetrics.length > 0 && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        {selectedDisclosure.keyMetrics.map((m, idx) => (
+                          <div
+                            key={idx}
+                            className={`p-3 rounded-xl border font-mono ${
+                              m.tone === 'negative'
+                                ? 'bg-rose-500/8 border-rose-500/30'
+                                : m.tone === 'positive'
+                                ? 'bg-emerald-500/8 border-emerald-500/30'
+                                : 'bg-[#161a23] border-[#262c38]'
+                            }`}
+                          >
+                            <div className="text-[10px] uppercase tracking-wider text-slate-400">{m.label}</div>
+                            <div className={`text-sm font-bold mt-0.5 ${
+                              m.tone === 'negative'
+                                ? 'text-rose-300'
+                                : m.tone === 'positive'
+                                ? 'text-emerald-300'
+                                : 'text-white'
+                            }`}>
+                              {m.value}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Kilit Noktalar & Finansal Etki */}
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <h5 className="text-[11px] font-bold font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                          <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Kilit Noktalar &amp; Finansal Etki</span>
+                        </h5>
+                        {isSingleRedundantBody && (
+                          <button
+                            type="button"
+                            onClick={handleCopyDisclosure}
+                            className="fv-pill inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#181c24] hover:bg-[#222834] border border-[#2e3440] text-[11px] font-mono text-slate-300 hover:text-white cursor-pointer"
+                          >
+                            {copiedDisclosureText ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedDisclosureText ? 'Kopyalandı' : 'Kopyala'}</span>
+                          </button>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        {takeawaysList.map((bullet, idx) => (
+                          <div key={idx} className="flex items-start gap-3 text-sm text-slate-200 leading-relaxed font-sans bg-[#161a23] p-3.5 rounded-xl border border-[#262c38]">
+                            <span className={`w-2 h-2 rounded-full mt-2 shrink-0 ${vis.dotCls}`} />
+                            <span>{renderHighlightedFinancialText(bullet)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Resmi KAP Bildirim Metni (Çok paragraflı / tam orijinal metin + tek tık kopyala) */}
+                    {fullTextParagraphs.length > 0 && !isSingleRedundantBody && (
+                      <div className="p-4 rounded-xl bg-[#101319] border border-[#262c38] space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-mono uppercase font-bold text-slate-400 flex items-center gap-1.5">
+                            <FileText className="w-3.5 h-3.5 text-sky-400" />
+                            <span>Resmi KAP Bildirim Metni</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleCopyDisclosure}
+                            className="fv-pill inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#181c24] hover:bg-[#222834] border border-[#2e3440] text-[11px] font-mono text-slate-300 hover:text-white cursor-pointer"
+                          >
+                            {copiedDisclosureText ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedDisclosureText ? 'Kopyalandı' : 'Kopyala'}</span>
+                          </button>
+                        </div>
+                        <div className="space-y-2.5 text-xs sm:text-[13px] text-slate-300 font-sans leading-relaxed max-h-60 overflow-y-auto pr-1">
+                          {fullTextParagraphs.map((para, pIdx) => (
+                            <p key={pIdx}>{para}</p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Alt Aksiyon Butonları */}
+                    <div className="pt-3 border-t border-[#262c38] flex items-center gap-2.5 flex-wrap">
+                      <a
+                        href={selectedDisclosure.kapUrl || selectedDisclosure.url || getKapCompanyDisclosuresUrl(selectedDisclosure.ticker)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-sans font-bold text-xs cursor-pointer"
+                      >
+                        <span>
+                          {selectedDisclosure.kapId ? `KAP Resmi Bildirimi Aç (#${selectedDisclosure.kapId})` : 'KAP Resmi Bildirimi Aç'}
+                        </span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+
+                      {selectedDisclosure.bigparaUrl && (
+                        <a
+                          href={selectedDisclosure.bigparaUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-sans font-bold text-xs cursor-pointer"
+                        >
+                          <span>Bigpara Metni</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const t = selectedDisclosure.ticker;
+                          setSelectedDisclosure(null);
+                          handleOpenOrAnalyzeTicker(t);
+                        }}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#1a1e26] hover:bg-[#252b36] border border-[#2e3440] text-slate-200 hover:text-white font-sans font-bold text-xs cursor-pointer"
+                      >
+                        <span>{selectedDisclosure.ticker} Raporuna Git</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Sağ Yan Kolon - Şirket Değerleme Kartı & İlgili Bildirimler */}
+                  <div className="w-full md:w-72 shrink-0 space-y-4 pt-4 md:pt-0 md:border-l md:border-[#262c38] md:pl-6">
+                    {(() => {
+                      const report = findLatestReportByTicker(savedReports, selectedDisclosure.ticker);
+                      const priceNum = report ? (parseFinancialNumber(report.price) ?? 0) : 0;
+                      const fairVal = report ? (parseFinancialNumber(report.fairValue) ?? 0) : 0;
+                      const discount = (fairVal > 0 && priceNum > 0)
+                        ? Number((((fairVal - priceNum) / priceNum) * 100).toFixed(1))
+                        : null;
+                      return (
+                        <div className="p-4 rounded-xl bg-[#161a23] border border-[#262c38] space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <span className="font-mono font-black text-sm text-white">
+                                {selectedDisclosure.ticker}
+                              </span>
+                              <p className="text-[11px] text-slate-400 font-sans truncate max-w-[165px]">
+                                {selectedDisclosure.companyName}
+                              </p>
+                            </div>
+                            {report?.decision && (
+                              <span className={`px-2.5 py-1 rounded-md text-xs font-mono font-bold border ${
+                                report.decision === 'AL'
+                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                  : report.decision === 'ALMA'
+                                  ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                                  : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                              }`}>
+                                {report.decision}
+                              </span>
+                            )}
+                          </div>
+
+                          {report ? (
+                            <div className="space-y-2 pt-2 border-t border-[#262c38] text-xs">
+                              <div className="flex items-center justify-between text-slate-400">
+                                <span>Güncel Fiyat:</span>
+                                <span className="font-mono font-bold text-white">{priceNum > 0 ? `₺${priceNum.toFixed(2)}` : '—'}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-slate-400">
+                                <span>Adil Değer:</span>
+                                <span className="font-mono font-bold text-emerald-400">{fairVal > 0 ? `₺${fairVal.toFixed(2)}` : '—'}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-slate-400">
+                                <span>Kalite Skoru:</span>
+                                <span className={`font-mono font-bold ${getScoreColorStyle(report.score).text}`}>{formatScore(report.score)}</span>
+                              </div>
+                              {discount != null && (
+                                <div className="flex items-center justify-between text-slate-400">
+                                  <span>Potansiyel:</span>
+                                  <span className={`font-mono font-bold ${discount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    {discount >= 0 ? `+%${discount}` : `-%${Math.abs(discount)}`}
+                                  </span>
+                                </div>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const t = selectedDisclosure.ticker;
+                                  setSelectedDisclosure(null);
+                                  handleOpenOrAnalyzeTicker(t);
+                                }}
+                                className="w-full mt-2 py-2 rounded-lg bg-emerald-500/12 hover:bg-emerald-500/22 text-emerald-400 border border-emerald-500/35 text-xs font-bold font-sans cursor-pointer flex items-center justify-center gap-1.5"
+                              >
+                                <span>Şirket Analizine Git</span>
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="pt-2 border-t border-[#262c38] space-y-2">
+                              <p className="text-xs text-slate-400 font-sans">
+                                Bu hisse henüz detaylı finansal analize alınmadı.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const t = selectedDisclosure.ticker;
+                                  setSelectedDisclosure(null);
+                                  handleOpenOrAnalyzeTicker(t);
+                                }}
+                                className="w-full py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold font-sans cursor-pointer"
+                              >
+                                Analiz Başlat
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Diğer Şirket Bildirimleri */}
+                    <div className="space-y-2.5">
+                      <h5 className="text-[11px] font-bold font-mono uppercase tracking-wider text-slate-400">
+                        Diğer Bildirimler
+                      </h5>
+                      {relatedDisclosures.length === 0 ? (
+                        <p className="text-xs text-slate-500 font-sans">Başka bildirim bulunmuyor.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {relatedDisclosures.slice(0, 5).map(other => {
+                            const oVis = getDisclosureVisualStyle(other);
+                            return (
+                              <div
+                                key={other.id}
+                                onClick={() => openDisclosureModal(other)}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    openDisclosureModal(other);
+                                  }
+                                }}
+                                className="fv-card p-3 rounded-xl bg-[#161a23] hover:bg-[#1f2532] border border-[#262c38] cursor-pointer space-y-1 group"
+                              >
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="inline-flex items-center gap-1.5 font-mono font-bold text-white">
+                                    <span className={`w-1.5 h-1.5 rounded-full ${oVis.dotCls}`} />
+                                    <span>{other.ticker}</span>
+                                  </span>
+                                  <span className="text-slate-500 font-mono text-[10px]">
+                                    {other.timeAgo}
+                                  </span>
+                                </div>
+                                <p className="text-xs font-semibold text-slate-200 group-hover:text-white font-sans line-clamp-2 leading-snug">
+                                  {other.title}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* MOBİL ALT SABİT NAVİGASYON BARI (MD:HIDDEN) */}
       <nav 

@@ -37,6 +37,7 @@ interface MarketCockpitProps {
   onToggleFavorite: (ticker: string) => void;
   onOpenTicker: (ticker: string) => void;
   onOpenReport: (reportId: string, ticker: string) => void;
+  onSelectDisclosure?: (item: CompanyNewsItem) => void;
 }
 
 const STORAGE_CARDS_KEY = 'fin_cockpit_cards_v1';
@@ -132,7 +133,7 @@ function StockComparisonCard({
   const strokeColor = isPositive ? '#22c55e' : '#ef4444';
 
   return (
-    <div className="bg-[#13161b] border border-[#232730] hover:border-[#323846] rounded-lg p-3.5 flex flex-col justify-between gap-3 transition-colors min-w-0">
+    <div className="fv-card bg-[#13161b] border border-[#232730] hover:border-[#323846] rounded-lg p-3.5 flex flex-col justify-between gap-3 transition-colors min-w-0">
       {/* Üst Başlık: Sembol, Fiyat, Değişim & Kapat */}
       <div className="space-y-2.5">
         <div className="flex items-center justify-between gap-2">
@@ -318,7 +319,8 @@ export default function MarketCockpit({
   liveNewsFeed,
   onToggleFavorite,
   onOpenTicker,
-  onOpenReport
+  onOpenReport,
+  onSelectDisclosure
 }: MarketCockpitProps) {
   const [overview, setOverview] = useState<CockpitOverviewData | null>(null);
   const [loadingOverview, setLoadingOverview] = useState<boolean>(true);
@@ -1049,49 +1051,95 @@ export default function MarketCockpit({
 
             <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
               {displayedNews.length > 0 ? (
-                displayedNews.slice(0, 12).map((news, idx) => (
-                  <div
-                    key={news.id || idx}
-                    className="bg-[#15181e] hover:bg-[#191d24] border border-[#20242d] rounded p-2.5 space-y-1 transition"
-                  >
-                    <div className="flex items-center justify-between gap-2 text-[10.5px] font-mono">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-slate-400 font-semibold">
-                          {news.source || 'KAP'}
-                        </span>
-                        <span className="text-slate-600">•</span>
-                        {news.ticker && (
-                          <button
-                            type="button"
-                            onClick={() => onOpenTicker(news.ticker)}
-                            className="text-slate-200 font-bold hover:text-white hover:underline cursor-pointer"
-                          >
-                            {news.ticker}
-                          </button>
+                displayedNews.slice(0, 12).map((news, idx) => {
+                  const isNeg = news.impact === 'NEGATIVE' || news.eventType === 'PENALTY';
+                  const isPos = !isNeg && (news.impact === 'POSITIVE' || news.category === 'CONTRACT');
+                  const isHigh = !isNeg && news.impact === 'HIGH_IMPACT';
+                  const accentCls = isNeg
+                    ? 'bg-rose-500'
+                    : isPos
+                    ? 'bg-emerald-400'
+                    : isHigh
+                    ? 'bg-purple-400'
+                    : 'bg-slate-600';
+                  const primaryMetric = news.keyMetrics?.[0];
+
+                  return (
+                    <div
+                      key={news.id || idx}
+                      onClick={onSelectDisclosure ? () => onSelectDisclosure(news) : undefined}
+                      role={onSelectDisclosure ? 'button' : undefined}
+                      tabIndex={onSelectDisclosure ? 0 : undefined}
+                      onKeyDown={onSelectDisclosure ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onSelectDisclosure(news);
+                        }
+                      } : undefined}
+                      className={`fv-card ${isNeg ? 'fv-card-rose' : isPos ? 'fv-card-emerald' : ''} bg-[#15181e] hover:bg-[#191d24] border border-[#20242d] rounded-lg overflow-hidden flex transition ${onSelectDisclosure ? 'cursor-pointer' : ''}`}
+                    >
+                      <div className={`w-1 shrink-0 ${accentCls}`} />
+                      <div className="flex-1 min-w-0 p-2.5 space-y-1">
+                        <div className="flex items-center justify-between gap-2 text-[10.5px] font-mono">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {news.ticker && (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onOpenTicker(news.ticker); }}
+                                className="text-white font-bold hover:text-[#f5c242] hover:underline cursor-pointer shrink-0"
+                              >
+                                {news.ticker}
+                              </button>
+                            )}
+                            <span className="text-slate-600">•</span>
+                            <span className={`truncate font-sans text-[10px] font-semibold ${
+                              isNeg ? 'text-rose-400' : isPos ? 'text-emerald-400' : isHigh ? 'text-purple-300' : 'text-slate-400'
+                            }`}>
+                              {news.categoryLabel || news.source || 'KAP'}
+                            </span>
+                          </div>
+                          <span className="text-slate-500 shrink-0">{news.timeAgo || news.publishDate}</span>
+                        </div>
+                        {onSelectDisclosure ? (
+                          <div className="block text-xs font-medium text-slate-200 hover:text-white leading-snug line-clamp-2 font-sans">
+                            {cleanFeedTitle(news.title)}
+                          </div>
+                        ) : (() => {
+                          const validUrl = news.kapUrl || news.url;
+                          const hasExternalUrl = typeof validUrl === 'string' && /^https?:\/\//i.test(validUrl);
+                          return hasExternalUrl ? (
+                            <a
+                              href={validUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block text-xs font-medium text-slate-200 hover:text-white leading-snug line-clamp-2 font-sans"
+                            >
+                              {cleanFeedTitle(news.title)}
+                            </a>
+                          ) : (
+                            <span className="block text-xs font-medium text-slate-200 leading-snug line-clamp-2 font-sans">
+                              {cleanFeedTitle(news.title)}
+                            </span>
+                          );
+                        })()}
+                        {primaryMetric && (
+                          <div className="pt-0.5">
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono border ${
+                              primaryMetric.tone === 'negative'
+                                ? 'bg-rose-500/10 text-rose-300 border-rose-500/30'
+                                : primaryMetric.tone === 'positive'
+                                ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                                : 'bg-[#0e1014] text-slate-300 border-[#262c38]'
+                            }`}>
+                              <span className="opacity-75">{primaryMetric.label}:</span>
+                              <strong>{primaryMetric.value}</strong>
+                            </span>
+                          </div>
                         )}
                       </div>
-                      <span className="text-slate-500">{news.timeAgo || news.publishDate}</span>
                     </div>
-                    {(() => {
-                      const validUrl = news.kapUrl || news.url;
-                      const hasExternalUrl = typeof validUrl === 'string' && /^https?:\/\//i.test(validUrl);
-                      return hasExternalUrl ? (
-                        <a
-                          href={validUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block text-xs text-slate-200 hover:text-white leading-snug line-clamp-2 font-sans"
-                        >
-                          {cleanFeedTitle(news.title)}
-                        </a>
-                      ) : (
-                        <span className="block text-xs text-slate-200 leading-snug line-clamp-2 font-sans">
-                          {cleanFeedTitle(news.title)}
-                        </span>
-                      );
-                    })()}
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="py-8 text-center text-xs text-slate-400 font-sans">
                   {feedTab === 'favorites'

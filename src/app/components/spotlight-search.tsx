@@ -162,7 +162,7 @@ export default function SpotlightSearch({
       onClick={onClose}
     >
       <div 
-        className="w-full max-w-xl bg-[#161a22] border border-[#2e3440] rounded-2xl shadow-2xl overflow-hidden divide-y divide-[#282d37] animate-in zoom-in-95 duration-150"
+        className="fv-modal-panel w-full max-w-xl bg-[#161a22] border border-[#2e3440] rounded-2xl shadow-2xl overflow-hidden divide-y divide-[#282d37]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Arama Input Alanı */}

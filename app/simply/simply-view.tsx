@@ -3144,7 +3144,7 @@ export default function SimplyView({
               key={item.id}
               type="button"
               onClick={() => scrollToSection(item.id)}
-              className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition cursor-pointer select-none ${
+              className={`fv-pill shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs cursor-pointer select-none ${
                 isActive
                   ? 'bg-[#f5c242] text-slate-950 font-bold shadow-sm'
                   : 'bg-[#181b20] text-slate-400 hover:text-white border border-[#282d37]'
@@ -3193,7 +3193,7 @@ export default function SimplyView({
                 onClick={() => {
                   if (onTogglePortfolio) onTogglePortfolio(report.ticker);
                 }}
-                className={`py-1.5 px-2 text-xs font-bold rounded-md transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm w-full ${
+                className={`fv-pill py-1.5 px-2 text-xs font-bold rounded-md flex items-center justify-center gap-1.5 cursor-pointer shadow-sm w-full ${
                   isInPortfolio
                     ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold'
                     : 'bg-[#f5c242] hover:bg-[#e5b332] text-slate-950 font-bold'
@@ -3208,7 +3208,7 @@ export default function SimplyView({
                 onClick={() => {
                   if (onToggleFavorite) onToggleFavorite(report.ticker);
                 }}
-                className={`py-1.5 px-2 text-xs font-semibold rounded-md border transition cursor-pointer flex items-center justify-center gap-1.5 w-full ${
+                className={`fv-pill py-1.5 px-2 text-xs font-semibold rounded-md border cursor-pointer flex items-center justify-center gap-1.5 w-full ${
                   isFavorite
                     ? 'bg-amber-400/20 text-amber-300 border-amber-400/50 hover:bg-amber-400/30'
                     : 'bg-[#1e2229] hover:bg-[#282e38] text-slate-400 hover:text-white border-[#2e3440]'
@@ -3283,7 +3283,7 @@ export default function SimplyView({
                   onClick={() => {
                     if (onTogglePortfolio) onTogglePortfolio(report.ticker);
                   }}
-                  className={`py-2 px-3 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm w-full ${
+                  className={`fv-pill py-2 px-3 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 cursor-pointer shadow-sm w-full ${
                     isInPortfolio
                       ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold'
                       : 'bg-[#f5c242] hover:bg-[#e5b332] text-slate-950 font-bold'
@@ -3298,7 +3298,7 @@ export default function SimplyView({
                   onClick={() => {
                     if (onToggleFavorite) onToggleFavorite(report.ticker);
                   }}
-                  className={`py-2 px-3 text-xs font-semibold rounded-lg border transition cursor-pointer flex items-center justify-center gap-1.5 w-full ${
+                  className={`fv-pill py-2 px-3 text-xs font-semibold rounded-lg border cursor-pointer flex items-center justify-center gap-1.5 w-full ${
                     isFavorite
                       ? 'bg-amber-400/20 text-amber-300 border-amber-400/50'
                       : 'bg-[#1e2229] hover:bg-[#282e38] text-slate-400 hover:text-white border-[#2e3440]'
@@ -4072,7 +4072,7 @@ export default function SimplyView({
                                   onSelectTicker(comp.ticker);
                                 }
                               }}
-                              className="bg-[#21262d] hover:bg-[#28303d] border border-[#2e3440] hover:border-[#f5c242]/60 rounded-xl p-4 transition-all duration-200 cursor-pointer flex items-center justify-between group shadow-sm hover:shadow-md hover:-translate-y-0.5"
+                              className="fv-card bg-[#21262d] hover:bg-[#28303d] border border-[#2e3440] hover:border-[#f5c242]/60 rounded-xl p-4 cursor-pointer flex items-center justify-between group shadow-sm"
                               title={`${comp.ticker} detaylı analizini aç`}
                             >
                               <div className="flex items-center gap-3 min-w-0">
@@ -4083,7 +4083,7 @@ export default function SimplyView({
                                   <div className="font-bold text-white group-hover:text-[#f5c242] transition flex items-center gap-2">
                                     <span>{comp.ticker}</span>
                                     {comp.score != null && (
-                                      <span className="text-[11px] font-mono px-1.5 py-0.2 bg-[#181b20] text-slate-300 rounded border border-[#2e3440]">
+                                      <span className="text-[11px] font-mono px-1.5 py-0.5 bg-[#181b20] text-slate-300 rounded border border-[#2e3440]">
                                         {String(comp.score).replace(/\/\s*100\s*$/i, '').trim()}/100
                                       </span>
                                     )}
@@ -4108,7 +4108,7 @@ export default function SimplyView({
                           <button
                             type="button"
                             onClick={() => setShowAllPeers(prev => !prev)}
-                            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#21262d] hover:bg-[#2b313d] text-slate-200 hover:text-[#f5c242] border border-[#2e3440] text-xs font-mono font-semibold transition cursor-pointer"
+                            className="fv-pill inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#21262d] hover:bg-[#2b313d] text-slate-200 hover:text-[#f5c242] border border-[#2e3440] text-xs font-mono font-semibold cursor-pointer"
                           >
                             {showAllPeers ? (
                               <>
