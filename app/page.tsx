@@ -115,6 +115,26 @@ import {
 } from '@/lib/bist-indices';
 
 /**
+ * Şirketin resmi sektörüne göre tutarlı pastel/kurumsal 2 harfli monogram renk stili döndürür.
+ */
+function getSectorMonogramCls(ticker: string, sector?: string): string {
+  const sec = (getCompanySectorDisplayName(ticker, sector) || sector || '').toLocaleUpperCase('tr-TR');
+  if (/BANK|SİGORTA|SIGORTA|FİNANS|FINANS|ARACI|FACTOR|LEAS/.test(sec)) {
+    return 'bg-indigo-500/15 text-indigo-300 border-indigo-500/35';
+  }
+  if (/YAZILIM|BİLİŞİM|BILISIM|TEKNOLOJİ|TEKNOLOJI|TELEKOM|SAVUNMA/.test(sec)) {
+    return 'bg-cyan-500/15 text-cyan-300 border-cyan-500/35';
+  }
+  if (/PERAKENDE|GIDA|İÇECEK|ICECEK|SAĞLIK|SAGLIK|İLAÇ|ILAC|MAĞAZA/.test(sec)) {
+    return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35';
+  }
+  if (/ENERJİ|ENERJI|PETROL|KIMYA|KİMYA|HOLDİNG|HOLDING/.test(sec)) {
+    return 'bg-sky-500/15 text-sky-300 border-sky-500/35';
+  }
+  return 'bg-amber-500/15 text-amber-300 border-amber-500/35';
+}
+
+/**
  * Kayıtlı analizleri (SavedReport) en son matematiksel değerleme motoru, IVS 105 standartları
  * ve resmi temettü kütüğüyle otomatik olarak uzlaştırır (reconcile).
  * Böylece motor veya formüllerde yapılan tüm güncellemeler, kullanıcının daha önce kaydettiği
@@ -6437,6 +6457,9 @@ export default function ValuationTerminal({
                               </td>
                               <td className="p-3.5">
                                 <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={`fv-monogram w-6 h-6 rounded-md border font-mono text-[10px] font-bold shrink-0 ${getSectorMonogramCls(item.ticker, item.sector)}`}>
+                                    {(item.ticker || '').slice(0, 2)}
+                                  </span>
                                   <a
                                     href={`/analysis/${item.ticker.toUpperCase()}`}
                                     onClick={(e) => {
@@ -9070,6 +9093,9 @@ export default function ValuationTerminal({
                               >
                                 <td className="py-3 px-4 sticky left-0 bg-[#151821] group-hover:bg-[#1c222d] z-10 min-w-[130px]">
                                   <div className="flex items-center gap-2">
+                                    <span className={`fv-monogram w-6 h-6 rounded-md border font-mono text-[10px] font-bold shrink-0 ${getSectorMonogramCls(item.ticker, item.sector)}`}>
+                                      {(item.ticker || '').slice(0, 2)}
+                                    </span>
                                     <span className="font-mono font-bold text-white group-hover:text-emerald-400 transition">
                                       {item.ticker}
                                     </span>

@@ -126,6 +126,42 @@ export default function SnowflakeRadar({
   const rMid = 63.3;
   const rIn = 31.7;
 
+  // 5 eksenin toplam skoruna göre dinamik renk spektrumu (20+ Zümrüt, 12-19 Altın, <12 Mercan)
+  const totalScore = useMemo(() => {
+    return Object.values(axes || {}).reduce((sum, axis) => sum + (axis?.score ?? 0), 0);
+  }, [axes]);
+
+  const radarPalette = useMemo(() => {
+    if (totalScore >= 20) {
+      return {
+        stop0: '#6ee7b7',
+        stop60: '#10b981',
+        stop100: '#047857',
+        stroke: '#10b981',
+        dotFill: '#6ee7b7',
+        glowRgba: 'rgba(16,185,129,0.38)'
+      };
+    }
+    if (totalScore >= 12) {
+      return {
+        stop0: '#fde047',
+        stop60: '#f5c242',
+        stop100: '#d97706',
+        stroke: '#f5c242',
+        dotFill: '#fde047',
+        glowRgba: 'rgba(245,194,66,0.35)'
+      };
+    }
+    return {
+      stop0: '#fda4af',
+      stop60: '#f43f5e',
+      stop100: '#be123c',
+      stroke: '#f43f5e',
+      dotFill: '#fda4af',
+      glowRgba: 'rgba(244,63,94,0.38)'
+    };
+  }, [totalScore]);
+
   // Snowflake organigini hesapla
   const radarPoints = useMemo(() => {
     return getSnowflakeCoordinates(axes, cx, cy, maxR);
@@ -163,17 +199,17 @@ export default function SnowflakeRadar({
             <feComposite in="SourceGraphic" in2="blur" operator="over" />
           </filter>
 
-          {/* Altın / Sarı Gradyan */}
+          {/* Dinamik Skor Gradyanı */}
           <radialGradient id={goldGradId} cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#fde047" stopOpacity="0.85" />
-            <stop offset="60%" stopColor="#f5c242" stopOpacity="0.75" />
-            <stop offset="100%" stopColor="#d97706" stopOpacity="0.65" />
+            <stop offset="0%" stopColor={radarPalette.stop0} stopOpacity="0.85" />
+            <stop offset="60%" stopColor={radarPalette.stop60} stopOpacity="0.75" />
+            <stop offset="100%" stopColor={radarPalette.stop100} stopOpacity="0.65" />
           </radialGradient>
 
           {/* Vurgu (Hover) Gradyanı */}
           <radialGradient id={hoverSectorGradId} cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="#ffffff" stopOpacity="0.18" />
-            <stop offset="100%" stopColor="#f5c242" stopOpacity="0.12" />
+            <stop offset="100%" stopColor={radarPalette.stroke} stopOpacity="0.14" />
           </radialGradient>
         </defs>
 
@@ -238,7 +274,7 @@ export default function SnowflakeRadar({
                   <path
                     d={makeWedgePath(cx, cy, 0, maxR, startDeg, endDeg)}
                     fill={`url(#${hoverSectorGradId})`}
-                    stroke="#f5c242"
+                    stroke={radarPalette.stroke}
                     strokeWidth="1.5"
                     className="animate-in fade-in duration-200"
                   />
@@ -272,17 +308,18 @@ export default function SnowflakeRadar({
         </g>
 
         {/* ========================================================================= */}
-        {/* 2. DİNAMİK ORGANİK SNOWFLAKE VERİ POLİGONU (ALTIN/SARI ŞEFFAF ALAN)        */}
+        {/* 2. DİNAMİK ORGANİK SNOWFLAKE VERİ POLİGONU (SKORA DUYARLI GRADİENT)       */}
         {/* ========================================================================= */}
         {smoothRadarPath && (
           <path
             d={smoothRadarPath}
             fill={`url(#${goldGradId})`}
-            stroke="#f5c242"
+            stroke={radarPalette.stroke}
             strokeWidth="2.5"
             strokeLinejoin="round"
             filter={`url(#${glowFilterId})`}
-            className="transition-all duration-500 pointer-events-none drop-shadow-[0_0_8px_rgba(245,194,66,0.35)]"
+            style={{ filter: `drop-shadow(0 0 8px ${radarPalette.glowRgba})` }}
+            className="transition-all duration-500 pointer-events-none"
           />
         )}
 
@@ -305,7 +342,7 @@ export default function SnowflakeRadar({
                 cy={pt.y}
                 r={isHovered ? 6.5 : 4.5}
                 fill="#12151b"
-                stroke="#f5c242"
+                stroke={radarPalette.stroke}
                 strokeWidth={isHovered ? 2.5 : 1.8}
                 className="transition-all duration-200"
               />
@@ -313,7 +350,7 @@ export default function SnowflakeRadar({
                 cx={pt.x}
                 cy={pt.y}
                 r={isHovered ? 3.5 : 2}
-                fill="#fde047"
+                fill={radarPalette.dotFill}
                 className="transition-all duration-200"
               />
             </g>
@@ -326,7 +363,7 @@ export default function SnowflakeRadar({
           x={cx}
           y={cy + 3.5}
           textAnchor="middle"
-          fill="#f5c242"
+          fill={radarPalette.stroke}
           fontSize={ticker && ticker.trim().length >= 5 ? '7.8' : '9'}
           fontWeight="bold"
           fontFamily="monospace"

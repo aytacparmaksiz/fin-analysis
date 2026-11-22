@@ -16,8 +16,8 @@ import {
 } from 'lucide-react';
 import {
   ResponsiveContainer,
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   YAxis,
   Tooltip,
   ReferenceLine
@@ -73,6 +73,24 @@ function cleanFeedTitle(rawTitle: string): string {
     .replace(/\*+/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+const TICKER_MONOGRAM_PALETTES = [
+  'bg-sky-500/15 text-sky-300 border-sky-500/35',
+  'bg-emerald-500/15 text-emerald-300 border-emerald-500/35',
+  'bg-amber-500/15 text-amber-300 border-amber-500/35',
+  'bg-cyan-500/15 text-cyan-300 border-cyan-500/35',
+  'bg-indigo-500/15 text-indigo-300 border-indigo-500/35'
+];
+
+function getTickerMonogramCls(ticker: string): string {
+  const s = (ticker || '').toUpperCase().trim();
+  if (!s) return TICKER_MONOGRAM_PALETTES[0];
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) {
+    hash = (hash * 31 + s.charCodeAt(i)) % TICKER_MONOGRAM_PALETTES.length;
+  }
+  return TICKER_MONOGRAM_PALETTES[Math.abs(hash) % TICKER_MONOGRAM_PALETTES.length];
 }
 
 function StockComparisonCard({
@@ -145,7 +163,7 @@ function StockComparisonCard({
             className="flex items-center gap-2 min-w-0 text-left group cursor-pointer"
             title={`${ticker} tam analizini aç`}
           >
-            <span className="w-6 h-6 rounded bg-[#1b1f27] border border-[#2a303c] flex items-center justify-center font-mono text-[10px] font-bold text-slate-200 shrink-0">
+            <span className={`fv-monogram w-6 h-6 rounded-md border font-mono text-[10px] font-bold shrink-0 ${getTickerMonogramCls(ticker)}`}>
               {ticker.slice(0, 2)}
             </span>
             <span className="font-mono font-bold text-sm text-white group-hover:text-[#f5c242] transition shrink-0">
@@ -226,7 +244,13 @@ function StockComparisonCard({
             </div>
           ) : card && card.points.length > 1 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={card.points} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
+              <AreaChart data={card.points} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
+                <defs>
+                  <linearGradient id={`cockpitSparkGrad-${ticker.replace(/[^a-zA-Z0-9_-]/g, '')}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={strokeColor} stopOpacity={0.28} />
+                    <stop offset="95%" stopColor={strokeColor} stopOpacity={0.0} />
+                  </linearGradient>
+                </defs>
                 <YAxis domain={['auto', 'auto']} hide />
                 <Tooltip
                   contentStyle={{
@@ -242,15 +266,16 @@ function StockComparisonCard({
                 {range === '1G' && typeof card.prevClose === 'number' && Number.isFinite(card.prevClose) && card.prevClose > 0 && (
                   <ReferenceLine y={card.prevClose} stroke="#3f4654" strokeDasharray="3 3" />
                 )}
-                <Line
+                <Area
                   type="monotone"
                   dataKey="v"
                   stroke={strokeColor}
-                  strokeWidth={1.6}
+                  strokeWidth={1.8}
+                  fill={`url(#cockpitSparkGrad-${ticker.replace(/[^a-zA-Z0-9_-]/g, '')})`}
                   dot={false}
                   isAnimationActive={false}
                 />
-              </LineChart>
+              </AreaChart>
             </ResponsiveContainer>
           ) : cardError ? (
             <div className="h-full flex items-center justify-center">
@@ -770,6 +795,9 @@ export default function MarketCockpit({
                           className="fv-row w-full flex items-center justify-between gap-2 bg-[#15181e] hover:bg-[#1b1f27] border border-[#20242d] rounded px-3 py-2 text-xs cursor-pointer text-left"
                         >
                           <div className="flex items-center gap-2 min-w-0">
+                            <span className={`fv-monogram w-5 h-5 rounded border font-mono text-[9px] font-bold shrink-0 ${getTickerMonogramCls(rep.ticker)}`}>
+                              {(rep.ticker || '').slice(0, 2)}
+                            </span>
                             <span className="font-mono font-bold text-white w-12 shrink-0">{rep.ticker}</span>
                             <span className="text-slate-400 font-mono text-[10.5px] shrink-0">{rep.period || '2025/12'}</span>
                             {repPr > 0 && repFv > 0 && (

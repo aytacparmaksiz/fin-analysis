@@ -172,6 +172,7 @@ describe('KAP Disclosure Intelligence & Redesigned Panel UI/UX Verification Suit
       ['app/components/spotlight-search.tsx', 'src/app/components/spotlight-search.tsx'],
       ['app/components/login-modal.tsx', 'src/app/components/login-modal.tsx'],
       ['app/simply/simply-view.tsx', 'src/app/simply/simply-view.tsx'],
+      ['app/simply/snowflake-radar.tsx', 'src/app/simply/snowflake-radar.tsx'],
       ['lib/news-service.ts', 'src/lib/news-service.ts'],
     ];
     for (const [a, b] of mirrorPairs) {
@@ -219,6 +220,14 @@ describe('KAP Disclosure Intelligence & Redesigned Panel UI/UX Verification Suit
       assert.ok(cockpitSrc.includes(marker), `market-cockpit.tsx missing Paket 4 marker: ${marker}`);
     }
     assert.ok(!cockpitSrc.includes('fv-cockpit-pulse') && !cockpitSrc.includes('Takip/Portföy Ort. Potansiyel'), 'market-cockpit.tsx must not render removed fv-cockpit-pulse strip');
+
+    // 5 Boyutlu Grafik Tasarım & Görsel Cila Kontrolleri
+    assert.ok(layoutSrc.includes('IBM_Plex_Mono') && layoutSrc.includes('ibmPlexMono.variable'), 'layout.tsx must load IBM_Plex_Mono font');
+    assert.ok(cssSrc.includes('--font-ibm-plex-mono') && cssSrc.includes('tabular-nums') && cssSrc.includes('.fv-monogram') && cssSrc.includes('.fv-inline-sparkbar'), 'globals.css missing typography/surface graphic design tokens');
+    assert.ok(cockpitSrc.includes('cockpitSparkGrad-') && cockpitSrc.includes('getTickerMonogramCls'), 'market-cockpit.tsx missing AreaChart gradient sparklines and monogram badges');
+    const radarSrc = fs.readFileSync(path.join(ROOT, 'app/simply/snowflake-radar.tsx'), 'utf8');
+    assert.ok(radarSrc.includes('radarPalette') && radarSrc.includes('totalScore >= 20'), 'snowflake-radar.tsx must compute dynamic score-based gradient palette');
+    assert.ok(pageSrc.includes('getSectorMonogramCls') && simplySrc.includes('fv-inline-sparkbar'), 'page.tsx / simply-view.tsx missing sector monogram or inline sparkbar');
   });
 
   it('7. Adversarial Real-World KAP Regression Guard: Moody downgrade, buyback daily vs cumulative, numeric integrity, inline tags & substring traps', () => {

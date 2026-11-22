@@ -3078,6 +3078,22 @@ export default function SimplyView({
     const isGood = invert ? (diffPct != null && diffPct <= 0) : (diffPct != null && diffPct >= 0);
     const isNegative = currentVal != null && !isNaN(Number(currentVal)) && Number(currentVal) < 0;
 
+    const rowMaxAbs = visiblePeriods.reduce((maxVal: number, p: any) => {
+      const raw = p?.[valKey] ?? p?.[fallbackKey || ''];
+      const n = Number(raw);
+      return raw != null && Number.isFinite(n) ? Math.max(maxVal, Math.abs(n)) : maxVal;
+    }, 0);
+    const barPct = (rowMaxAbs > 0 && currentVal != null && Number.isFinite(Number(currentVal)))
+      ? Math.max(8, Math.min(100, Math.round((Math.abs(Number(currentVal)) / rowMaxAbs) * 100)))
+      : 0;
+    const barColorCls = isNegative
+      ? 'bg-rose-400/75'
+      : isGrandTotal
+      ? 'bg-[#f5c242]/85'
+      : isBold
+      ? 'bg-emerald-400/75'
+      : 'bg-sky-400/45';
+
     const textStyle = isGrandTotal
       ? (isNegative ? 'font-black text-rose-400' : 'font-black text-[#f5c242]')
       : isBold
@@ -3105,6 +3121,11 @@ export default function SimplyView({
             )}
           </span>
         </div>
+        {barPct > 0 && (
+          <div className="w-full max-w-[78px] ml-auto mr-9 h-[2px] mt-0.5 rounded-full bg-white/[0.04] overflow-hidden flex justify-end">
+            <div className={`fv-inline-sparkbar ${barColorCls}`} style={{ width: `${barPct}%` }} />
+          </div>
+        )}
       </td>
     );
   };

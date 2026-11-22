@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Serif, IBM_Plex_Sans } from "next/font/google";
+import { IBM_Plex_Serif, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import "katex/dist/katex.min.css";
 import TactileFeedback from "./components/tactile-feedback";
@@ -15,6 +15,13 @@ const ibmPlexSans = IBM_Plex_Sans({
   subsets: ["latin", "latin-ext"],
   weight: ["300", "400", "500", "600", "700"],
   variable: "--font-ibm-plex-sans",
+  display: "swap",
+});
+
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-ibm-plex-mono",
   display: "swap",
 });
 
@@ -38,7 +45,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="tr" className={`h-full antialiased ${ibmPlexSerif.variable} ${ibmPlexSans.variable}`}>
+    <html lang="tr" className={`h-full antialiased ${ibmPlexSerif.variable} ${ibmPlexSans.variable} ${ibmPlexMono.variable}`}>
       <body className="min-h-full flex flex-col font-sans">
         <TactileFeedback />
         {children}
