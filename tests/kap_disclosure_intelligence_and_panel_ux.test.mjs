@@ -215,9 +215,10 @@ describe('KAP Disclosure Intelligence & Redesigned Panel UI/UX Verification Suit
     for (const marker of ['fv-sticky-context-bar', 'fv-forensic-4pillar', '4 Boyutlu Adli Denetim Özeti', 'fv-whatif-simulator', 'simWaccDelta', 'simMarginDelta', 'simGrowthDelta']) {
       assert.ok(simplySrc.includes(marker), `simply-view.tsx missing Paket 2 marker: ${marker}`);
     }
-    for (const marker of ['fv-cockpit-pulse', 'cockpitPulse', 'topAlSeeds', 'latestUniqueReports']) {
+    for (const marker of ['topAlSeeds', 'latestUniqueReports']) {
       assert.ok(cockpitSrc.includes(marker), `market-cockpit.tsx missing Paket 4 marker: ${marker}`);
     }
+    assert.ok(!cockpitSrc.includes('fv-cockpit-pulse') && !cockpitSrc.includes('Takip/Portföy Ort. Potansiyel'), 'market-cockpit.tsx must not render removed fv-cockpit-pulse strip');
   });
 
   it('7. Adversarial Real-World KAP Regression Guard: Moody downgrade, buyback daily vs cumulative, numeric integrity, inline tags & substring traps', () => {

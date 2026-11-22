@@ -349,44 +349,6 @@ export default function MarketCockpit({
     return getLatestReportsPerTicker(savedReports || []);
   }, [savedReports]);
 
-  const cockpitPulse = useMemo(() => {
-    if (latestUniqueReports.length === 0) return null;
-    const alReports = latestUniqueReports.filter(r => (r.decision || '').trim().toUpperCase() === 'AL');
-    const portSet = new Set(portfolioTickers.map(t => t.toUpperCase()));
-    const favSet = new Set(favoriteTickers.map(t => t.toUpperCase()));
-    const trackedReports = latestUniqueReports.filter(r => {
-      const tk = (r.ticker || '').toUpperCase();
-      return portSet.has(tk) || favSet.has(tk);
-    });
-    const sourceForUpside = trackedReports.length > 0 ? trackedReports : alReports;
-    let sumUpside = 0;
-    let upsideCnt = 0;
-    let topPick: { id: string; ticker: string; upside: number } | null = null;
-    for (const r of latestUniqueReports) {
-      const pr = parseFinancialNumber(r.price) ?? 0;
-      const fv = parseFinancialNumber(r.fairValue) ?? 0;
-      if (pr > 0 && fv > 0) {
-        const up = Number((((fv - pr) / pr) * 100).toFixed(1));
-        if (sourceForUpside.includes(r)) {
-          sumUpside += up;
-          upsideCnt++;
-        }
-        if ((r.decision || '').trim().toUpperCase() === 'AL' && (!topPick || up > topPick.upside)) {
-          topPick = { id: r.id, ticker: r.ticker, upside: up };
-        }
-      }
-    }
-    return {
-      totalCompanies: latestUniqueReports.length,
-      alCount: alReports.length,
-      portfolioCount: portfolioTickers.length,
-      favoriteCount: favoriteTickers.length,
-      avgUpside: upsideCnt > 0 ? Number((sumUpside / upsideCnt).toFixed(1)) : null,
-      upsideScopeLabel: trackedReports.length > 0 ? 'Takip/Portföy Ort. Potansiyel' : 'AL Ort. Potansiyel',
-      topPick
-    };
-  }, [latestUniqueReports, portfolioTickers, favoriteTickers]);
-
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_CARDS_KEY);
@@ -574,53 +536,6 @@ export default function MarketCockpit({
           </button>
         </div>
       </div>
-
-      {/* PORTFÖY & ANALİZ NABZI ŞERİDİ */}
-      {cockpitPulse && (
-        <div
-          data-testid="fv-cockpit-pulse"
-          className="bg-[#111419] border border-[#20242d] rounded-lg px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs font-mono"
-        >
-          <div className="flex flex-wrap items-center gap-4 sm:gap-6">
-            <div className="flex items-center gap-1.5">
-              <span className="text-slate-400">Analiz Edilen:</span>
-              <span className="font-bold text-white">{cockpitPulse.totalCompanies} Şirket</span>
-              <span className="px-1.5 py-0.5 rounded bg-emerald-500/12 text-emerald-400 border border-emerald-500/30 font-bold text-[11px]">
-                {cockpitPulse.alCount} AL
-              </span>
-            </div>
-            {(cockpitPulse.portfolioCount > 0 || cockpitPulse.favoriteCount > 0) && (
-              <div className="flex items-center gap-2 text-slate-300">
-                <span>Portföy: <strong className="text-[#f5c242]">{cockpitPulse.portfolioCount}</strong></span>
-                <span className="text-slate-600">•</span>
-                <span>İzleme: <strong className="text-amber-300">{cockpitPulse.favoriteCount}</strong></span>
-              </div>
-            )}
-            {cockpitPulse.avgUpside !== null && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-slate-400">{cockpitPulse.upsideScopeLabel}:</span>
-                <span className={`font-bold ${cockpitPulse.avgUpside >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {cockpitPulse.avgUpside >= 0 ? `+%${cockpitPulse.avgUpside}` : `-%${Math.abs(cockpitPulse.avgUpside)}`}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {cockpitPulse.topPick && (
-            <button
-              type="button"
-              onClick={() => onOpenReport(cockpitPulse.topPick!.id, cockpitPulse.topPick!.ticker)}
-              className="fv-pill inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold cursor-pointer"
-              title="En Yüksek AL Potansiyelli Raporu Aç"
-            >
-              <span>Öne Çıkan:</span>
-              <span className="text-white">{cockpitPulse.topPick.ticker}</span>
-              <span className="text-emerald-400">+%{cockpitPulse.topPick.upside}</span>
-              <ArrowUpRight className="w-3 h-3" />
-            </button>
-          )}
-        </div>
-      )}
 
       {/* ANA İKİ SÜTUNLU YERLEŞİM */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 items-start">
