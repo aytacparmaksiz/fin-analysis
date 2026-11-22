@@ -1,10 +1,22 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, X, TrendingUp, Building2, ArrowRight, Sparkles } from 'lucide-react';
+import { Search, X, TrendingUp, Building2, ArrowRight, Sparkles, Compass } from 'lucide-react';
 import type { SavedReport } from '../page';
 import { formatCanonicalScore } from '@/lib/report-resolver';
 import { parsePeriodSortKey } from '@/lib/valuation';
+import { OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE } from '@/lib/isyatirim-multiples-cache';
+import type { IsYatirimStockMultiples } from '@/lib/isyatirim-service';
+
+export type SpotlightNavTab =
+  | 'cockpit'
+  | 'saved'
+  | 'portfolio'
+  | 'favorites'
+  | 'themes'
+  | 'leaderboard'
+  | 'sectors'
+  | 'input';
 
 interface SpotlightSearchProps {
   isOpen: boolean;
@@ -12,6 +24,7 @@ interface SpotlightSearchProps {
   savedReports: SavedReport[];
   onSelectReport: (reportId: string, ticker: string) => void;
   onAnalyzeTicker: (ticker: string) => void;
+  onNavigateTab?: (tab: SpotlightNavTab) => void;
 }
 
 const POPULAR_TICKERS = [
@@ -32,12 +45,20 @@ export default function SpotlightSearch({
   onClose,
   savedReports,
   onSelectReport,
-  onAnalyzeTicker
+  onAnalyzeTicker,
+  onNavigateTab
 }: SpotlightSearchProps) {
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  // 629 BIST Şirketi Kataloğu (Piyasa değerine göre sıralı)
+  const bistCatalog = useMemo<IsYatirimStockMultiples[]>(() => {
+    return Object.values(OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE || {}).sort(
+      (a, b) => (b.marketCapMnTl ?? 0) - (a.marketCapMnTl ?? 0)
+    );
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -96,37 +117,56 @@ export default function SpotlightSearch({
   if (!isOpen) return null;
 
   const normalizedQuery = query.trim().toUpperCase();
+  const normalizedQueryTr = query.trim().toLocaleUpperCase('tr-TR');
 
   // Filtreleme: Her şirketin yalnızca en son raporu gösterilir
-  const matchedSaved = uniqueSavedReports.filter(r => 
-    (r.ticker || '').toUpperCase().includes(normalizedQuery) ||
-    ((r as any).companyName || r.extractedData?.company_name || '').toUpperCase().includes(normalizedQuery)
-  );
+  const matchedSaved = uniqueSavedReports.filter(r => {
+    const tk = (r.ticker || '').toUpperCase();
+    const cname = String((r as any).companyName || r.extractedData?.company_name || '').toLocaleUpperCase('tr-TR');
+    const sec = String(r.sector || '').toLocaleUpperCase('tr-TR');
+    return !normalizedQuery || tk.includes(normalizedQuery) || cname.includes(normalizedQueryTr) || sec.includes(normalizedQueryTr);
+  });
   const savedTickerSet = new Set(matchedSaved.map(r => (r.ticker || '').trim().replace(/\.IS$/i, '').toUpperCase()));
 
-  const matchedPopular = POPULAR_TICKERS.filter(p =>
-    !savedTickerSet.has(p.ticker.toUpperCase()) &&
-    (p.ticker.includes(normalizedQuery) ||
-      p.name.toUpperCase().includes(normalizedQuery))
-  );
+  // 629 BIST Şirketi İçinde Tam Metin & Çarpanlı Arama (Kayıtlı olmayanlar için)
+  const matchedBistCatalog = normalizedQuery.length > 0
+    ? bistCatalog
+        .filter(item => {
+          const tk = (item.ticker || '').toUpperCase();
+          if (savedTickerSet.has(tk)) return false;
+          const nm = (item.name || '').toLocaleUpperCase('tr-TR');
+          const sec = (item.sectorName || '').toLocaleUpperCase('tr-TR');
+          return tk.includes(normalizedQuery) || nm.includes(normalizedQueryTr) || sec.includes(normalizedQueryTr);
+        })
+        .sort((a, b) => {
+          const aExact = a.ticker.toUpperCase() === normalizedQuery ? 2 : a.ticker.toUpperCase().startsWith(normalizedQuery) ? 1 : 0;
+          const bExact = b.ticker.toUpperCase() === normalizedQuery ? 2 : b.ticker.toUpperCase().startsWith(normalizedQuery) ? 1 : 0;
+          if (aExact !== bExact) return bExact - aExact;
+          return (b.marketCapMnTl ?? 0) - (a.marketCapMnTl ?? 0);
+        })
+        .slice(0, 12)
+    : [];
 
-  const displayedPopular = query
-    ? matchedPopular
-    : POPULAR_TICKERS.filter(p => !savedTickerSet.has(p.ticker.toUpperCase())).slice(0, 6);
+  const displayedPopular = normalizedQuery.length === 0
+    ? POPULAR_TICKERS.filter(p => !savedTickerSet.has(p.ticker.toUpperCase())).slice(0, 6)
+    : [];
 
   const hasExactMatch =
     matchedSaved.some(r => (r.ticker || '').toUpperCase() === normalizedQuery) ||
+    matchedBistCatalog.some(c => (c.ticker || '').toUpperCase() === normalizedQuery) ||
     displayedPopular.some(p => p.ticker.toUpperCase() === normalizedQuery);
 
   const showDirectAnalyze = normalizedQuery.length >= 2 && !hasExactMatch;
 
   type NavItem =
     | { type: 'saved'; item: SavedReport }
+    | { type: 'bist'; comp: IsYatirimStockMultiples }
     | { type: 'popular'; comp: typeof POPULAR_TICKERS[number] }
     | { type: 'direct'; ticker: string };
 
   const navItems: NavItem[] = [
     ...matchedSaved.map(item => ({ type: 'saved' as const, item })),
+    ...matchedBistCatalog.map(comp => ({ type: 'bist' as const, comp })),
     ...displayedPopular.map(comp => ({ type: 'popular' as const, comp })),
     ...(showDirectAnalyze ? [{ type: 'direct' as const, ticker: normalizedQuery }] : [])
   ];
@@ -149,7 +189,7 @@ export default function SpotlightSearch({
     if (entry.type === 'saved') {
       onSelectReport(entry.item.id, entry.item.ticker);
       onClose();
-    } else if (entry.type === 'popular') {
+    } else if (entry.type === 'bist' || entry.type === 'popular') {
       handleSelect(entry.comp.ticker);
     } else {
       handleSelect(entry.ticker);
@@ -195,7 +235,7 @@ export default function SpotlightSearch({
                 onClose();
               }
             }}
-            placeholder="Hisse kodu veya şirket adı ara (Örn: THYAO, AGESA)..."
+            placeholder="629 BIST şirketi, sektör veya kayıtlı analiz ara (Örn: MPARK, FROTO)..."
             className="w-full bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none font-mono"
           />
           {query ? (
@@ -217,6 +257,38 @@ export default function SpotlightSearch({
             </button>
           )}
         </div>
+
+        {/* Hızlı Terminal Geçişleri (Sorgu Boşken) */}
+        {!normalizedQuery && onNavigateTab && (
+          <div className="px-3 py-2.5 bg-[#11141a] flex items-center gap-1.5 flex-wrap">
+            <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider mr-1">
+              <Compass className="w-3 h-3 text-cyan-400" />
+              <span>Paneller:</span>
+            </span>
+            {([
+              { id: 'cockpit', label: 'Kokpit' },
+              { id: 'saved', label: 'KAP Akışı' },
+              { id: 'portfolio', label: 'Portföy' },
+              { id: 'favorites', label: 'Favoriler' },
+              { id: 'themes', label: 'Temalar' },
+              { id: 'leaderboard', label: 'Tarama' },
+              { id: 'sectors', label: 'Sektörler' },
+              { id: 'input', label: '+ Analiz' },
+            ] as const).map(nav => (
+              <button
+                key={nav.id}
+                type="button"
+                onClick={() => {
+                  onNavigateTab(nav.id);
+                  onClose();
+                }}
+                className="fv-pill px-2 py-0.5 rounded-md bg-[#181c24] hover:bg-[#232936] border border-[#282e3b] hover:border-cyan-500/40 text-[11px] font-sans text-slate-300 hover:text-white cursor-pointer"
+              >
+                {nav.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Sonuç Listesi */}
         <div className="max-h-80 overflow-y-auto p-2 divide-y divide-[#21262d]">
@@ -286,6 +358,71 @@ export default function SpotlightSearch({
             </div>
           )}
 
+          {/* 629 BIST Şirketi Resmi Kataloğu Eşleşmeleri */}
+          {matchedBistCatalog.length > 0 && (
+            <div className="py-2">
+              <div className="text-[10px] font-mono text-slate-400 px-3 py-1 font-semibold uppercase tracking-wider flex items-center justify-between gap-1.5">
+                <span className="flex items-center gap-1.5">
+                  <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Tüm BIST Şirketleri ({matchedBistCatalog.length})</span>
+                </span>
+                <span className="text-[9.5px] text-slate-500">Seç ➔ Canlı Analiz</span>
+              </div>
+              <div className="space-y-1 mt-1">
+                {matchedBistCatalog.map((comp, bIdx) => {
+                  const globalIdx = matchedSaved.length + bIdx;
+                  const isSelected = activeIndex === globalIdx;
+                  return (
+                    <button
+                      key={comp.ticker}
+                      ref={(el) => { itemRefs.current[globalIdx] = el; }}
+                      type="button"
+                      onMouseEnter={() => setActiveIndex(globalIdx)}
+                      onClick={() => handleSelect(comp.ticker)}
+                      className={`w-full flex items-center justify-between gap-2 p-2.5 rounded-xl border transition text-left cursor-pointer group ${
+                        isSelected
+                          ? 'bg-[#21262d] border-cyan-500/40 shadow-sm'
+                          : 'border-transparent hover:bg-[#21262d]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className={`font-mono font-bold text-sm shrink-0 transition ${
+                          isSelected ? 'text-cyan-300' : 'text-[#f5c242] group-hover:text-white'
+                        }`}>
+                          {comp.ticker}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-xs text-slate-200 truncate">{comp.name}</div>
+                          <div className="text-[10px] text-slate-500 font-sans truncate">{comp.sectorName}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0 font-mono">
+                        {typeof comp.lastPrice === 'number' && comp.lastPrice > 0 && (
+                          <span className="text-[11px] font-bold text-slate-200 px-1.5 py-0.5 rounded bg-[#12151b] border border-[#282d37]">
+                            ₺{comp.lastPrice.toFixed(2)}
+                          </span>
+                        )}
+                        {typeof comp.pe === 'number' && comp.pe > 0 && (
+                          <span className="hidden sm:inline-block text-[10px] text-slate-400 px-1.5 py-0.5 rounded bg-[#12151b] border border-[#282d37]">
+                            F/K {comp.pe.toFixed(1)}
+                          </span>
+                        )}
+                        {typeof comp.pb === 'number' && comp.pb > 0 && (
+                          <span className="hidden sm:inline-block text-[10px] text-slate-400 px-1.5 py-0.5 rounded bg-[#12151b] border border-[#282d37]">
+                            PD {comp.pb.toFixed(1)}
+                          </span>
+                        )}
+                        <ArrowRight className={`w-3.5 h-3.5 transition ${
+                          isSelected ? 'text-cyan-400 translate-x-0.5' : 'text-slate-500 group-hover:text-white'
+                        }`} />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Popüler / Hızlı Analiz BIST Şirketleri */}
           {displayedPopular.length > 0 && (
             <div className="py-2">
@@ -295,7 +432,7 @@ export default function SpotlightSearch({
               </div>
               <div className="space-y-1 mt-1">
                 {displayedPopular.map((comp, pIdx) => {
-                  const globalIdx = matchedSaved.length + pIdx;
+                  const globalIdx = matchedSaved.length + matchedBistCatalog.length + pIdx;
                   const isSelected = activeIndex === globalIdx;
                   return (
                     <button
@@ -339,7 +476,7 @@ export default function SpotlightSearch({
           {showDirectAnalyze && (
             <div className="py-2">
               {(() => {
-                const directIdx = matchedSaved.length + displayedPopular.length;
+                const directIdx = matchedSaved.length + matchedBistCatalog.length + displayedPopular.length;
                 const isSelected = activeIndex === directIdx;
                 return (
                   <button
@@ -377,6 +514,9 @@ export default function SpotlightSearch({
             <span className="flex items-center gap-1">
               <kbd className="px-1.5 py-0.5 bg-[#21262d] rounded border border-[#2e3440] text-[10px] text-slate-300">↵</kbd>
               Seç
+            </span>
+            <span className="hidden sm:inline text-slate-500">
+              {bistCatalog.length} BIST şirketi dizinli
             </span>
           </div>
           <span className="flex items-center gap-1">

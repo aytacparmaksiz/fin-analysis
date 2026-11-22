@@ -22,7 +22,8 @@ import {
   Tooltip,
   ReferenceLine
 } from 'recharts';
-import { formatCanonicalScore, type SavedReport } from '@/lib/report-resolver';
+import { formatCanonicalScore, parseNumericScore, type SavedReport } from '@/lib/report-resolver';
+import { getLatestReportsPerTicker, parseFinancialNumber } from '@/lib/valuation';
 import type { CompanyNewsItem } from '@/lib/news-service';
 import type {
   CockpitOverviewData,
@@ -32,6 +33,7 @@ import type {
 
 interface MarketCockpitProps {
   savedReports: SavedReport[];
+  portfolioTickers?: string[];
   favoriteTickers: string[];
   liveNewsFeed: CompanyNewsItem[];
   onToggleFavorite: (ticker: string) => void;
@@ -315,6 +317,7 @@ function StockComparisonCard({
 
 export default function MarketCockpit({
   savedReports,
+  portfolioTickers = [],
   favoriteTickers,
   liveNewsFeed,
   onToggleFavorite,
@@ -328,7 +331,7 @@ export default function MarketCockpit({
   const overviewAbortRef = useRef<AbortController | null>(null);
   const [refreshToken, setRefreshToken] = useState<number>(0);
 
-  // Kullanıcının eklediği karşılaştırma kartları (Varsayılan boş)
+  // Kullanıcının eklediği karşılaştırma kartları (Varsayılan akıllı tohumlama ile başlar)
   const [cardTickers, setCardTickers] = useState<string[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [addSearchQuery, setAddSearchQuery] = useState<string>('');
@@ -342,17 +345,76 @@ export default function MarketCockpit({
   const [watchlistQuery, setWatchlistQuery] = useState<string>('');
   const [showWatchlistAdd, setShowWatchlistAdd] = useState<boolean>(false);
 
+  const latestUniqueReports = useMemo(() => {
+    return getLatestReportsPerTicker(savedReports || []);
+  }, [savedReports]);
+
+  const cockpitPulse = useMemo(() => {
+    if (latestUniqueReports.length === 0) return null;
+    const alReports = latestUniqueReports.filter(r => (r.decision || '').trim().toUpperCase() === 'AL');
+    const portSet = new Set(portfolioTickers.map(t => t.toUpperCase()));
+    const favSet = new Set(favoriteTickers.map(t => t.toUpperCase()));
+    const trackedReports = latestUniqueReports.filter(r => {
+      const tk = (r.ticker || '').toUpperCase();
+      return portSet.has(tk) || favSet.has(tk);
+    });
+    const sourceForUpside = trackedReports.length > 0 ? trackedReports : alReports;
+    let sumUpside = 0;
+    let upsideCnt = 0;
+    let topPick: { id: string; ticker: string; upside: number } | null = null;
+    for (const r of latestUniqueReports) {
+      const pr = parseFinancialNumber(r.price) ?? 0;
+      const fv = parseFinancialNumber(r.fairValue) ?? 0;
+      if (pr > 0 && fv > 0) {
+        const up = Number((((fv - pr) / pr) * 100).toFixed(1));
+        if (sourceForUpside.includes(r)) {
+          sumUpside += up;
+          upsideCnt++;
+        }
+        if ((r.decision || '').trim().toUpperCase() === 'AL' && (!topPick || up > topPick.upside)) {
+          topPick = { id: r.id, ticker: r.ticker, upside: up };
+        }
+      }
+    }
+    return {
+      totalCompanies: latestUniqueReports.length,
+      alCount: alReports.length,
+      portfolioCount: portfolioTickers.length,
+      favoriteCount: favoriteTickers.length,
+      avgUpside: upsideCnt > 0 ? Number((sumUpside / upsideCnt).toFixed(1)) : null,
+      upsideScopeLabel: trackedReports.length > 0 ? 'Takip/Portföy Ort. Potansiyel' : 'AL Ort. Potansiyel',
+      topPick
+    };
+  }, [latestUniqueReports, portfolioTickers, favoriteTickers]);
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_CARDS_KEY);
-      if (saved) {
+      if (saved !== null) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
           setCardTickers(parsed.filter((t) => typeof t === 'string' && t.trim().length >= 2).slice(0, 10));
+          return;
         }
       }
+      // Kullanıcı henüz manuel liste oluşturmamışsa akıllı varsayılan kartları yükle
+      const topAlSeeds = [...latestUniqueReports]
+        .filter(r => (r.decision || '').trim().toUpperCase() === 'AL')
+        .sort((a, b) => (parseNumericScore(b.score) ?? 0) - (parseNumericScore(a.score) ?? 0))
+        .map(r => (r.ticker || '').toUpperCase());
+      const seedPool = [
+        ...portfolioTickers.map(t => t.toUpperCase()),
+        ...favoriteTickers.map(t => t.toUpperCase()),
+        ...topAlSeeds,
+        'THYAO',
+        'AGESA',
+        'FROTO',
+        'ASELS'
+      ].filter(t => typeof t === 'string' && t.trim().length >= 2);
+      const uniqueSeeds = Array.from(new Set(seedPool)).slice(0, 4);
+      setCardTickers(uniqueSeeds);
     } catch {}
-  }, []);
+  }, [portfolioTickers, favoriteTickers, latestUniqueReports]);
 
   const persistCardTickers = useCallback((next: string[]) => {
     setCardTickers(next);
@@ -512,6 +574,53 @@ export default function MarketCockpit({
           </button>
         </div>
       </div>
+
+      {/* PORTFÖY & ANALİZ NABZI ŞERİDİ */}
+      {cockpitPulse && (
+        <div
+          data-testid="fv-cockpit-pulse"
+          className="bg-[#111419] border border-[#20242d] rounded-lg px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs font-mono"
+        >
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400">Analiz Edilen:</span>
+              <span className="font-bold text-white">{cockpitPulse.totalCompanies} Şirket</span>
+              <span className="px-1.5 py-0.5 rounded bg-emerald-500/12 text-emerald-400 border border-emerald-500/30 font-bold text-[11px]">
+                {cockpitPulse.alCount} AL
+              </span>
+            </div>
+            {(cockpitPulse.portfolioCount > 0 || cockpitPulse.favoriteCount > 0) && (
+              <div className="flex items-center gap-2 text-slate-300">
+                <span>Portföy: <strong className="text-[#f5c242]">{cockpitPulse.portfolioCount}</strong></span>
+                <span className="text-slate-600">•</span>
+                <span>İzleme: <strong className="text-amber-300">{cockpitPulse.favoriteCount}</strong></span>
+              </div>
+            )}
+            {cockpitPulse.avgUpside !== null && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-400">{cockpitPulse.upsideScopeLabel}:</span>
+                <span className={`font-bold ${cockpitPulse.avgUpside >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {cockpitPulse.avgUpside >= 0 ? `+%${cockpitPulse.avgUpside}` : `-%${Math.abs(cockpitPulse.avgUpside)}`}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {cockpitPulse.topPick && (
+            <button
+              type="button"
+              onClick={() => onOpenReport(cockpitPulse.topPick!.id, cockpitPulse.topPick!.ticker)}
+              className="fv-pill inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold cursor-pointer"
+              title="En Yüksek AL Potansiyelli Raporu Aç"
+            >
+              <span>Öne Çıkan:</span>
+              <span className="text-white">{cockpitPulse.topPick.ticker}</span>
+              <span className="text-emerald-400">+%{cockpitPulse.topPick.upside}</span>
+              <ArrowUpRight className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ANA İKİ SÜTUNLU YERLEŞİM */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 items-start">
@@ -733,32 +842,51 @@ export default function MarketCockpit({
                 </div>
               ) : (
                 <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
-                  {savedReports.length > 0 ? (
-                    savedReports.slice(0, 12).map((rep) => (
-                      <button
-                        key={rep.id}
-                        type="button"
-                        onClick={() => onOpenReport(rep.id, rep.ticker)}
-                        className="w-full flex items-center justify-between gap-3 bg-[#15181e] hover:bg-[#1b1f27] border border-[#20242d] rounded px-3 py-2 text-xs transition cursor-pointer text-left"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <span className="font-mono font-bold text-white w-14 shrink-0">{rep.ticker}</span>
-                          <span className="text-slate-400 font-mono text-[11px]">{rep.period || '2025/12'}</span>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0 font-mono">
-                          <span className="text-slate-300">{formatCanonicalScore(rep.score) ?? '—'}</span>
-                          <span className={`px-1.5 py-0.5 rounded text-[10.5px] font-bold ${
-                            rep.decision === 'AL'
-                              ? 'bg-emerald-500/10 text-emerald-400'
-                              : rep.decision === 'ALMA'
-                              ? 'bg-rose-500/10 text-rose-400'
-                              : 'bg-amber-500/10 text-amber-400'
-                          }`}>
-                            {rep.decision}
-                          </span>
-                        </div>
-                      </button>
-                    ))
+                  {latestUniqueReports.length > 0 ? (
+                    latestUniqueReports.slice(0, 12).map((rep) => {
+                      const repPr = parseFinancialNumber(rep.price) ?? 0;
+                      const repFv = parseFinancialNumber(rep.fairValue) ?? 0;
+                      const repUp = (repPr > 0 && repFv > 0) ? Number((((repFv - repPr) / repPr) * 100).toFixed(1)) : null;
+                      return (
+                        <button
+                          key={rep.id}
+                          type="button"
+                          onClick={() => onOpenReport(rep.id, rep.ticker)}
+                          className="fv-row w-full flex items-center justify-between gap-2 bg-[#15181e] hover:bg-[#1b1f27] border border-[#20242d] rounded px-3 py-2 text-xs cursor-pointer text-left"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-mono font-bold text-white w-12 shrink-0">{rep.ticker}</span>
+                            <span className="text-slate-400 font-mono text-[10.5px] shrink-0">{rep.period || '2025/12'}</span>
+                            {repPr > 0 && repFv > 0 && (
+                              <span className="hidden sm:inline-flex items-center gap-1 font-mono text-[10.5px] text-slate-300 truncate">
+                                <span>₺{repPr.toFixed(1)}</span>
+                                <span className="text-slate-500">➔</span>
+                                <span className="text-[#f5c242] font-semibold">₺{repFv.toFixed(1)}</span>
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 font-mono">
+                            {repUp !== null && (
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                repUp >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+                              }`}>
+                                {repUp >= 0 ? `+%${repUp}` : `-%${Math.abs(repUp)}`}
+                              </span>
+                            )}
+                            <span className="text-slate-300 text-[11px]">{formatCanonicalScore(rep.score) ?? '—'}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[10.5px] font-bold ${
+                              rep.decision === 'AL'
+                                ? 'bg-emerald-500/10 text-emerald-400'
+                                : rep.decision === 'ALMA'
+                                ? 'bg-rose-500/10 text-rose-400'
+                                : 'bg-amber-500/10 text-amber-400'
+                            }`}>
+                              {rep.decision}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })
                   ) : (
                     <div className="py-8 text-center text-xs font-mono text-slate-400">
                       Henüz analiz edilmiş bilanço raporu bulunmuyor.

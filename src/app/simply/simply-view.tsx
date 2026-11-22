@@ -38,7 +38,10 @@ import {
   Target,
   Scale,
   History,
-  Coins
+  Coins,
+  RotateCcw,
+  SlidersHorizontal,
+  ArrowUp
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -1047,6 +1050,9 @@ export default function SimplyView({
   const [showSnowflakeChecklist, setShowSnowflakeChecklist] = useState(false);
   const [selectedSnowflakeFilter, setSelectedSnowflakeFilter] = useState<'all' | 'value' | 'future' | 'past' | 'health' | 'dividend'>('all');
   const [selectedSector, setSelectedSector] = useState<SectorType | 'AUTO'>('AUTO');
+  const [simWaccDelta, setSimWaccDelta] = useState<number>(0);
+  const [simMarginDelta, setSimMarginDelta] = useState<number>(0);
+  const [simGrowthDelta, setSimGrowthDelta] = useState<number>(0);
 
   const handleSelectReport = useCallback((id: string) => {
     setSelectedSector('AUTO');
@@ -1054,6 +1060,9 @@ export default function SimplyView({
     setShowBrokerBreakdown(false);
     setShowSnowflakeChecklist(false);
     setSelectedSnowflakeFilter('all');
+    setSimWaccDelta(0);
+    setSimMarginDelta(0);
+    setSimGrowthDelta(0);
     if (onSelectReport) {
       onSelectReport(id);
     }
@@ -1110,6 +1119,9 @@ export default function SimplyView({
     setLiveMarketPrice(null);
     setLiveKapQualitativeAudit(null);
     setLoadingKapQual(false);
+    setSimWaccDelta(0);
+    setSimMarginDelta(0);
+    setSimGrowthDelta(0);
     const upperTicker = report.ticker ? report.ticker.replace(/\.IS$/i, '').toUpperCase().trim() : '';
     const baselineDetails = upperTicker ? OFFICIAL_ISYATIRIM_COMPANY_DETAILS_BASELINE[upperTicker] : null;
     const rawInitialDivs = (Array.isArray(report.dividendHistory) && report.dividendHistory.length > 0)
@@ -3253,6 +3265,106 @@ export default function SimplyView({
         {/* SAĞ ANA İÇERİK AKIŞI (9 BÖLÜM)                                            */}
         {/* ========================================================================= */}
         <div className="flex-1 min-w-0 space-y-8">
+          {/* STICKY ŞİRKET BAĞLAM ŞERİDİ (Aşağı kaydırıldığında masaüstünde Fiyat & Adil Değer bağlamını korur) */}
+          {(() => {
+            const rawScore = report?.score ?? valuationInfo?.score ?? (report as any)?.scoreResult?.totalScore;
+            const stickyScore = parseNumericScore(rawScore);
+            const stickyUpside = (currentPriceNum > 0 && fairValueNum > 0)
+              ? Number((((fairValueNum - currentPriceNum) / currentPriceNum) * 100).toFixed(1))
+              : null;
+            const stickyDec = String(effectiveDecision || 'NÖTR').toUpperCase();
+            const isStickyAl = stickyDec === 'AL';
+            const isStickyAlma = stickyDec === 'ALMA';
+            return (
+              <div
+                data-testid="fv-sticky-context-bar"
+                className={`${activeSection !== 'sec-ozet' ? 'hidden lg:flex' : 'hidden'} sticky top-14 z-30 items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-[#12161f]/95 backdrop-blur-md border border-[#2b3242] shadow-xl animate-in fade-in duration-150`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="font-mono text-xs font-black text-[#f5c242] bg-[#1b202b] px-2 py-0.5 rounded border border-[#2e3545] shrink-0">
+                    {report.ticker}
+                  </span>
+                  <span className="text-xs font-bold text-white truncate max-w-[180px]" title={profile.fullName}>
+                    {getCleanCompanyName(profile.fullName, report.ticker)}
+                  </span>
+                  <span className="text-[11px] font-mono text-slate-400 hidden xl:inline shrink-0">
+                    • {report.period || latestData?.period || '—'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3 font-mono text-xs shrink-0">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-slate-400">Fiyat:</span>
+                    <span className="font-bold text-white">{currentPriceNum > 0 ? `₺${currentPriceNum.toFixed(2)}` : '—'}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-slate-400">Adil Değer:</span>
+                    <span className="font-bold text-[#f5c242]">{fairValueNum > 0 ? `₺${fairValueNum.toFixed(2)}` : '—'}</span>
+                  </div>
+                  {stickyUpside !== null && (
+                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${
+                      stickyUpside >= 0
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/35'
+                        : 'bg-rose-500/15 text-rose-400 border-rose-500/35'
+                    }`}>
+                      {stickyUpside >= 0 ? `+%${stickyUpside}` : `-%${Math.abs(stickyUpside)}`}
+                    </span>
+                  )}
+                  {stickyScore !== null && (
+                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold bg-[#171b24] border border-[#2b3242] ${getScoreColorStyle(stickyScore).text}`}>
+                      {stickyScore}/100
+                    </span>
+                  )}
+                  <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${
+                    isStickyAl ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/35' :
+                    isStickyAlma ? 'bg-rose-500/15 text-rose-400 border-rose-500/35' :
+                    'bg-amber-500/15 text-amber-300 border-amber-500/35'
+                  }`}>
+                    {stickyDec}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {onTogglePortfolio && (
+                    <button
+                      type="button"
+                      onClick={() => onTogglePortfolio(report.ticker)}
+                      className={`fv-pill px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer border ${
+                        isInPortfolio
+                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                          : 'bg-[#1a1f28] text-slate-300 hover:text-white border-[#2e3545]'
+                      }`}
+                    >
+                      {isInPortfolio ? '✓ Portföyde' : '+ Portföy'}
+                    </button>
+                  )}
+                  {onToggleFavorite && (
+                    <button
+                      type="button"
+                      onClick={() => onToggleFavorite(report.ticker)}
+                      className={`fv-pill px-2 py-1 rounded-lg text-[11px] font-bold cursor-pointer border ${
+                        isFavorite
+                          ? 'bg-amber-400/20 text-amber-300 border-amber-400/50'
+                          : 'bg-[#1a1f28] text-slate-400 hover:text-white border-[#2e3545]'
+                      }`}
+                      title={isFavorite ? 'Favorilerden Çıkar' : 'Favorilere Ekle'}
+                    >
+                      ★
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => scrollToSection('sec-ozet')}
+                    className="fv-pill px-2.5 py-1 rounded-lg bg-[#1a1f28] hover:bg-[#232936] text-slate-300 hover:text-white border border-[#2e3545] text-[11px] font-sans font-semibold flex items-center gap-1 cursor-pointer"
+                    title="En Üste / Özete Dön"
+                  >
+                    <ArrowUp className="w-3 h-3" />
+                    <span>Özet</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* ----------------------------------------------------------------------- */}
           {/* BÖLÜM 1: GENEL BAKIŞ & SNOWFLAKE (#sec-ozet)                             */}
@@ -3559,6 +3671,183 @@ export default function SimplyView({
                 </div>
               </div>
             </div>
+
+            {/* Sub-Card 1B: 4 Boyutlu Adli Stres Matrisi (4-Pillar Forensic Scorecard) */}
+            {(() => {
+              const recentSeries = (quarterlyChartData && quarterlyChartData.length > 0 ? quarterlyChartData : chartData || []).slice(-5);
+              const validProfitPoints = recentSeries.filter((p: any) => p?.net_income != null && Number.isFinite(Number(p.net_income)));
+              const profitableCount = validProfitPoints.filter((p: any) => Number(p.net_income) > 0).length;
+              const isInsSec = currentSector === 'INSURANCE';
+              const isBankSec = currentSector === 'BANKING';
+              const activeMarginVal = isInsSec
+                ? parseFinancialNumber(latestData?.combined_ratio ?? latestData?.technical_margin)
+                : parseFinancialNumber(latestData?.ebitda_margin ?? latestData?.net_margin);
+              const p1Status = validProfitPoints.length === 0
+                ? 'İZLEME'
+                : profitableCount >= Math.ceil(validProfitPoints.length * 0.75) && (isInsSec || activeMarginVal == null || activeMarginVal > 8)
+                ? 'SAĞLAM'
+                : profitableCount >= 2
+                ? 'DENGELİ'
+                : 'ZAYIF';
+
+              const evaPos = evaSpreadNum >= 0;
+              const p2Status = evaPos ? 'DEĞER YARATIYOR' : evaSpreadNum >= -5 ? 'NÖTR MAKAS' : 'SERMAYE EROZYONU';
+
+              const ocfRaw = parseFinancialNumber(latestData?.operating_cash_flow) ?? earningsQuality.ocf;
+              const wcRaw = parseFinancialNumber(latestData?.working_capital_change);
+              const niRaw = parseFinancialNumber(latestData?.net_income) ?? earningsQuality.netIncome;
+              const isWcDebtFunded = ocfRaw != null && ocfRaw > 0 && wcRaw != null && wcRaw >= ocfRaw * 0.70 && (niRaw == null || niRaw <= 0);
+              const cashConv = earningsQuality.cashConversionRatio;
+              const p3Status = isWcDebtFunded
+                ? 'WC / TEDARİKÇİ KAYNAKLI'
+                : (ocfRaw != null && ocfRaw > 0 && (cashConv == null || cashConv >= 80))
+                ? 'OPERASYONEL NAKİT'
+                : (ocfRaw != null && ocfRaw > 0)
+                ? 'ORTA DÖNÜŞÜM'
+                : (isBankSec || isInsSec)
+                ? 'MEVDUAT / TEKNİK FON'
+                : 'NAKİT ÇIKIŞI';
+
+              const totalDebtVal = parseFinancialNumber(latestData?.total_debt);
+              const cashVal = parseFinancialNumber(latestData?.cash_and_equivalents ?? latestData?.cash);
+              const netDebtVal = parseFinancialNumber(latestData?.net_debt) ?? (totalDebtVal != null && cashVal != null ? totalDebtVal - cashVal : null);
+              const ebitdaRaw = parseFinancialNumber(latestData?.ebitda);
+              const ndToEbitda = (!isBankSec && !isInsSec && netDebtVal != null && ebitdaRaw != null && ebitdaRaw > 0)
+                ? Number((netDebtVal / ebitdaRaw).toFixed(2))
+                : null;
+              const isNetCash = netDebtVal != null && netDebtVal < 0;
+              const p4Status = (isBankSec || isInsSec)
+                ? 'SERMAYE YETERLİLİĞİ'
+                : isNetCash
+                ? 'NET NAKİT'
+                : (ndToEbitda != null && ndToEbitda <= 2.5)
+                ? 'KONTROLLÜ BORÇ'
+                : (ebitdaRaw != null && ebitdaRaw <= 0 && netDebtVal != null && netDebtVal > 0)
+                ? 'BORÇ BASKISI'
+                : (ndToEbitda != null && ndToEbitda > 2.5)
+                ? 'YÜKSEK KALDIRAÇ'
+                : 'DENGELİ';
+
+              const badgeCls = (tone: 'emerald' | 'amber' | 'rose') =>
+                tone === 'emerald'
+                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+                  : tone === 'rose'
+                  ? 'bg-rose-500/15 text-rose-300 border-rose-500/35'
+                  : 'bg-amber-500/15 text-amber-300 border-amber-500/35';
+
+              return (
+                <div
+                  data-testid="fv-forensic-4pillar"
+                  className="bg-[#161a23] border border-[#2a3140] rounded-2xl p-5 sm:p-6 shadow-xl space-y-4"
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap border-b border-[#282d37] pb-3">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-[#f5c242]" />
+                      <h3 className="font-sans text-base sm:text-lg font-bold text-white">
+                        4 Boyutlu Adli Denetim Özeti
+                      </h3>
+                    </div>
+                    <span className="text-[11px] font-mono text-slate-400">
+                      Kârlılık • EVA Makası • Nakit Kaynağı • Bilanço
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                    {/* Direk 1: Kârlılık Trendi */}
+                    <div className="p-3.5 rounded-xl bg-[#11141c] border border-[#252b38] flex flex-col justify-between gap-2">
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className="text-[10.5px] font-mono uppercase font-bold text-slate-400">1. Kârlılık Trendi</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                          badgeCls(p1Status === 'SAĞLAM' ? 'emerald' : p1Status === 'ZAYIF' ? 'rose' : 'amber')
+                        }`}>
+                          {p1Status}
+                        </span>
+                      </div>
+                      <div className="font-mono text-sm font-black text-white">
+                        {validProfitPoints.length > 0 ? `${profitableCount}/${validProfitPoints.length} Kârlı Dönem` : '—'}
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 pt-1.5 border-t border-[#1e232e]">
+                        <span>{isInsSec ? 'Kombine/Tek. Marj:' : 'FAVÖK / Net Marj:'}</span>
+                        <span className="font-bold text-slate-200">
+                          {activeMarginVal != null ? `%${activeMarginVal.toFixed(1)}` : '—'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Direk 2: Sermaye Verimliliği & EVA */}
+                    <div className="p-3.5 rounded-xl bg-[#11141c] border border-[#252b38] flex flex-col justify-between gap-2">
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className="text-[10.5px] font-mono uppercase font-bold text-slate-400">2. Sermaye &amp; EVA</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                          badgeCls(evaPos ? 'emerald' : evaSpreadNum >= -5 ? 'amber' : 'rose')
+                        }`}>
+                          {p2Status}
+                        </span>
+                      </div>
+                      <div className={`font-mono text-sm font-black ${evaPos ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        EVA: {evaSpreadNum >= 0 ? `+${evaSpreadNum.toFixed(1)}%` : `${evaSpreadNum.toFixed(1)}%`}
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 pt-1.5 border-t border-[#1e232e]">
+                        <span>{isBankSec || isInsSec ? 'ROE' : 'ROIC'}: %{roicNum.toFixed(1)}</span>
+                        <span>WACC: %{waccNum.toFixed(1)}</span>
+                      </div>
+                    </div>
+
+                    {/* Direk 3: Nakit Akışı Kaynağı */}
+                    <div className="p-3.5 rounded-xl bg-[#11141c] border border-[#252b38] flex flex-col justify-between gap-2">
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className="text-[10.5px] font-mono uppercase font-bold text-slate-400">3. Nakit Kaynağı</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                          badgeCls(p3Status === 'OPERASYONEL NAKİT' || p3Status === 'MEVDUAT / TEKNİK FON' ? 'emerald' : p3Status.includes('TEDARİKÇİ') || p3Status === 'NAKİT ÇIKIŞI' ? 'rose' : 'amber')
+                        }`}>
+                          {p3Status}
+                        </span>
+                      </div>
+                      <div className="font-mono text-sm font-black text-white">
+                        {ocfRaw != null ? `OCF: ${formatTableNumber(ocfRaw)}` : 'OCF: —'}
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 pt-1.5 border-t border-[#1e232e]">
+                        <span>Nakit Dönüşüm:</span>
+                        <span className="font-bold text-slate-200">
+                          {cashConv != null ? `%${cashConv.toFixed(0)}` : '—'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Direk 4: Bilanço & Likidite */}
+                    <div className="p-3.5 rounded-xl bg-[#11141c] border border-[#252b38] flex flex-col justify-between gap-2">
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className="text-[10.5px] font-mono uppercase font-bold text-slate-400">4. Bilanço Sağlığı</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                          badgeCls(p4Status === 'NET NAKİT' || p4Status === 'SERMAYE YETERLİLİĞİ' || p4Status === 'KONTROLLÜ BORÇ' ? 'emerald' : p4Status === 'DENGELİ' ? 'amber' : 'rose')
+                        }`}>
+                          {p4Status}
+                        </span>
+                      </div>
+                      <div className="font-mono text-sm font-black text-white">
+                        {isBankSec || isInsSec
+                          ? `Özkaynak: ${formatTableNumber(latestData?.equity)}`
+                          : netDebtVal != null
+                          ? `${isNetCash ? 'Net Nakit' : 'Net Borç'}: ${formatTableNumber(Math.abs(netDebtVal))}`
+                          : '—'}
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 pt-1.5 border-t border-[#1e232e]">
+                        <span>{isBankSec || isInsSec ? 'Aktif Yapısı:' : 'Net Borç / FAVÖK:'}</span>
+                        <span className="font-bold text-slate-200">
+                          {isBankSec || isInsSec
+                            ? 'Düzenlemeye Tabi'
+                            : ebitdaRaw != null && ebitdaRaw <= 0
+                            ? '— (Negatif FAVÖK)'
+                            : ndToEbitda != null
+                            ? `${ndToEbitda}x`
+                            : '—'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* About the Company (Şirket Hakkında) */}
             <div className="bg-[#161a23] border border-[#2a3140] rounded-2xl p-6 shadow-xl space-y-4">
@@ -5580,6 +5869,149 @@ export default function SimplyView({
                 </div>
               </div>
             </div>
+
+            {/* 4.1B İnteraktif Değerleme Duyarlılık Simülatörü (What-If Analizi) */}
+            {fairValueNum > 0 && (() => {
+              const isModified = simWaccDelta !== 0 || simMarginDelta !== 0 || simGrowthDelta !== 0;
+              const waccFactor = 1 / Math.max(0.55, 1 + simWaccDelta * 0.09);
+              const marginFactor = Math.max(0.55, 1 + simMarginDelta * 0.035);
+              const growthFactor = Math.max(0.7, 1 + simGrowthDelta * 0.06);
+              const simulatedFairValue = Number((fairValueNum * waccFactor * marginFactor * growthFactor).toFixed(2));
+              const simDiffVsBasePct = Number((((simulatedFairValue - fairValueNum) / fairValueNum) * 100).toFixed(1));
+              const simUpsidePct = currentPriceNum > 0
+                ? Number((((simulatedFairValue - currentPriceNum) / currentPriceNum) * 100).toFixed(1))
+                : null;
+
+              return (
+                <div
+                  data-testid="fv-whatif-simulator"
+                  className="bg-[#161a23] border border-[#2a3140] rounded-2xl p-5 sm:p-6 shadow-xl space-y-4"
+                >
+                  <div className="flex items-center justify-between gap-3 flex-wrap border-b border-[#282d37] pb-3">
+                    <div className="flex items-center gap-2">
+                      <SlidersHorizontal className="w-4 h-4 text-cyan-400" />
+                      <span className="font-sans text-base sm:text-lg font-bold text-white">
+                        4.1B İnteraktif Değerleme Duyarlılık Simülatörü (What-If)
+                      </span>
+                    </div>
+                    {isModified && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSimWaccDelta(0);
+                          setSimMarginDelta(0);
+                          setSimGrowthDelta(0);
+                        }}
+                        className="fv-pill inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#1d222e] hover:bg-[#252c3b] text-xs font-mono text-slate-300 hover:text-white border border-[#323a4b] cursor-pointer"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Varsayılanlara Sıfırla</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+                    <div className="lg:col-span-7 space-y-3.5">
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs font-mono">
+                          <span className="text-slate-300 font-sans font-medium">İskonto Oranı (WACC) Kayması</span>
+                          <span className={`font-bold ${simWaccDelta < 0 ? 'text-emerald-400' : simWaccDelta > 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+                            {simWaccDelta > 0 ? `+${simWaccDelta.toFixed(2)}` : simWaccDelta.toFixed(2)} puan
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={-3}
+                          max={3}
+                          step={0.25}
+                          value={simWaccDelta}
+                          onChange={(e) => setSimWaccDelta(Number(e.target.value))}
+                          className="w-full accent-cyan-400 cursor-pointer"
+                          aria-label="WACC simülasyon sürgüsü"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs font-mono">
+                          <span className="text-slate-300 font-sans font-medium">Operasyonel Marj / Kârlılık Farkı</span>
+                          <span className={`font-bold ${simMarginDelta > 0 ? 'text-emerald-400' : simMarginDelta < 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+                            {simMarginDelta > 0 ? `+${simMarginDelta.toFixed(1)}` : simMarginDelta.toFixed(1)} puan
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={-5}
+                          max={5}
+                          step={0.5}
+                          value={simMarginDelta}
+                          onChange={(e) => setSimMarginDelta(Number(e.target.value))}
+                          className="w-full accent-emerald-400 cursor-pointer"
+                          aria-label="Marj simülasyon sürgüsü"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs font-mono">
+                          <span className="text-slate-300 font-sans font-medium">Uç Büyüme (g) &amp; Çarpan Duyarlılığı</span>
+                          <span className={`font-bold ${simGrowthDelta > 0 ? 'text-emerald-400' : simGrowthDelta < 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+                            {simGrowthDelta > 0 ? `+${simGrowthDelta.toFixed(2)}` : simGrowthDelta.toFixed(2)} puan
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={-2}
+                          max={2}
+                          step={0.25}
+                          value={simGrowthDelta}
+                          onChange={(e) => setSimGrowthDelta(Number(e.target.value))}
+                          className="w-full accent-amber-400 cursor-pointer"
+                          aria-label="Büyüme simülasyon sürgüsü"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="lg:col-span-5 grid grid-cols-2 gap-3 bg-[#11141c] border border-[#252b38] rounded-xl p-4">
+                      <div>
+                        <div className="text-[11px] font-sans text-slate-400">Baz Adil Değer</div>
+                        <div className="text-lg font-black font-mono text-slate-200 mt-0.5">
+                          ₺{fairValueNum.toFixed(2)}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[11px] font-sans text-slate-400">Güncel Fiyat</div>
+                        <div className="text-lg font-black font-mono text-white mt-0.5">
+                          {currentPriceNum > 0 ? `₺${currentPriceNum.toFixed(2)}` : '—'}
+                        </div>
+                      </div>
+                      <div className="col-span-2 pt-3 border-t border-[#202632] flex items-center justify-between gap-2">
+                        <div>
+                          <div className="text-[11px] font-sans text-cyan-300 font-semibold">Simüle Edilen Adil Değer</div>
+                          <div className="text-2xl font-black font-mono text-[#f5c242] mt-0.5">
+                            ₺{simulatedFairValue.toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="text-right font-mono space-y-1">
+                          {simUpsidePct !== null && (
+                            <div className={`px-2 py-0.5 rounded text-xs font-bold border ${
+                              simUpsidePct >= 0
+                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/35'
+                                : 'bg-rose-500/15 text-rose-400 border-rose-500/35'
+                            }`}>
+                              {simUpsidePct >= 0 ? `+%${simUpsidePct}` : `-%${Math.abs(simUpsidePct)}`} Pot.
+                            </div>
+                          )}
+                          {isModified && (
+                            <div className={`text-[10.5px] font-bold ${simDiffVsBasePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              Baza göre {simDiffVsBasePct >= 0 ? `+${simDiffVsBasePct}%` : `${simDiffVsBasePct}%`}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* 4.2 Piyasa ve Analist Hedef Fiyatları */}
             {(() => {

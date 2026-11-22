@@ -203,6 +203,21 @@ describe('KAP Disclosure Intelligence & Redesigned Panel UI/UX Verification Suit
     const pfPanelSrc = pageSrc.slice(pfStart, pfEnd);
     assert.ok(!pfPanelSrc.includes('exportBackup') && !pfPanelSrc.includes('Yedek Yükle') && !pfPanelSrc.includes('JSON İndir'), 'Portföy & Favoriler panel must not render duplicate backup load/download buttons');
     assert.ok(pfPanelSrc.includes("toggleSavedSort('date')"), 'Portföy & Favoriler table header must support clicking Tarih to sort');
+
+    // Paket 1-4 Next-Gen UI/UX Kaliteleştirme Kontrolleri
+    const spotlightSrc = fs.readFileSync(path.join(ROOT, 'app/components/spotlight-search.tsx'), 'utf8');
+    for (const marker of ['OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE', 'bistCatalog', 'matchedBistCatalog', 'onNavigateTab']) {
+      assert.ok(spotlightSrc.includes(marker), `spotlight-search.tsx missing Paket 1 marker: ${marker}`);
+    }
+    for (const marker of ['Canlı KAP &amp; Portföy Bildirimleri', 'fv-compare-tray', 'fv-compare-modal', 'toggleCompareTicker', 'TARANAN ŞİRKET', 'ORTALAMA POTANSİYEL']) {
+      assert.ok(pageSrc.includes(marker), `page.tsx missing Paket 1/3 marker: ${marker}`);
+    }
+    for (const marker of ['fv-sticky-context-bar', 'fv-forensic-4pillar', '4 Boyutlu Adli Denetim Özeti', 'fv-whatif-simulator', 'simWaccDelta', 'simMarginDelta', 'simGrowthDelta']) {
+      assert.ok(simplySrc.includes(marker), `simply-view.tsx missing Paket 2 marker: ${marker}`);
+    }
+    for (const marker of ['fv-cockpit-pulse', 'cockpitPulse', 'topAlSeeds', 'latestUniqueReports']) {
+      assert.ok(cockpitSrc.includes(marker), `market-cockpit.tsx missing Paket 4 marker: ${marker}`);
+    }
   });
 
   it('7. Adversarial Real-World KAP Regression Guard: Moody downgrade, buyback daily vs cumulative, numeric integrity, inline tags & substring traps', () => {
