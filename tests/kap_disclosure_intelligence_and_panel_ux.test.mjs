@@ -191,9 +191,18 @@ describe('KAP Disclosure Intelligence & Redesigned Panel UI/UX Verification Suit
     const cockpitSrc = fs.readFileSync(path.join(ROOT, 'app/components/market-cockpit.tsx'), 'utf8');
     const simplySrc = fs.readFileSync(path.join(ROOT, 'app/simply/simply-view.tsx'), 'utf8');
     assert.ok(!pageSrc.includes('py-0.2') && !cockpitSrc.includes('py-0.2') && !simplySrc.includes('py-0.2'), 'Invalid Tailwind py-0.2 class must not exist');
-    for (const marker of ['KAP Bildirim Akışı', 'newsImpactFilter', 'Resmi KAP Bildirim Metni', 'themeVisualMeta', 'SEKTÖR KAPSAMA', 'findOfficialSectorAverage', 'KARAR DAĞILIMI', 'EN YÜKSEK POTANSİYEL', 'quickAddOpen', 'unanalyzedWatchTickers', 'openDisclosureModal']) {
+    for (const marker of ['KAP Bildirim Akışı', 'newsImpactFilter', 'Resmi KAP Bildirim Metni', 'themeVisualMeta', 'SEKTÖR KAPSAMA', 'findOfficialSectorAverage', 'KARAR DAĞILIMI', 'EN YÜKSEK POTANSİYEL', 'quickAddOpen', 'unanalyzedWatchTickers', 'openDisclosureModal', 'Şirket Analizine Git', 'topAccent', 'alInTheme']) {
       assert.ok(pageSrc.includes(marker), `page.tsx missing redesigned panel marker: ${marker}`);
     }
+    for (const bannedUiText of ['{selectedDisclosure.ticker} Raporuna Git', 'şirket izleniyor', 'bildirim listeleniyor', 'otomatik ayıklanan başlık', '53 Resmi Alt Sektör', '7 Temel Strateji', 'Aktif Kapsam: Tüm Analiz Edilmiş']) {
+      assert.ok(!pageSrc.includes(bannedUiText), `page.tsx should not retain removed UI clutter/duplicate: ${bannedUiText}`);
+    }
+    const pfStart = pageSrc.indexOf('const { key, direction } = savedTableSort;');
+    const pfEnd = pageSrc.indexOf('{/* Gizli Yedek Yükleme Dosya Girişi */}');
+    assert.ok(pfStart !== -1 && pfEnd > pfStart, 'Expected Portföy & Favoriler panel slice markers in page.tsx');
+    const pfPanelSrc = pageSrc.slice(pfStart, pfEnd);
+    assert.ok(!pfPanelSrc.includes('exportBackup') && !pfPanelSrc.includes('Yedek Yükle') && !pfPanelSrc.includes('JSON İndir'), 'Portföy & Favoriler panel must not render duplicate backup load/download buttons');
+    assert.ok(pfPanelSrc.includes("toggleSavedSort('date')"), 'Portföy & Favoriler table header must support clicking Tarih to sort');
   });
 
   it('7. Adversarial Real-World KAP Regression Guard: Moody downgrade, buyback daily vs cumulative, numeric integrity, inline tags & substring traps', () => {

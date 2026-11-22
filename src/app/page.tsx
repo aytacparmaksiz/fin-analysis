@@ -6413,23 +6413,13 @@ export default function ValuationTerminal({
                 {/* ÜST BAŞLIK & SEKTÖR RADAR KONTROL PANELİ */}
                 <div className="bg-[#151821] border border-[#262c38] rounded-2xl p-5 sm:p-6 space-y-5">
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                    <div className="flex items-start gap-3.5">
-                      <div className="w-11 h-11 rounded-xl bg-emerald-500/12 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-500/12 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
                         <Layers className="w-5 h-5" />
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2.5 flex-wrap">
-                          <h2 className="text-xl font-bold text-white tracking-tight font-sans">
-                            BIST Sektörler
-                          </h2>
-                          <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
-                            53 Resmi Alt Sektör
-                          </span>
-                        </div>
-                        <p className="text-xs sm:text-sm text-slate-400 mt-0.5 font-sans">
-                          İş Yatırım resmi sektör sınıflandırması, güncel çarpan ortalamaları ve analiz kapsamınızın sektörel dağılımı.
-                        </p>
-                      </div>
+                      <h2 className="text-xl font-bold text-white tracking-tight font-sans">
+                        BIST Sektörler
+                      </h2>
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
@@ -6938,55 +6928,71 @@ export default function ValuationTerminal({
               iconBox: string;
               activeCard: string;
               barColor: string;
+              topAccent: string;
+              countColor: string;
               tagline: string;
               hoverCard: string;
             }> = {
               GROWTH: {
-                iconBox: 'bg-emerald-500/12 text-emerald-400 border-emerald-500/30',
-                activeCard: 'border-emerald-400/70 bg-emerald-500/10 ring-1 ring-emerald-400/30',
+                iconBox: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/35',
+                activeCard: 'border-emerald-400/75 bg-emerald-500/10 ring-1 ring-emerald-400/35',
                 barColor: 'bg-emerald-400',
+                topAccent: 'from-emerald-500 via-teal-400 to-emerald-400',
+                countColor: 'text-emerald-300',
                 tagline: '≥%30 büyüme & güçlü FAVÖK',
                 hoverCard: 'fv-card-emerald'
               },
               DEEP_VALUE: {
-                iconBox: 'bg-cyan-500/12 text-cyan-400 border-cyan-500/30',
-                activeCard: 'border-cyan-400/70 bg-cyan-500/10 ring-1 ring-cyan-400/30',
+                iconBox: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/35',
+                activeCard: 'border-cyan-400/75 bg-cyan-500/10 ring-1 ring-cyan-400/35',
                 barColor: 'bg-cyan-400',
+                topAccent: 'from-cyan-500 via-sky-400 to-cyan-300',
+                countColor: 'text-cyan-300',
                 tagline: 'PD/DD ≤ 1,6x · Güçlü özkaynak',
                 hoverCard: 'fv-card-sky'
               },
               DEFENSIVE: {
-                iconBox: 'bg-blue-500/12 text-blue-400 border-blue-500/30',
-                activeCard: 'border-blue-400/70 bg-blue-500/10 ring-1 ring-blue-400/30',
+                iconBox: 'bg-blue-500/15 text-blue-400 border-blue-500/35',
+                activeCard: 'border-blue-400/75 bg-blue-500/10 ring-1 ring-blue-400/35',
                 barColor: 'bg-blue-400',
+                topAccent: 'from-blue-500 via-indigo-400 to-sky-400',
+                countColor: 'text-blue-300',
                 tagline: 'Net nakit / düşük borç kalkanı',
                 hoverCard: 'fv-card-sky'
               },
               TURNAROUND: {
-                iconBox: 'bg-amber-500/12 text-amber-400 border-amber-500/30',
-                activeCard: 'border-amber-400/70 bg-amber-500/10 ring-1 ring-amber-400/30',
+                iconBox: 'bg-amber-500/15 text-amber-400 border-amber-500/35',
+                activeCard: 'border-amber-400/75 bg-amber-500/10 ring-1 ring-amber-400/35',
                 barColor: 'bg-amber-400',
+                topAccent: 'from-amber-500 via-orange-400 to-yellow-400',
+                countColor: 'text-amber-300',
                 tagline: 'Zarardan kâra operasyonel dönüş',
                 hoverCard: 'fv-card-amber'
               },
               HIGH_ROIC: {
-                iconBox: 'bg-purple-500/12 text-purple-400 border-purple-500/30',
-                activeCard: 'border-purple-400/70 bg-purple-500/10 ring-1 ring-purple-400/30',
+                iconBox: 'bg-purple-500/15 text-purple-400 border-purple-500/35',
+                activeCard: 'border-purple-400/75 bg-purple-500/10 ring-1 ring-purple-400/35',
                 barColor: 'bg-purple-400',
+                topAccent: 'from-purple-500 via-violet-400 to-fuchsia-400',
+                countColor: 'text-purple-300',
                 tagline: 'ROIC > WACC · Pozitif EVA',
                 hoverCard: 'fv-card-purple'
               },
               CASH_COW: {
-                iconBox: 'bg-teal-500/12 text-teal-400 border-teal-500/30',
-                activeCard: 'border-teal-400/70 bg-teal-500/10 ring-1 ring-teal-400/30',
+                iconBox: 'bg-teal-500/15 text-teal-400 border-teal-500/35',
+                activeCard: 'border-teal-400/75 bg-teal-500/10 ring-1 ring-teal-400/35',
                 barColor: 'bg-teal-400',
+                topAccent: 'from-teal-500 via-emerald-400 to-cyan-400',
+                countColor: 'text-teal-300',
                 tagline: 'Yüksek serbest nakit dönüşümü',
                 hoverCard: 'fv-card-emerald'
               },
               AVOID: {
-                iconBox: 'bg-rose-500/12 text-rose-400 border-rose-500/30',
-                activeCard: 'border-rose-400/70 bg-rose-500/10 ring-1 ring-rose-400/30',
+                iconBox: 'bg-rose-500/15 text-rose-400 border-rose-500/35',
+                activeCard: 'border-rose-400/75 bg-rose-500/10 ring-1 ring-rose-400/35',
                 barColor: 'bg-rose-400',
+                topAccent: 'from-rose-500 via-red-400 to-orange-400',
+                countColor: 'text-rose-300',
                 tagline: 'Değer tuzağı / sermaye erozyonu',
                 hoverCard: 'fv-card-rose'
               }
@@ -7082,24 +7088,14 @@ export default function ValuationTerminal({
             return (
               <div className="space-y-5 fv-panel-enter">
                 {/* Üst Başlık & Kontroller */}
-                <div className="bg-[#151821] border border-[#262c38] p-5 sm:p-6 rounded-2xl flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                  <div className="flex items-start gap-3.5">
-                    <div className="w-11 h-11 rounded-xl bg-cyan-500/12 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
+                <div className="bg-[#151821] border border-[#262c38] p-5 sm:p-6 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-cyan-500/12 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
                       <Compass className="w-5 h-5" />
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        <h2 className="text-xl font-bold font-sans text-white tracking-tight">
-                          Yatırım Temaları
-                        </h2>
-                        <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/25">
-                          7 Temel Strateji
-                        </span>
-                      </div>
-                      <p className="text-xs sm:text-sm text-slate-400 mt-0.5 font-sans">
-                        Bilanço dayanıklılığı, sermaye verimliliği (ROIC &gt; WACC), nakit dönüşümü ve iskonto disiplinlerine göre tematik radar.
-                      </p>
-                    </div>
+                    <h2 className="text-xl font-bold font-sans text-white tracking-tight">
+                      Yatırım Temaları
+                    </h2>
                   </div>
 
                   <div className="flex items-center gap-2.5 flex-wrap">
@@ -7155,53 +7151,61 @@ export default function ValuationTerminal({
                 </div>
 
                 {/* GÖRSEL STRATEJİ TEMA KARTLARI IZGARASI (Simetrik 4x2 Kurumsal Düzen) */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
                   {/* TÜMÜ Strateji Kartı */}
-                  <button
-                    type="button"
-                    onClick={() => setSelectedThemeFilters([])}
-                    className={`fv-card text-left p-4 rounded-xl border cursor-pointer flex flex-col justify-between gap-2.5 ${
-                      selectedThemeFilters.length === 0
-                        ? 'bg-[#f5c242]/12 border-[#f5c242]/70 ring-1 ring-[#f5c242]/30'
-                        : 'bg-[#151821] border-[#262c38] hover:bg-[#1a1f2b]'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-1.5">
-                      <span className={`w-8 h-8 rounded-lg border flex items-center justify-center ${
-                        selectedThemeFilters.length === 0
-                          ? 'bg-[#f5c242] text-slate-950 border-[#f5c242]'
-                          : 'bg-[#101319] text-[#f5c242] border-[#262c38]'
-                      }`}>
-                        <Sparkles className="w-4 h-4" />
-                      </span>
-                      <span className={`text-xs font-mono font-bold px-2.5 py-0.5 rounded-full ${
-                        selectedThemeFilters.length === 0
-                          ? 'bg-[#f5c242] text-slate-950'
-                          : 'bg-[#101319] text-white border border-[#262c38]'
-                      }`}>
-                        {deduplicatedForThemes.length}
-                      </span>
-                    </div>
-                    <div>
-                      <div className={`text-[13px] font-bold font-sans ${selectedThemeFilters.length === 0 ? 'text-[#f5c242]' : 'text-white'}`}>
-                        TÜMÜ
-                      </div>
-                      <div className="text-[11px] text-slate-400 leading-snug mt-0.5">
-                        Tüm analiz kapsamı
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="h-1.5 flex-1 rounded-full bg-[#101319] overflow-hidden">
-                        <div className="h-full bg-[#f5c242] rounded-full" style={{ width: '100%' }} />
-                      </div>
-                      <span className="text-[10px] font-mono text-slate-400">%100</span>
-                    </div>
-                  </button>
+                  {(() => {
+                    const allAlCount = deduplicatedForThemes.filter(r => (r.decision || '').trim().toUpperCase() === 'AL').length;
+                    const isAllSelected = selectedThemeFilters.length === 0;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedThemeFilters([])}
+                        className={`fv-card fv-card-amber relative overflow-hidden text-left p-4 pt-5 rounded-2xl border cursor-pointer flex flex-col justify-between gap-3 ${
+                          isAllSelected
+                            ? 'bg-[#f5c242]/12 border-[#f5c242]/75 ring-1 ring-[#f5c242]/35'
+                            : 'bg-[#151821] border-[#262c38] hover:bg-[#1a1f2b]'
+                        }`}
+                      >
+                        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-[#f5c242] via-amber-300 to-yellow-400" />
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${
+                            isAllSelected
+                              ? 'bg-[#f5c242] text-slate-950 border-[#f5c242]'
+                              : 'bg-[#101319] text-[#f5c242] border-[#262c38]'
+                          }`}>
+                            <Sparkles className="w-4 h-4" />
+                          </span>
+                          <span className={`text-2xl font-black font-mono tracking-tight ${isAllSelected ? 'text-[#f5c242]' : 'text-white'}`}>
+                            {deduplicatedForThemes.length}
+                          </span>
+                        </div>
+                        <div className="space-y-0.5">
+                          <div className={`text-sm font-bold font-sans ${isAllSelected ? 'text-[#f5c242]' : 'text-white'}`}>
+                            TÜMÜ
+                          </div>
+                          <div className="text-[11.5px] text-slate-400 leading-snug line-clamp-2">
+                            Tüm analiz evreni
+                          </div>
+                        </div>
+                        <div className="space-y-1.5 pt-1 border-t border-[#232834]/70">
+                          <div className="h-1.5 w-full rounded-full bg-[#101319] overflow-hidden">
+                            <div className="h-full bg-[#f5c242] rounded-full" style={{ width: '100%' }} />
+                          </div>
+                          <div className="flex items-center justify-between text-[10.5px] font-mono">
+                            <span className="text-slate-400">%100</span>
+                            <span className="text-emerald-400 font-bold">{allAlCount} AL</span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })()}
 
                   {/* 7 Semantik Yatırım Teması Kartı */}
                   {allThemesList.map(theme => {
                     const tid = theme.id as InvestmentThemeId;
-                    const count = themeSummary[tid]?.length || 0;
+                    const themeReports = themeSummary[tid] || [];
+                    const count = themeReports.length;
+                    const alInTheme = themeReports.filter(x => (x.report.decision || '').trim().toUpperCase() === 'AL').length;
                     const sharePct = deduplicatedForThemes.length > 0
                       ? Math.round((count / deduplicatedForThemes.length) * 100)
                       : 0;
@@ -7220,49 +7224,53 @@ export default function ValuationTerminal({
                           );
                         }}
                         title={`${theme.name} — ${theme.criteriaSummary}`}
-                        className={`fv-card ${vis.hoverCard} text-left p-4 rounded-xl border cursor-pointer flex flex-col justify-between gap-2.5 ${
+                        className={`fv-card ${vis.hoverCard} relative overflow-hidden text-left p-4 pt-5 rounded-2xl border cursor-pointer flex flex-col justify-between gap-3 ${
                           isSelected
                             ? vis.activeCard
                             : 'bg-[#151821] border-[#262c38] hover:bg-[#1a1f2b]'
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-1.5">
-                          <span className={`w-8 h-8 rounded-lg border flex items-center justify-center ${vis.iconBox}`}>
+                        <div className={`absolute top-0 inset-x-0 h-1 bg-gradient-to-r ${vis.topAccent}`} />
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${vis.iconBox}`}>
                             {renderThemeIcon(theme.iconTag, 'w-4 h-4')}
                           </span>
                           <div className="flex items-center gap-1.5">
                             {isSelected && (
-                              <span className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-sm">
-                                <Check className="w-2.5 h-2.5 stroke-[3]" />
+                              <span className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-sm">
+                                <Check className="w-3 h-3 stroke-[3]" />
                               </span>
                             )}
-                            <span className={`text-xs font-mono font-bold px-2.5 py-0.5 rounded-full ${
-                              count > 0
-                                ? 'bg-[#101319] text-white border border-[#2e3440]'
-                                : 'bg-[#101319] text-slate-500 border border-[#232834]'
+                            <span className={`text-2xl font-black font-mono tracking-tight ${
+                              count > 0 ? (isSelected ? vis.countColor : 'text-white') : 'text-slate-500'
                             }`}>
                               {count}
                             </span>
                           </div>
                         </div>
 
-                        <div>
-                          <div className="text-[13px] font-bold text-white font-sans truncate">
+                        <div className="space-y-0.5">
+                          <div className="text-sm font-bold text-white font-sans truncate">
                             {theme.shortLabel}
                           </div>
-                          <div className="text-[11px] text-slate-400 leading-snug mt-0.5 line-clamp-1">
+                          <div className="text-[11.5px] text-slate-400 leading-snug line-clamp-2">
                             {vis.tagline}
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
-                          <div className="h-1.5 flex-1 rounded-full bg-[#101319] overflow-hidden">
+                        <div className="space-y-1.5 pt-1 border-t border-[#232834]/70">
+                          <div className="h-1.5 w-full rounded-full bg-[#101319] overflow-hidden">
                             <div
                               className={`h-full rounded-full transition-all duration-500 ${vis.barColor}`}
                               style={{ width: `${count > 0 ? Math.max(8, sharePct) : 0}%` }}
                             />
                           </div>
-                          <span className="text-[10px] font-mono text-slate-500">%{sharePct}</span>
+                          <div className="flex items-center justify-between text-[10.5px] font-mono">
+                            <span className="text-slate-400">%{sharePct}</span>
+                            <span className={alInTheme > 0 ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
+                              {alInTheme} AL
+                            </span>
+                          </div>
                         </div>
                       </button>
                     );
@@ -7270,51 +7278,43 @@ export default function ValuationTerminal({
                 </div>
 
                 {/* SEÇİLİ STRATEJİ ÖZET & METRİK ŞERİDİ */}
-                <div className="p-4 rounded-2xl bg-[#151821] border border-[#262c38] flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs">
-                  <div className="space-y-1.5 min-w-0">
-                    {selectedThemeFilters.length === 0 ? (
+                <div className={`p-4 rounded-2xl bg-[#151821] border border-[#262c38] flex flex-col lg:flex-row ${selectedThemeFilters.length > 0 ? 'lg:items-center justify-between' : 'lg:items-center justify-end'} gap-3 text-xs`}>
+                  {selectedThemeFilters.length > 0 && (
+                    <div className="space-y-1.5 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-slate-400 font-medium">Aktif Kapsam:</span>
-                        <span className="text-white font-bold">Tüm Analiz Edilmiş Şirketler ({deduplicatedForThemes.length})</span>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-slate-400 font-medium">Aktif Strateji ({selectedThemeFilters.length}):</span>
-                          {selectedThemeFilters.map(tid => {
-                            const t = INVESTMENT_THEMES[tid];
-                            return (
-                              <span
-                                key={tid}
-                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono font-bold text-[11px] ${t?.badgeClass || 'bg-[#21262d] text-[#f5c242] border-[#2e3440]'}`}
+                        {selectedThemeFilters.map(tid => {
+                          const t = INVESTMENT_THEMES[tid];
+                          return (
+                            <span
+                              key={tid}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono font-bold text-[11px] ${t?.badgeClass || 'bg-[#21262d] text-[#f5c242] border-[#2e3440]'}`}
+                            >
+                              {renderThemeIcon(t?.iconTag || 'Zap', 'w-3 h-3')}
+                              <span>{t?.shortLabel || tid}</span>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedThemeFilters(prev => prev.filter(x => x !== tid))}
+                                className="hover:text-white ml-0.5 cursor-pointer"
+                                title="Kaldır"
                               >
-                                {renderThemeIcon(t?.iconTag || 'Zap', 'w-3 h-3')}
-                                <span>{t?.shortLabel || tid}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedThemeFilters(prev => prev.filter(x => x !== tid))}
-                                  className="hover:text-white ml-0.5 cursor-pointer"
-                                  title="Kaldır"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            );
-                          })}
-                          <button
-                            type="button"
-                            onClick={() => setSelectedThemeFilters([])}
-                            className="text-[11px] text-rose-400 hover:text-rose-300 font-bold cursor-pointer ml-1"
-                          >
-                            Temizle
-                          </button>
-                        </div>
-                        <div className="text-[11px] text-slate-400 font-sans">
-                          {selectedThemeFilters.map(tid => INVESTMENT_THEMES[tid]?.criteriaSummary).filter(Boolean).join(' • ')}
-                        </div>
-                      </>
-                    )}
-                  </div>
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedThemeFilters([])}
+                          className="text-[11px] text-rose-400 hover:text-rose-300 font-bold cursor-pointer ml-1"
+                        >
+                          Temizle
+                        </button>
+                      </div>
+                      <div className="text-[11px] text-slate-400 font-sans">
+                        {selectedThemeFilters.map(tid => INVESTMENT_THEMES[tid]?.criteriaSummary).filter(Boolean).join(' • ')}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Eşleşen Küme KPI Özetleri & Hızlı Sıralama */}
                   <div className="flex items-center gap-3 sm:gap-4 font-mono text-[11px] shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-[#232834] flex-wrap">
@@ -7727,33 +7727,48 @@ export default function ValuationTerminal({
                       );
                       const leadMatch = orderedMatches[0];
 
+                      const scoreNum = parseNumericScore(report.score);
+
                       return (
                         <div
                           key={`${report.id}-theme-card-${idx}`}
                           onClick={() => openReport(report.id, report.ticker)}
-                          className={`fv-card ${isAl ? 'fv-card-emerald' : isAlma ? 'fv-card-rose' : 'fv-card-amber'} rounded-2xl bg-[#151821] border border-[#262c38] overflow-hidden cursor-pointer group flex flex-col justify-between`}
+                          className={`fv-card ${isAl ? 'fv-card-emerald' : isAlma ? 'fv-card-rose' : 'fv-card-amber'} relative rounded-2xl bg-[#151821] border border-[#262c38] overflow-hidden cursor-pointer group flex flex-col justify-between`}
                         >
                           <div className={`h-1 w-full ${isAl ? 'bg-gradient-to-r from-emerald-500 to-teal-400' : isAlma ? 'bg-gradient-to-r from-rose-500 to-red-400' : 'bg-gradient-to-r from-amber-500 to-yellow-400'}`} />
                           <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                             <div className="space-y-3.5">
-                              {/* Başlık Satırı */}
-                              <div className="flex items-start justify-between gap-2">
+                              {/* Tier 1: Kimlik + Karar + Kalite Skoru + Hızlı Ekle */}
+                              <div className="flex items-start justify-between gap-2.5">
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="text-lg font-black text-white font-mono tracking-tight group-hover:text-[#f5c242] transition">
+                                    <span className="text-xl font-black text-white font-mono tracking-tight group-hover:text-[#f5c242] transition">
                                       {report.ticker}
                                     </span>
-                                    <span className="text-[11px] text-slate-300 font-mono px-2 py-0.5 rounded bg-[#101319] border border-[#262c38]">
-                                      {getCompanySectorDisplayName(report.ticker, report.sector)}
+                                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md font-mono border ${
+                                      isAl ? 'bg-emerald-500/12 text-emerald-400 border-emerald-500/35' :
+                                      isAlma ? 'bg-rose-500/12 text-rose-400 border-rose-500/35' :
+                                      'bg-amber-500/12 text-amber-400 border-amber-500/35'
+                                    }`}>
+                                      {report.decision}
                                     </span>
                                   </div>
+                                  <div className="flex items-center gap-1.5 mt-1 text-[11.5px] text-slate-400 font-sans truncate max-w-[215px]">
+                                    <span className="truncate">{companyName || getCompanySectorDisplayName(report.ticker, report.sector)}</span>
+                                  </div>
                                   {companyName && (
-                                    <div className="text-xs text-slate-400 truncate max-w-[210px] mt-0.5 font-sans">
-                                      {companyName}
+                                    <div className="text-[10.5px] text-slate-500 font-mono truncate max-w-[215px] mt-0.5">
+                                      {getCompanySectorDisplayName(report.ticker, report.sector)}
                                     </div>
                                   )}
                                 </div>
+
                                 <div className="flex items-center gap-1.5 shrink-0">
+                                  {scoreNum !== null && (
+                                    <span className={`px-2 py-1 rounded-lg bg-[#101319] border border-[#262c38] text-xs font-mono font-bold ${getScoreColorStyle(report.score).text}`}>
+                                      {formatScore(report.score)}
+                                    </span>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); toggleFavorite(report.ticker); }}
@@ -7778,17 +7793,10 @@ export default function ValuationTerminal({
                                   >
                                     <Briefcase className="w-3.5 h-3.5" />
                                   </button>
-                                  <span className={`text-xs font-bold px-2.5 py-1 rounded-lg font-mono border ${
-                                    isAl ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
-                                    isAlma ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' :
-                                    'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                                  }`}>
-                                    {report.decision}
-                                  </span>
                                 </div>
                               </div>
 
-                              {/* Fiyat & Adil Değer & Görsel Hedef Çubuğu */}
+                              {/* Tier 2: Fiyat & Adil Değer & İskonto Şeridi */}
                               <div className="p-3 bg-[#101319] rounded-xl border border-[#232834] space-y-2.5">
                                 <div className="grid grid-cols-3 divide-x divide-[#232834] text-sm font-mono text-center">
                                   <div>
@@ -7810,24 +7818,26 @@ export default function ValuationTerminal({
                                 </div>
                                 <div className="space-y-1">
                                   <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
-                                    <span>Skor: <strong className={getScoreColorStyle(report.score).text}>{formatScore(report.score)}</strong></span>
-                                    <span>{discount !== null ? (discount >= 0 ? `%${discount} İskonto Marjı` : `%${Math.abs(discount)} Primli`) : ''}</span>
+                                    <span>Değerleme Marjı</span>
+                                    <span>{discount !== null ? (discount >= 0 ? `%${discount} İskonto` : `%${Math.abs(discount)} Primli`) : '—'}</span>
                                   </div>
                                   <div className="h-1.5 w-full rounded-full bg-[#1a1f2b] overflow-hidden">
                                     <div
-                                      className={`h-full rounded-full ${discount !== null && discount >= 0 ? 'bg-emerald-400' : 'bg-rose-400'}`}
+                                      className={`h-full rounded-full transition-all duration-500 ${discount !== null && discount >= 0 ? 'bg-emerald-400' : 'bg-rose-400'}`}
                                       style={{ width: `${marginBarPct}%` }}
                                     />
                                   </div>
                                 </div>
                               </div>
 
-                              {/* Eşleşen Temalar & Metrik Kanıtları */}
+                              {/* Tier 3: Eşleşen Temalar & Metrik Kanıtı */}
                               {orderedMatches.length > 0 && leadMatch && (
                                 <div className="p-3 rounded-xl bg-[#101319]/80 border border-[#232834] space-y-2">
-                                  <div className="flex items-center justify-between text-[10.5px] font-mono text-slate-400 uppercase tracking-wider">
-                                    <span>Eşleşen Temalar ({orderedMatches.length})</span>
-                                    <span className="text-cyan-400 font-bold">{leadMatch.metricValue}</span>
+                                  <div className="flex items-center justify-between gap-2 text-[10.5px] font-mono">
+                                    <span className="text-slate-400 uppercase tracking-wider">Tema Kanıtı ({orderedMatches.length})</span>
+                                    <span className="px-2 py-0.5 rounded bg-cyan-500/12 border border-cyan-500/30 text-cyan-300 font-bold">
+                                      {leadMatch.metricValue}
+                                    </span>
                                   </div>
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     {orderedMatches.map(m => (
@@ -7847,15 +7857,14 @@ export default function ValuationTerminal({
                               )}
                             </div>
 
-                            {/* İncele Butonu */}
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); openReport(report.id, report.ticker); }}
-                              className="w-full py-2.5 bg-[#1e232e] group-hover:bg-[#f5c242] group-hover:text-slate-950 text-slate-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border border-[#2e3440] group-hover:border-[#f5c242] cursor-pointer"
-                            >
-                              <span>Şirket Analizini İncele</span>
-                              <ArrowUpRight className="w-4 h-4" />
-                            </button>
+                            {/* Kompakt Alt Bilgi & İncele İkonu */}
+                            <div className="pt-2.5 border-t border-[#232834] flex items-center justify-between text-[11px] font-mono text-slate-500">
+                              <span>{report.period || formatAnalysisDate(report.createdAt) || 'Güncel Analiz'}</span>
+                              <span className="inline-flex items-center gap-1 text-slate-400 group-hover:text-[#f5c242] transition font-sans font-semibold">
+                                <span>Detay</span>
+                                <ArrowUpRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                              </span>
+                            </div>
                           </div>
                         </div>
                       );
@@ -7922,34 +7931,20 @@ export default function ValuationTerminal({
                   {/* Akış İstihbarat Başlık & Kontrol Paneli */}
                   <div className="bg-[#151821] border border-[#262c38] p-5 sm:p-6 rounded-2xl space-y-4">
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                      <div className="flex items-start gap-3.5">
-                        <div className="w-11 h-11 rounded-xl bg-sky-500/12 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0 relative">
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-10 h-10 rounded-xl bg-sky-500/12 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0 relative">
                           <Radio className="w-5 h-5" />
                           <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-[#151821] animate-pulse" />
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2.5 flex-wrap">
-                            <h2 className="text-xl font-bold font-sans text-white tracking-tight">
-                              KAP Bildirim Akışı
-                            </h2>
-                            <span className="inline-flex items-center gap-1.5 text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                              CANLI KAP
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <h2 className="text-xl font-bold font-sans text-white tracking-tight">
+                            KAP Bildirim Akışı
+                          </h2>
+                          {lastFeedSync && (
+                            <span className="text-[11px] text-slate-500 font-mono hidden sm:inline">
+                              • {lastFeedSync.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
                             </span>
-                            {analyzedTickersUnique.length > 0 && (
-                              <span className="text-[11px] font-mono text-slate-400 px-2 py-0.5 rounded-full bg-[#101319] border border-[#262c38]">
-                                {analyzedTickersUnique.length} şirket izleniyor
-                              </span>
-                            )}
-                            {lastFeedSync && (
-                              <span className="text-[11px] text-slate-500 font-mono hidden sm:inline">
-                                • {lastFeedSync.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs sm:text-sm text-slate-400 mt-0.5 font-sans">
-                            Analiz ettiğiniz şirketlerin resmi KAP açıklamalarından otomatik ayıklanan başlık, tutar ve finansal etki özeti.
-                          </p>
+                          )}
                         </div>
                       </div>
 
@@ -7988,40 +7983,33 @@ export default function ValuationTerminal({
                       </div>
                     </div>
 
-                    {/* Etki / Sinyal Filtre Çubuğu (Risk vs Katalizör Hızlı Tarama) */}
+                    {/* Etki / Sinyal Filtre Çubuğu */}
                     {baseFeed.length > 0 && (
-                      <div className="flex items-center justify-between gap-3 flex-wrap pt-3 border-t border-[#232834]">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-[11px] font-mono text-slate-500 mr-1">Etki:</span>
-                          {[
-                            { id: 'ALL', label: 'Tümü', count: impactCounts.ALL, active: 'bg-slate-200 text-slate-950 border-slate-200' },
-                            { id: 'NEGATIVE', label: '▼ Olumsuz / Ceza', count: impactCounts.NEGATIVE, active: 'bg-rose-500/20 text-rose-300 border-rose-500/50' },
-                            { id: 'HIGH_IMPACT', label: '⚡ Yüksek Etki', count: impactCounts.HIGH_IMPACT, active: 'bg-purple-500/20 text-purple-300 border-purple-500/50' },
-                            { id: 'POSITIVE', label: '▲ Olumlu', count: impactCounts.POSITIVE, active: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50' },
-                            { id: 'NEUTRAL', label: '● Bilgilendirme', count: impactCounts.NEUTRAL, active: 'bg-[#252b36] text-slate-200 border-slate-500/50' },
-                          ].map(imp => {
-                            const active = newsImpactFilter === imp.id;
-                            return (
-                              <button
-                                key={imp.id}
-                                type="button"
-                                onClick={() => setNewsImpactFilter(imp.id as any)}
-                                className={`fv-pill inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
-                                  active
-                                    ? imp.active
-                                    : 'bg-[#101319] text-slate-400 border-[#232834] hover:text-white'
-                                }`}
-                              >
-                                <span>{imp.label}</span>
-                                <span className="font-mono text-[10px] opacity-80">{imp.count}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        <span className="text-[11px] font-mono text-slate-500">
-                          {newsFeed.length} bildirim listeleniyor
-                        </span>
+                      <div className="flex items-center gap-1.5 flex-wrap pt-3 border-t border-[#232834]">
+                        {[
+                          { id: 'ALL', label: 'Tümü', count: impactCounts.ALL, active: 'bg-slate-200 text-slate-950 border-slate-200' },
+                          { id: 'NEGATIVE', label: '▼ Olumsuz / Ceza', count: impactCounts.NEGATIVE, active: 'bg-rose-500/20 text-rose-300 border-rose-500/50' },
+                          { id: 'HIGH_IMPACT', label: '⚡ Yüksek Etki', count: impactCounts.HIGH_IMPACT, active: 'bg-purple-500/20 text-purple-300 border-purple-500/50' },
+                          { id: 'POSITIVE', label: '▲ Olumlu', count: impactCounts.POSITIVE, active: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50' },
+                          { id: 'NEUTRAL', label: '● Bilgilendirme', count: impactCounts.NEUTRAL, active: 'bg-[#252b36] text-slate-200 border-slate-500/50' },
+                        ].map(imp => {
+                          const active = newsImpactFilter === imp.id;
+                          return (
+                            <button
+                              key={imp.id}
+                              type="button"
+                              onClick={() => setNewsImpactFilter(imp.id as any)}
+                              className={`fv-pill inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
+                                active
+                                  ? imp.active
+                                  : 'bg-[#101319] text-slate-400 border-[#232834] hover:text-white'
+                              }`}
+                            >
+                              <span>{imp.label}</span>
+                              <span className="font-mono text-[10px] opacity-80">{imp.count}</span>
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -8066,15 +8054,10 @@ export default function ValuationTerminal({
                       <div className="w-14 h-14 mx-auto rounded-2xl bg-sky-500/10 border border-sky-500/25 flex items-center justify-center text-sky-400">
                         <Newspaper className="w-7 h-7" />
                       </div>
-                      <div className="space-y-1">
-                        <h4 className="text-base font-bold text-white font-sans">
-                          Henüz Analiz Edilmiş Şirket Bulunmuyor
-                        </h4>
-                        <p className="text-xs text-slate-400 max-w-md mx-auto font-sans leading-relaxed">
-                          Akış panelinde yalnızca analiz ettiğiniz şirketlerin resmi KAP bildirimleri, sözleşme, ceza ve finansal gelişmeleri listelenir.
-                        </p>
-                      </div>
-                      <div className="flex items-center justify-center gap-3 flex-wrap">
+                      <h4 className="text-base font-bold text-white font-sans">
+                        Henüz Analiz Edilmiş Şirket Bulunmuyor
+                      </h4>
+                      <div className="flex items-center justify-center">
                         <button
                           type="button"
                           onClick={resetToNewAnalysis}
@@ -8082,14 +8065,6 @@ export default function ValuationTerminal({
                         >
                           <Plus className="w-4 h-4" />
                           <span>Yeni Şirket Analiz Et</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => backupFileInputRef.current?.click()}
-                          className="fv-pill inline-flex items-center gap-2 px-4 py-2.5 bg-[#21262d] hover:bg-[#2b313d] text-cyan-400 border border-[#3b4252] rounded-xl text-xs font-bold cursor-pointer font-sans"
-                        >
-                          <Upload className="w-4 h-4" />
-                          <span>Başka Cihazdan Yedek Yükle (JSON)</span>
                         </button>
                       </div>
                     </div>
@@ -8115,9 +8090,6 @@ export default function ValuationTerminal({
                       <h4 className="text-base font-bold text-slate-200 font-sans">
                         Seçili Filtrede Bildirim Bulunamadı
                       </h4>
-                      <p className="text-sm text-slate-400 max-w-md mx-auto font-sans">
-                        Analiz ettiğiniz şirketler için seçili kategori veya etki filtresine uyan KAP bildirimi bulunmuyor.
-                      </p>
                       <button
                         type="button"
                         onClick={() => { setNewsCategoryFilter('ALL'); setNewsImpactFilter('ALL'); setNewsSearchTerm(''); }}
@@ -8362,9 +8334,6 @@ export default function ValuationTerminal({
             });
 
             const pageTitle = isPortfolio ? 'Portföy' : 'Favoriler';
-            const pageDesc = isPortfolio
-              ? 'Portföyünüzdeki şirketlerin karar dağılımı, adil değer potansiyeli, kalite skoru ve sektörel yoğunlaşma kokpiti.'
-              : 'İzleme listenizdeki şirketler, alım bölgesindeki fırsatlar ve tek tıkla portföye aktarım radarı.';
             const currentViewMode = isPortfolio ? portfolioViewMode : watchlistViewMode;
             const setViewMode = isPortfolio ? setPortfolioViewMode : setWatchlistViewMode;
 
@@ -8379,9 +8348,9 @@ export default function ValuationTerminal({
               <div className="space-y-5 fv-panel-enter">
                 {/* ÜST BAŞLIK & KPI KOMUTA ŞERİDİ */}
                 <div className="bg-[#151821] border border-[#262c38] p-5 sm:p-6 rounded-2xl space-y-5">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                    <div className="flex items-start gap-3.5">
-                      <div className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 ${
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5">
+                      <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${
                         isPortfolio
                           ? 'bg-[#f5c242]/12 border-[#f5c242]/35 text-[#f5c242]'
                           : 'bg-amber-400/12 border-amber-400/35 text-amber-400'
@@ -8392,26 +8361,21 @@ export default function ValuationTerminal({
                           <Star className="w-5 h-5 fill-amber-400/25" />
                         )}
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2.5 flex-wrap">
-                          <h2 className="text-xl font-bold font-sans text-white tracking-tight">
-                            {pageTitle}
-                          </h2>
-                          <span className={`text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full border ${
-                            isPortfolio
-                              ? 'bg-[#f5c242]/10 text-[#f5c242] border-[#f5c242]/30'
-                              : 'bg-amber-400/10 text-amber-400 border-amber-400/30'
-                          }`}>
-                            {isPortfolio ? `${activeTickersUpper.length} Şirket Portföyde` : `${activeTickersUpper.length} Şirket İzlemede`}
-                          </span>
-                        </div>
-                        <p className="text-xs sm:text-sm text-slate-400 mt-0.5 font-sans">
-                          {pageDesc}
-                        </p>
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <h2 className="text-xl font-bold font-sans text-white tracking-tight">
+                          {pageTitle}
+                        </h2>
+                        <span className={`text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full border ${
+                          isPortfolio
+                            ? 'bg-[#f5c242]/10 text-[#f5c242] border-[#f5c242]/30'
+                            : 'bg-amber-400/10 text-amber-400 border-amber-400/30'
+                        }`}>
+                          {activeTickersUpper.length}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Sağ Aksiyonlar: Hızlı Ekle + Yedekleme + Görünüm Seçici */}
+                    {/* Sağ Aksiyonlar: Hızlı Ekle + Görünüm Seçici */}
                     <div className="flex items-center gap-2 flex-wrap">
                       {deduplicatedSaved.length > 0 && (
                         <button
@@ -8427,25 +8391,6 @@ export default function ValuationTerminal({
                           <span>{isPortfolio ? 'Portföye Ekle' : 'Favoriye Ekle'}</span>
                         </button>
                       )}
-
-                      <div className="flex items-center bg-[#101319] p-1 rounded-xl border border-[#262c38]">
-                        <button
-                          type="button"
-                          onClick={exportBackup}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-[#1e232e] cursor-pointer"
-                          title="Verileri Dışa Aktar (JSON İndir)"
-                        >
-                          <Download className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => backupFileInputRef.current?.click()}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-[#1e232e] cursor-pointer"
-                          title="Başka Cihazdan Yedek Yükle (JSON İçe Aktar)"
-                        >
-                          <Upload className="w-4 h-4" />
-                        </button>
-                      </div>
 
                       <div className="flex items-center bg-[#101319] p-1 rounded-xl border border-[#262c38]">
                         <button
@@ -8699,53 +8644,26 @@ export default function ValuationTerminal({
                     })}
                   </div>
 
-                  {/* Arama ve Sıralama */}
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <div className="relative flex-1 sm:flex-initial min-w-[235px]">
-                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        value={analyzedSearch}
-                        onChange={(e) => setAnalyzedSearch(e.target.value)}
-                        placeholder="Hisse veya sektör ara..."
-                        className="w-full bg-[#101319] border border-[#262c38] rounded-xl pl-8 pr-8 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition font-sans"
-                      />
-                      {analyzedSearch && (
-                        <button
-                          type="button"
-                          onClick={() => setAnalyzedSearch('')}
-                          aria-label="Aramayı temizle"
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white cursor-pointer"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="flex items-center bg-[#101319] p-1 rounded-xl border border-[#262c38] text-xs">
-                      {[
-                        { key: 'score', label: 'Skor' },
-                        { key: 'discount', label: 'Potansiyel' },
-                        { key: 'date', label: 'Tarih' }
-                      ].map(opt => (
-                        <button
-                          key={opt.key}
-                          type="button"
-                          onClick={() => {
-                            if (opt.key === 'score') setSidebarSort('rank');
-                            if (opt.key === 'date') setSidebarSort('date');
-                            setSavedTableSort({ key: opt.key as any, direction: 'desc' });
-                          }}
-                          className={`fv-pill px-2.5 py-1 rounded-lg cursor-pointer font-semibold ${
-                            savedTableSort.key === opt.key
-                              ? 'bg-emerald-600 text-white shadow-sm'
-                              : 'text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
+                  {/* Arama */}
+                  <div className="relative w-full lg:w-64">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={analyzedSearch}
+                      onChange={(e) => setAnalyzedSearch(e.target.value)}
+                      placeholder="Hisse veya sektör ara..."
+                      className="w-full bg-[#101319] border border-[#262c38] rounded-xl pl-8 pr-8 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition font-sans"
+                    />
+                    {analyzedSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setAnalyzedSearch('')}
+                        aria-label="Aramayı temizle"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -8802,14 +8720,6 @@ export default function ValuationTerminal({
                             <PlusCircle className="w-4 h-4" />
                             <span>Yeni Şirket Analiz Et</span>
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => backupFileInputRef.current?.click()}
-                            className="fv-pill inline-flex items-center gap-2 px-4 py-2 bg-[#21262d] hover:bg-[#2b313d] text-cyan-400 border border-[#3b4252] rounded-xl text-xs font-bold cursor-pointer font-sans"
-                          >
-                            <Upload className="w-4 h-4" />
-                            <span>Yedek Yükle (JSON)</span>
-                          </button>
                         </>
                       )}
                     </div>
@@ -8856,6 +8766,12 @@ export default function ValuationTerminal({
                               <span className="inline-flex items-center justify-center gap-1 w-full">
                                 <span>Karar</span>
                                 {savedTableSort.key === 'decision' && <span className="text-[#f5c242]">{savedTableSort.direction === 'asc' ? '↑' : '↓'}</span>}
+                              </span>
+                            </th>
+                            <th onClick={() => toggleSavedSort('date')} className="py-3.5 px-3 text-center cursor-pointer select-none hover:text-white">
+                              <span className="inline-flex items-center justify-center gap-1 w-full">
+                                <span>Tarih</span>
+                                {savedTableSort.key === 'date' && <span className="text-[#f5c242]">{savedTableSort.direction === 'asc' ? '↑' : '↓'}</span>}
                               </span>
                             </th>
                             <th className="py-3.5 px-4 text-right">Aksiyon</th>
@@ -8925,6 +8841,9 @@ export default function ValuationTerminal({
                                   }`}>
                                     {item.decision || 'NÖTR'}
                                   </span>
+                                </td>
+                                <td className="py-3 px-3 text-center font-mono text-[11px] text-slate-400">
+                                  {formatAnalysisDate(item.createdAt) || '—'}
                                 </td>
                                 <td className="py-3 px-4 text-right">
                                   <div className="inline-flex items-center gap-1.5">
@@ -9452,7 +9371,7 @@ export default function ValuationTerminal({
                       </div>
                     )}
 
-                    {/* Alt Aksiyon Butonları */}
+                    {/* Alt Kaynak Bağlantıları */}
                     <div className="pt-3 border-t border-[#262c38] flex items-center gap-2.5 flex-wrap">
                       <a
                         href={selectedDisclosure.kapUrl || selectedDisclosure.url || getKapCompanyDisclosuresUrl(selectedDisclosure.ticker)}
@@ -9477,19 +9396,6 @@ export default function ValuationTerminal({
                           <ExternalLink className="w-3.5 h-3.5" />
                         </a>
                       )}
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const t = selectedDisclosure.ticker;
-                          setSelectedDisclosure(null);
-                          handleOpenOrAnalyzeTicker(t);
-                        }}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#1a1e26] hover:bg-[#252b36] border border-[#2e3440] text-slate-200 hover:text-white font-sans font-bold text-xs cursor-pointer"
-                      >
-                        <span>{selectedDisclosure.ticker} Raporuna Git</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
                     </div>
                   </div>
 
