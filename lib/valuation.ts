@@ -74,7 +74,12 @@ export function resolveOfficialSectorMultiples(
     }
   }
 
-  const secAvg = code ? OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE[code] : null;
+  const resolvedCode = code === '0010' ? '0028' : code;
+  const secAvg = resolvedCode ? OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE[resolvedCode] : null;
+  const resolvedName =
+    code === '0010'
+      ? 'Eğlence Hizmetleri (Medya Akran Grubu)'
+      : (secAvg?.sectorName || officialSecName);
 
   const rawEv = secAvg?.evEbitda;
   const rawPe = secAvg?.pe;
@@ -88,8 +93,8 @@ export function resolveOfficialSectorMultiples(
   const ev_sales = (rawEvSales !== null && rawEvSales !== undefined && rawEvSales > 0) ? Number(Math.min(20.0, Math.max(0.05, rawEvSales)).toFixed(2)) : defaultFallback.ev_sales;
 
   return {
-    code: code || 'UNKNOWN',
-    name: secAvg?.sectorName || officialSecName,
+    code: resolvedCode || 'UNKNOWN',
+    name: resolvedName,
     ev,
     pe,
     pb,
@@ -3983,7 +3988,12 @@ export function calculateSectorScore(
         s4 = 4; r4 = `Kritik marj erozyonu (FAVÖK marjı: %${margin}).`; st4 = 'danger'; anomalies.push(`Düşük FAVÖK Marjı: %${margin}`);
       }
     }
-    if (kko !== null && kko > 0) {
+    const resolvedSecForKko = resolveOfficialSectorName(
+      officialSectorName || data?.official_sector_name || latest?.official_sector_name || '',
+      data?.ticker || latest?.ticker || ''
+    );
+    const isMediaServicePlatform = isMediaEntertainmentSportsSector(resolvedSecForKko, data?.ticker || latest?.ticker || '');
+    if (kko !== null && kko > 0 && !isMediaServicePlatform) {
       r4 += ` (TCMB İmalat KKO: %${kko.toFixed(1)} ${kko < 78 ? '- Organik üretim kapasitesi elverişli' : '- Yüksek kapasite baskısı'}).`;
     }
     breakdown.push({ category: config.categories[3].name, score: s4, maxScore: 25, reason: r4, status: st4 });
@@ -4623,16 +4633,24 @@ export function analyzeRelatedPartyAndCapitalAllocationRisk(
     severity = 'MODERATE';
   }
 
+  const hasMaterialOtherRecNotice = !isRiskDetected && ind2OtherRecTriggered && otherRecRatioAssets >= 25.0;
+
   const reasons = isRiskDetected
     ? triggeredList.map(i => `${i.title}: ${i.explanation}`)
-    : [];
+    : (hasMaterialOtherRecNotice
+        ? [`Ticari Olmayan Diğer Alacak Yoğunlaşması: Ticari olmayan diğer alacaklar toplam aktiflerin %${otherRecRatioAssets.toFixed(1)} seviyesine ulaşmıştır; grup içi/ilişkili taraf fon kullandırma ve tahsilat vadesi yakından izlenmelidir.`]
+        : []);
 
   const summaryTitle = isRiskDetected
     ? 'GRUP İÇİ SERMAYE AKTARIMI & GÖLGE HOLDİNGLEŞME RİSKİ'
-    : '';
+    : (hasMaterialOtherRecNotice
+        ? 'İLİŞKİLİ TARAF / TİCARİ OLMAYAN DİĞER ALACAK YOĞUNLAŞMASI'
+        : '');
   const summaryText = isRiskDetected
     ? `Şirket faaliyet kolu bir holding olmamasına rağmen bilançosunda yüksek tutarda duran finansal yatırım (%${nonCurrentFinInvRatioAssets ?? 0} aktif payı) taşımakta ve üretilen kârın serbest nakde dönüşümü (%${fcfConversionPct ?? 0}) zayıf kalmaktadır. Bireysel yatırımcıyı korumak amacıyla hedef değerlemeye %${Math.round(haircutPct * 100)} Kurumsal Yönetim & Holdingleşme İskontosu uygulanmıştır.`
-    : '';
+    : (hasMaterialOtherRecNotice
+        ? `Ticari olmayan diğer alacaklar toplam aktiflerin %${otherRecRatioAssets.toFixed(1)} seviyesine ulaşmıştır; esas faaliyet dışı fon kullandırma ve tahsilat vadesi yakından izlenmelidir.`
+        : '');
 
   return {
     isRiskDetected,
@@ -10346,19 +10364,22 @@ export function computeSectorValuationAndDrivers(
       ? 'Spor Kulüpleri Değerleme Modeli (Yayın Gelirleri, Lisans, Sponsorluk & Finansal Borç Sınırı)'
       : (isMedia
         ? 'Medya & Dijital Yayıncılık Değerleme Modeli (Reklam Hasılatı, İçerik Varlıkları & Nakit Akışı)'
-        : 'Eğlence & Etkinlik Hizmetleri Modeli (Biletleme, Lisans & Faaliyet Marjı)');
-    const secName = isSportsClub ? 'Spor' : (isMedia ? 'Medya' : (detectedOfficialSecName || 'Eğlence Hizmetleri'));
+        : 'Dijital Eğlence, İçerik & Reklam Platformu Modeli (Yüksek Marjlı Reklam/Lisans Nakit Akışı)');
+    const secName = isSportsClub ? 'Spor' : 'Medya';
     const secMult = resolveOfficialSectorMultiples(
       secName,
       isSportsClub
         ? { ev: 5.41, pe: 15.23, pb: 1.13 }
-        : (isMedia ? { ev: 11.01, pe: 6.98, pb: 2.98 } : { ev: 4.11, pe: 8.63, pb: 4.64 })
+        : { ev: 11.01, pe: 6.98, pb: 2.98, ev_sales: 1.57 }
     );
 
+    const contractionFactor = clampedRevG < -0.10 ? 0.88 : 1.0;
     const forwardEbitda = ebitdaFull > 0 ? ebitdaFull * (1 + clampedRevG) : 0;
     const targetEvMultiple = isMedia
       ? Number(Math.min(10.5, Math.max(6.5, secMult.ev * 0.85)).toFixed(2))
-      : (isSportsClub ? Number(Math.min(6.5, secMult.ev).toFixed(2)) : Number(Math.min(7.5, secMult.ev).toFixed(2)));
+      : isSportsClub
+      ? Number(Math.min(6.5, secMult.ev).toFixed(2))
+      : Number(Math.min(7.5, Math.max(5.5, secMult.ev * 0.60 * contractionFactor)).toFixed(2));
     syncTargetMultipleDriver(targetEvMultiple, 'FD/FAVÖK');
     const enterpriseVal = forwardEbitda * targetEvMultiple;
 
@@ -10368,16 +10389,18 @@ export function computeSectorValuationAndDrivers(
     const forwardNet = netFull > 0 ? netFull * (1 + clampedNetG) : 0;
     const targetPe = isMedia
       ? Number(Math.min(8.5, Math.max(5.5, secMult.pe)).toFixed(2))
-      : (isSportsClub ? Number(Math.min(12.0, secMult.pe * 0.70).toFixed(2)) : Number(Math.min(9.5, secMult.pe).toFixed(2)));
+      : isSportsClub
+      ? Number(Math.min(12.0, secMult.pe * 0.70).toFixed(2))
+      : Number(Math.min(9.0, Math.max(6.5, secMult.pe * 1.15 * contractionFactor)).toFixed(2));
     const pePerShare = forwardNet > 0 ? (forwardNet * targetPe) / effectiveShareCount : 0;
 
     const bvps = totalEquityFull > 0 ? (totalEquityFull / effectiveShareCount) : 0;
     const forwardBvps = resolveSafeForwardBvps(bvps, 0.25, 0.60);
     const positiveMediaPb = isMedia
       ? Math.max(1.30, Math.min(3.00, (roe !== null && roe > 0) ? (roe / 15.0) * secMult.pb : secMult.pb * 0.60))
-      : (isSportsClub
-        ? Math.max(0.60, Math.min(1.50, (roe !== null && roe > 0) ? (roe / 15.0) : secMult.pb))
-        : Math.max(1.10, Math.min(4.50, (roe !== null && roe > 0) ? (roe / 15.0) : secMult.pb)));
+      : isSportsClub
+      ? Math.max(0.60, Math.min(1.50, (roe !== null && roe > 0) ? (roe / 15.0) : secMult.pb))
+      : Math.max(1.30, Math.min(3.40, (roe !== null && roe > 0) ? (roe / 17.5) * contractionFactor : secMult.pb));
     const justifiedPb = resolveSafeJustifiedPb(positiveMediaPb, secMult.pb, enterpriseVal, totalDebtBridge, netFull);
     const pbPerShare = forwardBvps * justifiedPb;
 
@@ -10797,10 +10820,27 @@ export function computeSectorValuationAndDrivers(
     targetMultipleNum
   );
 
+  const resolvedSensWacc =
+    parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc) ??
+    (sector === 'INSURANCE' ? 35.1 : (sector === 'FINANCIAL_SERVICES' ? 36.5 : (sector === 'AVIATION' ? 14.5 : 28.0)));
+  const isRealOrFxSensWacc =
+    sector !== 'INSURANCE' &&
+    sector !== 'BANKING' &&
+    sector !== 'FINANCIAL_SERVICES' &&
+    resolvedSensWacc < 25.0;
+  const resolvedSensGrowth =
+    sector === 'INSURANCE'
+      ? 18.0
+      : (sector === 'BANKING' || sector === 'FINANCIAL_SERVICES')
+      ? 20.0
+      : isRealOrFxSensWacc
+      ? (sector === 'AVIATION' ? 2.5 : 3.0)
+      : 15.0;
+
   const sensitivityMatrix = (fairValue !== null && fairValue > 0)
     ? calculateValuationSensitivityMatrix({
-        baseWacc: parseFinancialNumber(latest?.benchmark_wacc ?? latest?.real_wacc ?? latest?.wacc) ?? (sector === 'INSURANCE' ? 35.1 : (sector === 'FINANCIAL_SERVICES' ? 36.5 : (sector === 'AVIATION' ? 14.5 : 28.0))),
-        baseGrowth: sector === 'INSURANCE' ? 18.0 : (sector === 'BANKING' ? 20.0 : (sector === 'FINANCIAL_SERVICES' ? 20.0 : (sector === 'AVIATION' ? 12.0 : 15.0))),
+        baseWacc: resolvedSensWacc,
+        baseGrowth: resolvedSensGrowth,
         currentPrice: safeCurrentPrice,
         baseFairValue: fairValue
       })
@@ -12270,15 +12310,31 @@ export function calculateCompanyMultiples(
     };
   } else if (isYatirimMultiples?.sector_averages) {
     const sa = isYatirimMultiples.sector_averages;
-    benchmark = {
-      sector,
-      sectorName: sa.sector_name || isYatirimMultiples.sector_name || benchmark.sectorName,
-      peMedian: (sa.pe && sa.pe > 0) ? sa.pe : benchmark.peMedian,
-      pbMedian: (sa.pb && sa.pb > 0) ? sa.pb : benchmark.pbMedian,
-      evEbitdaMedian: (sa.ev_ebitda && sa.ev_ebitda > 0) ? sa.ev_ebitda : null,
-      evSalesMedian: (sa.ev_sales && sa.ev_sales > 0) ? sa.ev_sales : null,
-      description: `İş Yatırım Resmi Sektör Ortalamaları (${sa.sector_name || benchmark.sectorName})`
-    };
+    const isSingletonEntertainment =
+      sa.sector_code === '0010' ||
+      String(sa.sector_name || '').trim() === 'Eğlence Hizmetleri';
+    if (isSingletonEntertainment) {
+      const mediaBench = OFFICIAL_ISYATIRIM_SECTOR_AVERAGES_BASELINE['0028'];
+      benchmark = {
+        sector,
+        sectorName: sa.sector_name || benchmark.sectorName,
+        peMedian: mediaBench?.pe ?? 6.98,
+        pbMedian: mediaBench?.pb ?? 2.98,
+        evEbitdaMedian: mediaBench?.evEbitda ?? 11.01,
+        evSalesMedian: mediaBench?.evSales ?? 1.57,
+        description: 'BIST Medya & Dijital Eğlence Akran Ortalaması (Tekil Sektör Düzeltmesi)'
+      };
+    } else {
+      benchmark = {
+        sector,
+        sectorName: sa.sector_name || isYatirimMultiples.sector_name || benchmark.sectorName,
+        peMedian: (sa.pe && sa.pe > 0) ? sa.pe : benchmark.peMedian,
+        pbMedian: (sa.pb && sa.pb > 0) ? sa.pb : benchmark.pbMedian,
+        evEbitdaMedian: (sa.ev_ebitda && sa.ev_ebitda > 0) ? sa.ev_ebitda : null,
+        evSalesMedian: (sa.ev_sales && sa.ev_sales > 0) ? sa.ev_sales : null,
+        description: `İş Yatırım Resmi Sektör Ortalamaları (${sa.sector_name || benchmark.sectorName})`
+      };
+    }
   }
   const fallbackShares = parseFinancialNumber(latest?.shares_outstanding ?? latest?.shares_count ?? latest?.share_count);
   const safeShares: number | null = (typeof shareCount === 'number' && Number.isFinite(shareCount) && shareCount > 0)

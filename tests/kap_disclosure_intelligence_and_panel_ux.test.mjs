@@ -24,6 +24,10 @@ import {
   DEFAULT_PORTFOLIO_ARCHITECT_CONFIG,
   PORTFOLIO_ARCHITECT_PRESETS,
 } from '../lib/portfolio-architect.ts';
+import {
+  computeSectorValuationAndDrivers,
+  calculateCompanyMultiples,
+} from '../lib/valuation.ts';
 
 const ROOT = process.cwd();
 const sha256 = (rel) => crypto.createHash('sha256').update(fs.readFileSync(path.join(ROOT, rel))).digest('hex');
@@ -235,7 +239,7 @@ describe('KAP Disclosure Intelligence & Redesigned Panel UI/UX Verification Suit
     const radarSrc = fs.readFileSync(path.join(ROOT, 'app/simply/snowflake-radar.tsx'), 'utf8');
     assert.ok(radarSrc.includes('radarPalette') && radarSrc.includes('totalScore >= 20'), 'snowflake-radar.tsx must compute dynamic score-based gradient palette');
     assert.ok(pageSrc.includes('getSectorMonogramCls') && simplySrc.includes('fv-inline-sparkbar'), 'page.tsx / simply-view.tsx missing sector monogram or inline sparkbar');
-    for (const marker of ['fv-portfolio-architect', 'İdeal Portföy Mimarı', 'applyPortfolioSet', 'swapPortfolioTicker']) {
+    for (const marker of ['fv-portfolio-architect', 'Model Portföy Mimarı', 'applyPortfolioSet', 'swapPortfolioTicker']) {
       assert.ok(pageSrc.includes(marker), `page.tsx missing Portfolio Architect marker: ${marker}`);
     }
   });
@@ -474,6 +478,158 @@ describe('KAP Disclosure Intelligence & Redesigned Panel UI/UX Verification Suit
 
     // C. Mirror Dosya Eşitliği Doğrulaması
     assert.equal(sha256('src/lib/portfolio-architect.ts'), sha256('lib/portfolio-architect.ts'));
+    assert.equal(sha256('src/app/page.tsx'), sha256('app/page.tsx'));
+  });
+
+  it('10. Risk-Free Rate (38%) Model Portfolio Hurdle, MACKO Valuation/Peer/Singularity Fixes & Full 4-File Mirror Parity', () => {
+    const mkHist = ({ ni, ocf, wc, ebM, roic, wacc, netDebt, eb }) => [
+      { period: '2025/12', net_income: ni, operating_cash_flow: ocf, working_capital_change: wc, ebitda_margin: ebM, net_margin: ebM * 0.6, roic, real_wacc: wacc, eva_spread: roic - wacc, net_debt: netDebt, ebitda: eb },
+      { period: '2026/03', net_income: ni, operating_cash_flow: ocf, working_capital_change: wc, ebitda_margin: ebM, net_margin: ebM * 0.6, roic, real_wacc: wacc, eva_spread: roic - wacc, net_debt: netDebt, ebitda: eb },
+      { period: '2026/06', net_income: ni, operating_cash_flow: ocf, working_capital_change: wc, ebitda_margin: ebM, net_margin: ebM * 0.6, roic, real_wacc: wacc, eva_spread: roic - wacc, net_debt: netDebt, ebitda: eb },
+      { period: '2026/09', net_income: ni, operating_cash_flow: ocf, working_capital_change: wc, ebitda_margin: ebM, net_margin: ebM * 0.6, roic, real_wacc: wacc, eva_spread: roic - wacc, net_debt: netDebt, ebitda: eb },
+    ];
+    const mkReport = (ticker, sector, price, fairValue, score, decision, histArgs, extra = {}) => ({
+      id: `rep10-${ticker}`,
+      ticker,
+      price: String(price),
+      fairValue: String(fairValue),
+      createdAt: '2026-11-26',
+      period: '2026/09',
+      report: '',
+      decision,
+      score: `${score}/100`,
+      sector,
+      extractedData: {
+        company_name: ticker,
+        sector,
+        reporting_period: '2026/09',
+        macro: { risk_free_rate: 38.0 },
+        financial_history: mkHist(histArgs),
+        valuation: { fair_value: fairValue, score, roic: histArgs.roic, real_wacc: histArgs.wacc, eva_spread: histArgs.roic - histArgs.wacc },
+        ...extra,
+      },
+    });
+
+    const universe = [
+      mkReport('TUPRS', 'INDUSTRIAL', 322, 681, 88, 'AL', { ni: 1000, ocf: 1700, wc: 200, ebM: 14, roic: 40.5, wacc: 14.2, netDebt: -5000, eb: 4000 }),
+      mkReport('MACKO', 'INDUSTRIAL', 20.64, 27.24, 89, 'AL', { ni: 275.6, ocf: 481.7, wc: 86.9, ebM: 54.9, roic: 49.26, wacc: 18.8, netDebt: 104.6, eb: 469.4 }, { official_sector_name: 'Eğlence Hizmetleri' }),
+      mkReport('MAVI', 'RETAIL', 32.2, 43.02, 87, 'AL', { ni: 300, ocf: 500, wc: -20, ebM: 20, roic: 22.0, wacc: 11.9, netDebt: -200, eb: 600 }),
+    ];
+
+    // 1A. enforceRiskFreeHurdle = true (Default Rf = 38.0%): MACKO (+32.0%) ve MAVI (+33.6%) Model Portföye giremez
+    const planStrict = buildForensicPortfolioPlan(universe, []);
+    assert.equal(DEFAULT_PORTFOLIO_ARCHITECT_CONFIG.enforceRiskFreeHurdle, true);
+    assert.equal(planStrict.effectiveRiskFreeRatePct, 38.0);
+    assert.equal(planStrict.belowRiskFreeAlCount, 2);
+    assert.ok(planStrict.modelPortfolio.some(h => h.ticker === 'TUPRS'), 'TUPRS (>38% upside) must remain in modelPortfolio');
+    assert.ok(!planStrict.modelPortfolio.some(h => h.ticker === 'MACKO'), 'MACKO (+32% < 38% Rf) must be excluded from modelPortfolio');
+    assert.ok(!planStrict.modelPortfolio.some(h => h.ticker === 'MAVI'), 'MAVI (+33.6% < 38% Rf) must be excluded from modelPortfolio');
+    assert.equal(planStrict.candidatesByTicker.MACKO.targetStatus, 'BELOW_RF_HURDLE');
+    assert.ok((planStrict.candidatesByTicker.MACKO.excessReturnOverRfPct ?? 0) < 0);
+    assert.ok(planStrict.tier3FilteredAl.some(h => h.ticker === 'MACKO' && h.targetStatus === 'BELOW_RF_HURDLE'));
+
+    // 1B. enforceRiskFreeHurdle = false: MACKO ve MAVI tekrar Model Portföye girebilir
+    const planRelaxed = buildForensicPortfolioPlan(universe, [], { enforceRiskFreeHurdle: false });
+    assert.equal(planRelaxed.belowRiskFreeAlCount, 0);
+    assert.ok(planRelaxed.modelPortfolio.some(h => h.ticker === 'MACKO'), 'Relaxing Rf hurdle must allow MACKO back into modelPortfolio');
+    assert.ok(planRelaxed.modelPortfolio.some(h => h.ticker === 'MAVI'), 'Relaxing Rf hurdle must allow MAVI back into modelPortfolio');
+
+    // 2. MACKO (Eğlence Hizmetleri, 0010) değerleme modeli, tekillik giderimi, diğer alacak uyarısı ve TCMB KKO izolasyonu
+    const mackoExtracted = {
+      ticker: 'MACKO',
+      company_name: 'Maçkolik İnternet Hizmetleri A.Ş.',
+      sector: 'INDUSTRIAL',
+      official_sector_name: 'Eğlence Hizmetleri',
+      currency: 'TL (Milyon)',
+      share_count: 100000000,
+      macro: { risk_free_rate: 38.0, expected_inflation: 23.7, tcmb_capacity_utilization: 74.1 },
+      market_multiples: {
+        pe: 6.4,
+        pb: 3.0,
+        ev_ebitda: 3.5,
+        ev_sales: 1.8,
+        sector_code: '0010',
+        sector_name: 'Eğlence Hizmetleri',
+        sector_averages: { sector_code: '0010', sector_name: 'Eğlence Hizmetleri', pe: 6.39, pb: 2.95, ev_ebitda: 3.54, ev_sales: 1.8 },
+      },
+      financial_history: [
+        {
+          period: '2025/09',
+          revenue: 1050.7,
+          gross_profit: 746.0,
+          operating_profit: 519.7,
+          ebitda: 604.9,
+          net_income: 390.0,
+          equity: 520.0,
+          total_assets: 820.0,
+          is_tms29: true,
+        },
+        {
+          period: '2026/09',
+          revenue: 855.02,
+          gross_profit: 551.5,
+          operating_profit: 395.8,
+          ebitda: 469.4,
+          net_income: 275.6,
+          equity: 677.63,
+          total_assets: 995.58,
+          other_receivables: 304.14,
+          non_current_other_receivables: 115.11,
+          trade_receivables: 259.69,
+          total_debt: 158.17,
+          cash_and_equivalents: 53.54,
+          net_debt: 104.63,
+          operating_cash_flow: 481.7,
+          working_capital_change: 86.9,
+          capex: -51.0,
+          free_cash_flow: 430.6,
+          roic: 49.26,
+          roe: 58.5,
+          ebitda_margin: 54.9,
+          net_margin: 32.2,
+          real_wacc: 18.8,
+          nominal_wacc: 47.0,
+          expected_inflation: 23.7,
+          is_tms29: true,
+          capacity_utilization_rate: 74.1,
+        },
+      ],
+    };
+
+    const valRes = computeSectorValuationAndDrivers(mackoExtracted, '20.64', 'INDUSTRIAL');
+    assert.equal(
+      valRes.valuation.valuation_model_name,
+      'Dijital Eğlence, İçerik & Reklam Platformu Modeli (Yüksek Marjlı Reklam/Lisans Nakit Akışı)'
+    );
+    assert.equal(valRes.valuation.sensitivity_matrix?.hasSingularity, false, 'Real WACC vs Real g must have zero singularity');
+    assert.equal(valRes.valuation.sensitivity_matrix?.singularityCount, 0);
+    assert.equal(valRes.valuation.sensitivity_matrix?.baseGrowth, 3);
+    assert.ok(
+      String(valRes.valuation.capital_allocation_risk?.summaryTitle || '').includes('DİĞER ALACAK YOĞUNLAŞMASI'),
+      'Severe non-trade other_receivables (>=25% assets) must surface executive warning'
+    );
+    const hasKkoLeak = valRes.scoreResult.breakdown.some(b => /TCMB İmalat KKO/i.test(b.reason || ''));
+    assert.equal(hasKkoLeak, false, 'Digital platform MACKO must not display TCMB İmalat KKO');
+
+    // Harici Medya (0028) akran çarpanları kontrolü (kendini kendiyle kıyaslama hatası çözümü)
+    const multRes = calculateCompanyMultiples(
+      mackoExtracted.financial_history[1],
+      20.64,
+      100000000,
+      'INDUSTRIAL',
+      mackoExtracted.market_multiples,
+      'TL (Milyon)',
+      null,
+      mackoExtracted.financial_history
+    );
+    assert.equal(multRes.benchmark.peMedian, 6.98);
+    assert.equal(multRes.benchmark.pbMedian, 2.98);
+    assert.equal(multRes.benchmark.evEbitdaMedian, 11.01);
+
+    // 3. Tüm 4 Mirror Dosya SHA-256 Eşitliği Doğrulaması
+    assert.equal(sha256('src/lib/valuation.ts'), sha256('lib/valuation.ts'));
+    assert.equal(sha256('src/lib/portfolio-architect.ts'), sha256('lib/portfolio-architect.ts'));
+    assert.equal(sha256('src/app/simply/simply-view.tsx'), sha256('app/simply/simply-view.tsx'));
     assert.equal(sha256('src/app/page.tsx'), sha256('app/page.tsx'));
   });
 });

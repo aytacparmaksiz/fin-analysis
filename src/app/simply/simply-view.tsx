@@ -1558,21 +1558,31 @@ export default function SimplyView({
   const rawOfficialSector = isYatirimEntry?.sectorName || marketMultiples?.sectorName;
   const officialSectorName = rawOfficialSector || (currentSector === 'INSURANCE' ? 'Sigorta' : (currentSector === 'BANKING' ? 'Bankacılık' : (currentSector === 'REIT' ? 'GYO' : (currentSector === 'HOLDING' ? 'Holdingler' : sectorMeta?.title || 'Sanayi'))));
 
-  // Aynı Sektördeki Resmi BİST Şirketleri (İş Yatırım Sektör Dağılımı ve Akıllı Eşleşme)
-  const sameSectorPeers = useMemo(() => {
+  // BIST Tekil veya Az Şirketli Sektörler için Komşu Kurumsal Akran Kümeleri
+  const { sameSectorPeers, peerClusterNote } = useMemo(() => {
     const targetTicker = report.ticker.toUpperCase();
     const currentEntry = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[targetTicker];
     const rawTargetSector = (currentEntry?.sectorName || rawOfficialSector || '').trim();
-
-    // Doğrudan İş Yatırım resmi sektör adı üzerinden çalış
-    let targetSector = rawTargetSector.toLowerCase();
+    const targetSector = rawTargetSector.toLowerCase();
     const isTargetHolding = targetSector === 'holdingler' || currentSector === 'HOLDING';
 
-    const allInSector: Array<{ ticker: string; name: string; marketCapMnTl: number | null }> = [];
+    const ADJACENT_OFFICIAL_SECTORS: Record<string, { sectors: string[]; label: string }> = {
+      'eğlence hizmetleri': { sectors: ['medya', 'spor'], label: 'Medya & Spor Akran Grubu' },
+      'kırtasiye': { sectors: ['kağıt ürünleri'], label: 'Kağıt & Kırtasiye Grubu' },
+      'otomotiv lastiği': { sectors: ['otomotiv yan sanayi', 'otomotiv'], label: 'Otomotiv & Yan Sanayi Grubu' },
+      'pazarlama': { sectors: ['perakande - ticaret', 'gıda & ticaret perakende'], label: 'Ticaret & Perakende Grubu' },
+      'cam': { sectors: ['seramik', 'inşaat malzemeleri'], label: 'Cam, Seramik & Yapı Grubu' },
+      'hayvancılık': { sectors: ['gıda'], label: 'Gıda & Hayvancılık Grubu' },
+    };
+
+    const exactMatches: Array<{ ticker: string; name: string; marketCapMnTl: number | null; isAdjacentPeer?: boolean }> = [];
+    const adjacentMatches: Array<{ ticker: string; name: string; marketCapMnTl: number | null; isAdjacentPeer?: boolean }> = [];
+    const adjConfig = targetSector ? ADJACENT_OFFICIAL_SECTORS[targetSector] : undefined;
 
     for (const [tk, item] of Object.entries(OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE)) {
       if (tk.toUpperCase() === targetTicker) continue;
       const itemSec = (item.sectorName || '').trim().toLowerCase();
+      if (!itemSec) continue;
       const itemName = (item.name || '').toLowerCase();
 
       // Holding filtresi: Eğer ana şirket bir holding değilse, akran olarak holdingleri ele
@@ -1609,23 +1619,42 @@ export default function SimplyView({
       }
 
       if (matches) {
-        allInSector.push({
+        exactMatches.push({
           ticker: item.ticker,
           name: item.name,
-          marketCapMnTl: item.marketCapMnTl
+          marketCapMnTl: item.marketCapMnTl,
+          isAdjacentPeer: false,
+        });
+      } else if (adjConfig && adjConfig.sectors.some(s => itemSec === s || itemSec.includes(s))) {
+        adjacentMatches.push({
+          ticker: item.ticker,
+          name: item.name,
+          marketCapMnTl: item.marketCapMnTl,
+          isAdjacentPeer: true,
         });
       }
     }
-    // Piyasa değerine göre büyükten küçüğe sırala
-    allInSector.sort((a, b) => (b.marketCapMnTl || 0) - (a.marketCapMnTl || 0));
-    return allInSector;
+
+    exactMatches.sort((a, b) => (b.marketCapMnTl || 0) - (a.marketCapMnTl || 0));
+    adjacentMatches.sort((a, b) => (b.marketCapMnTl || 0) - (a.marketCapMnTl || 0));
+
+    let combined = exactMatches;
+    let note: string | null = null;
+    if (exactMatches.length < 3 && adjConfig && adjacentMatches.length > 0) {
+      combined = [...exactMatches, ...adjacentMatches];
+      note = exactMatches.length === 0
+        ? `BIST Tekil Sektör • ${adjConfig.label} ile Kıyaslandı`
+        : `+ ${adjConfig.label}`;
+    }
+
+    return { sameSectorPeers: combined, peerClusterNote: note };
   }, [rawOfficialSector, currentSector, report.ticker]);
 
-  // Kullanıcının daha önce analiz ettiği akran şirketler (şirket başına en güncel tek rapor, AL -> NÖTR -> ALMA ve puan sırasına göre)
+  // Kullanıcının daha önce analiz ettiği akran şirketler (yalnızca gerçek akran kümesinden, şirket başına en güncel tek rapor)
   const analyzedCompetitors = useMemo(() => {
     const peerTickers = new Set(sameSectorPeers.map(p => p.ticker.toUpperCase()));
     const matching = savedReports.filter(
-      r => (peerTickers.has(r.ticker?.toUpperCase()) || (r.sector === currentSector && sameSectorPeers.length === 0)) &&
+      r => peerTickers.has(r.ticker?.toUpperCase()) &&
            r.ticker?.toUpperCase() !== report.ticker?.toUpperCase()
     );
     const latestPerTicker = getLatestReportsPerTicker(matching);
@@ -2612,13 +2641,15 @@ export default function SimplyView({
       }
     });
 
-    const bench = parseFinancialNumber(marketMultiples?.sector_averages?.pe ?? companyMultiplesData?.benchmark?.peMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pe);
+    const bench = officialSectorName === 'Eğlence Hizmetleri'
+      ? parseFinancialNumber(companyMultiplesData?.benchmark?.peMedian ?? marketMultiples?.sector_averages?.pe ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pe)
+      : parseFinancialNumber(marketMultiples?.sector_averages?.pe ?? companyMultiplesData?.benchmark?.peMedian ?? SECTOR_MEDIAN_BENCHMARKS[currentSector]?.pe);
     if (bench != null && Number.isFinite(bench) && bench > 0) {
       data.push({ name: 'Sektör Ort.', pe: Number(bench.toFixed(1)) });
     }
 
     return data;
-  }, [report.ticker, report.id, marketMultiples, companyMultiplesData, analyzedCompetitors, currentSector]);
+  }, [report.ticker, report.id, marketMultiples, companyMultiplesData, analyzedCompetitors, currentSector, officialSectorName]);
 
   // Navigasyon Elemanları (10 Sekme)
   const NAVIGATION_ITEMS: Array<{ id: SimplySectionId; num?: string; label: string; icon: any }> = [
@@ -4330,106 +4361,181 @@ export default function SimplyView({
               </div>
             </div>
 
-            {/* Sektörel Akranlar (Açılır/Kapanır Panel & Karar-Puan Sıralı) */}
-            <div className="bg-[#161a23] border border-[#2a3140] rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
-              <div 
-                className="flex items-center justify-between cursor-pointer select-none group"
+            {/* Sektörel Akran Kıyaslaması (Kurumsal Tablo Görünümü) */}
+            <div className="bg-[#151821] border border-[#262c38] rounded-2xl overflow-hidden shadow-xl">
+              <div
+                className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 cursor-pointer select-none group border-b border-[#232834]"
                 onClick={() => setIsPeersOpen(!isPeersOpen)}
                 title={isPeersOpen ? "Paneli Daralt" : "Paneli Genişlet"}
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center text-[#f5c242] font-bold text-sm">
-                    {analyzedCompetitors.length}
-                  </div>
-                  <div>
-                    <h3 className="font-sans text-lg sm:text-xl font-bold text-white group-hover:text-[#f5c242] transition-colors flex items-center gap-2">
-                      <span>Sektörel Akranlar</span>
-                      <span className="text-xs font-mono font-medium text-slate-400 bg-[#21262d] px-2.5 py-0.5 rounded-full border border-[#2e3440]">
-                        {officialSectorName}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="px-2.5 py-1 rounded-lg bg-[#101319] border border-[#262c38] font-mono text-xs font-bold text-[#f5c242]">
+                    {analyzedCompetitors.length} Akran
+                  </span>
+                  <h3 className="font-sans text-base sm:text-lg font-bold text-white group-hover:text-[#f5c242] transition-colors flex items-center gap-2 flex-wrap">
+                    <span>Sektörel Akran Kıyaslaması</span>
+                    <span className="text-[11px] font-mono font-medium text-slate-300 bg-[#101319] px-2.5 py-0.5 rounded-full border border-[#262c38]">
+                      {officialSectorName}
+                    </span>
+                    {peerClusterNote && (
+                      <span className="text-[11px] font-mono font-medium text-cyan-300 bg-cyan-500/10 px-2.5 py-0.5 rounded-full border border-cyan-500/30">
+                        {peerClusterNote}
                       </span>
-                    </h3>
-                  </div>
+                    )}
+                  </h3>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-[#21262d] border border-[#2e3440] flex items-center justify-center text-slate-300 group-hover:text-[#f5c242] group-hover:border-[#f5c242]/50 transition shadow-sm">
-                    {isPeersOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </div>
+                <div className="w-8 h-8 rounded-lg bg-[#101319] border border-[#262c38] flex items-center justify-center text-slate-300 group-hover:text-[#f5c242] group-hover:border-[#f5c242]/50 transition">
+                  {isPeersOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                 </div>
               </div>
 
               {isPeersOpen && (
-                <>
+                <div className="p-4 sm:p-5 space-y-4">
                   {analyzedCompetitors.length > 0 ? (
-                    <div className="space-y-4 pt-1">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                        {(showAllPeers ? analyzedCompetitors : analyzedCompetitors.slice(0, 3)).map((comp) => {
-                          const decStr = String(comp.decision || '').toUpperCase();
-                          const isBuy = decStr === 'AL' || decStr === 'GÜÇLÜ AL';
-                          const isSell = decStr === 'ALMA' || decStr === 'SAT' || decStr === 'GÜÇLÜ SAT';
-                          const badgeBg = isBuy 
-                            ? 'bg-emerald-950/70 text-emerald-400 border-emerald-800/60'
-                            : isSell
-                              ? 'bg-rose-950/70 text-rose-400 border-rose-800/60'
-                              : 'bg-amber-950/70 text-amber-400 border-amber-800/60';
+                    <>
+                      <div className="overflow-x-auto touch-pan-x no-scrollbar rounded-xl border border-[#232834]">
+                        <table className="w-full text-left text-xs border-collapse font-sans tabular-nums">
+                          <thead>
+                            <tr className="border-b border-[#232834] bg-[#101319] text-[11px] font-mono text-slate-400 uppercase tracking-wider">
+                              <th className="py-3 px-4">Şirket &amp; Sektör</th>
+                              <th className="py-3 px-3 text-right">Fiyat</th>
+                              <th className="py-3 px-3 text-right">Adil Değer</th>
+                              <th className="py-3 px-3 text-center">Potansiyel</th>
+                              <th className="py-3 px-3 text-center">F/K</th>
+                              <th className="py-3 px-3 text-center">Skor</th>
+                              <th className="py-3 px-4 text-right">Karar</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#232834] text-slate-200">
+                            {(() => {
+                              const selfPe = parseFinancialNumber(companyMultiplesData?.multiples?.pe?.companyValue ?? marketMultiples?.pe);
+                              const selfScoreNum = parseNumericScore(valuationInfo?.score ?? report.score);
+                              const selfDec = String(effectiveDecision || 'NÖTR').toUpperCase();
+                              const selfDecCls = selfDec === 'AL'
+                                ? 'bg-emerald-500/12 text-emerald-300 border-emerald-500/35'
+                                : selfDec === 'ALMA'
+                                ? 'bg-rose-500/12 text-rose-300 border-rose-500/35'
+                                : 'bg-amber-500/12 text-amber-300 border-amber-500/35';
 
-                          return (
-                            <div
-                              key={comp.id}
-                              onClick={() => {
-                                if (onSelectReport) {
-                                  onSelectReport(comp.id);
-                                } else if (onSelectTicker) {
-                                  onSelectTicker(comp.ticker);
-                                }
-                              }}
-                              className="fv-card bg-[#21262d] hover:bg-[#28303d] border border-[#2e3440] hover:border-[#f5c242]/60 rounded-xl p-4 cursor-pointer flex items-center justify-between group shadow-sm"
-                              title={`${comp.ticker} detaylı analizini aç`}
-                            >
-                              <div className="flex items-center gap-3 min-w-0">
-                                <div className="w-10 h-10 rounded-xl bg-[#181b20] border border-[#2e3440] group-hover:border-[#f5c242]/50 flex items-center justify-center font-black font-mono text-sm text-[#f5c242] shadow-inner transition">
-                                  {comp.ticker.slice(0, 4)}
-                                </div>
-                                <div className="truncate">
-                                  <div className="font-bold text-white group-hover:text-[#f5c242] transition flex items-center gap-2">
-                                    <span>{comp.ticker}</span>
-                                    {comp.score != null && (
-                                      <span className="text-[11px] font-mono px-1.5 py-0.5 bg-[#181b20] text-slate-300 rounded border border-[#2e3440]">
-                                        {String(comp.score).replace(/\/\s*100\s*$/i, '').trim()}/100
+                              return (
+                                <tr className="bg-[#f5c242]/6 border-b border-[#f5c242]/20">
+                                  <td className="py-3 px-4">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono font-black text-sm text-[#f5c242]">{report.ticker}</span>
+                                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#f5c242]/15 text-[#f5c242] border border-[#f5c242]/35">
+                                        İncelenen
                                       </span>
-                                    )}
-                                  </div>
-                                  <div className="text-xs text-slate-400 font-mono mt-0.5">
-                                    {comp.price ? `₺${comp.price}` : '—'}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="text-right shrink-0 pl-2">
-                                <div className={`text-xs font-bold font-mono px-2.5 py-1 rounded-md border ${badgeBg} shadow-sm`}>
-                                  {comp.decision || 'NÖTR'}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
+                                    </div>
+                                    <div className="text-[11px] text-slate-400 truncate max-w-[200px]">{officialSectorName}</div>
+                                  </td>
+                                  <td className="py-3 px-3 text-right font-mono font-bold text-white">
+                                    {currentPriceNum > 0 ? `₺${currentPriceNum.toFixed(2)}` : '—'}
+                                  </td>
+                                  <td className="py-3 px-3 text-right font-mono font-bold text-[#f5c242]">
+                                    {fairValueNum > 0 ? `₺${fairValueNum.toFixed(2)}` : '—'}
+                                  </td>
+                                  <td className="py-3 px-3 text-center font-mono">
+                                    <span className={`font-bold ${discountPctNum >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                      {discountPctNum >= 0 ? `+%${discountPctNum.toFixed(1)}` : `%${discountPctNum.toFixed(1)}`}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-3 text-center font-mono text-slate-200">
+                                    {selfPe != null && selfPe > 0 ? `${selfPe.toFixed(1)}x` : '—'}
+                                  </td>
+                                  <td className={`py-3 px-3 text-center font-mono font-bold ${getScoreColorStyle(selfScoreNum).text}`}>
+                                    {selfScoreNum != null ? `${selfScoreNum}/100` : '—'}
+                                  </td>
+                                  <td className="py-3 px-4 text-right">
+                                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-mono font-bold border ${selfDecCls}`}>
+                                      {selfDec}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })()}
+
+                            {(showAllPeers ? analyzedCompetitors : analyzedCompetitors.slice(0, 5)).map((comp) => {
+                              const compPrice = parseFinancialNumber(comp.price) ?? 0;
+                              const compFv = parseFinancialNumber(comp.fairValue ?? (comp as any).valuation?.fair_value ?? comp.extractedData?.valuation?.fair_value) ?? 0;
+                              const compUpside = compPrice > 0 && compFv > 0 ? Number((((compFv - compPrice) / compPrice) * 100).toFixed(1)) : null;
+                              const compPe = parseFinancialNumber(comp.extractedData?.valuation?.pe_ratio ?? (comp.extractedData as any)?.pe ?? comp.extractedData?.market_multiples?.pe);
+                              const compScoreNum = parseNumericScore(comp.score);
+                              const compOfficialSec = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[comp.ticker?.toUpperCase()]?.sectorName || String(comp.sector || '');
+                              const decStr = String(comp.decision || 'NÖTR').toUpperCase();
+                              const isBuy = decStr === 'AL' || decStr === 'GÜÇLÜ AL';
+                              const isSell = decStr === 'ALMA' || decStr === 'SAT' || decStr === 'GÜÇLÜ SAT';
+                              const badgeBg = isBuy
+                                ? 'bg-emerald-500/12 text-emerald-300 border-emerald-500/35'
+                                : isSell
+                                ? 'bg-rose-500/12 text-rose-300 border-rose-500/35'
+                                : 'bg-amber-500/12 text-amber-300 border-amber-500/35';
+
+                              return (
+                                <tr
+                                  key={comp.id}
+                                  onClick={() => {
+                                    if (onSelectReport) onSelectReport(comp.id);
+                                    else if (onSelectTicker) onSelectTicker(comp.ticker);
+                                  }}
+                                  className="hover:bg-[#1c222e] cursor-pointer transition-colors group"
+                                  title={`${comp.ticker} detaylı analizini aç`}
+                                >
+                                  <td className="py-3 px-4">
+                                    <div className="font-mono font-bold text-sm text-white group-hover:text-[#f5c242] transition-colors">
+                                      {comp.ticker}
+                                    </div>
+                                    <div className="text-[11px] text-slate-400 truncate max-w-[200px]">
+                                      {compOfficialSec}
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-3 text-right font-mono font-semibold text-slate-200">
+                                    {compPrice > 0 ? `₺${compPrice.toFixed(2)}` : '—'}
+                                  </td>
+                                  <td className="py-3 px-3 text-right font-mono font-bold text-emerald-400">
+                                    {compFv > 0 ? `₺${compFv.toFixed(2)}` : '—'}
+                                  </td>
+                                  <td className="py-3 px-3 text-center font-mono">
+                                    {compUpside != null ? (
+                                      <span className={`font-bold ${compUpside >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                        {compUpside >= 0 ? `+%${compUpside}` : `%${compUpside}`}
+                                      </span>
+                                    ) : <span className="text-slate-500">—</span>}
+                                  </td>
+                                  <td className="py-3 px-3 text-center font-mono text-slate-300">
+                                    {compPe != null && compPe > 0 ? `${compPe.toFixed(1)}x` : '—'}
+                                  </td>
+                                  <td className={`py-3 px-3 text-center font-mono font-bold ${getScoreColorStyle(compScoreNum).text}`}>
+                                    {compScoreNum != null ? `${compScoreNum}/100` : '—'}
+                                  </td>
+                                  <td className="py-3 px-4 text-right">
+                                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-mono font-bold border ${badgeBg}`}>
+                                      {comp.decision || 'NÖTR'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
 
-                      {analyzedCompetitors.length > 3 && (
+                      {analyzedCompetitors.length > 5 && (
                         <div className="flex justify-center pt-1">
                           <button
                             type="button"
                             onClick={() => setShowAllPeers(prev => !prev)}
-                            className="fv-pill inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#21262d] hover:bg-[#2b313d] text-slate-200 hover:text-[#f5c242] border border-[#2e3440] text-xs font-mono font-semibold cursor-pointer"
+                            className="fv-pill inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#101319] hover:bg-[#1e2430] text-slate-200 hover:text-[#f5c242] border border-[#262c38] text-xs font-mono font-semibold cursor-pointer"
                           >
                             {showAllPeers ? (
                               <>
                                 <ChevronUp className="w-3.5 h-3.5" />
-                                <span>Daha Az Göster (İlk 3)</span>
+                                <span>Daha Az Göster (İlk 5)</span>
                               </>
                             ) : (
                               <>
                                 <ChevronDown className="w-3.5 h-3.5" />
-                                <span>Devamını Göster (+{analyzedCompetitors.length - 3} Şirket)</span>
+                                <span>Tüm Akranları Göster (+{analyzedCompetitors.length - 5})</span>
                               </>
                             )}
                           </button>
@@ -4437,15 +4543,15 @@ export default function SimplyView({
                       )}
 
                       {sectorCandidateTickers.length > 0 && (
-                        <div className="pt-3 border-t border-[#282d37] flex items-center justify-between flex-wrap gap-2 text-sm text-slate-300">
-                          <span className="text-xs sm:text-sm font-medium text-slate-400">Sektördeki diğer akranları analiz et:</span>
+                        <div className="pt-3 border-t border-[#232834] flex items-center justify-between flex-wrap gap-2 text-xs text-slate-300">
+                          <span className="font-medium text-slate-400">Grubun diğer analiz edilmemiş akranları:</span>
                           <div className="flex items-center gap-1.5 flex-wrap">
                             {sectorCandidateTickers.slice(0, 6).map((tk) => (
                               <button
                                 key={tk}
                                 type="button"
                                 onClick={() => onSelectTicker && onSelectTicker(tk)}
-                                className="px-2.5 py-1 bg-[#21262d] hover:bg-[#2e3440] text-[#f5c242] hover:text-white rounded-lg border border-[#2e3440] hover:border-[#f5c242]/40 text-xs font-mono font-bold cursor-pointer transition shadow-sm"
+                                className="px-2.5 py-1 bg-[#101319] hover:bg-[#1e2430] text-[#f5c242] hover:text-white rounded-lg border border-[#262c38] hover:border-[#f5c242]/40 text-xs font-mono font-bold cursor-pointer transition"
                                 title={`${tk} hissesini doğrudan analiz et`}
                               >
                                 +{tk}
@@ -4454,17 +4560,17 @@ export default function SimplyView({
                           </div>
                         </div>
                       )}
-                    </div>
+                    </>
                   ) : (
-                    <div className="bg-[#21262d] rounded-xl p-4 text-sm text-slate-300 flex items-center justify-between flex-wrap gap-3">
-                  <span>Bu sektörde henüz başka bir şirket analiz edilmedi. Sektörel akranları ekleyebilirsiniz:</span>
+                    <div className="bg-[#101319] border border-[#232834] rounded-xl p-4 text-sm text-slate-300 flex items-center justify-between flex-wrap gap-3">
+                      <span>Bu akran grubunda henüz başka bir şirket analiz edilmedi:</span>
                       <div className="flex items-center gap-2 flex-wrap">
                         {sectorCandidateTickers.map((tk) => (
                           <button
                             key={tk}
                             type="button"
                             onClick={() => onSelectTicker && onSelectTicker(tk)}
-                            className="px-2.5 py-1 bg-[#181b20] hover:bg-[#2e3440] text-[#f5c242] rounded-lg border border-[#2e3440] text-xs font-mono font-bold cursor-pointer transition"
+                            className="px-2.5 py-1 bg-[#151821] hover:bg-[#1e2430] text-[#f5c242] rounded-lg border border-[#262c38] text-xs font-mono font-bold cursor-pointer transition"
                           >
                             +{tk} Analiz Et
                           </button>
@@ -4472,7 +4578,7 @@ export default function SimplyView({
                       </div>
                     </div>
                   )}
-                </>
+                </div>
               )}
             </div>
 

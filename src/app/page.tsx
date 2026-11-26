@@ -8890,6 +8890,9 @@ export default function ValuationTerminal({
               if (status === 'FORENSIC_EXIT') {
                 return { label: 'Adli Çıkış / Risk', cls: 'bg-rose-500/15 text-rose-300 border-rose-500/40' };
               }
+              if (status === 'BELOW_RF_HURDLE') {
+                return { label: 'Risksiz Faiz Altı', cls: 'bg-slate-500/15 text-slate-300 border-slate-500/35' };
+              }
               if (status === 'ACCUMULATE') {
                 return { label: 'İskontolu • Biriktir', cls: 'bg-emerald-500/12 text-emerald-300 border-emerald-500/35' };
               }
@@ -8905,6 +8908,8 @@ export default function ValuationTerminal({
                 'includeHighQualityNeutralCount',
                 'rotationTakeProfitUpsideThresholdPct',
                 'deduplicateGroupHoldings',
+                'enforceRiskFreeHurdle',
+                'riskFreeRatePct',
               ] as const
             ).filter(k => architectConfig[k] !== DEFAULT_PORTFOLIO_ARCHITECT_CONFIG[k]).length;
 
@@ -8932,76 +8937,45 @@ export default function ValuationTerminal({
               const isTopUp = portfolioCapitalState.allocationMode === 'topup';
               const activeAmount = isTopUp ? portfolioCapitalState.topUpCapitalTry : portfolioCapitalState.initialCapitalTry;
               const quickAmounts = isTopUp
-                ? [10000, 25000, 50000, 100000, 250000]
-                : [50000, 100000, 250000, 500000, 1000000];
+                ? [10000, 25000, 50000, 100000]
+                : [50000, 100000, 250000, 500000];
               const isCollapsed = scope === 'holdings' && !isHoldingsCapitalOpen;
 
               return (
-                <div className="bg-[#151821] border border-[#262c38] rounded-2xl p-4 sm:p-5 space-y-3.5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-[#f5c242]/12 border border-[#f5c242]/30 flex items-center justify-center text-[#f5c242] shrink-0">
-                        <Coins className="w-4 h-4" />
+                <div className="bg-[#151821] border border-[#262c38] rounded-2xl px-4 py-3.5 space-y-3">
+                  <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <div className="flex items-center gap-2 mr-1">
+                        <Coins className="w-4 h-4 text-[#f5c242] shrink-0" />
+                        <span className="text-xs font-sans font-bold text-slate-200 whitespace-nowrap">
+                          {scope === 'architect' ? 'Sermaye Tahsisatı' : 'Portföy Bütçesi'}
+                        </span>
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="text-sm font-bold text-white font-sans">
-                            {scope === 'architect' ? 'TL Sermaye & Aylık İlave Alım Planlayıcı' : 'Portföy Bütçesi & İlave Alım Dağıtıcı'}
-                          </h3>
-                          {scope === 'holdings' && (
-                            <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-[#101319] border border-[#262c38] text-[#f5c242]">
-                              {isTopUp ? `+${formatTryInt(activeAmount)} İlave` : formatTryInt(activeAmount)}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-slate-400 font-sans">
-                          {isTopUp
-                            ? 'Yeni nakdi ağırlığı eksik kalan veya iskontosu yüksek hisselere tam lot (BIST 1 lot = 1 pay) bazında dağıtır.'
-                            : 'Başlangıç sermayenizi belirleyin; model ağırlıklara göre her hisseden kaç TL ve kaç lot alacağınızı hesaplar.'}
-                        </p>
-                      </div>
-                    </div>
 
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <div className="inline-flex items-center bg-[#101319] p-1 rounded-xl border border-[#262c38]">
+                      <div className="inline-flex items-center bg-[#101319] p-0.5 rounded-lg border border-[#262c38]">
                         <button
                           type="button"
                           onClick={() => updatePortfolioCapitalState(p => ({ ...p, allocationMode: 'initial' }))}
-                          className={`fv-pill px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${
+                          className={`fv-pill px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer ${
                             !isTopUp ? 'bg-[#f5c242] text-slate-950' : 'text-slate-400 hover:text-white'
                           }`}
                         >
-                          Başlangıç Sermayesi
+                          Başlangıç
                         </button>
                         <button
                           type="button"
                           onClick={() => updatePortfolioCapitalState(p => ({ ...p, allocationMode: 'topup' }))}
-                          className={`fv-pill px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${
+                          className={`fv-pill px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer ${
                             isTopUp ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'
                           }`}
                         >
-                          + Aylık İlave Ekle
+                          + İlave Alım
                         </button>
                       </div>
 
-                      {scope === 'holdings' && (
-                        <button
-                          type="button"
-                          onClick={() => setIsHoldingsCapitalOpen(v => !v)}
-                          className="p-1.5 rounded-lg bg-[#101319] border border-[#262c38] text-slate-400 hover:text-white cursor-pointer"
-                          title={isCollapsed ? 'Planlayıcıyı Aç' : 'Daralt'}
-                        >
-                          {isCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {!isCollapsed && (
-                    <>
-                      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 pt-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="flex items-center bg-[#101319] border border-[#262c38] focus-within:border-[#f5c242] rounded-xl px-3 py-1.5 gap-2">
+                      {!isCollapsed && (
+                        <>
+                          <div className="flex items-center bg-[#101319] border border-[#262c38] focus-within:border-[#f5c242] rounded-lg px-2.5 py-1 gap-1.5">
                             <span className="text-xs font-mono font-bold text-[#f5c242]">
                               {isTopUp ? '+₺' : '₺'}
                             </span>
@@ -9019,11 +8993,11 @@ export default function ValuationTerminal({
                                 );
                               }}
                               aria-label={isTopUp ? 'İlave Yatırım Tutarı (TL)' : 'Başlangıç Sermayesi (TL)'}
-                              className="w-28 bg-transparent text-sm font-mono font-bold text-white focus:outline-none tabular-nums"
+                              className="w-24 bg-transparent text-xs font-mono font-bold text-white focus:outline-none tabular-nums"
                             />
                           </div>
 
-                          <div className="flex flex-wrap items-center gap-1.5">
+                          <div className="flex items-center gap-1 flex-wrap">
                             {quickAmounts.map(amt => (
                               <button
                                 key={amt}
@@ -9035,7 +9009,7 @@ export default function ValuationTerminal({
                                       : { ...prev, initialCapitalTry: amt }
                                   )
                                 }
-                                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold border cursor-pointer ${
+                                className={`px-2 py-1 rounded-md text-[11px] font-mono font-semibold border cursor-pointer ${
                                   activeAmount === amt
                                     ? isTopUp
                                       ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
@@ -9043,100 +9017,107 @@ export default function ValuationTerminal({
                                     : 'bg-[#101319] text-slate-400 hover:text-white border-[#262c38]'
                                 }`}
                               >
-                                {isTopUp ? `+${formatTryInt(amt)}` : formatTryInt(amt)}
+                                {isTopUp ? `+${Math.round(amt / 1000)}B` : `${Math.round(amt / 1000)}B`}
                               </button>
                             ))}
                           </div>
-                        </div>
+                        </>
+                      )}
+                    </div>
 
-                        <div className="flex flex-wrap items-center gap-3 text-xs font-mono bg-[#101319] border border-[#232834] rounded-xl px-3.5 py-2">
+                    <div className="flex items-center justify-between xl:justify-end gap-3 flex-wrap">
+                      {!isCollapsed && (
+                        <div className="flex flex-wrap items-center gap-3 text-[11px] font-mono bg-[#101319] border border-[#232834] rounded-lg px-3 py-1.5 tabular-nums">
                           {isTopUp && (
                             <>
-                              <div>
-                                <span className="text-slate-500 text-[10px] block font-sans">
-                                  {allocResult.hasSavedLots ? 'MEVCUT PORTFÖY' : 'BAZ SERMAYE'}
-                                </span>
-                                <span className="text-slate-200 font-bold">{formatTryInt(allocResult.existingPortfolioValueTry)}</span>
-                              </div>
-                              <div className="w-px h-6 bg-[#262c38]" />
+                              <span className="text-slate-400">
+                                {allocResult.hasSavedLots ? 'Mevcut' : 'Baz'}: <strong className="text-slate-200">{formatTryInt(allocResult.existingPortfolioValueTry)}</strong>
+                              </span>
+                              <span className="text-slate-600">|</span>
                             </>
                           )}
-                          <div>
-                            <span className="text-slate-500 text-[10px] block font-sans">DAĞITILAN ALIM</span>
-                            <span className="text-emerald-400 font-bold">{formatTryInt(allocResult.deployedAmountTry)}</span>
-                          </div>
-                          <div className="w-px h-6 bg-[#262c38]" />
-                          <div>
-                            <span className="text-slate-500 text-[10px] block font-sans">KÜSURAT NAKİT</span>
-                            <span className="text-slate-300 font-bold">{formatTryInt(allocResult.unallocatedCashTry)}</span>
-                          </div>
-                          <div className="w-px h-6 bg-[#262c38]" />
-                          <div>
-                            <span className="text-slate-500 text-[10px] block font-sans">YENİ TOPLAM → HEDEF</span>
-                            <span className="text-white font-bold">{formatTryInt(allocResult.finalPortfolioValueTry)}</span>
-                            <span className="text-[#f5c242] font-bold ml-1">➔ {formatTryInt(allocResult.impliedPortfolioFairValueTry)}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {isTopUp && (
-                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 pt-2 border-t border-[#232834]">
-                          <div className="flex items-center gap-2 flex-wrap text-xs">
-                            <span className="text-slate-400 font-sans">İlave Stratejisi:</span>
-                            <button
-                              type="button"
-                              onClick={() => updatePortfolioCapitalState(p => ({ ...p, topUpStrategy: 'smart_rebalance' }))}
-                              className={`px-2.5 py-1 rounded-lg border font-sans font-semibold cursor-pointer ${
-                                portfolioCapitalState.topUpStrategy === 'smart_rebalance'
-                                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-                                  : 'bg-[#101319] text-slate-400 hover:text-white border-[#262c38]'
-                              }`}
-                            >
-                              Akıllı Dengeleme (Eksik Ağırlığı Tamamla)
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => updatePortfolioCapitalState(p => ({ ...p, topUpStrategy: 'proportional' }))}
-                              className={`px-2.5 py-1 rounded-lg border font-sans font-semibold cursor-pointer ${
-                                portfolioCapitalState.topUpStrategy === 'proportional'
-                                  ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40'
-                                  : 'bg-[#101319] text-slate-400 hover:text-white border-[#262c38]'
-                              }`}
-                            >
-                              Sabit Oransal (% Ağırlıkla)
-                            </button>
-                            {!allocResult.hasSavedLots && (
-                              <span className="text-[11px] text-slate-500 font-sans">
-                                • Baz: {formatTryInt(portfolioCapitalState.initialCapitalTry)} başlangıç varsayımı
+                          <span className="text-slate-400">
+                            Dağıtılan: <strong className="text-emerald-400">{formatTryInt(allocResult.deployedAmountTry)}</strong>
+                          </span>
+                          <span className="text-slate-600">|</span>
+                          <span className="text-slate-400">
+                            Küsurat Nakit: <strong className="text-slate-200">{formatTryInt(allocResult.unallocatedCashTry)}</strong>
+                          </span>
+                          {isTopUp && (
+                            <>
+                              <span className="text-slate-600">|</span>
+                              <span className="text-slate-400">
+                                Yeni Toplam: <strong className="text-white">{formatTryInt(allocResult.finalPortfolioValueTry)}</strong>
                               </span>
-                            )}
-                          </div>
-
-                          {scope === 'holdings' && allocResult.deployedAmountTry > 0 && (
-                            <div className="flex items-center gap-2">
-                              {topUpAppliedNotice && (
-                                <span className="text-xs text-emerald-400 font-sans font-semibold">{topUpAppliedNotice}</span>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => commitTopUpToPositions(allocResult)}
-                                className="fv-pill px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer inline-flex items-center gap-1.5"
-                              >
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span>İlave Alımları Lotlarıma İşle</span>
-                              </button>
-                            </div>
+                            </>
                           )}
                         </div>
                       )}
 
-                      {allocResult.warningMessage && (
-                        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 font-sans flex items-center gap-2">
-                          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                          <span>{allocResult.warningMessage}</span>
+                      {scope === 'holdings' && (
+                        <button
+                          type="button"
+                          onClick={() => setIsHoldingsCapitalOpen(v => !v)}
+                          className="p-1.5 rounded-lg bg-[#101319] border border-[#262c38] text-slate-400 hover:text-white cursor-pointer"
+                          title={isCollapsed ? 'Planlayıcıyı Aç' : 'Daralt'}
+                        >
+                          {isCollapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {!isCollapsed && isTopUp && (
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 pt-2 border-t border-[#232834]">
+                      <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                        <span className="text-slate-400 font-sans mr-1">Dağıtım Modu:</span>
+                        <button
+                          type="button"
+                          onClick={() => updatePortfolioCapitalState(p => ({ ...p, topUpStrategy: 'smart_rebalance' }))}
+                          className={`px-2.5 py-1 rounded-md border font-sans font-semibold cursor-pointer ${
+                            portfolioCapitalState.topUpStrategy === 'smart_rebalance'
+                              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                              : 'bg-[#101319] text-slate-400 hover:text-white border-[#262c38]'
+                          }`}
+                        >
+                          Akıllı Dengeleme
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updatePortfolioCapitalState(p => ({ ...p, topUpStrategy: 'proportional' }))}
+                          className={`px-2.5 py-1 rounded-md border font-sans font-semibold cursor-pointer ${
+                            portfolioCapitalState.topUpStrategy === 'proportional'
+                              ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40'
+                              : 'bg-[#101319] text-slate-400 hover:text-white border-[#262c38]'
+                          }`}
+                        >
+                          Sabit Oransal
+                        </button>
+                      </div>
+
+                      {scope === 'holdings' && allocResult.deployedAmountTry > 0 && (
+                        <div className="flex items-center gap-2">
+                          {topUpAppliedNotice && (
+                            <span className="text-xs text-emerald-400 font-sans font-semibold">{topUpAppliedNotice}</span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => commitTopUpToPositions(allocResult)}
+                            className="fv-pill px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold cursor-pointer inline-flex items-center gap-1.5"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>İlave Alımları Lotlarıma İşle</span>
+                          </button>
                         </div>
                       )}
-                    </>
+                    </div>
+                  )}
+
+                  {!isCollapsed && allocResult.warningMessage && (
+                    <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 font-sans flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>{allocResult.warningMessage}</span>
+                    </div>
                   )}
                 </div>
               );
@@ -9144,26 +9125,26 @@ export default function ValuationTerminal({
 
             return (
               <div className="space-y-5 fv-panel-enter">
-                {/* ÜST BAŞLIK & KPI KOMUTA ŞERİDİ */}
-                <div className="bg-[#151821] border border-[#262c38] p-5 sm:p-6 rounded-2xl space-y-5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3.5 flex-wrap">
-                      <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${
+                {/* ÜST BAŞLIK & KURUMSAL KOMUTA ÇUBUĞU */}
+                <div className="bg-[#151821] border border-[#262c38] p-4 sm:p-5 rounded-2xl space-y-4">
+                  <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3.5">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${
                         isPortfolio
                           ? 'bg-[#f5c242]/12 border-[#f5c242]/35 text-[#f5c242]'
                           : 'bg-amber-400/12 border-amber-400/35 text-amber-400'
                       }`}>
                         {isPortfolio ? (
-                          <Briefcase className="w-5 h-5" />
+                          <Briefcase className="w-4 h-4" />
                         ) : (
-                          <Star className="w-5 h-5 fill-amber-400/25" />
+                          <Star className="w-4 h-4 fill-amber-400/25" />
                         )}
                       </div>
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        <h2 className="text-xl font-bold font-sans text-white tracking-tight">
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-lg sm:text-xl font-bold font-sans text-white tracking-tight">
                           {pageTitle}
                         </h2>
-                        <span className={`text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full border ${
+                        <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-full border ${
                           isPortfolio
                             ? 'bg-[#f5c242]/10 text-[#f5c242] border-[#f5c242]/30'
                             : 'bg-amber-400/10 text-amber-400 border-amber-400/30'
@@ -9177,7 +9158,7 @@ export default function ValuationTerminal({
                           <button
                             type="button"
                             onClick={() => setPortfolioWorkspaceTab('holdings')}
-                            className={`fv-pill px-3 py-1.5 rounded-lg text-xs font-sans font-bold cursor-pointer ${
+                            className={`fv-pill px-3 py-1 rounded-lg text-xs font-sans font-bold cursor-pointer ${
                               !showArchitect
                                 ? 'bg-[#222836] text-white border border-[#323b4e] shadow-sm'
                                 : 'text-slate-400 hover:text-white border border-transparent'
@@ -9188,14 +9169,14 @@ export default function ValuationTerminal({
                           <button
                             type="button"
                             onClick={() => setPortfolioWorkspaceTab('architect')}
-                            className={`fv-pill inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-sans font-bold cursor-pointer ${
+                            className={`fv-pill inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-sans font-bold cursor-pointer ${
                               showArchitect
                                 ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm'
                                 : 'text-slate-400 hover:text-emerald-300 border border-transparent'
                             }`}
                           >
                             <Compass className="w-3.5 h-3.5" />
-                            <span>İdeal Portföy Mimarı &amp; Rotasyon</span>
+                            <span>Model Portföy Mimarı</span>
                             {rotateOutCount > 0 && (
                               <span className="px-1.5 py-0.5 rounded-full text-[10px] font-mono font-black bg-rose-500/20 text-rose-300 border border-rose-500/40">
                                 {rotateOutCount}
@@ -9206,8 +9187,114 @@ export default function ValuationTerminal({
                       )}
                     </div>
 
-                    {/* Sağ Aksiyonlar: Hızlı Ekle + Görünüm Seçici */}
-                    {!showArchitect && (
+                    {/* Sağ Aksiyonlar */}
+                    {showArchitect ? (
+                      <div className="flex items-center gap-2 flex-wrap text-xs">
+                        {/* Kurumsal Şablon Seçici */}
+                        <div className="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-[#101319] border border-[#262c38]">
+                          {PORTFOLIO_ARCHITECT_PRESETS.map(preset => {
+                            const isActive = activePreset?.id === preset.id;
+                            const shortLbl =
+                              preset.id === 'INSTITUTIONAL_10'
+                                ? 'Standart 10'
+                                : preset.id === 'FOCUSED_8'
+                                ? 'Odaklı 8'
+                                : 'Geniş 12';
+                            return (
+                              <button
+                                key={preset.id}
+                                type="button"
+                                onClick={() => updateArchitectConfig({ ...preset.config })}
+                                title={preset.subtitle}
+                                className={`fv-pill px-2.5 py-1.5 rounded-lg font-sans font-bold cursor-pointer whitespace-nowrap ${
+                                  isActive
+                                    ? 'bg-[#f5c242] text-slate-950 shadow-sm'
+                                    : 'text-slate-400 hover:text-white'
+                                }`}
+                              >
+                                {shortLbl}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Hisse Sayısı Stepper */}
+                        <div className="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-[#101319] border border-[#262c38]">
+                          <button
+                            type="button"
+                            aria-label="Hisse sayısını azalt"
+                            disabled={architectConfig.targetCount <= 5}
+                            onClick={() =>
+                              updateArchitectConfig(prev => ({
+                                ...prev,
+                                targetCount: Math.max(5, prev.targetCount - 1),
+                              }))
+                            }
+                            className="w-6 h-6 rounded-md bg-[#151821] hover:bg-[#222836] border border-[#262c38] flex items-center justify-center text-slate-200 cursor-pointer disabled:opacity-35"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="min-w-[24px] text-center font-mono font-black text-xs text-white tabular-nums">
+                            {architectConfig.targetCount}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label="Hisse sayısını artır"
+                            disabled={architectConfig.targetCount >= 20}
+                            onClick={() =>
+                              updateArchitectConfig(prev => ({
+                                ...prev,
+                                targetCount: Math.min(20, prev.targetCount + 1),
+                              }))
+                            }
+                            className="w-6 h-6 rounded-md bg-[#151821] hover:bg-[#222836] border border-[#262c38] flex items-center justify-center text-slate-200 cursor-pointer disabled:opacity-35"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+
+                        {/* Açılır-Kapanır Kısıtlar & Filtreler Akordiyon Düğmesi */}
+                        <button
+                          type="button"
+                          aria-expanded={isArchitectFiltersOpen}
+                          onClick={() => setIsArchitectFiltersOpen(v => !v)}
+                          className={`fv-pill inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-sans font-bold cursor-pointer ${
+                            isArchitectFiltersOpen || customizedRuleCount > 0
+                              ? 'bg-[#222836] text-cyan-300 border-cyan-500/40'
+                              : 'bg-[#101319] text-slate-300 hover:text-white border-[#262c38]'
+                          }`}
+                        >
+                          <SlidersHorizontal className="w-3.5 h-3.5" />
+                          <span>Kısıtlar</span>
+                          {customizedRuleCount > 0 && (
+                            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                              {customizedRuleCount}
+                            </span>
+                          )}
+                          {isArchitectFiltersOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={forensicPortfolioPlan.modelPortfolio.length === 0}
+                          onClick={() => applyModelPortfolioWithLots(modelAllocationPlan, 'merge')}
+                          className="fv-pill px-3 py-1.5 rounded-xl bg-[#101319] hover:bg-[#1b202b] text-emerald-300 border border-emerald-500/35 font-bold cursor-pointer disabled:opacity-40"
+                        >
+                          + Eksikler
+                        </button>
+                        <button
+                          type="button"
+                          disabled={forensicPortfolioPlan.modelPortfolio.length === 0}
+                          onClick={() => {
+                            applyModelPortfolioWithLots(modelAllocationPlan, 'replace');
+                            setPortfolioWorkspaceTab('holdings');
+                          }}
+                          className="fv-pill px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold cursor-pointer shadow-sm disabled:opacity-40"
+                        >
+                          Portföye Uygula ({forensicPortfolioPlan.modelPortfolio.length})
+                        </button>
+                      </div>
+                    ) : (
                     <div className="flex items-center gap-2 flex-wrap">
                       {deduplicatedSaved.length > 0 && (
                         <button
@@ -9253,6 +9340,222 @@ export default function ValuationTerminal({
                     </div>
                     )}
                   </div>
+
+                  {/* AÇILIR KAPANIR KURUMSAL FİLTRE & RİSKSİZ FAİZ KISIT ÇEKMECESİ */}
+                  {showArchitect && isArchitectFiltersOpen && (
+                    <div className="p-4 rounded-xl bg-[#101319] border border-[#262c38] space-y-4">
+                      <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-[#232834]">
+                        <span className="text-xs font-sans font-bold text-slate-200">
+                          Kurumsal Portföy Kısıtları, Risksiz Faiz Eşiği &amp; 4-Boyutlu Adli Kurallar
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => updateArchitectConfig({ ...DEFAULT_PORTFOLIO_ARCHITECT_CONFIG })}
+                          className="text-[11px] font-sans font-bold text-[#f5c242] hover:underline cursor-pointer inline-flex items-center gap-1"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          <span>Kurumsal Varsayılana Sıfırla</span>
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 text-xs">
+                        {/* Sütun 1: Risksiz Faiz (Rf) Getiri Eşiği */}
+                        <div className="space-y-2.5">
+                          <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+                            1. Risksiz Faiz (Rf) Eşiği
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateArchitectConfig(prev => ({
+                                ...prev,
+                                enforceRiskFreeHurdle: !prev.enforceRiskFreeHurdle,
+                              }))
+                            }
+                            className={`w-full px-3 py-1.5 rounded-lg border font-mono text-xs font-bold cursor-pointer text-left flex items-center justify-between ${
+                              architectConfig.enforceRiskFreeHurdle
+                                ? 'bg-emerald-500/12 text-emerald-300 border-emerald-500/35'
+                                : 'bg-[#151821] text-slate-400 border-[#262c38]'
+                            }`}
+                          >
+                            <span>Rf Altını Ele</span>
+                            <span>{architectConfig.enforceRiskFreeHurdle ? 'AÇIK' : 'KAPALI'}</span>
+                          </button>
+                          <div className="space-y-1">
+                            <span className="text-slate-400 block font-sans">Yıllık Rf Oranı</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {([null, 30, 35, 38, 42] as const).map(rfOpt => (
+                                <button
+                                  key={String(rfOpt)}
+                                  type="button"
+                                  onClick={() => updateArchitectConfig(prev => ({ ...prev, riskFreeRatePct: rfOpt }))}
+                                  className={`px-2 py-1 rounded-md font-mono font-bold border cursor-pointer ${
+                                    architectConfig.riskFreeRatePct === rfOpt
+                                      ? 'bg-[#f5c242] text-slate-950 border-[#f5c242]'
+                                      : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
+                                  }`}
+                                >
+                                  {rfOpt === null ? `Oto (%${forensicPortfolioPlan.effectiveRiskFreeRatePct})` : `%${rfOpt}`}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Sütun 2: Çeşitlendirme Kısıtları */}
+                        <div className="space-y-2.5">
+                          <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+                            2. Çeşitlendirme Kısıtları
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-slate-400 block font-sans">Maks. Sektör Tavanı</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {([15, 20, 25, 30] as const).map(secCap => (
+                                <button
+                                  key={secCap}
+                                  type="button"
+                                  onClick={() => updateArchitectConfig(prev => ({ ...prev, maxSectorWeightPct: secCap }))}
+                                  className={`px-2 py-1 rounded-md font-mono font-bold border cursor-pointer ${
+                                    architectConfig.maxSectorWeightPct === secCap
+                                      ? 'bg-cyan-500 text-slate-950 border-cyan-400'
+                                      : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
+                                  }`}
+                                >
+                                  %{secCap}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-slate-400 block font-sans">Maks. Tek Hisse Tavanı</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {([10, 12, 15, 20] as const).map(stockCap => (
+                                <button
+                                  key={stockCap}
+                                  type="button"
+                                  onClick={() => updateArchitectConfig(prev => ({ ...prev, maxSingleStockWeightPct: stockCap }))}
+                                  className={`px-2 py-1 rounded-md font-mono font-bold border cursor-pointer ${
+                                    architectConfig.maxSingleStockWeightPct === stockCap
+                                      ? 'bg-[#f5c242] text-slate-950 border-[#f5c242]'
+                                      : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
+                                  }`}
+                                >
+                                  %{stockCap}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateArchitectConfig(prev => ({ ...prev, deduplicateGroupHoldings: !prev.deduplicateGroupHoldings }))
+                            }
+                            className={`w-full px-3 py-1.5 rounded-lg border font-mono text-xs font-bold cursor-pointer text-left flex items-center justify-between ${
+                              architectConfig.deduplicateGroupHoldings
+                                ? 'bg-emerald-500/12 text-emerald-300 border-emerald-500/35'
+                                : 'bg-[#151821] text-slate-400 border-[#262c38]'
+                            }`}
+                          >
+                            <span>Grup Tekilleştir</span>
+                            <span>{architectConfig.deduplicateGroupHoldings ? 'AÇIK' : 'KAPALI'}</span>
+                          </button>
+                        </div>
+
+                        {/* Sütun 3: Adli Kalite Eşikleri */}
+                        <div className="space-y-2.5">
+                          <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+                            3. Adli Kalite Eşikleri
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-slate-400 block font-sans">Min. Nakit Dönüşümü (OCF/Net)</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {([0, 65, 80, 100] as const).map(ocfMin => (
+                                <button
+                                  key={ocfMin}
+                                  type="button"
+                                  onClick={() => updateArchitectConfig(prev => ({ ...prev, minOcfConversionPct: ocfMin }))}
+                                  className={`px-2 py-1 rounded-md font-mono font-bold border cursor-pointer ${
+                                    architectConfig.minOcfConversionPct === ocfMin
+                                      ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                                      : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
+                                  }`}
+                                >
+                                  {ocfMin === 0 ? 'Esnek' : `%${ocfMin}`}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-slate-400 block font-sans">Min. FAVÖK Marjı / A+ NÖTR</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {([5, 8, 12] as const).map(ebMin => (
+                                <button
+                                  key={ebMin}
+                                  type="button"
+                                  onClick={() => updateArchitectConfig(prev => ({ ...prev, minEbitdaMarginPct: ebMin }))}
+                                  className={`px-2 py-1 rounded-md font-mono font-bold border cursor-pointer ${
+                                    architectConfig.minEbitdaMarginPct === ebMin
+                                      ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                                      : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
+                                  }`}
+                                >
+                                  %{ebMin}
+                                </button>
+                              ))}
+                              {([0, 1, 2] as const).map(nCnt => (
+                                <button
+                                  key={`nc-${nCnt}`}
+                                  type="button"
+                                  onClick={() => updateArchitectConfig(prev => ({ ...prev, includeHighQualityNeutralCount: nCnt }))}
+                                  className={`px-2 py-1 rounded-md font-mono font-bold border cursor-pointer ${
+                                    architectConfig.includeHighQualityNeutralCount === nCnt
+                                      ? 'bg-sky-500 text-slate-950 border-sky-400'
+                                      : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
+                                  }`}
+                                >
+                                  +{nCnt} NÖTR
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Sütun 4: Rotasyon & Hedef Alarmı */}
+                        <div className="space-y-2.5">
+                          <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+                            4. Rotasyon &amp; Hedef Eşiği
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-slate-400 block font-sans">Hedefe Yaklaşma / Kâr-Al</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {([8, 10, 12, 15, 20] as const).map(rot => (
+                                <button
+                                  key={rot}
+                                  type="button"
+                                  onClick={() =>
+                                    updateArchitectConfig(prev => ({
+                                      ...prev,
+                                      rotationTakeProfitUpsideThresholdPct: rot,
+                                    }))
+                                  }
+                                  className={`px-2 py-1 rounded-md font-mono font-bold border cursor-pointer ${
+                                    architectConfig.rotationTakeProfitUpsideThresholdPct === rot
+                                      ? 'bg-rose-500 text-white border-rose-400'
+                                      : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
+                                  }`}
+                                >
+                                  &lt;%{rot}
+                                </button>
+                              ))}
+                            </div>
+                            <p className="text-[11px] text-slate-500 font-sans pt-1 leading-relaxed">
+                              Risksiz faizin (%{forensicPortfolioPlan.effectiveRiskFreeRatePct}) altında kalan hisseler yeni model portföy alımlarından otomatik elenir.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {!showArchitect && (
                   <>
@@ -9471,397 +9774,123 @@ export default function ValuationTerminal({
 
                   return (
                     <div data-testid="fv-portfolio-architect" className="space-y-4 fv-panel-enter">
-                      {/* 4'lü Yönetici Özeti KPI Şeridi */}
-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-                        <div className="fv-kpi-card bg-[#151821] border border-[#262c38] rounded-2xl p-4 space-y-1.5">
-                          <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">KURUMSAL PORTFÖY YAPISI</div>
-                          <div className="text-2xl font-black font-mono text-white">
-                            {plan.modelPortfolio.length} <span className="text-xs font-normal text-slate-400">Hisse • {plan.sectorBreakdown.length} Sektör</span>
-                          </div>
-                          <div className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5 flex-wrap">
-                            <span className="text-emerald-400">{plan.tier1CoreAl.length} Çekirdek</span>
-                            <span>•</span>
-                            <span className="text-amber-300">{plan.tier2SatelliteAl.length} Uydu</span>
-                            <span>•</span>
-                            <span className="text-slate-300">Tavan %{architectConfig.maxSingleStockWeightPct}</span>
-                          </div>
-                        </div>
-
-                        <div className="fv-kpi-card bg-[#151821] border border-[#262c38] rounded-2xl p-4 space-y-1.5">
-                          <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">SERMAYE → ADİL DEĞER</div>
-                          <div className="text-lg sm:text-xl font-black font-mono text-white truncate">
-                            {formatTryInt(alloc.finalPortfolioValueTry)} <span className="text-emerald-400">➔ {formatTryInt(alloc.impliedPortfolioFairValueTry)}</span>
+                      {/* Tek Bantlı 5 Metrikli Kurumsal Özet Şeridi */}
+                      <div className="bg-[#151821] border border-[#262c38] rounded-2xl grid grid-cols-2 lg:grid-cols-5 divide-y lg:divide-y-0 lg:divide-x divide-[#232834] overflow-hidden tabular-nums">
+                        <div className="p-4 space-y-1">
+                          <div className="text-[10.5px] font-mono uppercase tracking-wider text-slate-400">PORTFÖY YAPISI</div>
+                          <div className="text-base sm:text-lg font-black font-mono text-white">
+                            {plan.modelPortfolio.length} Hisse <span className="text-xs font-normal text-slate-400">• {plan.sectorBreakdown.length} Sektör</span>
                           </div>
                           <div className="text-[11px] font-mono text-slate-400">
-                            Ort. Potansiyel: <strong className={plan.weightedAvgUpsidePct != null && plan.weightedAvgUpsidePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{formatPctSigned(plan.weightedAvgUpsidePct)}</strong>
+                            <span className="text-emerald-400">{plan.tier1CoreAl.length} Çekirdek</span> · <span className="text-amber-300">{plan.tier2SatelliteAl.length} Uydu</span>
                           </div>
                         </div>
 
-                        <div className="fv-kpi-card bg-[#151821] border border-[#262c38] rounded-2xl p-4 space-y-1.5">
-                          <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">KALİTE &amp; EVA MAKASI</div>
-                          <div className="flex items-baseline gap-2 font-mono">
-                            <span className="text-2xl font-black text-[#f5c242]">{plan.weightedAvgScore != null ? `${plan.weightedAvgScore}` : '—'}</span>
-                            <span className="text-xs text-slate-400">/100</span>
-                            <span className={`text-sm font-bold ml-auto ${plan.weightedAvgEvaPct != null && plan.weightedAvgEvaPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                              {plan.weightedAvgEvaPct != null ? `EVA ${plan.weightedAvgEvaPct >= 0 ? '+' : ''}${plan.weightedAvgEvaPct}p` : '—'}
+                        <div className="p-4 space-y-1">
+                          <div className="text-[10.5px] font-mono uppercase tracking-wider text-slate-400">TAHSİSAT → ADİL DEĞER</div>
+                          <div className="text-sm sm:text-base font-black font-mono text-white truncate">
+                            {formatTryInt(alloc.finalPortfolioValueTry)} <span className="text-emerald-400">→ {formatTryInt(alloc.impliedPortfolioFairValueTry)}</span>
+                          </div>
+                          <div className="text-[11px] font-mono text-slate-400">
+                            Tek Hisse Tavanı: <strong className="text-slate-200">%{architectConfig.maxSingleStockWeightPct}</strong>
+                          </div>
+                        </div>
+
+                        <div className="p-4 space-y-1">
+                          <div className="text-[10.5px] font-mono uppercase tracking-wider text-slate-400">ORT. POTANSİYEL &amp; ALFA</div>
+                          <div className={`text-base sm:text-lg font-black font-mono ${
+                            plan.weightedAvgUpsidePct != null && plan.weightedAvgUpsidePct >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                          }`}>
+                            {formatPctSigned(plan.weightedAvgUpsidePct)}
+                          </div>
+                          <div className="text-[11px] font-mono text-slate-400">
+                            Rf %{plan.effectiveRiskFreeRatePct} Üstü{' '}
+                            <strong className="text-emerald-300">
+                              {plan.weightedAvgUpsidePct != null
+                                ? `${plan.weightedAvgUpsidePct - plan.effectiveRiskFreeRatePct >= 0 ? '+' : ''}${(plan.weightedAvgUpsidePct - plan.effectiveRiskFreeRatePct).toFixed(1)}p`
+                                : '—'}
+                            </strong>
+                          </div>
+                        </div>
+
+                        <div className="p-4 space-y-1">
+                          <div className="text-[10.5px] font-mono uppercase tracking-wider text-slate-400">KALİTE &amp; REEL EVA</div>
+                          <div className="flex items-baseline gap-1.5 font-mono">
+                            <span className="text-base sm:text-lg font-black text-[#f5c242]">
+                              {plan.weightedAvgScore != null ? `${plan.weightedAvgScore}/100` : '—'}
+                            </span>
+                            <span className={`text-xs font-bold ${plan.weightedAvgEvaPct != null && plan.weightedAvgEvaPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {plan.weightedAvgEvaPct != null ? `• ${plan.weightedAvgEvaPct >= 0 ? '+' : ''}${plan.weightedAvgEvaPct}p EVA` : ''}
                             </span>
                           </div>
                           <div className="text-[11px] font-mono text-slate-400">
-                            A+ Kalite NÖTR: <strong className="text-cyan-300">{plan.tierANeutralCandidates.length}</strong> aday • Elenen: <strong className="text-rose-400">{plan.tier3FilteredAl.length}</strong>
+                            {architectConfig.enforceRiskFreeHurdle && plan.belowRiskFreeAlCount > 0
+                              ? `Rf Altı Elenen: ${plan.belowRiskFreeAlCount} AL`
+                              : `A+ NÖTR Adayı: ${plan.tierANeutralCandidates.length}`}
                           </div>
                         </div>
 
                         <button
                           type="button"
                           onClick={() => setArchitectTierFilter('ROTATION')}
-                          className="fv-kpi-card bg-[#151821] hover:border-emerald-500/40 border border-[#262c38] rounded-2xl p-4 space-y-1.5 text-left cursor-pointer"
+                          className="p-4 space-y-1 text-left hover:bg-[#1a1f2b] transition-colors cursor-pointer col-span-2 lg:col-span-1"
                         >
-                          <div className="flex items-center justify-between text-[11px] font-mono uppercase tracking-wider text-slate-400">
-                            <span>HEDEF &amp; ROTASYON</span>
+                          <div className="flex items-center justify-between text-[10.5px] font-mono uppercase tracking-wider text-slate-400">
+                            <span>ROTASYON DURUMU</span>
                             <ArrowUpRight className="w-3.5 h-3.5 text-slate-500" />
                           </div>
-                          <div className="flex items-center gap-2 font-mono text-xl font-black">
+                          <div className="flex items-center gap-2 font-mono text-base sm:text-lg font-black">
                             <span className={plan.rotationSignals.rotateOut.length > 0 ? 'text-rose-400' : 'text-slate-300'}>
                               {plan.rotationSignals.rotateOut.length} Çıkış
                             </span>
                             <span className="text-slate-600">/</span>
-                            <span className="text-emerald-400">{plan.rotationSignals.rotateIn.length} Yeni</span>
+                            <span className="text-sky-300">{plan.rotationSignals.hold.length} Korunan</span>
                           </div>
                           <div className="text-[11px] font-mono text-slate-400">
-                            Kâr-Al: <strong className="text-white">&lt;%{architectConfig.rotationTakeProfitUpsideThresholdPct}</strong> • Korunan: <strong className="text-sky-300">{plan.rotationSignals.hold.length}</strong>
+                            Kâr-Al Eşiği: &lt;%{architectConfig.rotationTakeProfitUpsideThresholdPct}
                           </div>
                         </button>
                       </div>
 
-                      {/* Sade Strateji Çubuğu + Açılır Kapanır Filtre Akordiyonu */}
-                      <div className="bg-[#151821] border border-[#262c38] rounded-2xl p-4 sm:p-5 space-y-4">
-                        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
-                          <div className="flex flex-wrap items-center gap-2.5 text-xs">
-                            {/* Kurumsal Şablon Seçimi */}
-                            <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-[#101319] border border-[#262c38]">
-                              {PORTFOLIO_ARCHITECT_PRESETS.map(preset => {
-                                const isActive = activePreset?.id === preset.id;
-                                return (
-                                  <button
-                                    key={preset.id}
-                                    type="button"
-                                    onClick={() => updateArchitectConfig({ ...preset.config })}
-                                    title={preset.subtitle}
-                                    className={`fv-pill px-2.5 py-1.5 rounded-lg font-sans font-bold cursor-pointer whitespace-nowrap ${
-                                      isActive
-                                        ? 'bg-[#f5c242] text-slate-950 shadow-sm'
-                                        : 'text-slate-400 hover:text-white'
-                                    }`}
-                                  >
-                                    {preset.label} ({preset.config.targetCount})
-                                  </button>
-                                );
-                              })}
-                            </div>
-
-                            {/* Doğrudan Hisse Sayısı Artır / Azalt Stepper */}
-                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#101319] border border-[#262c38]">
-                              <span className="text-slate-400 font-sans">Hisse Sayısı:</span>
-                              <button
-                                type="button"
-                                aria-label="Hisse sayısını azalt"
-                                disabled={architectConfig.targetCount <= 5}
-                                onClick={() =>
-                                  updateArchitectConfig(prev => ({
-                                    ...prev,
-                                    targetCount: Math.max(5, prev.targetCount - 1),
-                                  }))
-                                }
-                                className="w-6 h-6 rounded-md bg-[#151821] hover:bg-[#222836] border border-[#262c38] flex items-center justify-center text-slate-200 cursor-pointer disabled:opacity-35"
-                              >
-                                <Minus className="w-3 h-3" />
-                              </button>
-                              <span className="min-w-[26px] text-center font-mono font-black text-sm text-white tabular-nums">
-                                {architectConfig.targetCount}
-                              </span>
-                              <button
-                                type="button"
-                                aria-label="Hisse sayısını artır"
-                                disabled={architectConfig.targetCount >= 20}
-                                onClick={() =>
-                                  updateArchitectConfig(prev => ({
-                                    ...prev,
-                                    targetCount: Math.min(20, prev.targetCount + 1),
-                                  }))
-                                }
-                                className="w-6 h-6 rounded-md bg-[#151821] hover:bg-[#222836] border border-[#262c38] flex items-center justify-center text-slate-200 cursor-pointer disabled:opacity-35"
-                              >
-                                <Plus className="w-3 h-3" />
-                              </button>
-                            </div>
-
-                            {/* Kapanıp Açılabilen Gelişmiş Filtre Akordiyon Düğmesi */}
-                            <button
-                              type="button"
-                              aria-expanded={isArchitectFiltersOpen}
-                              onClick={() => setIsArchitectFiltersOpen(v => !v)}
-                              className={`fv-pill inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-sans font-bold cursor-pointer ${
-                                isArchitectFiltersOpen || customizedRuleCount > 0
-                                  ? 'bg-[#222836] text-cyan-300 border-cyan-500/40'
-                                  : 'bg-[#101319] text-slate-300 hover:text-white border-[#262c38]'
-                              }`}
-                            >
-                              <SlidersHorizontal className="w-3.5 h-3.5" />
-                              <span>Filtre &amp; Kısıtlar</span>
-                              {customizedRuleCount > 0 && (
-                                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                                  {customizedRuleCount}
-                                </span>
-                              )}
-                              {isArchitectFiltersOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                            </button>
-                          </div>
-
-                          <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                            <button
-                              type="button"
-                              disabled={plan.modelPortfolio.length === 0}
-                              onClick={() => applyModelPortfolioWithLots(alloc, 'merge')}
-                              className="fv-pill px-3 py-2 rounded-xl bg-[#101319] hover:bg-[#1b202b] text-emerald-300 border border-emerald-500/35 text-xs font-bold cursor-pointer disabled:opacity-40"
-                            >
-                              + Eksikleri Ekle
-                            </button>
-                            <button
-                              type="button"
-                              disabled={plan.modelPortfolio.length === 0}
-                              onClick={() => {
-                                applyModelPortfolioWithLots(alloc, 'replace');
-                                setPortfolioWorkspaceTab('holdings');
-                              }}
-                              className="fv-pill px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer shadow-sm disabled:opacity-40"
-                            >
-                              Modeli Portföyüme Uygula ({plan.modelPortfolio.length})
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Kapanıp Açılabilen Akordiyon: Çeşitlendirme, Adli Kalite ve Rotasyon Kuralları */}
-                        {isArchitectFiltersOpen && (
-                          <div className="p-4 rounded-xl bg-[#101319] border border-[#262c38] space-y-4">
-                            <div className="flex items-center justify-between gap-2 pb-2 border-b border-[#232834]">
-                              <span className="text-xs font-sans font-bold text-slate-200">
-                                Gelişmiş Kurumsal Portföy Kısıtları &amp; 4-Boyutlu Adli Eşikler
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => updateArchitectConfig({ ...DEFAULT_PORTFOLIO_ARCHITECT_CONFIG })}
-                                className="text-[11px] font-sans font-bold text-[#f5c242] hover:underline cursor-pointer inline-flex items-center gap-1"
-                              >
-                                <RefreshCw className="w-3 h-3" />
-                                <span>Kurumsal Varsayılana Sıfırla</span>
-                              </button>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                              {/* Sütun 1: Çeşitlendirme Kısıtları */}
-                              <div className="space-y-3">
-                                <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
-                                  1. Çeşitlendirme Kısıtları
-                                </div>
-                                <div className="space-y-1.5">
-                                  <span className="text-slate-400 block font-sans">Maks. Sektör Tavanı</span>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {([15, 20, 25, 30] as const).map(secCap => (
-                                      <button
-                                        key={secCap}
-                                        type="button"
-                                        onClick={() => updateArchitectConfig(prev => ({ ...prev, maxSectorWeightPct: secCap }))}
-                                        className={`px-2.5 py-1 rounded-lg font-mono font-bold border cursor-pointer ${
-                                          architectConfig.maxSectorWeightPct === secCap
-                                            ? 'bg-cyan-500 text-slate-950 border-cyan-400'
-                                            : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
-                                        }`}
-                                      >
-                                        %{secCap}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                                <div className="space-y-1.5">
-                                  <span className="text-slate-400 block font-sans">Maks. Tek Hisse Ağırlığı</span>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {([10, 12, 15, 20] as const).map(stockCap => (
-                                      <button
-                                        key={stockCap}
-                                        type="button"
-                                        onClick={() => updateArchitectConfig(prev => ({ ...prev, maxSingleStockWeightPct: stockCap }))}
-                                        className={`px-2.5 py-1 rounded-lg font-mono font-bold border cursor-pointer ${
-                                          architectConfig.maxSingleStockWeightPct === stockCap
-                                            ? 'bg-[#f5c242] text-slate-950 border-[#f5c242]'
-                                            : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
-                                        }`}
-                                      >
-                                        %{stockCap}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    updateArchitectConfig(prev => ({ ...prev, deduplicateGroupHoldings: !prev.deduplicateGroupHoldings }))
-                                  }
-                                  className={`w-full px-3 py-1.5 rounded-lg border font-mono text-xs font-bold cursor-pointer text-left flex items-center justify-between ${
-                                    architectConfig.deduplicateGroupHoldings
-                                      ? 'bg-emerald-500/12 text-emerald-300 border-emerald-500/35'
-                                      : 'bg-[#151821] text-slate-400 border-[#262c38]'
-                                  }`}
-                                >
-                                  <span>Konsolide Grup Tekilleştir</span>
-                                  <span>{architectConfig.deduplicateGroupHoldings ? 'AÇIK' : 'KAPALI'}</span>
-                                </button>
-                              </div>
-
-                              {/* Sütun 2: Adli Kalite Eşikleri */}
-                              <div className="space-y-3">
-                                <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
-                                  2. Adli Kalite Eşikleri
-                                </div>
-                                <div className="space-y-1.5">
-                                  <span className="text-slate-400 block font-sans">Min. Nakit Dönüşümü (OCF/Net)</span>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {([0, 65, 80, 100] as const).map(ocfMin => (
-                                      <button
-                                        key={ocfMin}
-                                        type="button"
-                                        onClick={() => updateArchitectConfig(prev => ({ ...prev, minOcfConversionPct: ocfMin }))}
-                                        className={`px-2.5 py-1 rounded-lg font-mono font-bold border cursor-pointer ${
-                                          architectConfig.minOcfConversionPct === ocfMin
-                                            ? 'bg-emerald-500 text-slate-950 border-emerald-400'
-                                            : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
-                                        }`}
-                                      >
-                                        {ocfMin === 0 ? 'Esnek' : `%${ocfMin}`}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                                <div className="space-y-1.5">
-                                  <span className="text-slate-400 block font-sans">Min. FAVÖK Marj Tamponu</span>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {([5, 8, 12] as const).map(ebMin => (
-                                      <button
-                                        key={ebMin}
-                                        type="button"
-                                        onClick={() => updateArchitectConfig(prev => ({ ...prev, minEbitdaMarginPct: ebMin }))}
-                                        className={`px-2.5 py-1 rounded-lg font-mono font-bold border cursor-pointer ${
-                                          architectConfig.minEbitdaMarginPct === ebMin
-                                            ? 'bg-emerald-500 text-slate-950 border-emerald-400'
-                                            : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
-                                        }`}
-                                      >
-                                        %{ebMin}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                                <div className="space-y-1.5">
-                                  <span className="text-slate-400 block font-sans">A+ Kalite NÖTR Kontenjanı</span>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {([0, 1, 2, 3] as const).map(nCnt => (
-                                      <button
-                                        key={nCnt}
-                                        type="button"
-                                        onClick={() =>
-                                          updateArchitectConfig(prev => ({ ...prev, includeHighQualityNeutralCount: nCnt }))
-                                        }
-                                        className={`px-2.5 py-1 rounded-lg font-mono font-bold border cursor-pointer ${
-                                          architectConfig.includeHighQualityNeutralCount === nCnt
-                                            ? 'bg-sky-500 text-slate-950 border-sky-400'
-                                            : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
-                                        }`}
-                                      >
-                                        {nCnt} Hisse
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Sütun 3: Rotasyon & Hedef Uyarı Eşiği */}
-                              <div className="space-y-3">
-                                <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
-                                  3. Hedef &amp; Rotasyon Alarmı
-                                </div>
-                                <div className="space-y-1.5">
-                                  <span className="text-slate-400 block font-sans">
-                                    Hedefe Yaklaşma / Kâr-Al Uyarı Eşiği
-                                  </span>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {([8, 10, 12, 15, 20] as const).map(rot => (
-                                      <button
-                                        key={rot}
-                                        type="button"
-                                        onClick={() =>
-                                          updateArchitectConfig(prev => ({
-                                            ...prev,
-                                            rotationTakeProfitUpsideThresholdPct: rot,
-                                          }))
-                                        }
-                                        className={`px-2.5 py-1 rounded-lg font-mono font-bold border cursor-pointer ${
-                                          architectConfig.rotationTakeProfitUpsideThresholdPct === rot
-                                            ? 'bg-rose-500 text-white border-rose-400'
-                                            : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
-                                        }`}
-                                      >
-                                        &lt;%{rot}
-                                      </button>
-                                    ))}
-                                  </div>
-                                  <p className="text-[11px] text-slate-500 font-sans pt-1 leading-relaxed">
-                                    Hisse fiyatıyla adil değer arasındaki kalan potansiyel belirlenen eşik değerin altına indiğinde hem Portföyüm hem de Rotasyon Masası üzerinde uyarı üretilir ve akıllı ilave alımda bu hisseye yeni nakit aktarılmaz.
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Alt Görünüm Sekmeleri */}
-                        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-2 border-t border-[#232834]">
-                          {([
-                            { id: 'MODEL', label: `İdeal Portföy & TL Dağılımı (${plan.modelPortfolio.length})` },
-                            { id: 'ROTATION', label: `Çeyreklik Rotasyon Masası (${plan.rotationSignals.rotateOut.length} Çıkış / ${plan.rotationSignals.rotateIn.length} Yeni)` },
-                            { id: 'ALL_LAYERS', label: `AL Hisseleri Adli Katmanları (${plan.totalAlCount})` },
-                            { id: 'NOTR_AUDIT', label: `NÖTR Havuzu: A+ Fırsat (${plan.tierANeutralCandidates.length}) vs Tuzak (${plan.neutralValueTraps.length})` },
-                          ] as const).map(tab => (
-                            <button
-                              key={tab.id}
-                              type="button"
-                              onClick={() => setArchitectTierFilter(tab.id)}
-                              className={`fv-pill px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap cursor-pointer border ${
-                                architectTierFilter === tab.id
-                                  ? 'bg-[#222836] text-[#f5c242] border-[#f5c242]/40'
-                                  : 'bg-[#101319] text-slate-400 hover:text-white border-[#232834]'
-                              }`}
-                            >
-                              {tab.label}
-                            </button>
-                          ))}
-                        </div>
+                      {/* Sade Alt Sekmeler */}
+                      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                        {([
+                          { id: 'MODEL', label: `Model Portföy (${plan.modelPortfolio.length})` },
+                          { id: 'ROTATION', label: `Rotasyon Masası (${plan.rotationSignals.rotateOut.length})` },
+                          { id: 'ALL_LAYERS', label: `Eleme Evreni (${plan.totalAlCount} AL)` },
+                          { id: 'NOTR_AUDIT', label: `NÖTR Analizi (${plan.tierANeutralCandidates.length})` },
+                        ] as const).map(tab => (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setArchitectTierFilter(tab.id)}
+                            className={`fv-pill px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap cursor-pointer border ${
+                              architectTierFilter === tab.id
+                                ? 'bg-[#222836] text-[#f5c242] border-[#f5c242]/40'
+                                : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
+                            }`}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
                       </div>
 
-                      {/* TL Sermaye & Aylık İlave Yatırım Planlayıcı Barı */}
+                      {/* TL Sermaye & Aylık İlave Yatırım Toolbar'ı */}
                       {architectTierFilter === 'MODEL' && renderCapitalPlannerBar(alloc, 'architect')}
 
                       {/* SEKMELERİN İÇERİĞİ */}
                       {architectTierFilter === 'MODEL' && (
-                        <div className="space-y-4">
-                          {/* Görsel Yığılmış Sektör Ağırlık Çubuğu & Sektör Kartları */}
+                        <div className="bg-[#151821] border border-[#262c38] rounded-2xl overflow-hidden">
+                          {/* Tablo İçi Entegre Sektör Dağılım Şeridi */}
                           {plan.sectorBreakdown.length > 0 && (
-                            <div className="bg-[#151821] border border-[#262c38] rounded-2xl p-4 space-y-3">
-                              <div className="flex items-center justify-between text-xs font-mono">
-                                <span className="text-slate-400 font-bold uppercase">
-                                  Sektörel Dağılım &amp; Konsantrasyon (Tavan: %{architectConfig.maxSectorWeightPct})
+                            <div className="px-4 py-3.5 border-b border-[#232834] space-y-2.5">
+                              <div className="flex items-center justify-between text-[11px] font-mono">
+                                <span className="text-slate-400 font-bold uppercase tracking-wider">
+                                  Sektörel Dağılım (Tavan %{architectConfig.maxSectorWeightPct})
                                 </span>
                                 <span className="text-slate-400">{plan.sectorBreakdown.length} Sektör</span>
                               </div>
-                              <div className="h-2.5 w-full rounded-full bg-[#101319] overflow-hidden flex gap-0.5">
+                              <div className="h-2 w-full rounded-full bg-[#101319] overflow-hidden flex gap-0.5">
                                 {plan.sectorBreakdown.map((sec, sIdx) => (
                                   <div
                                     key={sec.sectorName}
@@ -9871,7 +9900,7 @@ export default function ValuationTerminal({
                                   />
                                 ))}
                               </div>
-                              <div className="flex flex-wrap gap-2">
+                              <div className="flex flex-wrap gap-1.5">
                                 {plan.sectorBreakdown.map((sec, sIdx) => {
                                   const secTryTotal = sec.tickers.reduce(
                                     (sum, tk) => sum + (allocRowByTicker.get(tk)?.finalValueTry || 0),
@@ -9880,15 +9909,15 @@ export default function ValuationTerminal({
                                   return (
                                     <div
                                       key={sec.sectorName}
-                                      className="px-2.5 py-1 rounded-xl bg-[#101319] border border-[#232834] text-[11px] font-mono flex items-center gap-2"
+                                      className="px-2 py-0.5 rounded-lg bg-[#101319] border border-[#232834] text-[11px] font-mono flex items-center gap-1.5"
                                     >
-                                      <span className={`w-2 h-2 rounded-full ${SECTOR_BAR_COLORS[sIdx % SECTOR_BAR_COLORS.length]}`} />
-                                      <span className="text-slate-200 font-sans font-semibold">{sec.sectorName}</span>
+                                      <span className={`w-1.5 h-1.5 rounded-full ${SECTOR_BAR_COLORS[sIdx % SECTOR_BAR_COLORS.length]}`} />
+                                      <span className="text-slate-300 font-sans">{sec.sectorName}</span>
                                       <span className={`font-bold ${sec.weightPct > architectConfig.maxSectorWeightPct ? 'text-rose-400' : 'text-emerald-400'}`}>
                                         %{sec.weightPct.toFixed(1)}
                                       </span>
                                       {secTryTotal > 0 && (
-                                        <span className="text-slate-400">{formatTryInt(secTryTotal)}</span>
+                                        <span className="text-slate-500">{formatTryInt(secTryTotal)}</span>
                                       )}
                                     </div>
                                   );
@@ -9898,179 +9927,182 @@ export default function ValuationTerminal({
                           )}
 
                           {/* İdeal Model Portföy Tablosu */}
-                          <div className="bg-[#151821] border border-[#262c38] rounded-2xl overflow-hidden">
-                            <div className="overflow-x-auto touch-pan-x no-scrollbar">
-                              <table className="w-full text-left text-xs border-collapse font-sans">
-                                <thead>
-                                  <tr className="border-b border-[#262c38] bg-[#101319] text-[11px] font-mono text-slate-400 uppercase tracking-wider">
-                                    <th className="py-3.5 px-4">Şirket &amp; Katman</th>
-                                    <th className="py-3.5 px-3 text-center">Hedef Ağırlık</th>
-                                    <th className="py-3.5 px-3 text-right">
-                                      {portfolioCapitalState.allocationMode === 'topup' ? 'İlave Alım (TL / Lot)' : 'TL Tahsisat & Lot'}
-                                    </th>
-                                    <th className="py-3.5 px-3 text-right">Fiyat → Adil Değer</th>
-                                    <th className="py-3.5 px-3 text-center">Potansiyel &amp; Hedef</th>
-                                    <th className="py-3.5 px-3 text-center">Skor / Kalite</th>
-                                    <th className="py-3.5 px-4 text-right">Aksiyon</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-[#232834] text-slate-200 tabular-nums">
-                                  {plan.modelPortfolio.map((item) => {
-                                    const meta = tierBadgeMeta(item.tier);
-                                    const allocRow = allocRowByTicker.get(item.ticker);
-                                    const statusMeta = getTargetStatusMeta(item.targetStatus);
-                                    const isTopUp = portfolioCapitalState.allocationMode === 'topup';
-                                    return (
-                                      <tr
-                                        key={item.ticker}
-                                        onClick={() => openReport(item.reportId, item.ticker)}
-                                        className="fv-row cursor-pointer group"
-                                      >
-                                        <td className="py-3 px-4">
-                                          <div className="flex items-center gap-2.5">
-                                            <span className={`fv-monogram w-7 h-7 rounded-lg border font-mono text-[10px] font-bold shrink-0 ${getSectorMonogramCls(item.ticker, item.sectorCode)}`}>
-                                              {item.ticker.slice(0, 2)}
-                                            </span>
-                                            <div className="min-w-0">
-                                              <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="font-mono font-bold text-sm text-white group-hover:text-emerald-400 transition">
-                                                  {item.ticker}
-                                                </span>
-                                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${meta.cls}`}>
-                                                  {meta.label}
-                                                </span>
-                                              </div>
-                                              <div className="text-[11px] text-slate-400 truncate max-w-[210px]">
-                                                {item.sectorName} • {item.period}
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </td>
-                                        <td className="py-3 px-3 text-center font-mono">
-                                          <div className="inline-flex flex-col items-center gap-1 min-w-[82px]">
-                                            <span className="font-black text-sm text-[#f5c242]">
-                                              %{item.recommendedWeightPct.toFixed(1)}
-                                            </span>
-                                            {isTopUp && allocRow && (
-                                              <span className="text-[10px] text-slate-400">
-                                                {allocRow.existingWeightPct.toFixed(1)}% ➔ {allocRow.finalWeightPct.toFixed(1)}%
+                          <div className="overflow-x-auto touch-pan-x no-scrollbar">
+                            <table className="w-full text-left text-xs border-collapse font-sans">
+                              <thead>
+                                <tr className="border-b border-[#262c38] bg-[#101319] text-[11px] font-mono text-slate-400 uppercase tracking-wider">
+                                  <th className="py-3 px-4">Şirket &amp; Katman</th>
+                                  <th className="py-3 px-3 text-center">Hedef Ağırlık</th>
+                                  <th className="py-3 px-3 text-right">
+                                    {portfolioCapitalState.allocationMode === 'topup' ? 'İlave Alım (TL / Lot)' : 'TL Tahsisat & Lot'}
+                                  </th>
+                                  <th className="py-3 px-3 text-right">Fiyat → Adil Değer</th>
+                                  <th className="py-3 px-3 text-center">Potansiyel &amp; Alfa</th>
+                                  <th className="py-3 px-3 text-center">Skor / Kalite</th>
+                                  <th className="py-3 px-4 text-right">Aksiyon</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-[#232834] text-slate-200 tabular-nums">
+                                {plan.modelPortfolio.map((item) => {
+                                  const meta = tierBadgeMeta(item.tier);
+                                  const allocRow = allocRowByTicker.get(item.ticker);
+                                  const statusMeta = getTargetStatusMeta(item.targetStatus);
+                                  const isTopUp = portfolioCapitalState.allocationMode === 'topup';
+                                  return (
+                                    <tr
+                                      key={item.ticker}
+                                      onClick={() => openReport(item.reportId, item.ticker)}
+                                      className="fv-row cursor-pointer group"
+                                    >
+                                      <td className="py-3 px-4">
+                                        <div className="flex items-center gap-2.5">
+                                          <span className={`fv-monogram w-7 h-7 rounded-lg border font-mono text-[10px] font-bold shrink-0 ${getSectorMonogramCls(item.ticker, item.sectorCode)}`}>
+                                            {item.ticker.slice(0, 2)}
+                                          </span>
+                                          <div className="min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                              <span className="font-mono font-bold text-sm text-white group-hover:text-emerald-400 transition">
+                                                {item.ticker}
                                               </span>
-                                            )}
-                                            <div className="w-full h-1.5 rounded-full bg-[#101319] overflow-hidden">
-                                              <div
-                                                className="h-full rounded-full bg-[#f5c242]"
-                                                style={{ width: `${Math.min(100, Math.round((item.recommendedWeightPct / Math.max(1, architectConfig.maxSingleStockWeightPct)) * 100))}%` }}
-                                              />
+                                              <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${meta.cls}`}>
+                                                {meta.label}
+                                              </span>
+                                            </div>
+                                            <div className="text-[11px] text-slate-400 truncate max-w-[210px]">
+                                              {item.sectorName} • {item.period}
                                             </div>
                                           </div>
-                                        </td>
-                                        <td className="py-3 px-3 text-right font-mono">
-                                          {allocRow ? (
-                                            allocRow.isSkippedForRotation ? (
-                                              <div className="inline-flex flex-col items-end">
-                                                <span className="px-2 py-0.5 rounded text-[10.5px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/35">
-                                                  {allocRow.skipReason || '0 ₺ Alım'}
-                                                </span>
-                                                {isTopUp && (
-                                                  <span className="text-[10.5px] text-slate-400 mt-0.5">
-                                                    Mevcut: {formatTryInt(allocRow.existingValueTry)}
-                                                  </span>
-                                                )}
-                                              </div>
-                                            ) : isTopUp ? (
-                                              <div>
-                                                <div className="text-emerald-400 font-black text-sm">
-                                                  +{formatTryInt(allocRow.orderAmountTry)}
-                                                </div>
-                                                <div className="text-[10.5px] text-slate-400">
-                                                  +{allocRow.orderLots} Lot • Top: {formatTryInt(allocRow.finalValueTry)}
-                                                </div>
-                                              </div>
-                                            ) : (
-                                              <div>
-                                                <div className="text-white font-black text-sm">
-                                                  {formatTryInt(allocRow.orderAmountTry)}
-                                                </div>
-                                                <div className="text-[10.5px] text-slate-400">
-                                                  {allocRow.orderLots} Lot
-                                                </div>
-                                              </div>
-                                            )
-                                          ) : (
-                                            <span className="text-slate-500">—</span>
-                                          )}
-                                        </td>
-                                        <td className="py-3 px-3 text-right font-mono">
-                                          <div className="text-slate-200 font-semibold">{item.price > 0 ? `₺${item.price.toFixed(2)}` : '—'}</div>
-                                          <div className="text-[#f5c242] font-bold">{item.fairValue > 0 ? `➔ ₺${item.fairValue.toFixed(2)}` : '—'}</div>
-                                          {item.fairValue > 0 && item.price > 0 && (
-                                            <div className="w-20 ml-auto h-1 rounded-full bg-[#101319] overflow-hidden mt-1" title={`Adil değere ulaşım: %${item.fairValueProgressPct}`}>
-                                              <div
-                                                className={`h-full rounded-full ${item.fairValueProgressPct >= 90 ? 'bg-amber-400' : 'bg-emerald-400'}`}
-                                                style={{ width: `${item.fairValueProgressPct}%` }}
-                                              />
-                                            </div>
-                                          )}
-                                        </td>
-                                        <td className="py-3 px-3 text-center font-mono">
-                                          <div className="inline-flex flex-col items-center gap-1">
-                                            <span className={`px-2 py-0.5 rounded-md text-xs font-bold border ${
-                                              item.upsidePct >= 25
-                                                ? 'bg-emerald-500/12 text-emerald-400 border-emerald-500/30'
-                                                : item.upsidePct <= 0
-                                                ? 'bg-rose-500/12 text-rose-400 border-rose-500/30'
-                                                : 'bg-cyan-500/12 text-cyan-300 border-cyan-500/30'
-                                            }`}>
-                                              {formatPctSigned(item.upsidePct)}
+                                        </div>
+                                      </td>
+                                      <td className="py-3 px-3 text-center font-mono">
+                                        <div className="inline-flex flex-col items-center gap-1 min-w-[78px]">
+                                          <span className="font-black text-sm text-[#f5c242]">
+                                            %{item.recommendedWeightPct.toFixed(1)}
+                                          </span>
+                                          {isTopUp && allocRow && (
+                                            <span className="text-[10px] text-slate-400">
+                                              {allocRow.existingWeightPct.toFixed(1)}% ➔ {allocRow.finalWeightPct.toFixed(1)}%
                                             </span>
+                                          )}
+                                          <div className="w-full h-1.5 rounded-full bg-[#101319] overflow-hidden">
+                                            <div
+                                              className="h-full rounded-full bg-[#f5c242]"
+                                              style={{ width: `${Math.min(100, Math.round((item.recommendedWeightPct / Math.max(1, architectConfig.maxSingleStockWeightPct)) * 100))}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td className="py-3 px-3 text-right font-mono">
+                                        {allocRow ? (
+                                          allocRow.isSkippedForRotation ? (
+                                            <div className="inline-flex flex-col items-end">
+                                              <span className="px-2 py-0.5 rounded text-[10.5px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/35">
+                                                {allocRow.skipReason || '0 ₺ Alım'}
+                                              </span>
+                                              {isTopUp && (
+                                                <span className="text-[10.5px] text-slate-400 mt-0.5">
+                                                  Mevcut: {formatTryInt(allocRow.existingValueTry)}
+                                                </span>
+                                              )}
+                                            </div>
+                                          ) : isTopUp ? (
+                                            <div>
+                                              <div className="text-emerald-400 font-black text-sm">
+                                                +{formatTryInt(allocRow.orderAmountTry)}
+                                              </div>
+                                              <div className="text-[10.5px] text-slate-400">
+                                                +{allocRow.orderLots} Lot • Top: {formatTryInt(allocRow.finalValueTry)}
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <div>
+                                              <div className="text-white font-black text-sm">
+                                                {formatTryInt(allocRow.orderAmountTry)}
+                                              </div>
+                                              <div className="text-[10.5px] text-slate-400">
+                                                {allocRow.orderLots} Lot
+                                              </div>
+                                            </div>
+                                          )
+                                        ) : (
+                                          <span className="text-slate-500">—</span>
+                                        )}
+                                      </td>
+                                      <td className="py-3 px-3 text-right font-mono">
+                                        <div className="text-slate-200 font-semibold">{item.price > 0 ? `₺${item.price.toFixed(2)}` : '—'}</div>
+                                        <div className="text-[#f5c242] font-bold">{item.fairValue > 0 ? `➔ ₺${item.fairValue.toFixed(2)}` : '—'}</div>
+                                        {item.fairValue > 0 && item.price > 0 && (
+                                          <div className="w-20 ml-auto h-1 rounded-full bg-[#101319] overflow-hidden mt-1" title={`Adil değere ulaşım: %${item.fairValueProgressPct}`}>
+                                            <div
+                                              className={`h-full rounded-full ${item.fairValueProgressPct >= 90 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                                              style={{ width: `${item.fairValueProgressPct}%` }}
+                                            />
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td className="py-3 px-3 text-center font-mono">
+                                        <div className="inline-flex flex-col items-center gap-0.5">
+                                          <span className={`px-2 py-0.5 rounded-md text-xs font-bold border ${
+                                            item.upsidePct >= 25
+                                              ? 'bg-emerald-500/12 text-emerald-400 border-emerald-500/30'
+                                              : item.upsidePct <= 0
+                                              ? 'bg-rose-500/12 text-rose-400 border-rose-500/30'
+                                              : 'bg-cyan-500/12 text-cyan-300 border-cyan-500/30'
+                                          }`}>
+                                            {formatPctSigned(item.upsidePct)}
+                                          </span>
+                                          <span className="text-[10px] text-slate-400">
+                                            Rf {item.excessReturnOverRfPct >= 0 ? '+' : ''}{item.excessReturnOverRfPct.toFixed(1)}p
+                                          </span>
+                                          {(item.targetStatus === 'TARGET_REACHED' || item.targetStatus === 'NEAR_TARGET' || item.targetStatus === 'FORENSIC_EXIT') && (
                                             <span className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold border ${statusMeta.cls}`}>
                                               {statusMeta.label}
                                             </span>
-                                          </div>
-                                        </td>
-                                        <td className="py-3 px-3 text-center font-mono text-[11px]">
-                                          <div className={`font-bold ${getScoreColorStyle(item.score).text}`}>
-                                            {item.score}/100 • EVA {item.evaSpreadPct != null ? `${item.evaSpreadPct >= 0 ? '+' : ''}${item.evaSpreadPct}p` : '—'}
-                                          </div>
-                                          <div className="text-slate-400 mt-0.5">
-                                            {item.isBankOrInsurance
-                                              ? 'Finansal Kurum'
-                                              : `OCF %${item.ocfConversionPct ?? '—'} • ${item.isNetCash ? 'Net Nakit' : `Borç ${item.netDebtToEbitda ?? '—'}x`}`}
-                                          </div>
-                                        </td>
-                                        <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                                          <div className="inline-flex items-center gap-1.5">
-                                            <button
-                                              type="button"
-                                              onClick={() => togglePortfolio(item.ticker)}
-                                              className={`fv-pill px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
-                                                item.inCurrentPortfolio
-                                                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-                                                  : 'bg-[#101319] hover:bg-[#1e2532] text-[#f5c242] border-[#f5c242]/35'
-                                              }`}
-                                            >
-                                              {item.inCurrentPortfolio ? '✓ Portföyde' : '+ Portföye Ekle'}
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => toggleCompareTicker(item.ticker)}
-                                              className={`p-1.5 rounded-lg border cursor-pointer ${
-                                                compareTickers.includes(item.ticker)
-                                                  ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/40'
-                                                  : 'bg-[#101319] text-slate-400 hover:text-cyan-400 border-[#262c38]'
-                                              }`}
-                                              title="Yan Yana Kıyasla"
-                                            >
-                                              <Scale className="w-3.5 h-3.5" />
-                                            </button>
-                                          </div>
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="py-3 px-3 text-center font-mono text-[11px]">
+                                        <div className={`font-bold ${getScoreColorStyle(item.score).text}`}>
+                                          {item.score}/100 • EVA {item.evaSpreadPct != null ? `${item.evaSpreadPct >= 0 ? '+' : ''}${item.evaSpreadPct}p` : '—'}
+                                        </div>
+                                        <div className="text-slate-400 mt-0.5">
+                                          {item.isBankOrInsurance
+                                            ? 'Finansal Kurum'
+                                            : `OCF %${item.ocfConversionPct ?? '—'} • ${item.isNetCash ? 'Net Nakit' : `Borç ${item.netDebtToEbitda ?? '—'}x`}`}
+                                        </div>
+                                      </td>
+                                      <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                                        <div className="inline-flex items-center gap-1.5">
+                                          <button
+                                            type="button"
+                                            onClick={() => togglePortfolio(item.ticker)}
+                                            className={`fv-pill px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
+                                              item.inCurrentPortfolio
+                                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                                                : 'bg-[#101319] hover:bg-[#1e2532] text-[#f5c242] border-[#f5c242]/35'
+                                            }`}
+                                          >
+                                            {item.inCurrentPortfolio ? '✓ Portföyde' : '+ Ekle'}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => toggleCompareTicker(item.ticker)}
+                                            className={`p-1.5 rounded-lg border cursor-pointer ${
+                                              compareTickers.includes(item.ticker)
+                                                ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/40'
+                                                : 'bg-[#101319] text-slate-400 hover:text-cyan-400 border-[#262c38]'
+                                            }`}
+                                            title="Yan Yana Kıyasla"
+                                          >
+                                            <Scale className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
                           </div>
                         </div>
                       )}
@@ -10211,7 +10243,7 @@ export default function ValuationTerminal({
                             <div className="bg-[#151821] border border-rose-500/30 rounded-2xl p-5 space-y-3">
                               <h4 className="text-sm font-bold text-rose-300 font-sans flex items-center gap-2">
                                 <ShieldAlert className="w-4 h-4 text-rose-400" />
-                                <span>Adli Filtreye Takılan &quot;AL&quot; Hisseleri — Neden Elenmeli? ({plan.tier3FilteredAl.length})</span>
+                                <span>Eleme Kriterine Takılan &quot;AL&quot; Hisseleri ({plan.tier3FilteredAl.length}{plan.belowRiskFreeAlCount > 0 ? ` • ${plan.belowRiskFreeAlCount} Rf Altı` : ''})</span>
                               </h4>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 {plan.tier3FilteredAl.map(item => (
@@ -10236,8 +10268,9 @@ export default function ValuationTerminal({
                           {/* Tier-1 ve Tier-2 AL Katmanları */}
                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             <div className="bg-[#151821] border border-emerald-500/25 rounded-2xl p-5 space-y-3">
-                              <h4 className="text-sm font-bold text-emerald-400 font-sans">
-                                🟢 Tier-1 Çekirdek AL ({plan.tier1CoreAl.length} Hisse)
+                              <h4 className="text-sm font-bold text-emerald-400 font-sans flex items-center gap-2">
+                                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" />
+                                <span>Tier-1 Çekirdek AL ({plan.tier1CoreAl.length} Hisse)</span>
                               </h4>
                               <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
                                 {plan.tier1CoreAl.map(c => (
@@ -10268,8 +10301,9 @@ export default function ValuationTerminal({
                             </div>
 
                             <div className="bg-[#151821] border border-amber-500/25 rounded-2xl p-5 space-y-3">
-                              <h4 className="text-sm font-bold text-amber-300 font-sans">
-                                🟡 Tier-2 Uydu / Sınır Kontrollü AL ({plan.tier2SatelliteAl.length} Hisse)
+                              <h4 className="text-sm font-bold text-amber-300 font-sans flex items-center gap-2">
+                                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0" />
+                                <span>Tier-2 Uydu / Sınır Kontrollü AL ({plan.tier2SatelliteAl.length} Hisse)</span>
                               </h4>
                               <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
                                 {plan.tier2SatelliteAl.map(c => (
@@ -10305,8 +10339,9 @@ export default function ValuationTerminal({
                       {architectTierFilter === 'NOTR_AUDIT' && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                           <div className="bg-[#151821] border border-cyan-500/30 rounded-2xl p-5 space-y-3">
-                            <h4 className="text-sm font-bold text-cyan-300 font-sans">
-                              💎 A+ Kalite &amp; Dar İskontolu NÖTR ({plan.tierANeutralCandidates.length} Aday — Geri Çekilmede Alınabilir)
+                            <h4 className="text-sm font-bold text-cyan-300 font-sans flex items-center gap-2">
+                              <Gem className="w-4 h-4 text-cyan-400 shrink-0" />
+                              <span>A+ Kalite &amp; Dar İskontolu NÖTR ({plan.tierANeutralCandidates.length} Aday)</span>
                             </h4>
                             <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
                               {plan.tierANeutralCandidates.map(c => (
@@ -10341,8 +10376,9 @@ export default function ValuationTerminal({
                           </div>
 
                           <div className="bg-[#151821] border border-rose-500/30 rounded-2xl p-5 space-y-3">
-                            <h4 className="text-sm font-bold text-rose-400 font-sans">
-                              ⛔ Yüksek İskontolu Adli Tuzak NÖTR ({plan.neutralValueTraps.length} Şirket — Uzak Durulmalı)
+                            <h4 className="text-sm font-bold text-rose-400 font-sans flex items-center gap-2">
+                              <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+                              <span>Yüksek İskontolu Adli Tuzak NÖTR ({plan.neutralValueTraps.length} Şirket)</span>
                             </h4>
                             <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
                               {plan.neutralValueTraps.slice(0, 15).map(c => (

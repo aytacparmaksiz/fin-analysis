@@ -14,6 +14,8 @@ export interface PortfolioArchitectConfig {
   deduplicateGroupHoldings: boolean;
   includeHighQualityNeutralCount: number;
   rotationTakeProfitUpsideThresholdPct: number;
+  enforceRiskFreeHurdle: boolean;
+  riskFreeRatePct: number | null;
 }
 
 export const DEFAULT_PORTFOLIO_ARCHITECT_CONFIG: PortfolioArchitectConfig = {
@@ -27,6 +29,8 @@ export const DEFAULT_PORTFOLIO_ARCHITECT_CONFIG: PortfolioArchitectConfig = {
   deduplicateGroupHoldings: true,
   includeHighQualityNeutralCount: 1,
   rotationTakeProfitUpsideThresholdPct: 12,
+  enforceRiskFreeHurdle: true,
+  riskFreeRatePct: null,
 };
 
 export type PortfolioPresetId = 'INSTITUTIONAL_10' | 'FOCUSED_8' | 'BROAD_12';
@@ -78,6 +82,7 @@ export type PortfolioTargetStatus =
   | 'HOLD_WATCH'
   | 'NEAR_TARGET'
   | 'TARGET_REACHED'
+  | 'BELOW_RF_HURDLE'
   | 'FORENSIC_EXIT';
 
 const CONSOLIDATED_GROUP_MAP: Record<string, string> = {
@@ -135,6 +140,8 @@ export interface ForensicPortfolioCandidate {
   targetStatus: PortfolioTargetStatus;
   targetStatusLabel: string;
   fairValueProgressPct: number;
+  excessReturnOverRfPct: number;
+  hasForensicFailure: boolean;
 }
 
 export interface PortfolioRotationOutItem {
@@ -158,6 +165,8 @@ export interface PortfolioSectorSlice {
 
 export interface ForensicPortfolioPlan {
   config: PortfolioArchitectConfig;
+  effectiveRiskFreeRatePct: number;
+  belowRiskFreeAlCount: number;
   totalAnalyzedCount: number;
   totalAlCount: number;
   totalNotrCount: number;
@@ -333,7 +342,43 @@ function resolveCandidateFromReport(
     targetStatusLabel: 'Tut • İzle',
     fairValueProgressPct:
       fairValue > 0 && price > 0 ? Math.min(100, Math.max(0, Math.round((price / fairValue) * 100))) : 0,
+    excessReturnOverRfPct: 0,
+    hasForensicFailure: false,
   };
+}
+
+function resolveCanonicalRiskFreeRatePct(
+  uniqueReports: SavedReport[],
+  maxPeriodKey: number,
+  configRf: number | null | undefined
+): number {
+  if (configRf != null && Number.isFinite(configRf) && configRf >= 0) {
+    return round1(configRf);
+  }
+  const freq = new Map<number, number>();
+  for (const r of uniqueReports) {
+    const ext = r.extractedData || {};
+    const curr = String(ext.currency || 'TRY').toUpperCase();
+    if (curr === 'USD' || curr === 'EUR') continue;
+    const pKey = parsePeriodSortKey(String(r.period || ext.reporting_period || ''));
+    if (maxPeriodKey >= 202500 && pKey > 0 && pKey < maxPeriodKey - 100) continue;
+    const hist = Array.isArray(ext.financial_history) ? ext.financial_history : [];
+    const last = hist.length > 0 ? hist[hist.length - 1] : null;
+    const rfVal = parseFinancialNumber(last?.risk_free_rate ?? last?.rf_rate);
+    if (rfVal != null && rfVal >= 15 && rfVal <= 60) {
+      const rounded = round1(rfVal);
+      freq.set(rounded, (freq.get(rounded) || 0) + 1);
+    }
+  }
+  let bestRf = 38.0;
+  let bestCount = 0;
+  for (const [val, cnt] of freq.entries()) {
+    if (cnt > bestCount) {
+      bestCount = cnt;
+      bestRf = val;
+    }
+  }
+  return bestRf;
 }
 
 export function buildForensicPortfolioPlan(
@@ -362,7 +407,17 @@ export function buildForensicPortfolioPlan(
     if (k > maxPeriodKey) maxPeriodKey = k;
   }
 
-  const candidates = uniqueReports.map(r => resolveCandidateFromReport(r, portfolioSet, maxPeriodKey));
+  const effectiveRiskFreeRatePct = resolveCanonicalRiskFreeRatePct(
+    uniqueReports,
+    maxPeriodKey,
+    config.riskFreeRatePct
+  );
+
+  const candidates = uniqueReports.map(r => {
+    const c = resolveCandidateFromReport(r, portfolioSet, maxPeriodKey);
+    c.excessReturnOverRfPct = round1(c.upsidePct - effectiveRiskFreeRatePct);
+    return c;
+  });
 
   const rawAl = candidates
     .filter(c => c.decision === 'AL')
@@ -386,6 +441,7 @@ export function buildForensicPortfolioPlan(
   const tier1CoreAl: ForensicPortfolioCandidate[] = [];
   const tier2SatelliteAl: ForensicPortfolioCandidate[] = [];
   const tier3FilteredAl: ForensicPortfolioCandidate[] = [];
+  let belowRiskFreeAlCount = 0;
 
   for (const cand of rawAl) {
     const filterReasons: string[] = [];
@@ -433,11 +489,20 @@ export function buildForensicPortfolioPlan(
       );
     }
 
+    cand.hasForensicFailure = filterReasons.length > 0;
+
+    if (config.enforceRiskFreeHurdle && cand.upsidePct < effectiveRiskFreeRatePct) {
+      belowRiskFreeAlCount++;
+      filterReasons.push(
+        `Potansiyel getiri (+%${cand.upsidePct.toFixed(1)}), risksiz faiz oranının (%${effectiveRiskFreeRatePct.toFixed(1)}) altında`
+      );
+    }
+
     cand.filterReasons = filterReasons;
 
     if (filterReasons.length > 0) {
       cand.tier = 'TIER_3_FILTERED';
-      cand.roleSummary = 'Adli Stres Filtresine Takıldı';
+      cand.roleSummary = cand.hasForensicFailure ? 'Adli Stres Filtresine Takıldı' : 'Risksiz Faiz Eşiği Altında';
       tier3FilteredAl.push(cand);
       continue;
     }
@@ -518,9 +583,12 @@ export function buildForensicPortfolioPlan(
 
   neutralValueTraps.sort((a, b) => b.upsidePct - a.upsidePct);
 
-  // Model Portföy Seçimi (Sektör ve Grup Çeşitlendirme Kurallarıyla)
+  // Model Portföy Seçimi (Sektör, Grup ve Risksiz Faiz Eşiği Kurallarıyla)
   const selectedHoldings: ForensicPortfolioCandidate[] = [];
-  const selectedNeutralSlots = Math.min(config.includeHighQualityNeutralCount, tierANeutralCandidates.length);
+  const eligibleNeutrals = config.enforceRiskFreeHurdle
+    ? tierANeutralCandidates.filter(c => c.upsidePct >= effectiveRiskFreeRatePct)
+    : tierANeutralCandidates;
+  const selectedNeutralSlots = Math.min(config.includeHighQualityNeutralCount, eligibleNeutrals.length);
   const alTargetSlots = Math.max(1, config.targetCount - selectedNeutralSlots);
 
   const sectorSlotCap = Math.max(
@@ -547,9 +615,9 @@ export function buildForensicPortfolioPlan(
   if (selectedHoldings.length < alTargetSlots) {
     trySelect([...tier1CoreAl, ...tier2SatelliteAl], alTargetSlots, false);
   }
-  // A+ Kalite NÖTR kontenjanını ekle
+  // A+ Kalite NÖTR kontenjanını ekle (Rf eşiğini geçiyorsa)
   if (selectedNeutralSlots > 0) {
-    trySelect(tierANeutralCandidates, selectedHoldings.length + selectedNeutralSlots, true);
+    trySelect(eligibleNeutrals, selectedHoldings.length + selectedNeutralSlots, true);
   }
 
   // Ağırlık Dağıtımı: Tier-1 = 1.35x, Tier-2 = 0.90x, A+ NÖTR = 0.75x baz ağırlık + tek hisse/sektör tavanı
@@ -648,8 +716,8 @@ export function buildForensicPortfolioPlan(
     if (
       cand.decision === 'ALMA' ||
       cand.isValueTrap ||
-      cand.tier === 'TIER_3_FILTERED' ||
-      cand.tier === 'TRAP_NEUTRAL'
+      cand.tier === 'TRAP_NEUTRAL' ||
+      cand.hasForensicFailure
     ) {
       cand.targetStatus = 'FORENSIC_EXIT';
       cand.targetStatusLabel = 'Adli Çıkış / Risk';
@@ -659,6 +727,9 @@ export function buildForensicPortfolioPlan(
     } else if (cand.upsidePct < config.rotationTakeProfitUpsideThresholdPct) {
       cand.targetStatus = 'NEAR_TARGET';
       cand.targetStatusLabel = 'Hedefe Yaklaştı • Kâr Al';
+    } else if (config.enforceRiskFreeHurdle && cand.upsidePct < effectiveRiskFreeRatePct) {
+      cand.targetStatus = 'BELOW_RF_HURDLE';
+      cand.targetStatusLabel = 'Risksiz Faiz Altı';
     } else if (cand.decision === 'AL' && cand.upsidePct >= 25) {
       cand.targetStatus = 'ACCUMULATE';
       cand.targetStatusLabel = 'İskontolu • Biriktir';
@@ -737,7 +808,7 @@ export function buildForensicPortfolioPlan(
     } else if (cand.isValueTrap) {
       outReason = 'Değer tuzağı bayrağı aktif (Operasyonel/Nakit kalitesi bozulması)';
       severity = 'HIGH';
-    } else if (cand.tier === 'TIER_3_FILTERED') {
+    } else if (cand.tier === 'TIER_3_FILTERED' && cand.hasForensicFailure) {
       outReason = cand.filterReasons[0] || '4 Boyutlu Adli Stres filtresinden düştü';
       severity = 'HIGH';
     } else if (cand.tier === 'TRAP_NEUTRAL') {
@@ -787,6 +858,8 @@ export function buildForensicPortfolioPlan(
 
   return {
     config,
+    effectiveRiskFreeRatePct,
+    belowRiskFreeAlCount,
     totalAnalyzedCount: candidates.length,
     totalAlCount: rawAl.length,
     totalNotrCount: rawNotr.length,
