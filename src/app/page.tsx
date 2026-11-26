@@ -238,10 +238,24 @@ function reconcileSavedReportWithLatestEngine(rep: SavedReport): SavedReport {
         updatedReport.fairValue = `${valRes.valuation.fair_value.toFixed(2)} TL`;
       }
       if (valRes?.valuation && updatedReport.extractedData) {
+        const syncedFinalDecision =
+          valRes.optimization?.finalDecision ||
+          valRes.valuation.final_decision ||
+          valRes.valuation.decision ||
+          updatedReport.decision;
         updatedReport.extractedData.valuation = {
           ...(updatedReport.extractedData.valuation || {}),
           ...valRes.valuation,
+          final_decision: syncedFinalDecision,
+          decision: syncedFinalDecision,
+          override_reason: valRes.optimization?.overrideReason ?? undefined,
         };
+        if (!valRes.optimization?.overrideReason) {
+          delete (updatedReport.extractedData.valuation as any).override_reason;
+        }
+      }
+      if (valRes?.optimization && updatedReport.extractedData) {
+        (updatedReport.extractedData as any).optimization = valRes.optimization;
       }
       if (valRes?.drivers && updatedReport.extractedData) {
         updatedReport.extractedData.fair_value_drivers = valRes.drivers;
@@ -252,6 +266,10 @@ function reconcileSavedReportWithLatestEngine(rep: SavedReport): SavedReport {
       }
       if (valRes?.optimization?.finalDecision) {
         updatedReport.decision = valRes.optimization.finalDecision;
+        updatedReport.overrideReason = valRes.optimization.overrideReason;
+        updatedReport.conditionalWarnings = valRes.optimization.conditionalWarnings;
+        updatedReport.isGreyZone = valRes.optimization.isGreyZone;
+        updatedReport.marginOfSafetyStatus = valRes.optimization.marginOfSafetyStatus;
       }
       if (valRes?.valuation?.is_value_trap !== undefined) {
         updatedReport.isValueTrap = valRes.valuation.is_value_trap;

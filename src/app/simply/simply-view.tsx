@@ -1821,10 +1821,11 @@ export default function SimplyView({
   // Kurumsal Yatırım Tezi, Sektörel Ayrışma ve Fırsat Sentezi Motoru (8.1 Paneli)
   const synthesizedThesis = useMemo(() => {
     const capAlloc = valuationInfo?.capital_allocation_risk ?? analyzeRelatedPartyAndCapitalAllocationRisk(latestData, currentSector, officialSectorName);
-    const resolvedOverrideReason =
+    const rawOverrideReason =
       valuationInfo?.override_reason ||
       (report.extractedData as any)?.optimization?.overrideReason ||
       report.overrideReason;
+    const resolvedOverrideReason = effectiveDecision === 'AL' ? undefined : rawOverrideReason;
     const resolvedIsValueTrap = Boolean(
       valuationInfo?.is_value_trap ??
       (report.extractedData as any)?.optimization?.isValueTrap ??

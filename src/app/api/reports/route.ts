@@ -134,50 +134,23 @@ export async function GET(req: Request) {
       });
     }
 
-    // 2. Dayanıklı Sayfalı Çekim (Resilient Chunked Fetch):
-    const pageSize = 50;
-    let allRows: any[] = [];
-    let from = 0;
-    let hasMore = true;
+    // 2. İki Aşamalı Hızlı İndeksli Çekim (2-Phase Indexed Primary-Key Fetch):
+    // Aşama 2A: Sadece hafif üst-veriyi (id, ticker, period, created_at, updated_at) çekip bellekte tekilleştiririz (~150ms).
+    // Böylece Postgres'te 40MB+ JSONB/Markdown üzerinde indekssiz ORDER BY updated_at sıralamasından kaynaklanan 57014 statement_timeout önlenir.
+    let metaRows: any[] | null = null;
     let fetchError: any = null;
-
-    while (hasMore) {
-      const to = from + pageSize - 1;
-      let pageData: any[] | null = null;
-      let pageErr: any = null;
-
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const res = await supabase
-          .from('valuation_reports')
-          .select('*')
-          .order('updated_at', { ascending: false })
-          .range(from, to);
-        pageData = res.data;
-        pageErr = res.error;
-        if (!pageErr) break;
-        await new Promise((r) => setTimeout(r, 400));
-      }
-
-      if (pageErr) {
-        console.error(`[Reports] Sayfalı çekim hatası (${from}-${to}):`, pageErr);
-        fetchError = pageErr;
-        break;
-      }
-
-      if (!pageData || pageData.length === 0) {
-        break;
-      }
-
-      allRows = allRows.concat(pageData);
-      if (pageData.length < pageSize) {
-        hasMore = false;
-      } else {
-        from += pageSize;
-      }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const metaRes = await supabase
+        .from('valuation_reports')
+        .select('id, ticker, period, created_at, updated_at');
+      metaRows = metaRes.data;
+      fetchError = metaRes.error;
+      if (!fetchError) break;
+      await new Promise((r) => setTimeout(r, 300));
     }
 
     if (fetchError) {
-      console.error('Supabase fetch error during pagination:', fetchError);
+      console.error('Supabase metadata fetch error:', fetchError);
       if (cachedReportsResponse && cachedReportsResponse.data.reports.length > 0) {
         return NextResponse.json(cachedReportsResponse.data, {
           headers: { ...NO_STORE_HEADERS, 'X-Cache': 'STALE' },
@@ -193,25 +166,94 @@ export async function GET(req: Request) {
       );
     }
 
-    // (ticker, period) bileşik anahtarı ile çok çeyrekli geçmişi koruyarak tekilleştir:
-    const sortedAll = [...allRows].sort(
+    // (ticker, period) bileşik anahtarı ile çok çeyrekli geçmişi koruyarak hafif üst-veride tekilleştir:
+    const sortedMeta = [...(metaRows || [])].sort(
       (a, b) =>
         parsePeriodSortKey(String(b.period || '')) - parsePeriodSortKey(String(a.period || '')) ||
         extractTimestampMs(b) - extractTimestampMs(a)
     );
-    const quarterMap = new Map<string, any>();
-    for (const row of sortedAll) {
+    const winningIds: string[] = [];
+    const seenCompositeKeys = new Set<string>();
+    for (const row of sortedMeta) {
       const t = normalizeTicker(row.ticker);
-      if (!t) continue;
+      if (!t || !row.id) continue;
       const pRaw = String(row.period || '').trim();
       const pNorm = pRaw ? normalizePeriodName(pRaw) : '';
       const compositeKey = `${t}::${pNorm || '__LATEST__'}`;
-      if (!quarterMap.has(compositeKey)) {
-        quarterMap.set(compositeKey, row);
+      if (!seenCompositeKeys.has(compositeKey)) {
+        seenCompositeKeys.add(compositeKey);
+        winningIds.push(String(row.id));
       }
     }
 
-    const reports = Array.from(quarterMap.values()).map(mapRowToReport);
+    // Aşama 2B: Sadece tekilleştirilmiş kazanan ID'leri Primary Key indeksinden paralel dilimler halinde çek:
+    const chunkSize = 25;
+    const idChunks: string[][] = [];
+    for (let i = 0; i < winningIds.length; i += chunkSize) {
+      idChunks.push(winningIds.slice(i, i + chunkSize));
+    }
+
+    const rowById = new Map<string, any>();
+    const concurrency = 3;
+    for (let i = 0; i < idChunks.length; i += concurrency) {
+      const batch = idChunks.slice(i, i + concurrency);
+      const batchResults = await Promise.all(
+        batch.map(async (chunk) => {
+          let chunkData: any[] | null = null;
+          let chunkErr: any = null;
+          for (let attempt = 0; attempt < 2; attempt++) {
+            const res = await supabase
+              .from('valuation_reports')
+              .select('*')
+              .in('id', chunk);
+            chunkData = res.data;
+            chunkErr = res.error;
+            if (!chunkErr) break;
+            await new Promise((r) => setTimeout(r, 300));
+          }
+          if (chunkErr) {
+            console.error('[Reports] Primary-key dilim çekim hatası:', chunkErr);
+            throw chunkErr;
+          }
+          return chunkData || [];
+        })
+      ).catch((err) => {
+        fetchError = err;
+        return null;
+      });
+
+      if (!batchResults) break;
+      for (const rows of batchResults) {
+        for (const r of rows) {
+          if (r && r.id != null) {
+            rowById.set(String(r.id), r);
+          }
+        }
+      }
+    }
+
+    if (fetchError) {
+      console.error('Supabase chunk fetch error:', fetchError);
+      if (cachedReportsResponse && cachedReportsResponse.data.reports.length > 0) {
+        return NextResponse.json(cachedReportsResponse.data, {
+          headers: { ...NO_STORE_HEADERS, 'X-Cache': 'STALE' },
+        });
+      }
+      return NextResponse.json(
+        {
+          reports: [],
+          isCloudConfigured: true,
+          error: 'Raporlar getirilirken veritabanı hatası oluştu.',
+        },
+        { status: 500, headers: NO_STORE_HEADERS }
+      );
+    }
+
+    const orderedWinningRows = winningIds
+      .map((id) => rowById.get(id))
+      .filter((r): r is any => Boolean(r));
+
+    const reports = orderedWinningRows.map(mapRowToReport);
 
     const responsePayload = { reports, isCloudConfigured: true };
     cachedReportsResponse = { data: responsePayload, timestamp: now };
