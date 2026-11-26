@@ -18,6 +18,7 @@ import {
   fetchLiveBistNewsFeed,
   isStrictCorporateAnnouncement,
 } from '../lib/news-service.ts';
+import { buildForensicPortfolioPlan } from '../lib/portfolio-architect.ts';
 
 const ROOT = process.cwd();
 const sha256 = (rel) => crypto.createHash('sha256').update(fs.readFileSync(path.join(ROOT, rel))).digest('hex');
@@ -174,6 +175,7 @@ describe('KAP Disclosure Intelligence & Redesigned Panel UI/UX Verification Suit
       ['app/simply/simply-view.tsx', 'src/app/simply/simply-view.tsx'],
       ['app/simply/snowflake-radar.tsx', 'src/app/simply/snowflake-radar.tsx'],
       ['lib/news-service.ts', 'src/lib/news-service.ts'],
+      ['lib/portfolio-architect.ts', 'src/lib/portfolio-architect.ts'],
     ];
     for (const [a, b] of mirrorPairs) {
       assert.equal(sha256(a), sha256(b), `Mirror SHA-256 mismatch: ${a} !== ${b}`);
@@ -228,6 +230,9 @@ describe('KAP Disclosure Intelligence & Redesigned Panel UI/UX Verification Suit
     const radarSrc = fs.readFileSync(path.join(ROOT, 'app/simply/snowflake-radar.tsx'), 'utf8');
     assert.ok(radarSrc.includes('radarPalette') && radarSrc.includes('totalScore >= 20'), 'snowflake-radar.tsx must compute dynamic score-based gradient palette');
     assert.ok(pageSrc.includes('getSectorMonogramCls') && simplySrc.includes('fv-inline-sparkbar'), 'page.tsx / simply-view.tsx missing sector monogram or inline sparkbar');
+    for (const marker of ['fv-portfolio-architect', 'İdeal Portföy Mimarı', 'applyPortfolioSet', 'swapPortfolioTicker']) {
+      assert.ok(pageSrc.includes(marker), `page.tsx missing Portfolio Architect marker: ${marker}`);
+    }
   });
 
   it('7. Adversarial Real-World KAP Regression Guard: Moody downgrade, buyback daily vs cumulative, numeric integrity, inline tags & substring traps', () => {
@@ -288,5 +293,71 @@ describe('KAP Disclosure Intelligence & Redesigned Panel UI/UX Verification Suit
     assert.equal(isStrictCorporateAnnouncement('THY/Olmuştur: THY Türkiye\'nin en büyük bilançolarından birine sahip'), false);
     assert.equal(isStrictCorporateAnnouncement('BİST şirketlerinin 2026 yılı 6 aylık dönem finansal sonuçları açıklama tarihleri (Tablo)'), false);
     assert.equal(isStrictCorporateAnnouncement('Borsa İstanbul yatırımcı bazında tedbir uygulaması'), false);
+  });
+
+  it('8. Forensic Portfolio Architect & Quarterly Rotation Engine: 4-pillar filtering, group deduplication, A+ NÖTR vs traps & take-profit rotation', () => {
+    const mkHistory = ({ ni, ocf, wc, ebM, roic, wacc, netDebt, eb }) => [
+      { period: '2025/12', net_income: ni, operating_cash_flow: ocf, working_capital_change: wc, ebitda_margin: ebM, net_margin: ebM * 0.6, roic, real_wacc: wacc, eva_spread: roic - wacc, net_debt: netDebt, ebitda: eb },
+      { period: '2026/03', net_income: ni, operating_cash_flow: ocf, working_capital_change: wc, ebitda_margin: ebM, net_margin: ebM * 0.6, roic, real_wacc: wacc, eva_spread: roic - wacc, net_debt: netDebt, ebitda: eb },
+      { period: '2026/06', net_income: ni, operating_cash_flow: ocf, working_capital_change: wc, ebitda_margin: ebM, net_margin: ebM * 0.6, roic, real_wacc: wacc, eva_spread: roic - wacc, net_debt: netDebt, ebitda: eb },
+      { period: '2026/09', net_income: ni, operating_cash_flow: ocf, working_capital_change: wc, ebitda_margin: ebM, net_margin: ebM * 0.6, roic, real_wacc: wacc, eva_spread: roic - wacc, net_debt: netDebt, ebitda: eb },
+    ];
+    const mkReport = (ticker, sector, price, fairValue, score, decision, histArgs) => ({
+      id: `rep-${ticker}`,
+      ticker,
+      price: String(price),
+      fairValue: String(fairValue),
+      createdAt: '2026-11-26',
+      period: '2026/09',
+      report: '',
+      decision,
+      score: `${score}/100`,
+      sector,
+      extractedData: {
+        company_name: ticker,
+        sector,
+        reporting_period: '2026/09',
+        financial_history: mkHistory(histArgs),
+        valuation: { fair_value: fairValue, score, roic: histArgs.roic, real_wacc: histArgs.wacc, eva_spread: histArgs.roic - histArgs.wacc },
+      },
+    });
+
+    const sampleReports = [
+      // Tier-1 Çekirdek AL'lar
+      mkReport('TUPRS', 'INDUSTRIAL', 322, 681, 85, 'AL', { ni: 1000, ocf: 1700, wc: 200, ebM: 14, roic: 40.5, wacc: 14.2, netDebt: -5000, eb: 4000 }),
+      mkReport('TBORG', 'RETAIL', 116, 230, 89, 'AL', { ni: 500, ocf: 600, wc: -50, ebM: 30, roic: 31.8, wacc: 17.7, netDebt: -400, eb: 1800 }),
+      mkReport('SAYAS', 'INDUSTRIAL', 42, 59, 100, 'AL', { ni: 200, ocf: 248, wc: -30, ebM: 25, roic: 39.8, wacc: 14.6, netDebt: -100, eb: 300 }),
+      mkReport('TRENJ', 'UTILITIES_TELCO', 65, 97, 95, 'AL', { ni: 400, ocf: 900, wc: 100, ebM: 41, roic: 43.5, wacc: 13.9, netDebt: -2000, eb: 1100 }),
+      // Tier-3 elenecek AL'lar: TRMET (grup çift sayımı), ORGE (OCF/Net %35), PCILT (dar marj %7.1), OFSYM (WC/OCF %68)
+      mkReport('TRMET', 'INDUSTRIAL', 98, 133, 93, 'AL', { ni: 400, ocf: 900, wc: 100, ebM: 41, roic: 20.2, wacc: 18.6, netDebt: -2000, eb: 1100 }),
+      mkReport('ORGE', 'INDUSTRIAL', 18, 33, 83, 'AL', { ni: 700, ocf: 245, wc: -200, ebM: 56, roic: 38.6, wacc: 13.8, netDebt: -50, eb: 500 }),
+      mkReport('PCILT', 'TECH', 26, 66, 79, 'AL', { ni: 100, ocf: 268, wc: 40, ebM: 7.1, roic: 45.6, wacc: 17.9, netDebt: -300, eb: 150 }),
+      mkReport('OFSYM', 'RETAIL', 41, 69, 78, 'AL', { ni: 50, ocf: 450, wc: 310, ebM: 12, roic: 18.0, wacc: 13.4, netDebt: 400, eb: 220 }),
+      // A+ Kalite NÖTR & Adli Tuzak NÖTR & Rotasyon Çıkışı (Mevcut portföyde kalan potansiyeli %4 olan hisse)
+      mkReport('GUBRF', 'INDUSTRIAL', 273, 336, 94, 'NÖTR', { ni: 600, ocf: 1070, wc: 90, ebM: 19.6, roic: 37.7, wacc: 16.7, netDebt: -1000, eb: 2000 }),
+      mkReport('TCKRC', 'INDUSTRIAL', 118, 293, 83, 'NÖTR', { ni: 500, ocf: 60, wc: -200, ebM: 38.4, roic: 26.9, wacc: 17.6, netDebt: 150, eb: 400 }),
+      mkReport('FROTO', 'INDUSTRIAL', 100, 104, 86, 'NÖTR', { ni: 800, ocf: 950, wc: 50, ebM: 12.0, roic: 22.0, wacc: 14.0, netDebt: 500, eb: 1500 }),
+    ];
+
+    const plan = buildForensicPortfolioPlan(sampleReports, ['TUPRS', 'ORGE', 'FROTO']);
+
+    assert.ok(plan.tier1CoreAl.some(c => c.ticker === 'TUPRS') && plan.tier1CoreAl.some(c => c.ticker === 'TBORG'));
+    const filteredTickers = plan.tier3FilteredAl.map(c => c.ticker);
+    assert.ok(filteredTickers.includes('TRMET'), 'Consolidated twin TRMET must be filtered when TRENJ is present');
+    assert.ok(filteredTickers.includes('ORGE'), 'Low OCF/Net (35%) must filter ORGE into Tier-3');
+    assert.ok(filteredTickers.includes('PCILT'), 'Thin EBITDA margin (< 8%) must filter PCILT into Tier-3');
+    assert.ok(filteredTickers.includes('OFSYM'), 'WC share >= 65% must filter OFSYM into Tier-3');
+
+    assert.ok(plan.tierANeutralCandidates.some(c => c.ticker === 'GUBRF'), 'GUBRF must qualify as A+ quality NOTR');
+    assert.ok(plan.neutralValueTraps.some(c => c.ticker === 'TCKRC'), 'TCKRC (12% OCF conversion) must be flagged as Trap NOTR');
+
+    const totalWeight = plan.modelPortfolio.reduce((s, m) => s + m.recommendedWeightPct, 0);
+    assert.ok(Math.abs(totalWeight - 100) < 0.25, `Model portfolio weights must sum to 100%, got ${totalWeight}`);
+
+    const outTickers = plan.rotationSignals.rotateOut.map(x => x.candidate.ticker);
+    assert.ok(outTickers.includes('ORGE'), 'Existing holding ORGE must trigger forensic rotate-out');
+    assert.ok(outTickers.includes('FROTO'), 'Existing holding FROTO (+4% upside < 12%) must trigger take-profit rotation');
+    assert.ok(plan.rotationSignals.hold.some(h => h.candidate.ticker === 'TUPRS'), 'Existing clean holding TUPRS must stay HOLD');
+    assert.ok(plan.rotationSignals.rotateOut[0].suggestedReplacement != null, 'Rotate-out must suggest a valid model replacement');
   });
 });
