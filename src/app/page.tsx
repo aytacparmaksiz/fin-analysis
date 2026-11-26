@@ -68,8 +68,15 @@ import {
 } from '@/lib/company-categorizer';
 import {
   buildForensicPortfolioPlan,
+  computeCapitalAllocationPlan,
   DEFAULT_PORTFOLIO_ARCHITECT_CONFIG,
-  type PortfolioArchitectConfig
+  PORTFOLIO_ARCHITECT_PRESETS,
+  type PortfolioArchitectConfig,
+  type PortfolioPresetId,
+  type ForensicPortfolioCandidate,
+  type CapitalAllocationPlanResult,
+  type SavedPositionInput,
+  type PortfolioTargetStatus
 } from '@/lib/portfolio-architect';
 
 import {
@@ -1724,10 +1731,63 @@ export default function ValuationTerminal({
   const [portfolioWorkspaceTab, setPortfolioWorkspaceTab] = useState<'holdings' | 'architect'>('holdings');
   const [architectConfig, setArchitectConfig] = useState<PortfolioArchitectConfig>(DEFAULT_PORTFOLIO_ARCHITECT_CONFIG);
   const [architectTierFilter, setArchitectTierFilter] = useState<'MODEL' | 'ROTATION' | 'ALL_LAYERS' | 'NOTR_AUDIT'>('MODEL');
+  const [isArchitectFiltersOpen, setIsArchitectFiltersOpen] = useState<boolean>(false);
+  const [isHoldingsCapitalOpen, setIsHoldingsCapitalOpen] = useState<boolean>(true);
+  const [topUpAppliedNotice, setTopUpAppliedNotice] = useState<string | null>(null);
+  const [portfolioCapitalState, setPortfolioCapitalState] = useState<{
+    initialCapitalTry: number;
+    topUpCapitalTry: number;
+    allocationMode: 'initial' | 'topup';
+    topUpStrategy: 'smart_rebalance' | 'proportional';
+    positions: Record<string, SavedPositionInput>;
+  }>({
+    initialCapitalTry: 100000,
+    topUpCapitalTry: 50000,
+    allocationMode: 'initial',
+    topUpStrategy: 'smart_rebalance',
+    positions: {},
+  });
 
   const forensicPortfolioPlan = useMemo(() => {
     return buildForensicPortfolioPlan(savedReports, portfolioTickers, architectConfig);
   }, [savedReports, portfolioTickers, architectConfig]);
+
+  const modelAllocationPlan = useMemo(() => {
+    return computeCapitalAllocationPlan({
+      holdings: forensicPortfolioPlan.modelPortfolio,
+      mode: portfolioCapitalState.allocationMode,
+      initialCapitalTry: portfolioCapitalState.initialCapitalTry,
+      topUpCapitalTry: portfolioCapitalState.topUpCapitalTry,
+      topUpStrategy: portfolioCapitalState.topUpStrategy,
+      savedPositions: portfolioCapitalState.positions,
+      maxSingleStockWeightPct: architectConfig.maxSingleStockWeightPct,
+    });
+  }, [forensicPortfolioPlan.modelPortfolio, portfolioCapitalState, architectConfig.maxSingleStockWeightPct]);
+
+  const portfolioHoldingCandidates = useMemo(() => {
+    const out: ForensicPortfolioCandidate[] = [];
+    const seen = new Set<string>();
+    for (const rawTk of portfolioTickers) {
+      const sym = String(rawTk || '').trim().replace(/\.IS$/i, '').toUpperCase();
+      if (!sym || seen.has(sym)) continue;
+      seen.add(sym);
+      const cand = forensicPortfolioPlan.candidatesByTicker[sym];
+      if (cand) out.push(cand);
+    }
+    return out;
+  }, [portfolioTickers, forensicPortfolioPlan.candidatesByTicker]);
+
+  const holdingsAllocationPlan = useMemo(() => {
+    return computeCapitalAllocationPlan({
+      holdings: portfolioHoldingCandidates,
+      mode: portfolioCapitalState.allocationMode,
+      initialCapitalTry: portfolioCapitalState.initialCapitalTry,
+      topUpCapitalTry: portfolioCapitalState.topUpCapitalTry,
+      topUpStrategy: portfolioCapitalState.topUpStrategy,
+      savedPositions: portfolioCapitalState.positions,
+      maxSingleStockWeightPct: architectConfig.maxSingleStockWeightPct,
+    });
+  }, [portfolioHoldingCandidates, portfolioCapitalState, architectConfig.maxSingleStockWeightPct]);
 
   // Yan Yana Şirket Kıyaslama (En fazla 3 BIST Şirketi)
   const [compareTickers, setCompareTickers] = useState<string[]>([]);
@@ -1929,10 +1989,60 @@ export default function ValuationTerminal({
             setFavoriteTickers(parsedFavs.filter((t): t is string => typeof t === 'string' && t.trim().length > 0));
           }
         }
+        const savedArchCfg = localStorage.getItem('fair_value_architect_config_v1');
+        if (savedArchCfg) {
+          const parsedCfg = JSON.parse(savedArchCfg);
+          if (parsedCfg && typeof parsedCfg === 'object') {
+            setArchitectConfig(prev => ({ ...DEFAULT_PORTFOLIO_ARCHITECT_CONFIG, ...prev, ...parsedCfg }));
+          }
+        }
+        const savedCap = localStorage.getItem('fair_value_portfolio_capital_v1');
+        if (savedCap) {
+          const parsedCap = JSON.parse(savedCap);
+          if (parsedCap && typeof parsedCap === 'object') {
+            setPortfolioCapitalState(prev => ({
+              initialCapitalTry: typeof parsedCap.initialCapitalTry === 'number' && Number.isFinite(parsedCap.initialCapitalTry) ? Math.max(0, parsedCap.initialCapitalTry) : prev.initialCapitalTry,
+              topUpCapitalTry: typeof parsedCap.topUpCapitalTry === 'number' && Number.isFinite(parsedCap.topUpCapitalTry) ? Math.max(0, parsedCap.topUpCapitalTry) : prev.topUpCapitalTry,
+              allocationMode: parsedCap.allocationMode === 'topup' ? 'topup' : 'initial',
+              topUpStrategy: parsedCap.topUpStrategy === 'proportional' ? 'proportional' : 'smart_rebalance',
+              positions: parsedCap.positions && typeof parsedCap.positions === 'object' ? parsedCap.positions : prev.positions,
+            }));
+          }
+        }
       } catch (e) {
         console.warn('Portföy/Favori okuma hatası:', e);
       }
     }
+  }, []);
+
+  const updateArchitectConfig = useCallback((updater: PortfolioArchitectConfig | ((prev: PortfolioArchitectConfig) => PortfolioArchitectConfig)) => {
+    setArchitectConfig(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      try { localStorage.setItem('fair_value_architect_config_v1', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
+
+  const updatePortfolioCapitalState = useCallback((
+    updater: (prev: {
+      initialCapitalTry: number;
+      topUpCapitalTry: number;
+      allocationMode: 'initial' | 'topup';
+      topUpStrategy: 'smart_rebalance' | 'proportional';
+      positions: Record<string, SavedPositionInput>;
+    }) => {
+      initialCapitalTry: number;
+      topUpCapitalTry: number;
+      allocationMode: 'initial' | 'topup';
+      topUpStrategy: 'smart_rebalance' | 'proportional';
+      positions: Record<string, SavedPositionInput>;
+    }
+  ) => {
+    setPortfolioCapitalState(prev => {
+      const next = updater(prev);
+      try { localStorage.setItem('fair_value_portfolio_capital_v1', JSON.stringify(next)); } catch {}
+      return next;
+    });
   }, []);
 
   const togglePortfolio = useCallback((tickerToToggle: string) => {
@@ -1962,6 +2072,62 @@ export default function ValuationTerminal({
       return next;
     });
   }, []);
+
+  const applyModelPortfolioWithLots = useCallback((allocResult: CapitalAllocationPlanResult, mode: 'replace' | 'merge') => {
+    const tickers = allocResult.rows.map(r => r.ticker);
+    applyPortfolioSet(tickers, mode);
+    updatePortfolioCapitalState(prev => {
+      const nextPositions = mode === 'replace' ? {} as Record<string, SavedPositionInput> : { ...prev.positions };
+      for (const r of allocResult.rows) {
+        if (mode === 'replace' || !nextPositions[r.ticker]?.shares) {
+          nextPositions[r.ticker] = {
+            ...(nextPositions[r.ticker] || {}),
+            shares: r.finalLots,
+          };
+        }
+      }
+      return {
+        ...prev,
+        positions: nextPositions,
+      };
+    });
+  }, [applyPortfolioSet, updatePortfolioCapitalState]);
+
+  const commitTopUpToPositions = useCallback((allocResult: CapitalAllocationPlanResult) => {
+    updatePortfolioCapitalState(prev => {
+      const nextPositions = { ...prev.positions };
+      for (const r of allocResult.rows) {
+        nextPositions[r.ticker] = {
+          ...(nextPositions[r.ticker] || {}),
+          shares: r.finalLots,
+        };
+      }
+      return {
+        ...prev,
+        initialCapitalTry: Math.round(allocResult.finalPortfolioValueTry || prev.initialCapitalTry),
+        positions: nextPositions,
+      };
+    });
+    setTopUpAppliedNotice('İlave alım lotları mevcut portföyünüze işlendi.');
+    setTimeout(() => setTopUpAppliedNotice(null), 3500);
+  }, [updatePortfolioCapitalState]);
+
+  const updateHoldingShares = useCallback((rawTicker: string, rawSharesStr: string) => {
+    const sym = (rawTicker || '').trim().toUpperCase();
+    if (!sym) return;
+    const cleaned = rawSharesStr.replace(/[^0-9]/g, '');
+    const parsed = cleaned === '' ? 0 : Math.max(0, parseInt(cleaned, 10) || 0);
+    updatePortfolioCapitalState(prev => ({
+      ...prev,
+      positions: {
+        ...prev.positions,
+        [sym]: {
+          ...(prev.positions[sym] || {}),
+          shares: parsed,
+        },
+      },
+    }));
+  }, [updatePortfolioCapitalState]);
 
   const swapPortfolioTicker = useCallback((removeTicker: string, addTicker?: string | null) => {
     const rem = (removeTicker || '').trim().toUpperCase();
@@ -8704,6 +8870,278 @@ export default function ValuationTerminal({
               }));
             };
 
+            const formatTryInt = (val: number | null | undefined) => {
+              if (val == null || !Number.isFinite(val)) return '₺0';
+              return `₺${new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 0 }).format(Math.round(val))}`;
+            };
+
+            const formatPctSigned = (v: number | null | undefined) => {
+              if (v == null || !Number.isFinite(v)) return '—';
+              return `${v >= 0 ? '+' : '-'}%${Math.abs(v).toFixed(1)}`;
+            };
+
+            const getTargetStatusMeta = (status: PortfolioTargetStatus) => {
+              if (status === 'TARGET_REACHED') {
+                return { label: 'Hedefe Ulaştı • Rotasyon', cls: 'bg-rose-500/15 text-rose-300 border-rose-500/40' };
+              }
+              if (status === 'NEAR_TARGET') {
+                return { label: 'Hedefe Yaklaştı • Kâr Al', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/40' };
+              }
+              if (status === 'FORENSIC_EXIT') {
+                return { label: 'Adli Çıkış / Risk', cls: 'bg-rose-500/15 text-rose-300 border-rose-500/40' };
+              }
+              if (status === 'ACCUMULATE') {
+                return { label: 'İskontolu • Biriktir', cls: 'bg-emerald-500/12 text-emerald-300 border-emerald-500/35' };
+              }
+              return { label: 'Tut • İzle', cls: 'bg-sky-500/12 text-sky-300 border-sky-500/35' };
+            };
+
+            const customizedRuleCount = (
+              [
+                'maxSectorWeightPct',
+                'maxSingleStockWeightPct',
+                'minOcfConversionPct',
+                'minEbitdaMarginPct',
+                'includeHighQualityNeutralCount',
+                'rotationTakeProfitUpsideThresholdPct',
+                'deduplicateGroupHoldings',
+              ] as const
+            ).filter(k => architectConfig[k] !== DEFAULT_PORTFOLIO_ARCHITECT_CONFIG[k]).length;
+
+            const activePreset = PORTFOLIO_ARCHITECT_PRESETS.find(
+              p =>
+                p.config.targetCount === architectConfig.targetCount &&
+                p.config.maxSectorWeightPct === architectConfig.maxSectorWeightPct &&
+                p.config.maxSingleStockWeightPct === architectConfig.maxSingleStockWeightPct &&
+                p.config.minOcfConversionPct === architectConfig.minOcfConversionPct &&
+                p.config.includeHighQualityNeutralCount === architectConfig.includeHighQualityNeutralCount
+            );
+
+            const SECTOR_BAR_COLORS = [
+              'bg-emerald-400',
+              'bg-[#f5c242]',
+              'bg-cyan-400',
+              'bg-sky-400',
+              'bg-violet-400',
+              'bg-teal-400',
+              'bg-amber-400',
+              'bg-indigo-400',
+            ];
+
+            const renderCapitalPlannerBar = (allocResult: CapitalAllocationPlanResult, scope: 'architect' | 'holdings') => {
+              const isTopUp = portfolioCapitalState.allocationMode === 'topup';
+              const activeAmount = isTopUp ? portfolioCapitalState.topUpCapitalTry : portfolioCapitalState.initialCapitalTry;
+              const quickAmounts = isTopUp
+                ? [10000, 25000, 50000, 100000, 250000]
+                : [50000, 100000, 250000, 500000, 1000000];
+              const isCollapsed = scope === 'holdings' && !isHoldingsCapitalOpen;
+
+              return (
+                <div className="bg-[#151821] border border-[#262c38] rounded-2xl p-4 sm:p-5 space-y-3.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-[#f5c242]/12 border border-[#f5c242]/30 flex items-center justify-center text-[#f5c242] shrink-0">
+                        <Coins className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-sm font-bold text-white font-sans">
+                            {scope === 'architect' ? 'TL Sermaye & Aylık İlave Alım Planlayıcı' : 'Portföy Bütçesi & İlave Alım Dağıtıcı'}
+                          </h3>
+                          {scope === 'holdings' && (
+                            <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-[#101319] border border-[#262c38] text-[#f5c242]">
+                              {isTopUp ? `+${formatTryInt(activeAmount)} İlave` : formatTryInt(activeAmount)}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-400 font-sans">
+                          {isTopUp
+                            ? 'Yeni nakdi ağırlığı eksik kalan veya iskontosu yüksek hisselere tam lot (BIST 1 lot = 1 pay) bazında dağıtır.'
+                            : 'Başlangıç sermayenizi belirleyin; model ağırlıklara göre her hisseden kaç TL ve kaç lot alacağınızı hesaplar.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="inline-flex items-center bg-[#101319] p-1 rounded-xl border border-[#262c38]">
+                        <button
+                          type="button"
+                          onClick={() => updatePortfolioCapitalState(p => ({ ...p, allocationMode: 'initial' }))}
+                          className={`fv-pill px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${
+                            !isTopUp ? 'bg-[#f5c242] text-slate-950' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          Başlangıç Sermayesi
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updatePortfolioCapitalState(p => ({ ...p, allocationMode: 'topup' }))}
+                          className={`fv-pill px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${
+                            isTopUp ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          + Aylık İlave Ekle
+                        </button>
+                      </div>
+
+                      {scope === 'holdings' && (
+                        <button
+                          type="button"
+                          onClick={() => setIsHoldingsCapitalOpen(v => !v)}
+                          className="p-1.5 rounded-lg bg-[#101319] border border-[#262c38] text-slate-400 hover:text-white cursor-pointer"
+                          title={isCollapsed ? 'Planlayıcıyı Aç' : 'Daralt'}
+                        >
+                          {isCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {!isCollapsed && (
+                    <>
+                      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 pt-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex items-center bg-[#101319] border border-[#262c38] focus-within:border-[#f5c242] rounded-xl px-3 py-1.5 gap-2">
+                            <span className="text-xs font-mono font-bold text-[#f5c242]">
+                              {isTopUp ? '+₺' : '₺'}
+                            </span>
+                            <input
+                              type="number"
+                              min={0}
+                              step={1000}
+                              value={activeAmount}
+                              onChange={(e) => {
+                                const parsed = Math.max(0, Number(e.target.value) || 0);
+                                updatePortfolioCapitalState(prev =>
+                                  isTopUp
+                                    ? { ...prev, topUpCapitalTry: parsed }
+                                    : { ...prev, initialCapitalTry: parsed }
+                                );
+                              }}
+                              aria-label={isTopUp ? 'İlave Yatırım Tutarı (TL)' : 'Başlangıç Sermayesi (TL)'}
+                              className="w-28 bg-transparent text-sm font-mono font-bold text-white focus:outline-none tabular-nums"
+                            />
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {quickAmounts.map(amt => (
+                              <button
+                                key={amt}
+                                type="button"
+                                onClick={() =>
+                                  updatePortfolioCapitalState(prev =>
+                                    isTopUp
+                                      ? { ...prev, topUpCapitalTry: amt }
+                                      : { ...prev, initialCapitalTry: amt }
+                                  )
+                                }
+                                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold border cursor-pointer ${
+                                  activeAmount === amt
+                                    ? isTopUp
+                                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                                      : 'bg-[#f5c242]/15 text-[#f5c242] border-[#f5c242]/40'
+                                    : 'bg-[#101319] text-slate-400 hover:text-white border-[#262c38]'
+                                }`}
+                              >
+                                {isTopUp ? `+${formatTryInt(amt)}` : formatTryInt(amt)}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3 text-xs font-mono bg-[#101319] border border-[#232834] rounded-xl px-3.5 py-2">
+                          {isTopUp && (
+                            <>
+                              <div>
+                                <span className="text-slate-500 text-[10px] block font-sans">
+                                  {allocResult.hasSavedLots ? 'MEVCUT PORTFÖY' : 'BAZ SERMAYE'}
+                                </span>
+                                <span className="text-slate-200 font-bold">{formatTryInt(allocResult.existingPortfolioValueTry)}</span>
+                              </div>
+                              <div className="w-px h-6 bg-[#262c38]" />
+                            </>
+                          )}
+                          <div>
+                            <span className="text-slate-500 text-[10px] block font-sans">DAĞITILAN ALIM</span>
+                            <span className="text-emerald-400 font-bold">{formatTryInt(allocResult.deployedAmountTry)}</span>
+                          </div>
+                          <div className="w-px h-6 bg-[#262c38]" />
+                          <div>
+                            <span className="text-slate-500 text-[10px] block font-sans">KÜSURAT NAKİT</span>
+                            <span className="text-slate-300 font-bold">{formatTryInt(allocResult.unallocatedCashTry)}</span>
+                          </div>
+                          <div className="w-px h-6 bg-[#262c38]" />
+                          <div>
+                            <span className="text-slate-500 text-[10px] block font-sans">YENİ TOPLAM → HEDEF</span>
+                            <span className="text-white font-bold">{formatTryInt(allocResult.finalPortfolioValueTry)}</span>
+                            <span className="text-[#f5c242] font-bold ml-1">➔ {formatTryInt(allocResult.impliedPortfolioFairValueTry)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {isTopUp && (
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 pt-2 border-t border-[#232834]">
+                          <div className="flex items-center gap-2 flex-wrap text-xs">
+                            <span className="text-slate-400 font-sans">İlave Stratejisi:</span>
+                            <button
+                              type="button"
+                              onClick={() => updatePortfolioCapitalState(p => ({ ...p, topUpStrategy: 'smart_rebalance' }))}
+                              className={`px-2.5 py-1 rounded-lg border font-sans font-semibold cursor-pointer ${
+                                portfolioCapitalState.topUpStrategy === 'smart_rebalance'
+                                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                                  : 'bg-[#101319] text-slate-400 hover:text-white border-[#262c38]'
+                              }`}
+                            >
+                              Akıllı Dengeleme (Eksik Ağırlığı Tamamla)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updatePortfolioCapitalState(p => ({ ...p, topUpStrategy: 'proportional' }))}
+                              className={`px-2.5 py-1 rounded-lg border font-sans font-semibold cursor-pointer ${
+                                portfolioCapitalState.topUpStrategy === 'proportional'
+                                  ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40'
+                                  : 'bg-[#101319] text-slate-400 hover:text-white border-[#262c38]'
+                              }`}
+                            >
+                              Sabit Oransal (% Ağırlıkla)
+                            </button>
+                            {!allocResult.hasSavedLots && (
+                              <span className="text-[11px] text-slate-500 font-sans">
+                                • Baz: {formatTryInt(portfolioCapitalState.initialCapitalTry)} başlangıç varsayımı
+                              </span>
+                            )}
+                          </div>
+
+                          {scope === 'holdings' && allocResult.deployedAmountTry > 0 && (
+                            <div className="flex items-center gap-2">
+                              {topUpAppliedNotice && (
+                                <span className="text-xs text-emerald-400 font-sans font-semibold">{topUpAppliedNotice}</span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => commitTopUpToPositions(allocResult)}
+                                className="fv-pill px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer inline-flex items-center gap-1.5"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>İlave Alımları Lotlarıma İşle</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {allocResult.warningMessage && (
+                        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 font-sans flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span>{allocResult.warningMessage}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            };
+
             return (
               <div className="space-y-5 fv-panel-enter">
                 {/* ÜST BAŞLIK & KPI KOMUTA ŞERİDİ */}
@@ -9013,10 +9451,8 @@ export default function ValuationTerminal({
 
                 {showArchitect ? (() => {
                   const plan = forensicPortfolioPlan;
-                  const formatPctSigned = (v: number | null | undefined) => {
-                    if (v == null || !Number.isFinite(v)) return '—';
-                    return `${v >= 0 ? '+' : '-'}%${Math.abs(v).toFixed(1)}`;
-                  };
+                  const alloc = modelAllocationPlan;
+                  const allocRowByTicker = new Map(alloc.rows.map(r => [r.ticker, r]));
                   const tierBadgeMeta = (tier: string) => {
                     if (tier === 'TIER_1_CORE') {
                       return { label: 'Tier-1 Çekirdek', cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35' };
@@ -9034,155 +9470,150 @@ export default function ValuationTerminal({
                   };
 
                   return (
-                    <div data-testid="fv-portfolio-architect" className="space-y-5 fv-panel-enter">
-                      {/* 4'lü Adli Portföy Mimarısı KPI Şeridi */}
+                    <div data-testid="fv-portfolio-architect" className="space-y-4 fv-panel-enter">
+                      {/* 4'lü Yönetici Özeti KPI Şeridi */}
                       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
                         <div className="fv-kpi-card bg-[#151821] border border-[#262c38] rounded-2xl p-4 space-y-1.5">
-                          <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">MODEL PORTFÖY YAPISI</div>
+                          <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">KURUMSAL PORTFÖY YAPISI</div>
                           <div className="text-2xl font-black font-mono text-white">
-                            {plan.modelPortfolio.length} <span className="text-xs font-normal text-slate-400">Hisse</span>
+                            {plan.modelPortfolio.length} <span className="text-xs font-normal text-slate-400">Hisse • {plan.sectorBreakdown.length} Sektör</span>
                           </div>
                           <div className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5 flex-wrap">
                             <span className="text-emerald-400">{plan.tier1CoreAl.length} Çekirdek</span>
                             <span>•</span>
                             <span className="text-amber-300">{plan.tier2SatelliteAl.length} Uydu</span>
                             <span>•</span>
-                            <span className="text-rose-400">{plan.tier3FilteredAl.length} Elenen AL</span>
+                            <span className="text-slate-300">Tavan %{architectConfig.maxSingleStockWeightPct}</span>
                           </div>
                         </div>
 
                         <div className="fv-kpi-card bg-[#151821] border border-[#262c38] rounded-2xl p-4 space-y-1.5">
-                          <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">AĞIRLIKLI ORT. POTANSİYEL</div>
-                          <div className={`text-2xl font-black font-mono ${
-                            plan.weightedAvgUpsidePct != null && plan.weightedAvgUpsidePct >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                          }`}>
-                            {formatPctSigned(plan.weightedAvgUpsidePct)}
+                          <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">SERMAYE → ADİL DEĞER</div>
+                          <div className="text-lg sm:text-xl font-black font-mono text-white truncate">
+                            {formatTryInt(alloc.finalPortfolioValueTry)} <span className="text-emerald-400">➔ {formatTryInt(alloc.impliedPortfolioFairValueTry)}</span>
                           </div>
                           <div className="text-[11px] font-mono text-slate-400">
-                            Ort. Kalite Skoru: <strong className="text-[#f5c242]">{plan.weightedAvgScore != null ? `${plan.weightedAvgScore}/100` : '—'}</strong>
+                            Ort. Potansiyel: <strong className={plan.weightedAvgUpsidePct != null && plan.weightedAvgUpsidePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{formatPctSigned(plan.weightedAvgUpsidePct)}</strong>
                           </div>
                         </div>
 
                         <div className="fv-kpi-card bg-[#151821] border border-[#262c38] rounded-2xl p-4 space-y-1.5">
-                          <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">AĞIRLIKLI EVA MAKASI</div>
-                          <div className={`text-2xl font-black font-mono ${
-                            plan.weightedAvgEvaPct != null && plan.weightedAvgEvaPct >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                          }`}>
-                            {plan.weightedAvgEvaPct != null ? `${plan.weightedAvgEvaPct >= 0 ? '+' : ''}${plan.weightedAvgEvaPct}p` : '—'}
+                          <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">KALİTE &amp; EVA MAKASI</div>
+                          <div className="flex items-baseline gap-2 font-mono">
+                            <span className="text-2xl font-black text-[#f5c242]">{plan.weightedAvgScore != null ? `${plan.weightedAvgScore}` : '—'}</span>
+                            <span className="text-xs text-slate-400">/100</span>
+                            <span className={`text-sm font-bold ml-auto ${plan.weightedAvgEvaPct != null && plan.weightedAvgEvaPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {plan.weightedAvgEvaPct != null ? `EVA ${plan.weightedAvgEvaPct >= 0 ? '+' : ''}${plan.weightedAvgEvaPct}p` : '—'}
+                            </span>
                           </div>
                           <div className="text-[11px] font-mono text-slate-400">
-                            A+ Kalite NÖTR: <strong className="text-cyan-300">{plan.tierANeutralCandidates.length}</strong> aday
+                            A+ Kalite NÖTR: <strong className="text-cyan-300">{plan.tierANeutralCandidates.length}</strong> aday • Elenen: <strong className="text-rose-400">{plan.tier3FilteredAl.length}</strong>
                           </div>
                         </div>
 
-                        <div className="fv-kpi-card bg-[#151821] border border-[#262c38] rounded-2xl p-4 space-y-1.5">
-                          <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">ROTASYON SİNYALİ</div>
-                          <div className="flex items-center gap-2 font-mono text-lg font-black">
-                            <span className="text-rose-400">{plan.rotationSignals.rotateOut.length} Çıkış</span>
+                        <button
+                          type="button"
+                          onClick={() => setArchitectTierFilter('ROTATION')}
+                          className="fv-kpi-card bg-[#151821] hover:border-emerald-500/40 border border-[#262c38] rounded-2xl p-4 space-y-1.5 text-left cursor-pointer"
+                        >
+                          <div className="flex items-center justify-between text-[11px] font-mono uppercase tracking-wider text-slate-400">
+                            <span>HEDEF &amp; ROTASYON</span>
+                            <ArrowUpRight className="w-3.5 h-3.5 text-slate-500" />
+                          </div>
+                          <div className="flex items-center gap-2 font-mono text-xl font-black">
+                            <span className={plan.rotationSignals.rotateOut.length > 0 ? 'text-rose-400' : 'text-slate-300'}>
+                              {plan.rotationSignals.rotateOut.length} Çıkış
+                            </span>
                             <span className="text-slate-600">/</span>
                             <span className="text-emerald-400">{plan.rotationSignals.rotateIn.length} Yeni</span>
                           </div>
                           <div className="text-[11px] font-mono text-slate-400">
-                            Kâr-Al Eşiği: <strong className="text-white">&lt;%{architectConfig.rotationTakeProfitUpsideThresholdPct}</strong> • Tut: <strong className="text-sky-300">{plan.rotationSignals.hold.length}</strong>
+                            Kâr-Al: <strong className="text-white">&lt;%{architectConfig.rotationTakeProfitUpsideThresholdPct}</strong> • Korunan: <strong className="text-sky-300">{plan.rotationSignals.hold.length}</strong>
                           </div>
-                        </div>
+                        </button>
                       </div>
 
-                      {/* Adli Filtre & Kısıt Kuralı Ayarları + Tek Tık Portföy Aksiyonları */}
+                      {/* Sade Strateji Çubuğu + Açılır Kapanır Filtre Akordiyonu */}
                       <div className="bg-[#151821] border border-[#262c38] rounded-2xl p-4 sm:p-5 space-y-4">
                         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
                           <div className="flex flex-wrap items-center gap-2.5 text-xs">
-                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#101319] border border-[#262c38]">
-                              <span className="text-slate-400 font-sans">Hedef Hisse:</span>
-                              {([8, 10, 12, 15] as const).map(cnt => (
-                                <button
-                                  key={cnt}
-                                  type="button"
-                                  onClick={() => setArchitectConfig(prev => ({ ...prev, targetCount: cnt }))}
-                                  className={`px-2 py-0.5 rounded font-mono font-bold cursor-pointer ${
-                                    architectConfig.targetCount === cnt ? 'bg-[#f5c242] text-slate-950' : 'text-slate-400 hover:text-white'
-                                  }`}
-                                >
-                                  {cnt}
-                                </button>
-                              ))}
+                            {/* Kurumsal Şablon Seçimi */}
+                            <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-[#101319] border border-[#262c38]">
+                              {PORTFOLIO_ARCHITECT_PRESETS.map(preset => {
+                                const isActive = activePreset?.id === preset.id;
+                                return (
+                                  <button
+                                    key={preset.id}
+                                    type="button"
+                                    onClick={() => updateArchitectConfig({ ...preset.config })}
+                                    title={preset.subtitle}
+                                    className={`fv-pill px-2.5 py-1.5 rounded-lg font-sans font-bold cursor-pointer whitespace-nowrap ${
+                                      isActive
+                                        ? 'bg-[#f5c242] text-slate-950 shadow-sm'
+                                        : 'text-slate-400 hover:text-white'
+                                    }`}
+                                  >
+                                    {preset.label} ({preset.config.targetCount})
+                                  </button>
+                                );
+                              })}
                             </div>
 
-                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#101319] border border-[#262c38]">
-                              <span className="text-slate-400 font-sans">Sektör Tavanı:</span>
-                              {([15, 20, 25, 30] as const).map(secCap => (
-                                <button
-                                  key={secCap}
-                                  type="button"
-                                  onClick={() => setArchitectConfig(prev => ({ ...prev, maxSectorWeightPct: secCap }))}
-                                  className={`px-2 py-0.5 rounded font-mono font-bold cursor-pointer ${
-                                    architectConfig.maxSectorWeightPct === secCap ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-white'
-                                  }`}
-                                >
-                                  %{secCap}
-                                </button>
-                              ))}
+                            {/* Doğrudan Hisse Sayısı Artır / Azalt Stepper */}
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#101319] border border-[#262c38]">
+                              <span className="text-slate-400 font-sans">Hisse Sayısı:</span>
+                              <button
+                                type="button"
+                                aria-label="Hisse sayısını azalt"
+                                disabled={architectConfig.targetCount <= 5}
+                                onClick={() =>
+                                  updateArchitectConfig(prev => ({
+                                    ...prev,
+                                    targetCount: Math.max(5, prev.targetCount - 1),
+                                  }))
+                                }
+                                className="w-6 h-6 rounded-md bg-[#151821] hover:bg-[#222836] border border-[#262c38] flex items-center justify-center text-slate-200 cursor-pointer disabled:opacity-35"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+                              <span className="min-w-[26px] text-center font-mono font-black text-sm text-white tabular-nums">
+                                {architectConfig.targetCount}
+                              </span>
+                              <button
+                                type="button"
+                                aria-label="Hisse sayısını artır"
+                                disabled={architectConfig.targetCount >= 20}
+                                onClick={() =>
+                                  updateArchitectConfig(prev => ({
+                                    ...prev,
+                                    targetCount: Math.min(20, prev.targetCount + 1),
+                                  }))
+                                }
+                                className="w-6 h-6 rounded-md bg-[#151821] hover:bg-[#222836] border border-[#262c38] flex items-center justify-center text-slate-200 cursor-pointer disabled:opacity-35"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
                             </div>
 
-                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#101319] border border-[#262c38]">
-                              <span className="text-slate-400 font-sans">Min Nakit Dönüşümü:</span>
-                              {([0, 65, 80, 100] as const).map(ocfMin => (
-                                <button
-                                  key={ocfMin}
-                                  type="button"
-                                  onClick={() => setArchitectConfig(prev => ({ ...prev, minOcfConversionPct: ocfMin }))}
-                                  className={`px-2 py-0.5 rounded font-mono font-bold cursor-pointer ${
-                                    architectConfig.minOcfConversionPct === ocfMin ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'
-                                  }`}
-                                >
-                                  {ocfMin === 0 ? 'Esnek' : `%${ocfMin}`}
-                                </button>
-                              ))}
-                            </div>
-
-                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#101319] border border-[#262c38]">
-                              <span className="text-slate-400 font-sans">A+ NÖTR:</span>
-                              {([0, 1, 2, 3] as const).map(nCnt => (
-                                <button
-                                  key={nCnt}
-                                  type="button"
-                                  onClick={() => setArchitectConfig(prev => ({ ...prev, includeHighQualityNeutralCount: nCnt }))}
-                                  className={`px-2 py-0.5 rounded font-mono font-bold cursor-pointer ${
-                                    architectConfig.includeHighQualityNeutralCount === nCnt ? 'bg-sky-500 text-slate-950' : 'text-slate-400 hover:text-white'
-                                  }`}
-                                >
-                                  {nCnt}
-                                </button>
-                              ))}
-                            </div>
-
-                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#101319] border border-[#262c38]">
-                              <span className="text-slate-400 font-sans">Rotasyon Kâr-Al:</span>
-                              {([10, 12, 15, 20] as const).map(rot => (
-                                <button
-                                  key={rot}
-                                  type="button"
-                                  onClick={() => setArchitectConfig(prev => ({ ...prev, rotationTakeProfitUpsideThresholdPct: rot }))}
-                                  className={`px-2 py-0.5 rounded font-mono font-bold cursor-pointer ${
-                                    architectConfig.rotationTakeProfitUpsideThresholdPct === rot ? 'bg-rose-500 text-white' : 'text-slate-400 hover:text-white'
-                                  }`}
-                                >
-                                  &lt;%{rot}
-                                </button>
-                              ))}
-                            </div>
-
+                            {/* Kapanıp Açılabilen Gelişmiş Filtre Akordiyon Düğmesi */}
                             <button
                               type="button"
-                              onClick={() => setArchitectConfig(prev => ({ ...prev, deduplicateGroupHoldings: !prev.deduplicateGroupHoldings }))}
-                              className={`fv-pill px-2.5 py-1.5 rounded-xl border font-mono text-xs font-bold cursor-pointer ${
-                                architectConfig.deduplicateGroupHoldings
-                                  ? 'bg-emerald-500/12 text-emerald-300 border-emerald-500/35'
-                                  : 'bg-[#101319] text-slate-400 border-[#262c38]'
+                              aria-expanded={isArchitectFiltersOpen}
+                              onClick={() => setIsArchitectFiltersOpen(v => !v)}
+                              className={`fv-pill inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-sans font-bold cursor-pointer ${
+                                isArchitectFiltersOpen || customizedRuleCount > 0
+                                  ? 'bg-[#222836] text-cyan-300 border-cyan-500/40'
+                                  : 'bg-[#101319] text-slate-300 hover:text-white border-[#262c38]'
                               }`}
-                              title="Aynı konsolide tabloyu paylaşan şirketlerde (TRENJ/TRMET) çift sayımı önler"
                             >
-                              Grup Tekilleştir: {architectConfig.deduplicateGroupHoldings ? 'AÇIK' : 'KAPALI'}
+                              <SlidersHorizontal className="w-3.5 h-3.5" />
+                              <span>Filtre &amp; Kısıtlar</span>
+                              {customizedRuleCount > 0 && (
+                                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                                  {customizedRuleCount}
+                                </span>
+                              )}
+                              {isArchitectFiltersOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                             </button>
                           </div>
 
@@ -9190,29 +9621,211 @@ export default function ValuationTerminal({
                             <button
                               type="button"
                               disabled={plan.modelPortfolio.length === 0}
-                              onClick={() => applyPortfolioSet(plan.modelPortfolio.map(m => m.ticker), 'merge')}
+                              onClick={() => applyModelPortfolioWithLots(alloc, 'merge')}
                               className="fv-pill px-3 py-2 rounded-xl bg-[#101319] hover:bg-[#1b202b] text-emerald-300 border border-emerald-500/35 text-xs font-bold cursor-pointer disabled:opacity-40"
                             >
-                              + Eksikleri Portföye Ekle
+                              + Eksikleri Ekle
                             </button>
                             <button
                               type="button"
                               disabled={plan.modelPortfolio.length === 0}
                               onClick={() => {
-                                applyPortfolioSet(plan.modelPortfolio.map(m => m.ticker), 'replace');
+                                applyModelPortfolioWithLots(alloc, 'replace');
                                 setPortfolioWorkspaceTab('holdings');
                               }}
                               className="fv-pill px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer shadow-sm disabled:opacity-40"
                             >
-                              Model Portföyü Uygula ({plan.modelPortfolio.length})
+                              Modeli Portföyüme Uygula ({plan.modelPortfolio.length})
                             </button>
                           </div>
                         </div>
 
-                        {/* Alt Görünüm Sekmeleri (Model Portföy / Rotasyon / 22 AL Katmanları / NÖTR Havuzu) */}
+                        {/* Kapanıp Açılabilen Akordiyon: Çeşitlendirme, Adli Kalite ve Rotasyon Kuralları */}
+                        {isArchitectFiltersOpen && (
+                          <div className="p-4 rounded-xl bg-[#101319] border border-[#262c38] space-y-4">
+                            <div className="flex items-center justify-between gap-2 pb-2 border-b border-[#232834]">
+                              <span className="text-xs font-sans font-bold text-slate-200">
+                                Gelişmiş Kurumsal Portföy Kısıtları &amp; 4-Boyutlu Adli Eşikler
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => updateArchitectConfig({ ...DEFAULT_PORTFOLIO_ARCHITECT_CONFIG })}
+                                className="text-[11px] font-sans font-bold text-[#f5c242] hover:underline cursor-pointer inline-flex items-center gap-1"
+                              >
+                                <RefreshCw className="w-3 h-3" />
+                                <span>Kurumsal Varsayılana Sıfırla</span>
+                              </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                              {/* Sütun 1: Çeşitlendirme Kısıtları */}
+                              <div className="space-y-3">
+                                <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+                                  1. Çeşitlendirme Kısıtları
+                                </div>
+                                <div className="space-y-1.5">
+                                  <span className="text-slate-400 block font-sans">Maks. Sektör Tavanı</span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {([15, 20, 25, 30] as const).map(secCap => (
+                                      <button
+                                        key={secCap}
+                                        type="button"
+                                        onClick={() => updateArchitectConfig(prev => ({ ...prev, maxSectorWeightPct: secCap }))}
+                                        className={`px-2.5 py-1 rounded-lg font-mono font-bold border cursor-pointer ${
+                                          architectConfig.maxSectorWeightPct === secCap
+                                            ? 'bg-cyan-500 text-slate-950 border-cyan-400'
+                                            : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
+                                        }`}
+                                      >
+                                        %{secCap}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                  <span className="text-slate-400 block font-sans">Maks. Tek Hisse Ağırlığı</span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {([10, 12, 15, 20] as const).map(stockCap => (
+                                      <button
+                                        key={stockCap}
+                                        type="button"
+                                        onClick={() => updateArchitectConfig(prev => ({ ...prev, maxSingleStockWeightPct: stockCap }))}
+                                        className={`px-2.5 py-1 rounded-lg font-mono font-bold border cursor-pointer ${
+                                          architectConfig.maxSingleStockWeightPct === stockCap
+                                            ? 'bg-[#f5c242] text-slate-950 border-[#f5c242]'
+                                            : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
+                                        }`}
+                                      >
+                                        %{stockCap}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateArchitectConfig(prev => ({ ...prev, deduplicateGroupHoldings: !prev.deduplicateGroupHoldings }))
+                                  }
+                                  className={`w-full px-3 py-1.5 rounded-lg border font-mono text-xs font-bold cursor-pointer text-left flex items-center justify-between ${
+                                    architectConfig.deduplicateGroupHoldings
+                                      ? 'bg-emerald-500/12 text-emerald-300 border-emerald-500/35'
+                                      : 'bg-[#151821] text-slate-400 border-[#262c38]'
+                                  }`}
+                                >
+                                  <span>Konsolide Grup Tekilleştir</span>
+                                  <span>{architectConfig.deduplicateGroupHoldings ? 'AÇIK' : 'KAPALI'}</span>
+                                </button>
+                              </div>
+
+                              {/* Sütun 2: Adli Kalite Eşikleri */}
+                              <div className="space-y-3">
+                                <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+                                  2. Adli Kalite Eşikleri
+                                </div>
+                                <div className="space-y-1.5">
+                                  <span className="text-slate-400 block font-sans">Min. Nakit Dönüşümü (OCF/Net)</span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {([0, 65, 80, 100] as const).map(ocfMin => (
+                                      <button
+                                        key={ocfMin}
+                                        type="button"
+                                        onClick={() => updateArchitectConfig(prev => ({ ...prev, minOcfConversionPct: ocfMin }))}
+                                        className={`px-2.5 py-1 rounded-lg font-mono font-bold border cursor-pointer ${
+                                          architectConfig.minOcfConversionPct === ocfMin
+                                            ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                                            : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
+                                        }`}
+                                      >
+                                        {ocfMin === 0 ? 'Esnek' : `%${ocfMin}`}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                  <span className="text-slate-400 block font-sans">Min. FAVÖK Marj Tamponu</span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {([5, 8, 12] as const).map(ebMin => (
+                                      <button
+                                        key={ebMin}
+                                        type="button"
+                                        onClick={() => updateArchitectConfig(prev => ({ ...prev, minEbitdaMarginPct: ebMin }))}
+                                        className={`px-2.5 py-1 rounded-lg font-mono font-bold border cursor-pointer ${
+                                          architectConfig.minEbitdaMarginPct === ebMin
+                                            ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                                            : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
+                                        }`}
+                                      >
+                                        %{ebMin}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                  <span className="text-slate-400 block font-sans">A+ Kalite NÖTR Kontenjanı</span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {([0, 1, 2, 3] as const).map(nCnt => (
+                                      <button
+                                        key={nCnt}
+                                        type="button"
+                                        onClick={() =>
+                                          updateArchitectConfig(prev => ({ ...prev, includeHighQualityNeutralCount: nCnt }))
+                                        }
+                                        className={`px-2.5 py-1 rounded-lg font-mono font-bold border cursor-pointer ${
+                                          architectConfig.includeHighQualityNeutralCount === nCnt
+                                            ? 'bg-sky-500 text-slate-950 border-sky-400'
+                                            : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
+                                        }`}
+                                      >
+                                        {nCnt} Hisse
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Sütun 3: Rotasyon & Hedef Uyarı Eşiği */}
+                              <div className="space-y-3">
+                                <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+                                  3. Hedef &amp; Rotasyon Alarmı
+                                </div>
+                                <div className="space-y-1.5">
+                                  <span className="text-slate-400 block font-sans">
+                                    Hedefe Yaklaşma / Kâr-Al Uyarı Eşiği
+                                  </span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {([8, 10, 12, 15, 20] as const).map(rot => (
+                                      <button
+                                        key={rot}
+                                        type="button"
+                                        onClick={() =>
+                                          updateArchitectConfig(prev => ({
+                                            ...prev,
+                                            rotationTakeProfitUpsideThresholdPct: rot,
+                                          }))
+                                        }
+                                        className={`px-2.5 py-1 rounded-lg font-mono font-bold border cursor-pointer ${
+                                          architectConfig.rotationTakeProfitUpsideThresholdPct === rot
+                                            ? 'bg-rose-500 text-white border-rose-400'
+                                            : 'bg-[#151821] text-slate-400 hover:text-white border-[#262c38]'
+                                        }`}
+                                      >
+                                        &lt;%{rot}
+                                      </button>
+                                    ))}
+                                  </div>
+                                  <p className="text-[11px] text-slate-500 font-sans pt-1 leading-relaxed">
+                                    Hisse fiyatıyla adil değer arasındaki kalan potansiyel belirlenen eşik değerin altına indiğinde hem Portföyüm hem de Rotasyon Masası üzerinde uyarı üretilir ve akıllı ilave alımda bu hisseye yeni nakit aktarılmaz.
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Alt Görünüm Sekmeleri */}
                         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-2 border-t border-[#232834]">
                           {([
-                            { id: 'MODEL', label: `İdeal Model Portföy (${plan.modelPortfolio.length})` },
+                            { id: 'MODEL', label: `İdeal Portföy & TL Dağılımı (${plan.modelPortfolio.length})` },
                             { id: 'ROTATION', label: `Çeyreklik Rotasyon Masası (${plan.rotationSignals.rotateOut.length} Çıkış / ${plan.rotationSignals.rotateIn.length} Yeni)` },
                             { id: 'ALL_LAYERS', label: `AL Hisseleri Adli Katmanları (${plan.totalAlCount})` },
                             { id: 'NOTR_AUDIT', label: `NÖTR Havuzu: A+ Fırsat (${plan.tierANeutralCandidates.length}) vs Tuzak (${plan.neutralValueTraps.length})` },
@@ -9233,29 +9846,53 @@ export default function ValuationTerminal({
                         </div>
                       </div>
 
+                      {/* TL Sermaye & Aylık İlave Yatırım Planlayıcı Barı */}
+                      {architectTierFilter === 'MODEL' && renderCapitalPlannerBar(alloc, 'architect')}
+
                       {/* SEKMELERİN İÇERİĞİ */}
                       {architectTierFilter === 'MODEL' && (
                         <div className="space-y-4">
-                          {/* Sektörel Dağılım Özeti */}
+                          {/* Görsel Yığılmış Sektör Ağırlık Çubuğu & Sektör Kartları */}
                           {plan.sectorBreakdown.length > 0 && (
-                            <div className="bg-[#151821] border border-[#262c38] rounded-2xl p-4 space-y-2.5">
+                            <div className="bg-[#151821] border border-[#262c38] rounded-2xl p-4 space-y-3">
                               <div className="flex items-center justify-between text-xs font-mono">
-                                <span className="text-slate-400 font-bold uppercase">Sektörel Ağırlık Dağılımı (Tavan: %{architectConfig.maxSectorWeightPct})</span>
+                                <span className="text-slate-400 font-bold uppercase">
+                                  Sektörel Dağılım &amp; Konsantrasyon (Tavan: %{architectConfig.maxSectorWeightPct})
+                                </span>
                                 <span className="text-slate-400">{plan.sectorBreakdown.length} Sektör</span>
                               </div>
-                              <div className="flex flex-wrap gap-2">
-                                {plan.sectorBreakdown.map(sec => (
+                              <div className="h-2.5 w-full rounded-full bg-[#101319] overflow-hidden flex gap-0.5">
+                                {plan.sectorBreakdown.map((sec, sIdx) => (
                                   <div
                                     key={sec.sectorName}
-                                    className="px-3 py-1.5 rounded-xl bg-[#101319] border border-[#232834] text-xs font-mono flex items-center gap-2"
-                                  >
-                                    <span className="text-slate-200 font-sans font-semibold">{sec.sectorName}</span>
-                                    <span className={`font-bold ${sec.weightPct > architectConfig.maxSectorWeightPct ? 'text-rose-400' : 'text-emerald-400'}`}>
-                                      %{sec.weightPct.toFixed(1)}
-                                    </span>
-                                    <span className="text-[10px] text-slate-500">({sec.tickers.join(', ')})</span>
-                                  </div>
+                                    className={`h-full ${SECTOR_BAR_COLORS[sIdx % SECTOR_BAR_COLORS.length]} first:rounded-l-full last:rounded-r-full`}
+                                    style={{ width: `${Math.max(1, sec.weightPct)}%` }}
+                                    title={`${sec.sectorName}: %${sec.weightPct.toFixed(1)} (${sec.tickers.join(', ')})`}
+                                  />
                                 ))}
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {plan.sectorBreakdown.map((sec, sIdx) => {
+                                  const secTryTotal = sec.tickers.reduce(
+                                    (sum, tk) => sum + (allocRowByTicker.get(tk)?.finalValueTry || 0),
+                                    0
+                                  );
+                                  return (
+                                    <div
+                                      key={sec.sectorName}
+                                      className="px-2.5 py-1 rounded-xl bg-[#101319] border border-[#232834] text-[11px] font-mono flex items-center gap-2"
+                                    >
+                                      <span className={`w-2 h-2 rounded-full ${SECTOR_BAR_COLORS[sIdx % SECTOR_BAR_COLORS.length]}`} />
+                                      <span className="text-slate-200 font-sans font-semibold">{sec.sectorName}</span>
+                                      <span className={`font-bold ${sec.weightPct > architectConfig.maxSectorWeightPct ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                        %{sec.weightPct.toFixed(1)}
+                                      </span>
+                                      {secTryTotal > 0 && (
+                                        <span className="text-slate-400">{formatTryInt(secTryTotal)}</span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           )}
@@ -9268,16 +9905,21 @@ export default function ValuationTerminal({
                                   <tr className="border-b border-[#262c38] bg-[#101319] text-[11px] font-mono text-slate-400 uppercase tracking-wider">
                                     <th className="py-3.5 px-4">Şirket &amp; Katman</th>
                                     <th className="py-3.5 px-3 text-center">Hedef Ağırlık</th>
+                                    <th className="py-3.5 px-3 text-right">
+                                      {portfolioCapitalState.allocationMode === 'topup' ? 'İlave Alım (TL / Lot)' : 'TL Tahsisat & Lot'}
+                                    </th>
                                     <th className="py-3.5 px-3 text-right">Fiyat → Adil Değer</th>
-                                    <th className="py-3.5 px-3 text-center">Potansiyel</th>
-                                    <th className="py-3.5 px-3 text-center">Skor / EVA</th>
-                                    <th className="py-3.5 px-3 text-center">Nakit &amp; Borç</th>
+                                    <th className="py-3.5 px-3 text-center">Potansiyel &amp; Hedef</th>
+                                    <th className="py-3.5 px-3 text-center">Skor / Kalite</th>
                                     <th className="py-3.5 px-4 text-right">Aksiyon</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-[#232834] text-slate-200">
+                                <tbody className="divide-y divide-[#232834] text-slate-200 tabular-nums">
                                   {plan.modelPortfolio.map((item) => {
                                     const meta = tierBadgeMeta(item.tier);
+                                    const allocRow = allocRowByTicker.get(item.ticker);
+                                    const statusMeta = getTargetStatusMeta(item.targetStatus);
+                                    const isTopUp = portfolioCapitalState.allocationMode === 'topup';
                                     return (
                                       <tr
                                         key={item.ticker}
@@ -9298,17 +9940,22 @@ export default function ValuationTerminal({
                                                   {meta.label}
                                                 </span>
                                               </div>
-                                              <div className="text-[11px] text-slate-400 truncate max-w-[230px]">
+                                              <div className="text-[11px] text-slate-400 truncate max-w-[210px]">
                                                 {item.sectorName} • {item.period}
                                               </div>
                                             </div>
                                           </div>
                                         </td>
                                         <td className="py-3 px-3 text-center font-mono">
-                                          <div className="inline-flex flex-col items-center gap-1 min-w-[74px]">
+                                          <div className="inline-flex flex-col items-center gap-1 min-w-[82px]">
                                             <span className="font-black text-sm text-[#f5c242]">
                                               %{item.recommendedWeightPct.toFixed(1)}
                                             </span>
+                                            {isTopUp && allocRow && (
+                                              <span className="text-[10px] text-slate-400">
+                                                {allocRow.existingWeightPct.toFixed(1)}% ➔ {allocRow.finalWeightPct.toFixed(1)}%
+                                              </span>
+                                            )}
                                             <div className="w-full h-1.5 rounded-full bg-[#101319] overflow-hidden">
                                               <div
                                                 className="h-full rounded-full bg-[#f5c242]"
@@ -9318,30 +9965,77 @@ export default function ValuationTerminal({
                                           </div>
                                         </td>
                                         <td className="py-3 px-3 text-right font-mono">
+                                          {allocRow ? (
+                                            allocRow.isSkippedForRotation ? (
+                                              <div className="inline-flex flex-col items-end">
+                                                <span className="px-2 py-0.5 rounded text-[10.5px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/35">
+                                                  {allocRow.skipReason || '0 ₺ Alım'}
+                                                </span>
+                                                {isTopUp && (
+                                                  <span className="text-[10.5px] text-slate-400 mt-0.5">
+                                                    Mevcut: {formatTryInt(allocRow.existingValueTry)}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            ) : isTopUp ? (
+                                              <div>
+                                                <div className="text-emerald-400 font-black text-sm">
+                                                  +{formatTryInt(allocRow.orderAmountTry)}
+                                                </div>
+                                                <div className="text-[10.5px] text-slate-400">
+                                                  +{allocRow.orderLots} Lot • Top: {formatTryInt(allocRow.finalValueTry)}
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              <div>
+                                                <div className="text-white font-black text-sm">
+                                                  {formatTryInt(allocRow.orderAmountTry)}
+                                                </div>
+                                                <div className="text-[10.5px] text-slate-400">
+                                                  {allocRow.orderLots} Lot
+                                                </div>
+                                              </div>
+                                            )
+                                          ) : (
+                                            <span className="text-slate-500">—</span>
+                                          )}
+                                        </td>
+                                        <td className="py-3 px-3 text-right font-mono">
                                           <div className="text-slate-200 font-semibold">{item.price > 0 ? `₺${item.price.toFixed(2)}` : '—'}</div>
                                           <div className="text-[#f5c242] font-bold">{item.fairValue > 0 ? `➔ ₺${item.fairValue.toFixed(2)}` : '—'}</div>
+                                          {item.fairValue > 0 && item.price > 0 && (
+                                            <div className="w-20 ml-auto h-1 rounded-full bg-[#101319] overflow-hidden mt-1" title={`Adil değere ulaşım: %${item.fairValueProgressPct}`}>
+                                              <div
+                                                className={`h-full rounded-full ${item.fairValueProgressPct >= 90 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                                                style={{ width: `${item.fairValueProgressPct}%` }}
+                                              />
+                                            </div>
+                                          )}
                                         </td>
                                         <td className="py-3 px-3 text-center font-mono">
-                                          <span className={`px-2 py-0.5 rounded-md text-xs font-bold border ${
-                                            item.upsidePct >= 25
-                                              ? 'bg-emerald-500/12 text-emerald-400 border-emerald-500/30'
-                                              : 'bg-cyan-500/12 text-cyan-300 border-cyan-500/30'
-                                          }`}>
-                                            {formatPctSigned(item.upsidePct)}
-                                          </span>
-                                        </td>
-                                        <td className="py-3 px-3 text-center font-mono">
-                                          <div className={`font-bold ${getScoreColorStyle(item.score).text}`}>{item.score}/100</div>
-                                          <div className={`text-[11px] font-semibold ${item.evaSpreadPct != null && item.evaSpreadPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                            EVA {item.evaSpreadPct != null ? `${item.evaSpreadPct >= 0 ? '+' : ''}${item.evaSpreadPct}p` : '—'}
+                                          <div className="inline-flex flex-col items-center gap-1">
+                                            <span className={`px-2 py-0.5 rounded-md text-xs font-bold border ${
+                                              item.upsidePct >= 25
+                                                ? 'bg-emerald-500/12 text-emerald-400 border-emerald-500/30'
+                                                : item.upsidePct <= 0
+                                                ? 'bg-rose-500/12 text-rose-400 border-rose-500/30'
+                                                : 'bg-cyan-500/12 text-cyan-300 border-cyan-500/30'
+                                            }`}>
+                                              {formatPctSigned(item.upsidePct)}
+                                            </span>
+                                            <span className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold border ${statusMeta.cls}`}>
+                                              {statusMeta.label}
+                                            </span>
                                           </div>
                                         </td>
                                         <td className="py-3 px-3 text-center font-mono text-[11px]">
-                                          <div className="text-slate-200">
-                                            {item.isBankOrInsurance ? 'Finansal Kurum' : `OCF/Net ${item.ocfConversionPct != null ? `%${item.ocfConversionPct}` : '—'}`}
+                                          <div className={`font-bold ${getScoreColorStyle(item.score).text}`}>
+                                            {item.score}/100 • EVA {item.evaSpreadPct != null ? `${item.evaSpreadPct >= 0 ? '+' : ''}${item.evaSpreadPct}p` : '—'}
                                           </div>
-                                          <div className={item.isNetCash ? 'text-emerald-400 font-bold' : 'text-slate-400'}>
-                                            {item.isNetCash ? 'Net Nakit' : item.netDebtToEbitda != null ? `Borç ${item.netDebtToEbitda}x` : '—'}
+                                          <div className="text-slate-400 mt-0.5">
+                                            {item.isBankOrInsurance
+                                              ? 'Finansal Kurum'
+                                              : `OCF %${item.ocfConversionPct ?? '—'} • ${item.isNetCash ? 'Net Nakit' : `Borç ${item.netDebtToEbitda ?? '—'}x`}`}
                                           </div>
                                         </td>
                                         <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
@@ -9672,8 +10366,97 @@ export default function ValuationTerminal({
                       )}
                     </div>
                   );
-                })() : (
+                })() : (() => {
+                  const holdingAllocByTicker = isPortfolio
+                    ? new Map(holdingsAllocationPlan.rows.map(r => [r.ticker, r]))
+                    : null;
+                  const rotateAlerts = isPortfolio ? forensicPortfolioPlan.rotationSignals.rotateOut : [];
+                  const isTopUpMode = portfolioCapitalState.allocationMode === 'topup';
+
+                  return (
                 <>
+                {/* HEDEF FİYATA ULAŞAN / ROTASYON GEREKTİREN HİSSE UYARISI (Yalnızca Portföyüm'de) */}
+                {isPortfolio && rotateAlerts.length > 0 && (
+                  <div className="bg-[#151821] border border-rose-500/35 rounded-2xl p-4 sm:p-5 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-[#232834]">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-rose-500/15 border border-rose-500/35 flex items-center justify-center text-rose-400 shrink-0">
+                          <AlertTriangle className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-bold text-white font-sans">
+                            Hedefe Yaklaşan / Rotasyon Gerektiren Hisseler ({rotateAlerts.length})
+                          </h3>
+                          <p className="text-[11px] text-slate-400 font-sans">
+                            Adil değer hedefine ulaşan veya adli kalitesi bozulan pozisyonları tek tıkla Model Portföy adayıyla değiştirebilirsiniz.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPortfolioWorkspaceTab('architect');
+                          setArchitectTierFilter('ROTATION');
+                        }}
+                        className="fv-pill px-3 py-1.5 rounded-xl bg-[#101319] hover:bg-[#1e2430] text-amber-300 border border-amber-500/35 text-xs font-bold cursor-pointer self-start sm:self-auto"
+                      >
+                        Rotasyon Masasını Aç
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      {rotateAlerts.map(sig => (
+                        <div
+                          key={sig.candidate.ticker}
+                          className="p-3 rounded-xl bg-[#101319] border border-rose-500/20 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5"
+                        >
+                          <div className="min-w-0 space-y-0.5">
+                            <div className="flex items-center gap-2 flex-wrap font-mono text-xs">
+                              <span className="font-black text-sm text-white">{sig.candidate.ticker}</span>
+                              <span className="text-slate-400">
+                                ₺{sig.candidate.price.toFixed(2)} ➔ Adil: ₺{sig.candidate.fairValue.toFixed(2)}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded font-bold border ${
+                                sig.candidate.upsidePct <= 0
+                                  ? 'bg-rose-500/15 text-rose-300 border-rose-500/35'
+                                  : 'bg-amber-500/15 text-amber-300 border-amber-500/35'
+                              }`}>
+                                {formatPctSigned(sig.candidate.upsidePct)}
+                              </span>
+                            </div>
+                            <p className="text-xs text-rose-300 font-sans">{sig.reason}</p>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                            {sig.suggestedReplacement && (
+                              <button
+                                type="button"
+                                onClick={() => swapPortfolioTicker(sig.candidate.ticker, sig.suggestedReplacement!.ticker)}
+                                className="fv-pill px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                                <span>
+                                  Değiştir: {sig.candidate.ticker} ➔ {sig.suggestedReplacement.ticker} ({formatPctSigned(sig.suggestedReplacement.upsidePct)})
+                                </span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => openReport(sig.candidate.reportId, sig.candidate.ticker)}
+                              className="px-2.5 py-1.5 rounded-xl bg-[#151821] hover:bg-[#1e2430] text-slate-300 border border-[#262c38] text-xs font-bold cursor-pointer"
+                            >
+                              İncele
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* PORTFÖYÜM TL BÜTÇE & AYLIK İLAVE ALIM DAĞITICI */}
+                {isPortfolio && collectionAll.length > 0 && renderCapitalPlannerBar(holdingsAllocationPlan, 'holdings')}
+
                 {/* Filtre, Arama & Sıralama Kontrol Barı */}
                 <div className="bg-[#151821] border border-[#262c38] p-4 rounded-2xl flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                   {/* Karar Filtreleri (Portföy & Favoriler Her İkisinde Aktif) */}
@@ -9800,6 +10583,15 @@ export default function ValuationTerminal({
                               </span>
                             </th>
                             <th className="py-3.5 px-3">Sektör</th>
+                            {isPortfolio && (
+                              <>
+                                <th className="py-3.5 px-3 text-center">Hedef Ağırlık</th>
+                                <th className="py-3.5 px-3 text-center">Mevcut Lot</th>
+                                <th className="py-3.5 px-3 text-right">
+                                  {isTopUpMode ? 'İlave Alım (TL / Lot)' : 'TL Dağılım & Lot'}
+                                </th>
+                              </>
+                            )}
                             <th onClick={() => toggleSavedSort('price')} className="py-3.5 px-3 text-right cursor-pointer select-none hover:text-white">
                               <span className="inline-flex items-center justify-end gap-1 w-full">
                                 <span>Fiyat</span>
@@ -9848,6 +10640,8 @@ export default function ValuationTerminal({
                             const symUpper = (item.ticker || '').toUpperCase();
                             const inPort = portfolioTickers.includes(symUpper);
                             const inFav = favoriteTickers.includes(symUpper);
+                            const hAlloc = holdingAllocByTicker?.get(symUpper);
+                            const hStatusMeta = hAlloc ? getTargetStatusMeta(hAlloc.candidate.targetStatus) : null;
 
                             return (
                               <tr
@@ -9878,6 +10672,58 @@ export default function ValuationTerminal({
                                 <td className="py-3 px-3 font-mono text-xs text-slate-300">
                                   {getCompanySectorDisplayName(item.ticker, item.sector)}
                                 </td>
+                                {isPortfolio && (
+                                  <>
+                                    <td className="py-3 px-3 text-center font-mono text-xs">
+                                      {hAlloc ? (
+                                        <div className="inline-flex flex-col items-center">
+                                          <span className="font-black text-[#f5c242]">%{hAlloc.targetWeightPct.toFixed(1)}</span>
+                                          {isTopUpMode && (
+                                            <span className="text-[10px] text-slate-400">
+                                              {hAlloc.existingWeightPct.toFixed(1)}% ➔ {hAlloc.finalWeightPct.toFixed(1)}%
+                                            </span>
+                                          )}
+                                        </div>
+                                      ) : <span className="text-slate-500">—</span>}
+                                    </td>
+                                    <td className="py-3 px-3 text-center font-mono" onClick={(e) => e.stopPropagation()}>
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        step={1}
+                                        value={
+                                          portfolioCapitalState.positions[symUpper]?.shares != null
+                                            ? portfolioCapitalState.positions[symUpper]?.shares
+                                            : hAlloc?.existingLots || 0
+                                        }
+                                        onChange={(e) => updateHoldingShares(symUpper, e.target.value)}
+                                        aria-label={`${symUpper} mevcut lot adedi`}
+                                        className="w-16 bg-[#101319] border border-[#262c38] focus:border-[#f5c242] rounded-lg px-2 py-1 text-center text-xs font-mono font-bold text-white tabular-nums focus:outline-none"
+                                      />
+                                    </td>
+                                    <td className="py-3 px-3 text-right font-mono text-xs">
+                                      {hAlloc ? (
+                                        hAlloc.isSkippedForRotation ? (
+                                          <span className="px-2 py-0.5 rounded text-[10.5px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/35">
+                                            {hAlloc.skipReason || 'Rotasyon / 0 ₺'}
+                                          </span>
+                                        ) : isTopUpMode ? (
+                                          <div>
+                                            <div className="text-emerald-400 font-black">+{formatTryInt(hAlloc.orderAmountTry)}</div>
+                                            <div className="text-[10px] text-slate-400">
+                                              +{hAlloc.orderLots} Lot • Top: {formatTryInt(hAlloc.finalValueTry)}
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <div>
+                                            <div className="text-white font-bold">{formatTryInt(hAlloc.orderAmountTry)}</div>
+                                            <div className="text-[10px] text-slate-400">{hAlloc.orderLots} Lot</div>
+                                          </div>
+                                        )
+                                      ) : <span className="text-slate-500">—</span>}
+                                    </td>
+                                  </>
+                                )}
                                 <td className="py-3 px-3 text-right font-mono font-bold text-white">
                                   {priceNum > 0 ? `₺${priceNum.toFixed(2)}` : '—'}
                                 </td>
@@ -9885,15 +10731,22 @@ export default function ValuationTerminal({
                                   {fairVal > 0 ? `₺${fairVal.toFixed(2)}` : '—'}
                                 </td>
                                 <td className="py-3 px-3 text-center">
-                                  {discount !== null ? (
-                                    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-mono font-bold border ${
-                                      discount >= 0
-                                        ? 'bg-emerald-500/12 text-emerald-400 border-emerald-500/30'
-                                        : 'bg-rose-500/12 text-rose-400 border-rose-500/30'
-                                    }`}>
-                                      {discount >= 0 ? `+${discount}%` : `${discount}%`}
-                                    </span>
-                                  ) : <span className="text-slate-500">—</span>}
+                                  <div className="inline-flex flex-col items-center gap-1">
+                                    {discount !== null ? (
+                                      <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-mono font-bold border ${
+                                        discount >= 0
+                                          ? 'bg-emerald-500/12 text-emerald-400 border-emerald-500/30'
+                                          : 'bg-rose-500/12 text-rose-400 border-rose-500/30'
+                                      }`}>
+                                        {discount >= 0 ? `+${discount}%` : `${discount}%`}
+                                      </span>
+                                    ) : <span className="text-slate-500">—</span>}
+                                    {isPortfolio && hStatusMeta && (
+                                      <span className={`px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold border whitespace-nowrap ${hStatusMeta.cls}`}>
+                                        {hStatusMeta.label}
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
                                 <td className={`py-3 px-3 text-center font-mono font-bold text-xs ${getScoreColorStyle(item.score).text}`}>
                                   {formatScore(item.score)}
@@ -10051,8 +10904,11 @@ export default function ValuationTerminal({
 
                       const { fairVal, priceNum, discount } = getItemValuationMetrics(item);
                       const companyName = (item as any).companyName || item.extractedData?.company_name || '';
-                      const inPort = portfolioTickers.includes((item.ticker || '').toUpperCase());
-                      const inFav = favoriteTickers.includes((item.ticker || '').toUpperCase());
+                      const symCard = (item.ticker || '').toUpperCase();
+                      const inPort = portfolioTickers.includes(symCard);
+                      const inFav = favoriteTickers.includes(symCard);
+                      const cardAlloc = holdingAllocByTicker?.get(symCard);
+                      const cardStatusMeta = cardAlloc ? getTargetStatusMeta(cardAlloc.candidate.targetStatus) : null;
                       const marginBarPct = discount !== null
                         ? Math.max(10, Math.min(100, Math.round(Math.abs(discount))))
                         : 0;
@@ -10124,20 +10980,50 @@ export default function ValuationTerminal({
                                 </div>
                               </div>
 
-                              {/* Karar + Skor + Değer Tuzağı Uyarı Şeridi */}
-                              <div className="flex items-center justify-between gap-2">
+                              {/* Karar + Skor + Hedef / Değer Tuzağı Uyarı Şeridi */}
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
                                 <div className={`px-2.5 py-1 rounded-lg border text-xs font-mono font-bold inline-flex items-center gap-2 ${badgeCls}`}>
                                   <span>{item.decision || 'NÖTR'}</span>
                                   <span className="w-px h-3 bg-current opacity-30" />
                                   <span className={getScoreColorStyle(item.score).text}>{formatScore(item.score)}</span>
                                 </div>
-                                {item.isValueTrap && (
+                                {isPortfolio && cardStatusMeta ? (
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${cardStatusMeta.cls}`}>
+                                    {cardStatusMeta.label}
+                                  </span>
+                                ) : item.isValueTrap ? (
                                   <span className="inline-flex items-center gap-1 text-[10.5px] font-mono font-bold px-2 py-0.5 rounded bg-rose-500/12 text-rose-300 border border-rose-500/30">
                                     <AlertTriangle className="w-3 h-3" />
                                     <span>Değer Tuzağı</span>
                                   </span>
-                                )}
+                                ) : null}
                               </div>
+
+                              {/* Portföyüm TL Tahsisat & Ağırlık Özeti */}
+                              {isPortfolio && cardAlloc && (
+                                <div className="px-3 py-2 rounded-xl bg-[#101319] border border-[#232834] flex items-center justify-between text-xs font-mono">
+                                  <div>
+                                    <span className="text-[10px] text-slate-500 block font-sans">AĞIRLIK</span>
+                                    <span className="text-[#f5c242] font-bold">%{cardAlloc.targetWeightPct.toFixed(1)}</span>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="text-[10px] text-slate-500 block font-sans">
+                                      {isTopUpMode ? 'İLAVE ALIM' : 'TL TAHSİSAT'}
+                                    </span>
+                                    {cardAlloc.isSkippedForRotation ? (
+                                      <span className="text-amber-300 font-bold">{cardAlloc.skipReason || '0 ₺ Alım'}</span>
+                                    ) : isTopUpMode ? (
+                                      <span className="text-emerald-400 font-bold">
+                                        +{formatTryInt(cardAlloc.orderAmountTry)} (+{cardAlloc.orderLots} Lot)
+                                      </span>
+                                    ) : (
+                                      <span className="text-white font-bold">
+                                        {formatTryInt(cardAlloc.orderAmountTry)} ({cardAlloc.orderLots} Lot)
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
 
                               {/* Fiyat & Adil Değer & Hedef Çubuğu */}
                               <div className="p-3 bg-[#101319] rounded-xl border border-[#232834] space-y-2.5">
@@ -10211,7 +11097,8 @@ export default function ValuationTerminal({
                   </div>
                 )}
                 </>
-                )}
+                  );
+                })()}
               </div>
             );
           })()}

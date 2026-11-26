@@ -17,17 +17,68 @@ export interface PortfolioArchitectConfig {
 }
 
 export const DEFAULT_PORTFOLIO_ARCHITECT_CONFIG: PortfolioArchitectConfig = {
-  targetCount: 12,
-  maxSectorWeightPct: 20,
-  maxSingleStockWeightPct: 12,
+  targetCount: 10,
+  maxSectorWeightPct: 25,
+  maxSingleStockWeightPct: 15,
   minOcfConversionPct: 80,
   maxWcShareOfOcfPct: 65,
   minEbitdaMarginPct: 8,
   minFreeFloatPct: 0,
   deduplicateGroupHoldings: true,
-  includeHighQualityNeutralCount: 2,
+  includeHighQualityNeutralCount: 1,
   rotationTakeProfitUpsideThresholdPct: 12,
 };
+
+export type PortfolioPresetId = 'INSTITUTIONAL_10' | 'FOCUSED_8' | 'BROAD_12';
+
+export interface PortfolioArchitectPreset {
+  id: PortfolioPresetId;
+  label: string;
+  subtitle: string;
+  config: PortfolioArchitectConfig;
+}
+
+export const PORTFOLIO_ARCHITECT_PRESETS: PortfolioArchitectPreset[] = [
+  {
+    id: 'INSTITUTIONAL_10',
+    label: 'Kurumsal Standart',
+    subtitle: '10 Hisse • Dengeli Çekirdek',
+    config: { ...DEFAULT_PORTFOLIO_ARCHITECT_CONFIG },
+  },
+  {
+    id: 'FOCUSED_8',
+    label: 'Odaklı Kanaat',
+    subtitle: '8 Hisse • Yüksek Alfa',
+    config: {
+      ...DEFAULT_PORTFOLIO_ARCHITECT_CONFIG,
+      targetCount: 8,
+      maxSectorWeightPct: 25,
+      maxSingleStockWeightPct: 16,
+      minOcfConversionPct: 85,
+      includeHighQualityNeutralCount: 0,
+    },
+  },
+  {
+    id: 'BROAD_12',
+    label: 'Geniş Çeşitlendirilmiş',
+    subtitle: '12 Hisse • Düşük Volatilite',
+    config: {
+      ...DEFAULT_PORTFOLIO_ARCHITECT_CONFIG,
+      targetCount: 12,
+      maxSectorWeightPct: 20,
+      maxSingleStockWeightPct: 12,
+      minOcfConversionPct: 75,
+      includeHighQualityNeutralCount: 2,
+    },
+  },
+];
+
+export type PortfolioTargetStatus =
+  | 'ACCUMULATE'
+  | 'HOLD_WATCH'
+  | 'NEAR_TARGET'
+  | 'TARGET_REACHED'
+  | 'FORENSIC_EXIT';
 
 const CONSOLIDATED_GROUP_MAP: Record<string, string> = {
   TRENJ: 'KOZA_TR_GRUP',
@@ -81,6 +132,9 @@ export interface ForensicPortfolioCandidate {
   filterReasons: string[];
   cautionNotes: string[];
   roleSummary: string;
+  targetStatus: PortfolioTargetStatus;
+  targetStatusLabel: string;
+  fairValueProgressPct: number;
 }
 
 export interface PortfolioRotationOutItem {
@@ -123,10 +177,15 @@ export interface ForensicPortfolioPlan {
     hold: PortfolioRotationHoldItem[];
     rotateIn: ForensicPortfolioCandidate[];
   };
+  candidatesByTicker: Record<string, ForensicPortfolioCandidate>;
 }
 
 function round1(val: number): number {
   return Number(val.toFixed(1));
+}
+
+function round2(val: number): number {
+  return Number(val.toFixed(2));
 }
 
 function resolveCandidateFromReport(
@@ -267,9 +326,13 @@ function resolveCandidateFromReport(
     compositeRankScore,
     recommendedWeightPct: 0,
     inCurrentPortfolio: portfolioSet.has(ticker),
-    filterReasons: [],
+  filterReasons: [],
     cautionNotes: [],
     roleSummary: '',
+    targetStatus: 'HOLD_WATCH',
+    targetStatusLabel: 'Tut • İzle',
+    fairValueProgressPct:
+      fairValue > 0 && price > 0 ? Math.min(100, Math.max(0, Math.round((price / fairValue) * 100))) : 0,
   };
 }
 
@@ -580,6 +643,45 @@ export function buildForensicPortfolioPlan(
     }
   }
 
+  // Tüm adaylar için hedef durumunu & adil değer ilerleme oranını sınıflandır
+  for (const cand of candidates) {
+    if (
+      cand.decision === 'ALMA' ||
+      cand.isValueTrap ||
+      cand.tier === 'TIER_3_FILTERED' ||
+      cand.tier === 'TRAP_NEUTRAL'
+    ) {
+      cand.targetStatus = 'FORENSIC_EXIT';
+      cand.targetStatusLabel = 'Adli Çıkış / Risk';
+    } else if (cand.upsidePct <= 0) {
+      cand.targetStatus = 'TARGET_REACHED';
+      cand.targetStatusLabel = 'Hedefe Ulaştı • Rotasyon';
+    } else if (cand.upsidePct < config.rotationTakeProfitUpsideThresholdPct) {
+      cand.targetStatus = 'NEAR_TARGET';
+      cand.targetStatusLabel = 'Hedefe Yaklaştı • Kâr Al';
+    } else if (cand.decision === 'AL' && cand.upsidePct >= 25) {
+      cand.targetStatus = 'ACCUMULATE';
+      cand.targetStatusLabel = 'İskontolu • Biriktir';
+    } else {
+      cand.targetStatus = 'HOLD_WATCH';
+      cand.targetStatusLabel = 'Tut • İzle';
+    }
+    cand.fairValueProgressPct =
+      cand.fairValue > 0 && cand.price > 0
+        ? Math.min(100, Math.max(0, Math.round((cand.price / cand.fairValue) * 100)))
+        : 0;
+  }
+
+  // modelPortfolio elemanları select sırasında spread edilmemişti ama referans eşitliğinden güncellendiyse bile garanti senkronize et
+  for (const mp of modelPortfolio) {
+    const src = candidates.find(c => c.ticker === mp.ticker);
+    if (src) {
+      mp.targetStatus = src.targetStatus;
+      mp.targetStatusLabel = src.targetStatusLabel;
+      mp.fairValueProgressPct = src.fairValueProgressPct;
+    }
+  }
+
   // Sektör dağılımı özeti
   const secGroup = new Map<string, { weightPct: number; tickers: string[] }>();
   for (const m of modelPortfolio) {
@@ -642,8 +744,13 @@ export function buildForensicPortfolioPlan(
       outReason = cand.filterReasons[0] || 'NÖTR havuzunda adli kusur tespit edildi';
       severity = 'HIGH';
     } else if (cand.upsidePct < config.rotationTakeProfitUpsideThresholdPct) {
-      outReason = `Adil değerine yaklaştı (Kalan potansiyel ${cand.upsidePct >= 0 ? '+' : ''}%${cand.upsidePct} < %${config.rotationTakeProfitUpsideThresholdPct} eşiği) — Kâr Al / Rotasyon`;
-      severity = cand.upsidePct <= 0 ? 'HIGH' : 'MEDIUM';
+      if (cand.upsidePct <= 0) {
+        outReason = `Hedef adil değerine ulaştı/aştı (Fiyat ₺${cand.price.toFixed(2)} ≥ Adil Değer ₺${cand.fairValue.toFixed(2)}) — Kâr Realizasyonu & Rotasyon`;
+        severity = 'HIGH';
+      } else {
+        outReason = `Adil değer hedefine yaklaştı (Kalan marj +%${cand.upsidePct.toFixed(1)} < %${config.rotationTakeProfitUpsideThresholdPct} eşiği) — Kademeli Rotasyon Hazırlığı`;
+        severity = 'MEDIUM';
+      }
     } else if (cand.decision === 'NÖTR' && cand.tier !== 'A_PLUS_NEUTRAL') {
       outReason = `NÖTR görünüm ve yetersiz kalite/iskonto tamponu (Skor ${cand.score})`;
       severity = 'MEDIUM';
@@ -673,6 +780,11 @@ export function buildForensicPortfolioPlan(
     }
   }
 
+  const candidatesByTicker: Record<string, ForensicPortfolioCandidate> = {};
+  for (const c of candidates) {
+    candidatesByTicker[c.ticker] = c;
+  }
+
   return {
     config,
     totalAnalyzedCount: candidates.length,
@@ -694,5 +806,399 @@ export function buildForensicPortfolioPlan(
       hold,
       rotateIn: rotateInPool,
     },
+    candidatesByTicker,
+  };
+}
+
+export interface SavedPositionInput {
+  shares?: number;
+  currentValueTry?: number;
+  customWeightPct?: number;
+}
+
+export interface CapitalAllocationInput {
+  holdings: ForensicPortfolioCandidate[];
+  mode: 'initial' | 'topup';
+  initialCapitalTry: number;
+  topUpCapitalTry: number;
+  topUpStrategy: 'smart_rebalance' | 'proportional';
+  savedPositions?: Record<string, SavedPositionInput>;
+  maxSingleStockWeightPct?: number;
+}
+
+export interface StockCapitalAllocationRow {
+  ticker: string;
+  candidate: ForensicPortfolioCandidate;
+  targetWeightPct: number;
+  existingLots: number;
+  existingValueTry: number;
+  existingWeightPct: number;
+  orderLots: number;
+  orderAmountTry: number;
+  idealOrderAmountTry: number;
+  finalLots: number;
+  finalValueTry: number;
+  finalWeightPct: number;
+  isSkippedForRotation: boolean;
+  skipReason: string | null;
+}
+
+export interface CapitalAllocationPlanResult {
+  mode: 'initial' | 'topup';
+  topUpStrategy: 'smart_rebalance' | 'proportional';
+  existingPortfolioValueTry: number;
+  budgetToDeployTry: number;
+  deployedAmountTry: number;
+  unallocatedCashTry: number;
+  finalPortfolioValueTry: number;
+  impliedPortfolioFairValueTry: number;
+  rows: StockCapitalAllocationRow[];
+  hasSavedLots: boolean;
+  warningMessage: string | null;
+}
+
+function allocateWholeLots(
+  budgetTry: number,
+  rawTargetAmounts: number[],
+  prices: number[],
+  eligibleMask: boolean[],
+  baseValues?: number[],
+  maxSingleStockWeightPct?: number
+): number[] {
+  const n = prices.length;
+  const lots = new Array<number>(n).fill(0);
+  if (budgetTry <= 0 || n === 0) return lots;
+
+  for (let i = 0; i < n; i++) {
+    if (!eligibleMask[i] || prices[i] <= 0 || rawTargetAmounts[i] <= 0) {
+      lots[i] = 0;
+    } else {
+      lots[i] = Math.floor(rawTargetAmounts[i] / prices[i]);
+    }
+  }
+
+  let spent = 0;
+  for (let i = 0; i < n; i++) {
+    spent += lots[i] * prices[i];
+  }
+  let remCash = Math.max(0, budgetTry - spent);
+
+  const existingTotal = baseValues ? baseValues.reduce((a, b) => a + b, 0) : 0;
+  const approxPostTotal = existingTotal + budgetTry;
+  const enforceCap =
+    maxSingleStockWeightPct != null &&
+    maxSingleStockWeightPct > 0 &&
+    n >= 7 &&
+    approxPostTotal > 0;
+  const maxAllowedVal = enforceCap ? approxPostTotal * (maxSingleStockWeightPct / 100) * 1.02 : Infinity;
+
+  for (let pass = 0; pass < 2; pass++) {
+    const order = Array.from({ length: n }, (_, i) => i)
+      .filter(i => eligibleMask[i] && prices[i] > 0 && prices[i] <= remCash + 1e-6)
+      .sort((a, b) => {
+        const remA = rawTargetAmounts[a] / prices[a] - lots[a];
+        const remB = rawTargetAmounts[b] / prices[b] - lots[b];
+        if (Math.abs(remB - remA) > 1e-6) return remB - remA;
+        return prices[a] - prices[b];
+      });
+
+    let boughtAny = false;
+    for (const i of order) {
+      if (prices[i] <= remCash + 1e-6) {
+        const baseV = baseValues ? baseValues[i] : 0;
+        const candidateNewVal = baseV + (lots[i] + 1) * prices[i];
+        if (enforceCap && pass === 0 && candidateNewVal > maxAllowedVal) {
+          continue;
+        }
+        lots[i] += 1;
+        remCash = Math.max(0, remCash - prices[i]);
+        boughtAny = true;
+      }
+    }
+    if (!boughtAny || remCash <= 0) break;
+  }
+
+  return lots;
+}
+
+export function computeCapitalAllocationPlan(input: CapitalAllocationInput): CapitalAllocationPlanResult {
+  const holdings = input.holdings || [];
+  const mode = input.mode === 'topup' ? 'topup' : 'initial';
+  const topUpStrategy = input.topUpStrategy === 'proportional' ? 'proportional' : 'smart_rebalance';
+  const savedPositions = input.savedPositions || {};
+
+  if (holdings.length === 0) {
+    return {
+      mode,
+      topUpStrategy,
+      existingPortfolioValueTry: 0,
+      budgetToDeployTry: 0,
+      deployedAmountTry: 0,
+      unallocatedCashTry: 0,
+      finalPortfolioValueTry: 0,
+      impliedPortfolioFairValueTry: 0,
+      rows: [],
+      hasSavedLots: false,
+      warningMessage: null,
+    };
+  }
+
+  const n = holdings.length;
+  const prices = holdings.map(h => (Number.isFinite(h.price) && h.price > 0 ? h.price : 0));
+
+  // 1. Hedef ağırlıkları çöz
+  const hasCustomOverride = holdings.some(h => {
+    const cw = savedPositions[h.ticker]?.customWeightPct;
+    return cw != null && Number.isFinite(cw) && cw > 0;
+  });
+  const recSum = holdings.reduce((acc, h) => acc + (h.recommendedWeightPct || 0), 0);
+  let targetWeights: number[] = [];
+
+  if (!hasCustomOverride && recSum >= 98 && recSum <= 102) {
+    targetWeights = holdings.map(h => round1(h.recommendedWeightPct || 0));
+  } else {
+    const rawW = holdings.map(h => {
+      const cw = savedPositions[h.ticker]?.customWeightPct;
+      if (cw != null && Number.isFinite(cw) && cw > 0) return cw;
+      const tierMult =
+        h.tier === 'TIER_1_CORE'
+          ? 1.35
+          : h.tier === 'TIER_2_SATELLITE'
+          ? 1.0
+          : h.tier === 'A_PLUS_NEUTRAL'
+          ? 0.85
+          : h.targetStatus === 'FORENSIC_EXIT'
+          ? 0.25
+          : 0.65;
+      const scoreBoost = h.score >= 90 ? 1.08 : 1.0;
+      return tierMult * scoreBoost;
+    });
+
+    const sumR = rawW.reduce((a, b) => a + b, 0);
+    let wPct = rawW.map(w => (sumR > 0 ? (w / sumR) * 100 : 100 / n));
+    const singleCap = input.maxSingleStockWeightPct;
+    if (singleCap != null && singleCap > 0 && n * singleCap >= 105) {
+      for (let iter = 0; iter < 4; iter++) {
+        let excess = 0;
+        const capped = wPct.map(() => false);
+        wPct = wPct.map((w, i) => {
+          if (w > singleCap) {
+            excess += w - singleCap;
+            capped[i] = true;
+            return singleCap;
+          }
+          return w;
+        });
+        if (excess > 0.05) {
+          const uncappedSum = wPct.reduce((acc, w, i) => (!capped[i] && w < singleCap - 0.1 ? acc + w : acc), 0);
+          if (uncappedSum > 0) {
+            wPct = wPct.map((w, i) =>
+              !capped[i] && w < singleCap - 0.1 ? w + (excess * w) / uncappedSum : w
+            );
+          }
+        }
+      }
+    }
+    targetWeights = wPct.map(w => round1(w));
+    const roundedSum = targetWeights.reduce((a, b) => a + b, 0);
+    if (targetWeights.length > 0 && Math.abs(100 - roundedSum) >= 0.05) {
+      targetWeights[0] = round1(targetWeights[0] + (100 - roundedSum));
+    }
+  }
+
+  // 2. Mod bazlı bütçe ve lot tahsisatı
+  const safeInitial = Math.max(0, Number.isFinite(input.initialCapitalTry) ? input.initialCapitalTry : 0);
+  const safeTopUp = Math.max(0, Number.isFinite(input.topUpCapitalTry) ? input.topUpCapitalTry : 0);
+
+  let existingLots = new Array<number>(n).fill(0);
+  let existingValues = new Array<number>(n).fill(0);
+  let orderLots = new Array<number>(n).fill(0);
+  let idealOrderAmounts = new Array<number>(n).fill(0);
+  let skippedFlags = new Array<boolean>(n).fill(false);
+  let skipReasons = new Array<string | null>(n).fill(null);
+  let hasSavedLots = false;
+  let warningMessage: string | null = null;
+  let budgetToDeployTry = safeInitial;
+
+  if (mode === 'initial') {
+    budgetToDeployTry = safeInitial;
+    const eligibleMask = holdings.map((h, i) => {
+      if (prices[i] <= 0) {
+        skippedFlags[i] = true;
+        skipReasons[i] = 'Canlı fiyat verisi eksik';
+        return false;
+      }
+      if (h.targetStatus === 'FORENSIC_EXIT') {
+        skippedFlags[i] = true;
+        skipReasons[i] = h.targetStatusLabel || 'Adli Çıkış / Risk';
+        return false;
+      }
+      return true;
+    });
+
+    const eligSumW = targetWeights.reduce((acc, w, i) => (eligibleMask[i] ? acc + w : acc), 0);
+    if (eligSumW > 0) {
+      idealOrderAmounts = targetWeights.map((w, i) =>
+        eligibleMask[i] ? round2(budgetToDeployTry * (w / eligSumW)) : 0
+      );
+      orderLots = allocateWholeLots(
+        budgetToDeployTry,
+        idealOrderAmounts,
+        prices,
+        eligibleMask,
+        undefined,
+        input.maxSingleStockWeightPct
+      );
+    } else if (budgetToDeployTry > 0) {
+      warningMessage = 'Tahsis edilebilecek geçerli fiyatlı/uygun hisse bulunamadı.';
+    }
+  } else {
+    // mode === 'topup'
+    budgetToDeployTry = safeTopUp;
+    hasSavedLots = holdings.some(h => {
+      const p = savedPositions[h.ticker];
+      return (p?.shares != null && p.shares > 0) || (p?.currentValueTry != null && p.currentValueTry > 0);
+    });
+
+    if (hasSavedLots) {
+      for (let i = 0; i < n; i++) {
+        const sp = savedPositions[holdings[i].ticker];
+        const sh = sp?.shares != null && Number.isFinite(sp.shares) && sp.shares > 0 ? Math.floor(sp.shares) : 0;
+        const valRaw =
+          sp?.currentValueTry != null && Number.isFinite(sp.currentValueTry) && sp.currentValueTry > 0
+            ? sp.currentValueTry
+            : 0;
+        if (sh > 0 && prices[i] > 0) {
+          existingLots[i] = sh;
+          existingValues[i] = round2(sh * prices[i]);
+        } else if (valRaw > 0) {
+          existingLots[i] = prices[i] > 0 ? Math.floor(valRaw / prices[i]) : 0;
+          existingValues[i] = round2(valRaw);
+        }
+      }
+    } else if (safeInitial > 0) {
+      // Başlangıç sermayesinden baz pozisyonları simüle et
+      const baseMask = holdings.map((h, i) => prices[i] > 0 && h.targetStatus !== 'FORENSIC_EXIT');
+      const baseSumW = targetWeights.reduce((acc, w, i) => (baseMask[i] ? acc + w : acc), 0);
+      if (baseSumW > 0) {
+        const baseTargets = targetWeights.map((w, i) => (baseMask[i] ? safeInitial * (w / baseSumW) : 0));
+        existingLots = allocateWholeLots(
+          safeInitial,
+          baseTargets,
+          prices,
+          baseMask,
+          undefined,
+          input.maxSingleStockWeightPct
+        );
+        existingValues = existingLots.map((l, i) => round2(l * prices[i]));
+      }
+    }
+
+    const existingTotalTry = round2(existingValues.reduce((a, b) => a + b, 0));
+    const postTopUpTargetTotal = existingTotalTry + budgetToDeployTry;
+
+    const eligibleMask = holdings.map((h, i) => {
+      if (prices[i] <= 0) {
+        skippedFlags[i] = true;
+        skipReasons[i] = 'Fiyat yok';
+        return false;
+      }
+      if (h.targetStatus === 'FORENSIC_EXIT' || h.targetStatus === 'TARGET_REACHED') {
+        skippedFlags[i] = true;
+        skipReasons[i] = h.targetStatusLabel;
+        return false;
+      }
+      if (topUpStrategy === 'smart_rebalance' && h.targetStatus === 'NEAR_TARGET') {
+        skippedFlags[i] = true;
+        skipReasons[i] = 'Hedefe Yakın • 0 ₺ Alım';
+        return false;
+      }
+      return true;
+    });
+
+    const eligSumW = targetWeights.reduce((acc, w, i) => (eligibleMask[i] ? acc + w : acc), 0);
+    if (eligSumW <= 0) {
+      warningMessage =
+        'Mevcut hisselerin tamamı hedef fiyata ulaşmış veya çıkış sinyali üretiyor. İlave nakdi dağıtmadan önce rotasyon yapmanız önerilir.';
+    } else if (budgetToDeployTry > 0) {
+      const eligNormW = targetWeights.map((w, i) => (eligibleMask[i] ? w / eligSumW : 0));
+      if (topUpStrategy === 'smart_rebalance') {
+        const deficits = holdings.map((_, i) => {
+          if (!eligibleMask[i]) return 0;
+          const desiredFinal = postTopUpTargetTotal * eligNormW[i];
+          return Math.max(0, desiredFinal - existingValues[i]);
+        });
+        const sumDeficit = deficits.reduce((a, b) => a + b, 0);
+        idealOrderAmounts = holdings.map((_, i) => {
+          if (!eligibleMask[i]) return 0;
+          if (sumDeficit > 0.01) {
+            return round2(budgetToDeployTry * (deficits[i] / sumDeficit));
+          }
+          return round2(budgetToDeployTry * eligNormW[i]);
+        });
+      } else {
+        idealOrderAmounts = holdings.map((_, i) =>
+          eligibleMask[i] ? round2(budgetToDeployTry * eligNormW[i]) : 0
+        );
+      }
+
+      orderLots = allocateWholeLots(
+        budgetToDeployTry,
+        idealOrderAmounts,
+        prices,
+        eligibleMask,
+        existingValues,
+        input.maxSingleStockWeightPct
+      );
+    }
+  }
+
+  const orderAmounts = orderLots.map((l, i) => round2(l * prices[i]));
+  const finalLots = existingLots.map((l, i) => l + orderLots[i]);
+  const finalValues = existingValues.map((v, i) => round2(v + orderAmounts[i]));
+
+  const existingPortfolioValueTry = round2(existingValues.reduce((a, b) => a + b, 0));
+  const deployedAmountTry = round2(orderAmounts.reduce((a, b) => a + b, 0));
+  const unallocatedCashTry = round2(Math.max(0, budgetToDeployTry - deployedAmountTry));
+  const finalPortfolioValueTry = round2(finalValues.reduce((a, b) => a + b, 0));
+
+  const impliedPortfolioFairValueTry = round2(
+    holdings.reduce((acc, h, i) => {
+      const fv = h.fairValue > 0 ? h.fairValue : prices[i];
+      return acc + finalLots[i] * fv;
+    }, 0)
+  );
+
+  const rows: StockCapitalAllocationRow[] = holdings.map((h, i) => ({
+    ticker: h.ticker,
+    candidate: h,
+    targetWeightPct: targetWeights[i] ?? 0,
+    existingLots: existingLots[i] ?? 0,
+    existingValueTry: existingValues[i] ?? 0,
+    existingWeightPct:
+      existingPortfolioValueTry > 0 ? round1((existingValues[i] / existingPortfolioValueTry) * 100) : 0,
+    orderLots: orderLots[i] ?? 0,
+    orderAmountTry: orderAmounts[i] ?? 0,
+    idealOrderAmountTry: idealOrderAmounts[i] ?? 0,
+    finalLots: finalLots[i] ?? 0,
+    finalValueTry: finalValues[i] ?? 0,
+    finalWeightPct:
+      finalPortfolioValueTry > 0 ? round1((finalValues[i] / finalPortfolioValueTry) * 100) : 0,
+    isSkippedForRotation: skippedFlags[i] ?? false,
+    skipReason: skipReasons[i] ?? null,
+  }));
+
+  return {
+    mode,
+    topUpStrategy,
+    existingPortfolioValueTry,
+    budgetToDeployTry,
+    deployedAmountTry,
+    unallocatedCashTry,
+    finalPortfolioValueTry,
+    impliedPortfolioFairValueTry,
+    rows,
+    hasSavedLots,
+    warningMessage,
   };
 }

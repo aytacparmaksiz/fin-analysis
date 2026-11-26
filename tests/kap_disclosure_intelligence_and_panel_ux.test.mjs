@@ -18,7 +18,12 @@ import {
   fetchLiveBistNewsFeed,
   isStrictCorporateAnnouncement,
 } from '../lib/news-service.ts';
-import { buildForensicPortfolioPlan } from '../lib/portfolio-architect.ts';
+import {
+  buildForensicPortfolioPlan,
+  computeCapitalAllocationPlan,
+  DEFAULT_PORTFOLIO_ARCHITECT_CONFIG,
+  PORTFOLIO_ARCHITECT_PRESETS,
+} from '../lib/portfolio-architect.ts';
 
 const ROOT = process.cwd();
 const sha256 = (rel) => crypto.createHash('sha256').update(fs.readFileSync(path.join(ROOT, rel))).digest('hex');
@@ -359,5 +364,116 @@ describe('KAP Disclosure Intelligence & Redesigned Panel UI/UX Verification Suit
     assert.ok(outTickers.includes('FROTO'), 'Existing holding FROTO (+4% upside < 12%) must trigger take-profit rotation');
     assert.ok(plan.rotationSignals.hold.some(h => h.candidate.ticker === 'TUPRS'), 'Existing clean holding TUPRS must stay HOLD');
     assert.ok(plan.rotationSignals.rotateOut[0].suggestedReplacement != null, 'Rotate-out must suggest a valid model replacement');
+  });
+
+  it('9. Institutional Default (10 stocks), TRY Whole-Lot Initial Allocation (100.000 TL) & Smart Monthly Top-Up Rebalancing (+50.000 TL)', () => {
+    assert.equal(DEFAULT_PORTFOLIO_ARCHITECT_CONFIG.targetCount, 10);
+    assert.equal(DEFAULT_PORTFOLIO_ARCHITECT_CONFIG.maxSectorWeightPct, 25);
+    assert.equal(DEFAULT_PORTFOLIO_ARCHITECT_CONFIG.maxSingleStockWeightPct, 15);
+
+    const presetIds = PORTFOLIO_ARCHITECT_PRESETS.map(p => p.id);
+    assert.deepEqual(presetIds, ['INSTITUTIONAL_10', 'FOCUSED_8', 'BROAD_12']);
+
+    const mkHistory = ({ ni, ocf, wc, ebM, roic, wacc, netDebt, eb }) => [
+      { period: '2025/12', net_income: ni, operating_cash_flow: ocf, working_capital_change: wc, ebitda_margin: ebM, net_margin: ebM * 0.6, roic, real_wacc: wacc, eva_spread: roic - wacc, net_debt: netDebt, ebitda: eb },
+      { period: '2026/03', net_income: ni, operating_cash_flow: ocf, working_capital_change: wc, ebitda_margin: ebM, net_margin: ebM * 0.6, roic, real_wacc: wacc, eva_spread: roic - wacc, net_debt: netDebt, ebitda: eb },
+      { period: '2026/06', net_income: ni, operating_cash_flow: ocf, working_capital_change: wc, ebitda_margin: ebM, net_margin: ebM * 0.6, roic, real_wacc: wacc, eva_spread: roic - wacc, net_debt: netDebt, ebitda: eb },
+      { period: '2026/09', net_income: ni, operating_cash_flow: ocf, working_capital_change: wc, ebitda_margin: ebM, net_margin: ebM * 0.6, roic, real_wacc: wacc, eva_spread: roic - wacc, net_debt: netDebt, ebitda: eb },
+    ];
+    const mkReport = (ticker, sector, price, fairValue, score, decision, histArgs) => ({
+      id: `rep-${ticker}`,
+      ticker,
+      price: String(price),
+      fairValue: String(fairValue),
+      createdAt: '2026-11-26',
+      period: '2026/09',
+      report: '',
+      decision,
+      score: `${score}/100`,
+      sector,
+      extractedData: {
+        company_name: ticker,
+        sector,
+        reporting_period: '2026/09',
+        financial_history: mkHistory(histArgs),
+        valuation: { fair_value: fairValue, score, roic: histArgs.roic, real_wacc: histArgs.wacc, eva_spread: histArgs.roic - histArgs.wacc },
+      },
+    });
+
+    const sampleReports = [
+      mkReport('TUPRS', 'INDUSTRIAL', 322, 681, 88, 'AL', { ni: 1000, ocf: 1700, wc: 200, ebM: 14, roic: 40.5, wacc: 14.2, netDebt: -5000, eb: 4000 }),
+      mkReport('TBORG', 'RETAIL', 116, 230, 90, 'AL', { ni: 500, ocf: 600, wc: -50, ebM: 30, roic: 31.8, wacc: 17.7, netDebt: -400, eb: 1800 }),
+      mkReport('SAYAS', 'TECH', 42, 65, 92, 'AL', { ni: 200, ocf: 248, wc: -30, ebM: 25, roic: 39.8, wacc: 14.6, netDebt: -100, eb: 300 }),
+      mkReport('MAVI', 'RETAIL', 32.2, 43.02, 87, 'AL', { ni: 300, ocf: 500, wc: -20, ebM: 20, roic: 22.0, wacc: 11.9, netDebt: -200, eb: 600 }),
+      mkReport('FROTO', 'INDUSTRIAL', 100, 104, 86, 'NÖTR', { ni: 800, ocf: 950, wc: 50, ebM: 12.0, roic: 22.0, wacc: 14.0, netDebt: 500, eb: 1500 }),
+      mkReport('ASELS', 'INDUSTRIAL', 75, 70, 88, 'NÖTR', { ni: 600, ocf: 750, wc: 20, ebM: 24.0, roic: 25.0, wacc: 15.0, netDebt: -300, eb: 1200 }),
+      mkReport('ORGE', 'INDUSTRIAL', 18, 33, 83, 'AL', { ni: 700, ocf: 245, wc: -200, ebM: 56, roic: 38.6, wacc: 13.8, netDebt: -50, eb: 500 }),
+    ];
+
+    const plan = buildForensicPortfolioPlan(sampleReports, ['TUPRS', 'TBORG', 'MAVI', 'FROTO', 'ASELS']);
+
+    assert.equal(plan.candidatesByTicker.TUPRS.targetStatus, 'ACCUMULATE');
+    assert.equal(plan.candidatesByTicker.FROTO.targetStatus, 'NEAR_TARGET', '0 < +4% < 12% threshold must classify NEAR_TARGET');
+    assert.equal(plan.candidatesByTicker.ASELS.targetStatus, 'TARGET_REACHED', 'upside <= 0 must classify TARGET_REACHED');
+    assert.equal(plan.candidatesByTicker.ORGE.targetStatus, 'FORENSIC_EXIT', 'Tier-3 filtered stock must classify FORENSIC_EXIT');
+
+    // A. Başlangıç 100.000 TL Tam Lot Tahsisat Testi
+    const initialAlloc = computeCapitalAllocationPlan({
+      holdings: plan.modelPortfolio,
+      mode: 'initial',
+      initialCapitalTry: 100000,
+      topUpCapitalTry: 50000,
+      topUpStrategy: 'smart_rebalance',
+      maxSingleStockWeightPct: 15,
+    });
+
+    assert.equal(initialAlloc.mode, 'initial');
+    assert.ok(initialAlloc.deployedAmountTry <= 100000.01, 'Deployed cash must not exceed budget');
+    assert.ok(
+      Math.abs(initialAlloc.deployedAmountTry + initialAlloc.unallocatedCashTry - 100000) < 0.05,
+      'Deployed + unallocated cash must equal 100.000 TL'
+    );
+    for (const row of initialAlloc.rows) {
+      assert.equal(row.orderLots, Math.floor(row.orderLots), 'Lots must be integer whole lots');
+      assert.ok(row.orderLots >= 0);
+      assert.ok(Math.abs(row.orderAmountTry - row.orderLots * row.candidate.price) < 0.05);
+    }
+
+    // B. Aylık +50.000 TL Akıllı İlave Yatırım & Hedefe Yakın Hisseyi Atlamalı Dengeleme Testi
+    const customHoldings = [
+      { ...plan.candidatesByTicker.TUPRS, recommendedWeightPct: 35 },
+      { ...plan.candidatesByTicker.TBORG, recommendedWeightPct: 35 },
+      { ...plan.candidatesByTicker.FROTO, recommendedWeightPct: 30 }, // +4% -> NEAR_TARGET
+    ];
+    const topUpAlloc = computeCapitalAllocationPlan({
+      holdings: customHoldings,
+      mode: 'topup',
+      initialCapitalTry: 100000,
+      topUpCapitalTry: 50000,
+      topUpStrategy: 'smart_rebalance',
+      savedPositions: {
+        TUPRS: { shares: 220 }, // ~70.840 TL (çok yüksek ağırlık -> dengelemede az pay almalı)
+        TBORG: { shares: 50 },  // ~5.800 TL (düşük ağırlık -> ağırlık tamamlamak için çok pay almalı)
+        FROTO: { shares: 200 }, // ~20.000 TL (NEAR_TARGET -> 0 TL ilave almalı!)
+      },
+    });
+
+    assert.equal(topUpAlloc.mode, 'topup');
+    assert.equal(topUpAlloc.hasSavedLots, true);
+    assert.ok(
+      Math.abs(topUpAlloc.deployedAmountTry + topUpAlloc.unallocatedCashTry - 50000) < 0.05,
+      'Top-up deployed + cash remainder must equal 50.000 TL'
+    );
+
+    const frotoRow = topUpAlloc.rows.find(r => r.ticker === 'FROTO');
+    const tborgRow = topUpAlloc.rows.find(r => r.ticker === 'TBORG');
+    const tuprsRow = topUpAlloc.rows.find(r => r.ticker === 'TUPRS');
+    assert.equal(frotoRow?.isSkippedForRotation, true, 'NEAR_TARGET holding must be skipped in smart_rebalance');
+    assert.equal(frotoRow?.orderAmountTry, 0, 'Skipped holding must receive 0 TL top-up');
+    assert.ok((tborgRow?.orderAmountTry || 0) > (tuprsRow?.orderAmountTry || 0), 'Underweight TBORG must receive larger top-up than overweight TUPRS');
+
+    // C. Mirror Dosya Eşitliği Doğrulaması
+    assert.equal(sha256('src/lib/portfolio-architect.ts'), sha256('lib/portfolio-architect.ts'));
+    assert.equal(sha256('src/app/page.tsx'), sha256('app/page.tsx'));
   });
 });
