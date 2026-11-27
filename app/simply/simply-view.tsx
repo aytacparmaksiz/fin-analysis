@@ -4362,49 +4362,42 @@ export default function SimplyView({
             </div>
 
             {/* Sektörel Akran Kıyaslaması (Kurumsal Tablo Görünümü) */}
-            <div className="bg-[#151821] border border-[#262c38] rounded-2xl overflow-hidden shadow-xl">
+            <div className="bg-[#151821] border border-[#232834] rounded-xl overflow-hidden">
               <div
-                className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 cursor-pointer select-none group border-b border-[#232834]"
+                className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 cursor-pointer select-none group border-b border-[#232834]"
                 onClick={() => setIsPeersOpen(!isPeersOpen)}
                 title={isPeersOpen ? "Paneli Daralt" : "Paneli Genişlet"}
               >
-                <div className="flex items-center gap-3 flex-wrap">
-                  <span className="px-2.5 py-1 rounded-lg bg-[#101319] border border-[#262c38] font-mono text-xs font-bold text-[#f5c242]">
-                    {analyzedCompetitors.length} Akran
-                  </span>
-                  <h3 className="font-sans text-base sm:text-lg font-bold text-white group-hover:text-[#f5c242] transition-colors flex items-center gap-2 flex-wrap">
-                    <span>Sektörel Akran Kıyaslaması</span>
-                    <span className="text-[11px] font-mono font-medium text-slate-300 bg-[#101319] px-2.5 py-0.5 rounded-full border border-[#262c38]">
-                      {officialSectorName}
-                    </span>
-                    {peerClusterNote && (
-                      <span className="text-[11px] font-mono font-medium text-cyan-300 bg-cyan-500/10 px-2.5 py-0.5 rounded-full border border-cyan-500/30">
-                        {peerClusterNote}
-                      </span>
-                    )}
+                <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                  <h3 className="font-sans text-sm sm:text-base font-semibold text-white">
+                    Sektörel Akran Kıyaslaması
                   </h3>
+                  <span className="text-xs font-sans text-slate-400">
+                    {officialSectorName} · {analyzedCompetitors.length} akran
+                    {peerClusterNote ? ` · ${peerClusterNote}` : ''}
+                  </span>
                 </div>
 
-                <div className="w-8 h-8 rounded-lg bg-[#101319] border border-[#262c38] flex items-center justify-center text-slate-300 group-hover:text-[#f5c242] group-hover:border-[#f5c242]/50 transition">
+                <div className="w-7 h-7 rounded-md bg-[#101319] border border-[#232834] flex items-center justify-center text-slate-400 group-hover:text-white transition-colors">
                   {isPeersOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                 </div>
               </div>
 
               {isPeersOpen && (
-                <div className="p-4 sm:p-5 space-y-4">
+                <div className="p-4 sm:p-5 space-y-3.5">
                   {analyzedCompetitors.length > 0 ? (
                     <>
-                      <div className="overflow-x-auto touch-pan-x no-scrollbar rounded-xl border border-[#232834]">
+                      <div className="overflow-x-auto touch-pan-x no-scrollbar rounded-lg border border-[#232834]">
                         <table className="w-full text-left text-xs border-collapse font-sans tabular-nums">
                           <thead>
-                            <tr className="border-b border-[#232834] bg-[#101319] text-[11px] font-mono text-slate-400 uppercase tracking-wider">
-                              <th className="py-3 px-4">Şirket &amp; Sektör</th>
-                              <th className="py-3 px-3 text-right">Fiyat</th>
-                              <th className="py-3 px-3 text-right">Adil Değer</th>
-                              <th className="py-3 px-3 text-center">Potansiyel</th>
-                              <th className="py-3 px-3 text-center">F/K</th>
-                              <th className="py-3 px-3 text-center">Skor</th>
-                              <th className="py-3 px-4 text-right">Karar</th>
+                            <tr className="border-b border-[#232834] bg-[#101319] text-[11px] font-sans font-medium text-slate-400">
+                              <th className="py-2.5 px-4">Şirket</th>
+                              <th className="py-2.5 px-3 text-right">Fiyat</th>
+                              <th className="py-2.5 px-3 text-right">Adil Değer</th>
+                              <th className="py-2.5 px-3 text-center">Potansiyel</th>
+                              <th className="py-2.5 px-3 text-center">F/K</th>
+                              <th className="py-2.5 px-3 text-center">Skor</th>
+                              <th className="py-2.5 px-4 text-right">Karar</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#232834] text-slate-200">
@@ -4412,42 +4405,42 @@ export default function SimplyView({
                               const selfPe = parseFinancialNumber(companyMultiplesData?.multiples?.pe?.companyValue ?? marketMultiples?.pe);
                               const selfScoreNum = parseNumericScore(valuationInfo?.score ?? report.score);
                               const selfDec = String(effectiveDecision || 'NÖTR').toUpperCase();
-                              const selfDecCls = selfDec === 'AL'
-                                ? 'bg-emerald-500/12 text-emerald-300 border-emerald-500/35'
+                              const selfDecTextCls = selfDec === 'AL'
+                                ? 'text-emerald-400'
                                 : selfDec === 'ALMA'
-                                ? 'bg-rose-500/12 text-rose-300 border-rose-500/35'
-                                : 'bg-amber-500/12 text-amber-300 border-amber-500/35';
+                                ? 'text-rose-400'
+                                : 'text-amber-300';
 
                               return (
-                                <tr className="bg-[#f5c242]/6 border-b border-[#f5c242]/20">
+                                <tr className="bg-[#1a1f2a] border-l-2 border-l-slate-200">
                                   <td className="py-3 px-4">
                                     <div className="flex items-center gap-2">
-                                      <span className="font-mono font-black text-sm text-[#f5c242]">{report.ticker}</span>
-                                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#f5c242]/15 text-[#f5c242] border border-[#f5c242]/35">
+                                      <span className="font-mono font-semibold text-sm text-white">{report.ticker}</span>
+                                      <span className="px-1.5 py-0.5 rounded text-[10px] font-sans font-medium bg-[#232834] text-slate-300">
                                         İncelenen
                                       </span>
                                     </div>
                                     <div className="text-[11px] text-slate-400 truncate max-w-[200px]">{officialSectorName}</div>
                                   </td>
-                                  <td className="py-3 px-3 text-right font-mono font-bold text-white">
+                                  <td className="py-3 px-3 text-right font-mono font-semibold text-white">
                                     {currentPriceNum > 0 ? `₺${currentPriceNum.toFixed(2)}` : '—'}
                                   </td>
-                                  <td className="py-3 px-3 text-right font-mono font-bold text-[#f5c242]">
+                                  <td className="py-3 px-3 text-right font-mono font-semibold text-slate-200">
                                     {fairValueNum > 0 ? `₺${fairValueNum.toFixed(2)}` : '—'}
                                   </td>
                                   <td className="py-3 px-3 text-center font-mono">
-                                    <span className={`font-bold ${discountPctNum >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    <span className={`font-semibold ${discountPctNum >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                       {discountPctNum >= 0 ? `+%${discountPctNum.toFixed(1)}` : `%${discountPctNum.toFixed(1)}`}
                                     </span>
                                   </td>
-                                  <td className="py-3 px-3 text-center font-mono text-slate-200">
+                                  <td className="py-3 px-3 text-center font-mono text-slate-300">
                                     {selfPe != null && selfPe > 0 ? `${selfPe.toFixed(1)}x` : '—'}
                                   </td>
-                                  <td className={`py-3 px-3 text-center font-mono font-bold ${getScoreColorStyle(selfScoreNum).text}`}>
+                                  <td className="py-3 px-3 text-center font-mono font-medium text-slate-200">
                                     {selfScoreNum != null ? `${selfScoreNum}/100` : '—'}
                                   </td>
                                   <td className="py-3 px-4 text-right">
-                                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-mono font-bold border ${selfDecCls}`}>
+                                    <span className={`text-xs font-mono font-semibold ${selfDecTextCls}`}>
                                       {selfDec}
                                     </span>
                                   </td>
@@ -4465,11 +4458,11 @@ export default function SimplyView({
                               const decStr = String(comp.decision || 'NÖTR').toUpperCase();
                               const isBuy = decStr === 'AL' || decStr === 'GÜÇLÜ AL';
                               const isSell = decStr === 'ALMA' || decStr === 'SAT' || decStr === 'GÜÇLÜ SAT';
-                              const badgeBg = isBuy
-                                ? 'bg-emerald-500/12 text-emerald-300 border-emerald-500/35'
+                              const decTextCls = isBuy
+                                ? 'text-emerald-400'
                                 : isSell
-                                ? 'bg-rose-500/12 text-rose-300 border-rose-500/35'
-                                : 'bg-amber-500/12 text-amber-300 border-amber-500/35';
+                                ? 'text-rose-400'
+                                : 'text-amber-300';
 
                               return (
                                 <tr
@@ -4478,26 +4471,26 @@ export default function SimplyView({
                                     if (onSelectReport) onSelectReport(comp.id);
                                     else if (onSelectTicker) onSelectTicker(comp.ticker);
                                   }}
-                                  className="hover:bg-[#1c222e] cursor-pointer transition-colors group"
+                                  className="hover:bg-[#1a1f2b] cursor-pointer transition-colors group"
                                   title={`${comp.ticker} detaylı analizini aç`}
                                 >
                                   <td className="py-3 px-4">
-                                    <div className="font-mono font-bold text-sm text-white group-hover:text-[#f5c242] transition-colors">
+                                    <div className="font-mono font-semibold text-sm text-white group-hover:underline">
                                       {comp.ticker}
                                     </div>
                                     <div className="text-[11px] text-slate-400 truncate max-w-[200px]">
                                       {compOfficialSec}
                                     </div>
                                   </td>
-                                  <td className="py-3 px-3 text-right font-mono font-semibold text-slate-200">
+                                  <td className="py-3 px-3 text-right font-mono font-medium text-slate-200">
                                     {compPrice > 0 ? `₺${compPrice.toFixed(2)}` : '—'}
                                   </td>
-                                  <td className="py-3 px-3 text-right font-mono font-bold text-emerald-400">
+                                  <td className="py-3 px-3 text-right font-mono font-medium text-slate-300">
                                     {compFv > 0 ? `₺${compFv.toFixed(2)}` : '—'}
                                   </td>
                                   <td className="py-3 px-3 text-center font-mono">
                                     {compUpside != null ? (
-                                      <span className={`font-bold ${compUpside >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                      <span className={`font-semibold ${compUpside >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                         {compUpside >= 0 ? `+%${compUpside}` : `%${compUpside}`}
                                       </span>
                                     ) : <span className="text-slate-500">—</span>}
@@ -4505,11 +4498,11 @@ export default function SimplyView({
                                   <td className="py-3 px-3 text-center font-mono text-slate-300">
                                     {compPe != null && compPe > 0 ? `${compPe.toFixed(1)}x` : '—'}
                                   </td>
-                                  <td className={`py-3 px-3 text-center font-mono font-bold ${getScoreColorStyle(compScoreNum).text}`}>
+                                  <td className="py-3 px-3 text-center font-mono font-medium text-slate-200">
                                     {compScoreNum != null ? `${compScoreNum}/100` : '—'}
                                   </td>
                                   <td className="py-3 px-4 text-right">
-                                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-mono font-bold border ${badgeBg}`}>
+                                    <span className={`text-xs font-mono font-semibold ${decTextCls}`}>
                                       {comp.decision || 'NÖTR'}
                                     </span>
                                   </td>
@@ -4525,7 +4518,7 @@ export default function SimplyView({
                           <button
                             type="button"
                             onClick={() => setShowAllPeers(prev => !prev)}
-                            className="fv-pill inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#101319] hover:bg-[#1e2430] text-slate-200 hover:text-[#f5c242] border border-[#262c38] text-xs font-mono font-semibold cursor-pointer"
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#101319] hover:bg-[#1e2430] text-slate-300 hover:text-white border border-[#232834] text-xs font-medium cursor-pointer transition-colors"
                           >
                             {showAllPeers ? (
                               <>
@@ -4551,7 +4544,7 @@ export default function SimplyView({
                                 key={tk}
                                 type="button"
                                 onClick={() => onSelectTicker && onSelectTicker(tk)}
-                                className="px-2.5 py-1 bg-[#101319] hover:bg-[#1e2430] text-[#f5c242] hover:text-white rounded-lg border border-[#262c38] hover:border-[#f5c242]/40 text-xs font-mono font-bold cursor-pointer transition"
+                                className="px-2.5 py-1 bg-[#101319] hover:bg-[#1c222e] text-slate-300 hover:text-white rounded-md border border-[#262c38] text-xs font-mono font-medium cursor-pointer transition-colors"
                                 title={`${tk} hissesini doğrudan analiz et`}
                               >
                                 +{tk}
@@ -4562,7 +4555,7 @@ export default function SimplyView({
                       )}
                     </>
                   ) : (
-                    <div className="bg-[#101319] border border-[#232834] rounded-xl p-4 text-sm text-slate-300 flex items-center justify-between flex-wrap gap-3">
+                    <div className="bg-[#101319] border border-[#232834] rounded-lg p-4 text-xs text-slate-300 flex items-center justify-between flex-wrap gap-3">
                       <span>Bu akran grubunda henüz başka bir şirket analiz edilmedi:</span>
                       <div className="flex items-center gap-2 flex-wrap">
                         {sectorCandidateTickers.map((tk) => (
@@ -4570,7 +4563,7 @@ export default function SimplyView({
                             key={tk}
                             type="button"
                             onClick={() => onSelectTicker && onSelectTicker(tk)}
-                            className="px-2.5 py-1 bg-[#151821] hover:bg-[#1e2430] text-[#f5c242] rounded-lg border border-[#262c38] text-xs font-mono font-bold cursor-pointer transition"
+                            className="px-2.5 py-1 bg-[#151821] hover:bg-[#1c222e] text-slate-300 hover:text-white rounded-md border border-[#262c38] text-xs font-mono font-medium cursor-pointer transition-colors"
                           >
                             +{tk} Analiz Et
                           </button>

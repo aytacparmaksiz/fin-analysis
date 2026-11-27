@@ -239,8 +239,11 @@ describe('KAP Disclosure Intelligence & Redesigned Panel UI/UX Verification Suit
     const radarSrc = fs.readFileSync(path.join(ROOT, 'app/simply/snowflake-radar.tsx'), 'utf8');
     assert.ok(radarSrc.includes('radarPalette') && radarSrc.includes('totalScore >= 20'), 'snowflake-radar.tsx must compute dynamic score-based gradient palette');
     assert.ok(pageSrc.includes('getSectorMonogramCls') && simplySrc.includes('fv-inline-sparkbar'), 'page.tsx / simply-view.tsx missing sector monogram or inline sparkbar');
-    for (const marker of ['fv-portfolio-architect', 'Model Portföy Mimarı', 'applyPortfolioSet', 'swapPortfolioTicker']) {
+    for (const marker of ['fv-portfolio-architect', 'Model Portföy', 'applyPortfolioSet', 'swapPortfolioTicker']) {
       assert.ok(pageSrc.includes(marker), `page.tsx missing Portfolio Architect marker: ${marker}`);
+    }
+    for (const bannedPortfolioBuzzword of ['Eleme Evreni', 'Rotasyon Masası', 'Model Portföy Mimarı']) {
+      assert.ok(!pageSrc.includes(bannedPortfolioBuzzword), `page.tsx must not contain AI buzzword: ${bannedPortfolioBuzzword}`);
     }
   });
 

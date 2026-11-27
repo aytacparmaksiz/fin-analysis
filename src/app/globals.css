@@ -1275,3 +1275,40 @@ summary:active {
   padding-top: env(safe-area-inset-top, 0.5rem);
 }
 
+/* Kurumsal Monokrom Birincil Aksiyon & Aktif Yüzey Tokenları */
+.fv-btn-primary {
+  background-color: #f1f5f9;
+  color: #0f172a;
+  border: 1px solid #e2e8f0;
+  transition: background-color 140ms ease, border-color 140ms ease, opacity 140ms ease;
+}
+.fv-btn-primary:hover:not(:disabled) {
+  background-color: #ffffff;
+  border-color: #ffffff;
+}
+.fv-btn-primary * {
+  color: #0f172a;
+}
+
+[data-theme="light"] .fv-btn-primary {
+  background-color: #0f172a !important;
+  color: #ffffff !important;
+  border-color: #0f172a !important;
+}
+[data-theme="light"] .fv-btn-primary:hover:not(:disabled) {
+  background-color: #1e293b !important;
+  border-color: #1e293b !important;
+}
+[data-theme="light"] .fv-btn-primary * {
+  color: #ffffff !important;
+}
+
+[data-theme="light"] [class*="bg-[#222836]"],
+[data-theme="light"] [class*="bg-[#1a1f2a]"] {
+  background-color: #E2E8F0 !important;
+  box-shadow: none !important;
+}
+[data-theme="light"] [class*="border-[#3b4458]"] {
+  border-color: #94A3B8 !important;
+}
+
