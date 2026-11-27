@@ -1939,9 +1939,57 @@ export default function ValuationTerminal({
     positions: {},
   });
 
+  const [livePriceMap, setLivePriceMap] = useState<Record<string, number>>({});
+  const [livePriceUpdatedAt, setLivePriceUpdatedAt] = useState<string | null>(null);
+  const [isRefreshingLivePrices, setIsRefreshingLivePrices] = useState<boolean>(false);
+  const hasAutoFetchedLivePricesRef = useRef<boolean>(false);
+
+  const refreshLivePrices = useCallback(async () => {
+    if (isRefreshingLivePrices) return;
+    const uniqueTickers = Array.from(
+      new Set(
+        savedReports
+          .map(r => String(r.ticker || '').trim().replace(/\.IS$/i, '').toUpperCase())
+          .filter(Boolean)
+      )
+    );
+    if (uniqueTickers.length === 0) return;
+    setIsRefreshingLivePrices(true);
+    try {
+      const queryUrl =
+        uniqueTickers.length <= 350
+          ? `/api/live-prices?tickers=${encodeURIComponent(uniqueTickers.join(','))}`
+          : '/api/live-prices';
+      const res = await fetch(queryUrl, { cache: 'no-store' });
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json?.success && json.prices && typeof json.prices === 'object') {
+        setLivePriceMap(json.prices);
+        setLivePriceUpdatedAt(typeof json.updatedAt === 'string' ? json.updatedAt : new Date().toISOString());
+      }
+    } catch (err) {
+      console.warn('[ModelPortfoy] Canlı BIST fiyat güncelleme hatası:', err);
+    } finally {
+      setIsRefreshingLivePrices(false);
+    }
+  }, [isRefreshingLivePrices, savedReports]);
+
+  useEffect(() => {
+    if (
+      step === 'saved' &&
+      (analyzedTab === 'PORTFOLIO' || analyzedTab === 'FAVORITES') &&
+      savedReports.length > 0 &&
+      !hasAutoFetchedLivePricesRef.current &&
+      Object.keys(livePriceMap).length === 0
+    ) {
+      hasAutoFetchedLivePricesRef.current = true;
+      void refreshLivePrices();
+    }
+  }, [step, analyzedTab, savedReports.length, livePriceMap, refreshLivePrices]);
+
   const forensicPortfolioPlan = useMemo(() => {
-    return buildForensicPortfolioPlan(savedReports, portfolioTickers, architectConfig);
-  }, [savedReports, portfolioTickers, architectConfig]);
+    return buildForensicPortfolioPlan(savedReports, portfolioTickers, architectConfig, livePriceMap);
+  }, [savedReports, portfolioTickers, architectConfig, livePriceMap]);
 
   const modelAllocationPlan = useMemo(() => {
     return computeCapitalAllocationPlan({
@@ -1952,8 +2000,14 @@ export default function ValuationTerminal({
       topUpStrategy: portfolioCapitalState.topUpStrategy,
       savedPositions: portfolioCapitalState.positions,
       maxSingleStockWeightPct: architectConfig.maxSingleStockWeightPct,
+      cashReserveWeightPct: forensicPortfolioPlan.cashReserveWeightPct,
     });
-  }, [forensicPortfolioPlan.modelPortfolio, portfolioCapitalState, architectConfig.maxSingleStockWeightPct]);
+  }, [
+    forensicPortfolioPlan.modelPortfolio,
+    forensicPortfolioPlan.cashReserveWeightPct,
+    portfolioCapitalState,
+    architectConfig.maxSingleStockWeightPct,
+  ]);
 
   const portfolioHoldingCandidates = useMemo(() => {
     const out: ForensicPortfolioCandidate[] = [];
@@ -9941,6 +9995,14 @@ export default function ValuationTerminal({
                           <span className="text-slate-400">
                             Dağıtılan: <strong className="text-white">{formatTryInt(allocResult.deployedAmountTry)}</strong>
                           </span>
+                          {allocResult.cashReserveTry > 0 && (
+                            <>
+                              <span className="text-slate-700">|</span>
+                              <span className="text-slate-400">
+                                Nakit/PPF: <strong className="text-slate-200">{formatTryInt(allocResult.cashReserveTry)}</strong>
+                              </span>
+                            </>
+                          )}
                           <span className="text-slate-700">|</span>
                           <span className="text-slate-400">
                             Kalan Nakit: <strong className="text-slate-300">{formatTryInt(allocResult.unallocatedCashTry)}</strong>
@@ -10141,6 +10203,29 @@ export default function ValuationTerminal({
                             <Plus className="w-3 h-3" />
                           </button>
                         </div>
+
+                        {/* Canlı BIST Fiyat Güncelleme */}
+                        <button
+                          type="button"
+                          disabled={isRefreshingLivePrices || savedReports.length === 0}
+                          onClick={() => void refreshLivePrices()}
+                          title={
+                            livePriceUpdatedAt
+                              ? `Canlı BIST fiyatları (${forensicPortfolioPlan.livePricesAppliedCount} hisse güncellendi)`
+                              : 'İş Yatırım canlı BIST fiyatlarını çekerek hedef potansiyelleri güncelle'
+                          }
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-[#101319] hover:bg-[#1a1f2b] text-slate-300 hover:text-white border-[#232834] font-sans font-medium cursor-pointer disabled:opacity-40 transition-colors"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${isRefreshingLivePrices ? 'animate-spin' : ''}`} />
+                          <span>Canlı Fiyat</span>
+                          {livePriceUpdatedAt ? (
+                            <span className="text-[10px] font-mono text-slate-400">
+                              {new Date(livePriceUpdatedAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-sans text-slate-500">Fiyat Güncelle</span>
+                          )}
+                        </button>
 
                         {/* Açılır-Kapanır Portföy Kuralları Çekmecesi */}
                         <button
@@ -10688,6 +10773,11 @@ export default function ValuationTerminal({
                           <div className="text-[11px] font-mono text-slate-400">
                             {plan.tier1CoreAl.length} Ana · {plan.tier2SatelliteAl.length} İkincil
                           </div>
+                          {plan.cashReserveWeightPct > 0 && (
+                            <div className="text-[11px] font-mono text-slate-300">
+                              Hisse %{plan.equityAllocationWeightPct} · Nakit/PPF %{plan.cashReserveWeightPct}
+                            </div>
+                          )}
                         </div>
 
                         <div className="p-4 space-y-1">
@@ -10697,6 +10787,9 @@ export default function ValuationTerminal({
                           </div>
                           <div className="text-[11px] font-sans text-slate-400">
                             Tek hisse tavanı <span className="font-mono text-slate-300">%{architectConfig.maxSingleStockWeightPct}</span>
+                            {alloc.cashReserveTry > 0 && (
+                              <span className="text-slate-300"> · Nakit/PPF rezervi <span className="font-mono">{formatTryInt(alloc.cashReserveTry)}</span></span>
+                            )}
                           </div>
                         </div>
 
@@ -10927,7 +11020,14 @@ export default function ValuationTerminal({
                                           <span className="text-slate-500">—</span>
                                         )}
                                       </td>
-                                      <td className="py-3 px-3 text-right font-mono">
+                                      <td
+                                        className="py-3 px-3 text-right font-mono"
+                                        title={
+                                          item.isLivePrice && item.reportPrice > 0
+                                            ? `Canlı BIST Fiyatı (Rapor: ₺${item.reportPrice.toFixed(2)}${item.priceDriftPct != null ? `, ${item.priceDriftPct >= 0 ? '+' : ''}${item.priceDriftPct.toFixed(1)}%` : ''})`
+                                            : undefined
+                                        }
+                                      >
                                         <div className="text-white font-medium">{item.price > 0 ? `₺${item.price.toFixed(2)}` : '—'}</div>
                                         <div className="text-slate-400 text-[11px]">{item.fairValue > 0 ? `Adil ₺${item.fairValue.toFixed(2)}` : '—'}</div>
                                       </td>

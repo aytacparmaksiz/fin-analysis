@@ -25,7 +25,7 @@ export const DEFAULT_PORTFOLIO_ARCHITECT_CONFIG: PortfolioArchitectConfig = {
   minOcfConversionPct: 80,
   maxWcShareOfOcfPct: 65,
   minEbitdaMarginPct: 8,
-  minFreeFloatPct: 0,
+  minFreeFloatPct: 15,
   deduplicateGroupHoldings: true,
   includeHighQualityNeutralCount: 1,
   rotationTakeProfitUpsideThresholdPct: 12,
@@ -91,6 +91,24 @@ const CONSOLIDATED_GROUP_MAP: Record<string, string> = {
   TRALT: 'KOZA_TR_GRUP',
 };
 
+// Ana Holding - Borsa İştirakleri Eşleşmesi (Aynı anda hem ana holding hem iştiraki AL listesinde olursa en yüksek puanlı tutulur)
+const HOLDING_SUBSIDIARY_MAP: Record<string, string[]> = {
+  KCHOL: ['TUPRS', 'FROTO', 'TOASO', 'TTRAK', 'ARCLK', 'YKBNK', 'AYGAZ', 'OTKAR'],
+  SAHOL: ['AKBNK', 'ENJSA', 'CIMSA', 'AGESA', 'BRISA', 'KORDS', 'TKNSA'],
+  AGHOL: ['MGROS', 'CCOLA', 'AEFES', 'ADEL', 'ASUZU'],
+  ISCTR: ['SISE', 'ANHYT', 'ANSGR', 'TSKB', 'ISGYO', 'ISMEN'],
+  DOHOL: ['GWIND', 'KAREL', 'DITAS'],
+  ALARK: ['ALGYO', 'ALCAR'],
+};
+
+const NON_OPERATING_FINANCIAL_SECTORS = new Set<SectorType>([
+  'BANKING',
+  'INSURANCE',
+  'FINANCIAL_SERVICES',
+  'HOLDING',
+  'REIT',
+]);
+
 export type ForensicPortfolioTier =
   | 'TIER_1_CORE'
   | 'TIER_2_SATELLITE'
@@ -109,8 +127,13 @@ export interface ForensicPortfolioCandidate {
   period: string;
   periodSortKey: number;
   price: number;
+  reportPrice: number;
+  isLivePrice: boolean;
+  priceDriftPct: number | null;
   fairValue: number;
   upsidePct: number;
+  dividendYieldPct: number;
+  totalExpectedReturnPct: number;
   score: number;
   decision: 'AL' | 'NÖTR' | 'ALMA';
   tier: ForensicPortfolioTier;
@@ -128,6 +151,7 @@ export interface ForensicPortfolioCandidate {
   currentRatio: number | null;
   freeFloatPct: number | null;
   isBankOrInsurance: boolean;
+  isNonOperatingFinancial: boolean;
   isValueTrap: boolean;
   isStalePeriod: boolean;
   groupKey: string | null;
@@ -177,6 +201,9 @@ export interface ForensicPortfolioPlan {
   tierANeutralCandidates: ForensicPortfolioCandidate[];
   neutralValueTraps: ForensicPortfolioCandidate[];
   modelPortfolio: ForensicPortfolioCandidate[];
+  equityAllocationWeightPct: number;
+  cashReserveWeightPct: number;
+  livePricesAppliedCount: number;
   sectorBreakdown: PortfolioSectorSlice[];
   weightedAvgUpsidePct: number | null;
   weightedAvgScore: number | null;
@@ -200,7 +227,8 @@ function round2(val: number): number {
 function resolveCandidateFromReport(
   rep: SavedReport,
   portfolioSet: Set<string>,
-  maxUniversePeriodKey: number
+  maxUniversePeriodKey: number,
+  livePriceMap?: Record<string, number>
 ): ForensicPortfolioCandidate {
   const ticker = (rep.ticker || '').trim().replace(/\.IS$/i, '').toUpperCase();
   const ext = rep.extractedData || {};
@@ -213,15 +241,22 @@ function resolveCandidateFromReport(
   const sectorName = getCompanySectorDisplayName(ticker, sectorCode);
   const companyName = String((rep as any).companyName || ext.company_name || ticker);
   const isBankOrInsurance = sectorCode === 'BANKING' || sectorCode === 'INSURANCE';
+  const isNonOperatingFinancial = NON_OPERATING_FINANCIAL_SECTORS.has(sectorCode);
 
   const isy = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[ticker];
-  const price = parseFinancialNumber(rep.price) ?? isy?.lastPrice ?? 0;
+  const reportPrice = parseFinancialNumber(rep.price) ?? isy?.lastPrice ?? 0;
+  const rawLivePrice = livePriceMap?.[ticker];
+  const hasValidLivePrice =
+    rawLivePrice != null && Number.isFinite(rawLivePrice) && rawLivePrice > 0;
+  const price = hasValidLivePrice ? round2(rawLivePrice) : reportPrice;
+  const isLivePrice = hasValidLivePrice;
+  const priceDriftPct =
+    hasValidLivePrice && reportPrice > 0
+      ? round1(((price - reportPrice) / reportPrice) * 100)
+      : null;
+
   const fairValue = parseFinancialNumber(rep.fairValue ?? val.fair_value) ?? 0;
   const upsidePct = price > 0 && fairValue > 0 ? round1(((fairValue - price) / price) * 100) : 0;
-  const score = parseNumericScore(rep.score ?? val.score) ?? 0;
-  const rawDec = String(rep.decision || val.final_decision || 'NÖTR').trim().toUpperCase();
-  const decision: 'AL' | 'NÖTR' | 'ALMA' =
-    rawDec === 'AL' ? 'AL' : rawDec === 'ALMA' ? 'ALMA' : 'NÖTR';
 
   const history = Array.isArray(ext.financial_history) ? ext.financial_history : [];
   const latest = history.length > 0 ? history[history.length - 1] : {};
@@ -230,6 +265,43 @@ function resolveCandidateFromReport(
   const maxYear = Math.floor(maxUniversePeriodKey / 100);
   const repYear = Math.floor(periodSortKey / 100);
   const isStalePeriod = maxYear >= 2025 && repYear > 2000 && maxYear - repYear >= 2;
+
+  let rawDividendYield = parseFinancialNumber(
+    ext.market_multiples?.dividend_yield ??
+      val.dividend_yield ??
+      (isy as any)?.dividendYield ??
+      (isy as any)?.dividend_yield
+  );
+  if (rawDividendYield == null && Array.isArray(ext.dividends) && ext.dividends.length > 0) {
+    const refYear = repYear >= 2000 ? repYear : new Date().getFullYear();
+    for (const d of ext.dividends) {
+      if (!d || typeof d !== 'object') continue;
+      const dYear = parseFinancialNumber(d.year);
+      if (dYear != null && dYear < refYear - 1) continue;
+      const candidateYield = parseFinancialNumber(
+        d.yieldPct ?? d.yield_pct ?? d.yield ?? d.dividend_yield ?? d.verim
+      );
+      if (candidateYield != null && candidateYield > 0) {
+        rawDividendYield = candidateYield;
+        break;
+      }
+      const perShareTl = parseFinancialNumber(d.perShareTl ?? d.per_share_tl);
+      if (perShareTl != null && perShareTl > 0 && price > 0) {
+        rawDividendYield = (perShareTl / price) * 100;
+        break;
+      }
+    }
+  }
+  const dividendYieldPct =
+    rawDividendYield != null && Number.isFinite(rawDividendYield)
+      ? round1(Math.max(0, Math.min(25, rawDividendYield)))
+      : 0;
+  const totalExpectedReturnPct = round1(upsidePct + dividendYieldPct);
+
+  const score = parseNumericScore(rep.score ?? val.score) ?? 0;
+  const rawDec = String(rep.decision || val.final_decision || 'NÖTR').trim().toUpperCase();
+  const decision: 'AL' | 'NÖTR' | 'ALMA' =
+    rawDec === 'AL' ? 'AL' : rawDec === 'ALMA' ? 'ALMA' : 'NÖTR';
 
   const recentSeries = history.slice(-4);
   const validQuarters = recentSeries.filter((q: any) => q?.net_income != null && Number.isFinite(Number(q.net_income)));
@@ -296,9 +368,13 @@ function resolveCandidateFromReport(
   const groupKey = CONSOLIDATED_GROUP_MAP[ticker] || null;
 
   // Kurumsal Çok Boyutlu Sıralama Puanı
-  const cappedUpside = Math.max(-20, Math.min(130, upsidePct));
+  const cappedUpside = Math.max(-20, Math.min(130, totalExpectedReturnPct));
   const cappedEva = Math.max(-10, Math.min(35, evaSpreadPct ?? 0));
-  const cashBonus = isNetCash ? 5 : netDebtToEbitda != null && netDebtToEbitda > 2.5 ? -8 : 0;
+  const cashBonus = isNetCash
+    ? 5
+    : !isNonOperatingFinancial && netDebtToEbitda != null && netDebtToEbitda > 2.5
+    ? -8
+    : 0;
   const compositeRankScore = round1(score * 0.5 + cappedUpside * 0.35 + cappedEva * 0.65 + cashBonus);
 
   return {
@@ -310,8 +386,13 @@ function resolveCandidateFromReport(
     period,
     periodSortKey,
     price,
+    reportPrice,
+    isLivePrice,
+    priceDriftPct,
     fairValue,
     upsidePct,
+    dividendYieldPct,
+    totalExpectedReturnPct,
     score,
     decision,
     tier: decision === 'ALMA' ? 'ALMA' : 'OTHER_NEUTRAL',
@@ -329,6 +410,7 @@ function resolveCandidateFromReport(
     currentRatio,
     freeFloatPct,
     isBankOrInsurance,
+    isNonOperatingFinancial,
     isValueTrap,
     isStalePeriod,
     groupKey,
@@ -384,12 +466,24 @@ function resolveCanonicalRiskFreeRatePct(
 export function buildForensicPortfolioPlan(
   reports: SavedReport[],
   currentPortfolioTickers: string[],
-  partialConfig?: Partial<PortfolioArchitectConfig>
+  partialConfig?: Partial<PortfolioArchitectConfig>,
+  livePriceMap?: Record<string, number>
 ): ForensicPortfolioPlan {
   const config: PortfolioArchitectConfig = {
     ...DEFAULT_PORTFOLIO_ARCHITECT_CONFIG,
     ...(partialConfig || {}),
   };
+
+  const normalizedLivePriceMap: Record<string, number> = {};
+  if (livePriceMap && typeof livePriceMap === 'object') {
+    for (const [rawTk, rawPx] of Object.entries(livePriceMap)) {
+      const sym = String(rawTk || '').trim().replace(/\.IS$/i, '').toUpperCase();
+      const px = typeof rawPx === 'number' ? rawPx : parseFinancialNumber(rawPx);
+      if (sym && px != null && Number.isFinite(px) && px > 0) {
+        normalizedLivePriceMap[sym] = px;
+      }
+    }
+  }
 
   const uniqueReports = getLatestReportsPerTicker(reports || []);
   const portfolioUpper = Array.from(
@@ -414,10 +508,11 @@ export function buildForensicPortfolioPlan(
   );
 
   const candidates = uniqueReports.map(r => {
-    const c = resolveCandidateFromReport(r, portfolioSet, maxPeriodKey);
-    c.excessReturnOverRfPct = round1(c.upsidePct - effectiveRiskFreeRatePct);
+    const c = resolveCandidateFromReport(r, portfolioSet, maxPeriodKey, normalizedLivePriceMap);
+    c.excessReturnOverRfPct = round1(c.totalExpectedReturnPct - effectiveRiskFreeRatePct);
     return c;
   });
+  const livePricesAppliedCount = candidates.filter(c => c.isLivePrice).length;
 
   const rawAl = candidates
     .filter(c => c.decision === 'AL')
@@ -427,25 +522,12 @@ export function buildForensicPortfolioPlan(
     .sort((a, b) => b.compositeRankScore - a.compositeRankScore);
   const rawAlma = candidates.filter(c => c.decision === 'ALMA');
 
-  // Konsolide grup liderini belirle (TRENJ vs TRMET gibi aynı grubu paylaşanlardan yalnızca en yüksek sıralıyı tut)
-  const chosenGroupLeader = new Map<string, string>();
-  if (config.deduplicateGroupHoldings) {
-    for (const c of rawAl) {
-      if (!c.groupKey) continue;
-      if (!chosenGroupLeader.has(c.groupKey)) {
-        chosenGroupLeader.set(c.groupKey, c.ticker);
-      }
-    }
-  }
-
-  const tier1CoreAl: ForensicPortfolioCandidate[] = [];
-  const tier2SatelliteAl: ForensicPortfolioCandidate[] = [];
-  const tier3FilteredAl: ForensicPortfolioCandidate[] = [];
-  let belowRiskFreeAlCount = 0;
+  // 1. Geçiş: Bireysel adli stres & Rf engellerini ölç (böylece elenen bir holding sağlıklı iştirakini bloklamaz)
+  const rawAlReasonsMap = new Map<string, { filterReasons: string[]; hasForensic: boolean; isBelowRf: boolean }>();
+  const passingAlPool: ForensicPortfolioCandidate[] = [];
 
   for (const cand of rawAl) {
     const filterReasons: string[] = [];
-    const cautionNotes: string[] = [];
 
     if (cand.isValueTrap) {
       filterReasons.push('Değer tuzağı bayrağı aktif');
@@ -453,17 +535,7 @@ export function buildForensicPortfolioPlan(
     if (cand.isStalePeriod) {
       filterReasons.push(`Bayat bilanço dönemi (${cand.period})`);
     }
-    if (
-      config.deduplicateGroupHoldings &&
-      cand.groupKey &&
-      chosenGroupLeader.get(cand.groupKey) &&
-      chosenGroupLeader.get(cand.groupKey) !== cand.ticker
-    ) {
-      filterReasons.push(
-        `Konsolide grup çift sayımı (${chosenGroupLeader.get(cand.groupKey)} ile aynı konsolide mali yapı)`
-      );
-    }
-    if (!cand.isBankOrInsurance) {
+    if (!cand.isNonOperatingFinancial) {
       if (cand.ocfConversionPct !== null && cand.ocfConversionPct < config.minOcfConversionPct) {
         filterReasons.push(
           `Zayıf nakit dönüşümü: OCF/Net Kâr %${cand.ocfConversionPct} (< %${config.minOcfConversionPct})`
@@ -489,15 +561,90 @@ export function buildForensicPortfolioPlan(
       );
     }
 
-    cand.hasForensicFailure = filterReasons.length > 0;
-
-    if (config.enforceRiskFreeHurdle && cand.upsidePct < effectiveRiskFreeRatePct) {
-      belowRiskFreeAlCount++;
+    const hasForensic = filterReasons.length > 0;
+    const isBelowRf = Boolean(
+      config.enforceRiskFreeHurdle && cand.totalExpectedReturnPct < effectiveRiskFreeRatePct
+    );
+    if (isBelowRf) {
       filterReasons.push(
-        `Potansiyel getiri (+%${cand.upsidePct.toFixed(1)}), risksiz faiz oranının (%${effectiveRiskFreeRatePct.toFixed(1)}) altında`
+        cand.dividendYieldPct > 0
+          ? `Toplam beklenen getiri (+%${cand.totalExpectedReturnPct.toFixed(1)}, temettü dahil), risksiz faiz oranının (%${effectiveRiskFreeRatePct.toFixed(1)}) altında`
+          : `Potansiyel getiri (+%${cand.upsidePct.toFixed(1)}), risksiz faiz oranının (%${effectiveRiskFreeRatePct.toFixed(1)}) altında`
       );
     }
 
+    rawAlReasonsMap.set(cand.ticker, { filterReasons, hasForensic, isBelowRf });
+    if (filterReasons.length === 0) {
+      passingAlPool.push(cand);
+    }
+  }
+
+  // 2. Geçiş: Sağlıklı adaylar arasında konsolide grup (TRENJ/TRMET) ve ana holding-iştirak tekilleştirmesi
+  const chosenGroupLeader = new Map<string, string>();
+  const holdingDupWinnerByLoser = new Map<string, string>();
+  if (config.deduplicateGroupHoldings) {
+    for (const c of passingAlPool) {
+      if (!c.groupKey) continue;
+      if (!chosenGroupLeader.has(c.groupKey)) {
+        chosenGroupLeader.set(c.groupKey, c.ticker);
+      }
+    }
+
+    const passingRankMap = new Map(passingAlPool.map((c, idx) => [c.ticker, { cand: c, rankIdx: idx }]));
+    for (const [holdingTicker, subTickers] of Object.entries(HOLDING_SUBSIDIARY_MAP)) {
+      const hEntry = passingRankMap.get(holdingTicker);
+      if (!hEntry) continue;
+      const presentSubs = subTickers
+        .map(s => passingRankMap.get(s))
+        .filter((x): x is { cand: ForensicPortfolioCandidate; rankIdx: number } => Boolean(x))
+        .sort((a, b) => a.rankIdx - b.rankIdx);
+      if (presentSubs.length === 0) continue;
+
+      const topSub = presentSubs[0];
+      if (topSub.rankIdx < hEntry.rankIdx) {
+        if (!holdingDupWinnerByLoser.has(holdingTicker)) {
+          holdingDupWinnerByLoser.set(holdingTicker, topSub.cand.ticker);
+        }
+      } else {
+        for (const subEntry of presentSubs) {
+          if (!holdingDupWinnerByLoser.has(subEntry.cand.ticker)) {
+            holdingDupWinnerByLoser.set(subEntry.cand.ticker, holdingTicker);
+          }
+        }
+      }
+    }
+  }
+
+  const tier1CoreAl: ForensicPortfolioCandidate[] = [];
+  const tier2SatelliteAl: ForensicPortfolioCandidate[] = [];
+  const tier3FilteredAl: ForensicPortfolioCandidate[] = [];
+  let belowRiskFreeAlCount = 0;
+
+  for (const cand of rawAl) {
+    const info = rawAlReasonsMap.get(cand.ticker)!;
+    const filterReasons = [...info.filterReasons];
+    const cautionNotes: string[] = [];
+
+    if (
+      config.deduplicateGroupHoldings &&
+      cand.groupKey &&
+      chosenGroupLeader.get(cand.groupKey) &&
+      chosenGroupLeader.get(cand.groupKey) !== cand.ticker
+    ) {
+      filterReasons.push(
+        `Konsolide grup çift sayımı (${chosenGroupLeader.get(cand.groupKey)} ile aynı konsolide mali yapı)`
+      );
+      info.hasForensic = true;
+    }
+
+    const dupWinner = holdingDupWinnerByLoser.get(cand.ticker);
+    if (dupWinner) {
+      filterReasons.push(`Holding-iştirak çift sayımı (${dupWinner} ile aynı ana grup)`);
+      info.hasForensic = true;
+    }
+
+    cand.hasForensicFailure = info.hasForensic;
+    if (info.isBelowRf) belowRiskFreeAlCount++;
     cand.filterReasons = filterReasons;
 
     if (filterReasons.length > 0) {
@@ -507,9 +654,12 @@ export function buildForensicPortfolioPlan(
       continue;
     }
 
-    // İkincil Uyarılar (Tier-1 vs Tier-2 ayrımı: yüksek kaldıraç, çok düşük cari oran, sınırda EVA < 1 veya grup temsilciliği)
-    if (!cand.isBankOrInsurance && cand.netDebtToEbitda !== null && cand.netDebtToEbitda > 2.5) {
+    // İkincil Uyarılar (Tier-1 vs Tier-2 ayrımı: yüksek kaldıraç, çok düşük cari oran, sınırda EVA < 2, eksik metrik)
+    if (!cand.isNonOperatingFinancial && cand.netDebtToEbitda !== null && cand.netDebtToEbitda > 2.5) {
       cautionNotes.push(`Yüksek kaldıraç (Net Borç/FAVÖK ${cand.netDebtToEbitda}x)`);
+    }
+    if (!cand.isNonOperatingFinancial && (cand.ocfConversionPct === null || cand.evaSpreadPct === null)) {
+      cautionNotes.push('Eksik nakit akışı / EVA verisi (Çekirdek AL yerine İkincil havuzda izlenir)');
     }
     if (cand.currentRatio !== null && cand.currentRatio < 0.85) {
       cautionNotes.push(`Düşük cari oran (${cand.currentRatio}x)`);
@@ -544,10 +694,10 @@ export function buildForensicPortfolioPlan(
   for (const cand of rawNotr) {
     const trapReasons: string[] = [];
     if (cand.isValueTrap) trapReasons.push('Değer tuzağı bayrağı');
-    if (!cand.isBankOrInsurance && cand.ocfConversionPct !== null && cand.ocfConversionPct < 60) {
+    if (!cand.isNonOperatingFinancial && cand.ocfConversionPct !== null && cand.ocfConversionPct < 60) {
       trapReasons.push(`Zayıf nakit dönüşümü (%${cand.ocfConversionPct})`);
     }
-    if (!cand.isBankOrInsurance && cand.wcShareOfOcfPct !== null && cand.wcShareOfOcfPct >= 70) {
+    if (!cand.isNonOperatingFinancial && cand.wcShareOfOcfPct !== null && cand.wcShareOfOcfPct >= 70) {
       trapReasons.push(`Tedarikçi/WC kaynaklı nakit (%${cand.wcShareOfOcfPct})`);
     }
     if (cand.evaSpreadPct !== null && cand.evaSpreadPct < 0) {
@@ -572,7 +722,7 @@ export function buildForensicPortfolioPlan(
       !cand.isStalePeriod &&
       cand.upsidePct >= 10 &&
       (cand.evaSpreadPct === null || cand.evaSpreadPct >= 2.0) &&
-      (cand.isBankOrInsurance || cand.ocfConversionPct === null || cand.ocfConversionPct >= 75);
+      (cand.isNonOperatingFinancial || cand.ocfConversionPct === null || cand.ocfConversionPct >= 75);
 
     if (isQualityNeutral) {
       cand.tier = 'A_PLUS_NEUTRAL';
@@ -586,7 +736,7 @@ export function buildForensicPortfolioPlan(
   // Model Portföy Seçimi (Sektör, Grup ve Risksiz Faiz Eşiği Kurallarıyla)
   const selectedHoldings: ForensicPortfolioCandidate[] = [];
   const eligibleNeutrals = config.enforceRiskFreeHurdle
-    ? tierANeutralCandidates.filter(c => c.upsidePct >= effectiveRiskFreeRatePct)
+    ? tierANeutralCandidates.filter(c => c.totalExpectedReturnPct >= effectiveRiskFreeRatePct)
     : tierANeutralCandidates;
   const selectedNeutralSlots = Math.min(config.includeHighQualityNeutralCount, eligibleNeutrals.length);
   const alTargetSlots = Math.max(1, config.targetCount - selectedNeutralSlots);
@@ -631,7 +781,7 @@ export function buildForensicPortfolioPlan(
   let weights = rawWeights.map(w => (sumRaw > 0 ? (w / sumRaw) * 100 : 0));
 
   // İteratif tek hisse (%maxSingleStockWeightPct) ve sektör (%maxSectorWeightPct) tavan dengelemesi
-  for (let iter = 0; iter < 5; iter++) {
+  for (let iter = 0; iter < 6; iter++) {
     let excess = 0;
     const cappedFlags = weights.map(() => false);
 
@@ -680,7 +830,10 @@ export function buildForensicPortfolioPlan(
           const sec = selectedHoldings[idx].sectorName;
           const secCur = selectedHoldings.reduce((sAcc, h, hIdx) => (h.sectorName === sec ? sAcc + weights[hIdx] : sAcc), 0);
           if (!cappedFlags[idx] && w < config.maxSingleStockWeightPct - 0.1 && secCur < config.maxSectorWeightPct - 0.1) {
-            return w + (excess * w) / uncappedWeightSum;
+            const singleRoom = Math.max(0, config.maxSingleStockWeightPct - w);
+            const secRoom = Math.max(0, config.maxSectorWeightPct - secCur);
+            const addAmt = Math.min((excess * w) / uncappedWeightSum, singleRoom, secRoom);
+            return w + addAmt;
           }
           return w;
         });
@@ -688,15 +841,75 @@ export function buildForensicPortfolioPlan(
     }
   }
 
-  // %100'e temiz yuvarla
-  const finalSum = weights.reduce((a, b) => a + b, 0);
-  if (finalSum > 0) {
-    weights = weights.map(w => round1((w / finalSum) * 100));
-    const roundedSum = weights.reduce((a, b) => a + b, 0);
-    if (weights.length > 0 && Math.abs(100 - roundedSum) >= 0.05) {
-      weights[0] = round1(weights[0] + (100 - roundedSum));
+  // Sert tavan korumalı yuvarlama: Hisse ve sektör tavanlarını ASLA aşma; boşta kalan oran Nakit / PPF Rezervi olur
+  weights = weights.map(w => Math.min(w, config.maxSingleStockWeightPct));
+  const finalSecSumsRaw = new Map<string, number>();
+  weights.forEach((w, idx) => {
+    const sec = selectedHoldings[idx].sectorName;
+    finalSecSumsRaw.set(sec, (finalSecSumsRaw.get(sec) || 0) + w);
+  });
+  for (const [sec, totalSecW] of finalSecSumsRaw.entries()) {
+    if (totalSecW > config.maxSectorWeightPct) {
+      const ratio = config.maxSectorWeightPct / totalSecW;
+      weights = weights.map((w, idx) => (selectedHoldings[idx].sectorName === sec ? w * ratio : w));
     }
   }
+
+  weights = weights.map(w => Math.min(round1(config.maxSingleStockWeightPct), Math.max(0, round1(w))));
+
+  // Yuvarlama sonrası sektör tavanı taşması varsa ilgili sektörün en büyük hissesinden 0.1'lik kırpma yap
+  const uniqueSectors = Array.from(new Set(selectedHoldings.map(h => h.sectorName)));
+  for (const sec of uniqueSectors) {
+    let secSum = round1(
+      selectedHoldings.reduce((s, h, i) => (h.sectorName === sec ? s + weights[i] : s), 0)
+    );
+    while (secSum > config.maxSectorWeightPct + 1e-6) {
+      let bestIdx = -1;
+      let bestW = 0;
+      selectedHoldings.forEach((h, i) => {
+        if (h.sectorName === sec && weights[i] > bestW) {
+          bestW = weights[i];
+          bestIdx = i;
+        }
+      });
+      if (bestIdx === -1 || weights[bestIdx] <= 0) break;
+      weights[bestIdx] = round1(Math.max(0, weights[bestIdx] - 0.1));
+      secSum = round1(
+        selectedHoldings.reduce((s, h, i) => (h.sectorName === sec ? s + weights[i] : s), 0)
+      );
+    }
+  }
+
+  let equityAllocationWeightPct = round1(weights.reduce((a, b) => a + b, 0));
+  while (equityAllocationWeightPct > 100 + 1e-6 && weights.length > 0) {
+    let maxIdx = 0;
+    for (let i = 1; i < weights.length; i++) {
+      if (weights[i] > weights[maxIdx]) maxIdx = i;
+    }
+    if (weights[maxIdx] <= 0) break;
+    weights[maxIdx] = round1(Math.max(0, weights[maxIdx] - 0.1));
+    equityAllocationWeightPct = round1(weights.reduce((a, b) => a + b, 0));
+  }
+
+  if (equityAllocationWeightPct >= 99.5 && equityAllocationWeightPct < 100 && weights.length > 0) {
+    const delta = round1(100 - equityAllocationWeightPct);
+    for (let i = 0; i < weights.length; i++) {
+      const sec = selectedHoldings[i].sectorName;
+      const secCur = round1(
+        selectedHoldings.reduce((s, h, idx) => (h.sectorName === sec ? s + weights[idx] : s), 0)
+      );
+      if (
+        round1(weights[i] + delta) <= config.maxSingleStockWeightPct + 1e-6 &&
+        round1(secCur + delta) <= config.maxSectorWeightPct + 1e-6
+      ) {
+        weights[i] = round1(weights[i] + delta);
+        break;
+      }
+    }
+    equityAllocationWeightPct = round1(weights.reduce((a, b) => a + b, 0));
+  }
+
+  const cashReserveWeightPct = round1(Math.max(0, 100 - equityAllocationWeightPct));
 
   const modelPortfolio: ForensicPortfolioCandidate[] = selectedHoldings.map((item, idx) => ({
     ...item,
@@ -727,7 +940,7 @@ export function buildForensicPortfolioPlan(
     } else if (cand.upsidePct < config.rotationTakeProfitUpsideThresholdPct) {
       cand.targetStatus = 'NEAR_TARGET';
       cand.targetStatusLabel = 'Hedefe Yaklaştı • Kâr Al';
-    } else if (config.enforceRiskFreeHurdle && cand.upsidePct < effectiveRiskFreeRatePct) {
+    } else if (config.enforceRiskFreeHurdle && cand.totalExpectedReturnPct < effectiveRiskFreeRatePct) {
       cand.targetStatus = 'BELOW_RF_HURDLE';
       cand.targetStatusLabel = 'Risksiz Faiz Altı';
     } else if (cand.decision === 'AL' && cand.upsidePct >= 25) {
@@ -870,6 +1083,9 @@ export function buildForensicPortfolioPlan(
     tierANeutralCandidates,
     neutralValueTraps,
     modelPortfolio,
+    equityAllocationWeightPct,
+    cashReserveWeightPct,
+    livePricesAppliedCount,
     sectorBreakdown,
     weightedAvgUpsidePct,
     weightedAvgScore,
@@ -897,6 +1113,7 @@ export interface CapitalAllocationInput {
   topUpStrategy: 'smart_rebalance' | 'proportional';
   savedPositions?: Record<string, SavedPositionInput>;
   maxSingleStockWeightPct?: number;
+  cashReserveWeightPct?: number;
 }
 
 export interface StockCapitalAllocationRow {
@@ -923,6 +1140,7 @@ export interface CapitalAllocationPlanResult {
   budgetToDeployTry: number;
   deployedAmountTry: number;
   unallocatedCashTry: number;
+  cashReserveTry: number;
   finalPortfolioValueTry: number;
   impliedPortfolioFairValueTry: number;
   rows: StockCapitalAllocationRow[];
@@ -936,7 +1154,8 @@ function allocateWholeLots(
   prices: number[],
   eligibleMask: boolean[],
   baseValues?: number[],
-  maxSingleStockWeightPct?: number
+  maxSingleStockWeightPct?: number,
+  totalPortfolioValueForCapTry?: number
 ): number[] {
   const n = prices.length;
   const lots = new Array<number>(n).fill(0);
@@ -957,13 +1176,15 @@ function allocateWholeLots(
   let remCash = Math.max(0, budgetTry - spent);
 
   const existingTotal = baseValues ? baseValues.reduce((a, b) => a + b, 0) : 0;
-  const approxPostTotal = existingTotal + budgetTry;
+  const approxPostTotal =
+    totalPortfolioValueForCapTry != null && totalPortfolioValueForCapTry > 0
+      ? totalPortfolioValueForCapTry
+      : existingTotal + budgetTry;
   const enforceCap =
     maxSingleStockWeightPct != null &&
     maxSingleStockWeightPct > 0 &&
-    n >= 7 &&
     approxPostTotal > 0;
-  const maxAllowedVal = enforceCap ? approxPostTotal * (maxSingleStockWeightPct / 100) * 1.02 : Infinity;
+  const maxAllowedVal = enforceCap ? approxPostTotal * (maxSingleStockWeightPct / 100) : Infinity;
 
   for (let pass = 0; pass < 2; pass++) {
     const order = Array.from({ length: n }, (_, i) => i)
@@ -980,7 +1201,7 @@ function allocateWholeLots(
       if (prices[i] <= remCash + 1e-6) {
         const baseV = baseValues ? baseValues[i] : 0;
         const candidateNewVal = baseV + (lots[i] + 1) * prices[i];
-        if (enforceCap && pass === 0 && candidateNewVal > maxAllowedVal) {
+        if (enforceCap && candidateNewVal > maxAllowedVal) {
           continue;
         }
         lots[i] += 1;
@@ -1008,6 +1229,7 @@ export function computeCapitalAllocationPlan(input: CapitalAllocationInput): Cap
       budgetToDeployTry: 0,
       deployedAmountTry: 0,
       unallocatedCashTry: 0,
+      cashReserveTry: 0,
       finalPortfolioValueTry: 0,
       impliedPortfolioFairValueTry: 0,
       rows: [],
@@ -1025,9 +1247,16 @@ export function computeCapitalAllocationPlan(input: CapitalAllocationInput): Cap
     return cw != null && Number.isFinite(cw) && cw > 0;
   });
   const recSum = holdings.reduce((acc, h) => acc + (h.recommendedWeightPct || 0), 0);
+  const explicitCashReservePct =
+    input.cashReserveWeightPct != null && Number.isFinite(input.cashReserveWeightPct) && input.cashReserveWeightPct > 0
+      ? Math.min(100, Math.max(0, round1(input.cashReserveWeightPct)))
+      : 0;
   let targetWeights: number[] = [];
 
-  if (!hasCustomOverride && recSum >= 98 && recSum <= 102) {
+  if (
+    !hasCustomOverride &&
+    ((recSum >= 98 && recSum <= 102) || (explicitCashReservePct > 0 && recSum > 0 && recSum <= 102))
+  ) {
     targetWeights = holdings.map(h => round1(h.recommendedWeightPct || 0));
   } else {
     const rawW = holdings.map(h => {
@@ -1092,9 +1321,12 @@ export function computeCapitalAllocationPlan(input: CapitalAllocationInput): Cap
   let hasSavedLots = false;
   let warningMessage: string | null = null;
   let budgetToDeployTry = safeInitial;
+  let cashReserveTry = 0;
 
   if (mode === 'initial') {
     budgetToDeployTry = safeInitial;
+    cashReserveTry = round2(budgetToDeployTry * (explicitCashReservePct / 100));
+    const equityBudgetTry = Math.max(0, round2(budgetToDeployTry - cashReserveTry));
     const eligibleMask = holdings.map((h, i) => {
       if (prices[i] <= 0) {
         skippedFlags[i] = true;
@@ -1110,24 +1342,29 @@ export function computeCapitalAllocationPlan(input: CapitalAllocationInput): Cap
     });
 
     const eligSumW = targetWeights.reduce((acc, w, i) => (eligibleMask[i] ? acc + w : acc), 0);
-    if (eligSumW > 0) {
+    if (eligSumW > 0 && equityBudgetTry > 0) {
       idealOrderAmounts = targetWeights.map((w, i) =>
-        eligibleMask[i] ? round2(budgetToDeployTry * (w / eligSumW)) : 0
+        eligibleMask[i] ? round2(equityBudgetTry * (w / eligSumW)) : 0
       );
       orderLots = allocateWholeLots(
-        budgetToDeployTry,
+        equityBudgetTry,
         idealOrderAmounts,
         prices,
         eligibleMask,
         undefined,
-        input.maxSingleStockWeightPct
+        input.maxSingleStockWeightPct,
+        budgetToDeployTry
       );
+    } else if (budgetToDeployTry > 0 && equityBudgetTry <= 0) {
+      warningMessage = 'Portföyün %100\'ü Nakit / PPF Rezervi olarak ayrıldı.';
     } else if (budgetToDeployTry > 0) {
       warningMessage = 'Tahsis edilebilecek geçerli fiyatlı/uygun hisse bulunamadı.';
     }
   } else {
     // mode === 'topup'
     budgetToDeployTry = safeTopUp;
+    cashReserveTry = round2(budgetToDeployTry * (explicitCashReservePct / 100));
+    const equityBudgetTry = Math.max(0, round2(budgetToDeployTry - cashReserveTry));
     hasSavedLots = holdings.some(h => {
       const p = savedPositions[h.ticker];
       return (p?.shares != null && p.shares > 0) || (p?.currentValueTry != null && p.currentValueTry > 0);
@@ -1151,24 +1388,26 @@ export function computeCapitalAllocationPlan(input: CapitalAllocationInput): Cap
       }
     } else if (safeInitial > 0) {
       // Başlangıç sermayesinden baz pozisyonları simüle et
+      const baseEquityTry = round2(safeInitial * (1 - explicitCashReservePct / 100));
       const baseMask = holdings.map((h, i) => prices[i] > 0 && h.targetStatus !== 'FORENSIC_EXIT');
       const baseSumW = targetWeights.reduce((acc, w, i) => (baseMask[i] ? acc + w : acc), 0);
-      if (baseSumW > 0) {
-        const baseTargets = targetWeights.map((w, i) => (baseMask[i] ? safeInitial * (w / baseSumW) : 0));
+      if (baseSumW > 0 && baseEquityTry > 0) {
+        const baseTargets = targetWeights.map((w, i) => (baseMask[i] ? baseEquityTry * (w / baseSumW) : 0));
         existingLots = allocateWholeLots(
-          safeInitial,
+          baseEquityTry,
           baseTargets,
           prices,
           baseMask,
           undefined,
-          input.maxSingleStockWeightPct
+          input.maxSingleStockWeightPct,
+          safeInitial
         );
         existingValues = existingLots.map((l, i) => round2(l * prices[i]));
       }
     }
 
     const existingTotalTry = round2(existingValues.reduce((a, b) => a + b, 0));
-    const postTopUpTargetTotal = existingTotalTry + budgetToDeployTry;
+    const postTopUpTargetTotal = existingTotalTry + equityBudgetTry;
 
     const eligibleMask = holdings.map((h, i) => {
       if (prices[i] <= 0) {
@@ -1193,7 +1432,7 @@ export function computeCapitalAllocationPlan(input: CapitalAllocationInput): Cap
     if (eligSumW <= 0) {
       warningMessage =
         'Mevcut hisselerin tamamı hedef fiyata ulaşmış veya çıkış sinyali üretiyor. İlave nakdi dağıtmadan önce rotasyon yapmanız önerilir.';
-    } else if (budgetToDeployTry > 0) {
+    } else if (equityBudgetTry > 0) {
       const eligNormW = targetWeights.map((w, i) => (eligibleMask[i] ? w / eligSumW : 0));
       if (topUpStrategy === 'smart_rebalance') {
         const deficits = holdings.map((_, i) => {
@@ -1205,23 +1444,24 @@ export function computeCapitalAllocationPlan(input: CapitalAllocationInput): Cap
         idealOrderAmounts = holdings.map((_, i) => {
           if (!eligibleMask[i]) return 0;
           if (sumDeficit > 0.01) {
-            return round2(budgetToDeployTry * (deficits[i] / sumDeficit));
+            return round2(equityBudgetTry * (deficits[i] / sumDeficit));
           }
-          return round2(budgetToDeployTry * eligNormW[i]);
+          return round2(equityBudgetTry * eligNormW[i]);
         });
       } else {
         idealOrderAmounts = holdings.map((_, i) =>
-          eligibleMask[i] ? round2(budgetToDeployTry * eligNormW[i]) : 0
+          eligibleMask[i] ? round2(equityBudgetTry * eligNormW[i]) : 0
         );
       }
 
       orderLots = allocateWholeLots(
-        budgetToDeployTry,
+        equityBudgetTry,
         idealOrderAmounts,
         prices,
         eligibleMask,
         existingValues,
-        input.maxSingleStockWeightPct
+        input.maxSingleStockWeightPct,
+        existingTotalTry + budgetToDeployTry
       );
     }
   }
@@ -1268,6 +1508,7 @@ export function computeCapitalAllocationPlan(input: CapitalAllocationInput): Cap
     budgetToDeployTry,
     deployedAmountTry,
     unallocatedCashTry,
+    cashReserveTry,
     finalPortfolioValueTry,
     impliedPortfolioFairValueTry,
     rows,

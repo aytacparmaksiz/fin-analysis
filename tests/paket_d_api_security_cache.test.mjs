@@ -917,4 +917,133 @@ describe('Paket D: Security, Auth, Rate Limiting, Cache, API Routes & 100% Direc
     assert.equal(macroSource.includes('endDate=31-12-2026'), false, 'macro-service must not hardcode endDate=31-12-2026');
     assert.ok(macroSource.includes('foundCommercial') && macroSource.includes('foundDeposit'), 'EVDS3 banking loop must use found* guards');
   });
+
+  it('11. Phase 3 Institutional Model Portfolio: Live BIST Prices, Hard Cap + Cash/PPF Reserve, Liquidity Floor, Dividend Total Return, Group Dedup & /api/live-prices', async () => {
+    const archMod = await import('../lib/portfolio-architect.ts');
+    const {
+      DEFAULT_PORTFOLIO_ARCHITECT_CONFIG,
+      buildForensicPortfolioPlan,
+      computeCapitalAllocationPlan,
+    } = archMod;
+
+    assert.equal(DEFAULT_PORTFOLIO_ARCHITECT_CONFIG.minFreeFloatPct, 15, 'Default minFreeFloatPct must be 15%');
+
+    const mkHist = ({ ni, ocf, wc, ebM, roic, wacc, netDebt, eb }) => [
+      { period: '2025/12', net_income: ni, operating_cash_flow: ocf, working_capital_change: wc, ebitda_margin: ebM, net_margin: ebM * 0.6, roic, real_wacc: wacc, eva_spread: roic - wacc, net_debt: netDebt, ebitda: eb },
+      { period: '2026/03', net_income: ni, operating_cash_flow: ocf, working_capital_change: wc, ebitda_margin: ebM, net_margin: ebM * 0.6, roic, real_wacc: wacc, eva_spread: roic - wacc, net_debt: netDebt, ebitda: eb },
+      { period: '2026/06', net_income: ni, operating_cash_flow: ocf, working_capital_change: wc, ebitda_margin: ebM, net_margin: ebM * 0.6, roic, real_wacc: wacc, eva_spread: roic - wacc, net_debt: netDebt, ebitda: eb },
+      { period: '2026/09', net_income: ni, operating_cash_flow: ocf, working_capital_change: wc, ebitda_margin: ebM, net_margin: ebM * 0.6, roic, real_wacc: wacc, eva_spread: roic - wacc, net_debt: netDebt, ebitda: eb },
+    ];
+    const mkReport = (ticker, sector, price, fairValue, score, decision, histArgs, extra = {}) => ({
+      id: `rep11-${ticker}`,
+      ticker,
+      price: String(price),
+      fairValue: String(fairValue),
+      createdAt: '2026-11-27',
+      period: '2026/09',
+      report: '',
+      decision,
+      score: `${score}/100`,
+      sector,
+      extractedData: {
+        company_name: ticker,
+        sector,
+        reporting_period: '2026/09',
+        macro: { risk_free_rate: 38.0 },
+        financial_history: mkHist(histArgs),
+        valuation: { fair_value: fairValue, score, roic: histArgs.roic, real_wacc: histArgs.wacc, eva_spread: histArgs.roic - histArgs.wacc },
+        ...extra,
+      },
+    });
+
+    const universe = [
+      // 1. Live price override test: reportPrice=100, fv=180, live=185 -> flips ACCUMULATE to TARGET_REACHED!
+      mkReport('LIVETEST', 'TECH', 100, 180, 92, 'AL', { ni: 500, ocf: 600, wc: 50, ebM: 28, roic: 35, wacc: 15, netDebt: -300, eb: 900 }, { market_multiples: { free_float_pct: 35 } }),
+      // 2. Clean Tier-1 CORE: TUPRS + FROTO (both KCHOL subsidiaries, allowed when KCHOL not present)
+      mkReport('TUPRS', 'INDUSTRIAL', 320, 680, 90, 'AL', { ni: 1000, ocf: 1700, wc: 150, ebM: 15, roic: 38, wacc: 14, netDebt: -4000, eb: 4000 }, { market_multiples: { free_float_pct: 49 } }),
+      mkReport('FROTO', 'RETAIL', 100, 180, 88, 'AL', { ni: 800, ocf: 1100, wc: 50, ebM: 12, roic: 30, wacc: 14, netDebt: 100, eb: 1500 }, { market_multiples: { free_float_pct: 20 } }),
+      // 3. Dividend total return test: +33% upside + 8% dividend = +41% total >= 38% Rf (passes!), vs NODIV +33% + 0% (fails!)
+      mkReport('DIVBLUE', 'UTILITIES_TELCO', 100, 133, 91, 'AL', { ni: 400, ocf: 520, wc: -20, ebM: 22, roic: 28, wacc: 14, netDebt: -100, eb: 700 }, { market_multiples: { free_float_pct: 40, dividend_yield: 8.0 } }),
+      mkReport('NODIVLOW', 'UTILITIES_TELCO', 100, 133, 91, 'AL', { ni: 400, ocf: 520, wc: -20, ebM: 22, roic: 28, wacc: 14, netDebt: -100, eb: 700 }, { market_multiples: { free_float_pct: 40, dividend_yield: 0 } }),
+      // 4. Low free-float liquidity block (7.1% < 15% default)
+      mkReport('LOWFLOAT', 'BANKING', 20, 45, 92, 'AL', { ni: 300, ocf: 0, wc: 0, ebM: 0, roic: 25, wacc: 18, netDebt: 0, eb: 0 }, { market_multiples: { free_float_pct: 7.1 } }),
+      // 5. Holding-subsidiary dedup: SAHOL (higher composite) vs AGESA (lower composite)
+      mkReport('SAHOL', 'HOLDING', 80, 180, 94, 'AL', { ni: 1200, ocf: null, wc: null, ebM: null, roic: 32, wacc: 16, netDebt: -500, eb: 0 }, { market_multiples: { free_float_pct: 48 } }),
+      mkReport('AGESA', 'INSURANCE', 150, 260, 86, 'AL', { ni: 600, ocf: null, wc: null, ebM: null, roic: 30, wacc: 16, netDebt: 0, eb: 0 }, { market_multiples: { free_float_pct: 20 } }),
+      // 6. Non-operating financial sector exemption (FINANCIAL_SERVICES with 0 EBITDA margin / null OCF must pass!)
+      mkReport('FINSRV1', 'FINANCIAL_SERVICES', 40, 80, 89, 'AL', { ni: 200, ocf: null, wc: null, ebM: 0, roic: 29, wacc: 16, netDebt: 0, eb: 0 }, { market_multiples: { free_float_pct: 32 } }),
+    ];
+
+    const plan = buildForensicPortfolioPlan(universe, ['LIVETEST'], undefined, { LIVETEST: 185 });
+
+    // A. Live price override & drift
+    const liveCand = plan.candidatesByTicker.LIVETEST;
+    assert.equal(liveCand.isLivePrice, true);
+    assert.equal(liveCand.reportPrice, 100);
+    assert.equal(liveCand.price, 185);
+    assert.equal(liveCand.priceDriftPct, 85.0);
+    assert.equal(liveCand.targetStatus, 'TARGET_REACHED');
+    assert.ok(plan.livePricesAppliedCount >= 1);
+
+    // B. Low free float filtered out
+    assert.ok(plan.tier3FilteredAl.some(c => c.ticker === 'LOWFLOAT'), 'Low free-float (7.1% < 15%) must filter LOWFLOAT');
+
+    // C. Dividend yield hurdle check
+    const divCand = plan.candidatesByTicker.DIVBLUE;
+    assert.equal(divCand.dividendYieldPct, 8.0);
+    assert.equal(divCand.totalExpectedReturnPct, 41.0);
+    assert.ok(plan.modelPortfolio.some(c => c.ticker === 'DIVBLUE'), 'DIVBLUE (+33% + 8% = +41% >= 38% Rf) must pass hurdle');
+    assert.equal(plan.candidatesByTicker.NODIVLOW.targetStatus, 'BELOW_RF_HURDLE', 'NODIVLOW (+33% + 0% < 38% Rf) must fail hurdle');
+
+    // D. Holding-subsidiary dedup & non-operating exemption
+    assert.ok(plan.modelPortfolio.some(c => c.ticker === 'SAHOL'), 'SAHOL (higher score) must stay');
+    assert.ok(plan.tier3FilteredAl.some(c => c.ticker === 'AGESA' && c.filterReasons.some(r => r.includes('Holding-iştirak'))), 'AGESA must be filtered when parent SAHOL wins');
+    assert.ok(plan.modelPortfolio.some(c => c.ticker === 'TUPRS') && plan.modelPortfolio.some(c => c.ticker === 'FROTO'), 'Two KCHOL subsidiaries without KCHOL must co-exist');
+    assert.ok(plan.modelPortfolio.some(c => c.ticker === 'FINSRV1'), 'FINANCIAL_SERVICES must be exempt from operating EBITDA margin filter');
+
+    // E. Strict hard caps & Cash/PPF reserve
+    assert.equal(plan.modelPortfolio.length, 5, 'Should select the 5 surviving clean stocks (TUPRS, FROTO, DIVBLUE, SAHOL, FINSRV1)');
+    assert.equal(plan.equityAllocationWeightPct, 75.0, '5 stocks capped at 15% each must sum to 75.0% equity');
+    assert.equal(plan.cashReserveWeightPct, 25.0, 'Remaining 25.0% must become Cash/PPF Reserve instead of breaking 15% cap');
+    assert.equal(Math.round((plan.equityAllocationWeightPct + plan.cashReserveWeightPct) * 10), 1000);
+    for (const mp of plan.modelPortfolio) {
+      assert.ok(mp.recommendedWeightPct <= 15.0 + 1e-6, `${mp.ticker} exceeded 15% cap: ${mp.recommendedWeightPct}%`);
+    }
+    for (const sec of plan.sectorBreakdown) {
+      assert.ok(sec.weightPct <= 25.0 + 1e-6, `${sec.sectorName} exceeded 25% cap: ${sec.weightPct}%`);
+    }
+
+    // F. Capital Allocation respects Cash/PPF reserve and single-stock whole-lot cap even with n < 7
+    const alloc = computeCapitalAllocationPlan({
+      holdings: plan.modelPortfolio,
+      mode: 'initial',
+      initialCapitalTry: 100000,
+      topUpCapitalTry: 50000,
+      topUpStrategy: 'smart_rebalance',
+      maxSingleStockWeightPct: 15,
+      cashReserveWeightPct: plan.cashReserveWeightPct,
+    });
+    assert.equal(alloc.cashReserveTry, 25000);
+    assert.ok(alloc.deployedAmountTry <= 75000.01, `Equity deployment (${alloc.deployedAmountTry}) must stay <= 75.000 TRY`);
+    assert.ok(Math.abs(alloc.deployedAmountTry + alloc.unallocatedCashTry - 100000) < 0.05);
+    for (const r of alloc.rows) {
+      assert.ok(r.finalValueTry <= 15000.01, `${r.ticker} allocated TRY (${r.finalValueTry}) must respect 15% total portfolio cap even when n=5 < 7`);
+    }
+
+    // G. /api/live-prices route contract, validation & mirror parity
+    resetRateLimitBuckets();
+    const livePricesRoute = await import('../src/app/api/live-prices/route.ts');
+    const routeExports = Object.keys(livePricesRoute).filter((k) => k !== 'default' && k !== '__esModule').sort();
+    assert.deepEqual(routeExports, ['GET', 'dynamic', 'maxDuration', 'runtime']);
+
+    const badTickersRes = await livePricesRoute.GET(new Request('http://localhost:3000/api/live-prices?tickers=TUPRS,BAD!!'));
+    assert.equal(badTickersRes.status, 400, '/api/live-prices must reject invalid tickers with 400');
+
+    const emptyTickersRes = await livePricesRoute.GET(new Request('http://localhost:3000/api/live-prices?tickers='));
+    assert.equal(emptyTickersRes.status, 400, '/api/live-prices must reject empty tickers param with 400');
+
+    const hSrc = crypto.createHash('sha256').update(fs.readFileSync(path.resolve('src/app/api/live-prices/route.ts'))).digest('hex');
+    const hMir = crypto.createHash('sha256').update(fs.readFileSync(path.resolve('app/api/live-prices/route.ts'))).digest('hex');
+    assert.equal(hSrc, hMir, 'src/app/api/live-prices/route.ts and app/api/live-prices/route.ts must match byte-for-byte');
+  });
 });
