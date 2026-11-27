@@ -659,7 +659,12 @@ export async function fetchIsYatirimMaliTabloBatches(
     ? [preferredGroup, ...defaultCandidates.filter(g => g !== preferredGroup)].slice(0, 3)
     : defaultCandidates.slice(0, 3);
 
+  const hasLatestQuarterValue = (rows: any[] | undefined | null) =>
+    Array.isArray(rows) &&
+    rows.some((r) => r && r.value1 !== null && r.value1 !== undefined && String(r.value1).trim() !== '');
+
   // 1. Aşama: Eğer preferredGroup biliniyorsa tüm 5 partiyi doğrudan tam paralel çek (10 saniyede 20 çeyrek)
+  // Eğer preferredGroup'ta en güncel çeyrek (value1) henüz yoksa, alternatif grupta (ör. QUICK için UFRS) yeni çeyrek olup olmadığını kontrol et
   if (preferredGroup) {
     const batchRows = await Promise.all(
       BATCH_SPECS.map(spec => fetchIsYatirimSingleBatch(ticker, preferredGroup, spec.params))
@@ -667,6 +672,30 @@ export async function fetchIsYatirimMaliTabloBatches(
     const hasAnyRows = batchRows.some(rows => rows && rows.length >= 5);
     if (hasAnyRows) {
       const rowsByBatch = BATCH_SPECS.map((spec, idx) => ({ spec, rows: batchRows[idx] || [] }));
+      if (hasLatestQuarterValue(batchRows[0])) {
+        return { rowsByBatch, activeGroup: preferredGroup };
+      }
+      const altGroups = candidateGroups.filter(g => g !== preferredGroup);
+      if (altGroups.length > 0) {
+        const altChecks = await Promise.allSettled(
+          altGroups.map(async (g) => {
+            const r0 = await fetchIsYatirimSingleBatch(ticker, g, BATCH_SPECS[0].params);
+            return { group: g, r0 };
+          })
+        );
+        for (const res of altChecks) {
+          if (res.status === 'fulfilled' && res.value.r0.length >= 5 && hasLatestQuarterValue(res.value.r0)) {
+            const altGroup = res.value.group;
+            const altAllRows = await Promise.all(
+              BATCH_SPECS.map(spec => fetchIsYatirimSingleBatch(ticker, altGroup, spec.params))
+            );
+            return {
+              rowsByBatch: BATCH_SPECS.map((spec, idx) => ({ spec, rows: altAllRows[idx] || [] })),
+              activeGroup: altGroup,
+            };
+          }
+        }
+      }
       return { rowsByBatch, activeGroup: preferredGroup };
     }
   }
@@ -679,25 +708,27 @@ export async function fetchIsYatirimMaliTabloBatches(
     return { rowsByBatch: [], activeGroup: null };
   }
 
-  const probeGroup = async (group: ('XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A')) => {
+  const probeGroup = async (
+    group: ('XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A')
+  ): Promise<{ group: 'XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A'; hasLatest: boolean }> => {
     const rows0 = await fetchIsYatirimSingleBatch(ticker, group, BATCH_SPECS[0].params);
     if (rows0 && rows0.length >= 5) {
-      return { group, rows0 };
+      return { group, hasLatest: hasLatestQuarterValue(rows0) };
     }
     const rows1 = await fetchIsYatirimSingleBatch(ticker, group, BATCH_SPECS[1].params);
     if (rows1 && rows1.length >= 5) {
-      return { group, rows1 };
+      return { group, hasLatest: false };
     }
     throw new Error(`Grup ${group} için veri bulunamadı`);
   };
 
   let chosenGroup: ('XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A') | null = null;
-  try {
-    const probeResult = await Promise.any(remainingCandidates.map(probeGroup));
-    chosenGroup = probeResult.group;
-  } catch {
-    chosenGroup = null;
-  }
+  const settledProbes = await Promise.allSettled(remainingCandidates.map(probeGroup));
+  const fulfilledProbes = settledProbes
+    .filter((r): r is PromiseFulfilledResult<{ group: 'XI_29' | 'UFRS' | 'UFRS_K' | 'UFRS_A'; hasLatest: boolean }> => r.status === 'fulfilled')
+    .map(r => r.value);
+  const bestWithLatest = fulfilledProbes.find(p => p.hasLatest);
+  chosenGroup = bestWithLatest ? bestWithLatest.group : (fulfilledProbes[0]?.group ?? null);
 
   if (!chosenGroup) {
     return { rowsByBatch: [], activeGroup: null };

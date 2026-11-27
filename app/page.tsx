@@ -7420,7 +7420,14 @@ export default function ValuationTerminal({
                               {batchProgress.results.slice(0, 36).map((res, idx) => (
                                 <span
                                   key={`${res.ticker}-${idx}`}
-                                  title={res.error || (res.prevPeriod && res.newPeriod ? `${res.prevPeriod} → ${res.newPeriod}` : '')}
+                                  title={
+                                    res.error ||
+                                    (res.status === 'SKIPPED_SAME_PERIOD' && res.newPeriod
+                                      ? `Yeni dönem henüz açıklanmadı (Güncel: ${res.newPeriod})`
+                                      : res.prevPeriod && res.newPeriod
+                                      ? `${res.prevPeriod} → ${res.newPeriod}`
+                                      : '')
+                                  }
                                   className="px-2 py-0.5 rounded bg-[#151821] border border-[#232834] text-[11px] font-mono inline-flex items-center gap-1"
                                 >
                                   <span className="text-white font-semibold">{res.ticker}</span>
@@ -7433,7 +7440,13 @@ export default function ValuationTerminal({
                                         : 'text-slate-500'
                                     }
                                   >
-                                    {res.status === 'UPDATED' ? 'Güncel' : res.status === 'FAILED' ? 'Hata' : 'Atlandı'}
+                                    {res.status === 'UPDATED'
+                                      ? 'Güncel'
+                                      : res.status === 'FAILED'
+                                      ? 'Hata'
+                                      : res.newPeriod
+                                      ? `Atlandı (${res.newPeriod})`
+                                      : 'Atlandı'}
                                   </span>
                                 </span>
                               ))}
