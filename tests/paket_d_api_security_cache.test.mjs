@@ -39,6 +39,7 @@ import {
 import { getSupabase, getSupabaseAdmin, getSupabaseForAuthorizedWrite, isSupabaseConfigured } from '../lib/supabase.ts';
 import { saveReportsCache, flushReportsCache } from '../lib/report-cache.ts';
 import { mergeAnalysisHistorySnapshots, toAnalysisHistorySnapshot } from '../lib/report-resolver.ts';
+import { computeReportChangeAttribution, resolveReportAttribution } from '../lib/batch-delta.ts';
 import { sanitizeDisclosureTitle } from '../lib/news-service.ts';
 import { buildBatchSpecs } from '../lib/bist-service.ts';
 import { generateWithRateLimitAndBackoff, cleanAndParseJson } from '../lib/gemini.ts';
@@ -523,5 +524,200 @@ describe('Paket D: Security, Auth, Rate Limiting, Cache, API Routes & 100% Direc
     const routeSource = fs.readFileSync(path.resolve('src/app/api/reports/route.ts'), 'utf8');
     assert.ok(routeSource.includes('isDelta: true'), '/api/reports must support delta sync responses');
     assert.ok(routeSource.includes(".delete()\n        .eq('ticker', cleanTicker)\n        .neq('id', cleanId)"), '/api/reports POST must delete all superseded rows of the same ticker');
+  });
+
+  it('8. Batch Quarterly Refresh API & Period-over-Period Change Attribution Engine', async () => {
+    // A. Period-over-period attribution calculation with 4-category score deltas & narrative
+    const q2Item = {
+      period: '2026/06',
+      revenue: 1_000_000_000,
+      gross_profit: 220_000_000,
+      ebitda: 150_000_000,
+      operating_profit: 110_000_000,
+      net_income: 50_000_000,
+      equity: 1_200_000_000,
+      net_debt: 200_000_000,
+      short_term_debt: 100_000_000,
+      long_term_debt: 200_000_000,
+      cash: 100_000_000,
+      operating_cash_flow: 40_000_000,
+      free_cash_flow: -25_000_000,
+      current_assets: 500_000_000,
+      current_liabilities: 450_000_000,
+      roic: 11.2,
+      roe: 8.5,
+      share_price: 42.0,
+    };
+
+    const q3Item = {
+      period: '2026/09',
+      revenue: 1_450_000_000,
+      gross_profit: 435_000_000,
+      ebitda: 348_000_000,
+      operating_profit: 290_000_000,
+      net_income: 175_000_000,
+      equity: 1_400_000_000,
+      net_debt: 800_000_000,
+      short_term_debt: 350_000_000,
+      long_term_debt: 550_000_000,
+      cash: 100_000_000,
+      operating_cash_flow: 230_000_000,
+      free_cash_flow: 165_000_000,
+      current_assets: 620_000_000,
+      current_liabilities: 420_000_000,
+      roic: 26.5,
+      roe: 24.0,
+      share_price: 45.0,
+    };
+
+    const attr = computeReportChangeAttribution({
+      ticker: 'TESTA',
+      sector: 'INDUSTRIAL_MFG',
+      prevReport: {
+        id: 'rep_q2',
+        period: '2026/06',
+        score: '62/100',
+        fairValue: '40.00',
+        price: '42.00',
+        decision: 'NÖTR',
+      },
+      currData: {
+        id: 'rep_q3',
+        ticker: 'TESTA',
+        company_name: 'Test Sanayi A.Ş.',
+        reporting_period: '2026/09',
+        current_price: 45.0,
+        financial_history: [q2Item, q3Item],
+        valuation: { fair_value: 64.0, discount_pct: 42.2 },
+      },
+      currPrice: 45.0,
+      currFairValue: 64.0,
+      currDecision: 'AL',
+    });
+
+    assert.ok(attr, 'Attribution object must be produced when two periods exist');
+    assert.equal(attr.prevPeriod, '2026/06');
+    assert.equal(attr.currPeriod, '2026/09');
+    assert.equal(attr.isNewQuarter, true);
+    assert.equal(attr.prevDecision, 'NÖTR');
+    assert.equal(attr.currDecision, 'AL');
+    assert.equal(attr.decisionTransition, 'UPGRADED');
+    assert.equal(attr.fairValueDeltaPct, 60.0);
+    assert.equal(attr.scoreBreakdownDeltas.length, 4, 'Score attribution must cover all 4 scoring pillars');
+    assert.ok(attr.improvements.length >= 2, 'Must identify operational/profitability improvements');
+    assert.ok(attr.deteriorations.some(d => d.key === 'leverage'), 'Must flag rising Net Debt / EBITDA deterioration');
+    assert.ok(attr.impactNarrative.includes('2026/06') && attr.impactNarrative.includes('2026/09'));
+
+    // B. On-the-fly fallback attribution for existing SavedReports without stored period_delta
+    const derived = resolveReportAttribution({
+      id: 'rep_q3_legacy',
+      ticker: 'TESTA',
+      companyName: 'Test Sanayi A.Ş.',
+      period: '2026/09',
+      price: '45.00',
+      fairValue: '64.00',
+      score: '84/100',
+      decision: 'AL',
+      createdAt: '2026-11-27T10:00:00.000Z',
+      report: '## TESTA',
+      extractedData: {
+        financial_history: [q2Item, q3Item],
+        valuation: {
+          fair_value: 64.0,
+          fair_value_trend: [
+            { period: '2026/06', fairValue: 40.0, sharePrice: 42.0 },
+            { period: '2026/09', fairValue: 64.0, sharePrice: 45.0 },
+          ],
+        },
+        analysis_history: [
+          {
+            id: 'rep_q2',
+            period: '2026/06',
+            createdAt: '2026-08-20T10:00:00.000Z',
+            price: '42.00',
+            fairValue: '40.00',
+            discountPct: -4.8,
+            score: '62/100',
+            decision: 'NÖTR',
+          },
+        ],
+      },
+    });
+    assert.ok(derived, 'resolveReportAttribution must derive attribution on-the-fly');
+    assert.equal(derived.prevScore, 62);
+    assert.equal(derived.currScore, 84);
+    assert.equal(derived.scoreDelta, 22);
+    assert.equal(derived.fairValueDeltaPct, 60.0);
+
+    // C. /api/batch-refresh Next.js exports & request guardrails
+    const batchRoute = await import('../app/api/batch-refresh/route.ts');
+    assert.deepEqual(
+      Object.keys(batchRoute).sort(),
+      ['POST', 'dynamic', 'maxDuration', 'runtime'],
+      '/api/batch-refresh route must export only allowed Next.js App Router symbols'
+    );
+
+    const savedApiSecret = process.env.API_SECRET_KEY;
+    const savedAdminSecret = process.env.ADMIN_API_TOKEN;
+    const savedAllowBrowser = process.env.ALLOW_SAME_ORIGIN_BROWSER_MUTATIONS;
+    try {
+      delete process.env.API_SECRET_KEY;
+      delete process.env.ADMIN_API_TOKEN;
+      delete process.env.ALLOW_SAME_ORIGIN_BROWSER_MUTATIONS;
+      resetRateLimitBuckets();
+
+      const unauthRes = await batchRoute.POST(
+        new Request('http://localhost:3000/api/batch-refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tickers: ['THYAO'] }),
+        })
+      );
+      assert.equal(unauthRes.status, 401);
+
+      const emptyTickersRes = await batchRoute.POST(
+        new Request('http://localhost:3000/api/batch-refresh', {
+          method: 'POST',
+          headers: {
+            Host: 'localhost:3000',
+            Origin: 'http://localhost:3000',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ tickers: [] }),
+        })
+      );
+      assert.equal(emptyTickersRes.status, 400);
+
+      const tooManyRes = await batchRoute.POST(
+        new Request('http://localhost:3000/api/batch-refresh', {
+          method: 'POST',
+          headers: {
+            Host: 'localhost:3000',
+            Origin: 'http://localhost:3000',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ tickers: ['THYAO', 'TUPRS', 'ASELS', 'BIMAS', 'EREGL', 'KCHOL'] }),
+        })
+      );
+      assert.equal(tooManyRes.status, 400);
+
+      const badTickerRes = await batchRoute.POST(
+        new Request('http://localhost:3000/api/batch-refresh', {
+          method: 'POST',
+          headers: {
+            Host: 'localhost:3000',
+            Origin: 'http://localhost:3000',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ tickers: ['INVALID$$'] }),
+        })
+      );
+      assert.equal(badTickerRes.status, 400);
+    } finally {
+      if (savedApiSecret !== undefined) process.env.API_SECRET_KEY = savedApiSecret;
+      if (savedAdminSecret !== undefined) process.env.ADMIN_API_TOKEN = savedAdminSecret;
+      if (savedAllowBrowser !== undefined) process.env.ALLOW_SAME_ORIGIN_BROWSER_MUTATIONS = savedAllowBrowser;
+      resetRateLimitBuckets();
+    }
   });
 });

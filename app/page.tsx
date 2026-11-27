@@ -61,6 +61,10 @@ import {
   formatCanonicalScore,
   mergeAnalysisHistorySnapshots,
 } from '@/lib/report-resolver';
+import {
+  resolveReportAttribution,
+  type PeriodChangeAttribution,
+} from '@/lib/batch-delta';
 export type { SavedReport };
 import { loadReportsCache, saveReportsCache } from '@/lib/report-cache';
 import { parseApiResponse } from '@/lib/api-response';
@@ -123,6 +127,8 @@ import {
 } from '@/lib/ratio-engine';
 import { extractSmartFinancialText, extractSmartDocumentText, splitScannedPdfIntoChunks, DocumentCategory } from '@/lib/pdf-filter';
 import {
+  OFFICIAL_BIST_30_TICKERS,
+  OFFICIAL_BIST_100_TICKERS,
   isBist30,
   isBist50,
   isBist100,
@@ -1660,6 +1666,185 @@ export default function ValuationTerminal({
   const [leaderboardIndexFilter, setLeaderboardIndexFilter] = useState<LeaderboardIndexFilter>('ALL');
   const [leaderboardSort, setLeaderboardSort] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'score', direction: 'desc' });
   const [leaderboardViewMode, setLeaderboardViewMode] = useState<'list' | 'icons'>('list');
+  const [leaderboardSubTab, setLeaderboardSubTab] = useState<'SCREENER' | 'BATCH_CHANGES'>('SCREENER');
+  const [batchScope, setBatchScope] = useState<'OUTDATED_QUARTER' | 'PORTFOLIO' | 'FAVORITES' | 'BIST30' | 'BIST100' | 'ALL_SAVED'>('OUTDATED_QUARTER');
+  const [batchOnlyNewQuarter, setBatchOnlyNewQuarter] = useState<boolean>(true);
+  const [batchChangeFilter, setBatchChangeFilter] = useState<'ALL' | 'UPGRADED' | 'DOWNGRADED' | 'SCORE_UP' | 'SCORE_DOWN'>('ALL');
+  const [batchChangeSearch, setBatchChangeSearch] = useState<string>('');
+  const [expandedDeltaTickers, setExpandedDeltaTickers] = useState<Record<string, boolean>>({});
+  const batchAbortRef = useRef<AbortController | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{
+    running: boolean;
+    total: number;
+    processed: number;
+    updated: number;
+    skipped: number;
+    failed: number;
+    currentTickers: string[];
+    results: Array<{
+      ticker: string;
+      status: 'UPDATED' | 'SKIPPED_SAME_PERIOD' | 'FAILED';
+      prevPeriod?: string | null;
+      newPeriod?: string | null;
+      error?: string;
+    }>;
+  }>({
+    running: false,
+    total: 0,
+    processed: 0,
+    updated: 0,
+    skipped: 0,
+    failed: 0,
+    currentTickers: [],
+    results: [],
+  });
+
+  const stopBatchQuarterRefresh = useCallback(() => {
+    if (batchAbortRef.current) {
+      batchAbortRef.current.abort();
+      batchAbortRef.current = null;
+    }
+    setBatchProgress(prev => ({ ...prev, running: false, currentTickers: [] }));
+  }, []);
+
+  const startBatchQuarterRefresh = useCallback(async (targetTickersInput: string[]) => {
+    const cleanList = Array.from(
+      new Set(
+        targetTickersInput
+          .map(t => String(t || '').trim().replace(/\.IS$/i, '').toUpperCase())
+          .filter(Boolean)
+      )
+    );
+    if (cleanList.length === 0) return;
+
+    if (batchAbortRef.current) {
+      batchAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    batchAbortRef.current = controller;
+
+    setBatchProgress({
+      running: true,
+      total: cleanList.length,
+      processed: 0,
+      updated: 0,
+      skipped: 0,
+      failed: 0,
+      currentTickers: cleanList.slice(0, 3),
+      results: [],
+    });
+
+    const CHUNK_SIZE = 3;
+    for (let i = 0; i < cleanList.length; i += CHUNK_SIZE) {
+      if (controller.signal.aborted) break;
+      const chunk = cleanList.slice(i, i + CHUNK_SIZE);
+      setBatchProgress(prev => ({ ...prev, currentTickers: chunk }));
+
+      let json: any = null;
+      let chunkErrMsg = '';
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (controller.signal.aborted) break;
+        try {
+          const res = await fetch('/api/batch-refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fin-analiz-client' },
+            body: JSON.stringify({ tickers: chunk, onlyNewQuarter: batchOnlyNewQuarter }),
+            signal: controller.signal,
+          });
+          if (res.status === 429 && attempt === 0) {
+            const waitSec = Math.min(8, Math.max(2, Number(res.headers.get('retry-after') || 3)));
+            await new Promise(r => setTimeout(r, waitSec * 1000));
+            continue;
+          }
+          json = await res.json().catch(() => null);
+          if (!res.ok) {
+            chunkErrMsg = json?.error || `HTTP ${res.status}`;
+          }
+          break;
+        } catch (err: any) {
+          if (err?.name === 'AbortError') break;
+          chunkErrMsg = err?.message || 'Ağ hatası';
+        }
+      }
+
+      if (controller.signal.aborted) break;
+
+      const chunkResults: any[] = Array.isArray(json?.results)
+        ? json.results
+        : chunk.map(tk => ({ ticker: tk, status: 'FAILED', error: chunkErrMsg || 'İşlem başarısız.' }));
+
+      const updatedReports: SavedReport[] = [];
+      let updCnt = 0;
+      let skipCnt = 0;
+      let failCnt = 0;
+      const formattedItems: Array<{
+        ticker: string;
+        status: 'UPDATED' | 'SKIPPED_SAME_PERIOD' | 'FAILED';
+        prevPeriod?: string | null;
+        newPeriod?: string | null;
+        error?: string;
+      }> = [];
+
+      for (const item of chunkResults) {
+        if (item?.status === 'UPDATED' && item?.report) {
+          updCnt++;
+          updatedReports.push(reconcileSavedReportWithLatestEngine(item.report as SavedReport));
+          formattedItems.push({
+            ticker: item.ticker,
+            status: 'UPDATED',
+            prevPeriod: item.prevPeriod || null,
+            newPeriod: item.newPeriod || null,
+          });
+        } else if (item?.status === 'SKIPPED_SAME_PERIOD') {
+          skipCnt++;
+          formattedItems.push({
+            ticker: item.ticker,
+            status: 'SKIPPED_SAME_PERIOD',
+            prevPeriod: item.prevPeriod || null,
+            newPeriod: item.newPeriod || null,
+          });
+        } else {
+          failCnt++;
+          formattedItems.push({
+            ticker: item?.ticker || '?',
+            status: 'FAILED',
+            error: item?.error || chunkErrMsg || 'Güncellenemedi',
+          });
+        }
+      }
+
+      if (updatedReports.length > 0) {
+        setSavedReports(prev => {
+          const byTicker = new Map<string, SavedReport>();
+          for (const r of prev) {
+            const sym = (r.ticker || '').trim().replace(/\.IS$/i, '').toUpperCase();
+            if (sym) byTicker.set(sym, r);
+          }
+          for (const u of updatedReports) {
+            const sym = (u.ticker || '').trim().replace(/\.IS$/i, '').toUpperCase();
+            if (sym) byTicker.set(sym, u);
+          }
+          const next = Array.from(byTicker.values());
+          saveReportsCache(next);
+          return next;
+        });
+      }
+
+      setBatchProgress(prev => ({
+        ...prev,
+        processed: Math.min(prev.total, prev.processed + chunk.length),
+        updated: prev.updated + updCnt,
+        skipped: prev.skipped + skipCnt,
+        failed: prev.failed + failCnt,
+        results: [...formattedItems, ...prev.results].slice(0, 120),
+      }));
+    }
+
+    if (batchAbortRef.current === controller) {
+      batchAbortRef.current = null;
+    }
+    setBatchProgress(prev => ({ ...prev, running: false, currentTickers: [] }));
+  }, [batchOnlyNewQuarter]);
   const [themesSort, setThemesSort] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'score', direction: 'desc' });
   const [expandedSectors, setExpandedSectors] = useState<Record<string, boolean>>({});
   const [sectorSearchTerm, setSectorSearchTerm] = useState<string>('');
@@ -6336,58 +6521,212 @@ export default function ValuationTerminal({
               };
             })();
 
+            const batchScopeLists = (() => {
+              const periodFreq = new Map<number, number>();
+              let maxP = 0;
+              for (const r of deduplicatedLatestReports) {
+                const pk = parsePeriodSortKey(r.period || r.extractedData?.reporting_period || '');
+                if (pk > 0) {
+                  periodFreq.set(pk, (periodFreq.get(pk) || 0) + 1);
+                  if (pk > maxP) maxP = pk;
+                }
+              }
+              let dominantKey = maxP;
+              const candidatesDominant = Array.from(periodFreq.entries())
+                .filter(([, cnt]) => cnt >= 5)
+                .sort((a, b) => b[0] - a[0]);
+              if (candidatesDominant.length > 0) {
+                dominantKey = candidatesDominant[0][0];
+              }
+              const formatKeyLabel = (k: number) => {
+                if (!k || k < 200000) return '—';
+                const yr = Math.floor(k / 100);
+                const mo = String(k % 100).padStart(2, '0');
+                return `${yr}/${mo}`;
+              };
+
+              const outdated = deduplicatedLatestReports
+                .filter(r => {
+                  const pk = parsePeriodSortKey(r.period || r.extractedData?.reporting_period || '');
+                  return dominantKey > 0 && pk > 0 && pk < dominantKey;
+                })
+                .map(r => r.ticker);
+
+              const portList = Array.from(new Set(portfolioTickers.map(t => t.toUpperCase().trim()).filter(Boolean)));
+              const favList = Array.from(new Set(favoriteTickers.map(t => t.toUpperCase().trim()).filter(Boolean)));
+              const bist30List = [...OFFICIAL_BIST_30_TICKERS];
+              const bist100List = [...OFFICIAL_BIST_100_TICKERS];
+              const allSavedList = deduplicatedLatestReports.map(r => r.ticker);
+
+              const map: Record<typeof batchScope, string[]> = {
+                OUTDATED_QUARTER: outdated,
+                PORTFOLIO: portList,
+                FAVORITES: favList,
+                BIST30: bist30List,
+                BIST100: bist100List,
+                ALL_SAVED: allSavedList,
+              };
+
+              return {
+                dominantPeriodLabel: formatKeyLabel(dominantKey),
+                counts: {
+                  OUTDATED_QUARTER: outdated.length,
+                  PORTFOLIO: portList.length,
+                  FAVORITES: favList.length,
+                  BIST30: bist30List.length,
+                  BIST100: bist100List.length,
+                  ALL_SAVED: allSavedList.length,
+                },
+                activeTickers: map[batchScope] || [],
+              };
+            })();
+
+            const attributionRows = (() => {
+              const list: Array<{ report: SavedReport; delta: PeriodChangeAttribution }> = [];
+              for (const r of deduplicatedLatestReports) {
+                const delta = resolveReportAttribution(r);
+                if (delta) list.push({ report: r, delta });
+              }
+              list.sort((a, b) => {
+                const transWeight = (d: PeriodChangeAttribution) =>
+                  d.decisionTransition === 'UNCHANGED' ? 0 : 1000;
+                const scoreDiff =
+                  transWeight(b.delta) +
+                  Math.abs(b.delta.scoreDelta ?? 0) * 10 +
+                  Math.abs(b.delta.fairValueDeltaPct ?? 0) +
+                  (b.delta.improvements.length + b.delta.deteriorations.length) -
+                  (transWeight(a.delta) +
+                    Math.abs(a.delta.scoreDelta ?? 0) * 10 +
+                    Math.abs(a.delta.fairValueDeltaPct ?? 0) +
+                    (a.delta.improvements.length + a.delta.deteriorations.length));
+                return scoreDiff;
+              });
+              return list;
+            })();
+
+            const upgradedCnt = attributionRows.filter(x => x.delta.decisionTransition === 'UPGRADED').length;
+            const downgradedCnt = attributionRows.filter(x => x.delta.decisionTransition === 'DOWNGRADED').length;
+            const scoreUpList = attributionRows.filter(x => (x.delta.scoreDelta ?? 0) > 0);
+            const scoreDownList = attributionRows.filter(x => (x.delta.scoreDelta ?? 0) < 0);
+            const avgScoreUpDelta = scoreUpList.length > 0
+              ? Number((scoreUpList.reduce((s, x) => s + (x.delta.scoreDelta ?? 0), 0) / scoreUpList.length).toFixed(1))
+              : null;
+            const avgScoreDownDelta = scoreDownList.length > 0
+              ? Number((scoreDownList.reduce((s, x) => s + (x.delta.scoreDelta ?? 0), 0) / scoreDownList.length).toFixed(1))
+              : null;
+
+            const filteredAttributionRows = attributionRows.filter(({ report, delta }) => {
+              const q = batchChangeSearch.trim().toLowerCase();
+              if (q) {
+                const name = ((report as any).companyName || report.extractedData?.company_name || '').toLowerCase();
+                if (!report.ticker.toLowerCase().includes(q) && !name.includes(q)) return false;
+              }
+              if (batchChangeFilter === 'UPGRADED') return delta.decisionTransition === 'UPGRADED';
+              if (batchChangeFilter === 'DOWNGRADED') return delta.decisionTransition === 'DOWNGRADED';
+              if (batchChangeFilter === 'SCORE_UP') return (delta.scoreDelta ?? 0) > 0;
+              if (batchChangeFilter === 'SCORE_DOWN') return (delta.scoreDelta ?? 0) < 0;
+              return true;
+            });
+
             return (
-              <div className="space-y-5">
-                <div className="bg-[#12151c] border border-[#262c38] p-5 sm:p-6 rounded-2xl shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center shrink-0">
-                      <BarChart3 className="w-5 h-5 text-amber-400" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        <h2 className="text-xl font-bold text-white tracking-tight font-sans">
-                          Hisse Tarama
-                        </h2>
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-[#1a1f29] text-slate-300 border border-[#2d3444]">
-                          {leaderboardMetrics.total}
+              <div className="space-y-4">
+                <div className="bg-[#151821] border border-[#232834] px-5 py-4 rounded-xl space-y-3.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <h2 className="text-lg sm:text-xl font-semibold text-white tracking-tight font-sans">
+                        Hisse Tarama
+                      </h2>
+                      <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-medium bg-[#101319] text-slate-300 border border-[#232834]">
+                        {leaderboardMetrics.total}
+                      </span>
+                      {isSyncing && (
+                        <span className="flex items-center gap-1.5 text-xs text-slate-300 bg-[#101319] border border-[#232834] px-2.5 py-0.5 rounded-md">
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <span>Senkronize ediliyor...</span>
                         </span>
-                        {isSyncing && (
-                          <span className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-0.5 rounded-full animate-pulse">
-                            <RefreshCw className="w-3 h-3 animate-spin" />
-                            <span>Güncelleniyor...</span>
-                          </span>
-                        )}
-                      </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {leaderboardSubTab === 'SCREENER' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setLeaderboardSubTab('BATCH_CHANGES')}
+                            className="fv-btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            <span>Toplu Güncelle</span>
+                          </button>
+                          <div className="flex items-center bg-[#101319] p-0.5 rounded-lg border border-[#232834]">
+                            <button
+                              type="button"
+                              onClick={() => setLeaderboardViewMode('list')}
+                              className={`p-1.5 rounded-md cursor-pointer transition-colors ${
+                                leaderboardViewMode === 'list'
+                                  ? 'bg-[#222836] text-white'
+                                  : 'text-slate-400 hover:text-slate-200'
+                              }`}
+                              title="Liste Görünümü"
+                            >
+                              <List className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setLeaderboardViewMode('icons')}
+                              className={`p-1.5 rounded-md cursor-pointer transition-colors ${
+                                leaderboardViewMode === 'icons'
+                                  ? 'bg-[#222836] text-white'
+                                  : 'text-slate-400 hover:text-slate-200'
+                              }`}
+                              title="Kart Görünümü"
+                            >
+                              <LayoutGrid className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 bg-[#161a23] p-1 rounded-xl border border-[#262c38]">
+
+                  {/* Alt Sekmeler (Underline Tab Bar) */}
+                  <div className="border-b border-[#232834] flex items-center gap-6 overflow-x-auto no-scrollbar">
                     <button
                       type="button"
-                      onClick={() => setLeaderboardViewMode('list')}
-                      className={`fv-pill p-1.5 rounded-lg cursor-pointer ${
-                        leaderboardViewMode === 'list'
-                          ? 'bg-[#232936] text-white shadow-sm'
-                          : 'text-slate-400 hover:text-white'
+                      onClick={() => setLeaderboardSubTab('SCREENER')}
+                      className={`pb-2.5 text-xs whitespace-nowrap cursor-pointer border-b-2 transition-colors ${
+                        leaderboardSubTab === 'SCREENER'
+                          ? 'border-slate-100 text-white font-semibold'
+                          : 'border-transparent text-slate-400 hover:text-slate-200 font-medium'
                       }`}
-                      title="Liste Görünümü"
                     >
-                      <List className="w-4 h-4" />
+                      Tarama Listesi ({leaderboardMetrics.total})
                     </button>
                     <button
                       type="button"
-                      onClick={() => setLeaderboardViewMode('icons')}
-                      className={`fv-pill p-1.5 rounded-lg cursor-pointer ${
-                        leaderboardViewMode === 'icons'
-                          ? 'bg-[#232936] text-white shadow-sm'
-                          : 'text-slate-400 hover:text-white'
+                      onClick={() => setLeaderboardSubTab('BATCH_CHANGES')}
+                      className={`pb-2.5 text-xs whitespace-nowrap cursor-pointer border-b-2 transition-colors inline-flex items-center gap-2 ${
+                        leaderboardSubTab === 'BATCH_CHANGES'
+                          ? 'border-slate-100 text-white font-semibold'
+                          : 'border-transparent text-slate-400 hover:text-slate-200 font-medium'
                       }`}
-                      title="Kart Görünümü"
                     >
-                      <LayoutGrid className="w-4 h-4" />
+                      <span>Toplu Güncelleme &amp; Dönemsel Değişimler</span>
+                      {batchProgress.running ? (
+                        <span className="text-[10.5px] font-mono text-emerald-400">
+                          {batchProgress.processed}/{batchProgress.total}
+                        </span>
+                      ) : (upgradedCnt + downgradedCnt) > 0 ? (
+                        <span className="text-[10.5px] font-mono text-slate-400">
+                          {upgradedCnt + downgradedCnt} karar değişimi
+                        </span>
+                      ) : null}
                     </button>
                   </div>
                 </div>
 
+                {leaderboardSubTab === 'SCREENER' ? (
+                <>
                 {/* 4'lü KPI Özet Şeridi */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
                   <div className="bg-[#151821] border border-[#262c38] rounded-2xl p-4 flex flex-col justify-between space-y-2">
@@ -6901,6 +7240,479 @@ export default function ValuationTerminal({
                   </div>
                   )}
                 </div>
+                </>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Toplu Bilanço Güncelleme Kontrol Paneli */}
+                    <div className="bg-[#151821] border border-[#232834] rounded-xl p-4 sm:p-5 space-y-4">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <h3 className="text-sm font-semibold text-white font-sans">
+                            Toplu Çeyrek Bilanço Güncelleme
+                          </h3>
+                          <p className="text-xs text-slate-400 font-sans">
+                            Seçili kapsamdaki hisseler 3&apos;erli gruplar halinde Borsa İstanbul / İş Yatırım üzerinden güncellenir. Mevcut en yoğun dönem:{' '}
+                            <span className="font-mono text-slate-200">{batchScopeLists.dominantPeriodLabel}</span>.
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                          <button
+                            type="button"
+                            disabled={batchProgress.running}
+                            onClick={() => setBatchOnlyNewQuarter(v => !v)}
+                            className={`px-3 py-1.5 rounded-lg border text-xs font-medium cursor-pointer transition-colors disabled:opacity-50 ${
+                              batchOnlyNewQuarter
+                                ? 'bg-[#222836] text-white border-[#3b4458]'
+                                : 'bg-[#101319] text-slate-400 hover:text-slate-200 border-[#232834]'
+                            }`}
+                            title="Açık olduğunda aynı bilanço dönemindeki hisseler veritabanına yeniden yazılmadan atlanır"
+                          >
+                            {batchOnlyNewQuarter ? 'Yalnızca Yeni Dönem Gelenler' : 'Tümünü Yeniden Hesapla'}
+                          </button>
+
+                          {batchProgress.running ? (
+                            <button
+                              type="button"
+                              onClick={stopBatchQuarterRefresh}
+                              className="px-3.5 py-1.5 rounded-lg bg-[#222836] hover:bg-[#2c3447] text-rose-400 border border-[#3b4458] text-xs font-semibold cursor-pointer inline-flex items-center gap-1.5"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              <span>Durdur</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={batchScopeLists.activeTickers.length === 0}
+                              onClick={() => startBatchQuarterRefresh(batchScopeLists.activeTickers)}
+                              className="fv-btn-primary px-3.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-40"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              <span>Güncellemeyi Başlat ({batchScopeLists.activeTickers.length})</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Kapsam Seçici */}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {([
+                          { id: 'OUTDATED_QUARTER', label: 'Eski Dönemde Kalanlar', count: batchScopeLists.counts.OUTDATED_QUARTER },
+                          { id: 'PORTFOLIO', label: 'Portföyüm', count: batchScopeLists.counts.PORTFOLIO },
+                          { id: 'FAVORITES', label: 'Favorilerim', count: batchScopeLists.counts.FAVORITES },
+                          { id: 'BIST30', label: 'BIST 30', count: batchScopeLists.counts.BIST30 },
+                          { id: 'BIST100', label: 'BIST 100', count: batchScopeLists.counts.BIST100 },
+                          { id: 'ALL_SAVED', label: 'Tüm Kayıtlılar', count: batchScopeLists.counts.ALL_SAVED },
+                        ] as const).map(opt => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            disabled={batchProgress.running}
+                            onClick={() => setBatchScope(opt.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium border cursor-pointer transition-colors disabled:opacity-50 inline-flex items-center gap-1.5 ${
+                              batchScope === opt.id
+                                ? 'bg-[#222836] text-white border-[#3b4458]'
+                                : 'bg-[#101319] text-slate-400 hover:text-slate-200 border-[#232834]'
+                            }`}
+                          >
+                            <span>{opt.label}</span>
+                            <span className="font-mono text-[11px] text-slate-400">{opt.count}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {batchScope === 'OUTDATED_QUARTER' && batchScopeLists.counts.OUTDATED_QUARTER === 0 && !batchProgress.running && (
+                        <p className="text-[11px] text-slate-400 font-sans">
+                          Tüm kayıtlı şirketler şu an aynı dönemde ({batchScopeLists.dominantPeriodLabel}). Yeni bilanço sezonu başladığında bu sekmeden veya Portföyüm / BIST 30 / BIST 100 seçimiyle yalnızca yeni bilanço açıklayanları güncelleyebilirsiniz.
+                        </p>
+                      )}
+
+                      {/* Canlı İlerleme Çubuğu */}
+                      {(batchProgress.running || batchProgress.processed > 0) && (
+                        <div className="p-3 rounded-lg bg-[#101319] border border-[#232834] space-y-2.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono tabular-nums">
+                            <div className="text-slate-300">
+                              {batchProgress.running
+                                ? `İşleniyor: ${batchProgress.currentTickers.join(', ')}`
+                                : 'Toplu güncelleme tamamlandı'}
+                            </div>
+                            <div className="flex items-center gap-3 text-[11px]">
+                              <span className="text-slate-300">
+                                {batchProgress.processed}/{batchProgress.total}
+                              </span>
+                              <span className="text-emerald-400 font-semibold">
+                                {batchProgress.updated} güncellendi
+                              </span>
+                              <span className="text-slate-400">
+                                {batchProgress.skipped} aynı dönem
+                              </span>
+                              {batchProgress.failed > 0 && (
+                                <span className="text-rose-400 font-semibold">
+                                  {batchProgress.failed} hata
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-[#151821] overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-slate-200 transition-all duration-300"
+                              style={{
+                                width: `${batchProgress.total > 0 ? Math.round((batchProgress.processed / batchProgress.total) * 100) : 0}%`,
+                              }}
+                            />
+                          </div>
+                          {batchProgress.results.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-1">
+                              {batchProgress.results.slice(0, 36).map((res, idx) => (
+                                <span
+                                  key={`${res.ticker}-${idx}`}
+                                  title={res.error || (res.prevPeriod && res.newPeriod ? `${res.prevPeriod} → ${res.newPeriod}` : '')}
+                                  className="px-2 py-0.5 rounded bg-[#151821] border border-[#232834] text-[11px] font-mono inline-flex items-center gap-1"
+                                >
+                                  <span className="text-white font-semibold">{res.ticker}</span>
+                                  <span
+                                    className={
+                                      res.status === 'UPDATED'
+                                        ? 'text-emerald-400'
+                                        : res.status === 'FAILED'
+                                        ? 'text-rose-400'
+                                        : 'text-slate-500'
+                                    }
+                                  >
+                                    {res.status === 'UPDATED' ? 'Güncel' : res.status === 'FAILED' ? 'Hata' : 'Atlandı'}
+                                  </span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 4 Metrikli Dönemsel Değişim Özeti */}
+                    <div className="bg-[#151821] border border-[#232834] rounded-xl grid grid-cols-2 lg:grid-cols-4 divide-y lg:divide-y-0 lg:divide-x divide-[#232834] overflow-hidden tabular-nums">
+                      <div className="p-4 space-y-1">
+                        <div className="text-[11px] font-sans font-medium text-slate-400">Karar Yükselenler</div>
+                        <div className="text-lg font-semibold font-mono text-emerald-400">{upgradedCnt} Şirket</div>
+                        <div className="text-[11px] font-sans text-slate-500">NÖTR / ALMA → AL geçişi</div>
+                      </div>
+                      <div className="p-4 space-y-1">
+                        <div className="text-[11px] font-sans font-medium text-slate-400">Karar Düşenler</div>
+                        <div className="text-lg font-semibold font-mono text-rose-400">{downgradedCnt} Şirket</div>
+                        <div className="text-[11px] font-sans text-slate-500">AL → NÖTR / ALMA geçişi</div>
+                      </div>
+                      <div className="p-4 space-y-1">
+                        <div className="text-[11px] font-sans font-medium text-slate-400">Skoru İyileşenler</div>
+                        <div className="text-lg font-semibold font-mono text-emerald-400">{scoreUpList.length} Şirket</div>
+                        <div className="text-[11px] font-mono text-slate-400">
+                          {avgScoreUpDelta !== null ? `Ort. +${avgScoreUpDelta} puan` : 'Veri yok'}
+                        </div>
+                      </div>
+                      <div className="p-4 space-y-1">
+                        <div className="text-[11px] font-sans font-medium text-slate-400">Skoru Gerileyenler</div>
+                        <div className="text-lg font-semibold font-mono text-rose-400">{scoreDownList.length} Şirket</div>
+                        <div className="text-[11px] font-mono text-slate-400">
+                          {avgScoreDownDelta !== null ? `Ort. ${avgScoreDownDelta} puan` : 'Veri yok'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Filtre ve Arama Barı */}
+                    <div className="bg-[#151821] border border-[#232834] px-4 py-3 rounded-xl flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                        {([
+                          { key: 'ALL', label: `Tümü (${attributionRows.length})` },
+                          { key: 'UPGRADED', label: `Karar Yükselenler (${upgradedCnt})` },
+                          { key: 'DOWNGRADED', label: `Karar Düşenler (${downgradedCnt})` },
+                          { key: 'SCORE_UP', label: `Skoru Artanlar (${scoreUpList.length})` },
+                          { key: 'SCORE_DOWN', label: `Skoru Düşenler (${scoreDownList.length})` },
+                        ] as const).map(f => (
+                          <button
+                            key={f.key}
+                            type="button"
+                            onClick={() => setBatchChangeFilter(f.key)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium border whitespace-nowrap cursor-pointer transition-colors ${
+                              batchChangeFilter === f.key
+                                ? 'bg-[#222836] text-white border-[#3b4458]'
+                                : 'bg-[#101319] text-slate-400 hover:text-slate-200 border-transparent'
+                            }`}
+                          >
+                            {f.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="relative w-full lg:w-64">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={batchChangeSearch}
+                          onChange={e => setBatchChangeSearch(e.target.value)}
+                          placeholder="Hisse veya şirket ara..."
+                          className="w-full bg-[#101319] border border-[#232834] rounded-lg pl-8 pr-8 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-slate-400 font-sans"
+                        />
+                        {batchChangeSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setBatchChangeSearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white cursor-pointer"
+                            aria-label="Aramayı temizle"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Dönemsel Değişim ve Değerleme Etkisi Tablosu */}
+                    <div className="bg-[#151821] border border-[#232834] rounded-xl overflow-hidden">
+                      <div className="overflow-x-auto touch-pan-x no-scrollbar">
+                        <table className="w-full text-left text-xs border-collapse font-sans">
+                          <thead>
+                            <tr className="border-b border-[#232834] bg-[#101319] text-[11px] font-sans font-medium text-slate-400">
+                              <th className="py-2.5 px-4">Hisse</th>
+                              <th className="py-2.5 px-3">Dönem Geçişi</th>
+                              <th className="py-2.5 px-3 text-center">Karar Etkisi</th>
+                              <th className="py-2.5 px-3 text-center">Skor Etkisi</th>
+                              <th className="py-2.5 px-3 text-right">Adil Değer Etkisi</th>
+                              <th className="py-2.5 px-3">Ana İyileşme / Bozulma</th>
+                              <th className="py-2.5 px-4 text-right">Detay</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#232834] text-slate-200 tabular-nums">
+                            {filteredAttributionRows.length === 0 ? (
+                              <tr>
+                                <td colSpan={7} className="p-8 text-center text-slate-500 text-xs">
+                                  Seçili filtreye uyan dönemsel değişim kaydı bulunamadı.
+                                </td>
+                              </tr>
+                            ) : (
+                              filteredAttributionRows.slice(0, 100).map(({ report, delta }) => {
+                                const isExpanded = !!expandedDeltaTickers[report.ticker];
+                                const scoreCls =
+                                  (delta.scoreDelta ?? 0) > 0
+                                    ? 'text-emerald-400'
+                                    : (delta.scoreDelta ?? 0) < 0
+                                    ? 'text-rose-400'
+                                    : 'text-slate-400';
+                                const fvCls =
+                                  (delta.fairValueDeltaPct ?? 0) > 0
+                                    ? 'text-emerald-400'
+                                    : (delta.fairValueDeltaPct ?? 0) < 0
+                                    ? 'text-rose-400'
+                                    : 'text-slate-400';
+                                const decCls =
+                                  delta.decisionTransition === 'UPGRADED'
+                                    ? 'text-emerald-400'
+                                    : delta.decisionTransition === 'DOWNGRADED'
+                                    ? 'text-rose-400'
+                                    : 'text-slate-300';
+
+                                return (
+                                  <React.Fragment key={report.id}>
+                                    <tr
+                                      onClick={() =>
+                                        setExpandedDeltaTickers(prev => ({
+                                          ...prev,
+                                          [report.ticker]: !prev[report.ticker],
+                                        }))
+                                      }
+                                      className="fv-row cursor-pointer group"
+                                    >
+                                      <td className="py-3 px-4">
+                                        <div className="font-mono font-semibold text-sm text-white group-hover:underline">
+                                          {report.ticker}
+                                        </div>
+                                        <div className="text-[11px] text-slate-400 truncate max-w-[160px]">
+                                          {getCompanySectorDisplayName(report.ticker, report.sector)}
+                                        </div>
+                                      </td>
+                                      <td className="py-3 px-3 font-mono text-xs text-slate-300 whitespace-nowrap">
+                                        {delta.prevPeriod && delta.currPeriod && delta.prevPeriod !== delta.currPeriod
+                                          ? `${delta.prevPeriod} → ${delta.currPeriod}`
+                                          : delta.currPeriod || '—'}
+                                      </td>
+                                      <td className="py-3 px-3 text-center font-mono whitespace-nowrap">
+                                        {delta.prevDecision && delta.prevDecision !== delta.currDecision ? (
+                                          <span className={`font-semibold ${decCls}`}>
+                                            {delta.prevDecision} → {delta.currDecision}
+                                          </span>
+                                        ) : (
+                                          <span className="text-slate-300">{delta.currDecision} (Sabit)</span>
+                                        )}
+                                      </td>
+                                      <td className="py-3 px-3 text-center font-mono whitespace-nowrap">
+                                        {delta.prevScore !== null && delta.currScore !== null ? (
+                                          <div>
+                                            <span className="text-white font-medium">
+                                              {delta.prevScore} → {delta.currScore}
+                                            </span>
+                                            {delta.scoreDelta !== null && delta.scoreDelta !== 0 && (
+                                              <span className={`ml-1.5 font-semibold ${scoreCls}`}>
+                                                ({delta.scoreDelta > 0 ? `+${delta.scoreDelta}` : delta.scoreDelta})
+                                              </span>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <span className="text-slate-500">—</span>
+                                        )}
+                                      </td>
+                                      <td className="py-3 px-3 text-right font-mono whitespace-nowrap">
+                                        {delta.currFairValue !== null ? (
+                                          <div>
+                                            <div className="text-white font-medium">
+                                              {delta.prevFairValue !== null
+                                                ? `₺${delta.prevFairValue.toFixed(2)} → ₺${delta.currFairValue.toFixed(2)}`
+                                                : `₺${delta.currFairValue.toFixed(2)}`}
+                                            </div>
+                                            {delta.fairValueDeltaPct !== null && (
+                                              <div className={`text-[11px] font-semibold ${fvCls}`}>
+                                                {delta.fairValueDeltaPct > 0 ? '+' : ''}%{delta.fairValueDeltaPct}
+                                              </div>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <span className="text-slate-500">—</span>
+                                        )}
+                                      </td>
+                                      <td className="py-3 px-3 max-w-[260px]">
+                                        <div className="space-y-0.5 text-[11px]">
+                                          {delta.improvements[0] && (
+                                            <div className="text-emerald-400 truncate">
+                                              + {delta.improvements[0].label} ({delta.improvements[0].deltaFormatted})
+                                            </div>
+                                          )}
+                                          {delta.deteriorations[0] && (
+                                            <div className="text-rose-400 truncate">
+                                              − {delta.deteriorations[0].label} ({delta.deteriorations[0].deltaFormatted})
+                                            </div>
+                                          )}
+                                          {!delta.improvements[0] && !delta.deteriorations[0] && (
+                                            <div className="text-slate-500">Yatay / Dengeli</div>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="py-3 px-4 text-right" onClick={e => e.stopPropagation()}>
+                                        <div className="inline-flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setExpandedDeltaTickers(prev => ({
+                                                ...prev,
+                                                [report.ticker]: !prev[report.ticker],
+                                              }))
+                                            }
+                                            className="p-1.5 rounded-md bg-[#101319] hover:bg-[#222836] border border-[#232834] text-slate-300 cursor-pointer"
+                                            title={isExpanded ? 'Detayı Daralt' : 'İyileşen / Kötüleşen Kalemleri Aç'}
+                                          >
+                                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => openReport(report.id, report.ticker)}
+                                            className="p-1.5 rounded-md bg-[#101319] hover:bg-[#222836] border border-[#232834] text-slate-300 hover:text-white cursor-pointer"
+                                            title="Tam Raporu Aç"
+                                          >
+                                            <ArrowUpRight className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+
+                                    {isExpanded && (
+                                      <tr className="bg-[#101319]">
+                                        <td colSpan={7} className="p-4 space-y-3 border-t border-[#232834]">
+                                          <p className="text-xs text-slate-300 font-sans leading-relaxed">
+                                            {delta.impactNarrative}
+                                          </p>
+                                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 text-xs">
+                                            <div className="p-3 rounded-lg bg-[#151821] border border-[#232834] space-y-2">
+                                              <div className="font-sans font-semibold text-slate-200 text-[11px]">
+                                                İyileşen Kalemler ({delta.improvements.length})
+                                              </div>
+                                              {delta.improvements.length === 0 ? (
+                                                <div className="text-[11px] text-slate-500">Öne çıkan belirgin iyileşme yok.</div>
+                                              ) : (
+                                                <div className="space-y-1.5">
+                                                  {delta.improvements.map(imp => (
+                                                    <div key={imp.key} className="flex items-center justify-between gap-2 font-mono text-[11px]">
+                                                      <span className="text-slate-300 font-sans">{imp.label}</span>
+                                                      <span className="text-emerald-400 font-semibold">
+                                                        {imp.prevFormatted} → {imp.currFormatted} ({imp.deltaFormatted})
+                                                      </span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            <div className="p-3 rounded-lg bg-[#151821] border border-[#232834] space-y-2">
+                                              <div className="font-sans font-semibold text-slate-200 text-[11px]">
+                                                Kötüleşen Kalemler ({delta.deteriorations.length})
+                                              </div>
+                                              {delta.deteriorations.length === 0 ? (
+                                                <div className="text-[11px] text-slate-500">Belirgin bozulma tespit edilmedi.</div>
+                                              ) : (
+                                                <div className="space-y-1.5">
+                                                  {delta.deteriorations.map(det => (
+                                                    <div key={det.key} className="flex items-center justify-between gap-2 font-mono text-[11px]">
+                                                      <span className="text-slate-300 font-sans">{det.label}</span>
+                                                      <span className="text-rose-400 font-semibold">
+                                                        {det.prevFormatted} → {det.currFormatted} ({det.deltaFormatted})
+                                                      </span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            <div className="p-3 rounded-lg bg-[#151821] border border-[#232834] space-y-2">
+                                              <div className="font-sans font-semibold text-slate-200 text-[11px]">
+                                                Skor &amp; Değerleme Etkisi (4 Boyut)
+                                              </div>
+                                              {delta.scoreBreakdownDeltas.length === 0 ? (
+                                                <div className="text-[11px] text-slate-500">Alt kırılım karşılaştırması mevcut değil.</div>
+                                              ) : (
+                                                <div className="space-y-1.5">
+                                                  {delta.scoreBreakdownDeltas.map(cat => (
+                                                    <div key={cat.category} className="flex items-center justify-between gap-2 font-mono text-[11px]">
+                                                      <span className="text-slate-300 font-sans truncate max-w-[165px]">{cat.category}</span>
+                                                      <span className="shrink-0">
+                                                        <span className="text-slate-200">{cat.prevScore} → {cat.currScore}/{cat.maxScore}</span>
+                                                        {cat.delta !== 0 && (
+                                                          <span className={`ml-1 font-semibold ${cat.delta > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                                            ({cat.delta > 0 ? `+${cat.delta}` : cat.delta})
+                                                          </span>
+                                                        )}
+                                                      </span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              )}
+                                              <div className="pt-1 flex justify-end">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => openReport(report.id, report.ticker)}
+                                                  className="text-[11px] font-sans font-medium text-slate-300 hover:text-white underline cursor-pointer"
+                                                >
+                                                  Tam Raporu Aç →
+                                                </button>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -9373,6 +10185,21 @@ export default function ValuationTerminal({
                       </div>
                     ) : (
                     <div className="flex items-center gap-2 flex-wrap">
+                      {isPortfolio && portfolioTickers.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBatchScope('PORTFOLIO');
+                            setLeaderboardSubTab('BATCH_CHANGES');
+                            navigateTo('leaderboard');
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#101319] hover:bg-[#1e2430] text-slate-200 border border-[#2a3140] text-xs font-medium cursor-pointer transition-colors"
+                          title="Portföydeki hisselerin bilançolarını topluca güncelle ve değişimleri incele"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Bilançoları Güncelle</span>
+                        </button>
+                      )}
                       {deduplicatedSaved.length > 0 && (
                         <button
                           type="button"

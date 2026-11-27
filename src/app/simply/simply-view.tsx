@@ -68,6 +68,7 @@ import {
   mergeAnalysisHistorySnapshots,
   type SavedReport,
 } from '@/lib/report-resolver';
+import { resolveReportAttribution } from '@/lib/batch-delta';
 import type { SectorType } from '@/lib/sectors';
 import {
   SECTOR_DEFINITIONS,
@@ -1353,6 +1354,8 @@ export default function SimplyView({
     discountPctNum,
     effectiveDecision,
   ]);
+
+  const periodAttribution = useMemo(() => resolveReportAttribution(report), [report]);
 
   // Canlı Piyasa Getiri Performansı (TradingView BIST & Tarihsel Finansal Seriden Dinamik Çözüm)
   const priceReturns = useMemo(() => {
@@ -8825,10 +8828,215 @@ export default function SimplyView({
                   title={`${report.ticker} için yeni bilanço dönemini analiz et`}
                 >
                   <Sparkles className="w-4 h-4 text-emerald-400" />
-                  <span>{report.ticker} Yeni Çeyrek Güncelle</span>
+                <span>{report.ticker} Yeni Çeyrek Güncelle</span>
                 </button>
               )}
             </div>
+
+            {periodAttribution && (
+              <div className="bg-[#151821] border border-[#232834] rounded-xl overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-[#232834] bg-[#101319] flex items-center justify-between gap-2 flex-wrap">
+                  <span className="font-sans text-sm sm:text-base font-semibold text-white">
+                    Dönemsel Değişim Özeti (
+                    {periodAttribution.prevPeriod
+                      ? `${periodAttribution.prevPeriod} → ${periodAttribution.currPeriod || 'Güncel'}`
+                      : periodAttribution.currPeriod || 'Güncel Dönem'}
+                    )
+                  </span>
+                  <span
+                    className={`text-xs font-mono font-semibold ${
+                      periodAttribution.decisionTransition === 'UPGRADED'
+                        ? 'text-emerald-400'
+                        : periodAttribution.decisionTransition === 'DOWNGRADED'
+                        ? 'text-rose-400'
+                        : 'text-slate-400'
+                    }`}
+                  >
+                    {periodAttribution.decisionTransition === 'UPGRADED'
+                      ? 'Karar Yükseldi'
+                      : periodAttribution.decisionTransition === 'DOWNGRADED'
+                      ? 'Karar Düştü'
+                      : 'Karar Korundu'}
+                  </span>
+                </div>
+
+                <div className="p-4 sm:p-5 space-y-4">
+                  {/* Üst 3 Metrik Şeridi: Karar / Skor / Adil Değer Etkisi */}
+                  <div className="bg-[#101319] border border-[#232834] rounded-xl grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-[#232834] tabular-nums">
+                    <div className="p-3.5 space-y-1">
+                      <div className="text-[11px] text-slate-400 font-sans">Karar Etkisi</div>
+                      <div className="text-sm font-semibold font-mono flex items-center gap-1.5 flex-wrap">
+                        <span className="text-slate-400">
+                          {periodAttribution.prevDecision || '—'}
+                        </span>
+                        <span className="text-slate-600">→</span>
+                        <span
+                          className={
+                            periodAttribution.currDecision === 'AL'
+                              ? 'text-emerald-400'
+                              : periodAttribution.currDecision === 'ALMA'
+                              ? 'text-rose-400'
+                              : 'text-amber-300'
+                          }
+                        >
+                          {periodAttribution.currDecision}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="p-3.5 space-y-1">
+                      <div className="text-[11px] text-slate-400 font-sans">Skor Etkisi</div>
+                      <div className="text-sm font-semibold font-mono text-white flex items-center gap-1.5 flex-wrap">
+                        <span className="text-slate-400">
+                          {periodAttribution.prevScore != null ? `${periodAttribution.prevScore}/100` : '—'}
+                        </span>
+                        <span className="text-slate-600">→</span>
+                        <span>
+                          {periodAttribution.currScore != null ? `${periodAttribution.currScore}/100` : '—'}
+                        </span>
+                        {periodAttribution.scoreDelta != null && (
+                          <span
+                            className={`text-xs ${
+                              periodAttribution.scoreDelta > 0
+                                ? 'text-emerald-400'
+                                : periodAttribution.scoreDelta < 0
+                                ? 'text-rose-400'
+                                : 'text-slate-400'
+                            }`}
+                          >
+                            ({periodAttribution.scoreDelta > 0 ? `+${periodAttribution.scoreDelta}` : periodAttribution.scoreDelta} puan)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="p-3.5 space-y-1">
+                      <div className="text-[11px] text-slate-400 font-sans">Adil Değer Etkisi</div>
+                      <div className="text-sm font-semibold font-mono text-white flex items-center gap-1.5 flex-wrap">
+                        <span className="text-slate-400">
+                          {periodAttribution.prevFairValue != null && periodAttribution.prevFairValue > 0
+                            ? `₺${periodAttribution.prevFairValue.toFixed(2)}`
+                            : '—'}
+                        </span>
+                        <span className="text-slate-600">→</span>
+                        <span>
+                          {periodAttribution.currFairValue != null && periodAttribution.currFairValue > 0
+                            ? `₺${periodAttribution.currFairValue.toFixed(2)}`
+                            : '—'}
+                        </span>
+                        {periodAttribution.fairValueDeltaPct != null && (
+                          <span
+                            className={`text-xs ${
+                              periodAttribution.fairValueDeltaPct > 0
+                                ? 'text-emerald-400'
+                                : periodAttribution.fairValueDeltaPct < 0
+                                ? 'text-rose-400'
+                                : 'text-slate-400'
+                            }`}
+                          >
+                            ({periodAttribution.fairValueDeltaPct > 0 ? '+' : ''}
+                            {periodAttribution.fairValueDeltaPct.toFixed(1)}%)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Nedensellik Özeti */}
+                  {periodAttribution.impactNarrative && (
+                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed bg-[#101319] border border-[#232834] rounded-lg px-3.5 py-2.5">
+                      {periodAttribution.impactNarrative}
+                    </p>
+                  )}
+
+                  {/* 3 Kolonlu Kırılım: İyileşenler | Kötüleşenler | 4 Boyut Skor Etkisi */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                    <div className="bg-[#101319] border border-[#232834] rounded-lg p-3.5 space-y-2">
+                      <div className="text-xs font-semibold text-slate-200 border-b border-[#232834] pb-1.5 flex items-center justify-between">
+                        <span>İyileşen Kalemler</span>
+                        <span className="font-mono text-emerald-400">{periodAttribution.improvements.length}</span>
+                      </div>
+                      {periodAttribution.improvements.length === 0 ? (
+                        <div className="text-xs text-slate-500">Önceki döneme göre belirgin iyileşme görülmedi.</div>
+                      ) : (
+                        <div className="space-y-2 tabular-nums">
+                          {periodAttribution.improvements.map(item => (
+                            <div key={item.key} className="text-xs space-y-0.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-slate-300 font-medium">{item.label}</span>
+                                <span className="font-mono font-semibold text-emerald-400">{item.deltaFormatted}</span>
+                              </div>
+                              <div className="text-[11px] font-mono text-slate-400">
+                                {item.prevFormatted} → <span className="text-slate-200">{item.currFormatted}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-[#101319] border border-[#232834] rounded-lg p-3.5 space-y-2">
+                      <div className="text-xs font-semibold text-slate-200 border-b border-[#232834] pb-1.5 flex items-center justify-between">
+                        <span>Kötüleşen Kalemler</span>
+                        <span className="font-mono text-rose-400">{periodAttribution.deteriorations.length}</span>
+                      </div>
+                      {periodAttribution.deteriorations.length === 0 ? (
+                        <div className="text-xs text-slate-500">Önceki döneme göre belirgin bozulma görülmedi.</div>
+                      ) : (
+                        <div className="space-y-2 tabular-nums">
+                          {periodAttribution.deteriorations.map(item => (
+                            <div key={item.key} className="text-xs space-y-0.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-slate-300 font-medium">{item.label}</span>
+                                <span className="font-mono font-semibold text-rose-400">{item.deltaFormatted}</span>
+                              </div>
+                              <div className="text-[11px] font-mono text-slate-400">
+                                {item.prevFormatted} → <span className="text-slate-200">{item.currFormatted}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-[#101319] border border-[#232834] rounded-lg p-3.5 space-y-2">
+                      <div className="text-xs font-semibold text-slate-200 border-b border-[#232834] pb-1.5">
+                        Skor Alt Kırılım Etkisi (4 Boyut)
+                      </div>
+                      {periodAttribution.scoreBreakdownDeltas.length === 0 ? (
+                        <div className="text-xs text-slate-500">4 boyut skor karşılaştırması için en az iki dönem gerekli.</div>
+                      ) : (
+                        <div className="space-y-2 tabular-nums">
+                          {periodAttribution.scoreBreakdownDeltas.map(cat => (
+                            <div key={cat.category} className="text-xs space-y-0.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-slate-300 font-medium truncate">{cat.category}</span>
+                                <span
+                                  className={`font-mono font-semibold shrink-0 ${
+                                    cat.delta > 0
+                                      ? 'text-emerald-400'
+                                      : cat.delta < 0
+                                      ? 'text-rose-400'
+                                      : 'text-slate-400'
+                                  }`}
+                                >
+                                  {cat.prevScore} → {cat.currScore}/{cat.maxScore} ({cat.delta > 0 ? `+${cat.delta}` : cat.delta})
+                                </span>
+                              </div>
+                              {cat.currReason && (
+                                <div className="text-[11px] text-slate-500 truncate" title={cat.currReason}>
+                                  {cat.currReason}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="bg-[#151821] border border-[#232834] rounded-xl overflow-hidden">
               <div className="px-5 py-3.5 border-b border-[#232834] bg-[#101319] flex items-center justify-between gap-2 flex-wrap">
