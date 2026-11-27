@@ -848,4 +848,73 @@ describe('Paket D: Security, Auth, Rate Limiting, Cache, API Routes & 100% Direc
     });
     assert.equal(chronicNegFcf.finalDecision, 'NÖTR', '4/4 consecutive negative FCF + net debt must block AL');
   });
+
+  it('10. Phase 2 Institutional Methodology Upgrades: 5Y Real FCFF DCF, PV vs 12M Target, Levered Fin Beta, ICR, Completeness & EVDS3 Dynamic Dates', async () => {
+    const valMod = await import('../lib/valuation.ts');
+
+    // 1. 5Y Real FCFF DCF + PV Fair Value vs 12M Target Price (price-independent)
+    const healthyInd = {
+      ticker: 'TESTDCF',
+      sector: 'INDUSTRIAL',
+      share_count: 100_000_000,
+      financial_history: [
+        { period: '2025/12', revenue: 4_000e6, gross_profit: 1_400e6, operating_profit: 900e6, ebitda: 1_100e6, net_income: 600e6, equity: 3_000e6, net_debt: -400e6, operating_cash_flow: 950e6, free_cash_flow: 750e6, roic: 28, roe: 22, is_tms29: true },
+        { period: '2026/09', revenue: 3_600e6, gross_profit: 1_300e6, operating_profit: 850e6, ebitda: 1_050e6, net_income: 580e6, equity: 3_500e6, net_debt: -600e6, operating_cash_flow: 900e6, free_cash_flow: 720e6, roic: 30, roe: 24, is_tms29: true },
+      ],
+    };
+    const dcfAt30 = valMod.computeSectorValuationAndDrivers(healthyInd, '30.00', 'INDUSTRIAL');
+    const dcfAt120 = valMod.computeSectorValuationAndDrivers(healthyInd, '120.00', 'INDUSTRIAL');
+    assert.ok(dcfAt30.valuation.dcf_summary && dcfAt30.valuation.dcf_summary.dcfFairValue > 0, 'Must compute genuine 5Y Real FCFF DCF');
+    assert.ok(dcfAt30.valuation.target_price_12m > 0 && dcfAt30.valuation.pv_fair_value > 0, 'Must populate both 12M target and PV fair value');
+    assert.equal(dcfAt30.valuation.pv_fair_value, dcfAt120.valuation.pv_fair_value, 'PV fair value must be 100% price-independent');
+    assert.equal(dcfAt30.valuation.dcf_summary.dcfFairValue, dcfAt120.valuation.dcf_summary.dcfFairValue, 'DCF fair value must be 100% price-independent');
+
+    // 2. Levered equity beta for Banking/Insurance + item.wacc === item.nominal_wacc + real reported_wacc guard
+    const bankEnriched = valMod.enrichAndSanitizeFinancialHistory({
+      ticker: 'GARAN',
+      sector: 'BANKING',
+      financial_history: [{ period: '2026/09', equity: 300_000e6, total_assets: 3_000_000e6, net_income: 75_000e6, roe: 32 }],
+    }, 'BANKING');
+    assert.ok(bankEnriched.financial_history[0].beta >= 0.85, `Banking must use levered equity beta (>=0.85), got ${bankEnriched.financial_history[0].beta}`);
+
+    const insEnriched = valMod.enrichAndSanitizeFinancialHistory({
+      ticker: 'AGESA',
+      sector: 'INSURANCE',
+      financial_history: [{ period: '2026/09', equity: 15_000e6, total_assets: 560_000e6, net_income: 6_500e6, roe: 53 }],
+    }, 'INSURANCE');
+    assert.ok(insEnriched.financial_history[0].beta >= 0.75, `Insurance must use levered equity beta (>=0.75), got ${insEnriched.financial_history[0].beta}`);
+
+    const realWaccEnriched = valMod.enrichAndSanitizeFinancialHistory({
+      ticker: 'REALW',
+      sector: 'INDUSTRIAL',
+      financial_history: [{ period: '2026/09', equity: 1_000e6, net_debt: 0, reported_wacc: 15.0, is_tms29: true }],
+    }, 'INDUSTRIAL');
+    assert.equal(realWaccEnriched.financial_history[0].real_wacc, 15.0, 'Reported real WACC <=22% must NOT be double-deflated');
+    assert.equal(realWaccEnriched.financial_history[0].wacc, realWaccEnriched.financial_history[0].nominal_wacc, 'item.wacc must sync with nominal_wacc');
+
+    // 3. Industrial Pillar 1 liquidity fall-through fix + Interest Coverage veto + Data Completeness
+    const illiquidInd = valMod.calculateSectorScore({
+      ticker: 'LIQFAIL',
+      financial_history: [{ period: '2026/09', revenue: 1_000e6, ebitda: 200e6, operating_profit: 120e6, financing_expenses: -150e6, net_income: 10e6, equity: 500e6, net_debt: 250e6, current_ratio: 0.40, operating_cash_flow: 80e6, free_cash_flow: 40e6 }],
+    }, 'INDUSTRIAL');
+    assert.ok(illiquidInd.breakdown[0].score <= 8, `Low current_ratio (0.40x) + ICR<1.2 must score <=8, got ${illiquidInd.breakdown[0].score}`);
+
+    const icrBlocked = valMod.optimizeFinalDecision({
+      rawDecision: 'AL',
+      score: 80,
+      marketPrice: 10,
+      fairValue: 20,
+      sector: 'INDUSTRIAL',
+      latestData: { period: '2026/09', equity: 1_000e6, net_debt: 500e6, operating_profit: 100e6, financing_expenses: -120e6, ebitda: 250e6, net_income: 20e6, operating_cash_flow: 120e6, free_cash_flow: 50e6, roic: 25, real_wacc: 12, risk_free_rate: 38, is_tms29: true },
+    });
+    assert.equal(icrBlocked.finalDecision, 'NÖTR', 'EBIT/Interest < 1.2x with net debt must cap AL at NÖTR');
+
+    const emptyScore = valMod.calculateSectorScore({ ticker: 'EMPTY', financial_history: [{ period: '2026/09' }] }, 'INDUSTRIAL');
+    assert.ok(emptyScore.dataCompletenessPct < 50, `Empty financials must report <50% completeness, got ${emptyScore.dataCompletenessPct}`);
+
+    // 4. EVDS3 dynamic dates & foundCommercial/foundDeposit loop guards
+    const macroSource = fs.readFileSync(path.resolve('src/lib/macro-service.ts'), 'utf8');
+    assert.equal(macroSource.includes('endDate=31-12-2026'), false, 'macro-service must not hardcode endDate=31-12-2026');
+    assert.ok(macroSource.includes('foundCommercial') && macroSource.includes('foundDeposit'), 'EVDS3 banking loop must use found* guards');
+  });
 });

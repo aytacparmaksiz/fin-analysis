@@ -5966,6 +5966,72 @@ export default function SimplyView({
               </div>
             </div>
 
+            {/* Faz 2 Kurumsal Değerleme Ayrımı: 12 Aylık Hedef Fiyat vs. Bugünkü İçsel Değer (PV) & 5Y Reel FCFF İNA */}
+            {(() => {
+              const vObj = valuationInfo || report.extractedData?.valuation || {};
+              const target12m = parseFinancialNumber(vObj?.target_price_12m ?? vObj?.fair_value) ?? (fairValueNum > 0 ? fairValueNum : null);
+              const pvFv = parseFinancialNumber(vObj?.pv_fair_value);
+              const dcf = vObj?.dcf_summary;
+              if (target12m === null && pvFv === null) return null;
+              const upside12m = (target12m && currentPriceNum > 0) ? ((target12m - currentPriceNum) / currentPriceNum) * 100 : null;
+              const pvMargin = (pvFv && pvFv > 0 && currentPriceNum > 0) ? ((pvFv - currentPriceNum) / pvFv) * 100 : null;
+              const pvUpside = (pvFv && pvFv > 0 && currentPriceNum > 0) ? ((pvFv - currentPriceNum) / currentPriceNum) * 100 : null;
+              return (
+                <div className="bg-[#151821] border border-[#232834] rounded-xl overflow-hidden">
+                  <div className="px-5 py-3 border-b border-[#232834] bg-[#101319] flex items-center justify-between gap-2 flex-wrap">
+                    <span className="font-sans text-xs sm:text-sm font-semibold text-white">
+                      Kurumsal Değerleme Ayrımı: 12A Hedef Fiyat vs. Bugünkü İçsel Değer (PV / İNA)
+                    </span>
+                    <span className="text-[11px] font-mono text-slate-400">
+                      {dcf ? `5Y ${dcf.isRealBasis ? 'Reel' : 'Nominal'} FCFF İNA • WACC %${dcf.waccPct} • g %${dcf.terminalGrowthPct}` : 'WACC / Ke İndirgemeli PV Ayrımı'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-[#232834] tabular-nums">
+                    <div className="p-4 space-y-1">
+                      <div className="text-[11px] text-slate-400 font-sans">12 Aylık Hedef Fiyat (t+1)</div>
+                      <div className="text-lg sm:text-xl font-bold font-mono text-white">
+                        {target12m !== null ? `₺${target12m.toFixed(2)}` : '—'}
+                      </div>
+                      <div className="text-xs font-mono text-slate-400">
+                        12A Beklenen Getiri:{' '}
+                        <span className={upside12m !== null ? (upside12m >= 0 ? 'text-emerald-400 font-semibold' : 'text-rose-400 font-semibold') : 'text-slate-400'}>
+                          {upside12m !== null ? `${upside12m >= 0 ? '+' : ''}%${upside12m.toFixed(1)}` : '—'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="p-4 space-y-1">
+                      <div className="text-[11px] text-slate-400 font-sans">Bugünkü İçsel Değer (PV, t=0)</div>
+                      <div className="text-lg sm:text-xl font-bold font-mono text-white">
+                        {pvFv !== null ? `₺${pvFv.toFixed(2)}` : '—'}
+                      </div>
+                      <div className="text-xs font-mono text-slate-400">
+                        PV Emniyet Marjı:{' '}
+                        <span className={pvMargin !== null ? (pvMargin >= 0 ? 'text-emerald-400 font-semibold' : 'text-rose-400 font-semibold') : 'text-slate-400'}>
+                          {pvMargin !== null ? `${pvMargin >= 0 ? '+' : ''}%${pvMargin.toFixed(1)}` : '—'}
+                        </span>
+                        {pvUpside !== null && (
+                          <span className="text-slate-500"> ({pvUpside >= 0 ? '+' : ''}%{pvUpside.toFixed(1)} PV getiri)</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="p-4 space-y-1">
+                      <div className="text-[11px] text-slate-400 font-sans">5 Yıllık FCFF İNA (DCF) Çıktısı</div>
+                      <div className="text-lg sm:text-xl font-bold font-mono text-white">
+                        {dcf && dcf.dcfFairValue > 0 ? `₺${Number(dcf.dcfFairValue).toFixed(2)}` : 'Sektörel Model'}
+                      </div>
+                      <div className="text-[11px] font-mono text-slate-400">
+                        {dcf
+                          ? `Yeniden Yatırım: %${dcf.reinvestmentRatePct} • g/ROIC Disiplini`
+                          : 'Finansal / GYO / Holding: Gordon & NAD indirgemesi'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* 4.1 İskontolu Değerleme Senaryoları */}
             <div className="bg-[#161a23] border border-[#2a3140] rounded-2xl p-6 shadow-xl space-y-4">
               <div className="flex items-center gap-2 border-b border-[#282d37] pb-3">

@@ -254,9 +254,9 @@ describe('Comprehensive Financial Terminal Stress Test Suite', () => {
       const item = enriched.financial_history[0];
       // 30% corporate tax rate on pre-tax Kd (45.0 * 0.70 = 31.5)
       assert.equal(item.after_tax_cost_of_debt, 31.5);
-      // Insurance WACC is purely cost of equity (Ke = Rf + Beta * ERP)
-      // Rf (2025) = 34.0, Beta = 0.53, ERP = 8.56 -> Ke = 38.54 -> 38.5
-      assert.equal(item.wacc, 38.5);
+      // Insurance WACC is purely cost of equity using levered equity beta (Ke = Rf + LeveredBeta * ERP)
+      // Rf (2025) = 34.0, Levered Equity Beta = 0.75, ERP = 8.56 -> Ke = 40.42 -> 40.4
+      assert.equal(item.wacc, 40.4);
     });
 
     it('applies 25% corporate tax rate for Industrial sector', () => {

@@ -247,13 +247,22 @@ export async function fetchLiveTcmbMacroData(options?: {
       'TP.PKAUO.S07.A.U'  // GSYH Büyüme
     ].join('-');
 
-    const surveyUrl = `https://evds3.tcmb.gov.tr/igmevdsms-dis/series=${surveySeries}&startDate=01-01-2024&endDate=31-12-2026&type=json`;
+    // Faz 2 P1: Dinamik EVDS3 bitiş tarihi (yıl sonunda donmayı engeller)
+    const nowDate = new Date();
+    const dd = String(nowDate.getDate()).padStart(2, '0');
+    const mm = String(nowDate.getMonth() + 1).padStart(2, '0');
+    const yyyy = nowDate.getFullYear();
+    const dynamicEndDate = `${dd}-${mm}-${yyyy}`;
+    const sixMonthsAgo = new Date(nowDate.getFullYear(), nowDate.getMonth() - 4, 1);
+    const dynamicBankingStart = `01-${String(sixMonthsAgo.getMonth() + 1).padStart(2, '0')}-${sixMonthsAgo.getFullYear()}`;
+
+    const surveyUrl = `https://evds3.tcmb.gov.tr/igmevdsms-dis/series=${surveySeries}&startDate=01-01-2024&endDate=${dynamicEndDate}&type=json`;
     
     // 2. Ticari Kredi Faizi (TP.KTF10) & 3 Aylık Vadeli TL Mevduat Faizi (TP.TRY.MT06)
-    const bankingUrl = `https://evds3.tcmb.gov.tr/igmevdsms-dis/series=TP.KTF10-TP.TRY.MT06&startDate=01-08-2026&endDate=31-12-2026&type=json`;
+    const bankingUrl = `https://evds3.tcmb.gov.tr/igmevdsms-dis/series=TP.KTF10-TP.TRY.MT06&startDate=${dynamicBankingStart}&endDate=${dynamicEndDate}&type=json`;
 
     // 3. İmalat Sanayi Kapasite Kullanım Oranı (TP.KKO.MA) & Konut Fiyat Endeksi (TP.KFE.TR)
-    const monthlyUrl = `https://evds3.tcmb.gov.tr/igmevdsms-dis/series=TP.KKO.MA-TP.KFE.TR&startDate=01-08-2025&endDate=31-12-2026&type=json`;
+    const monthlyUrl = `https://evds3.tcmb.gov.tr/igmevdsms-dis/series=TP.KKO.MA-TP.KFE.TR&startDate=01-08-2025&endDate=${dynamicEndDate}&type=json`;
 
     const [surveyRes, bankingRes, monthlyRes] = await Promise.all([
       fetchEvdsJson(surveyUrl, effectiveKey),
@@ -312,30 +321,34 @@ export async function fetchLiveTcmbMacroData(options?: {
       }
     }
 
-    // Bankacılık Kredi ve Mevduat Faizleri Çözümleme
+    // Bankacılık Kredi ve Mevduat Faizleri Çözümleme (found* bayraklarıyla en güncel haftanın ezilmesi engellenir)
     let commercialRate = 62.21;
     let commercialDate = '09-10-2026';
     let depositRate = 42.94;
     let depositDate = '09-10-2026';
+    let foundCommercial = false;
+    let foundDeposit = false;
 
     if (bankingRes?.items && Array.isArray(bankingRes.items)) {
       for (let i = bankingRes.items.length - 1; i >= 0; i--) {
         const it = bankingRes.items[i];
-        if (it.TP_KTF10 != null && it.TP_KTF10 !== '') {
+        if (!foundCommercial && it.TP_KTF10 != null && it.TP_KTF10 !== '') {
           const crVal = parseFloat(String(it.TP_KTF10));
           if (!isNaN(crVal) && crVal > 0) {
             commercialRate = Number(crVal.toFixed(2));
             commercialDate = String(it.Tarih || it.YEARWEEK || commercialDate);
+            foundCommercial = true;
           }
         }
-        if (it.TP_TRY_MT06 != null && it.TP_TRY_MT06 !== '') {
+        if (!foundDeposit && it.TP_TRY_MT06 != null && it.TP_TRY_MT06 !== '') {
           const depVal = parseFloat(String(it.TP_TRY_MT06));
           if (!isNaN(depVal) && depVal > 0) {
             depositRate = Number(depVal.toFixed(2));
             depositDate = String(it.Tarih || it.YEARWEEK || depositDate);
+            foundDeposit = true;
           }
         }
-        if (commercialRate !== 62.21 && depositRate !== 42.94) break;
+        if (foundCommercial && foundDeposit) break;
       }
     }
     const creditDepositSpread = Number((commercialRate - depositRate).toFixed(2));
