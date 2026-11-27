@@ -60,18 +60,28 @@ export async function GET(request: Request) {
       requestedTickers = Array.from(cleanSet);
     }
 
-    const allMultiples = await fetchAllIsYatirimMultiples();
+    let allMultiples = await fetchAllIsYatirimMultiples();
+    const firstEntry = allMultiples ? Object.values(allMultiples)[0] : undefined;
+    if (firstEntry?.isBaselineFallback) {
+      // Cold-start SWR 6sn yarışını kıl payı kaçırdıysa kısa bir bekleme sonrası taze önbelleği tekrar oku
+      await new Promise((r) => setTimeout(r, 2500));
+      allMultiples = await fetchAllIsYatirimMultiples();
+    }
+
     const prices: Record<string, number> = {};
 
     if (requestedTickers) {
       for (const tk of requestedTickers) {
-        const px = allMultiples?.[tk]?.lastPrice;
+        const rec = allMultiples?.[tk];
+        if (rec?.isBaselineFallback) continue;
+        const px = rec?.lastPrice;
         if (typeof px === 'number' && Number.isFinite(px) && px > 0) {
           prices[tk] = px;
         }
       }
     } else if (allMultiples && typeof allMultiples === 'object') {
       for (const [tk, rec] of Object.entries(allMultiples)) {
+        if (rec?.isBaselineFallback) continue;
         const px = rec?.lastPrice;
         if (typeof px === 'number' && Number.isFinite(px) && px > 0) {
           prices[tk] = px;
