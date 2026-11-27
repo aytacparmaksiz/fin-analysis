@@ -25,7 +25,7 @@ export const DEFAULT_PORTFOLIO_ARCHITECT_CONFIG: PortfolioArchitectConfig = {
   minOcfConversionPct: 80,
   maxWcShareOfOcfPct: 65,
   minEbitdaMarginPct: 8,
-  minFreeFloatPct: 15,
+  minFreeFloatPct: 0,
   deduplicateGroupHoldings: true,
   includeHighQualityNeutralCount: 1,
   rotationTakeProfitUpsideThresholdPct: 12,

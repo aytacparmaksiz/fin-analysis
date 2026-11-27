@@ -918,7 +918,7 @@ describe('Paket D: Security, Auth, Rate Limiting, Cache, API Routes & 100% Direc
     assert.ok(macroSource.includes('foundCommercial') && macroSource.includes('foundDeposit'), 'EVDS3 banking loop must use found* guards');
   });
 
-  it('11. Phase 3 Institutional Model Portfolio: Live BIST Prices, Hard Cap + Cash/PPF Reserve, Liquidity Floor, Dividend Total Return, Group Dedup & /api/live-prices', async () => {
+  it('11. Phase 3 Institutional Model Portfolio: Live BIST Prices, Hard Cap + Cash/PPF Reserve, Default 0% Free-Float Floor, Dividend Total Return, Group Dedup & /api/live-prices', async () => {
     const archMod = await import('../lib/portfolio-architect.ts');
     const {
       DEFAULT_PORTFOLIO_ARCHITECT_CONFIG,
@@ -926,7 +926,7 @@ describe('Paket D: Security, Auth, Rate Limiting, Cache, API Routes & 100% Direc
       computeCapitalAllocationPlan,
     } = archMod;
 
-    assert.equal(DEFAULT_PORTFOLIO_ARCHITECT_CONFIG.minFreeFloatPct, 15, 'Default minFreeFloatPct must be 15%');
+    assert.equal(DEFAULT_PORTFOLIO_ARCHITECT_CONFIG.minFreeFloatPct, 0, 'Default minFreeFloatPct must be 0%');
 
     const mkHist = ({ ni, ocf, wc, ebM, roic, wacc, netDebt, eb }) => [
       { period: '2025/12', net_income: ni, operating_cash_flow: ocf, working_capital_change: wc, ebitda_margin: ebM, net_margin: ebM * 0.6, roic, real_wacc: wacc, eva_spread: roic - wacc, net_debt: netDebt, ebitda: eb },
@@ -974,7 +974,10 @@ describe('Paket D: Security, Auth, Rate Limiting, Cache, API Routes & 100% Direc
       mkReport('FINSRV1', 'FINANCIAL_SERVICES', 40, 80, 89, 'AL', { ni: 200, ocf: null, wc: null, ebM: 0, roic: 29, wacc: 16, netDebt: 0, eb: 0 }, { market_multiples: { free_float_pct: 32 } }),
     ];
 
-    const plan = buildForensicPortfolioPlan(universe, ['LIVETEST'], undefined, { LIVETEST: 185 });
+    const defaultPlan = buildForensicPortfolioPlan(universe, ['LIVETEST'], undefined, { LIVETEST: 185 });
+    assert.ok(defaultPlan.modelPortfolio.some(c => c.ticker === 'LOWFLOAT'), 'By default (minFreeFloatPct=0), strong low-float stocks must NOT be filtered out');
+
+    const plan = buildForensicPortfolioPlan(universe, ['LIVETEST'], { minFreeFloatPct: 15 }, { LIVETEST: 185 });
 
     // A. Live price override & drift
     const liveCand = plan.candidatesByTicker.LIVETEST;
@@ -985,8 +988,8 @@ describe('Paket D: Security, Auth, Rate Limiting, Cache, API Routes & 100% Direc
     assert.equal(liveCand.targetStatus, 'TARGET_REACHED');
     assert.ok(plan.livePricesAppliedCount >= 1);
 
-    // B. Low free float filtered out
-    assert.ok(plan.tier3FilteredAl.some(c => c.ticker === 'LOWFLOAT'), 'Low free-float (7.1% < 15%) must filter LOWFLOAT');
+    // B. Optional free-float filter works only when explicitly configured
+    assert.ok(plan.tier3FilteredAl.some(c => c.ticker === 'LOWFLOAT'), 'Explicit minFreeFloatPct=15 must filter LOWFLOAT');
 
     // C. Dividend yield hurdle check
     const divCand = plan.candidatesByTicker.DIVBLUE;

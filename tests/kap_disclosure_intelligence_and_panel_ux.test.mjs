@@ -351,7 +351,7 @@ describe('KAP Disclosure Intelligence & Redesigned Panel UI/UX Verification Suit
       mkReport('FROTO', 'INDUSTRIAL', 100, 104, 86, 'NÖTR', { ni: 800, ocf: 950, wc: 50, ebM: 12.0, roic: 22.0, wacc: 14.0, netDebt: 500, eb: 1500 }),
     ];
 
-    const plan = buildForensicPortfolioPlan(sampleReports, ['TUPRS', 'ORGE', 'FROTO'], { minFreeFloatPct: 0 });
+    const plan = buildForensicPortfolioPlan(sampleReports, ['TUPRS', 'ORGE', 'FROTO']);
 
     assert.ok(plan.tier1CoreAl.some(c => c.ticker === 'TUPRS') && plan.tier1CoreAl.some(c => c.ticker === 'TBORG'));
     const filteredTickers = plan.tier3FilteredAl.map(c => c.ticker);
@@ -426,7 +426,7 @@ describe('KAP Disclosure Intelligence & Redesigned Panel UI/UX Verification Suit
       mkReport('ORGE', 'INDUSTRIAL', 18, 33, 83, 'AL', { ni: 700, ocf: 245, wc: -200, ebM: 56, roic: 38.6, wacc: 13.8, netDebt: -50, eb: 500 }),
     ];
 
-    const plan = buildForensicPortfolioPlan(sampleReports, ['TUPRS', 'TBORG', 'MAVI', 'FROTO', 'ASELS'], { minFreeFloatPct: 0 });
+    const plan = buildForensicPortfolioPlan(sampleReports, ['TUPRS', 'TBORG', 'MAVI', 'FROTO', 'ASELS']);
 
     assert.equal(plan.candidatesByTicker.TUPRS.targetStatus, 'ACCUMULATE');
     assert.equal(plan.candidatesByTicker.FROTO.targetStatus, 'NEAR_TARGET', '0 < +4% < 12% threshold must classify NEAR_TARGET');
