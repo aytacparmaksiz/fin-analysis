@@ -866,8 +866,33 @@ describe('Paket D: Security, Auth, Rate Limiting, Cache, API Routes & 100% Direc
     const dcfAt120 = valMod.computeSectorValuationAndDrivers(healthyInd, '120.00', 'INDUSTRIAL');
     assert.ok(dcfAt30.valuation.dcf_summary && dcfAt30.valuation.dcf_summary.dcfFairValue > 0, 'Must compute genuine 5Y Real FCFF DCF');
     assert.ok(dcfAt30.valuation.target_price_12m > 0 && dcfAt30.valuation.pv_fair_value > 0, 'Must populate both 12M target and PV fair value');
+    assert.ok(dcfAt30.valuation.pv_fair_value < dcfAt30.valuation.target_price_12m, 'PV fair value must strictly remain below 12M target under positive discount rate');
     assert.equal(dcfAt30.valuation.pv_fair_value, dcfAt120.valuation.pv_fair_value, 'PV fair value must be 100% price-independent');
     assert.equal(dcfAt30.valuation.dcf_summary.dcfFairValue, dcfAt120.valuation.dcf_summary.dcfFairValue, 'DCF fair value must be 100% price-independent');
+
+    // 1B. Low-WACC FX-functional PV <= 12M Target guard & NCI > 1.0x implied multiple deduction in FCFF DCF bridge
+    const fxNciBase = {
+      ticker: 'FXNCITEST',
+      sector: 'AVIATION',
+      currency: 'TRY',
+      share_count: 100_000_000,
+      financial_history: [
+        { period: '2025/12', revenue: 6_000e6, gross_profit: 2_500e6, operating_profit: 1_800e6, ebitda: 2_200e6, net_income: 1_400e6, equity: 4_000e6, net_debt: -500e6, operating_cash_flow: 1_900e6, free_cash_flow: 1_500e6, roic: 35, roe: 32, real_wacc: 6.5, reported_wacc: 6.5, is_tms29: true },
+        { period: '2026/09', revenue: 6_500e6, gross_profit: 2_700e6, operating_profit: 2_000e6, ebitda: 2_400e6, net_income: 1_500e6, equity: 4_500e6, non_controlling_interests: 0, net_debt: -600e6, operating_cash_flow: 2_100e6, free_cash_flow: 1_650e6, roic: 36, roe: 34, real_wacc: 6.5, reported_wacc: 6.5, is_tms29: true },
+      ],
+    };
+    const fxNciWithMinority = {
+      ...fxNciBase,
+      financial_history: [
+        fxNciBase.financial_history[0],
+        { ...fxNciBase.financial_history[1], non_controlling_interests: 1_000e6 },
+      ],
+    };
+    const resNoNci = valMod.computeSectorValuationAndDrivers(fxNciBase, '100.00', 'AVIATION');
+    const resWithNci = valMod.computeSectorValuationAndDrivers(fxNciWithMinority, '100.00', 'AVIATION');
+    assert.ok(resNoNci.valuation.pv_fair_value < resNoNci.valuation.target_price_12m, `Low-WACC PV (${resNoNci.valuation.pv_fair_value}) must stay < 12M Target (${resNoNci.valuation.target_price_12m})`);
+    const dcfDropPerShare = resNoNci.valuation.dcf_summary.dcfFairValue - resWithNci.valuation.dcf_summary.dcfFairValue;
+    assert.ok(dcfDropPerShare > 10.0, `NCI deduction (${dcfDropPerShare.toFixed(2)} TL/sh) must exceed 1.0x book (10.00 TL/sh) via implied multiple bridge`);
 
     // 2. Levered equity beta for Banking/Insurance + item.wacc === item.nominal_wacc + real reported_wacc guard
     const bankEnriched = valMod.enrichAndSanitizeFinancialHistory({
@@ -1048,5 +1073,66 @@ describe('Paket D: Security, Auth, Rate Limiting, Cache, API Routes & 100% Direc
     const hSrc = crypto.createHash('sha256').update(fs.readFileSync(path.resolve('src/app/api/live-prices/route.ts'))).digest('hex');
     const hMir = crypto.createHash('sha256').update(fs.readFileSync(path.resolve('app/api/live-prices/route.ts'))).digest('hex');
     assert.equal(hSrc, hMir, 'src/app/api/live-prices/route.ts and app/api/live-prices/route.ts must match byte-for-byte');
+
+    // H. Trailing dividend yield synthesis from dividends_paid + share_count & shallow float USD depth caution
+    const divSynthReport = {
+      id: 'rep11-DIVSYNTH',
+      ticker: 'DIVSYNTH',
+      price: '100',
+      fairValue: '133', // +33% price upside alone (< 38% Rf)
+      createdAt: '2026-11-27',
+      period: '2026/09',
+      report: '',
+      decision: 'AL',
+      score: '91/100',
+      sector: 'INDUSTRIAL',
+      extractedData: {
+        company_name: 'DIVSYNTH',
+        sector: 'INDUSTRIAL',
+        currency: 'TRY',
+        share_count: 100_000_000,
+        reporting_period: '2026/09',
+        macro: { risk_free_rate: 38.0 },
+        market_multiples: { free_float_pct: 40, market_cap_mn_usd: 250 },
+        financial_history: [
+          { period: '2025/12', net_income: 500e6, operating_cash_flow: 650e6, working_capital_change: -10e6, ebitda_margin: 22, roic: 30, real_wacc: 15, eva_spread: 15, net_debt: -200e6, ebitda: 800e6, dividends_paid: 800e6 },
+          { period: '2026/09', net_income: 550e6, operating_cash_flow: 700e6, working_capital_change: -20e6, ebitda_margin: 24, roic: 32, real_wacc: 15, eva_spread: 17, net_debt: -250e6, ebitda: 850e6, dividends_paid: 800e6 },
+        ],
+        valuation: { fair_value: 133, score: 91, roic: 32, real_wacc: 15, eva_spread: 17 },
+      },
+    };
+    const shallowDepthReport = {
+      id: 'rep11-SHALLOW',
+      ticker: 'SHALLOW',
+      price: '50',
+      fairValue: '100',
+      createdAt: '2026-11-27',
+      period: '2026/09',
+      report: '',
+      decision: 'AL',
+      score: '90/100',
+      sector: 'RETAIL',
+      extractedData: {
+        company_name: 'SHALLOW',
+        sector: 'RETAIL',
+        currency: 'TRY',
+        share_count: 100_000_000,
+        reporting_period: '2026/09',
+        macro: { risk_free_rate: 38.0 },
+        market_multiples: { free_float_pct: 8, market_cap_mn_usd: 200 }, // 8% * $200M = $16.0M < $25M
+        financial_history: [
+          { period: '2026/03', net_income: 300e6, operating_cash_flow: 400e6, working_capital_change: -10e6, ebitda_margin: 18, roic: 28, real_wacc: 14, eva_spread: 14, net_debt: -100e6, ebitda: 500e6 },
+          { period: '2026/09', net_income: 320e6, operating_cash_flow: 420e6, working_capital_change: -10e6, ebitda_margin: 19, roic: 29, real_wacc: 14, eva_spread: 15, net_debt: -120e6, ebitda: 520e6 },
+        ],
+        valuation: { fair_value: 100, score: 90, roic: 29, real_wacc: 14, eva_spread: 15 },
+      },
+    };
+    const phase31Plan = buildForensicPortfolioPlan([divSynthReport, shallowDepthReport], []);
+    assert.equal(phase31Plan.candidatesByTicker.DIVSYNTH.dividendYieldPct, 8.0, 'Must synthesize 8.0% trailing dividend yield from dividends_paid / mcap');
+    assert.equal(phase31Plan.candidatesByTicker.DIVSYNTH.totalExpectedReturnPct, 41.0);
+    assert.ok(phase31Plan.modelPortfolio.some(c => c.ticker === 'DIVSYNTH'), 'Synthesized dividend yield (+41% >= 38% Rf) must carry DIVSYNTH into Model Portfolio');
+    assert.equal(phase31Plan.candidatesByTicker.SHALLOW.freeFloatMcapUsdMn, 16.0);
+    assert.equal(phase31Plan.candidatesByTicker.SHALLOW.tier, 'TIER_2_SATELLITE', 'Shallow USD depth (< $25M) must place in TIER_2_SATELLITE with caution rather than excluding');
+    assert.ok(phase31Plan.candidatesByTicker.SHALLOW.cautionNotes.some(n => n.includes('$16M < $25M')));
   });
 });

@@ -6773,9 +6773,19 @@ export function calculateRealFcffDcf(params: {
   const enterpriseValue = explicitPv + terminalPv;
 
   const netDebt = (parseFinancialNumber(latest.net_debt) ?? 0) * unitScale;
-  const rawMinority = (parseFinancialNumber(latest.non_controlling_interests ?? latest.minority_interests ?? latest.azinlik_paylari) ?? 0) * unitScale;
+  const rawMinority = Math.max(
+    0,
+    (parseFinancialNumber(latest.non_controlling_interests ?? latest.minority_interests ?? latest.azinlik_paylari) ?? 0) * unitScale
+  );
+  const parentEqForNci = Math.max(0, (parseFinancialNumber(latest.equity) ?? 0) * unitScale);
+  const totalConsolEq = parentEqForNci + rawMinority;
+  const impliedConsolPb =
+    rawMinority > 0 && totalConsolEq > 0 && enterpriseValue > netDebt
+      ? Math.max(1.0, Math.min(2.5, (enterpriseValue - netDebt) / totalConsolEq))
+      : 1.0;
+  const minorityFairValue = rawMinority * impliedConsolPb;
   const associatesAdded = Math.max(0, (parseFinancialNumber(latest.non_current_financial_investments) ?? 0) * unitScale) * 0.70;
-  const debtBridge = netDebt + rawMinority;
+  const debtBridge = netDebt + minorityFairValue;
   const equityValue = enterpriseValue - debtBridge + associatesAdded;
   if (!Number.isFinite(equityValue) || equityValue <= 0) return undefined;
 
@@ -11304,7 +11314,11 @@ export function computeSectorValuationAndDrivers(
   let pvFairValue: number | null = pvFrom12mTarget;
   if (pvFrom12mTarget !== null && pvFrom12mTarget > 0 && dcfSummary && dcfSummary.dcfFairValue > 0) {
     const boundedDcf = Math.max(pvFrom12mTarget * 0.50, Math.min(pvFrom12mTarget * 1.50, dcfSummary.dcfFairValue));
-    pvFairValue = Number((pvFrom12mTarget * 0.60 + boundedDcf * 0.40).toFixed(2));
+    const blendedPv = pvFrom12mTarget * 0.60 + boundedDcf * 0.40;
+    // Kurumsal finansman kuralı: t=0 Bugünkü İçsel Değer (PV), pozitif sermaye maliyeti altında t+1 12A Hedef Fiyattan büyük olamaz
+    const minCarryFloorPct = Math.max(5.0, pvDiscountRatePct * 0.5);
+    const maxAllowedPv = targetPrice12m !== null ? targetPrice12m / (1 + minCarryFloorPct / 100) : blendedPv;
+    pvFairValue = Number(Math.min(blendedPv, maxAllowedPv).toFixed(2));
   }
 
   const pvUpsidePct: number | null = (pvFairValue !== null && pvFairValue > 0 && safeCurrentPrice > 0)

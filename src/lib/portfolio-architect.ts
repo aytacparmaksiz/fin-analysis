@@ -150,6 +150,7 @@ export interface ForensicPortfolioCandidate {
   isNetCash: boolean;
   currentRatio: number | null;
   freeFloatPct: number | null;
+  freeFloatMcapUsdMn: number | null;
   isBankOrInsurance: boolean;
   isNonOperatingFinancial: boolean;
   isValueTrap: boolean;
@@ -292,6 +293,47 @@ function resolveCandidateFromReport(
       }
     }
   }
+  if (rawDividendYield == null && price > 0 && history.length > 0) {
+    const currRaw = String(latest?.currency || ext.currency || 'TRY').toLowerCase();
+    const isForeignReportCurr = /\b(usd|eur|gbp|dolar|euro)\b/.test(currRaw);
+    if (!isForeignReportCurr) {
+      const divShareCount =
+        parseFinancialNumber(ext.share_count) ??
+        (isy?.paidInCapitalMnTl && isy.paidInCapitalMnTl > 0 ? isy.paidInCapitalMnTl * 1_000_000 : null);
+      if (divShareCount != null && divShareCount > 0) {
+        let divUnitScale = 1;
+        if (currRaw.includes('milyon') || currRaw.includes(' mn')) {
+          divUnitScale = 1_000_000;
+        } else if (currRaw.includes('bin') || currRaw.includes('thousand')) {
+          divUnitScale = 1_000;
+        } else {
+          const paidCapSample = Math.abs(parseFinancialNumber(latest?.paid_in_capital) ?? 0);
+          if (paidCapSample > 0) {
+            const lotRatio = paidCapSample / divShareCount;
+            if (Math.abs(lotRatio - 0.001) < 0.00025) divUnitScale = 1_000;
+            else if (Math.abs(lotRatio - 0.000001) < 0.00000025) divUnitScale = 1_000_000;
+          }
+        }
+        let rawDivPaid = Math.abs(parseFinancialNumber(latest?.dividends_paid) ?? 0);
+        if (rawDivPaid <= 0 && period.endsWith('/03')) {
+          for (let hi = history.length - 2; hi >= 0; hi--) {
+            const hPeriod = String(history[hi]?.period || '');
+            if (hPeriod.endsWith('/12')) {
+              const fyDiv = Math.abs(parseFinancialNumber(history[hi]?.dividends_paid) ?? 0);
+              if (fyDiv > 0) rawDivPaid = fyDiv;
+              break;
+            }
+          }
+        }
+        if (rawDivPaid > 0) {
+          const calcYield = ((rawDivPaid * divUnitScale) / (price * divShareCount)) * 100;
+          if (Number.isFinite(calcYield) && calcYield > 0 && calcYield <= 35) {
+            rawDividendYield = calcYield;
+          }
+        }
+      }
+    }
+  }
   const dividendYieldPct =
     rawDividendYield != null && Number.isFinite(rawDividendYield)
       ? round1(Math.max(0, Math.min(25, rawDividendYield)))
@@ -364,6 +406,19 @@ function resolveCandidateFromReport(
     ext.market_multiples?.free_float_pct ?? ext.free_float_pct ?? isy?.freeFloatPct
   );
   const freeFloatPct = freeFloatRaw != null ? round1(freeFloatRaw) : null;
+  const rawBaseMcapUsd = parseFinancialNumber(
+    ext.market_multiples?.market_cap_mn_usd ?? isy?.marketCapMnUsd
+  );
+  const effectiveMcapUsd =
+    rawBaseMcapUsd != null && rawBaseMcapUsd > 0
+      ? isLivePrice && isy?.lastPrice != null && isy.lastPrice > 0
+        ? rawBaseMcapUsd * (price / isy.lastPrice)
+        : rawBaseMcapUsd
+      : null;
+  const freeFloatMcapUsdMn =
+    effectiveMcapUsd != null && freeFloatPct != null && freeFloatPct > 0
+      ? round1((effectiveMcapUsd * freeFloatPct) / 100)
+      : null;
   const isValueTrap = Boolean(rep.isValueTrap ?? val.is_value_trap);
   const groupKey = CONSOLIDATED_GROUP_MAP[ticker] || null;
 
@@ -409,6 +464,7 @@ function resolveCandidateFromReport(
     isNetCash,
     currentRatio,
     freeFloatPct,
+    freeFloatMcapUsdMn,
     isBankOrInsurance,
     isNonOperatingFinancial,
     isValueTrap,
@@ -672,6 +728,9 @@ export function buildForensicPortfolioPlan(
     }
     if (cand.groupKey && cand.wcShareOfOcfPct !== null && cand.wcShareOfOcfPct >= 25) {
       cautionNotes.push(`Konsolide azınlık payı & WC payı (%${cand.wcShareOfOcfPct})`);
+    }
+    if (cand.freeFloatMcapUsdMn !== null && cand.freeFloatMcapUsdMn < 25) {
+      cautionNotes.push(`Sığ halka açık derinlik ($${cand.freeFloatMcapUsdMn}M < $25M) — kademeli emir önerilir`);
     }
 
     cand.cautionNotes = cautionNotes;
