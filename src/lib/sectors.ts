@@ -52,6 +52,11 @@ export const BIST_COMPANY_SPECIFIC_SECTOR: Record<string, string> = {
   ARSAN: 'Holdingler',
   SONME: 'Holdingler',
   PSDTC: 'Diğer',
+  // Faz 1 P0: Doğrulanmış faaliyet alanı / model eşleşme düzeltmeleri
+  MAVI: 'Perakande - Ticaret', // Giyim perakendecisi (Tekstil Entegre / İplik fabrikası değildir)
+  TRCAS: 'Holdingler',         // Shell & Turcas ve RWE Denizli özkaynak yöntemiyle konsolide enerji holdingi (solo ciro=0)
+  PETKM: 'Kimyasal Ürün',      // Petrokimya üreticisi (Rafineri bloğu yerine kendi petrokimya döngüsel modelini kullanır)
+  SASA: 'Kimyasal Ürün',       // Polyester & petrokimya tesisi (Konfeksiyon/tekstil değildir)
 };
 
 /**

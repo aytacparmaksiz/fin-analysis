@@ -330,7 +330,12 @@ describe('Systemic Valuation & Decision Harmonization Audit Suite', () => {
     const res = computeSectorValuationAndDrivers(trgyoData, 88.20);
     assert.equal(res.valuation.final_decision, 'AL', 'TRGYO must be AL due to massive operating cash rental yield and net cash');
     assert.ok(res.valuation.formula_display.includes('(0,75x)') || res.valuation.formula_display.includes('(0,70x)'), 'Must award prime REIT multiple ~0.70x-0.75x, NOT 0.40x!');
-    assert.ok(res.valuation.formula_display.includes('Kira Getirisi P/OCF'), 'Formula must explicitly state rental cash yield');
+    assert.ok(
+      res.valuation.formula_display.includes('Portföy Nakit Verimi') ||
+      res.valuation.formula_display.includes('Varlık Nakit Verimi') ||
+      res.valuation.formula_display.includes('Kira/Temettü Akımı'),
+      'Formula must explicitly state price-independent rental cash yield'
+    );
     assert.ok(res.valuation.fair_value >= 115.0, `TRGYO fair value (${res.valuation.fair_value}) must be >= 115 TL`);
   });
 

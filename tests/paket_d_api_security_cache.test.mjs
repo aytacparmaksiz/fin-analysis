@@ -720,4 +720,132 @@ describe('Paket D: Security, Auth, Rate Limiting, Cache, API Routes & 100% Direc
       resetRateLimitBuckets();
     }
   });
+
+  it('9. Phase 1 P0 Institutional Forensic Invariants: Insolvency N/A, Overvaluation ALMA, Price-Invariance, Sector/Beta & Zero Fabrication', async () => {
+    const valMod = await import('../lib/valuation.ts');
+    const secMod = await import('../lib/sectors.ts');
+    const betaMod = await import('../lib/damodaran-betas.ts');
+    const valtrMod = await import('../lib/financial-validator.ts');
+
+    // 1. Negative equity + net loss (TKNSA pattern) -> insolvent N/A + ALMA (never +804%)
+    const negEqLoss = valMod.computeSectorValuationAndDrivers({
+      ticker: 'TKNSA',
+      sector: 'RETAIL',
+      official_sector_name: 'Gıda & Ticaret Perakende',
+      share_count: 201_000_000,
+      financial_history: [
+        { period: '2026/06', revenue: 46_400e6, ebitda: 1_382e6, operating_profit: -1_100e6, net_income: -1_496e6, equity: -648e6, net_debt: 8_130e6, operating_cash_flow: 315e6, free_cash_flow: 139e6 },
+        { period: '2026/09', revenue: 73_713e6, ebitda: 2_474e6, operating_profit: -2_140e6, net_income: -2_577e6, equity: -1_678e6, net_debt: 7_127e6, operating_cash_flow: 4_366e6, free_cash_flow: 4_054e6, working_capital_change: 4_338e6 },
+      ],
+    }, '10.40', 'RETAIL');
+    assert.equal(negEqLoss.valuation.is_insolvent, true);
+    assert.equal(negEqLoss.valuation.fair_value, null);
+    assert.equal(negEqLoss.optimization.finalDecision, 'ALMA');
+
+    // 2. Forward equity wipeout (OTKAR pattern) -> null/N/A (never 0.05 TL) + ALMA
+    const eqWipeout = valMod.computeSectorValuationAndDrivers({
+      ticker: 'OTKAR',
+      sector: 'INDUSTRIAL',
+      official_sector_name: 'Otomotiv',
+      share_count: 120_000_000,
+      financial_history: [
+        { period: '2026/06', revenue: 21_170e6, ebitda: -1_635e6, operating_profit: -2_000e6, net_income: -4_493e6, equity: 5_509e6, net_debt: 42_901e6, operating_cash_flow: -5_137e6, free_cash_flow: -9_109e6 },
+        { period: '2026/09', revenue: 36_143e6, ebitda: -1_057e6, operating_profit: -1_800e6, net_income: -6_696e6, equity: 3_536e6, net_debt: 52_014e6, operating_cash_flow: -7_682e6, free_cash_flow: -14_050e6 },
+      ],
+    }, '306.75', 'INDUSTRIAL');
+    assert.equal(eqWipeout.valuation.is_insolvent, true);
+    assert.equal(eqWipeout.valuation.fair_value, null);
+    assert.equal(eqWipeout.optimization.finalDecision, 'ALMA');
+
+    // 3. Severe overvaluation (<= -35%) -> mandatory ALMA even when rawDecision is NÖTR
+    const severeOverval = valMod.optimizeFinalDecision({
+      rawDecision: 'NÖTR',
+      score: 68,
+      marketPrice: 100,
+      fairValue: 50,
+      sector: 'INDUSTRIAL',
+      latestData: { period: '2026/09', equity: 1_000e6, net_income: 100e6, ebitda: 200e6, operating_profit: 150e6, operating_cash_flow: 120e6, free_cash_flow: 80e6 },
+    });
+    assert.equal(severeOverval.finalDecision, 'ALMA');
+
+    // 4. Layer 1 Price-Independence for REIT & Value Trap deflator
+    const reitFixture = {
+      ticker: 'TRGYO',
+      sector: 'REIT',
+      share_count: 1_000_000_000,
+      financial_history: [
+        { period: '2026/09', revenue: 11_125e6, ebitda: 8_162e6, operating_profit: 7_500e6, net_income: 6_941e6, equity: 164_447e6, net_debt: -4_656e6, operating_cash_flow: 12_224e6, total_assets: 210_000e6, roe: 5.53 },
+      ],
+    };
+    const reitAt40 = valMod.computeSectorValuationAndDrivers(reitFixture, '40.00', 'REIT');
+    const reitAt250 = valMod.computeSectorValuationAndDrivers(reitFixture, '250.00', 'REIT');
+    assert.equal(reitAt40.valuation.fair_value, reitAt250.valuation.fair_value, 'REIT fair_value must be 100% invariant to currentPrice');
+
+    // 5. INDES IT hardware wholesaler must NOT trigger SaaS Rule-of-40 trap
+    const indesTrap = valMod.detectValueTrap(
+      [
+        { period: '2026/06', revenue: 70_000e6, ebitda: 2_900e6, operating_profit: 2_600e6, net_income: 550e6, equity: 8_500e6, net_debt: -150e6, operating_cash_flow: 1_500e6, free_cash_flow: 1_000e6, roic: 80, roe: 12 },
+        { period: '2026/09', revenue: 110_000e6, ebitda: 4_541e6, operating_profit: 4_100e6, net_income: 857e6, equity: 8_995e6, net_debt: -226e6, operating_cash_flow: 2_471e6, free_cash_flow: 1_577e6, roic: 97, roe: 13 },
+      ],
+      8.09,
+      16.93,
+      'TECH',
+      { ticker: 'INDES', official_sector_name: '' }
+    );
+    assert.equal(indesTrap.reasons.some(r => r.includes('Rule of 40') || r.includes('Kuralı-40')), false, 'INDES must never be penalized by SaaS Rule of 40');
+
+    // 6. Sector & Beta routing fixes: MAVI -> RETAIL, TRCAS -> HOLDING, PETKM/SASA -> Kimyasal Ürün, ASTOR/CWENE -> Electrical Equipment beta
+    assert.equal(secMod.detectSector('MAVI'), 'RETAIL');
+    assert.equal(secMod.detectSector('TRCAS'), 'HOLDING');
+    assert.equal(secMod.resolveOfficialSectorName(undefined, 'PETKM'), 'Kimyasal Ürün');
+    assert.equal(secMod.isRefinerySector('PETKM'), false);
+    assert.equal(secMod.isPetrochemicalSector('PETKM'), true);
+    assert.equal(secMod.resolveOfficialSectorName(undefined, 'SASA'), 'Kimyasal Ürün');
+    const astorBeta = valMod.getDamodaranUnleveredBeta('INDUSTRIAL', 'ASTOR', 'Elektrik Enerji Ürt.Teçh/Tesis Kurulum');
+    assert.ok(astorBeta > 0.70, `ASTOR must use Electrical Equipment beta (>0.70), not utility Power (0.31), got ${astorBeta}`);
+
+    // 7. Zero Silent Data Fabrication: Missing Bank NPL stays null, synthetic CAR can drop below 12%, AQI reads tangible_assets
+    const bankCheck = valtrMod.FinancialDataValidator.validateItem(
+      { period: '2026/09', equity: 500e6, total_assets: 20_000e6, loans: 14_000e6, net_interest_income: 1_200e6, net_income: 200e6 },
+      'BANKING'
+    );
+    assert.equal(bankCheck.reconciledItem.npl_ratio ?? null, null, 'Missing bank NPL must remain null (never fabricated 1.85%)');
+    assert.ok(bankCheck.reconciledItem.car_ratio < 12.0, `Under-capitalized bank CAR must NOT be floored at 12.0%, got ${bankCheck.reconciledItem.car_ratio}`);
+
+    const eqQuality = valMod.calculateEarningsQuality(
+      [
+        { period: '2026/06', revenue: 1_000e6, gross_profit: 300e6, total_assets: 2_000e6, current_assets: 800e6, tangible_assets: 900e6, operating_cash_flow: 180e6, net_income: 150e6 },
+        { period: '2026/09', revenue: 1_500e6, gross_profit: 450e6, total_assets: 2_200e6, current_assets: 850e6, tangible_assets: 950e6, operating_cash_flow: 260e6, net_income: 220e6 },
+      ],
+      'INDUSTRIAL'
+    );
+    assert.ok(eqQuality.aqi !== null && eqQuality.aqi > 0.5 && eqQuality.aqi < 2.0, 'AQI must compute from tangible_assets');
+
+    // 8. AL Rf hurdle & 4/4 negative FCF veto
+    const belowRf = valMod.optimizeFinalDecision({
+      rawDecision: 'AL',
+      score: 85,
+      marketPrice: 100,
+      fairValue: 132,
+      sector: 'INDUSTRIAL',
+      latestData: { period: '2026/09', equity: 1_000e6, net_income: 200e6, ebitda: 350e6, operating_profit: 300e6, operating_cash_flow: 250e6, free_cash_flow: 200e6, roic: 30, real_wacc: 12, risk_free_rate: 38.0, is_tms29: true },
+    });
+    assert.equal(belowRf.finalDecision, 'NÖTR', 'TRY stock with +32% upside below 38% Rf must be capped at NÖTR');
+
+    const chronicNegFcf = valMod.optimizeFinalDecision({
+      rawDecision: 'AL',
+      score: 82,
+      marketPrice: 100,
+      fairValue: 165,
+      sector: 'INDUSTRIAL',
+      latestData: { period: '2026/09', equity: 6_400e6, net_income: 1_500e6, ebitda: 4_400e6, operating_profit: 3_500e6, net_debt: 5_400e6, operating_cash_flow: 3_300e6, free_cash_flow: -328e6, roic: 32, real_wacc: 12, risk_free_rate: 38.0, is_tms29: true },
+      financialHistory: [
+        { period: '2025/12', free_cash_flow: -3_200e6 },
+        { period: '2026/03', free_cash_flow: -840e6 },
+        { period: '2026/06', free_cash_flow: -1_030e6 },
+        { period: '2026/09', free_cash_flow: -328e6 },
+      ],
+    });
+    assert.equal(chronicNegFcf.finalDecision, 'NÖTR', '4/4 consecutive negative FCF + net debt must block AL');
+  });
 });

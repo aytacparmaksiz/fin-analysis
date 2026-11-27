@@ -348,7 +348,7 @@ export class IsYatirimApiAdapter {
       net_income = getVal(['3Z', '3ZA', '2OV'], ['net dönem karı', 'net dönem karı/zararı', 'dönem net karı']);
       tax_expense = getVal(['3CM', '3CMA', '3IA'], ['vergi karşılığı', 'sürdürülen faaliyetler vergi karşılığı']);
 
-      operating_cash_flow = getVal(['4A', '4CAE'], ['işletme faaliyetlerinden nakit']) ?? net_income;
+      operating_cash_flow = getVal(['4A', '4CAE'], ['işletme faaliyetlerinden nakit']);
       free_cash_flow = operating_cash_flow;
 
       // Bankacılık Rasyoları Türetimi:
@@ -364,22 +364,22 @@ export class IsYatirimApiAdapter {
         nim = Number((((net_interest_income * pAnnualFactor) / total_assets) * 100).toFixed(2));
       }
 
-      // 3. Takipteki Krediler Oranı (NPL / TGA):
+      // 3. Takipteki Krediler Oranı (NPL / TGA): Eksik veri asla %1.85 uydurulmaz (null bırakılır)
       if (npl_loans !== null && npl_loans > 0 && loans !== null && loans > 0) {
         npl_ratio = Number(((npl_loans / (loans + npl_loans)) * 100).toFixed(2));
       } else if (loan_loss_expense !== null && loan_loss_expense > 0 && loans !== null && loans > 0) {
         const costOfRisk = ((loan_loss_expense * pAnnualFactor) / loans) * 100;
-        npl_ratio = Number((Math.min(5.5, Math.max(1.2, costOfRisk * 1.15))).toFixed(2));
+        npl_ratio = Number((Math.min(12.0, Math.max(0.5, costOfRisk * 1.15))).toFixed(2));
       } else {
-        npl_ratio = 1.85;
+        npl_ratio = null;
       }
 
-      // 4. Sermaye Yeterlilik Rasyosu (SYR / CAR):
+      // 4. Sermaye Yeterlilik Rasyosu (SYR / CAR): Yasal %12 altı ihlaller gizlenmez (taban %2)
       if (equity !== null && equity > 0 && total_assets !== null && total_assets > 0) {
         const safeLoans = loans ?? (total_assets * 0.58);
-        const rwa = (safeLoans * 0.85) + (Math.max(0, total_assets - safeLoans) * 0.20);
+        const rwa = (safeLoans * 0.80) + (Math.max(0, total_assets - safeLoans) * 0.20);
         const totalCapital = equity + (subordinated_debt || 0);
-        car_ratio = Number((Math.min(28.0, Math.max(12.0, (totalCapital / (rwa || 1)) * 100))).toFixed(2));
+        car_ratio = Number((Math.min(28.0, Math.max(2.0, (totalCapital / (rwa || 1)) * 100))).toFixed(2));
       }
 
     } else {
@@ -552,7 +552,8 @@ export class IsYatirimApiAdapter {
 
       grossOcf = getVal(['4CAE', '4A'], ['işletme sermayesinde gerçekleşen değişimler öncesi', 'işletme sermayesinde değişik', 'faaliyetlerden kaynaklanan nakit akışları']);
       netOcf = officialOcf ?? getVal(['4A_NET'], ['işletme faaliyetlerinden net nakit']);
-      operating_cash_flow = netOcf ?? grossOcf ?? net_income;
+      // Faz 1 P0: Eksik nakit akışı asla net_income ile doldurulmaz (sahte %100 nakit dönüşümü önlenir)
+      operating_cash_flow = netOcf ?? grossOcf ?? null;
 
       working_capital_change = getVal(['4CAF'], ['işletme sermayesindeki değişiklikler']);
       tangibleCapex = getVal(['4CAI', '4CBDA'], ['sabit sermaye yatırımları', 'maddi ve maddi olmayan duran varlıkların alımından kaynaklanan nakit çıkışları', 'maddi duran varlık alım']);

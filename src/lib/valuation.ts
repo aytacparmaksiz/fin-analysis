@@ -1638,7 +1638,8 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
 
       // NOPAT = EBIT * (1 - t)
       let opIncomeVal = item.operating_profit ?? item.operating_income ?? null;
-      if (opIncomeVal === null || opIncomeVal === 0) {
+      // Yalnızca EBIT alanı tamamen eksikse (null) FAVÖK fallback'ine bakılır; negatif/sıfır faaliyet kârı asla FAVÖK ile örtülmez.
+      if (opIncomeVal === null) {
         if (typeof item.ebitda === 'number' && item.ebitda > 0) {
           opIncomeVal = item.ebitda;
         }
@@ -1658,29 +1659,19 @@ export function enrichAndSanitizeFinancialHistory(data: any, sectorOverride?: Se
         ? (grossProfit - opex)
         : null;
 
-      const hasPositiveCoreOrNet = (typeof item.net_income === 'number' && item.net_income > 0) ||
-                                   (coreOperatingProfit !== null && coreOperatingProfit > 0);
-
-      // Kur farkı giderleri (3DF / Esas Faaliyetlerden Diğer Giderler) nedeniyle operating_profit negatifken,
-      // şirket pozitif çekirdek faaliyet kârı veya net kâr üretiyorsa rawNopat kilitlenmez:
+      // Kur farkı giderleri (3DF / Esas Faaliyetlerden Diğer Giderler) nedeniyle raporlanan EBIT negatifken,
+      // yalnızca pozitif çekirdek faaliyet kârı (Brüt Kâr - Faaliyet Giderleri > 0) varsa çekirdek EBIT kullanılır.
+      // Asla faaliyet dışı net kâr (TMS-29 parasal kazanç veya faiz geliri) ile pozitif ROIC uydurulmaz!
       let effectiveOperatingProfit = opIncomeVal;
-      if ((effectiveOperatingProfit === null || effectiveOperatingProfit <= 0) && hasPositiveCoreOrNet) {
-        if (coreOperatingProfit !== null && coreOperatingProfit > 0) {
-          effectiveOperatingProfit = coreOperatingProfit;
-        } else if (typeof item.net_income === 'number' && item.net_income > 0) {
-          effectiveOperatingProfit = item.net_income / (1 - taxRate);
-        }
+      if ((effectiveOperatingProfit === null || effectiveOperatingProfit <= 0) && coreOperatingProfit !== null && coreOperatingProfit > 0) {
+        effectiveOperatingProfit = coreOperatingProfit;
       }
 
       const opNopat = (typeof effectiveOperatingProfit === 'number' && effectiveOperatingProfit !== 0)
         ? effectiveOperatingProfit * (1 - taxRate)
         : 0;
 
-      const rawNopat = (opNopat > 0)
-        ? opNopat
-        : ((typeof item.net_income === 'number' && item.net_income > 0)
-          ? item.net_income
-          : opNopat);
+      const rawNopat = opNopat;
 
       // NOPAT Yıllıklandırmasında TTM (Trailing Twelve Months) Uygulaması:
       // Düz çarpma (annualFactor) yerine geçmiş çeyrekler mevcutsa standart TTM kümülasyonu kullanılır
@@ -2685,10 +2676,11 @@ export function calculateSectorScore(
   } else if (sector === 'BANKING') {
     // Bankacılık dinamik puanlama motoru
     // 1. Kredi Kalitesi & Risk Yönetimi (NPL / TGA) (Max 25)
+    // Faz 1 P0: Eksik NPL verisi asla %1.85 uydurulup 25/25 puan verilmez; raporlanmadığında temkinli nötr (12/25) uygulanır.
     const npl = parseFinancialNumber(latest?.npl_ratio ?? latest?.npl ?? latest?.tga_ratio);
-    let s1 = 18;
-    let r1 = 'Kredi portföyü ve karşılık oranları dengeli';
-    let st1: 'good' | 'warning' | 'danger' = 'good';
+    let s1 = 12;
+    let r1 = 'Takipteki krediler (NPL/TGA) oranı resmi tabloda raporlanmadı — temkinli varsayılan puan uygulandı.';
+    let st1: 'good' | 'warning' | 'danger' = 'warning';
     if (npl !== null) {
       if (npl <= 2.0) { s1 = 25; r1 = `Aktif kalitesi mükemmel (NPL %${npl}), sektör ortalamasının belirgin altında.`; st1 = 'good'; }
       else if (npl <= 3.5) { s1 = 20; r1 = `Kredi kalitesi ve karşılık oranları BDDK standartlarına uygun (NPL %${npl}).`; st1 = 'good'; }
@@ -2742,11 +2734,14 @@ export function calculateSectorScore(
       else if (car >= 12.0) { s3 = 11; r3 = `SYR (%${car}) yasal %12 asgari tabanına yakın, sermaye artırımı gerekebilir.`; st3 = 'warning'; }
       else { s3 = 2; r3 = `Kritik Sermaye İhlali: SYR (%${car}) BDDK yasal tabanının (%12) altında!`; st3 = 'danger'; anomalies.push(`BDDK SYR İhlali: %${car}`); }
     }
-    if (bankRoe !== null && bankWacc !== null && bankRoe < bankWacc) {
+    const bankBenchmarkKe = (bankWacc !== null && bankWacc > 28.0)
+      ? Number(Math.max(18.0, Math.min(26.0, bankWacc * 0.45 + 20.0 * 0.55)).toFixed(1))
+      : bankWacc;
+    if (bankRoe !== null && bankBenchmarkKe !== null && bankRoe < bankBenchmarkKe) {
       s3 = Math.min(s3, 18);
       st3 = st3 === 'danger' ? 'danger' : 'warning';
-      r3 += ` | ROE (%${bankRoe.toFixed(1)}) sermaye maliyetinin (%${bankWacc.toFixed(1)}) altında (EVA: ${(bankRoe - bankWacc).toFixed(1)} puan).`;
-      anomalies.push(`Bankacılık Negatif EVA Spread (${(bankRoe - bankWacc).toFixed(1)} puan)`);
+      r3 += ` | ROE (%${bankRoe.toFixed(1)}) normalize banka sermaye maliyetinin (%${bankBenchmarkKe.toFixed(1)}) altında (EVA: ${(bankRoe - bankBenchmarkKe).toFixed(1)} puan).`;
+      anomalies.push(`Bankacılık Negatif EVA Spread (${(bankRoe - bankBenchmarkKe).toFixed(1)} puan)`);
     } else if (bankRoe !== null && bankRoe < 15.0) {
       anomalies.push(`Yetersiz Bankacılık ROE: %${bankRoe}`);
     }
@@ -4685,7 +4680,8 @@ export function detectValueTrap(
   currentPrice?: number | null | undefined,
   fairValue?: number | null | undefined,
   sector: SectorType = 'INDUSTRIAL',
-  effectiveLatestData?: any
+  effectiveLatestData?: any,
+  options?: { priceIndependent?: boolean }
 ): ValueTrapAnalysis {
   let history: any[] = [];
   let resolvedCurrentPrice = currentPrice;
@@ -4711,7 +4707,8 @@ export function detectValueTrap(
     resolvedLatestData = resolvedLatestData ?? financialHistory;
   }
 
-  if (history.length === 0 || !resolvedCurrentPrice || resolvedCurrentPrice <= 0 || !resolvedFairValue || resolvedFairValue <= 0) {
+  const isPriceIndependentMode = options?.priceIndependent === true;
+  if (history.length === 0 || (!isPriceIndependentMode && (!resolvedCurrentPrice || resolvedCurrentPrice <= 0 || !resolvedFairValue || resolvedFairValue <= 0))) {
     return {
       isValueTrap: false,
       severity: 'NONE',
@@ -4721,7 +4718,9 @@ export function detectValueTrap(
     };
   }
 
-  const discountPct = Number((((resolvedFairValue - resolvedCurrentPrice) / resolvedCurrentPrice) * 100).toFixed(1));
+  const discountPct = (resolvedCurrentPrice && resolvedCurrentPrice > 0 && resolvedFairValue && resolvedFairValue > 0)
+    ? Number((((resolvedFairValue - resolvedCurrentPrice) / resolvedCurrentPrice) * 100).toFixed(1))
+    : 0;
   const sorted = [...history].sort((a, b) => parsePeriodSortKey(a?.period) - parsePeriodSortKey(b?.period));
   const rawLatest = sorted.length > 0 ? sorted[sorted.length - 1] : {};
   const latest = { ...rawLatest, ...(resolvedLatestData || {}) };
@@ -4760,9 +4759,11 @@ export function detectValueTrap(
   const checkWc = parseFinancialNumber(latest?.working_capital_change);
   const checkOcf = parseFinancialNumber(latest?.operating_cash_flow ?? latest?.ocf);
 
-  // Cari F/K (P/E) hesaplaması (doğrudan alan veya Piyasa Değeri / TTM Net Kâr)
-  let effectivePe = parseFinancialNumber(latest?.pe ?? latest?.pe_ratio ?? latest?.fk ?? latest?.current_pe);
-  if (effectivePe === null && resolvedCurrentPrice > 0) {
+  // Cari F/K (P/E) hesaplaması (Katman 1 fiyat-bağımsız modda piyasa fiyatından F/K türetilmez)
+  let effectivePe = isPriceIndependentMode
+    ? null
+    : parseFinancialNumber(latest?.pe ?? latest?.pe_ratio ?? latest?.fk ?? latest?.current_pe);
+  if (!isPriceIndependentMode && effectivePe === null && resolvedCurrentPrice && resolvedCurrentPrice > 0) {
     const explicitShares = parseFinancialNumber(latest?.share_count ?? latest?.shares_count ?? latest?.shares_outstanding);
     if (explicitShares !== null && explicitShares > 0) {
       let ttmNetVal = parseFinancialNumber(latest?.net_income_ttm ?? latest?.ttm_net_income ?? latest?.annualized_net_income);
@@ -4840,8 +4841,8 @@ export function detectValueTrap(
     (!isCashCowReit && effectivePe !== null && effectivePe > 80.0 && (checkRoe === null || checkRoe < rfQuarter))
   );
 
-  // Sadece kağıt üzerinde iskonto (%20+) varken veya kronik zarar/varlık/tedarikçi/kağıt kârı tuzağı varken değer tuzağı analizi devreye girer
-  if (discountPct < 20.0 && !isChronicLossOrSupplierTrap && !isPaperProfitCapitalErosionTrap && !isPreCheckAssetOrSectorTrap) {
+  // Katman 1 fiyat-bağımsız modda değer tuzağı yalnızca bilanço/kârlılık/nakit akışı temel verileriyle çalışır (piyasa fiyatına göre sıçrama yapmaz)
+  if (!isPriceIndependentMode && discountPct < 20.0 && !isChronicLossOrSupplierTrap && !isPaperProfitCapitalErosionTrap && !isPreCheckAssetOrSectorTrap) {
     return {
       isValueTrap: false,
       severity: 'NONE',
@@ -4977,7 +4978,9 @@ export function detectValueTrap(
   }
 
   // E) Teknoloji/Yazılım: Nakit Yakma (Cash Burn) ve Kuralı-40 (Rule of 40) Başarısızlığı
-  const isTechWholesale = officialSecName === 'Bilgisayar Toptancılığı';
+  // Bilgisayar/Donanım Toptancıları (INDES, DGATE, DESPC, ARENA, INGRM, PENTA) yüksek cirolu/düşük marjlı distribütörlerdir; SaaS Kuralı-40 uygulanmaz!
+  const TECH_WHOLESALE_TICKERS = new Set(['INDES', 'DGATE', 'DESPC', 'ARENA', 'INGRM', 'PENTA', 'MOBTL', 'AZTEK']);
+  const isTechWholesale = officialSecName === 'Bilgisayar Toptancılığı' || officialSecName === 'İletişim Cihazları' || TECH_WHOLESALE_TICKERS.has(tickerStr);
   const isTechSoftware = (resolvedSector === 'TECH' || /yazılım|bilişim|teknoloji/i.test(officialSecName)) && !isTechWholesale && !isVentureHolding;
   const fcf = parseFinancialNumber(latest?.free_cash_flow);
   if (isTechSoftware) {
@@ -5280,15 +5283,21 @@ export function optimizeFinalDecision({
   let overrideApplied = false;
   let overrideReason: string | undefined = undefined;
 
-  // 1. Kural: Negatif Özkaynak / Borca Batıklık (TTK 376) - Her durumda ALMA olmalıdır
+  // 1. Kural: Negatif Özkaynak / Borca Batıklık (TTK 376) veya Hesaplanamayan İçsel Değer (N/A) - Her durumda ALMA olmalıdır
   const equity = parseFinancialNumber(effectiveLatestData?.equity);
-  if (equity !== null && equity <= 0) {
+  const isValuationInsolvent = Boolean(
+    valuation?.is_insolvent === true ||
+    (valuation && valuation.fair_value === null)
+  );
+  if ((equity !== null && equity <= 0) || isValuationInsolvent) {
     if (finalDecision !== 'ALMA') {
       finalDecision = 'ALMA';
       overrideApplied = true;
-      overrideReason = 'Teknik İflas (TTK 376): Özkaynaklar negatiftir, AL kararı kesinlikle verilemez.';
+      overrideReason = (equity !== null && equity <= 0)
+        ? 'Teknik İflas (TTK 376): Özkaynaklar negatiftir, AL kararı kesinlikle verilemez.'
+        : 'Teknik İflas / Özkaynak Erozyonu (N/A): Borç köprüsü veya özkaynak erozyonu nedeniyle pozitif içsel değer üretilememektedir; karar ALMA olarak kilitlendi.';
     }
-    safetyFlags.push('Negatif Özkaynak');
+    safetyFlags.push((equity !== null && equity <= 0) ? 'Negatif Özkaynak' : 'Hesaplanamayan İçsel Değer (N/A)');
   }
 
   // FALSE NEGATIVE VE MANTIKSAL TEZATLIK GİDERME KURALI:
@@ -5327,12 +5336,53 @@ export function optimizeFinalDecision({
     (parseFinancialNumber(effectiveLatestData?.roe) ?? 0) < -8.0 &&
     ((parseFinancialNumber(effectiveLatestData?.eva_spread) ?? 0) < -5.0 || effectiveScore < 45);
 
-  const hasFatalFlaw = isFatalInsolvent || isIndustrialDistressed || isHoldingDistressed || isReitDistressed || isBankingToxic || isInsuranceDeficit || isSevereValueTrap || isSupplierDebtTrap || isChronicEquityErosion;
+  const hasFatalFlaw = isFatalInsolvent || isValuationInsolvent || isIndustrialDistressed || isHoldingDistressed || isReitDistressed || isBankingToxic || isInsuranceDeficit || isSevereValueTrap || isSupplierDebtTrap || isChronicEquityErosion;
 
-  if (rawDecision === 'ALMA' && discount >= 20.0 && !hasFatalFlaw) {
+  // Faz 1 P0: ALMA -> NÖTR yükseltme açığı sıkılaştırıldı — yalnızca skor >= 50 + pozitif EBIT VEYA
+  // değer tuzağı olmayan, pozitif net kâr + pozitif FCF üreten derin iskontolu (>= %30) solvent döngüsel şirketler NÖTR (Koşullu İzleme) olabilir.
+  const rawOpProfitForLift = parseFinancialNumber(effectiveLatestData?.operating_profit ?? effectiveLatestData?.ebit);
+  const hasPositiveOperatingCoreForLift = !isOperatingSector || (rawOpProfitForLift === null || rawOpProfitForLift > 0);
+  const isSolventPositiveFcfDeepCyclical = (
+    discount >= 30.0 &&
+    !(valuation?.is_value_trap ?? false) &&
+    (parseFinancialNumber(effectiveLatestData?.net_income) ?? 0) > 0 &&
+    (parseFinancialNumber(effectiveLatestData?.free_cash_flow) ?? 0) > 0
+  );
+  if (rawDecision === 'ALMA' && discount >= 20.0 && !hasFatalFlaw && ((effectiveScore >= 50 && hasPositiveOperatingCoreForLift) || isSolventPositiveFcfDeepCyclical)) {
     finalDecision = 'NÖTR';
     overrideApplied = true;
     overrideReason = `Karar ve Değerleme Uyumu: Hisse güncel fiyata göre %${discount} adil değer iskontosu sunmaktadır. Şirketin borca batık olmaması ve pozitif özkaynakları doğrultusunda 'ALMA' tezatlığı engellenmiş, risk faktörleri gözetilerek karar 'NÖTR' (Koşullu İzleme) olarak dengelenmiştir.`;
+  }
+
+  // Faz 1 P0: Aşırı Primli Değerleme Zorunlu ALMA Kuralı (Tüm ham kararlar için çalışır — NÖTR kalan -%40..-99% hisseleri düzeltir)
+  const optFairVal = parseFinancialNumber(valuation?.fair_value ?? fairValue);
+  const optCurPrice = parseFinancialNumber(valuation?.current_price ?? marketPrice);
+  const hasValidFvAndPrice = (optFairVal !== null && optFairVal > 0 && optCurPrice !== null && optCurPrice > 0) || (valuation?.discount_pct != null);
+  if (!overrideApplied && finalDecision !== 'ALMA' && hasValidFvAndPrice) {
+    if (discount <= -35.0) {
+      finalDecision = 'ALMA';
+      overrideApplied = true;
+      overrideReason = `Aşırı Primli Değerleme (Aşağı Yönlü Risk): Hisse içsel adil değerine göre -%${Math.abs(discount).toFixed(1)} primli (aşağı yönlü riskli) işlem görmektedir. Kurumsal değerleme disiplini gereği karar ALMA olarak kilitlendi.`;
+      safetyFlags.push(`Aşırı Primli Değerleme (%${discount})`);
+    } else if (discount <= -25.0 && (isSevereValueTrap || effectiveScore < 60)) {
+      finalDecision = 'ALMA';
+      overrideApplied = true;
+      overrideReason = `Primli Değerleme ve Zayıf Temel Profil: Hisse adil değerine göre -%${Math.abs(discount).toFixed(1)} primli işlem görürken temel skor (${effectiveScore}/100) veya değer tuzağı profili yetersizdir. Karar ALMA olarak kilitlendi.`;
+      safetyFlags.push(`Primli Değerleme + Zayıf Skor (%${discount})`);
+    }
+  }
+
+  // Faz 1 P0: Ölümcül Bilanço/Borç/Sektör İhlalleri NÖTR Kararlarında da ALMA'ya Kilitlenir
+  if (!overrideApplied && finalDecision === 'NÖTR') {
+    const ndForNotr = parseFinancialNumber(effectiveLatestData?.net_debt);
+    const fcfForNotr = parseFinancialNumber(effectiveLatestData?.free_cash_flow);
+    const extremeDebtBurn = isOperatingSector && ndForNotr !== null && ndForNotr > 0 && effectiveEbitda !== null && effectiveEbitda > 0 && (ndForNotr / effectiveEbitda) > 5.0 && fcfForNotr !== null && fcfForNotr < 0;
+    if (isIndustrialDistressed || isBankingToxic || isInsuranceDeficit || extremeDebtBurn) {
+      finalDecision = 'ALMA';
+      overrideApplied = true;
+      overrideReason = 'Kritik Bilanço ve Borçluluk İhlali: Şirket operasyonel zarar, aşırı borçluluk veya yasal sermaye/hasar eşiği ihlali taşımaktadır; karar ALMA olarak kilitlendi.';
+      safetyFlags.push('Kritik Bilanço İhlali (NÖTR -> ALMA)');
+    }
   }
 
   if (!overrideApplied && rawDecision !== 'ALMA' && isChronicEquityErosion && (valuation?.is_value_trap ?? false)) {
@@ -5751,6 +5801,11 @@ export function optimizeFinalDecision({
       checkRoeForRule9 !== null && checkRoeForRule9 < rfQuarterForRule9 &&
       (checkEvaForRule9 === null || checkEvaForRule9 < -5.0);
 
+    // Bankacılık için Kural 9, değerleme modelinde kullanılan normalize banka Ke eşiğiyle uyumlu çalışır
+    const effectiveRule9Wacc = (effectiveSector === 'BANKING' && benchmarkWacc !== null && benchmarkWacc > 28.0)
+      ? Number(Math.max(18.0, Math.min(26.0, benchmarkWacc * 0.45 + 20.0 * 0.55)).toFixed(1))
+      : benchmarkWacc;
+
     if (!overrideApplied && (isStrictAssetTrapRule9 || (!isReitCashCowExempt && (
       (checkPeForRule9 !== null && checkPeForRule9 > 80.0 && (checkRoeForRule9 === null || checkRoeForRule9 < 15.0)) ||
       (checkRoeForRule9 !== null && checkRoeForRule9 < rfQuarterForRule9 && checkEvaForRule9 !== null && checkEvaForRule9 < -5.0)
@@ -5759,20 +5814,56 @@ export function optimizeFinalDecision({
       overrideApplied = true;
       overrideReason = `Genel Varlık Tuzağı Kuralı (Asset Trap): Şirketin defter değeri/NAD'ı yüksek görünse de reel değer yaratmamaktadır (${checkPeForRule9 !== null && checkPeForRule9 > 80.0 ? `F/K: ${checkPeForRule9.toFixed(1)}x > 80x, ` : ''}TTM ROE: %${checkRoeForRule9 != null ? checkRoeForRule9.toFixed(1) : '-'} < %${rfQuarterForRule9.toFixed(1)} [Rf/4], EVA: ${checkEvaForRule9 != null ? checkEvaForRule9.toFixed(1) : '-'} puan). Karar tavanı NÖTR olarak sınırlandırıldı.`;
       safetyFlags.push('Genel Varlık Tuzağı (Asset Trap)');
-    } else if (!overrideApplied && !isReitCashCowExempt && roic !== null && benchmarkWacc !== null && (roic - benchmarkWacc) < 0) {
+    } else if (!overrideApplied && !isReitCashCowExempt && roic !== null && effectiveRule9Wacc !== null && (roic - effectiveRule9Wacc) < 0) {
       finalDecision = 'NÖTR';
       overrideApplied = true;
-      const waccTitle = isTms29 ? 'Reel WACC' : 'WACC';
-      overrideReason = `Negatif Sermaye Makası (EVA): Şirket sermaye maliyetinin altında getiri üreterek (ROIC %${roic.toFixed(1)} < ${waccTitle} %${benchmarkWacc.toFixed(1)}, Makas: ${(roic - benchmarkWacc).toFixed(1)} puan) değer erittiği için AL kararı NÖTR'e (Koşullu İzleme) çekildi.`;
-      safetyFlags.push(`Negatif EVA Spread: ${(roic - benchmarkWacc).toFixed(1)} puan`);
+      const waccTitle = effectiveSector === 'BANKING' ? 'Normalize Banka Ke' : (isTms29 ? 'Reel WACC' : 'WACC');
+      overrideReason = `Negatif Sermaye Makası (EVA): Şirket sermaye maliyetinin altında getiri üreterek (ROIC %${roic.toFixed(1)} < ${waccTitle} %${effectiveRule9Wacc.toFixed(1)}, Makas: ${(roic - effectiveRule9Wacc).toFixed(1)} puan) değer erittiği için AL kararı NÖTR'e (Koşullu İzleme) çekildi.`;
+      safetyFlags.push(`Negatif EVA Spread: ${(roic - effectiveRule9Wacc).toFixed(1)} puan`);
     }
 
-    // 10. Kural: Emniyet Marjı Yetersizse veya Sınırda (<%25) İse Kesinlikle AL Verilemez (Max NÖTR)
-    if (!overrideApplied && (marginOfSafetyStatus === 'UNSAFE' || marginOfSafetyStatus === 'BORDERLINE')) {
+    // 10. Kural: Emniyet Marjı ve Risksiz Faiz (Rf) Getiri Eşiği Koruması
+    // Faz 1 P0: TL bazlı BIST hisselerinde getiri potansiyeli risksiz faiz oranının (Rf) veya %25 tabanının altındaysa AL verilemez (Max NÖTR).
+    const resolvedRfHurdleRaw = parseFinancialNumber(effectiveLatestData?.risk_free_rate ?? effectiveLatestData?.rf_rate);
+    const minAlUpsideHurdle = resolvedRfHurdleRaw !== null && resolvedRfHurdleRaw > 25.0 ? resolvedRfHurdleRaw : 25.0;
+    if (!overrideApplied && (marginOfSafetyStatus === 'UNSAFE' || marginOfSafetyStatus === 'BORDERLINE' || discount < minAlUpsideHurdle)) {
       finalDecision = 'NÖTR';
       overrideApplied = true;
-      overrideReason = `Muhafazakar Emniyet Marjı Filtresi: İskonto potansiyeli (%${discount}), kurumsal %25 'AL' emniyet marjı eşiğinin altında (${marginOfSafetyStatus === 'BORDERLINE' ? 'Sınırda Bölge' : 'Yetersiz Marj'}) kaldığı için 'AL' kararı temkinli 'NÖTR' (Koşullu İzleme) olarak revize edildi.`;
-      safetyFlags.push(`Yetersiz/Sınırda Emniyet Marjı: %${discount} (< %25)`);
+      overrideReason = discount < minAlUpsideHurdle && minAlUpsideHurdle > 25.0
+        ? `Risksiz Faiz Eşiği Koruması: Getiri potansiyeli (%${discount}), risksiz faiz getiri eşiğinin (%${minAlUpsideHurdle.toFixed(1)}) altında kaldığı için 'AL' kararı temkinli 'NÖTR' olarak revize edildi.`
+        : `Muhafazakar Emniyet Marjı Filtresi: İskonto potansiyeli (%${discount}), kurumsal %25 'AL' emniyet marjı eşiğinin altında (${marginOfSafetyStatus === 'BORDERLINE' ? 'Sınırda Bölge' : 'Yetersiz Marj'}) kaldığı için 'AL' kararı temkinli 'NÖTR' (Koşullu İzleme) olarak revize edildi.`;
+      safetyFlags.push(`Risksiz Faiz / Emniyet Marjı Altı: %${discount} (< %${minAlUpsideHurdle.toFixed(1)})`);
+    }
+
+    // 10.5 Kural: Kronik 4/4 Negatif Serbest Nakit Akışı & Yoğun Pay Sulanması Koruması (örn. YEOTK)
+    if (!overrideApplied && Array.isArray(historySeries) && historySeries.length >= 4) {
+      const sortedHistVeto = [...historySeries]
+        .filter((h: any) => h && h.period)
+        .sort((a: any, b: any) => parsePeriodSortKey(a.period) - parsePeriodSortKey(b.period));
+      const last4Veto = sortedHistVeto.slice(-4);
+      const isFcfSensitiveSector = ['INDUSTRIAL', 'HEALTHCARE', 'RETAIL', 'TECH', 'AVIATION'].includes(effectiveSector);
+      const negFcfAll4 = last4Veto.length === 4 && last4Veto.every((q: any) => {
+        const f = parseFinancialNumber(q?.free_cash_flow);
+        return f !== null && f < 0;
+      });
+      const latestNetDebtVeto = parseFinancialNumber(effectiveLatestData?.net_debt) ?? 0;
+      if (isFcfSensitiveSector && negFcfAll4 && latestNetDebtVeto > 0) {
+        finalDecision = 'NÖTR';
+        overrideApplied = true;
+        overrideReason = 'Kronik Negatif Serbest Nakit Akışı: Şirket son 4 çeyreğin tamamında negatif serbest nakit akışı (FCF < 0) ve net borç pozisyonu üretmektedir. Nakit dönüşümü teyit edilene kadar karar NÖTR olarak sınırlandırıldı.';
+        safetyFlags.push('Kronik 4/4 Negatif FCF + Net Borç');
+      }
+      if (!overrideApplied && last4Veto.length >= 2) {
+        const shFirst = parseFinancialNumber(last4Veto[0]?.shares_outstanding ?? last4Veto[0]?.paid_in_capital);
+        const shLast = parseFinancialNumber(last4Veto[last4Veto.length - 1]?.shares_outstanding ?? last4Veto[last4Veto.length - 1]?.paid_in_capital);
+        const latestFcfVeto = parseFinancialNumber(effectiveLatestData?.free_cash_flow);
+        if (shFirst !== null && shFirst > 0 && shLast !== null && shLast >= shFirst * 1.95 && latestFcfVeto !== null && latestFcfVeto < 0) {
+          finalDecision = 'NÖTR';
+          overrideApplied = true;
+          overrideReason = `Yoğun Pay Sulanması & Negatif FCF: Son 4 çeyrekte ödenmiş sermaye/pay adedi %${(((shLast / shFirst) - 1) * 100).toFixed(0)} genişlerken serbest nakit akışı negatif kalmıştır. Karar NÖTR olarak sınırlandırıldı.`;
+          safetyFlags.push('Yoğun Pay Sulanması + Negatif FCF');
+        }
+      }
     }
 
     // 11. Kural: Skor Tabanı Filtresi (Skor < 65 ise AL verilemez)
@@ -6188,12 +6279,15 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
   let appliedDistressedPb: number | undefined = undefined;
 
   if (totalEquityFull <= 0) {
-    // Negatif Özkaynak
-    if (evEbitdaEquity <= 0) {
+    // Negatif Özkaynak (TTK 376): Borca batık ve net/operasyonel zarar üreten şirketlerde (örn. TKNSA)
+    // TFRS-16 amortisman kaynaklı pozitif FAVÖK ile şişkin adil değer üretilemez (N/A).
+    if (evEbitdaEquity <= 0 || ebitdaFull <= 0 || netFull < 0 || inputs.isDistressed === true) {
       isInsolvent = true;
-      boundaryWarning = 'Firma Değeri Borç Köprüsünü (Net Borç + TFRS 16) karşılayamamaktadır (Özkaynak Değeri <= 0).';
+      boundaryWarning = evEbitdaEquity <= 0
+        ? 'Firma Değeri Borç Köprüsünü (Net Borç + TFRS 16) karşılayamamaktadır (Özkaynak Değeri <= 0).'
+        : 'Teknik İflas / Negatif Özkaynak (TTK 376): Şirket hem negatif özkaynak hem de net/operasyonel zarar konumundadır; amortisman kaynaklı FAVÖK ile içsel özkaynak değeri üretilemez (N/A).';
       fairValue = null;
-      formulaStr = `Firma Değeri (${enterpriseVal.toLocaleString('tr-TR')} TL) <= Borç Köprüsü (${totalDebtBridge.toLocaleString('tr-TR')} TL) -> İçsel Değer: N/A`;
+      formulaStr = `Negatif Özkaynak (${totalEquityFull.toLocaleString('tr-TR')} TL) ve ${netFull < 0 ? 'Net Zarar' : 'Yetersiz Firma Değeri'} -> İçsel Değer: N/A`;
     } else {
       fairValue = Number(evEbitdaPerShare.toFixed(2));
       formulaStr = `Firma Değeri: ${enterpriseVal.toLocaleString('tr-TR')} TL - Borç Köprüsü: ${totalDebtBridge.toLocaleString('tr-TR')} TL = Özkaynak: ${evEbitdaEquity.toLocaleString('tr-TR')} TL -> Hisse Başı: ${fairValue.toFixed(2).replace('.', ',')} TL`;
@@ -6252,8 +6346,15 @@ export function computeIndustrialFairValue(inputs: IndustrialFairValueInputs): I
         justifiedPb = Number(Math.max(0.28, Math.min(0.38, rawPb)).toFixed(3));
       }
       appliedDistressedPb = justifiedPb;
-      fairValue = Number(Math.max(0.05, forwardBvps * justifiedPb).toFixed(2));
-      formulaStr = `İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL) × Hak Edilen Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) = ${fairValue.toFixed(2).replace('.', ',')} TL [Sıkıntılı Şirket / Varlık Tabanı Modeli]`;
+      if (forwardBvps <= 0) {
+        isInsolvent = true;
+        fairValue = null;
+        boundaryWarning = 'Özkaynak Erozyonu (TTK 376 Sınırı): Yıllıklandırılmış net zarar mevcut özkaynağı aşmaktadır (İleri Defter Değeri <= 0); adil değer N/A olarak işaretlenmiştir.';
+        formulaStr = `İleri Defter Değeri (0,00 TL) -> Özkaynak erozyonu nedeniyle içsel değer: N/A [Sıkıntılı Şirket / Varlık Tabanı Modeli]`;
+      } else {
+        fairValue = Number(Math.max(0.05, forwardBvps * justifiedPb).toFixed(2));
+        formulaStr = `İleri Defter Değeri (${forwardBvps.toFixed(2).replace('.', ',')} TL) × Hak Edilen Sıkıntılı PD/DD (${justifiedPb.toFixed(3).replace('.', ',')}x) = ${fairValue.toFixed(2).replace('.', ',')} TL [Sıkıntılı Şirket / Varlık Tabanı Modeli]`;
+      }
     } else {
       const forwardEquityGrowth = (activeRoe !== null && activeRoe > 0) ? Math.min(0.75, Math.max(0.10, (activeRoe / 100) * 0.85)) : 0;
       const forwardBvps = Math.max(0, bvps * (1 + forwardEquityGrowth));
@@ -7397,21 +7498,16 @@ export function computeSectorValuationAndDrivers(
       const nonMinorityDebt = Math.max(0, debtBridge - rawMinorityVal);
       const consEvEq = Math.max(0, enterpriseVal - nonMinorityDebt + netCashVal);
       const propParentEvEq = consEvEq * parentEqShare;
-      if (!isChronicSectorLossDestroyer(netFullVal)) {
-        return Math.max(propParentEvEq, enterpriseVal * floorRatio * parentEqShare);
-      }
       return Math.max(0, propParentEvEq);
     }
 
     const cappedMinority = enterpriseVal > 0 ? Math.min(rawMinorityVal, enterpriseVal * 0.35) : rawMinorityVal;
     
     // debtBridge parametresi (effectiveNetDebt + leaseLiabilities + rawMinority) içerir.
-    // Azınlık payı tavanı uygulanır ve kasadaki net nakit özkaynak değerine ilave edilir:
+    // Azınlık payı tavanı uygulanır ve kasadaki net nakit özkaynak değerine ilave edilir.
+    // Faz 1 P0: Borç Firma Değerini aşıyorsa hayali %22-%40 EV tabanı üretilmez; gerçek özkaynak değeri 0 TL'dir.
     const adjustedDebt = (debtBridge - rawMinorityVal + cappedMinority) - netCashVal;
     const rawEq = enterpriseVal - adjustedDebt;
-    if (!isChronicSectorLossDestroyer(netFullVal) && enterpriseVal > 0 && equityFull > 0) {
-      return Math.max(rawEq, enterpriseVal * floorRatio);
-    }
     return Math.max(0, rawEq);
   };
 
@@ -7754,27 +7850,23 @@ export function computeSectorValuationAndDrivers(
       ) ?? 0;
       const ocfFull = rawOcf * unitScale;
       const totalAssetsFull = (parseFinancialNumber(latest?.total_assets) ?? 0) * unitScale;
-      const currentPriceNum = currentPrice ?? (rawPrice ?? 0);
-      const marketCapFull = (currentPriceNum > 0 && effectiveShareCount > 0) ? (currentPriceNum * effectiveShareCount) : 0;
 
-      // Fiyat / Faaliyet Nakit Akışı (Kira Amortisman Süresi):
-      const pOcf = (marketCapFull > 0 && ocfFull > 0) ? (marketCapFull / ocfFull) : null;
-      // Varlık Nakit Verimi (Cap Rate / NOI Yield):
+      // Faz 1 P0 (Katman 1 Fiyat-Bağımsızlık Değişmezi):
+      // GYO adil değeri piyasa fiyatından (P/OCF, DivYield) TAMAMEN bağımsız bilanço/nakit verimiyle belirlenir:
+      // 1) Varlık Nakit Verimi (Cap Rate / OCF / Toplam Aktif >= %5.5)
+      // 2) Gayrimenkul Portföy NAD Nakit Verimi (OCF / Gayrimenkul NAD >= %6.5)
+      // 3) Özkaynak Temettü Dağıtım Gücü (Temettü / Özkaynak >= %4.0 ve OCF / Özkaynak >= %5.0)
       const ocfAssetYield = (totalAssetsFull > 0 && ocfFull > 0) ? (ocfFull / totalAssetsFull) : null;
-
-      // Temettü Dağıtım Gücü:
+      const ocfNavYield = (realEstateNavFull > 0 && ocfFull > 0) ? (ocfFull / realEstateNavFull) : null;
       const rawDividends = Math.abs(parseFinancialNumber(latest?.dividends_paid) ?? 0);
       const dividendsPaidFull = rawDividends * unitScale;
-      const dividendYield = (marketCapFull > 0 && dividendsPaidFull > 0) ? (dividendsPaidFull / marketCapFull) : 0;
+      const equityDivYield = (totalEquityFull > 0 && dividendsPaidFull > 0) ? (dividendsPaidFull / totalEquityFull) : 0;
+      const equityOcfYield = (totalEquityFull > 0 && ocfFull > 0) ? (ocfFull / totalEquityFull) : 0;
 
-      // Güçlü Nakit Akışı & Kira Makinesi Teyidi (TRGYO tipi nakit inekleri):
-      // 1) Şirket nakit akışıyla kendini <= 8.5 yılda amorti ediyorsa (P/OCF <= 8.5x)
-      // 2) VEYA Varlık nakit getirisi >= %5.5 ise
-      // 3) VEYA Temettü verimi >= %4.5 ve P/OCF <= 12.0x ise VE Net Borç/Varlık (LTV) <= %40 (sağlıklı borç)
       const hasStrongCashRentalYield = (
         ocfFull > 0 &&
         (rawNetDebt <= 0 || (totalAssetsFull > 0 && rawNetDebt / totalAssetsFull <= 0.40)) &&
-        ((pOcf !== null && pOcf <= 8.5) || (ocfAssetYield !== null && ocfAssetYield >= 0.055) || (dividendYield >= 0.045 && pOcf !== null && pOcf <= 12.0))
+        ((ocfAssetYield !== null && ocfAssetYield >= 0.055) || (ocfNavYield !== null && ocfNavYield >= 0.065) || (equityDivYield >= 0.04 && equityOcfYield >= 0.05))
       );
 
       let reitMultiple: number;
@@ -7788,10 +7880,12 @@ export function computeSectorValuationAndDrivers(
         forwardNavGrowth = 0.04; // Enflasyon koruması zayıf
       } else if (hasStrongCashRentalYield) {
         // A Sınıfı Nakit Akışı & Kira Makinesi (TRGYO tipi - TMS 29 muhasebe ROE'si baskılanmış olsa bile güçlü kira ve temettü):
-        // P/OCF <= 8.5x veya güçlü temettü dağıtımı ile desteklenen portföy için hakkaniyetli NAD çarpanı (%28-%32 iskonto -> 0.68x - 0.72x P/NAV)
+        // Fiyat-bağımsız varlık/NAD nakit verimiyle desteklenen portföy için hakkaniyetli NAD çarpanı (%28-%32 iskonto -> 0.68x - 0.75x P/NAV)
         reitMultiple = Math.max(0.68, Math.min(0.75, targetMultipleNum > 0.85 ? 0.72 : Math.max(0.70, targetMultipleNum)));
         forwardNavGrowth = 0.10;
-        cashRentalNote = pOcf ? ` [Kira Getirisi P/OCF: ${pOcf.toFixed(1)}x]` : ' [Kira/Temettü Akımı]';
+        cashRentalNote = ocfNavYield !== null
+          ? ` [Portföy Nakit Verimi: %${(ocfNavYield * 100).toFixed(1)}]`
+          : (ocfAssetYield !== null ? ` [Varlık Nakit Verimi: %${(ocfAssetYield * 100).toFixed(1)}]` : ' [Kira/Temettü Akımı]');
       } else if (reitRoe !== null && reitRoe < 8.0) {
         // Düşük Varlık Getirisi & Nakit Üretemeyen Portföy (EKGYO tipi - ROE %0.23 gibi mevduatın çok altında): %60-%65 iskonto -> 0.35x - 0.40x P/NAV
         reitMultiple = Number(Math.max(0.35, Math.min(0.42, 0.35 + (reitRoe / 100) * 0.9)).toFixed(2));
@@ -7992,8 +8086,11 @@ export function computeSectorValuationAndDrivers(
     const isFactoring = detectedOfficialSecName === 'Fin.Kiralama ve Faktoring';
     const isAssetMgmt = detectedOfficialSecName === 'Varlık Yönetim';
     const isInvTrust = detectedOfficialSecName === 'Yatırım Ortaklıkları';
+    const isFinVentureTfrs10 = isTfrs10InvestmentEntity(latest, currentTickerUpper, detectedOfficialSecName);
 
-    if (isBrokerage) {
+    if (isFinVentureTfrs10) {
+      modelName = 'TFRS 10 Girişim Sermayesi & Yatırım İşletmesi Net Aktif Değer (NAD / P/NAV) Modeli';
+    } else if (isBrokerage) {
       modelName = 'Aracı Kurumlar Modeli (İşlem Hacmi Pazar Payı, Komisyon Marjı & Gerekçeli PD/DD / Forward F/K)';
     } else if (isFactoring) {
       modelName = 'Finansal Kiralama ve Faktoring Modeli (Net Faiz / Faktoring Spread, Plasman Büyümesi & Gerekçeli PD/DD)';
@@ -8019,6 +8116,19 @@ export function computeSectorValuationAndDrivers(
       boundaryWarning = 'Finansal hizmetler şirketi muhasebesel özkaynakları negatiftir. Gordon ve defter değeri modeli uygulanamaz (N/A).';
       fairValue = null as any;
       formulaStr = `Özkaynaklar Negatif = ${totalEquityFull.toLocaleString('tr-TR')} TL (N/A)`;
+    } else if (isFinVentureTfrs10) {
+      // TFRS 10 Girişim Sermayesi Portföy Şirketi (VERTU, HUBVC, GOZDE vb.):
+      // Gayrinakdi iştirak değerleme kârı nedeniyle F/K yerine doğrudan İştirak Portföyü NAD (P/NAV) ile değerlenir.
+      const bvps = totalEquityFull / effectiveShareCount;
+      const ventureRoe = roe !== null ? roe : 8.0;
+      const forwardNavGrowth = ventureRoe > 0 ? Math.min(0.18, (ventureRoe / 100) * 0.60) : Math.max(-0.25, (ventureRoe / 100) * 0.50);
+      const forwardBvps = Math.max(0, bvps * (1 + forwardNavGrowth));
+      const venturePNav = ventureRoe >= 25.0 ? 0.72 : (ventureRoe >= 8.0 ? 0.64 : (ventureRoe > 0 ? 0.52 : 0.35));
+      const discLabel = Math.round((1 - venturePNav) * 100);
+      const rawFair = forwardBvps * venturePNav;
+      fairValue = rawFair > 0 ? Number(Math.max(0.1, rawFair).toFixed(2)) : (null as any);
+      syncTargetMultipleDriver(venturePNav, 'PD/NAD');
+      formulaStr = `Cari NAD/Pay = ${bvps.toFixed(2).replace('.', ',')} TL | 12A İleri Portföy NAD = ${forwardBvps.toFixed(2).replace('.', ',')} TL × ${venturePNav.toFixed(2).replace('.', ',')}x (%${discLabel} Gayrinakdi Değerleme & Çıkış İskontosu) = ${fairValue !== null ? fairValue.toFixed(2).replace('.', ',') + ' TL' : 'N/A'}`;
     } else {
       const bookValuePerShare = totalEquityFull / effectiveShareCount;
       const retentionRate = 0.80;
@@ -10765,7 +10875,9 @@ export function computeSectorValuationAndDrivers(
       bullPrice = Math.max(bullPrice, Number((fairValue * 1.05).toFixed(2)));
     }
   }
-  const latestWithSharesForTrap = { ...latest, share_count: latest?.share_count ?? effectiveShareCount };
+  const latestWithSharesForTrap = { ...latest, ticker: currentTickerUpper || latest?.ticker, official_sector_name: detectedOfficialSecName || latest?.official_sector_name, share_count: latest?.share_count ?? effectiveShareCount };
+  // Faz 1 P0 (Katman 1 Fiyat-Bağımsızlık): Adil değer tırpanı piyasa fiyatından tamamen bağımsız temel tuzak analiziyle hesaplanır
+  const intrinsicValueTrapResult = detectValueTrap(extractedData?.financial_history, null, fairValue, sector, latestWithSharesForTrap, { priceIndependent: true });
   const valueTrapResult = detectValueTrap(extractedData?.financial_history, currentPrice ?? 0, fairValue, sector, latestWithSharesForTrap);
   const capAllocAudit = analyzeRelatedPartyAndCapitalAllocationRisk(latest, sector, detectedOfficialSecName);
 
@@ -10777,16 +10889,16 @@ export function computeSectorValuationAndDrivers(
   const isNavAlreadyDiscounted = Boolean(
     (sector === 'HOLDING' && targetMultipleNum <= 0.55) ||
     (sector === 'REIT' && targetMultipleNum <= 0.45) ||
-    ((sector === 'BANKING' || sector === 'INSURANCE' || sector === 'FINANCIAL_SERVICES') && targetMultipleNum <= 0.65)
+    ((sector === 'BANKING' || sector === 'INSURANCE' || sector === 'FINANCIAL_SERVICES') && targetMultipleNum <= 0.90)
   );
 
-  if (!isDistressedModel && !isNavAlreadyDiscounted && !isCapExTransitionPhase && !evaHaircutApplied && valueTrapResult.isValueTrap && fairValue !== null && fairValue > 0) {
+  if (!isDistressedModel && !isNavAlreadyDiscounted && !isCapExTransitionPhase && !evaHaircutApplied && intrinsicValueTrapResult.isValueTrap && fairValue !== null && fairValue > 0) {
     let vtDeflator = 1.0;
-    if (valueTrapResult.severity === 'CRITICAL') {
+    if (intrinsicValueTrapResult.severity === 'CRITICAL') {
       vtDeflator = 0.58; // %42 sermaye erozyonu ve nakit yakımı terminal iskontosu
-    } else if (valueTrapResult.severity === 'HIGH') {
+    } else if (intrinsicValueTrapResult.severity === 'HIGH') {
       vtDeflator = 0.72; // %28 iskonto
-    } else if (valueTrapResult.severity === 'MODERATE') {
+    } else if (intrinsicValueTrapResult.severity === 'MODERATE') {
       vtDeflator = 0.85; // %15 iskonto
     }
     fairValue = Number((fairValue * vtDeflator).toFixed(2));
@@ -11060,9 +11172,9 @@ export function calculateEarningsQuality(
       : null;
 
   const caCurr = parseFinancialNumber(latest?.current_assets);
-  const ppeCurr = parseFinancialNumber(latest?.property_plant_equipment ?? latest?.tangible_fixed_assets ?? 0) ?? 0;
+  const ppeCurr = parseFinancialNumber(latest?.property_plant_equipment ?? latest?.tangible_fixed_assets ?? latest?.tangible_assets ?? 0) ?? 0;
   const caPrev = parseFinancialNumber(prev?.current_assets);
-  const ppePrev = parseFinancialNumber(prev?.property_plant_equipment ?? prev?.tangible_fixed_assets ?? 0) ?? 0;
+  const ppePrev = parseFinancialNumber(prev?.property_plant_equipment ?? prev?.tangible_fixed_assets ?? prev?.tangible_assets ?? 0) ?? 0;
   const taPrev = parseFinancialNumber(prev?.total_assets);
 
   let aqi: number | null = null;

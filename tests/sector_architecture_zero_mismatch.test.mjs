@@ -40,8 +40,9 @@ test('53-Sector Architecture & Zero-Mismatch Routing Audit Suite', async (t) => 
     assert.equal(isTextileSector(desaOff, 'DESA'), true, 'DESA must be Textile/Leather');
 
     const maviOff = USER_OFFICIAL_BIST_COMPANY_SECTORS['MAVI']?.sector;
-    assert.equal(isRetailFloatSector(maviOff, 'MAVI'), false, 'MAVI must NOT be Retail Float');
-    assert.equal(isTextileSector(maviOff, 'MAVI'), true, 'MAVI must be Textile Entegre');
+    assert.equal(maviOff, 'Perakande - Ticaret', 'MAVI is an apparel retailer (Perakande - Ticaret), not a cotton/yarn textile mill');
+    assert.equal(isRetailFloatSector(maviOff, 'MAVI'), true, 'MAVI must route to Retail');
+    assert.equal(isTextileSector(maviOff, 'MAVI'), false, 'MAVI must NOT be Textile yarn mill');
 
     const suwenOff = USER_OFFICIAL_BIST_COMPANY_SECTORS['SUWEN']?.sector;
     assert.equal(isRetailFloatSector(suwenOff, 'SUWEN'), false, 'SUWEN must NOT be Retail Float');

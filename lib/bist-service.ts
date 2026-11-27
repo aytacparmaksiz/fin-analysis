@@ -363,10 +363,11 @@ function resolveDefaultFinancialGroup(
 export function resolveBistCompanyMeta(rawTicker: string): BistCompanyMetadata {
   const cleanTicker = (rawTicker || '').toUpperCase().replace(/\.IS$/i, '').trim();
 
-  // 1. Kullanıcı 53 Resmi Sektör ve 630 Şirket Master Listesi (Birincil Yetkili Kaynak)
+  // 1. Kullanıcı 53 Resmi Sektör ve 630 Şirket Master Listesi (Kalıcı şirket override'ları dahil)
   const userSec = USER_OFFICIAL_BIST_COMPANY_SECTORS[cleanTicker];
   if (userSec && userSec.sector) {
-    const valuationSector = mapIsYatirimSectorToValuationSector(userSec.sector);
+    const resolvedOfficialSec = resolveOfficialSectorName(userSec.sector, cleanTicker) || userSec.sector;
+    const valuationSector = detectSector(cleanTicker, resolvedOfficialSec);
     const group = resolveDefaultFinancialGroup(cleanTicker, valuationSector);
 
     const isy = OFFICIAL_ISYATIRIM_MULTIPLES_BASELINE[cleanTicker];
@@ -384,7 +385,7 @@ export function resolveBistCompanyMeta(rawTicker: string): BistCompanyMetadata {
       sector: valuationSector,
       financialGroup: group,
       shareCount,
-      officialSectorName: userSec.sector
+      officialSectorName: resolvedOfficialSec
     };
   }
 
@@ -1265,14 +1266,12 @@ export async function fetchAndAnalyzeBistCompany(
               const safeLoans = enhanced.loans ?? enhanced.trade_receivables ?? (assets * 0.58);
               const rwa = (safeLoans * 0.80) + (Math.max(0, assets - safeLoans) * 0.20);
               const totalCap = enhanced.equity + (enhanced.subordinated_debt || 0);
-              enhanced.car_ratio = Number((Math.min(28.0, Math.max(12.0, (totalCap / (rwa || 1)) * 100))).toFixed(2));
+              enhanced.car_ratio = Number((Math.min(28.0, Math.max(2.0, (totalCap / (rwa || 1)) * 100))).toFixed(2));
               enhanced.syr = enhanced.car_ratio;
             }
             if (enhanced.npl_ratio == null) {
               if (enhanced.npl_loans != null && enhanced.loans != null && enhanced.loans > 0) {
                 enhanced.npl_ratio = Number(((enhanced.npl_loans / (enhanced.loans + enhanced.npl_loans)) * 100).toFixed(2));
-              } else {
-                enhanced.npl_ratio = 1.85;
               }
             }
             if (enhanced.syr == null && enhanced.car_ratio != null) {
@@ -1302,7 +1301,8 @@ export async function fetchAndAnalyzeBistCompany(
         if (meta.sector === 'INSURANCE' && ['revenue', 'written_premiums', 'gross_written_premiums', 'earned_premiums', 'technical_profit', 'technical_balance'].includes(k) && item[k] != null && item[k] !== 0) {
           continue;
         }
-        if ((item[k] === null || item[k] === undefined || item[k] === 0) && yItem[k] !== null && yItem[k] !== undefined && yItem[k] !== 0) {
+        // Faz 1 P0: Yahoo yedeği yalnızca null/undefined alanları doldurur; resmi İş Yatırım 0 değerlerini asla ezmez.
+        if ((item[k] === null || item[k] === undefined) && yItem[k] !== null && yItem[k] !== undefined && yItem[k] !== 0) {
           item[k] = yItem[k];
         }
       }
@@ -1372,21 +1372,29 @@ export async function fetchAndAnalyzeBistCompany(
   }
 
   // Borsa İstanbul'da 1 TL nominal Ödenmiş Sermaye = 1 Adet Pay (Lot).
-  // Cari hisse fiyatı ve piyasa değeri güncel resmi pay adedi (isYatirimShares) ile uyumludur.
-  // Şirket sermaye artırımı (bedelsiz/bedelli) yapmışsa, eski bilançolardaki paid_in_capital yerine güncel sermaye esastır.
+  // Faz 1 P0: Son bilançoda yeni sermaye artırımı varsa (latestPaidCapital güncel tablodan geliyorsa ve baz veriden >%15 farklıysa)
+  // canlı bilanço ödenmiş sermayesi tercih edilir; aksi halde güncel resmi İş Yatırım pay adedi kullanılır.
   const latestPaidCapital = latestItem?.paid_in_capital ? Math.abs(latestItem.paid_in_capital) : null;
   const isYatirimShares = (finalMultiples?.paidInCapitalMnTl && finalMultiples.paidInCapitalMnTl > 0)
     ? Math.round(finalMultiples.paidInCapitalMnTl * 1000000)
     : null;
+  const hasNewerBalanceSheetCapitalChange = Boolean(
+    latestPaidCapital &&
+    latestPaidCapital >= 1_000_000 &&
+    isYatirimShares &&
+    Math.abs(latestPaidCapital - isYatirimShares) / isYatirimShares > 0.15
+  );
   const effectiveShareCount = (ticker === 'DOCO' && meta.shareCount && meta.shareCount >= 1000000)
     ? meta.shareCount
-    : ((isYatirimShares && isYatirimShares >= 1000000)
-      ? isYatirimShares
-      : ((meta.shareCount && meta.shareCount >= 1000000)
-        ? meta.shareCount
+    : (hasNewerBalanceSheetCapitalChange && latestPaidCapital
+      ? latestPaidCapital
+      : ((isYatirimShares && isYatirimShares >= 1000000)
+        ? isYatirimShares
         : ((latestPaidCapital && latestPaidCapital >= 1000000)
           ? latestPaidCapital
-          : 500000000)));
+          : ((meta.shareCount && meta.shareCount >= 1000000)
+            ? meta.shareCount
+            : 0))));
 
   // Son bilançodaki nominal sermayeyi kesinleşmiş resmi pay adediyle senkronize et:
   if (latestItem && effectiveShareCount > 0) {

@@ -1300,10 +1300,10 @@ export function lookupDamodaranIndustry(
   }
 
   // 3. Otomotiv & Yan Sanayi
-  if (['FROTO', 'TOASO', 'TTRAK', 'DOAS', 'TMSN'].includes(t) || /otomotiv/i.test(secName)) {
+  if (['FROTO', 'TOASO', 'TTRAK', 'DOAS', 'TMSN', 'OTKAR'].includes(t) || /otomotiv/i.test(secName)) {
     return DAMODARAN_INDUSTRY_MAP['auto & truck'] || DAMODARAN_GLOBAL_BETAS[4];
   }
-  if (['OTKAR', 'BRISA', 'GOODY'].includes(t) || /yedek parça|lastik/i.test(secName)) {
+  if (['BRISA', 'GOODY'].includes(t) || /yedek parça|lastik/i.test(secName)) {
     return DAMODARAN_INDUSTRY_MAP['auto parts'] || DAMODARAN_GLOBAL_BETAS[5];
   }
 
@@ -1369,8 +1369,13 @@ export function lookupDamodaranIndustry(
     return DAMODARAN_INDUSTRY_MAP['telecom. services'] || DAMODARAN_GLOBAL_BETAS[86];
   }
 
-  // 13. Enerji & Elektrik Üretimi
-  if (['ENJSA', 'AKSEN', 'AYGAZ', 'GWIND', 'CWENE', 'ASTOR'].includes(t) || s === 'UTILITIES_TELCO' || /elektrik|enerji/i.test(secName)) {
+  // 13a. Elektrik Teçhizat, Trafo & Güneş Paneli İmalatı (Elektrik dağıtım/utility 0.31 betası uygulanmaz!)
+  if (['ASTOR', 'CWENE', 'EUPWR', 'GESAN', 'SMRTG', 'ALFAS', 'ULUSE', 'SAYAS', 'YEOTK'].includes(t) || /teçh|trafo|panel|tesis kurulum/i.test(secName)) {
+    return DAMODARAN_INDUSTRY_MAP['electrical equipment'] || DAMODARAN_GLOBAL_BETAS[27];
+  }
+
+  // 13. Enerji & Elektrik Üretimi (Utility)
+  if (['ENJSA', 'AKSEN', 'AYGAZ', 'GWIND'].includes(t) || s === 'UTILITIES_TELCO' || /elektrik|enerji/i.test(secName)) {
     return DAMODARAN_INDUSTRY_MAP['power'] || DAMODARAN_GLOBAL_BETAS[59];
   }
 
@@ -1380,10 +1385,10 @@ export function lookupDamodaranIndustry(
   }
 
   // 15. Kimya ve Petrol
-  if (['TUPRS', 'PETKM'].includes(t) || /petrol|rafineri/i.test(secName)) {
+  if (['TUPRS'].includes(t) || /petrol|rafineri/i.test(secName)) {
     return DAMODARAN_INDUSTRY_MAP['oil/gas (integrated)'] || DAMODARAN_GLOBAL_BETAS[53];
   }
-  if (['SASA', 'HEKTS', 'GUBRF', 'BAGFS'].includes(t) || /kimya|gübre/i.test(secName)) {
+  if (['PETKM', 'SASA', 'HEKTS', 'GUBRF', 'BAGFS'].includes(t) || /kimya|gübre/i.test(secName)) {
     return DAMODARAN_INDUSTRY_MAP['chemical (specialty)'] || DAMODARAN_GLOBAL_BETAS[17];
   }
 

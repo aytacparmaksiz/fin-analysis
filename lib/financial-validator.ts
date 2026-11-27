@@ -125,7 +125,7 @@ export class FinancialDataValidator {
         const safeLoans = copy.loans ?? copy.trade_receivables ?? (assets * 0.58);
         const rwa = (safeLoans * 0.80) + (Math.max(0, assets - safeLoans) * 0.20);
         const totalCap = copy.equity + (copy.subordinated_debt || 0);
-        copy.car_ratio = Number((Math.min(28.0, Math.max(12.0, (totalCap / (rwa || 1)) * 100))).toFixed(2));
+        copy.car_ratio = Number((Math.min(28.0, Math.max(2.0, (totalCap / (rwa || 1)) * 100))).toFixed(2));
       }
       if (copy.syr == null && copy.car_ratio != null) {
         copy.syr = copy.car_ratio;
@@ -133,8 +133,6 @@ export class FinancialDataValidator {
       if (copy.npl_ratio == null) {
         if (copy.npl_loans != null && copy.loans != null && copy.loans > 0) {
           copy.npl_ratio = Number(((copy.npl_loans / (copy.loans + copy.npl_loans)) * 100).toFixed(2));
-        } else {
-          copy.npl_ratio = 1.85;
         }
       }
       if (copy.loan_to_deposit == null && copy.loans != null && copy.deposits != null && copy.deposits > 0) {

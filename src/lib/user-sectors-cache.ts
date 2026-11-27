@@ -1648,7 +1648,7 @@ export const USER_OFFICIAL_BIST_COMPANY_SECTORS: Record<string, UserBistCompanyS
   },
   "MAVI": {
     "name": "Mavi Giyim Sanayi Tic.A.S",
-    "sector": "Tekstil Entegre"
+    "sector": "Perakande - Ticaret"
   },
   "MCARD": {
     "name": "MetropolCard",
@@ -1944,7 +1944,7 @@ export const USER_OFFICIAL_BIST_COMPANY_SECTORS: Record<string, UserBistCompanyS
   },
   "PETKM": {
     "name": "Petkim",
-    "sector": "Petrol"
+    "sector": "Kimyasal Ürün"
   },
   "PETUN": {
     "name": "Pınar Et ve Un",
@@ -2104,7 +2104,7 @@ export const USER_OFFICIAL_BIST_COMPANY_SECTORS: Record<string, UserBistCompanyS
   },
   "SASA": {
     "name": "Sasa Polyester Sanayi A.Ş.",
-    "sector": "Endüstriyel Tekstil"
+    "sector": "Kimyasal Ürün"
   },
   "SAYAS": {
     "name": "Say Yenilenebilir Enerji",
@@ -2340,7 +2340,7 @@ export const USER_OFFICIAL_BIST_COMPANY_SECTORS: Record<string, UserBistCompanyS
   },
   "TRCAS": {
     "name": "Turcas Holding",
-    "sector": "Petrol"
+    "sector": "Holdingler"
   },
   "TRENJ": {
     "name": "TR Doğal Enerji Kaynakları",
