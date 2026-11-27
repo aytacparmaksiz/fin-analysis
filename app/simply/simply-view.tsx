@@ -4691,7 +4691,7 @@ export default function SimplyView({
                           stroke="#64748b"
                           axisLine={false}
                           tickLine={false}
-                          tick={{ fontSize: 11, fill: '#64748b', fontFamily: 'monospace' }}
+                          tick={{ fontSize: 11, fill: '#64748b', fontFamily: 'var(--font-sans)' }}
                           tickFormatter={(v: string) => v ? v.replace(/\/0(\d)/, '/$1') : ''}
                         />
                         <YAxis stroke="#6b7280" hide domain={getZeroAnchoredBarDomain(barSlice, 'revenue')} />
@@ -4724,7 +4724,7 @@ export default function SimplyView({
                           stroke="#64748b"
                           axisLine={false}
                           tickLine={false}
-                          tick={{ fontSize: 11, fill: '#64748b', fontFamily: 'monospace' }}
+                          tick={{ fontSize: 11, fill: '#64748b', fontFamily: 'var(--font-sans)' }}
                           tickFormatter={(v: string) => v ? v.replace(/\/0(\d)/, '/$1') : ''}
                         />
                         <YAxis stroke="#6b7280" hide domain={getZeroAnchoredBarDomain(barSlice, 'ebitda')} />
@@ -4757,7 +4757,7 @@ export default function SimplyView({
                           stroke="#64748b"
                           axisLine={false}
                           tickLine={false}
-                          tick={{ fontSize: 11, fill: '#64748b', fontFamily: 'monospace' }}
+                          tick={{ fontSize: 11, fill: '#64748b', fontFamily: 'var(--font-sans)' }}
                           tickFormatter={(v: string) => v ? v.replace(/\/0(\d)/, '/$1') : ''}
                         />
                         <YAxis stroke="#6b7280" hide domain={getZeroAnchoredBarDomain(barSlice, 'net_income')} />

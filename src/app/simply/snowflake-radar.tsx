@@ -366,7 +366,7 @@ export default function SnowflakeRadar({
           fill={radarPalette.stroke}
           fontSize={ticker && ticker.trim().length >= 5 ? '7.8' : '9'}
           fontWeight="bold"
-          fontFamily="monospace"
+          fontFamily="var(--font-sans)"
         >
           {ticker ? ticker.trim().toUpperCase().slice(0, 5) : 'BIST'}
         </text>
@@ -394,7 +394,7 @@ export default function SnowflakeRadar({
                 fill={isHovered ? '#f5c242' : '#e2e8f0'}
                 fontSize="11"
                 fontWeight={isHovered ? '900' : '700'}
-                fontFamily="system-ui, -apple-system, sans-serif"
+                fontFamily="var(--font-sans)"
                 letterSpacing="0.06em"
                 className="transition-colors duration-200"
               >
@@ -407,9 +407,9 @@ export default function SnowflakeRadar({
                 y={meta.labelY + 12}
                 textAnchor={meta.textAnchor}
                 fill={isHovered ? '#fde047' : '#94a3b8'}
-                fontSize="9"
+                fontSize="10"
                 fontWeight="600"
-                fontFamily="monospace"
+                fontFamily="var(--font-sans)"
                 className="transition-colors duration-200"
               >
                 {score}/6 {isHovered ? '• İNCELE' : ''}

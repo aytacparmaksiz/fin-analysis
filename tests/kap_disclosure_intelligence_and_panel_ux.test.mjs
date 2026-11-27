@@ -232,9 +232,10 @@ describe('KAP Disclosure Intelligence & Redesigned Panel UI/UX Verification Suit
     }
     assert.ok(!cockpitSrc.includes('fv-cockpit-pulse') && !cockpitSrc.includes('Takip/Portföy Ort. Potansiyel'), 'market-cockpit.tsx must not render removed fv-cockpit-pulse strip');
 
-    // 5 Boyutlu Grafik Tasarım & Görsel Cila Kontrolleri
-    assert.ok(layoutSrc.includes('IBM_Plex_Mono') && layoutSrc.includes('ibmPlexMono.variable'), 'layout.tsx must load IBM_Plex_Mono font');
-    assert.ok(cssSrc.includes('--font-ibm-plex-mono') && cssSrc.includes('tabular-nums') && cssSrc.includes('.fv-monogram') && cssSrc.includes('.fv-inline-sparkbar'), 'globals.css missing typography/surface graphic design tokens');
+    // 5 Boyutlu Grafik Tasarım & Tek Sabit Font (IBM Plex Sans + Tabular Numerals) Kontrolleri
+    assert.ok(layoutSrc.includes('IBM_Plex_Sans') && layoutSrc.includes('ibmPlexSans.variable'), 'layout.tsx must load single IBM_Plex_Sans font');
+    assert.ok(!layoutSrc.includes('IBM_Plex_Mono') && !layoutSrc.includes('IBM_Plex_Serif'), 'layout.tsx must enforce single unified font without Mono/Serif overrides');
+    assert.ok(cssSrc.includes('--font-ibm-plex-sans') && cssSrc.includes('tabular-nums') && cssSrc.includes('.fv-monogram') && cssSrc.includes('.fv-inline-sparkbar'), 'globals.css missing typography/surface graphic design tokens');
     assert.ok(cockpitSrc.includes('cockpitSparkGrad-') && cockpitSrc.includes('getTickerMonogramCls'), 'market-cockpit.tsx missing AreaChart gradient sparklines and monogram badges');
     const radarSrc = fs.readFileSync(path.join(ROOT, 'app/simply/snowflake-radar.tsx'), 'utf8');
     assert.ok(radarSrc.includes('radarPalette') && radarSrc.includes('totalScore >= 20'), 'snowflake-radar.tsx must compute dynamic score-based gradient palette');

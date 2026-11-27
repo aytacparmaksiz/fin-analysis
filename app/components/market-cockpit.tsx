@@ -260,7 +260,7 @@ function StockComparisonCard({
                     fontSize: '11px',
                     padding: '4px 8px'
                   }}
-                  labelStyle={{ color: '#94a3b8', fontFamily: 'monospace' }}
+                  labelStyle={{ color: '#94a3b8', fontFamily: 'var(--font-sans)' }}
                   formatter={(value: any) => [Number.isFinite(Number(value)) ? `₺${Number(value).toFixed(2)}` : '—', ticker]}
                 />
                 {range === '1G' && typeof card.prevClose === 'number' && Number.isFinite(card.prevClose) && card.prevClose > 0 && (
