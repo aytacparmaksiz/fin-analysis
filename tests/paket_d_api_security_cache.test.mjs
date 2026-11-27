@@ -38,6 +38,7 @@ import {
 } from '../lib/security.ts';
 import { getSupabase, getSupabaseAdmin, getSupabaseForAuthorizedWrite, isSupabaseConfigured } from '../lib/supabase.ts';
 import { saveReportsCache, flushReportsCache } from '../lib/report-cache.ts';
+import { mergeAnalysisHistorySnapshots, toAnalysisHistorySnapshot } from '../lib/report-resolver.ts';
 import { sanitizeDisclosureTitle } from '../lib/news-service.ts';
 import { buildBatchSpecs } from '../lib/bist-service.ts';
 import { generateWithRateLimitAndBackoff, cleanAndParseJson } from '../lib/gemini.ts';
@@ -444,5 +445,83 @@ describe('Paket D: Security, Auth, Rate Limiting, Cache, API Routes & 100% Direc
     assert.ok(isYatirimSource.includes('inFlightMultiplesPromise'));
     assert.equal(isYatirimSource.includes('isFetchingInProgress'), false);
     assert.ok(isYatirimSource.includes('DETAILS_EMPTY_DIV_TTL_MS'));
+  });
+
+  it('7. Supabase Egress & Quota Optimization: Snapshot History Archiving, Single-Row-Per-Ticker, Delta Sync & Zero Daily Write Storm', async () => {
+    const reportsRoute = await import('../src/app/api/reports/route.ts');
+
+    // A. ?ids= validation blocks invalid IDs with 400
+    resetRateLimitBuckets();
+    const badIdsRes = await reportsRoute.GET(
+      new Request('http://localhost:3000/api/reports?ids=rep_ok,BAD!!')
+    );
+    assert.equal(badIdsRes.status, 400, '/api/reports?ids= must reject invalid IDs with 400');
+
+    // B. Displaced old reports (e.g. 20.11 report + prior quarter) are archived into ~180-byte snapshots while heavy payloads are dropped
+    const oldDbRowNov20 = {
+      id: 'rep_20261120',
+      ticker: 'MACKO',
+      period: '2026/09',
+      price: '20.64',
+      decision: 'AL',
+      score: '89/100',
+      created_at: '2026-11-20T10:30:00.000Z',
+      report: 'x'.repeat(12_000),
+      extracted_data: {
+        valuation: { fair_value: 27.24, discount_pct: 32.0 },
+        financial_history: Array.from({ length: 20 }, (_, i) => ({ period: `2022/${i}`, revenue: 100000 })),
+        analysis_history: [
+          {
+            id: 'rep_20260815',
+            period: '2026/06',
+            createdAt: '2026-08-15T09:00:00.000Z',
+            price: '31.16',
+            fairValue: '26.18',
+            discountPct: -16.0,
+            score: '82/100',
+            decision: 'NÖTR',
+          },
+        ],
+      },
+    };
+
+    const incomingNewReport = {
+      id: 'rep_20261127',
+      ticker: 'MACKO',
+      period: '2026/12',
+      price: '22.10',
+      fairValue: '29.50',
+      score: '91/100',
+      decision: 'AL',
+      createdAt: '2026-11-27T09:00:00.000Z',
+      report: 'y'.repeat(12_000),
+      extractedData: { valuation: { fair_value: 29.5, discount_pct: 33.5 } },
+    };
+
+    const merged = mergeAnalysisHistorySnapshots([oldDbRowNov20], incomingNewReport);
+    assert.equal(merged.length, 2, 'Must retain both Nov 20 displaced report and Aug 15 nested snapshot');
+    assert.equal(merged[0].id, 'rep_20261120');
+    assert.equal(merged[0].price, '20.64');
+    assert.equal(merged[0].fairValue, '27.24');
+    assert.equal(merged[0].score, '89/100');
+    assert.equal(merged[0].decision, 'AL');
+    assert.equal(merged[0].discountPct, 32.0);
+    assert.equal(merged[1].id, 'rep_20260815');
+    assert.equal(merged[1].fairValue, '26.18');
+    assert.ok(!merged.some(s => s.id === 'rep_20261127'), 'Active report must not duplicate itself in analysis_history');
+
+    const snapshotBytes = Buffer.byteLength(JSON.stringify(toAnalysisHistorySnapshot(oldDbRowNov20)), 'utf8');
+    const fullOldRowBytes = Buffer.byteLength(JSON.stringify(oldDbRowNov20), 'utf8');
+    assert.ok(snapshotBytes < 300, `Snapshot must be ultra-compact (<300 bytes), got ${snapshotBytes}`);
+    assert.ok(snapshotBytes < fullOldRowBytes * 0.03, 'Snapshot archiving must cut per-revision storage by >97%');
+
+    // C. Source invariants: no daily 40-report write storm, single-row-per-ticker cleanup & delta sync enabled
+    const pageSource = fs.readFileSync(path.resolve('src/app/page.tsx'), 'utf8');
+    assert.equal(pageSource.includes('schemaStale || !doneToday'), false, 'Daily 40-report background write storm must be removed');
+    assert.ok(pageSource.includes('/api/reports?since='), 'Client syncWithCloud must use incremental ?since= delta sync');
+
+    const routeSource = fs.readFileSync(path.resolve('src/app/api/reports/route.ts'), 'utf8');
+    assert.ok(routeSource.includes('isDelta: true'), '/api/reports must support delta sync responses');
+    assert.ok(routeSource.includes(".delete()\n        .eq('ticker', cleanTicker)\n        .neq('id', cleanId)"), '/api/reports POST must delete all superseded rows of the same ticker');
   });
 });

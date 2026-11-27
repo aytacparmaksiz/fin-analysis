@@ -60,7 +60,14 @@ import {
   Legend,
   ReferenceLine
 } from 'recharts';
-import { formatAnalysisDate, parseNumericScore, type SavedReport } from '@/lib/report-resolver';
+import {
+  formatAnalysisDate,
+  parseNumericScore,
+  formatCanonicalScore,
+  toAnalysisHistorySnapshot,
+  mergeAnalysisHistorySnapshots,
+  type SavedReport,
+} from '@/lib/report-resolver';
 import type { SectorType } from '@/lib/sectors';
 import {
   SECTOR_DEFINITIONS,
@@ -1261,6 +1268,91 @@ export default function SimplyView({
     report.decision ||
     'NÖTR'
   );
+
+  // Birleştirilmiş Analiz Geçmişi (Aktif rapor + varsa tam kayıtlar + silinen eski raporların analysis_history özetleri)
+  const mergedAnalysisHistory = useMemo(() => {
+    const activeId = String(report.id || '').trim();
+    const fullIds = new Set<string>(
+      [activeId, ...(tickerHistory || []).map(t => String(t?.id || '').trim())].filter(Boolean)
+    );
+    const activeScoreStr = formatCanonicalScore(valuationInfo?.score ?? report.score) || null;
+    const currentSnap = toAnalysisHistorySnapshot({
+      id: activeId || 'current',
+      period: report.period || report.extractedData?.reporting_period || null,
+      createdAt: report.extractedData?.saved_at || report.updatedAt || report.createdAt || '',
+      price: staticReportPrice > 0 ? staticReportPrice : currentPriceNum,
+      fairValue: fairValueNum > 0 ? fairValueNum : report.fairValue,
+      discountPct: discountPctNum,
+      score: activeScoreStr,
+      decision: effectiveDecision,
+    });
+
+    const pastSnapshots = mergeAnalysisHistorySnapshots(tickerHistory || [], report, 24);
+
+    const items: Array<{
+      id: string;
+      period: string | null;
+      createdAt: string;
+      priceNum: number | null;
+      fairValueNum: number | null;
+      discountPct: number | null;
+      score: string | null;
+      decision: string;
+      isCurrent: boolean;
+      isSnapshotOnly: boolean;
+      ts: number;
+    }> = [];
+
+    if (currentSnap) {
+      const pNum = parseFinancialNumber(currentSnap.price);
+      const fvNum = parseFinancialNumber(currentSnap.fairValue);
+      const ts = Date.parse(String(currentSnap.createdAt || ''));
+      items.push({
+        id: currentSnap.id,
+        period: currentSnap.period,
+        createdAt: currentSnap.createdAt,
+        priceNum: pNum !== null && pNum > 0 ? pNum : null,
+        fairValueNum: fvNum !== null && fvNum > 0 ? fvNum : null,
+        discountPct: currentSnap.discountPct,
+        score: currentSnap.score,
+        decision: currentSnap.decision || 'NÖTR',
+        isCurrent: true,
+        isSnapshotOnly: false,
+        ts: Number.isFinite(ts) ? ts : Date.now(),
+      });
+    }
+
+    for (const s of pastSnapshots) {
+      if (activeId && s.id === activeId) continue;
+      const pNum = parseFinancialNumber(s.price);
+      const fvNum = parseFinancialNumber(s.fairValue);
+      const ts = Date.parse(String(s.createdAt || ''));
+      items.push({
+        id: s.id,
+        period: s.period,
+        createdAt: s.createdAt,
+        priceNum: pNum !== null && pNum > 0 ? pNum : null,
+        fairValueNum: fvNum !== null && fvNum > 0 ? fvNum : null,
+        discountPct: s.discountPct,
+        score: s.score,
+        decision: s.decision || 'NÖTR',
+        isCurrent: false,
+        isSnapshotOnly: !fullIds.has(s.id),
+        ts: Number.isFinite(ts) ? ts : 0,
+      });
+    }
+
+    return items;
+  }, [
+    report,
+    tickerHistory,
+    valuationInfo?.score,
+    staticReportPrice,
+    currentPriceNum,
+    fairValueNum,
+    discountPctNum,
+    effectiveDecision,
+  ]);
 
   // Canlı Piyasa Getiri Performansı (TradingView BIST & Tarihsel Finansal Seriden Dinamik Çözüm)
   const priceReturns = useMemo(() => {
@@ -3987,39 +4079,19 @@ export default function SimplyView({
                 </div>
               </div>
 
-              {/* Analiz Geçmişi: yalnızca bilgi amaçlıdır, değerleme motoruna girdi OLMAZ */}
-              {Array.isArray(report.extractedData?.analysis_history) && report.extractedData.analysis_history.length > 0 && (
-                <details className="rounded-xl border border-[#232834] bg-[#151821] px-4 py-3 text-sm">
-                  <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-slate-400 select-none">
-                    Önceki Analizler ({report.extractedData.analysis_history.length})
-                  </summary>
-                  <div className="mt-3 overflow-x-auto">
-                    <table className="w-full text-xs font-mono">
-                      <thead>
-                        <tr className="text-slate-500 text-left">
-                          <th className="py-1 pr-4 font-medium">Dönem</th>
-                          <th className="py-1 pr-4 font-medium">Tarih</th>
-                          <th className="py-1 pr-4 font-medium">Fiyat</th>
-                          <th className="py-1 pr-4 font-medium">Adil Değer</th>
-                          <th className="py-1 pr-4 font-medium">Puan</th>
-                          <th className="py-1 font-medium">Karar</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {report.extractedData.analysis_history.map((h: any) => (
-                          <tr key={h.id} className="border-t border-[#232834] text-slate-300">
-                            <td className="py-1.5 pr-4">{h.period || '—'}</td>
-                            <td className="py-1.5 pr-4">{h.createdAt ? formatAnalysisDate(h.createdAt) : '—'}</td>
-                            <td className="py-1.5 pr-4">{h.price || '—'}</td>
-                            <td className="py-1.5 pr-4">{h.fairValue || '—'}</td>
-                            <td className="py-1.5 pr-4">{h.score || '—'}</td>
-                            <td className="py-1.5">{h.decision || '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </details>
+              {/* Analiz Geçmişi Hızlı Bağlantısı (Yalnızca bilgi amaçlıdır, değerleme motoruna girdi OLMAZ) */}
+              {mergedAnalysisHistory.length > 1 && (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => scrollToSection('sec-gecmis')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#151821] hover:bg-[#1e2430] border border-[#232834] text-xs font-sans font-medium text-slate-300 hover:text-white cursor-pointer transition-colors"
+                  >
+                    <History className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Geçmiş Analiz Kayıtları ({mergedAnalysisHistory.length - 1})</span>
+                    <ArrowRight className="w-3 h-3 text-slate-400" />
+                  </button>
+                </div>
               )}
 
               {/* 30 Kriter Kontrol Paneli (Açılır - Kapanır Liste) */}
@@ -6402,16 +6474,13 @@ export default function SimplyView({
                   {/* Hedef Revizyon Trendi */}
                   {(() => {
                     const now = Date.now();
-                    const validHistory = (tickerHistory || [])
-                      .filter(h => h.id !== report.id && (h.createdAt || h.updatedAt || h.extractedData?.saved_at))
-                      .map(h => {
-                        const isoSrc = h.extractedData?.saved_at || h.updatedAt || h.createdAt || '';
-                        const ts = Date.parse(String(isoSrc));
-                        const ageDays = Number.isFinite(ts) ? (now - ts) / (1000 * 60 * 60 * 24) : NaN;
-                        const parsedFv = parseFinancialNumber(h.fairValue);
-                        const fv = parsedFv != null && Number.isFinite(parsedFv) ? parsedFv : 0;
-                        return { ...h, ageDays, fv };
-                      })
+                    const validHistory = mergedAnalysisHistory
+                      .filter(h => !h.isCurrent && h.ts > 0 && (h.fairValueNum ?? 0) > 0)
+                      .map(h => ({
+                        ...h,
+                        ageDays: (now - h.ts) / (1000 * 60 * 60 * 24),
+                        fv: h.fairValueNum || 0,
+                      }))
                       .filter(h => Number.isFinite(h.ageDays) && h.fv > 0);
 
                     const rep1M = validHistory.find(h => h.ageDays >= 14 && h.ageDays < 60);
@@ -8761,168 +8830,181 @@ export default function SimplyView({
               )}
             </div>
 
-            <div className="bg-[#161a23] border border-[#2a3140] rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center gap-2 border-b border-[#282d37] pb-3">
-                <span className="font-sans text-base sm:text-lg font-bold text-white">9.1 Analiz Geçmişi</span>
+            <div className="bg-[#151821] border border-[#232834] rounded-xl overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-[#232834] bg-[#101319] flex items-center justify-between gap-2 flex-wrap">
+                <span className="font-sans text-sm sm:text-base font-semibold text-white">9.1 Analiz Geçmişi</span>
+                <span className="text-xs font-mono text-slate-400">
+                  {mergedAnalysisHistory.length} kayıt
+                </span>
               </div>
 
-              {/* Öneri 5: Model Sinyal ve Alfa Takip Özeti */}
-              {(() => {
-                const validPriceItems = (tickerHistory || [])
-                  .map(h => {
-                    const p = parseFinancialNumber(h.price ?? h.extractedData?.current_price);
-                    const rawTs = Date.parse(String(h?.extractedData?.saved_at || h?.updatedAt || h?.createdAt || ''));
-                    return {
-                      hist: h,
-                      price: p,
-                      ts: Number.isFinite(rawTs) ? rawTs : 0
-                    };
-                  })
-                  .filter((x): x is { hist: SavedReport; price: number; ts: number } =>
-                    x.price != null && !isNaN(x.price) && x.price > 0
+              <div className="p-4 sm:p-5 space-y-4">
+                {/* Model Sinyal ve Alfa Takip Özeti (Arşivlenmiş eski rapor özetleri dahil en eski kayıttan hesaplanır) */}
+                {(() => {
+                  const validPriceItems = mergedAnalysisHistory.filter(
+                    h => h.priceNum != null && Number.isFinite(h.priceNum) && h.priceNum > 0
                   );
 
-                if (validPriceItems.length === 0 || currentPriceNum <= 0) return null;
+                  if (validPriceItems.length === 0 || currentPriceNum <= 0) return null;
 
-                const oldestEntry = [...validPriceItems].sort(
-                  (a, b) => (a.ts || Number.MAX_SAFE_INTEGER) - (b.ts || Number.MAX_SAFE_INTEGER)
-                )[0];
-                const oldestPrice = oldestEntry.price;
-                const totalRealizedPct = ((currentPriceNum - oldestPrice) / oldestPrice) * 100;
-                const oldestDec = String(oldestEntry.hist?.decision || effectiveDecision || 'NÖTR').toUpperCase();
-                const isAlConfirmed = oldestDec === 'AL' && totalRealizedPct > 0;
-                const isAlmaConfirmed = oldestDec === 'ALMA' && totalRealizedPct <= 0;
-                const isConfirmed = isAlConfirmed || isAlmaConfirmed;
+                  const oldestEntry = [...validPriceItems].sort(
+                    (a, b) => (a.ts || Number.MAX_SAFE_INTEGER) - (b.ts || Number.MAX_SAFE_INTEGER)
+                  )[0];
+                  const oldestPrice = oldestEntry.priceNum!;
+                  const totalRealizedPct = ((currentPriceNum - oldestPrice) / oldestPrice) * 100;
+                  const oldestDec = String(oldestEntry.decision || effectiveDecision || 'NÖTR').toUpperCase();
+                  const isAlConfirmed = oldestDec === 'AL' && totalRealizedPct > 0;
+                  const isAlmaConfirmed = oldestDec === 'ALMA' && totalRealizedPct <= 0;
+                  const isConfirmed = isAlConfirmed || isAlmaConfirmed;
 
-                const signalLabel = isAlConfirmed
-                  ? 'Sinyal Teyitli (Pozitif Getiri)'
-                  : isAlmaConfirmed
-                  ? 'Sinyal Teyitli (Kayıp Koruması)'
-                  : oldestDec === 'ALMA' && totalRealizedPct > 0
-                  ? 'Piyasa Ayrışması (İzleniyor)'
-                  : 'Takip Ediliyor';
+                  const signalLabel = isAlConfirmed
+                    ? 'Sinyal Teyitli (Pozitif Getiri)'
+                    : isAlmaConfirmed
+                    ? 'Sinyal Teyitli (Kayıp Koruması)'
+                    : oldestDec === 'ALMA' && totalRealizedPct > 0
+                    ? 'Piyasa Ayrışması (İzleniyor)'
+                    : 'Takip Ediliyor';
 
-                return (
-                  <div className="bg-[#1d222e] border border-[#323a4b] rounded-xl p-3.5 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="bg-[#161a23] border border-[#2a3140] rounded-lg p-3 space-y-1">
-                      <div className="text-xs text-slate-400 font-sans">İlk Analiz Fiyatı → Güncel</div>
-                      <div className="text-sm font-bold font-mono text-white">
-                        ₺{oldestPrice.toFixed(2)} <span className="text-slate-500">→</span>{' '}
-                        <span className="text-[#f5c242]">₺{currentPriceNum.toFixed(2)}</span>
+                  return (
+                    <div className="bg-[#101319] border border-[#232834] rounded-xl grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-[#232834] tabular-nums">
+                      <div className="p-3.5 space-y-1">
+                        <div className="text-[11px] text-slate-400 font-sans">İlk Analiz Fiyatı → Güncel</div>
+                        <div className="text-sm font-semibold font-mono text-white">
+                          ₺{oldestPrice.toFixed(2)} <span className="text-slate-500">→</span>{' '}
+                          <span className="text-slate-200">₺{currentPriceNum.toFixed(2)}</span>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="bg-[#161a23] border border-[#2a3140] rounded-lg p-3 space-y-1">
-                      <div className="text-xs text-slate-400 font-sans">Analizden Bugüne Getiri</div>
-                      <div className={`text-sm font-black font-mono ${
-                        totalRealizedPct >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                      }`}>
-                        {totalRealizedPct >= 0 ? '+' : ''}%{totalRealizedPct.toFixed(1)}
+                      <div className="p-3.5 space-y-1">
+                        <div className="text-[11px] text-slate-400 font-sans">Analizden Bugüne Getiri</div>
+                        <div className={`text-sm font-semibold font-mono ${
+                          totalRealizedPct >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}>
+                          {totalRealizedPct >= 0 ? '+' : ''}%{totalRealizedPct.toFixed(1)}
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="bg-[#161a23] border border-[#2a3140] rounded-lg p-3 flex items-center justify-between gap-2">
-                      <div>
-                        <div className="text-xs text-slate-400 font-sans">Model Sinyal Performansı</div>
-                        <div className="text-[11px] font-mono text-slate-400 mt-0.5">İlk Karar: {oldestDec}</div>
-                      </div>
-                      <span className={`px-2.5 py-1 rounded text-xs font-mono font-bold border shrink-0 ${
-                        isConfirmed
-                          ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
-                          : 'bg-amber-950/60 text-amber-300 border-amber-500/40'
-                      }`}>
-                        {signalLabel}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {tickerHistory.length > 0 ? (
-                <div className="divide-y divide-[#282d37]">
-                  {tickerHistory.map((hist) => {
-                    // Adil Değer Güvenli Çözümleyici (₺— hatasını engeller)
-                    let rawFv: any = hist.fairValue;
-                    if (!rawFv || rawFv === '—' || rawFv === 'null' || rawFv === 'undefined') {
-                      rawFv = hist.extractedData?.valuation?.composite_fair_value ??
-                              hist.extractedData?.valuation?.fair_value ??
-                              hist.extractedData?.valuation?.dcf_fair_value ??
-                              (hist as any).valuation?.composite_fair_value ??
-                              (hist as any).valuation?.fair_value ??
-                              (hist as any).valuationInfo?.fair_value;
-                    }
-                    if (!rawFv && hist.report) {
-                      const match = hist.report.match(/(?:Hesaplanan\s+Adil\s+Değer|Adil\s+Değer)\s*[:=]\s*₺?\s*([\d\.,]+)/i);
-                      if (match && match[1]) rawFv = match[1];
-                    }
-                    const numFv = parseFinancialNumber(rawFv);
-                    const fairValDisplay = numFv != null && !isNaN(numFv) && numFv > 0
-                      ? `₺${numFv.toFixed(2)}`
-                      : '—';
-
-                    const rawHistPrice = hist.price ?? hist.extractedData?.current_price;
-                    const numHistPrice = parseFinancialNumber(rawHistPrice);
-                    const analysisPriceDisplay = numHistPrice != null && !isNaN(numHistPrice) && numHistPrice > 0
-                      ? `₺${numHistPrice.toFixed(2)}`
-                      : '—';
-                    const realizedReturnPct =
-                      numHistPrice != null && !isNaN(numHistPrice) && numHistPrice > 0 && currentPriceNum > 0
-                        ? ((currentPriceNum - numHistPrice) / numHistPrice) * 100
-                        : null;
-
-                    return (
-                      <div
-                        key={hist.id}
-                        onClick={() => handleSelectReport(hist.id)}
-                        onAuxClick={(e) => {
-                          if (e.button === 1) {
-                            e.preventDefault();
-                            if (typeof window !== 'undefined') {
-                              window.open(`/analysis/${hist.ticker.toUpperCase()}`, '_blank');
-                            }
-                          }
-                        }}
-                        className="py-3.5 flex items-center justify-between hover:bg-[#21262d]/50 px-3 rounded-xl transition cursor-pointer group"
-                      >
+                      <div className="p-3.5 flex items-center justify-between gap-2">
                         <div>
-                          <div className="font-bold text-[15px] text-white flex items-center gap-2">
-                            <span className="group-hover:text-emerald-400 transition">{hist.ticker}</span>
-                          </div>
-                          <div className="text-sm text-slate-400 mt-1 font-mono">
-                            {hist.period ? `${hist.period} - ` : ''}Analiz: {formatAnalysisDate(hist.createdAt)}
-                          </div>
+                          <div className="text-[11px] text-slate-400 font-sans">Model Sinyal Performansı</div>
+                          <div className="text-[11px] font-mono text-slate-400 mt-0.5">İlk Karar: {oldestDec}</div>
                         </div>
-                        <div className="text-right space-y-0.5">
-                          <div className="font-mono text-xs sm:text-[13px] font-semibold text-slate-300 flex items-center justify-end gap-2 flex-wrap">
-                            <span>
-                              Analiz Fiyatı: <span className="text-white">{analysisPriceDisplay}</span>
-                            </span>
-                            {realizedReturnPct !== null && (
-                              <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold border ${
-                                realizedReturnPct >= 0
-                                  ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
-                                  : 'bg-rose-950/60 text-rose-300 border-rose-500/40'
-                              }`}>
-                                Güncel Fark: {realizedReturnPct >= 0 ? '+' : ''}%{realizedReturnPct.toFixed(1)}
-                              </span>
-                            )}
-                          </div>
-                          <div className="font-mono text-[15px] font-bold text-[#f5c242]">
-                            Adil Değer: {fairValDisplay}
-                          </div>
-                          <div className={`text-sm font-bold font-mono ${hist.decision === 'AL' ? 'text-emerald-400' : hist.decision === 'ALMA' ? 'text-rose-400' : 'text-amber-400'}`}>
-                            Karar: {hist.decision || 'NÖTR'}
-                          </div>
-                        </div>
+                        <span className={`text-xs font-mono font-semibold shrink-0 ${
+                          isConfirmed ? 'text-emerald-400' : 'text-amber-300'
+                        }`}>
+                          {signalLabel}
+                        </span>
                       </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="text-center py-6 text-slate-400 font-mono text-sm">
-                  {report.ticker} için sistemde kayıtlı geçmiş başka bir rapor bulunmuyor.
-                </div>
-              )}
+                    </div>
+                  );
+                })()}
+
+                {mergedAnalysisHistory.length > 0 ? (
+                  <>
+                    <div className="overflow-x-auto touch-pan-x no-scrollbar rounded-lg border border-[#232834]">
+                      <table className="w-full text-left text-xs border-collapse font-sans tabular-nums">
+                        <thead>
+                          <tr className="border-b border-[#232834] bg-[#101319] text-[11px] font-sans font-medium text-slate-400">
+                            <th className="py-2.5 px-4">Dönem &amp; Tarih</th>
+                            <th className="py-2.5 px-3 text-right">Analiz Fiyatı</th>
+                            <th className="py-2.5 px-3 text-right">Adil Değer</th>
+                            <th className="py-2.5 px-3 text-center">Skor</th>
+                            <th className="py-2.5 px-3 text-center">Karar</th>
+                            <th className="py-2.5 px-3 text-right">Güncel Fark</th>
+                            <th className="py-2.5 px-4 text-right">Kayıt</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#232834] text-slate-200">
+                          {mergedAnalysisHistory.map((item) => {
+                            const realizedPct =
+                              item.priceNum != null && item.priceNum > 0 && currentPriceNum > 0
+                                ? ((currentPriceNum - item.priceNum) / item.priceNum) * 100
+                                : null;
+                            const decUpper = String(item.decision || 'NÖTR').toUpperCase();
+                            const decCls =
+                              decUpper === 'AL'
+                                ? 'text-emerald-400'
+                                : decUpper === 'ALMA'
+                                ? 'text-rose-400'
+                                : 'text-amber-300';
+                            const isClickable = !item.isCurrent && !item.isSnapshotOnly;
+
+                            return (
+                              <tr
+                                key={item.id}
+                                onClick={isClickable ? () => handleSelectReport(item.id) : undefined}
+                                className={`${
+                                  item.isCurrent
+                                    ? 'bg-[#1a1f2a] border-l-2 border-l-slate-200'
+                                    : isClickable
+                                    ? 'hover:bg-[#1a1f2b] cursor-pointer transition-colors'
+                                    : ''
+                                }`}
+                              >
+                                <td className="py-3 px-4">
+                                  <div className="font-mono font-semibold text-white">
+                                    {item.period || report.period || '—'}
+                                  </div>
+                                  <div className="text-[11px] text-slate-400">
+                                    {item.createdAt ? formatAnalysisDate(item.createdAt) : '—'}
+                                  </div>
+                                </td>
+                                <td className="py-3 px-3 text-right font-mono font-medium text-white">
+                                  {item.priceNum != null ? `₺${item.priceNum.toFixed(2)}` : '—'}
+                                </td>
+                                <td className="py-3 px-3 text-right font-mono font-medium text-slate-200">
+                                  {item.fairValueNum != null ? `₺${item.fairValueNum.toFixed(2)}` : '—'}
+                                  {item.discountPct != null && (
+                                    <div className={`text-[10.5px] ${item.discountPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                      {item.discountPct >= 0 ? '+' : ''}%{item.discountPct.toFixed(1)}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="py-3 px-3 text-center font-mono font-medium text-slate-200">
+                                  {item.score || '—'}
+                                </td>
+                                <td className="py-3 px-3 text-center font-mono font-semibold">
+                                  <span className={decCls}>{decUpper}</span>
+                                </td>
+                                <td className="py-3 px-3 text-right font-mono">
+                                  {realizedPct !== null ? (
+                                    <span
+                                      title={`Güncel Fark: ${realizedPct >= 0 ? '+' : ''}%${realizedPct.toFixed(1)}`}
+                                      className={`font-semibold ${realizedPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}
+                                    >
+                                      {realizedPct >= 0 ? '+' : ''}%{realizedPct.toFixed(1)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-500">—</span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4 text-right font-sans text-[11px]">
+                                  {item.isCurrent ? (
+                                    <span className="px-2 py-0.5 rounded bg-[#232834] text-slate-200 font-medium">
+                                      Güncel Rapor
+                                    </span>
+                                  ) : item.isSnapshotOnly ? (
+                                    <span className="text-slate-400">Arşiv Özeti</span>
+                                  ) : (
+                                    <span className="text-slate-300 underline">Tam Rapor</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="text-[11px] text-slate-500 font-sans">
+                      Güncellemelerde eski raporların ham veri gövdesi kota optimizasyonu için temizlenir; tarihsel skor, fiyat, adil değer ve karar kayıtları bu tabloda kalıcı olarak izlenir.
+                    </p>
+                  </>
+                ) : (
+                  <div className="text-center py-6 text-slate-400 font-sans text-xs">
+                    {report.ticker} için kayıtlı geçmiş analiz verisi bulunmuyor.
+                  </div>
+                )}
+              </div>
             </div>
           </section>
           </ComponentErrorBoundary>

@@ -84,6 +84,159 @@ export function getStaticReport(_ticker?: string): SavedReport | null {
   return null;
 }
 
+export interface AnalysisHistorySnapshot {
+  id: string;
+  period: string | null;
+  createdAt: string;
+  price: string;
+  fairValue: string | null;
+  discountPct: number | null;
+  score: string | null;
+  decision: string | null;
+}
+
+function parseSnapshotTimeMs(raw?: string | null): number {
+  if (!raw) return 0;
+  const ms = Date.parse(String(raw));
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+/**
+ * Ham Supabase satırını, SavedReport nesnesini veya mevcut özet kaydı ~180 baytlık
+ * kompakt `AnalysisHistorySnapshot` formatına dönüştürür.
+ */
+export function toAnalysisHistorySnapshot(item: any): AnalysisHistorySnapshot | null {
+  if (!item || typeof item !== 'object') return null;
+  const ed = item.extractedData ?? item.extracted_data ?? {};
+  const val = ed?.valuation ?? item.valuation ?? {};
+  const opt = ed?.optimization ?? {};
+
+  const periodStr = String(item.period || ed?.reporting_period || '').trim();
+  const createdAt = String(
+    item.createdAt || item.created_at || ed?.saved_at || item.updatedAt || item.updated_at || ''
+  ).trim();
+  const rawId = String(item.id || '').trim();
+  const id = rawId || `${periodStr || 'NA'}_${createdAt || '0'}`;
+
+  const priceNum = parseFinancialNumber(item.price ?? ed?.current_price ?? val?.current_price);
+  const priceStr =
+    priceNum !== null && priceNum > 0
+      ? priceNum.toFixed(2)
+      : item.price != null
+      ? String(item.price).trim()
+      : '';
+
+  const fvRaw =
+    item.fairValue ??
+    item.fair_value ??
+    val?.fair_value ??
+    val?.composite_fair_value ??
+    ed?.fair_value ??
+    ed?.target_price;
+  const fvNum = parseFinancialNumber(fvRaw);
+  const fairValueStr =
+    fvNum !== null && fvNum > 0
+      ? fvNum.toFixed(2)
+      : fvRaw != null && String(fvRaw).trim() !== '' && String(fvRaw).trim() !== '—'
+      ? String(fvRaw).trim()
+      : null;
+
+  const discRaw = parseFinancialNumber(item.discountPct ?? val?.discount_pct);
+  const discountPct =
+    discRaw !== null
+      ? Number(discRaw.toFixed(1))
+      : priceNum !== null && priceNum > 0 && fvNum !== null && fvNum > 0
+      ? Number((((fvNum - priceNum) / priceNum) * 100).toFixed(1))
+      : null;
+
+  const scoreStr =
+    formatCanonicalScore(item.score ?? val?.score ?? opt?.score ?? ed?.scoreResult?.totalScore) ||
+    (item.score != null && String(item.score).trim() !== '' ? String(item.score).trim() : null);
+
+  const decRaw = String(
+    item.decision || opt?.finalDecision || val?.final_decision || val?.decision || ''
+  )
+    .trim()
+    .toUpperCase();
+  const decision = decRaw || null;
+
+  if (!priceStr && !fairValueStr && !scoreStr && !decision) {
+    return null;
+  }
+
+  return {
+    id,
+    period: periodStr || null,
+    createdAt,
+    price: priceStr,
+    fairValue: fairValueStr,
+    discountPct,
+    score: scoreStr,
+    decision,
+  };
+}
+
+/**
+ * Eski rapor(lar) silinmeden önce skor, adil değer, fiyat, karar ve tarih bilgilerini
+ * kompakt `analysis_history` dizisinde birleştirir, mükerrerleri temizler ve en güncel 24 kaydı tutar.
+ */
+export function mergeAnalysisHistorySnapshots(
+  existingRecords: any[],
+  incomingReport?: any,
+  maxEntries = 24
+): AnalysisHistorySnapshot[] {
+  const activeId = String(incomingReport?.id || '').trim();
+  const byId = new Map<string, AnalysisHistorySnapshot>();
+
+  const ingest = (raw: any) => {
+    const snap = toAnalysisHistorySnapshot(raw);
+    if (!snap) return;
+    if (activeId && snap.id === activeId) return;
+    const prev = byId.get(snap.id);
+    if (!prev || parseSnapshotTimeMs(snap.createdAt) >= parseSnapshotTimeMs(prev.createdAt)) {
+      byId.set(snap.id, snap);
+    }
+  };
+
+  for (const rec of Array.isArray(existingRecords) ? existingRecords : []) {
+    if (!rec) continue;
+    const nested = rec.extractedData?.analysis_history ?? rec.extracted_data?.analysis_history;
+    if (Array.isArray(nested)) {
+      for (const s of nested) ingest(s);
+    }
+    const recId = String(rec.id || '').trim();
+    if (!activeId || recId !== activeId) {
+      ingest(rec);
+    }
+  }
+
+  const incomingNested =
+    incomingReport?.extractedData?.analysis_history ?? incomingReport?.extracted_data?.analysis_history;
+  if (Array.isArray(incomingNested)) {
+    for (const s of incomingNested) ingest(s);
+  }
+
+  const sorted = Array.from(byId.values()).sort((a, b) => {
+    const tDiff = parseSnapshotTimeMs(b.createdAt) - parseSnapshotTimeMs(a.createdAt);
+    if (tDiff !== 0) return tDiff;
+    return parsePeriodSortKey(b.period || '') - parsePeriodSortKey(a.period || '');
+  });
+
+  // Aynı gün içinde birebir aynı rakamlarla oluşmuş mükerrer kayıtları tekilleştir
+  const dedupedFingerprints = new Set<string>();
+  const cleanList: AnalysisHistorySnapshot[] = [];
+  for (const item of sorted) {
+    const dayKey = (item.createdAt || '').slice(0, 10);
+    const fp = `${item.period || ''}|${dayKey}|${item.price}|${item.fairValue || ''}|${item.score || ''}|${item.decision || ''}`;
+    if (dedupedFingerprints.has(fp)) continue;
+    dedupedFingerprints.add(fp);
+    cleanList.push(item);
+    if (cleanList.length >= maxEntries) break;
+  }
+
+  return cleanList;
+}
+
 function resolveRowCanonicalPeriod(row: any): string {
   const direct = String(row?.period || '').trim();
   const ed = row?.extracted_data || {};
@@ -123,7 +276,7 @@ export async function getReportForTicker(ticker: string): Promise<SavedReport | 
         .select('*')
         .eq('ticker', norm)
         .order('updated_at', { ascending: false })
-        .limit(20);
+        .limit(3);
 
       if (!error && data && data.length > 0) {
         const sortedRows = [...data].sort((a: any, b: any) => {

@@ -54,7 +54,13 @@ import {
   getScoreColorStyle
 } from '@/lib/sectors';
 
-import { SavedReport, formatAnalysisDate, parseNumericScore, formatCanonicalScore } from '@/lib/report-resolver';
+import {
+  SavedReport,
+  formatAnalysisDate,
+  parseNumericScore,
+  formatCanonicalScore,
+  mergeAnalysisHistorySnapshots,
+} from '@/lib/report-resolver';
 export type { SavedReport };
 import { loadReportsCache, saveReportsCache } from '@/lib/report-cache';
 import { parseApiResponse } from '@/lib/api-response';
@@ -2477,17 +2483,16 @@ export default function ValuationTerminal({
     setSavedReports(localData);
 
     // IndexedDB kalıcı önbelleğinden tam listeyi yükle (5MB localStorage kotasına takılmadan)
-    loadReportsCache<SavedReport>().then(cached => {
-      if (Array.isArray(cached) && cached.length > 0) {
-        const reconciled = cached.map(reconcileSavedReportWithLatestEngine);
-        setSavedReports(prev => {
-          if (reconciled.length >= prev.length) {
-            return reconciled;
-          }
-          return prev;
-        });
-      }
-    }).catch(() => {});
+    const idbLoadPromise = loadReportsCache<SavedReport>()
+      .then(cached => {
+        if (Array.isArray(cached) && cached.length > 0) {
+          const reconciled = cached.map(reconcileSavedReportWithLatestEngine);
+          setSavedReports(prev => (reconciled.length >= prev.length ? reconciled : prev));
+          return reconciled;
+        }
+        return [] as SavedReport[];
+      })
+      .catch(() => [] as SavedReport[]);
 
     // Doğrudan URL veya initialTicker kontrolü (/analysis/VESBE veya query params)
     let pathTicker = '';
@@ -2553,7 +2558,21 @@ export default function ValuationTerminal({
     const syncWithCloud = async () => {
       try {
         setIsSyncing(true);
-        const res = await fetch('/api/reports');
+        const idbList = await idbLoadPromise;
+        const baseLocal = idbList.length > 0 ? idbList : localData;
+
+        let maxLocalTs = 0;
+        for (const r of baseLocal) {
+          const ts = reportTimestamp(r);
+          if (ts > maxLocalTs) maxLocalTs = ts;
+        }
+
+        const syncUrl =
+          baseLocal.length > 0 && maxLocalTs > 0
+            ? `/api/reports?since=${encodeURIComponent(new Date(maxLocalTs).toISOString())}`
+            : '/api/reports';
+
+        const res = await fetch(syncUrl);
         if (res.ok) {
           const text = await res.text();
           let json: any = null;
@@ -2564,40 +2583,111 @@ export default function ValuationTerminal({
           }
           if (json) {
             setIsCloudConfigured(Boolean(json.isCloudConfigured));
-            if (json.isCloudConfigured && Array.isArray(json.reports) && json.reports.length > 0) {
-              // Çoklu çeyrek hafızasını koruyarak (ticker, period) bazında birleştir
-              const cloudMap = new Map<string, SavedReport>();
-              for (const rep of json.reports) {
-                const t = (rep.ticker || '').trim().replace(/\.IS$/i, '').toUpperCase();
-                if (!t) continue;
-                const p = (rep.period || rep.extractedData?.reporting_period || '').trim();
-                const compositeKey = p ? `${t}::${p}` : `${t}::${rep.id}`;
-                const existing = cloudMap.get(compositeKey);
-                if (!existing || reportTimestamp(rep) >= reportTimestamp(existing)) {
-                  cloudMap.set(compositeKey, rep);
+            if (json.isCloudConfigured) {
+              let incomingRaw: SavedReport[] = Array.isArray(json.reports) ? json.reports : [];
+              let activeIdSet =
+                Array.isArray(json.activeIds) && json.activeIds.length > 0
+                  ? new Set<string>(json.activeIds.map(String))
+                  : null;
+
+              // Eksik aktif ID tespiti (farklı cihazdan eklenmiş veya kısmi önbellek kendi kendini onarır):
+              if (json.isDelta && activeIdSet) {
+                const presentIds = new Set<string>([
+                  ...baseLocal.map(r => String(r.id)),
+                  ...incomingRaw.map(r => String(r.id)),
+                ]);
+                const missingIds = Array.from(activeIdSet).filter(id => !presentIds.has(id));
+                if (missingIds.length > 0 && missingIds.length <= 50) {
+                  try {
+                    const missRes = await fetch(`/api/reports?ids=${encodeURIComponent(missingIds.join(','))}`);
+                    if (missRes.ok) {
+                      const missJson = await missRes.json();
+                      if (Array.isArray(missJson?.reports)) {
+                        incomingRaw = [...incomingRaw, ...missJson.reports];
+                      }
+                    }
+                  } catch {}
+                } else if (missingIds.length > 50) {
+                  try {
+                    const fullRes = await fetch('/api/reports');
+                    if (fullRes.ok) {
+                      const fullJson = await fullRes.json();
+                      if (Array.isArray(fullJson?.reports)) {
+                        incomingRaw = fullJson.reports;
+                        if (Array.isArray(fullJson.activeIds) && fullJson.activeIds.length > 0) {
+                          activeIdSet = new Set<string>(fullJson.activeIds.map(String));
+                        }
+                      }
+                    }
+                  } catch {}
                 }
               }
-              const cloudReconciled = Array.from(cloudMap.values()).map(reconcileSavedReportWithLatestEngine);
+
+              // Hiçbir değişiklik yoksa ve yerel liste sunucuyla birebir aynıysa yeniden hesaplama yapma:
+              if (
+                json.isDelta &&
+                incomingRaw.length === 0 &&
+                activeIdSet &&
+                baseLocal.length === activeIdSet.size &&
+                baseLocal.every(r => activeIdSet!.has(String(r.id)))
+              ) {
+                return;
+              }
+
+              const cloudReconciled = incomingRaw.map(reconcileSavedReportWithLatestEngine);
               setSavedReports(prev => {
-                const mergedMap = new Map<string, SavedReport>();
+                const prevByTicker = new Map<string, SavedReport[]>();
                 for (const localRep of prev) {
                   const t = (localRep.ticker || '').trim().replace(/\.IS$/i, '').toUpperCase();
-                  const p = (localRep.period || localRep.extractedData?.reporting_period || '').trim();
-                  if (!t || !p) continue;
-                  mergedMap.set(`${t}::${p}`, localRep);
+                  if (!t) continue;
+                  const arr = prevByTicker.get(t) || [];
+                  arr.push(localRep);
+                  prevByTicker.set(t, arr);
                 }
+
+                // Her hisse için tekil aktif rapor (eski kayıtların özetleri analysis_history'ye aktarılır):
+                const mergedByTicker = new Map<string, SavedReport>();
+                for (const [t, list] of prevByTicker.entries()) {
+                  const activeOnly = activeIdSet
+                    ? list.filter(r => activeIdSet!.has(String(r.id)))
+                    : list;
+                  if (activeOnly.length === 0) continue;
+                  const sorted = [...activeOnly].sort(
+                    (a, b) =>
+                      parsePeriodSortKey(b.period || b.extractedData?.reporting_period || '') -
+                        parsePeriodSortKey(a.period || a.extractedData?.reporting_period || '') ||
+                      reportTimestamp(b) - reportTimestamp(a)
+                  );
+                  const winner = sorted[0];
+                  const mergedHist = mergeAnalysisHistorySnapshots(list, winner);
+                  mergedByTicker.set(
+                    t,
+                    mergedHist.length > 0
+                      ? { ...winner, extractedData: { ...(winner.extractedData || {}), analysis_history: mergedHist } }
+                      : winner
+                  );
+                }
+
                 for (const cloudRep of cloudReconciled) {
                   const t = (cloudRep.ticker || '').trim().replace(/\.IS$/i, '').toUpperCase();
-                  const p = (cloudRep.period || cloudRep.extractedData?.reporting_period || '').trim();
-                  const key = p ? `${t}::${p}` : `${t}::${cloudRep.id}`;
-                  mergedMap.set(key, cloudRep);
+                  if (!t) continue;
+                  const priorLocal = prevByTicker.get(t) || [];
+                  const mergedHist = mergeAnalysisHistorySnapshots(priorLocal, cloudRep);
+                  const enrichedCloud =
+                    mergedHist.length > 0
+                      ? { ...cloudRep, extractedData: { ...(cloudRep.extractedData || {}), analysis_history: mergedHist } }
+                      : cloudRep;
+                  const cur = mergedByTicker.get(t);
+                  if (!cur || reportTimestamp(enrichedCloud) >= reportTimestamp(cur)) {
+                    mergedByTicker.set(t, enrichedCloud);
+                  }
                 }
-                const finalList = Array.from(mergedMap.values());
-                saveReportsCache(finalList);
-                try {
-                  localStorage.setItem('fin_valuation_reports', JSON.stringify(getLatestReportsPerTicker(finalList).slice(0, 30)));
-                } catch {}
-                return finalList;
+
+                const finalList = Array.from(mergedByTicker.values());
+                if (finalList.length > 0) {
+                  saveReportsCache(finalList);
+                }
+                return finalList.length > 0 ? finalList : prev;
               });
             }
           }
@@ -2732,9 +2822,10 @@ export default function ValuationTerminal({
       const h = r.extractedData?.financial_history;
       if (!Array.isArray(h) || h.length === 0) return false;
       const schemaStale = h[h.length - 1]?.parent_equity === undefined;
+      if (!schemaStale) return false;
       let doneToday = false;
       try { doneToday = localStorage.getItem(`fv_refreshed_${r.ticker}`) === todayKey; } catch {}
-      return schemaStale || !doneToday;
+      return !doneToday;
     }).slice(0, 40);
     if (stale.length === 0) return;
     staleRefreshStarted.current = true;
@@ -2763,7 +2854,6 @@ export default function ValuationTerminal({
           setSavedReports(prev => {
             const next = prev.map(r => (r.id === rep.id ? refreshed : r));
             saveReportsCache(next);
-            try { localStorage.setItem('fin_valuation_reports', JSON.stringify(next)); } catch {}
             return next;
           });
           try { localStorage.setItem(`fv_refreshed_${rep.ticker}`, todayKey); } catch {}
@@ -2780,58 +2870,54 @@ export default function ValuationTerminal({
   }, [mounted, savedReports]);
 
   const saveReport = async (newReport: SavedReport) => {
-    // Aynı hissenin aynı çeyreklik dönem raporu varsa güncelle; farklı çeyrekse (örn: 2026/06 ve 2026/09) hafızada birlikte sakla
-    const isSameQuarter = (a: SavedReport, b: SavedReport) => {
-      const sameTicker = (a.ticker || '').trim().toUpperCase() === (b.ticker || '').trim().toUpperCase();
-      const aPeriod = (a.period || '').trim().toLowerCase();
-      const bPeriod = (b.period || '').trim().toLowerCase();
-      if (aPeriod && bPeriod) {
-        return sameTicker && aPeriod === bPeriod;
-      }
-      return sameTicker;
+    const newTickerUpper = (newReport.ticker || '').trim().toUpperCase();
+
+    // Analiz Geçmişi (yalnızca görüntüleme): Eski rapor gövdesi silinmeden önce skor, adil değer, fiyat,
+    // dönem ve karar bilgileri ~180 baytlık özet kayıt olarak yeni raporun extractedData.analysis_history alanına aktarılır.
+    const sameTickerPrev = savedReports.filter(
+      r => (r.ticker || '').trim().toUpperCase() === newTickerUpper && r.id !== newReport.id
+    );
+    const analysisHistory = mergeAnalysisHistorySnapshots(sameTickerPrev, newReport);
+    if (analysisHistory.length > 0) {
+      newReport = {
+        ...newReport,
+        extractedData: { ...(newReport.extractedData || {}), analysis_history: analysisHistory },
+      };
+    }
+
+    newReport = {
+      ...newReport,
+      extractedData: { ...(newReport.extractedData || {}), saved_at: new Date().toISOString() },
     };
 
-    // Analiz Geçmişi (yalnızca görüntüleme): Eski rapor silinmeden önce özet bir kayıt (snapshot) olarak
-    // yeni raporun extractedData.analysis_history alanına eklenir. Değerleme motoru bu alanı ASLA okumaz;
-    // yeni rapor eski kayıtlardan etkilenmez, sadece trendi göstermek için saklanır.
-    const sameTickerPrev = savedReports.filter(r => (r.ticker || '').trim().toUpperCase() === (newReport.ticker || '').trim().toUpperCase() && r.id !== newReport.id);
-    const toSnapshot = (r: SavedReport) => ({
-      id: r.id,
-      period: r.period || null,
-      createdAt: r.createdAt,
-      price: r.price,
-      fairValue: r.fairValue || null,
-      score: r.score || null,
-      decision: r.decision || null,
-    });
-    const snapMap = new Map<string, any>();
-    for (const r of sameTickerPrev) {
-      for (const s of (r.extractedData?.analysis_history || [])) snapMap.set(s.id, s);
-      snapMap.set(r.id, toSnapshot(r));
-    }
-    for (const s of (newReport.extractedData?.analysis_history || [])) snapMap.set(s.id, s);
-    snapMap.delete(newReport.id);
-    const analysisHistory = Array.from(snapMap.values())
-      .sort((a, b) => reportTimestamp(b) - reportTimestamp(a))
-      .slice(0, 24);
-    if (analysisHistory.length > 0) {
-      newReport = { ...newReport, extractedData: { ...(newReport.extractedData || {}), analysis_history: analysisHistory } };
-    }
-
-    newReport = { ...newReport, extractedData: { ...(newReport.extractedData || {}), saved_at: new Date().toISOString() } };
-    const updated = [newReport, ...savedReports.filter(r => r.id !== newReport.id && !isSameQuarter(r, newReport))];
+    // Tekil aktif rapor: aynı hisseye ait önceki tam raporlar bellekten düşürülür (özetleri analysis_history içindedir)
+    const updated = [
+      newReport,
+      ...savedReports.filter(r => (r.ticker || '').trim().toUpperCase() !== newTickerUpper),
+    ];
     setSavedReports(updated);
     saveReportsCache(updated);
-    try {
-      localStorage.setItem('fin_valuation_reports', JSON.stringify(updated));
-    } catch (e) {}
 
     try {
-      await fetch('/api/reports', {
+      const postRes = await fetch('/api/reports', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fin-analiz-client' },
         body: JSON.stringify({ report: newReport }),
       });
+      if (postRes.ok) {
+        const postJson = await postRes.json().catch(() => null);
+        if (Array.isArray(postJson?.analysis_history) && postJson.analysis_history.length > 0) {
+          setSavedReports(prev => {
+            const synced = prev.map(r =>
+              r.id === newReport.id
+                ? { ...r, extractedData: { ...(r.extractedData || {}), analysis_history: postJson.analysis_history } }
+                : r
+            );
+            saveReportsCache(synced);
+            return synced;
+          });
+        }
+      }
     } catch (err) {
       console.warn('Buluta kaydetme başarısız, yerelde saklandı:', err);
     }
@@ -4909,8 +4995,13 @@ export default function ValuationTerminal({
         if (pDiff !== 0) return pDiff;
         return reportTimestamp(b) - reportTimestamp(a);
       });
-    if (prevList.length === 0) return null;
-    const prev = prevList[0];
+
+    const snapHistory = Array.isArray(activeReport?.extractedData?.analysis_history)
+      ? activeReport.extractedData.analysis_history
+      : [];
+    const prev: any = prevList[0] || snapHistory[0] || null;
+    if (!prev) return null;
+
     const prevFv = parseFinancialNumber(prev.fairValue);
     const currFv = valuationInfo.fair_value;
     const diffPct = (prevFv && currFv) ? Number((((currFv - prevFv) / prevFv) * 100).toFixed(1)) : null;
@@ -4924,7 +5015,7 @@ export default function ValuationTerminal({
       prevDecision: prev.decision,
       currDecision: dynamicValuationResult.optimization?.finalDecision
     };
-  }, [savedReports, currentTicker, activeReport?.id, valuationInfo.fair_value, dynamicValuationResult]);
+  }, [savedReports, currentTicker, activeReport?.id, activeReport?.extractedData?.analysis_history, valuationInfo.fair_value, dynamicValuationResult]);
 
   const renderEarningsQualityCard = (options?: { id?: string }) => (
     <div id={options?.id} className={`bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 ${options?.id ? 'scroll-mt-24' : ''}`}>
