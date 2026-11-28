@@ -2364,6 +2364,7 @@ export default function ValuationTerminal({
     const parsed = cleaned === '' ? 0 : Math.max(0, parseInt(cleaned, 10) || 0);
     updatePortfolioCapitalState(prev => ({
       ...prev,
+      ...(parsed > 0 ? { allocationMode: 'topup' as const, topUpStrategy: 'smart_rebalance' as const } : {}),
       positions: {
         ...prev.positions,
         [sym]: {
@@ -9906,9 +9907,6 @@ export default function ValuationTerminal({
             const renderCapitalPlannerBar = (allocResult: CapitalAllocationPlanResult, scope: 'architect' | 'holdings') => {
               const isTopUp = portfolioCapitalState.allocationMode === 'topup';
               const activeAmount = isTopUp ? portfolioCapitalState.topUpCapitalTry : portfolioCapitalState.initialCapitalTry;
-              const quickAmounts = isTopUp
-                ? [10000, 25000, 50000, 100000]
-                : [50000, 100000, 250000, 500000];
               const isCollapsed = scope === 'holdings' && !isHoldingsCapitalOpen;
 
               return (
@@ -9967,29 +9965,6 @@ export default function ValuationTerminal({
                               className="w-24 bg-transparent text-xs font-mono font-semibold text-white focus:outline-none tabular-nums"
                             />
                           </div>
-
-                          <div className="flex items-center gap-1 flex-wrap">
-                            {quickAmounts.map(amt => (
-                              <button
-                                key={amt}
-                                type="button"
-                                onClick={() =>
-                                  updatePortfolioCapitalState(prev =>
-                                    isTopUp
-                                      ? { ...prev, topUpCapitalTry: amt }
-                                      : { ...prev, initialCapitalTry: amt }
-                                  )
-                                }
-                                className={`px-2 py-1 rounded-md text-[11px] font-mono font-medium border cursor-pointer transition-colors ${
-                                  activeAmount === amt
-                                    ? 'bg-[#222836] text-white border-[#3b4458]'
-                                    : 'bg-[#101319] text-slate-400 hover:text-slate-200 border-[#232834]'
-                                }`}
-                              >
-                                {isTopUp ? `+${Math.round(amt / 1000)}B` : `${Math.round(amt / 1000)}B`}
-                              </button>
-                            ))}
-                          </div>
                         </>
                       )}
                     </div>
@@ -9997,7 +9972,7 @@ export default function ValuationTerminal({
                     <div className="flex items-center justify-between xl:justify-end gap-3 flex-wrap">
                       {!isCollapsed && (
                         <div className="flex flex-wrap items-center gap-3 text-[11px] font-mono bg-[#101319] border border-[#232834] rounded-lg px-3 py-1.5 tabular-nums">
-                          {isTopUp && (
+                          {(isTopUp || allocResult.existingPortfolioValueTry > 0) && (
                             <>
                               <span className="text-slate-400">
                                 {allocResult.hasSavedLots ? 'Mevcut' : 'Baz'}: <strong className="text-slate-200">{formatTryInt(allocResult.existingPortfolioValueTry)}</strong>
@@ -10891,51 +10866,6 @@ export default function ValuationTerminal({
                       {/* SEKMELERİN İÇERİĞİ */}
                       {architectTierFilter === 'MODEL' && (
                         <div className="bg-[#151821] border border-[#232834] rounded-xl overflow-hidden">
-                          {/* Tablo İçi Entegre Monokrom Sektör Dağılım Şeridi */}
-                          {plan.sectorBreakdown.length > 0 && (
-                            <div className="px-4 py-3 border-b border-[#232834] space-y-2">
-                              <div className="flex items-center justify-between text-[11px] font-sans text-slate-400">
-                                <span className="font-medium">
-                                  Sektörel Dağılım <span className="text-slate-500 font-mono">(Tavan %{architectConfig.maxSectorWeightPct})</span>
-                                </span>
-                                <span className="font-mono text-slate-400">{plan.sectorBreakdown.length} Sektör</span>
-                              </div>
-                              <div className="h-1.5 w-full rounded-full bg-[#101319] overflow-hidden flex gap-0.5">
-                                {plan.sectorBreakdown.map((sec, sIdx) => (
-                                  <div
-                                    key={sec.sectorName}
-                                    className={`h-full ${SECTOR_BAR_COLORS[sIdx % SECTOR_BAR_COLORS.length]} first:rounded-l-full last:rounded-r-full`}
-                                    style={{ width: `${Math.max(1, sec.weightPct)}%` }}
-                                    title={`${sec.sectorName}: %${sec.weightPct.toFixed(1)} (${sec.tickers.join(', ')})`}
-                                  />
-                                ))}
-                              </div>
-                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                                {plan.sectorBreakdown.map((sec, sIdx) => {
-                                  const secTryTotal = sec.tickers.reduce(
-                                    (sum, tk) => sum + (allocRowByTicker.get(tk)?.finalValueTry || 0),
-                                    0
-                                  );
-                                  return (
-                                    <span
-                                      key={sec.sectorName}
-                                      className="inline-flex items-center gap-1.5 text-xs font-mono"
-                                    >
-                                      <span className={`w-1.5 h-1.5 rounded-full ${SECTOR_BAR_COLORS[sIdx % SECTOR_BAR_COLORS.length]}`} />
-                                      <span className="text-slate-300 font-sans">{sec.sectorName}</span>
-                                      <span className={`font-semibold ${sec.weightPct > architectConfig.maxSectorWeightPct ? 'text-rose-400' : 'text-slate-100'}`}>
-                                        %{sec.weightPct.toFixed(1)}
-                                      </span>
-                                      {secTryTotal > 0 && (
-                                        <span className="text-slate-500 text-[11px]">{formatTryInt(secTryTotal)}</span>
-                                      )}
-                                    </span>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-
                           {/* Model Portföy Tablosu */}
                           <div className="overflow-x-auto touch-pan-x no-scrollbar">
                             <table className="w-full text-left text-xs border-collapse font-sans">
@@ -11769,11 +11699,18 @@ export default function ValuationTerminal({
                                         type="number"
                                         min={0}
                                         step={1}
-                                        value={
-                                          portfolioCapitalState.positions[symUpper]?.shares != null
-                                            ? portfolioCapitalState.positions[symUpper]?.shares
-                                            : hAlloc?.existingLots || 0
-                                        }
+                                        placeholder="0"
+                                        value={(() => {
+                                          const v =
+                                            portfolioCapitalState.positions[symUpper]?.shares != null
+                                              ? portfolioCapitalState.positions[symUpper]?.shares
+                                              : hAlloc?.existingLots || 0;
+                                          return v > 0 ? v : '';
+                                        })()}
+                                        onFocus={(e) => {
+                                          if (e.currentTarget.value === '0') e.currentTarget.value = '';
+                                          else e.currentTarget.select();
+                                        }}
                                         onChange={(e) => updateHoldingShares(symUpper, e.target.value)}
                                         aria-label={`${symUpper} mevcut lot adedi`}
                                         className="w-16 bg-[#101319] border border-[#232834] focus:border-slate-400 rounded-md px-2 py-1 text-center text-xs font-mono font-semibold text-white tabular-nums focus:outline-none"
